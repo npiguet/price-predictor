@@ -10,7 +10,9 @@ budgets added, each carrying the rule it was drawn for and that rule's tag
 entities; a validation record's one natural copy and its added copies, by the
 same rule budgets planned over its stratum (FR-068a); and a record's
 protection copies (FR-058), each a synthetic record of its own. ``turn_action``
-records are written nowhere and counted by subkind (FR-059).
+records are written nowhere and counted by subkind (FR-059). A game the survey
+found cut (no game-end marker in its shard) is written nowhere, every record
+counted under ``dropped-cut``.
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from effects.application.corpus_survey import ReadConfig, RefusalTally, WorkerContext
+from effects.application.corpus_survey import ReadConfig, ReadGaps, RefusalTally, WorkerContext
 from effects.application.parallel_map import run_parallel
 from effects.domain.corpus_curation import CopyPlan, natural_copies
 from effects.domain.corpus_manifest import SourceShard
@@ -38,7 +40,7 @@ from effects.domain.records import (
     acting_keys,
 )
 from effects.domain.sampling import SamplingClass
-from effects.domain.strata import OUTPUT_STRATA, Stratum
+from effects.domain.strata import DROPPED_STRATA, OUTPUT_STRATA, Stratum
 from effects.domain.tally_merge import merge_into
 
 
@@ -77,6 +79,13 @@ class WriteTask:
 
     shard: SourceShard
     copies: CopyMap = field(default_factory=dict)
+    #: The records the survey read in the shard; None for no bound. A record
+    #: past them (the shard grew between the passes) was never surveyed nor
+    #: planned, so it is written nowhere and counted as ``dropped-unsurveyed``.
+    surveyed: int | None = None
+    #: The shard's games the survey found cut (``Survey.shard_cut``): written
+    #: nowhere and counted as ``dropped-cut``, whatever the shard holds by now.
+    cut: frozenset[str] = frozenset()
 
 
 # ── the tallies ─────────────────────────────────────────────────────────
@@ -153,6 +162,8 @@ class WriteResult:
     protection: Counter[str] = field(default_factory=Counter)
     #: ``turn_action`` records by subkind, written to no stratum (FR-059).
     turn_actions: Counter[str] = field(default_factory=Counter)
+    #: What reading the shards met without stopping, as the survey counts it.
+    reading: ReadGaps = field(default_factory=ReadGaps)
 
 
 # ── the pass ────────────────────────────────────────────────────────────
@@ -166,11 +177,14 @@ class WriteWorker:
         self.context = WorkerContext(config.read)
 
     def write(self, task: WriteTask) -> WriteResult:
-        """Filter one shard into its output parts."""
-        writer = _ShardWriter(self.plan, self.context, task.copies)
+        """Filter one shard into its output parts, with what reading it met."""
+        ReadGaps.take(self.context.sidecars)
+        writer = _ShardWriter(self.plan, self.context, task.copies, task.surveyed, task.cut)
         for record in self.context.records(task.shard):
             writer.observe(record)
-        return writer.finish(task.shard.part_name)
+        result = writer.finish(task.shard.part_name)
+        result.reading = ReadGaps.take(self.context.sidecars)
+        return result
 
 
 _NO_ADDED: Mapping[int, tuple[str, ...]] = {}
@@ -180,15 +194,26 @@ class _ShardWriter:
     """One shard's write pass in progress: every record routed to its outputs
     and tallied, then each output written as one part."""
 
-    def __init__(self, plan: WritePlan, context: WorkerContext, copies: CopyMap) -> None:
+    def __init__(self, plan: WritePlan, context: WorkerContext, copies: CopyMap,
+                 surveyed: int | None = None, cut: frozenset[str] = frozenset()) -> None:
         self.plan = plan
         self.context = context
         self.copies = copies
+        self.surveyed = surveyed
+        self.cut = cut
+        self.read = 0
         self.out = WriteResult()
         self.outputs: dict[Stratum, list] = {stratum: [] for stratum in OUTPUT_STRATA}
 
     def observe(self, record: EffectRecord) -> None:
         """Route one record to its outputs and tally it."""
+        self.read += 1
+        if self.surveyed is not None and self.read > self.surveyed:
+            self.out.strata.note(Stratum.DROPPED_UNSURVEYED, ())
+            return
+        if record.game_id in self.cut:
+            self.out.strata.note(Stratum.DROPPED_CUT, ())
+            return
         if record.kind is RecordKind.TURN_ACTION:
             self.out.turn_actions[str(record.subkind)] += 1
             return
@@ -200,7 +225,7 @@ class _ShardWriter:
             self.out.unattributed += 1
         keys = acting_keys(record)
         stratum = self.plan.strata.stratum_of(record.game_id)
-        if stratum is Stratum.DROPPED_HELD_OUT:
+        if stratum in DROPPED_STRATA:
             self.out.strata.note(stratum, ())
         elif stratum is Stratum.TRAINING:
             self._train(record, klass, keys)
@@ -284,7 +309,7 @@ class _ShardWriter:
         rules = self.copies.get(record.game_id, _NO_ADDED).get(value, ())
         if not rules:
             return 0
-        opportunities = qualify(record)
+        opportunities = qualify(record, self.context.sidecars)
         rng = random.Random(value)
         drawn = tuple(sorted(set(rules)))
         written = 0

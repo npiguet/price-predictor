@@ -18,9 +18,10 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 122.1g, a battle with no defense counters is put into its owner's
- * graveyard, on scenario {@code 122.1g-1}: A's Lightning Bolt removes the
- * last 3 defense counters of Invasion of Zendikar.
+ * 704.5v, a battle with no defense counters that is not the source of an
+ * ability on the stack is put into its owner's graveyard (122.1g restates
+ * it), on scenario {@code 704.5v-1}: A's Lightning Bolt removes the last 3
+ * defense counters of Invasion of Zendikar.
  *
  * <p>The base board, read at a boundary: a main phase of the active player
  * begins, it holds a spell it has the lands to cast that deals a fixed N
@@ -31,11 +32,23 @@ import java.util.Optional;
  * <p>Variant {@code four_defense} ({@code counters}): the battle has N + 1
  * defense counters, as Invasion of Zendikar has 4 against Lightning Bolt's 3,
  * so the spell leaves it one and it stays.
+ *
+ * <p>Neither side of the point happens in a fork the Forge AI plays: no AI
+ * aims a damage spell at a battle ({@code DamageDealAi} chooses among
+ * creatures, planeswalkers and players), so the spell resolves elsewhere or
+ * stays in hand, and the fork writes no resolution lowering the battle's
+ * defense. An attack defeats a battle without a choice of spell, but its
+ * damage is a combat record, which 704.5v-1's {@code resolution} declaration
+ * does not read, and every battle Forge has is a Siege, whose defeat trigger
+ * exiles it rather than letting the state-based check put it into the
+ * graveyard. A board edit leaving the battle at 0 defense is no way round:
+ * the fork's first state-based check would put it into the graveyard, and a
+ * state-based move after an edit reaches no record (FR-029).
  */
 public final class BattleDefense {
 
-    public static final String RULE = "122.1g";
-    static final String SCENARIO = "122.1g-1";
+    public static final String RULE = "704.5v";
+    static final String SCENARIO = "704.5v-1";
     static final String FOUR_DEFENSE = "four_defense";
 
     private BattleDefense() {

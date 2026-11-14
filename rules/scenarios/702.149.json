@@ -157,14 +157,7 @@
       ],
       "forge_notes": "In the two_instances variant Warrior's Resolve also draws A a card at the beginning of the end step, because a creature with a +1/+1 counter attacked; that is why A's library holds a card. Warrior's Resolve under B's control does not affect A's creatures. Forge must count the granted instance separately from the printed one.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "Each training instance on an attacking creature fires its own trigger when the creature attacks alongside a creature with greater power.",
-        "near_miss": "A training trigger is evaluated for its creature attacking with no other attacker of greater power and does not fire.",
-        "params": {
-          "keyword": "Training"
-        },
-        "needs": []
+        "none": "How many times one event triggers an ability is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     },
     {

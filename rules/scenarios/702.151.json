@@ -81,11 +81,11 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "An attach ability resolves and produces an attached event.",
-        "near_miss": "An attach ability resolved with no attached event.",
+        "outcome": "A reconfigure ability attaches the permanent to a creature.",
+        "near_miss": "A reconfigure ability resolving and attaching nothing.",
         "params": {
           "event": "attached",
-          "api": "Attach"
+          "keyword": "Reconfigure"
         },
         "needs": []
       }
@@ -227,11 +227,12 @@
       "detector": {
         "family": "continuous_contribution",
         "record_kind": "continuous",
-        "outcome": "A static ability removes the creature type from a permanent.",
-        "near_miss": "A static contributing no type removal on the board.",
+        "outcome": "A reconfigure Equipment's static removes its creature type while attached.",
+        "near_miss": "The static applying and removing no type.",
         "params": {
           "field": "types",
-          "value": "-Creature"
+          "value": "-Creature",
+          "source_keyword": "Reconfigure"
         },
         "needs": []
       }

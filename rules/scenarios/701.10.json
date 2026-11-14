@@ -77,18 +77,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A resolution that doubles a creature's power is a Pump whose effect half holds a pt_change giving it a power modifier equal to its current power.",
-        "near_miss": "A Pump resolution that does not double power (a fixed bonus).",
-        "params": {
-          "event": "pt_change",
-          "api": "Pump",
-          "script_param": {
-            "NumAtt": "Double"
-          }
-        },
-        "needs": []
+        "none": "Could not express: what the doubled or tripled value was (negative, or later overwritten by a base-power effect) is read by no outcome_event parameter."
       }
     },
     {
@@ -364,18 +353,7 @@
       ],
       "forge_notes": "A power below zero is only reachable with an effect that lowers power while leaving toughness positive; the toughness-below-zero branch of 701.10c cannot be reached because the creature dies first.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A resolution that doubles a creature's power (a negative power gives a further negative modifier) is a Pump whose effect half holds a pt_change of the doubling.",
-        "near_miss": "A Pump resolution that does not double power.",
-        "params": {
-          "event": "pt_change",
-          "api": "Pump",
-          "script_param": {
-            "NumAtt": "Double"
-          }
-        },
-        "needs": []
+        "none": "Could not express: what the doubled or tripled value was (negative, or later overwritten by a base-power effect) is read by no outcome_event parameter."
       }
     },
     {
@@ -683,11 +661,12 @@
       "detector": {
         "family": "rewrite_event",
         "record_kind": "rewrite",
-        "outcome": "A damage event meeting a replacement that changes its amount, such as doubling it, goes on with the updated amount.",
-        "near_miss": "A damage event meets the replacement and is not replaced.",
+        "outcome": "A replacement doubles the damage a source would deal.",
+        "near_miss": "A damage replacement updating the event without doubling it.",
         "params": {
           "event": "damage_dealt",
-          "result": "updated"
+          "result": "updated",
+          "amount_change": "doubled"
         },
         "needs": []
       }
@@ -763,11 +742,12 @@
       "detector": {
         "family": "rewrite_event",
         "record_kind": "rewrite",
-        "outcome": "A damage event meeting a replacement that changes its amount, such as doubling it, goes on with the updated amount.",
-        "near_miss": "A damage event meets the replacement and is not replaced.",
+        "outcome": "A replacement doubles the damage a source would deal.",
+        "near_miss": "A damage replacement updating the event without doubling it.",
         "params": {
           "event": "damage_dealt",
-          "result": "updated"
+          "result": "updated",
+          "amount_change": "doubled"
         },
         "needs": []
       }

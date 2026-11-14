@@ -12,7 +12,9 @@ copies stay each record's natural share:
 3. each half is filled on its own: what a short side cannot reach stays its
    shortfall and is never given to the other side;
 4. a record's added copies never take its total past ``reuse_cap``, and a
-   text's added copies never take its total in the class past ``text_cap``;
+   text's added copies never take its total in the class past ``text_cap``,
+   its total counting the natural copies of every record of the text in the
+   class, tagged or not (``text_natural``);
 5. each added copy goes to the record's rule furthest below its half.
 
 Copies are added in rounds, one per record per round, records in seeded
@@ -134,6 +136,7 @@ def plan_rule_budgets(
     budgeted: Iterable[str],
     reuse_cap: int,
     text_cap: int,
+    text_natural: Mapping[str, Mapping[str, int]] | None = None,
 ) -> RuleBudgets:
     """The added copies of every class, and its rule rows.
 
@@ -142,6 +145,9 @@ def plan_rule_budgets(
             ``SelectionPlan.targets`` holds them.
         budgeted: the rules the map snapshot marks ``trained``.
         text_cap: ``--text-cap``; ``<= 0`` is no cap.
+        text_natural: ``class -> text -> natural copies`` of every record of
+            the text in the class, untagged ones included, which the text cap
+            counts; a text it omits counts its tagged records' alone.
     """
     budgeted = frozenset(budgeted)
     by_class: dict[str, list[BudgetedRecord]] = defaultdict(list)
@@ -157,6 +163,7 @@ def plan_rule_budgets(
         plan = _ClassPlan(
             by_class[klass], budgeted=budgeted, target=class_targets.get(klass, 0),
             reuse_cap=reuse_cap, text_cap=text_cap,
+            text_natural=dict((text_natural or {}).get(klass, {})),
         )
         plan.fill()
         for index, drawn in plan.drawn.items():
@@ -190,6 +197,8 @@ class _ClassPlan:
     target: int
     reuse_cap: int
     text_cap: int
+    #: ``text -> natural copies`` of every record of the text in the class.
+    text_natural: dict[str, int] = field(default_factory=dict)
     #: Budgeted rules tagged in the class, sorted.
     rules: tuple[str, ...] = ()
     share: int = 0
@@ -249,14 +258,16 @@ class _ClassPlan:
 
     def _text_room(self) -> dict[str, int]:
         """Added copies each text may still take: what keeps its total in the
-        class at or under ``text_cap``; no entry is no cap."""
+        class, untagged records' natural copies included, at or under
+        ``text_cap``; no entry is no cap."""
         if self.text_cap <= 0:
             return {}
         natural: Counter = Counter()
         for record in self.records:
             if record.text is not None:
                 natural[record.text] += record.natural
-        return {text: max(0, self.text_cap - n) for text, n in natural.items()}
+        return {text: max(0, self.text_cap - max(n, self.text_natural.get(text, 0)))
+                for text, n in natural.items()}
 
     def _halves(self, record: BudgetedRecord) -> list[tuple[str, Polarity]]:
         """The record's tags that draw a half."""

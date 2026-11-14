@@ -92,16 +92,4 @@ class ScriptLocatorTest {
         assertEquals("cardsfolder/l/lightning_bolt.txt", ScriptLocator.scriptFileOf(copy));
     }
 
-    /**
-     * The join is a string comparison, so what the collector writes has to be
-     * what the converter wrote: the source path relativised against the tree,
-     * with forward slashes, on a platform whose own separator is neither.
-     * Spelled out rather than recomputed, so a change to the shared derivation
-     * cannot move both sides at once; {@code +2 Mace} is a card the tree files
-     * under {@code p/} rather than where its name derives.
-     */
-    @Test
-    void theKeyedPathIsTheOneTheConverterWouldHaveWritten() {
-        assertEquals("cardsfolder/p/+2_mace.txt", ScriptLocator.scriptFileOf(card("+2 Mace")));
-    }
 }

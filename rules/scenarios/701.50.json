@@ -323,15 +323,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A Connive N resolution puts +1/+1 counters on the conniving permanent for the nonland cards discarded.",
-        "near_miss": "A Connive resolution puts no counter on the conniving permanent (every discarded card was a land).",
-        "params": {
-          "event": "counter_change",
-          "api": "Connive"
-        },
-        "needs": []
+        "same_as": "701.50a-1",
+        "reason": "Connive N adds a counter per nonland card discarded as connive does: the record shows 701.50a's fact."
       }
     },
     {

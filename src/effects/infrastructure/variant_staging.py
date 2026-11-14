@@ -17,33 +17,36 @@ import price_predictor.infrastructure.forge_jvm as forge_jvm
 
 logger = logging.getLogger(__name__)
 
-#: The staging's manifest, ``ForgeEnvironmentInitializer.STAGED_MANIFEST``:
-#: not a ``.txt``, because Forge reads every ``.txt`` there as a card.
-STAGED_MANIFEST = ".staged-by-effects.list"
+#: The staging's manifest, ``ForgeEnvironmentInitializer.STAGED_MANIFEST``.
+STAGED_MANIFEST = forge_jvm.STAGED_MANIFEST
 
 
 def custom_cards_dir() -> Path:
-    """Forge's ``USER_CUSTOM_CARDS_DIR`` as a worker resolves it: the worker
-    makes ``forge-gui/`` the assets dir, and a headless GUI's user dir is
-    ``<assets>/data/``."""
-    return forge_jvm.forge_dir() / "forge-gui" / "data" / "custom" / "cards"
+    """Forge's ``USER_CUSTOM_CARDS_DIR`` as a worker resolves it."""
+    return forge_jvm.custom_cards_dir()
+
+
+def claim_staging() -> None:
+    """Record this process as the staging's owner before anything is staged,
+    so another command's first JVM leaves the staging alone while this run
+    lasts (``forge_jvm.clear_stale_staging``); :func:`unstage_variants`
+    drops the record."""
+    forge_jvm.claim_staging()
 
 
 def unstage_variants(directory: Path | None = None) -> int:
     """Delete every file the last staging copied into ``directory`` (default
-    :func:`custom_cards_dir`), as its manifest names them, and empty the
-    manifest; returns how many were deleted. A card a person put there is not
-    in the manifest and stays."""
+    :func:`custom_cards_dir`), as its manifest names them, empty the manifest
+    and drop the owner record; returns how many were deleted. A card a person
+    put there is not in the manifest and stays. A manifest that cannot be
+    read is reported and left. A run killed too hard to get here leaves its
+    scripts staged: the next command's first JVM clears them once this
+    process is gone (``forge_jvm.clear_stale_staging``)."""
     directory = custom_cards_dir() if directory is None else Path(directory)
-    manifest = directory / STAGED_MANIFEST
-    if not manifest.is_file():
+    try:
+        removed = forge_jvm.unstage_custom_cards(directory)
+    except (OSError, ValueError) as exc:
+        logger.warning("Could not unstage the variant scripts in %s: %s", directory, exc)
         return 0
-    removed = 0
-    for name in manifest.read_text(encoding="utf-8").splitlines():
-        name = name.strip()
-        if name and (directory / name).is_file():
-            (directory / name).unlink()
-            removed += 1
-    manifest.write_text("", encoding="utf-8")
     logger.info("Unstaged %d variant script(s) from %s", removed, directory)
     return removed

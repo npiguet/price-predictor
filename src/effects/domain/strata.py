@@ -19,6 +19,14 @@ class Stratum(StrEnum):
     #: Records of training games acting through a held-out ability text;
     #: counted, never written, while the rest of the game still trains.
     DROPPED_HELD_OUT_TEXT = "dropped-held-out-text"
+    #: Records of games the survey never saw, which a shard growing between
+    #: the survey and the write pass adds: never placed, so counted and
+    #: never written, since one may name a held-out card.
+    DROPPED_UNSURVEYED = "dropped-unsurveyed"
+    #: Records of gen-3 games whose shard holds no game-end marker (WP7): a
+    #: game cut by a killed worker or one that threw, its records incomplete;
+    #: counted, never written.
+    DROPPED_CUT = "dropped-cut"
 
 
 class Half(StrEnum):
@@ -35,6 +43,9 @@ OUTPUT_STRATA: tuple[Stratum, ...] = (
     Stratum.TRAINING, Stratum.CARD_DISJOINT, Stratum.GAME_DISJOINT, Stratum.GATE_ONE,
 )
 #: The strata a build counts and never writes, in report order.
-DROPPED_STRATA: tuple[Stratum, ...] = (Stratum.DROPPED_HELD_OUT, Stratum.DROPPED_HELD_OUT_TEXT)
+DROPPED_STRATA: tuple[Stratum, ...] = (
+    Stratum.DROPPED_HELD_OUT, Stratum.DROPPED_HELD_OUT_TEXT, Stratum.DROPPED_UNSURVEYED,
+    Stratum.DROPPED_CUT,
+)
 #: The two strata the trainer validates on, each with a fixed sample.
 VALIDATION_STRATA: tuple[Stratum, ...] = (Stratum.CARD_DISJOINT, Stratum.GAME_DISJOINT)

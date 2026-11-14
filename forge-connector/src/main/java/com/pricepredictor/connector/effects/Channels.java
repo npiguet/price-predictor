@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import forge.game.Game;
 
+import java.util.List;
 import java.util.Random;
 
 /**
@@ -43,17 +44,27 @@ record Channels(
         PlayabilityChannel playability =
                 new PlayabilityChannel(live, context, dedup, sampler, caps);
         PriorityCandidates candidates = new PriorityCandidates(live, playability);
+        RewriteChannel rewrites = new RewriteChannel(live, context, dedup);
+        ManaChannel mana = new ManaChannel(
+                live, context, new RecordReservoir(caps.manaCap(), sampler), bracket);
+        if (bracket != null) {
+            // A buffered ability's run and a mana ability's own effects are
+            // those channels' records, never the open bracket's.
+            bracket.addTap(rewrites);
+            bracket.addTap(mana);
+        }
         return new Channels(
-                new RewriteChannel(live, context, dedup),
+                rewrites,
                 new TriggerChannel(live, context, dedup, new TriggerNegativeSampler(sampler),
                         new RecordReservoir(TriggerNegativeSampler.POSITIVES_PER_LINE, sampler)),
                 playability,
                 candidates,
-                new ManaChannel(
-                        live, context, new RecordReservoir(caps.manaCap(), sampler), bracket),
+                mana,
                 new ClauseOutcomeRouter(live, bracket),
                 new ContinuousChannel(live, context, dedup),
-                new PhaseSignals(live, PhaseSignals.Sink.both(bracket.phaseSink(), candidates.sink())));
+                new PhaseSignals(live, PhaseSignals.Sink.both(
+                        PhaseSignals.Sink.both(bracket.phaseSink(), candidates.sink()),
+                        rewrites.phaseSink())));
     }
 
     @Override
@@ -66,19 +77,36 @@ record Channels(
      *                  rewrite tally counts; a fork played on from one is not
      */
     void close(boolean countGame) {
-        try {
-            // A declaration of attackers the game ended before it was made.
-            playability.close();
-            // This is the last moment the game can be said to have ended, and
-            // the reservoirs are only decided then.
-            triggers.flush();
-            mana.flush();
-        } finally {
-            // In the finally: the question the tally answers is about the run,
-            // so it is asked once per game whatever the game did.
-            if (countGame) {
-                RewriteChannel.JVM_REWRITES.endOfGame();
+        RuntimeException failed = null;
+        // Each in its own try, so one that throws costs its own records and
+        // not the others' (V3 #5); the first failure is thrown once all ran,
+        // and the game then gets no end marker.
+        for (Runnable step : List.<Runnable>of(
+                // A declaration of attackers the game ended before it was made.
+                playability::close,
+                // A buffered ability that never ran.
+                rewrites::writeWaiting,
+                // This is the last moment the game can be said to have ended,
+                // and the reservoirs are only decided then.
+                triggers::flush,
+                mana::flush)) {
+            try {
+                step.run();
+            } catch (RuntimeException failure) {
+                if (failed == null) {
+                    failed = failure;
+                } else {
+                    failed.addSuppressed(failure);
+                }
             }
+        }
+        // Whatever the steps did: the question the tally answers is about the
+        // run, so it is asked once per game whatever the game did.
+        if (countGame) {
+            RewriteChannel.JVM_REWRITES.endOfGame();
+        }
+        if (failed != null) {
+            throw failed;
         }
     }
 }

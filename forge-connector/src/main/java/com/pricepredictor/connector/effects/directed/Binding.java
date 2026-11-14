@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects.directed;
 
+import com.pricepredictor.connector.effects.ForkRefusal;
 import forge.ai.simulation.GameCopier;
 import forge.game.GameObject;
 import forge.game.card.Card;
@@ -66,9 +67,9 @@ public record Binding(Map<String, Card> cards, Map<String, Player> players) {
     /**
      * The same roles bound to the fork's copies of the live objects.
      *
-     * @throws IllegalStateException when the copy holds no counterpart of a
-     *                               bound object, which discards the fork:
-     *                               the variant cannot be described on it
+     * @throws ForkRefusal when the copy holds no counterpart of a bound
+     *                     object, which the fork counts as a refusal: the
+     *                     variant cannot be described on it
      */
     public Binding inFork(GameCopier copier) {
         Map<String, Card> forkCards = new LinkedHashMap<>();
@@ -83,10 +84,10 @@ public record Binding(Map<String, Card> cards, Map<String, Player> players) {
         try {
             found = copier.find(live);
         } catch (RuntimeException e) {
-            throw new IllegalStateException("the fork holds no copy of the " + role, e);
+            throw new ForkRefusal(ForkRefusal.NO_COUNTERPART);
         }
         if (found == null) {
-            throw new IllegalStateException("the fork holds no copy of the " + role);
+            throw new ForkRefusal(ForkRefusal.NO_COUNTERPART);
         }
         return found;
     }

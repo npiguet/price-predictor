@@ -86,8 +86,7 @@ final class PlayabilityChecks {
             boolean affordable, StaticAbility prohibiting) {
         Set<PlayabilityCheck> failed = EnumSet.noneOf(PlayabilityCheck.class);
         Game game = activator.getGame();
-        // Special actions (turning a face-down creature up) ignore split second (CR 702.61b).
-        if (!(sa instanceof AbilityStatic) && game.getStack().isSplitSecondOnStack()) {
+        if (!ignoresSplitSecond(sa) && game.getStack().isSplitSecondOnStack()) {
             failed.add(PlayabilityCheck.SPLIT_SECOND);
         }
         if (!timing) {
@@ -123,6 +122,20 @@ final class PlayabilityChecks {
             failed.add(PlayabilityCheck.SCRIPT_RESTRICTION);
         }
         return named(failed, prohibiting);
+    }
+
+    /**
+     * Whether split second leaves {@code sa} legal (CR 702.61b): a mana
+     * ability, or a special action (CR 116.2) — a land play, turning a
+     * face-down permanent face up, foretelling, plotting, suspending a card,
+     * unlocking a door, and Forge's other special actions, which it builds as
+     * {@code AbilityStatic} (an action ending an effect, Circling Vultures'
+     * discard, a companion put into hand).
+     */
+    static boolean ignoresSplitSecond(SpellAbility sa) {
+        return sa.isManaAbility() || sa.isLandAbility() || sa instanceof AbilityStatic
+                || sa.isTurnFaceUp() || sa.isForetelling() || sa.isPlotting() || sa.isUnlock()
+                || !sa.isSpell() && sa.isKeyword(forge.game.keyword.Keyword.SUSPEND);
     }
 
     /** The failed checks in {@link PlayabilityCheck}'s order, the prohibition naming its static. */

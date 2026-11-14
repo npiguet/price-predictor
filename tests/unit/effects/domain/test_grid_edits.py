@@ -6,6 +6,7 @@ damage grid's amount is edited in the encoded text under a key of its own.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -23,7 +24,13 @@ from effects.domain.grid_edits import (
 )
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import ResolutionPayload
-from effects.domain.state_snapshot import GlobalState, PlayerState, PowerToughness, Refs
+from effects.domain.state_snapshot import (
+    GlobalState,
+    GrantedTemporary,
+    PlayerState,
+    PowerToughness,
+    Refs,
+)
 from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 BOLT = ("NumDmg$ 3 | SP$ DealDamage | SpellDescription$ CARDNAME deals 3 damage to "
@@ -131,3 +138,138 @@ class TestTheEditor:
     def test_an_unknown_grid_is_refused(self):
         with pytest.raises(KeyError):
             GridEdits(_Texts(BOLT)).cells("nowhere/none/blocker", _record(), ("A", "B"))
+
+
+class _Lines:
+    """The damage grid's acting-line read (``SidecarCache.line_or_none``)."""
+
+    def line_or_none(self, key):
+        return SimpleNamespace(script_text=BOLT, role_spans=())
+
+
+def _no_keywords(entity) -> frozenset[str]:
+    return frozenset()
+
+
+class TestTheDamageGridsOutcomes:
+    def test_each_cell_s_outcome_is_the_rule_on_the_board_the_cell_reads(self):
+        """A target already marked with damage: every cell clears it, so the
+        frozen outcome is the rule on the cleared board, never on the real one."""
+        from effects.domain.event_schema import Event, EventType
+        from effects.domain.grid_edits import DamageGrid
+        from effects.domain.rule_outcomes import damage_lethal
+
+        target = make_entity("E1", "E1", controller="P1", types=("creature",),
+                             pt=PowerToughness(base=(2, 5)), damage=2)
+        events = (Event(type=EventType.DAMAGE_DEALT, subjects=("E1",), params={"amount": 3}),
+                  Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
+                        params={"from_zone": "battlefield", "to_zone": "graveyard"}))
+        record = _record(target, payload=ResolutionPayload(events=events))
+        qualified = DamageGrid(_Lines(), _no_keywords).qualify(record)
+        assert qualified is not None and qualified.entities == ("E1",)
+        cells = damage_cells(record, "E1", _Texts(BOLT))
+        boards = [cell.record.state.entity("E1") for cell in cells]
+        amounts = [amount for amount in VALUES for _ in VALUES]
+        assert list(qualified.outcomes) == [
+            float(damage_lethal(board.pt.total[1], board.damage, amount))
+            for board, amount in zip(boards, amounts, strict=True)]
+        # Amount 2 on toughness 3: the real board's 2 marked damage would kill.
+        assert qualified.outcomes[1 * 8 + 2] == 0.0
+
+
+def _blockers_record(attacker, blocker):
+    from effects.domain.records import (
+        PlayabilityBlockersPayload,
+        PlayabilitySubkind,
+        RecordKind,
+    )
+
+    return make_record(
+        kind=RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.BLOCKERS,
+        state=make_snapshot(entities=(attacker, blocker)), what_if=False,
+        payload=PlayabilityBlockersPayload(anchor_attacker=attacker.id,
+                                           legal_blockers=(blocker.id,)))
+
+
+class TestTheEvasionGridsPair:
+    def test_a_pair_holding_all_five_colours_is_no_evasion_pair(self):
+        """``protection-other`` needs a colour neither creature has: an Esper
+        attacker against a red-green blocker leaves none, so the pair is not
+        one the grid can fill, rather than a crash that kills the freeze."""
+        from effects.domain.grid_edits import EvasionGrid
+
+        record = _blockers_record(_creature("A", colors=("W", "U", "B")),
+                                  _creature("B", colors=("R", "G")))
+        assert EvasionGrid(_no_keywords).qualify(record) is None
+
+    def test_a_pair_holding_every_spare_creature_type_is_no_evasion_pair(self):
+        from effects.domain.grid_edits import OTHER_CREATURE_TYPES, EvasionGrid
+
+        attacker = replace(_creature("A", colors=("W",)), subtypes=OTHER_CREATURE_TYPES)
+        record = _blockers_record(attacker, _creature("B", colors=("G",)))
+        assert EvasionGrid(_no_keywords).qualify(record) is None
+
+    def test_a_changeling_blocker_is_no_evasion_pair(self):
+        """702.73a: a changeling has every creature type, so protection from a
+        creature type covers it (702.16f) though its subtypes list none."""
+        from effects.domain.grid_edits import EvasionGrid
+
+        blocker = replace(_creature("B", colors=("G",)),
+                          granted_temporary=GrantedTemporary(keywords=("changeling",)))
+        record = _blockers_record(_creature("A", colors=("W",)), blocker)
+        assert EvasionGrid(_no_keywords).qualify(record) is None
+
+    def test_a_phased_out_blocker_or_a_last_known_attacker_is_no_evasion_pair(self):
+        from effects.domain.grid_edits import EvasionGrid
+
+        attacker, blocker = _creature("A", colors=("W",)), _creature("B", colors=("G",))
+        assert EvasionGrid(_no_keywords).qualify(_blockers_record(attacker, blocker))
+        for record in (
+                _blockers_record(attacker, replace(blocker, designations=("phased_out",))),
+                _blockers_record(replace(attacker, zone=None), blocker)):
+            assert EvasionGrid(_no_keywords).qualify(record) is None
+
+    def test_a_pair_with_a_spare_colour_fills_every_cell(self):
+        from effects.domain.grid_edits import EvasionGrid
+
+        record = _blockers_record(_creature("A", colors=("W", "U", "B")),
+                                  _creature("B", colors=("R",)))
+        qualified = EvasionGrid(_no_keywords).qualify(record)
+        assert qualified is not None and qualified.entities == ("A", "B")
+        assert len(qualified.outcomes) == len(ATTACKER_KEYWORDS) * len(BLOCKER_TRAITS)
+
+
+class TestTheCombatGridsPair:
+    def _combat(self, *extra_events):
+        from effects.domain.event_schema import Event, EventType
+        from effects.domain.records import CombatPayload, RecordKind
+        from effects.domain.state_snapshot import CombatStatus
+
+        attacker = replace(_creature("A", power=2, toughness=3),
+                           combat=CombatStatus(attacking="P1", blocked_by=("B",)))
+        blocker = replace(_creature("B", power=2, toughness=3),
+                          combat=CombatStatus(blocking=("A",)))
+        events = (Event(type=EventType.DAMAGE_DEALT, subjects=("B",), params={"amount": 2}),
+                  Event(type=EventType.DAMAGE_DEALT, subjects=("A",), params={"amount": 2}),
+                  *extra_events)
+        state = make_snapshot(
+            global_=GlobalState(turn=3, phase="combat_damage", active="P0", priority="P0",
+                                stack_size=0, combat_substep="regular"),
+            entities=(attacker, blocker))
+        return make_record(kind=RecordKind.COMBAT, state=state,
+                           payload=CombatPayload(attackers=("A",), blocks={"A": ("B",)},
+                                                 events=events))
+
+    def test_a_block_both_creatures_survive_qualifies(self):
+        from effects.domain.grid_edits import grid_block
+
+        assert grid_block(self._combat(), _no_keywords, "one") == ("A", "B")
+
+    def test_a_creature_moved_where_no_zone_outcome_names_is_no_grid_pair(self):
+        """Its outcome is unknown, never "stayed", so the rule cannot be checked."""
+        from effects.domain.event_schema import Event, EventType
+        from effects.domain.grid_edits import grid_block
+
+        moved = Event(type=EventType.ZONE_CHANGE, subjects=("B",),
+                      params={"from_zone": "battlefield", "to_zone": "stack"})
+        assert grid_block(self._combat(moved), _no_keywords, "one") is None

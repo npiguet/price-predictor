@@ -98,10 +98,22 @@ final class SnapshotLinks {
     static String render(Game game, Collection<Card> cards, Collection<Card> tiers,
                          SpellAbility acting, boolean actingTargets, EffectEvent pending,
                          StaticSuppression board, FloatingEffects floating) {
+        return render(game, cards, tiers, acting, actingTargets, pending, board, floating, null);
+    }
+
+    /**
+     * The same, {@code acting}'s {@code targets} links taken from
+     * {@code actingTargetsAsCast} when it is not null: an effect half's
+     * targets as cast, before Forge's check for illegal targets.
+     */
+    static String render(Game game, Collection<Card> cards, Collection<Card> tiers,
+                         SpellAbility acting, boolean actingTargets, EffectEvent pending,
+                         StaticSuppression board, FloatingEffects floating,
+                         List<String> actingTargetsAsCast) {
         SnapshotLinks links = new SnapshotLinks(game);
         links.cardLinks(cards, board);
         links.combat(game.getCombat());
-        links.stack(acting, actingTargets);
+        links.stack(acting, actingTargets, actingTargetsAsCast);
         links.commandZone(cards, tiers, floating);
         if (pending != null && pending.lastKnown() != null) {
             Card lastKnown = pending.lastKnown();
@@ -197,7 +209,7 @@ final class SnapshotLinks {
      * acting ability's too where it is not on the stack yet, its targets only
      * when they are its own.
      */
-    private void stack(SpellAbility acting, boolean actingTargets) {
+    private void stack(SpellAbility acting, boolean actingTargets, List<String> actingAsCast) {
         Set<SpellAbility> objects = Collections.newSetFromMap(new IdentityHashMap<>());
         List<SpellAbility> ordered = new ArrayList<>();
         for (SpellAbilityStackInstance instance : game.getStack()) {
@@ -217,6 +229,12 @@ final class SnapshotLinks {
             String line = line(host, ability);
             int index = 0;
             boolean targets = !(staleTargets && ability == acting);
+            if (targets && ability == acting && actingAsCast != null) {
+                for (String target : actingAsCast) {
+                    addTarget(line, Json.string(target), index++);
+                }
+                targets = false;
+            }
             for (SpellAbility clause = ability; targets && clause != null;
                     clause = clause.getSubAbility()) {
                 if (clause.getTargets() == null) {

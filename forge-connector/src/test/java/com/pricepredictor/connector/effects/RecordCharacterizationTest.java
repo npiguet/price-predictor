@@ -33,6 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -67,9 +68,13 @@ class RecordCharacterizationTest {
     // ── resolution ──────────────────────────────────────────────────────
 
     /**
-     * Both moments, through the engine: a two-colour spell that kills its
-     * target, a spell that fizzles, a tap ability, and an ability hosted on an
-     * engine-built effect card, which keys to the line that made the effect.
+     * Both moments, through the engine with every hook installed, as a
+     * patched worker records them: a two-colour spell that kills its target,
+     * a spell that fizzles (its targets as cast), a tap ability, an ability
+     * hosted on an engine-built effect card, which keys to the line that made
+     * the effect, a "can't block" pump (a hidden keyword), Arc Trail losing
+     * one of its two targets (partially fizzled, its targets as cast apart
+     * from those left) and Cryptolith Rite entering (an ability granted).
      */
     @Test
     void resolutionRecords() throws Throwable {
@@ -82,10 +87,12 @@ class RecordCharacterizationTest {
         pyromancer.setSickness(false);
         Card bears = board.battlefield("Grizzly Bears", opponent);
         Card giant = board.battlefield("Hill Giant", opponent);
+        Card elves = board.battlefield("Llanowar Elves", opponent);
+        Card ogre = board.battlefield("Gray Ogre", opponent);
+        Card wall = board.battlefield("Wall of Wood", you);
 
-        List<String> records = ShardRun.records(tempDir, board.game, CAPS, (bracket, collectors) -> {
-            board.game.subscribeToEvents(bracket);
-
+        RecordShardWriter writer = ShardRun.recordedWithClauseHook(tempDir, board.game, CAPS,
+                "for the resolution hook's targets as cast", () -> {
             SpellAbility helix = board.spell(
                     board.game.getAction().moveToStack(board.card("Lightning Helix", you), null),
                     you);
@@ -114,11 +121,125 @@ class RecordCharacterizationTest {
             gain.setActivatingPlayer(you);
             board.castAndResolve(gain);
 
+            board.cast(board.card("Abandon the Post", you), you, elves);
+            board.game.getStack().resolveStack();
+            board.game.getAction().checkStateEffects(false);
+
+            SpellAbility arcTrail = board.spell(
+                    board.game.getAction().moveToStack(board.card("Arc Trail", you), null), you);
+            arcTrail.resetTargets();
+            arcTrail.getTargets().add(ogre);
+            arcTrail.getSubAbility().getTargets().add(opponent);
+            board.game.getStack().add(arcTrail);
+            board.game.getAction().exile(ogre, null, null);
+            board.game.getStack().resolveStack();
+            board.game.getAction().checkStateEffects(false);
+
+            SpellAbility rite = board.spell(
+                    board.game.getAction().moveToStack(board.card("Cryptolith Rite", you), null), you);
+            board.castAndResolve(rite);
+
             board.nextStep();
         });
+        List<String> records = ShardRun.readShard(writer.path()).stream()
+                .filter(record -> "resolution".equals(RecordLines.parse(record).get("kind")))
+                .toList();
+        assertTrue(wall.isInPlay());
 
         Characterization.assertMatches(
                 "record-resolution.jsonl", Characterization.recordLines(records));
+    }
+
+    /**
+     * What a board holds beside its permanents' front faces, through the
+     * engine with every hook installed: Graceful Reprieve leaves a pending
+     * delayed trigger on Grizzly Bears, and a transformed Delver of Secrets
+     * (Insectile Aberration) is on the battlefield on its back face, when
+     * Lightning Bolt is cast at the opponent and resolves. Both moments of
+     * both spells.
+     */
+    @Test
+    void aBackFaceAndAPendingDelayedTrigger() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Player you = board.you;
+        Player opponent = board.opponent;
+        Card bears = board.battlefield("Grizzly Bears", you);
+        Card delver = board.battlefield("Delver of Secrets", you);
+        delver.setState(forge.card.CardStateName.Backside, true);
+
+        RecordShardWriter writer = ShardRun.recordedWithClauseHook(tempDir, board.game, CAPS,
+                "for the resolution hook", () -> {
+            board.cast(board.card("Graceful Reprieve", you), you, bears);
+            board.game.getStack().resolveStack();
+            TestBoard.cast(board.game, board.card("Lightning Bolt", you), you, opponent);
+            board.game.getStack().resolveStack();
+            board.game.getAction().checkStateEffects(false);
+            board.nextStep();
+        });
+        List<String> records = ShardRun.readShard(writer.path()).stream()
+                .filter(record -> "resolution".equals(RecordLines.parse(record).get("kind")))
+                .toList();
+        assertEquals(4, records.size(), records.toString());
+        String bolt = RecordLines.only(records, "activation", "cardsfolder/l/lightning_bolt.txt");
+        assertTrue(bolt.contains("\"delayed_triggers\":[{"), "the reprieve pending: " + bolt);
+        assertTrue(bolt.contains("\"name\":\"Insectile Aberration\"")
+                && bolt.contains("\"face_state\":\"back\""), "the delver's back face: " + bolt);
+
+        Characterization.assertMatches(
+                "record-back-face-and-delayed-trigger.jsonl", Characterization.recordLines(records));
+    }
+
+    /**
+     * Every turn-based action a turn wrap performs, each a {@code turn_action}
+     * record of its own, through the engine's real loop with every hook
+     * installed: the ending player's cleanup discard to hand size, then the
+     * next player's phasing (Breezekeeper), day becoming night, untap (a
+     * tapped Forest), draw and a lore counter on History of Benalia.
+     */
+    @Test
+    void theTurnActionsOfATurnWrap() throws Throwable {
+        forge.game.Game game = TestBoard.twoPlayerGame(PhaseType.END_OF_TURN);
+        CharacterizationBoard board = CharacterizationBoard.on(game);
+        Player next = game.getPlayers().get(0);
+        Player ending = game.getPlayers().get(1);
+        // Turn 1 is the ending player's, so the next one's draw is not skipped.
+        game.getPhaseHandler().devModeSet(PhaseType.END_OF_TURN, ending, 1);
+        game.setAge(forge.game.GameStage.Play);
+        for (int i = 0; i < 8; i++) {
+            game.getAction().moveTo(ZoneType.Hand, board.card("Craw Wurm", ending), null, null);
+        }
+        for (Player player : List.of(ending, next)) {
+            for (int i = 0; i < 2; i++) {
+                game.getAction().moveTo(ZoneType.Library, board.card("Craw Wurm", player), null, null);
+            }
+        }
+        board.battlefield("Forest", next).setTapped(true);
+        board.battlefield("Breezekeeper", next);
+        board.battlefield("History of Benalia", next);
+        game.getTriggerHandler().clearWaitingTriggers();
+        game.setDayTime(false);
+
+        forge.game.phase.PhaseHandler phases = game.getPhaseHandler();
+        RecordShardWriter writer = ShardRun.recordedWithClauseHook(tempDir, game, CAPS,
+                "for the hooks a worker installs", () -> {
+            for (int step = 0; step < 100
+                    && !(phases.is(PhaseType.MAIN1) && phases.getPlayerTurn() == next); step++) {
+                phases.mainLoopStep();
+            }
+            assertTrue(phases.is(PhaseType.MAIN1) && phases.getPlayerTurn() == next,
+                    "the game reached the next player's main phase");
+            game.fireEvent(new forge.game.event.GameEventPlayerPriority(
+                    forge.game.player.PlayerView.get(next), PhaseType.MAIN1,
+                    forge.game.player.PlayerView.get(next)));
+        });
+        List<String> records = ShardRun.readShard(writer.path()).stream()
+                .filter(record -> "turn_action".equals(RecordLines.parse(record).get("kind")))
+                .toList();
+        assertEquals(List.of("cleanup_discard", "phasing", "day_night", "untap", "draw", "lore_counter"),
+                records.stream().map(record -> RecordLines.parse(record).get("subkind")).toList());
+
+        Characterization.assertMatches(
+                "record-turn-actions.jsonl", Characterization.recordLines(records));
     }
 
     /**
@@ -192,10 +313,87 @@ class RecordCharacterizationTest {
             Map<AbilityKey, Object> after = AbilityKey.newMap(before);
             after.put(AbilityKey.DamageAmount, 3);
             listener.onReplacement(prevent, before, after, ReplacementResult.Updated, null);
+
+            // Run parameters Forge could not copy: incoming_unknown.
+            listener.onReplacement(prevent, null, after, ReplacementResult.Updated, null);
         });
 
         Characterization.assertMatches(
                 "record-rewrite.jsonl", Characterization.recordLines(records));
+    }
+
+    /**
+     * Shock at Swans of Bryn Argoll, played on the hooked path: the
+     * prevention's rewrite record names the buffered draw and takes the
+     * events of its run.
+     */
+    @Test
+    void bufferedRewriteRecords() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Player you = board.you;
+        for (int i = 0; i < 2; i++) {
+            board.game.getAction().moveToLibrary(board.hand("Island", you), null, null);
+        }
+        Card swans = board.battlefield("Swans of Bryn Argoll", board.opponent);
+
+        List<String> records = ShardRun.recordsWithClauseHook(
+                tempDir, board.game, "for the buffered-ability hooks", () -> {
+                    board.cast(board.card("Shock", you), you, swans);
+                    board.game.getStack().resolveStack();
+                    board.game.getAction().checkStateEffects(false);
+                });
+
+        Characterization.assertMatches("record-rewrite-buffered.jsonl",
+                Characterization.recordLines(records.stream()
+                        .filter(line -> line.contains("\"kind\":\"rewrite\"")).toList()));
+    }
+
+    /**
+     * Captain Marvel's power-up (a +1/+1 and an indestructible counter at
+     * once) under Hardened Scales and Doubling Season, played on the hooked
+     * path: the scales' record is the +1/+1 counters' alone, and the
+     * season's is two, one per type it doubled.
+     */
+    @Test
+    void counterRewriteRecordsOverSeveralTypes() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Player you = board.you;
+        board.battlefield("Hardened Scales", you);
+        board.battlefield("Doubling Season", you);
+        Card marvel = board.battlefield("Captain Marvel, Earth's Protector", you);
+
+        List<String> records = ShardRun.recordsWithClauseHook(
+                tempDir, board.game, "for rewrite records over a counter map", () -> {
+                    SpellAbility powerUp = board.ability(marvel, ApiType.PutCounter);
+                    powerUp.setActivatingPlayer(you);
+                    board.castAndResolve(powerUp);
+                });
+
+        Characterization.assertMatches("record-rewrite-counter-types.jsonl",
+                Characterization.recordLines(records.stream()
+                        .filter(line -> line.contains("\"kind\":\"rewrite\"")).toList()));
+    }
+
+    /**
+     * A pain land tapped for coloured mana, played on the hooked path: its
+     * mana record holds the tap, the mana, and the damage its sub-ability
+     * dealt its controller.
+     */
+    @Test
+    void manaRecords() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Player you = board.you;
+        Card wastes = board.battlefield("Adarkar Wastes", you);
+        SpellAbility pain = wastes.getManaAbilities().stream()
+                .filter(sa -> sa.getSubAbility() != null).findFirst().orElseThrow();
+        pain.setActivatingPlayer(you);
+
+        List<String> records = ShardRun.recordsWithClauseHook(
+                tempDir, board.game, "for the payment and clause hooks", () ->
+                        forge.ai.ComputerUtil.playNoStack(you, pain, board.game, false));
+
+        Characterization.assertMatches(
+                "record-mana.jsonl", Characterization.recordLines(records));
     }
 
     // ── trigger ─────────────────────────────────────────────────────────
@@ -223,6 +421,7 @@ class RecordCharacterizationTest {
             bearsEntered.put(AbilityKey.Card, bears);
             bearsEntered.put(AbilityKey.Destination, ZoneType.Battlefield.name());
             listener.onConditionEvaluated(entered, bearsEntered, true);
+            listener.onTriggerRun(entered, bearsEntered, null);
 
             Map<AbilityKey, Object> itselfEntered = AbilityKey.newMap();
             itselfEntered.put(AbilityKey.Card, warden);
@@ -233,10 +432,37 @@ class RecordCharacterizationTest {
             endStep.put(AbilityKey.Phase, PhaseType.END_OF_TURN.nameForScripts);
             endStep.put(AbilityKey.Player, you);
             listener.onConditionEvaluated(monarch, endStep, true);
+            listener.onTriggerRun(monarch, endStep, null);
         });
 
         Characterization.assertMatches(
                 "record-trigger.jsonl", Characterization.recordLines(records));
+    }
+
+    /**
+     * Triggers the engine runs, with every hook installed: Exquisite Blood
+     * seeing an opponent lose 3 life (a loss written negative), Bloodcrazed
+     * Hoplite seeing a +1/+1 counter put on it, one per counter.
+     */
+    @Test
+    void playedTriggerRecords() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        board.battlefield("Exquisite Blood", board.you);
+        Card hoplite = board.battlefield("Bloodcrazed Hoplite", board.you);
+        board.game.getTriggerHandler().resetActiveTriggers();
+
+        List<String> records = ShardRun.readShard(ShardRun.recordedWithClauseHook(
+                tempDir, board.game, CAPS, "for the trigger hook", () -> {
+                    board.opponent.loseLife(3, false, false, null);
+                    forge.game.GameEntityCounterTable table = new forge.game.GameEntityCounterTable();
+                    hoplite.addCounter(forge.game.card.CounterType.getType("P1P1"), 1, board.you, table);
+                    table.replaceCounterEffect(board.game, null);
+                }).path()).stream()
+                .filter(record -> "trigger".equals(RecordLines.parse(record).get("kind")))
+                .toList();
+
+        Characterization.assertMatches(
+                "record-trigger-played.jsonl", Characterization.recordLines(records));
     }
 
     // ── continuous ──────────────────────────────────────────────────────
@@ -259,6 +485,31 @@ class RecordCharacterizationTest {
 
         Characterization.assertMatches(
                 "record-continuous.jsonl", Characterization.recordLines(records));
+    }
+
+    /**
+     * Statics that change abilities and hidden keywords: Humility (every
+     * keyword and ability of Prodigal Sorcerer taken away), Cryptolith Rite
+     * (an ability granted) and Errantry (a hidden keyword granted).
+     */
+    @Test
+    void continuousRecordsOfAbilities() throws Throwable {
+        Assumptions.assumeTrue(ContinuousChannel.CAN_SUPPRESS,
+                "../forge cannot remove one static's contributions");
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        board.battlefield("Cryptolith Rite", board.you);
+        Card bears = board.battlefield("Grizzly Bears", board.you);
+        Card errantry = board.battlefield("Errantry", board.you);
+        errantry.attachToEntity(bears, null);
+        board.battlefield("Humility", board.opponent);
+        board.battlefield("Prodigal Sorcerer", board.opponent);
+        board.game.getAction().checkStaticAbilities();
+
+        List<String> records = ShardRun.records(tempDir, board.game, CAPS,
+                (bracket, collectors) -> collectors.continuous().collect());
+
+        Characterization.assertMatches(
+                "record-continuous-abilities.jsonl", Characterization.recordLines(records));
     }
 
     // ── playability ─────────────────────────────────────────────────────
@@ -308,6 +559,32 @@ class RecordCharacterizationTest {
             declaration.onAttackersDeclared(new GameEventAttackersDeclared(you, declared));
             listener.onBlockersDeclarable(
                     opponent, bears, List.of(angel, giant), List.of(angel), 1);
+
+            // A blocker Pacifism keeps out (responsible_static), one a lure
+            // attacking beside the anchor calls away (required_elsewhere),
+            // one its own keyword line keeps out (responsible_own), and one
+            // an engine-built effect's static keeps out, which no line names
+            // (responsible_unresolved).
+            Card pacified = board.battlefield("Gray Ogre", opponent);
+            board.battlefield("Pacifism", you).attachToEntity(pacified, null);
+            Card unicorn = board.battlefield("Prized Unicorn", you);
+            Card lured = board.battlefield("Runeclaw Bear", opponent);
+            Card grakk = board.battlefield("Grakk the Pacifist", opponent);
+            Card stopped = board.battlefield("Walking Corpse", opponent);
+            Card effect = new Card(board.game.nextCardId(), board.game);
+            effect.setName("Engine Effect");
+            effect.setOwner(you);
+            effect.setGamePieceType(forge.card.GamePieceType.EFFECT);
+            effect.addStaticAbility("Mode$ CantBlock | ValidCard$ Creature.namedWalking Corpse"
+                    + " | EffectZone$ Command | Description$ Walking Corpse can't block.");
+            board.game.getAction().moveTo(ZoneType.Command, effect, null, null);
+            board.game.getAction().checkStaticAbilities();
+            Combat lure = new Combat(you);
+            lure.addAttacker(bears, opponent);
+            lure.addAttacker(unicorn, opponent);
+            board.game.getPhaseHandler().setCombat(lure);
+            listener.onBlockersDeclarable(
+                    opponent, bears, List.of(pacified, lured, grakk, stopped), List.of(), 1);
         });
 
         Characterization.assertMatches(
@@ -465,5 +742,198 @@ class RecordCharacterizationTest {
 
         Characterization.assertMatches(
                 "record-intervention.jsonl", Characterization.recordLines(fork.records()));
+    }
+
+    /**
+     * A forced resolution through the hooks, on a copy that left something
+     * out: Raise the Alarm's effect half holds the {@code token_created} the
+     * outcome hook reports, and the record carries {@code copy_dropped} for
+     * the one remembered object (a token that ceased to exist) the copier
+     * could not map.
+     */
+    @Test
+    void anInterventionalResolutionOnALossyCopyThroughTheHooks() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Player you = board.you;
+        Card holder = board.battlefield("Hill Giant", you);
+        Card token = board.token("w_1_1_soldier", you);
+        holder.addRemembered(token);
+        token.getZone().remove(token);
+        SpellAbility alarm = board.spell(board.hand("Raise the Alarm", you), you);
+        CollectionCaps caps = TestCaps.caps().everyDecision()
+                .interventions(1).probes(0).build();
+
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
+                tempDir, board.game, caps, 1L, alarm, "to hear the outcome hook");
+        assertTrue(fork.wrote(), "the fork observed nothing");
+        String record = fork.records().get(0);
+        assertTrue(record.contains("\"copy_dropped\":{\"remembered\":1}"), record);
+        assertTrue(record.contains("\"token_created\""), record);
+
+        Characterization.assertMatches(
+                "record-intervention-hooked.jsonl", Characterization.recordLines(fork.records()));
+    }
+
+    // ── the fork shapes Python reads (WP5) ──────────────────────────────
+
+    /**
+     * Two forced resolutions that fizzle: Murder at Skulking Ghost, which
+     * sacrifices itself on becoming a target (the spell's half holds its
+     * card's move off the stack), and Royal Assassin's ability at the tapped
+     * Ghost (the ability's half holds nothing). Both read fizzled.
+     */
+    @Test
+    void forcedResolutionsThatFizzle() throws Throwable {
+        List<String> records = new ArrayList<>();
+        for (String forced : List.of("Murder", "Royal Assassin")) {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card ghost = board.battlefield("Skulking Ghost", board.opponent);
+            ghost.setTapped(true);
+            board.game.getTriggerHandler().resetActiveTriggers();
+            SpellAbility ability;
+            if (forced.equals("Murder")) {
+                ability = board.spell(board.hand("Murder", board.you), board.you);
+            } else {
+                Card assassin = board.battlefield("Royal Assassin", board.you);
+                ability = assassin.getSpellAbilities().stream()
+                        .filter(sa -> sa.getApi() == ApiType.Destroy).findFirst().orElseThrow();
+                ability.setActivatingPlayer(board.you);
+            }
+            CollectionCaps caps = TestCaps.caps().everyDecision().interventions(1).probes(0).build();
+            ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
+                    tempDir.resolve(forced.replace(' ', '-')), board.game, caps, 1L, ability,
+                    "to read the resolution hook's fizzle");
+            assertTrue(fork.wrote(), forced + ": the fork wrote nothing");
+            records.addAll(fork.records());
+        }
+        assertTrue(records.stream().allMatch(record -> record.contains("\"outcome\":\"fizzled\"")),
+                records.toString());
+
+        Characterization.assertMatches(
+                "record-intervention-fizzled.jsonl", Characterization.recordLines(records));
+    }
+
+    /**
+     * A forced "you may" its controller declines: Druidic Ritual's "you may
+     * mill three" refused by a seat that refuses every "you may", its half
+     * holding the card's move off the stack and reading declined.
+     */
+    @Test
+    void aForcedYouMayDeclined() throws Throwable {
+        forge.game.Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1,
+                new DecliningSeat("a"), new forge.ai.LobbyPlayerAi("b", null));
+        game.setAge(forge.game.GameStage.Play);
+        CharacterizationBoard board = CharacterizationBoard.on(game);
+        for (int i = 0; i < 5; i++) {
+            game.getAction().moveToLibrary(TestBoard.card(game, board.you, "Shock"), null, null);
+        }
+        SpellAbility ritual = board.spell(board.hand("Druidic Ritual", board.you), board.you);
+        CollectionCaps caps = TestCaps.caps().everyDecision().interventions(1).probes(0).build();
+
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
+                tempDir, game, caps, 1L, ritual, "to hear the confirm hook");
+        assertTrue(fork.wrote(), "the fork wrote nothing");
+        assertTrue(fork.records().get(0).contains("\"outcome\":\"declined\""), fork.records().toString());
+
+        Characterization.assertMatches(
+                "record-intervention-declined.jsonl", Characterization.recordLines(fork.records()));
+    }
+
+    /**
+     * A probe whose combat record holds the damage a protection prevented:
+     * Colossal Dreadmaw blocked by Coast Watcher (protection from green),
+     * trample probed, through the hooks.
+     */
+    @Test
+    void aProbeHoldingThePreventedDamage() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.COMBAT_DAMAGE);
+        Card dreadmaw = board.battlefield("Colossal Dreadmaw", board.you);
+        Card watcher = board.battlefield("Coast Watcher", board.opponent);
+        Combat combat = TestBoard.blockedCombat(board.game, board.you, board.opponent, dreadmaw, watcher);
+        CollectionCaps caps = TestCaps.caps().everyDecision().manaCap(2000).interventions(0).probes(1)
+                .probeKeywords("trample").build();
+
+        RecordShardWriter writer = ShardRun.recordedWithClauseHook(
+                tempDir, board.game, caps, "to hear the outcome hook", () -> {
+                    TestBoard.enterStep(board.game, PhaseType.COMBAT_DAMAGE);
+                    assertTrue(combat.assignCombatDamage(false), "the step assigned no damage");
+                    combat.dealAssignedDamage();
+                    board.game.getAction().checkStateEffects(false);
+                    TestBoard.enterStep(board.game, PhaseType.COMBAT_END);
+                });
+        List<String> probes = ShardRun.readShard(writer.path()).stream()
+                .filter(record -> record.contains("\"fork\":true")).toList();
+        assertTrue(probes.stream().anyMatch(record -> record.contains("\"damage_prevented\"")), probes.toString());
+
+        Characterization.assertMatches(
+                "record-combat-probe-prevented.jsonl", Characterization.recordLines(probes));
+    }
+
+    /**
+     * A protection fork: Grizzly Bears granted protection from Goblins, the
+     * copy played to the end of the turn, every record interventional.
+     */
+    @Test
+    void aProtectionFork() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card bears = board.battlefield("Grizzly Bears", board.you);
+        board.battlefield("Goblin Piker", board.opponent);
+        // The default sampling rates, from the game's seed: the turn's
+        // decisions mostly unwritten, so the golden holds the fork's shape.
+        CollectionCaps caps = TestCaps.caps().interventions(0).probes(0).build();
+        RecordShardWriter writer = ShardRun.writer(tempDir);
+        boolean kept;
+        Forks.restartStreams();
+        try (GameRecording recording = new GameRecording(board.game, writer, ShardRun.GAME_ID, caps, 7L, null)) {
+            recording.open();
+            kept = new ProtectionFork(board.game, new ForkBudget(caps), recording.playForward(), 7L)
+                    .take(new ProtectionFork.Grant(bears, "Protection:Goblin"));
+        } finally {
+            writer.close();
+        }
+        assertTrue(kept, "the fork was not kept");
+        List<String> records = ShardRun.readShard(writer.path());
+
+        Characterization.assertMatches(
+                "record-protection-fork.jsonl", Characterization.recordLines(records));
+    }
+
+    /**
+     * A directed fork: 704.5f's variant "tougher" (a pt edit) on Grizzly
+     * Bears, the copy played to the end of the turn, every record naming the
+     * rule, the variant and the operation.
+     */
+    @Test
+    void aDirectedFork() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card bears = board.battlefield("Grizzly Bears", board.you);
+        board.battlefield("Hill Giant", board.opponent);
+        CollectionCaps caps = TestCaps.caps().interventions(0).probes(0)
+                .directed(1, 1.0, "704.5f").build();
+        com.pricepredictor.connector.effects.directed.DirectedRule rule =
+                com.pricepredictor.connector.effects.directed.DirectedRule.of("704.5f", "704.5f-1",
+                        live -> java.util.Optional.of(
+                                com.pricepredictor.connector.effects.directed.Binding.empty()
+                                        .with("creature", bears)),
+                        "tougher", new com.pricepredictor.connector.effects.directed.Application(
+                                com.pricepredictor.connector.effects.directed.ForkOperation.PT,
+                                binding -> new com.pricepredictor.connector.effects.directed.operations
+                                        .PtOperation(binding.card("creature"), null, 5)));
+        RecordShardWriter writer = ShardRun.writer(tempDir);
+        boolean kept;
+        Forks.restartStreams();
+        try (GameRecording recording = new GameRecording(board.game, writer, ShardRun.GAME_ID, caps, 7L, null)) {
+            recording.open();
+            kept = new DirectedFork(board.game, recording.playForward(), () -> board.you)
+                    .take(rule, "tougher", rule.variants().get("tougher"),
+                            com.pricepredictor.connector.effects.directed.Binding.empty().with("creature", bears));
+        } finally {
+            writer.close();
+        }
+        assertTrue(kept, "the fork was not kept");
+        List<String> records = ShardRun.readShard(writer.path());
+
+        Characterization.assertMatches(
+                "record-directed-fork.jsonl", Characterization.recordLines(records));
     }
 }

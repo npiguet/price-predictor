@@ -47,7 +47,7 @@ final class TriggerNegativeSampler {
     /** Each trigger mode's written evaluations and pending offers, this game. */
     private final Map<String, ModeBalance> triggerBalance = new HashMap<>();
     /** Not-fired records written per acting line, for the flood cap. */
-    private final Map<ProvenanceKey, Integer> negativesPerLine = new HashMap<>();
+    private final Map<String, Integer> negativesPerLine = new HashMap<>();
 
     TriggerNegativeSampler(Random sampler) {
         this.sampler = sampler;
@@ -121,7 +121,7 @@ final class TriggerNegativeSampler {
      *
      * @param line the acting line, null where the trigger names none
      */
-    void keep(String mode, ProvenanceKey line, boolean fired) {
+    void keep(String mode, String line, boolean fired) {
         if (!fired) {
             negativesPerLine.merge(line, 1, Integer::sum);
         }
@@ -156,7 +156,7 @@ final class TriggerNegativeSampler {
      *
      * @param line the acting line, null where the trigger names none
      */
-    boolean lineHasRoomForNegative(ProvenanceKey line) {
+    boolean lineHasRoomForNegative(String line) {
         return negativesPerLine.getOrDefault(line, 0) < NEGATIVES_PER_LINE;
     }
 

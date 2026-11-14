@@ -163,7 +163,7 @@ def test_other_subkinds_show_nothing_and_a_bad_bit_is_refused(by_kind):
     blockers = by_kind("playability", "blockers")[0]
     assert FAMILY.match(blockers, None, {"bit": "affordable"}) is None
     with pytest.raises(ValueError, match="unknown bit"):
-        FAMILY.match(blockers, None, {"bit": "mana_value"})
+        FAMILY.validate({"bit": "mana_value"})
 
 
 class TestLandPlays:
@@ -238,8 +238,7 @@ class TestLandPlays:
         assert FAMILY.needs(self.LIMIT) == {"failed_checks", "land_play"}
         assert FAMILY.needs({"bit": "timing", "land_play": True}) == {"timing", "land_play"}
         with pytest.raises(ValueError, match="names its check"):
-            FAMILY.match(_unaffordable(by_kind), None,
-                         {"bit": "failed_check", "check": "land_limit"})
+            FAMILY.validate({"bit": "failed_check", "check": "land_limit"})
 
     def test_rule_305_s_declarations_read_the_fixture_s_land_plays(self):
         """Each declared 305 scenario finds both sides among the land plays."""
@@ -250,8 +249,9 @@ class TestLandPlays:
                                 / "305.json").read_text(encoding="utf-8"))["scenarios"]
         declared = {s["id"]: s["detector"]["params"] for s in scenarios
                     if s.get("detector", {}).get("family") == "verdict_bit"}
-        assert set(declared) == {"305.1-1", "305.2-1", "305.2a-1", "305.2b-1", "305.3-1",
-                                 "305.4-1"}
+        # 305.1-1 and 305.2b-1 state 116.2a's and 305.2's facts (same_as); 305.4-1's
+        # effect-put land is read by no filter (none): D4.
+        assert set(declared) == {"305.2-1", "305.2a-1", "305.3-1"}
         land = self._land(lambda c: True)
         for scenario, params in declared.items():
             assert params["land_play"] is True, scenario
@@ -276,4 +276,20 @@ class TestCandidateFace:
         assert FAMILY.match(on_front, None, declared) is None
         assert FAMILY.match(on_front, None, {**declared, "candidate_face": "front"}) is not None
         with pytest.raises(ValueError, match="candidate_face"):
-            FAMILY.match(record, None, {**declared, "candidate_face": "back"})
+            FAMILY.validate({**declared, "candidate_face": "back"})
+
+
+@pytest.mark.parametrize("flag", ["tapped", "sick"])
+def test_the_source_s_tapped_and_sick_flags_filter_the_candidate(by_kind, flag):
+    record = _unaffordable(by_kind)
+    source = record.state.refs.source
+
+    def held(value):
+        return replace(record, state=replace(record.state, entities=tuple(
+            replace(e, **{flag: value}) if e.id == source else e
+            for e in record.state.entities)))
+
+    declared = {"bit": "affordable", f"source_{flag}": True}
+    assert FAMILY.match(held(True), None, declared) is not None
+    assert FAMILY.match(held(False), None, declared) is None
+    assert FAMILY.match(held(False), None, {**declared, f"source_{flag}": False}) is not None

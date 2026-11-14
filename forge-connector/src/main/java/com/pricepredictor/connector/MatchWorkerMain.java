@@ -106,7 +106,8 @@ public class MatchWorkerMain {
             int workerIndex,
             String workerLifetime,
             boolean decksOnly,
-            Optional<Path> progressFile) {
+            Optional<Path> progressFile,
+            WorkerStop stop) {
 
         /**
          * Records-only: no sealed corpus is written at all.
@@ -128,7 +129,14 @@ public class MatchWorkerMain {
     }
 
     public static void main(String[] args) {
-        WorkerConfig config = parseConfig();
+        ToolMain.guard(() -> work(args));
+    }
+
+    /** The worker itself; an exit it requests ends the process through {@link ToolMain#guard}. */
+    static void work(String[] args) {
+        // The recycle time counts from here, before Forge is initialised.
+        long started = System.nanoTime();
+        WorkerConfig config = parseConfig(started);
         initializeForge(config);
         runForever(config);
     }
@@ -139,6 +147,14 @@ public class MatchWorkerMain {
      * {@link ExitCode#BAD_CONFIG} on any malformed input.
      */
     static WorkerConfig parseConfig() {
+        return parseConfig(System.nanoTime());
+    }
+
+    /**
+     * {@link #parseConfig()}, the stop's recycle time counted from
+     * {@code startedNanos}.
+     */
+    static WorkerConfig parseConfig(long startedNanos) {
         Optional<Path> outputFile = WorkerProperties.optionalPath(OUTPUT_FILE);
         Optional<Path> effectRecordsDir = WorkerProperties.optionalPath(EFFECT_RECORDS_DIR);
         if (outputFile.isEmpty() && effectRecordsDir.isEmpty()) {
@@ -193,9 +209,13 @@ public class MatchWorkerMain {
         // Javadoc entry for this property).
         Optional<Path> progressFile = WorkerProperties.optionalPath(PROGRESS_FILE);
 
+        // Read with the rest, before Forge is initialised, so a malformed
+        // value exits at once.
+        WorkerStop stop = WorkerStop.fromSystemProperties(startedNanos);
+
         return new WorkerConfig(
                 outputFile, runId, bestOf, sideADecks, sideBDecks, sideBWeight,
-                effectRecordsDir, workerIndex, workerLifetime, decksOnly, progressFile);
+                effectRecordsDir, workerIndex, workerLifetime, decksOnly, progressFile, stop);
     }
 
     private static void initializeForge(WorkerConfig config) {
@@ -233,22 +253,66 @@ public class MatchWorkerMain {
         RecordShardWriter effectRecords = openEffectRecords(config, caps);
 
         HookFailureReport hookFailureReport = new HookFailureReport();
+        // A stop file already there, or a recycle time already past, stops
+        // the worker before its first match, once Forge is initialised.
+        WorkerStop stop = config.stop();
+        stop.describe().ifPresent(System.out::println);
+        GamePlayer gamePlayer = new GamePlayer(
+                config.bestOf(), effectRecords, caps, stop, forge.game.Match::startGame);
         MatchGenerator generator = MatchGenerator.builder(eligibleSets, config.runId())
-                .gamePlayer(new GamePlayer(config.bestOf(), effectRecords, caps))
+                .gamePlayer(gamePlayer)
                 .sideA(sideA)
                 .sideB(sideB, config.sideBWeight())
                 .excludedCards(HoldoutCards.fromSystemProperty())
                 .decksOnly(config.decksOnly())
                 .build();
 
-        WorkerLoop.runUntilBroken(
-                () -> {
-                    recordMatch(generator.generateMatch(), sealedCorpus, progress);
-                    hookFailureReport.afterMatch();
-                    return WorkerLoop.Outcome.COMPLETED;
-                },
-                new WorkerLoop.Progress(
-                        System.out, PROGRESS_EVERY, "matches generated", "Error generating match"));
+        WorkerLoop.Progress matches = new WorkerLoop.Progress(
+                System.out, PROGRESS_EVERY, "matches generated", "Error generating match");
+        WorkerLoop.Ending ending;
+        try {
+            ending = WorkerLoop.runUntilBroken(
+                    () -> oneMatch(generator::generateMatch, sealedCorpus, progress,
+                            hookFailureReport),
+                    matches, stop);
+        } finally {
+            // Whatever ended the loop, the counts so far are printed: a
+            // worker giving up or stopping is when they matter most.
+            hookFailureReport.afterMatch();
+        }
+        throw stopGracefully(ending, matches, gamePlayer.gamesPlayed(), effectRecords);
+    }
+
+    /**
+     * One match: played, recorded, and the hooks' failure counts reported
+     * however it ended, a match that threw included.
+     */
+    static WorkerLoop.Outcome oneMatch(
+            java.util.function.Supplier<MatchGenerationResult> match,
+            Optional<SealedCorpus> sealedCorpus, Optional<ProgressWriter> progress,
+            HookFailureReport report) {
+        try {
+            recordMatch(match.get(), sealedCorpus, progress);
+        } finally {
+            report.afterMatch();
+        }
+        return WorkerLoop.Outcome.COMPLETED;
+    }
+
+    /**
+     * End a worker the stop asked to end: its last game is over and its
+     * marker written, so the shard is closed whole, the acknowledgement
+     * printed, and the process exits {@link ExitCode#OK}.
+     */
+    static ToolMain.Exit stopGracefully(
+            WorkerLoop.Ending ending, WorkerLoop.Progress progress, long games,
+            RecordShardWriter effectRecords) {
+        if (effectRecords != null) {
+            effectRecords.close();
+        }
+        progress.stream().println(WorkerLoop.stoppedLine(ending, progress, games));
+        progress.stream().flush();
+        return ToolMain.exit(ExitCode.OK);
     }
 
     /**
@@ -274,7 +338,7 @@ public class MatchWorkerMain {
      * with the collection state it runs under, or null when the run collects
      * none.
      */
-    private static RecordShardWriter openEffectRecords(WorkerConfig config, CollectionCaps caps) {
+    static RecordShardWriter openEffectRecords(WorkerConfig config, CollectionCaps caps) {
         if (!config.collectsEffectRecords()) {
             return null;
         }
@@ -307,9 +371,13 @@ public class MatchWorkerMain {
             System.out.println("Dropped events: counted per game into "
                     + GameRecording.droppedEventsFile(effectRecords));
         }
-        // The worker loops until the supervisor terminates it, so close()
-        // is never reached on the normal path. Without this the block in
-        // flight — up to a few hundred records — is lost on every stop.
+        // A graceful stop closes the shard itself (stopGracefully), and every
+        // game end writes the block in flight (RecordShardWriter.endGame).
+        // This hook covers the JVM's other orderly exits: a worker giving up,
+        // an Error that ends it, a console Ctrl-C reaching a worker started
+        // outside the stop protocol. It writes the cut game's records so
+        // far, which carry no marker. A kill (taskkill /F) runs no hook and
+        // loses the game in progress only.
         Runtime.getRuntime().addShutdownHook(new Thread(effectRecords::close));
         return effectRecords;
     }
@@ -325,15 +393,40 @@ public class MatchWorkerMain {
      */
     static final class HookFailureReport {
         private Map<String, Long> reported = Map.of();
+        private Map<String, Long> reportedByForge = Map.of();
+        private Map<String, Long> reportedRefusals = Map.of();
 
+        /**
+         * Print the counts when they changed: the connector's
+         * ({@link HookFailures#counts}: listener calls, short calls,
+         * subscribers, boundary steps, unreadable candidates) and Forge's
+         * own per slot ({@link PatchHooks#forgeFailureCounts}), which also
+         * holds the argument builds Forge made inside a hook's call; a
+         * listener's failure is in both. Then, on a line of its own and only
+         * when it changed, the forks that refused, by kind and reason
+         * ({@code ForkRefusals}), which are no failures.
+         */
         void afterMatch() {
             Map<String, Long> counts = HookFailures.counts();
-            if (!counts.equals(reported)) {
+            Map<String, Long> byForge = PatchHooks.forgeFailureCounts();
+            if (!counts.equals(reported) || !byForge.equals(reportedByForge)) {
                 System.err.println("effect-record hook failures so far, listener calls that threw"
-                        + " and lost their records: " + counts);
+                        + " and lost their records: " + counts
+                        + "; contained by Forge, per slot: " + byForge);
                 reported = counts;
+                reportedByForge = byForge;
+            }
+            // Beside the failures and never among them: forks that declined
+            // for an expected reason, by kind and reason (ForkRefusals).
+            Map<String, Long> refusals = com.pricepredictor.connector.effects.ForkRefusals.counts();
+            if (!refusals.equals(reportedRefusals)) {
+                System.err.println(REFUSALS_LINE + refusals);
+                reportedRefusals = refusals;
             }
         }
+
+        /** How the refusal tally's line starts; a count, not a failure line. */
+        static final String REFUSALS_LINE = "Effect records: fork refusals so far, expected and no failure: ";
     }
 
     /**

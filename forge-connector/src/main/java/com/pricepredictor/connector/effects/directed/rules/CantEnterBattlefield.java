@@ -14,6 +14,7 @@ import forge.game.replacement.ReplacementType;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -27,7 +28,8 @@ import java.util.Optional;
  * card entering the battlefield from a graveyard (Grafdigger's Cage), a
  * creature card is in the active player's graveyard, and the active player
  * holds a spell it has the mana for that returns a card from a graveyard to
- * the battlefield. It binds the stopping permanent.
+ * the battlefield, and no other permanent stops it, which would with the
+ * first gone. It binds the stopping permanent.
  *
  * <p>Variant {@code no_cage} ({@code remove_permanent}): the permanent is not
  * on the battlefield, so the creature card enters.
@@ -56,10 +58,12 @@ public final class CantEnterBattlefield {
                 || Boards.castableInHand(active, CantEnterBattlefield::reanimates).isEmpty()) {
             return Optional.empty();
         }
-        return live.getCardsIn(ZoneType.Battlefield).stream()
+        List<Card> stopping = live.getCardsIn(ZoneType.Battlefield).stream()
                 .filter(CantEnterBattlefield::stopsEntering)
-                .findFirst()
-                .map(card -> Binding.empty().with("permanent", card));
+                .toList();
+        return stopping.size() == 1
+                ? Optional.of(Binding.empty().with("permanent", stopping.get(0)))
+                : Optional.empty();
     }
 
     /** Whether one of the permanent's replacement effects stops a card entering the battlefield from a graveyard. */

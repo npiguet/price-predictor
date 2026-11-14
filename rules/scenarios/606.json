@@ -103,11 +103,14 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A loyalty ability candidate fails the activation-limit check because a loyalty ability of that permanent was already activated this turn.",
-        "near_miss": "A decision in which every candidate, loyalty abilities included, passes the activation-limit check.",
+        "outcome": "A loyalty ability fails its activation-limit check (a loyalty ability of the permanent was already activated this turn).",
+        "near_miss": "A loyalty ability whose activation limit is not reached.",
         "params": {
           "bit": "failed_check",
-          "check": "activation_limit"
+          "check": "activation_limit",
+          "script_param": {
+            "Planeswalker": "True"
+          }
         },
         "needs": [
           "failed_checks"
@@ -322,11 +325,14 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A loyalty ability candidate fails the cost check because its negative loyalty cost, additional loyalty costs included, removes more counters than the permanent has.",
-        "near_miss": "A decision in which every candidate passes the cost check, a negative loyalty cost the permanent has enough loyalty counters for included.",
+        "outcome": "A loyalty ability fails its cost check (not enough loyalty for a negative cost).",
+        "near_miss": "A loyalty ability whose cost check passes.",
         "params": {
           "bit": "failed_check",
-          "check": "cost"
+          "check": "cost",
+          "script_param": {
+            "Planeswalker": "True"
+          }
         },
         "needs": [
           "failed_checks"
@@ -391,11 +397,14 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A loyalty ability candidate fails the cost check because its negative loyalty cost, additional loyalty costs included, removes more counters than the permanent has.",
-        "near_miss": "A decision in which every candidate passes the cost check, a negative loyalty cost the permanent has enough loyalty counters for included.",
+        "outcome": "A loyalty ability fails its cost check (not enough loyalty for a negative cost).",
+        "near_miss": "A loyalty ability whose cost check passes.",
         "params": {
           "bit": "failed_check",
-          "check": "cost"
+          "check": "cost",
+          "script_param": {
+            "Planeswalker": "True"
+          }
         },
         "needs": [
           "failed_checks"

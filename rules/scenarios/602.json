@@ -217,17 +217,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "resolution_outcome",
-        "record_kind": "resolution",
-        "outcome": "An activated ability that was put on the stack resolves as an object of its own, whether or not its source is still on the battlefield.",
-        "near_miss": "The activated ability leaves the stack countered rather than resolving.",
-        "params": {
-          "outcome": "resolved",
-          "near": [
-            "countered"
-          ]
-        },
-        "needs": []
+        "none": "Could not express: that the ability resolved after its source left is read by no resolution_outcome parameter."
       }
     },
     {
@@ -353,11 +343,12 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An activation candidate fails because a static effect prohibits activating that ability.",
-        "near_miss": "The candidate passes the static-prohibition check.",
+        "outcome": "An activated ability fails the static-prohibition check.",
+        "near_miss": "An activated ability that passes it.",
         "params": {
           "bit": "failed_check",
-          "check": "static_prohibition"
+          "check": "static_prohibition",
+          "candidate": "activated"
         },
         "needs": [
           "failed_checks"
@@ -456,11 +447,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An ability whose cost includes {T} cannot be activated because its source has not been continuously controlled since the start of the turn and lacks haste; Forge reports this as the candidate's failed cost check.",
-        "near_miss": "The candidate passes the cost check.",
+        "outcome": "A summoning-sick creature's ability with {T} in its cost fails its cost check.",
+        "near_miss": "A summoning-sick creature's {T} ability whose cost check passes (haste).",
         "params": {
           "bit": "failed_check",
-          "check": "cost"
+          "check": "cost",
+          "cost_symbol": "T",
+          "source_sick": true
         },
         "needs": [
           "failed_checks"
@@ -538,11 +531,14 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An ability with an activation limit cannot be activated because that ability's limit is already used up.",
-        "near_miss": "The candidate passes the activation-limit check.",
+        "outcome": "An ability with an activation limit fails it once used (whoever controls it now).",
+        "near_miss": "Such an ability under its limit.",
         "params": {
           "bit": "failed_check",
-          "check": "activation_limit"
+          "check": "activation_limit",
+          "script_param": {
+            "ActivationLimit": "*"
+          }
         },
         "needs": [
           "failed_checks"
@@ -622,17 +618,7 @@
       ],
       "forge_notes": "Each Touch of Vitae animates its own copy of the ABUntap ability; confirm Forge keeps a separate GameActivationLimit count for each copy.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "An ability with an activation limit cannot be activated because that ability's limit is already used up.",
-        "near_miss": "The candidate passes the activation-limit check.",
-        "params": {
-          "bit": "failed_check",
-          "check": "activation_limit"
-        },
-        "needs": [
-          "failed_checks"
-        ]
+        "none": "Could not express: that the restricted ability was acquired from another object is read by no verdict_bit filter."
       }
     },
     {
@@ -705,16 +691,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "An ability restricted to sorcery timing is not activatable because it is not its controller's main phase with an empty stack; the candidate's timing verdict is false.",
-        "near_miss": "The candidate's timing verdict is true.",
-        "params": {
-          "bit": "timing"
-        },
-        "needs": [
-          "timing"
-        ]
+        "same_as": "307.5-1",
+        "reason": "An activate-only-as-a-sorcery ability's timing is 307.5's fact."
       }
     },
     {

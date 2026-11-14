@@ -242,15 +242,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A destroy event meets a destruction replacement, such as a static regeneration ability, and is replaced: the permanent stays on the battlefield.",
-        "near_miss": "A destroy event meets a destruction replacement and is not replaced.",
-        "params": {
-          "event": "destroyed",
-          "result": "replaced"
-        },
-        "needs": []
+        "none": "Could not express: which effect replaced the destruction (a shield counter, which no line carries; a static regeneration against a shield; Pyramids' damage removal) is compared by no rewrite_event parameter."
       }
     },
     {
@@ -323,15 +315,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A destruction that cannot be regenerated destroys the permanent, whatever shield it holds (a destroyed event marked not regenerable).",
-        "near_miss": "A destruction that can be regenerated and is regenerated instead; no clean near miss without an api filter, so only the fires side is tagged.",
-        "params": {
-          "event": "destroyed",
-          "regenerable": false
-        },
-        "needs": []
+        "none": "The record cannot show the rule's condition: no snapshot fact says a permanent holds a regeneration shield, and the bus-side destroyed event carries no regenerable flag (the run-parameter one on a trigger or rewrite record does; a destruction regeneration stopped writes no destroyed at all), so a can't-be-regenerated destruction looks like any other."
       }
     }
   ]

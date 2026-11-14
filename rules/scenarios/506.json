@@ -182,14 +182,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "keyword_combat",
-        "record_kind": "combat",
-        "outcome": "A combat with a first-strike attacker or blocker has a separate, earlier combat damage step in which that creature deals its damage.",
-        "near_miss": "A damage-step probe fork re-runs that combat with first strike stripped from its carrier, so its damage is dealt in the regular step.",
-        "params": {
-          "keyword": "first_strike"
-        },
-        "needs": []
+        "same_as": "702.7b-1",
+        "reason": "A first strike creature dealing its damage in the first-strike step is 702.7b's fact."
       }
     },
     {
@@ -256,12 +250,13 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A noncreature permanent the attacking player controls is outside the legal attackers: only creatures can attack.",
-        "near_miss": "A creature that can attack is inside the legal attackers.",
+        "outcome": "A noncreature permanent the active player controls is no legal attacker.",
+        "near_miss": "None: a noncreature permanent is never a legal attacker.",
         "params": {
           "list": "legal_attackers",
           "fires_when": "outside",
-          "universe": "battlefield"
+          "universe": "battlefield",
+          "judged_not_type": "creature"
         },
         "needs": []
       }
@@ -339,12 +334,13 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A noncreature permanent the defending player controls is outside the legal blockers: only creatures can block.",
-        "near_miss": "A creature that can block is inside the legal blockers.",
+        "outcome": "A noncreature permanent the defending player controls is no legal blocker.",
+        "near_miss": "None: a noncreature permanent is never a legal blocker.",
         "params": {
           "list": "legal_blockers",
           "fires_when": "outside",
-          "universe": "battlefield"
+          "universe": "battlefield",
+          "judged_not_type": "creature"
         },
         "needs": []
       }
@@ -434,12 +430,13 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "An attackers legality record's anchored attacker may not attack a permanent that is not a player, planeswalker or battle: such a permanent is outside its legal_defenders.",
-        "near_miss": "A planeswalker or battle on the battlefield is inside the anchored attacker's legal_defenders.",
+        "outcome": "A creature is outside every attacker's legal defenders (only players, planeswalkers and battles can be attacked).",
+        "near_miss": "None: a creature is never a legal defender.",
         "params": {
           "list": "legal_defenders",
           "fires_when": "outside",
-          "universe": "battlefield"
+          "universe": "battlefield",
+          "judged_type": "creature"
         },
         "needs": [
           "legal_defenders"
@@ -1549,11 +1546,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A spell or ability restricted to before attackers are declared fails its phase check once the declare attackers step has begun, whether or not attackers were declared.",
-        "near_miss": "The same kind of candidate passes its phase check in a step before the declare attackers step.",
+        "outcome": "A spell castable only before attackers are declared fails its phase check once they are.",
+        "near_miss": "Such a spell whose phase check passes.",
         "params": {
           "bit": "failed_check",
-          "check": "phase"
+          "check": "phase",
+          "candidate": "cast",
+          "phase_list_last": "combat_begin"
         },
         "needs": [
           "failed_checks"
@@ -1629,15 +1628,15 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A spell or ability restricted to before blockers are declared fails its phase check once the declare blockers step has begun, whether or not blockers were declared.",
-        "near_miss": "The same kind of candidate passes its phase check in a combat step before the declare blockers step.",
+        "outcome": "A spell castable only before blockers are declared fails its phase check once the declare blockers step has begun.",
+        "near_miss": "Such a spell whose phase check passes.",
         "params": {
           "bit": "failed_check",
-          "check": "phase"
+          "check": "phase",
+          "candidate": "cast",
+          "phase_list_last": "combat_declare_attackers"
         },
-        "needs": [
-          "failed_checks"
-        ]
+        "needs": []
       }
     },
     {
@@ -1710,15 +1709,15 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A spell or ability restricted to after blockers are declared fails its phase check in a step before the declare blockers step.",
-        "near_miss": "The same kind of candidate passes its phase check once the declare blockers step has begun, whether or not blockers were declared.",
+        "outcome": "A spell castable only after blockers are declared passes its phase check in the declare blockers step, blockers or none.",
+        "near_miss": "Such a spell before the declare blockers step.",
         "params": {
           "bit": "failed_check",
-          "check": "phase"
+          "check": "phase",
+          "fires_when": true,
+          "phase_list_first": "combat_declare_blockers"
         },
-        "needs": [
-          "failed_checks"
-        ]
+        "needs": []
       }
     },
     {
@@ -1807,12 +1806,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A spell or ability restricted to during combat passes its phase check in a combat step of any combat phase of the turn, an additional one included.",
-        "near_miss": "The same kind of candidate fails its phase check outside the combat phase.",
+        "outcome": "A spell castable only during combat passes its phase check in a combat step.",
+        "near_miss": "Such a spell outside combat.",
         "params": {
           "bit": "failed_check",
           "check": "phase",
-          "fires_when": true
+          "fires_when": true,
+          "phase_list_first": "combat_begin"
         },
         "needs": [
           "failed_checks"
@@ -1906,15 +1906,16 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A spell or ability restricted to before a point in combat, without a 'during combat' clause, fails its first-combat check in a later combat phase of the turn.",
-        "near_miss": "The same kind of candidate passes that check in the turn's first combat phase.",
+        "outcome": "A spell castable only before attackers are declared, in a turn with several combats, fails its phase check after the first.",
+        "near_miss": "Such a spell before the first combat.",
         "params": {
           "bit": "failed_check",
-          "check": "combat"
+          "check": "phase",
+          "script_param": {
+            "ActivationFirstCombat": "True"
+          }
         },
-        "needs": [
-          "failed_checks"
-        ]
+        "needs": []
       }
     },
     {
@@ -1980,17 +1981,7 @@
       ],
       "forge_notes": "Only the first sentence of 506.8e is illustrated. The second sentence (a skipped combat phase leaves casting possible only before the precombat main phase ends) gives the same verdicts as the ordinary 'before attackers are declared' case in every position, so no separate variant tells it apart. If Forge skips the declare attackers step's priority when nobody attacks, the declare_attackers_step verdict is absent.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A spell or ability restricted to before blockers are declared fails its phase check after the declare attackers step has ended in a combat whose declare blockers step was skipped.",
-        "near_miss": "The same kind of candidate passes its phase check during the declare attackers step.",
-        "params": {
-          "bit": "failed_check",
-          "check": "phase"
-        },
-        "needs": [
-          "failed_checks"
-        ]
+        "none": "Could not express: which point of combat the restriction names (before blockers rather than attackers, a step that does not exist) is in the script's phase list, which no verdict_bit filter compares with the step the record is in."
       }
     },
     {
@@ -2057,11 +2048,12 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A spell or ability restricted to during combat after blockers are declared fails its after-blockers check in a combat phase whose declare blockers step was skipped.",
-        "near_miss": "The same kind of candidate passes that check in a combat phase whose declare blockers step took place.",
+        "outcome": "A spell castable only after blockers are declared fails its combat check (the declare blockers step did not happen).",
+        "near_miss": "Such a spell whose combat check passes.",
         "params": {
           "bit": "failed_check",
-          "check": "combat"
+          "check": "combat",
+          "phase_list_first": "combat_declare_blockers"
         },
         "needs": [
           "failed_checks"
@@ -2129,11 +2121,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An activated ability restricted to before a point in combat fails its phase check once that point has passed.",
-        "near_miss": "The same kind of ability passes its phase check before that point.",
+        "outcome": "An ability activatable only before attackers are declared fails its phase check once they are.",
+        "near_miss": "Such an ability whose phase check passes.",
         "params": {
           "bit": "failed_check",
-          "check": "phase"
+          "check": "phase",
+          "candidate": "activated",
+          "phase_list_last": "combat_begin"
         },
         "needs": [
           "failed_checks"
@@ -2196,11 +2190,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An activated ability restricted to during combat fails its phase check outside the combat phase.",
-        "near_miss": "The same kind of ability passes its phase check in a combat step.",
+        "outcome": "An ability activatable only during combat fails its phase check outside it.",
+        "near_miss": "Such an ability whose phase check passes in combat.",
         "params": {
           "bit": "failed_check",
-          "check": "phase"
+          "check": "phase",
+          "candidate": "activated",
+          "phase_list_first": "combat_begin"
         },
         "needs": [
           "failed_checks"

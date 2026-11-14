@@ -106,7 +106,10 @@ class FloatingEffectsTest {
         for (Card token : board.game.getCardsIn(ZoneType.Battlefield)) {
             assertTrue(remembered.contains(Refs.of(token)), exile.toString());
         }
-        assertTrue(List.of("end_of_turn", "permanent").contains(exile.get("duration")));
+        // Feral Lightning's AtEOT$ registers a delayed trigger that is not a
+        // this-turn one: the contract's permanent (record-schema-delta.md,
+        // command-zone objects); only a this-turn trigger is end_of_turn.
+        assertEquals("permanent", exile.get("duration"), exile.toString());
     }
 
     /**

@@ -78,12 +78,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A card with an alternative cost is a legal candidate when its cost is payable.",
-        "near_miss": "The same card is a candidate rejected because the cost cannot be paid.",
+        "outcome": "A More Than Meets the Eye candidate passes its cost check.",
+        "near_miss": "A More Than Meets the Eye candidate that fails it.",
         "params": {
           "bit": "failed_check",
           "check": "cost",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "More Than Meets the Eye"
         },
         "needs": [
           "failed_checks"

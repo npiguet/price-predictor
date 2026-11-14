@@ -7,11 +7,13 @@ import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.RemovePermanentOperation;
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.replacement.ReplacementEffect;
 import forge.game.replacement.ReplacementType;
 import forge.game.zone.ZoneType;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -20,10 +22,12 @@ import java.util.Optional;
  * one card in its library, casts Night's Whisper, and Lich's Mirror replaces
  * both losses at once.
  *
- * <p>The base board, read at a boundary: a player controls a permanent with a
- * replacement effect for its own game loss, and that player is close to
- * losing: 5 life or less, or one card or none left in its library. It binds
- * that permanent.
+ * <p>The base board, read at a boundary of the turn where a loss can still
+ * come ({@link #playedOut}): a player controls exactly one permanent with a
+ * replacement effect for its own game loss (a second would still replace the
+ * losses with the first gone), nothing else stops it losing (Platinum
+ * Angel), and that player is close to losing: 5 life or less, or one card or
+ * none left in its library. It binds that permanent.
  *
  * <p>Variant {@code no_mirror} ({@code remove_permanent}): that permanent is
  * gone, so nothing replaces the losses.
@@ -35,6 +39,18 @@ public final class GameLossReplaced {
     static final String NO_MIRROR = "no_mirror";
     /** The life total at or below which a player is close to losing for life. */
     static final int LOW_LIFE = 5;
+    /**
+     * Whether the boundary's turn still holds a loss to replace: a draw
+     * (upkeep, the draw step itself), a sorcery (either main phase) or
+     * combat damage (as attackers are declared). Not the untap step, which
+     * no player acts in, nor the end step or cleanup, after the turn's last
+     * draw and damage. A method, not a constant: the registry is built
+     * where Forge's localised phase names are not loaded.
+     */
+    static boolean playedOut(Game live) {
+        return Boards.at(live, PhaseType.UPKEEP, PhaseType.DRAW, PhaseType.MAIN1,
+                PhaseType.COMBAT_DECLARE_ATTACKERS, PhaseType.MAIN2);
+    }
 
     private GameLossReplaced() {
     }
@@ -46,10 +62,18 @@ public final class GameLossReplaced {
     }
 
     static Optional<Binding> bind(Game live) {
-        for (Card permanent : live.getCardsIn(ZoneType.Battlefield)) {
-            Player controller = permanent.getController();
-            if (closeToLosing(controller) && replacesOwnLoss(permanent)) {
-                return Optional.of(Binding.empty().with("permanent", permanent));
+        if (!playedOut(live)) {
+            return Optional.empty();
+        }
+        for (Player player : live.getPlayers()) {
+            if (!closeToLosing(player) || player.cantLose()) {
+                continue;
+            }
+            List<Card> replacing = player.getCardsIn(ZoneType.Battlefield).stream()
+                    .filter(GameLossReplaced::replacesOwnLoss)
+                    .toList();
+            if (replacing.size() == 1) {
+                return Optional.of(Binding.empty().with("permanent", replacing.get(0)));
             }
         }
         return Optional.empty();

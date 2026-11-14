@@ -99,11 +99,14 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A sorcery-speed card in hand, such as a battle, passes the timing check while its owner has priority in a main phase of their own turn with an empty stack.",
-        "near_miss": "A sorcery-speed card fails the timing check outside a main phase, on another player's turn, or with an object on the stack.",
+        "outcome": "A sorcery-speed battle card's cast has its timing true: a main phase of its controller's turn with an empty stack.",
+        "near_miss": "A sorcery-speed battle card's cast whose timing is false.",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "candidate": "cast",
+          "source_type": "battle",
+          "sorcery_speed": true
         },
         "needs": [
           "timing"
@@ -178,12 +181,13 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolving permanent spell moves from the stack to the battlefield.",
-        "near_miss": "A permanent spell leaves the stack without resolving (it is countered), so no stack-to-battlefield move appears; not counted, since a permanent spell's implicit trait has no acting line for api to name.",
+        "outcome": "A resolving battle spell is put onto the battlefield.",
+        "near_miss": "A battle spell's resolution that puts nothing onto the battlefield.",
         "params": {
           "event": "zone_change",
           "from_zone": "stack",
-          "to_zone": "battlefield"
+          "to_zone": "battlefield",
+          "source_type": "battle"
         },
         "needs": []
       }
@@ -253,16 +257,7 @@
       ],
       "forge_notes": "The doubling_season variant needs Doubling Season already on A's battlefield and an extra card in the setup; Forge's Doubling Season script restricts to counters on a permanent already in the battlefield zone, so it may not double a battle's enters-with counters. Invasion of Gobakhan's enters trigger targets B, whose hand is empty, so nothing is exiled.",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A permanent entering the battlefield meets its enters-with-counters replacement and the entering event is updated to carry the counters.",
-        "near_miss": "An entering event meets a replacement effect and is not updated.",
-        "params": {
-          "event": "zone_change",
-          "to_zone": "battlefield",
-          "result": "updated"
-        },
-        "needs": []
+        "none": "Could not express: a battle's defense counters on entry come from its intrinsic replacement, which no rewrite_event parameter picks apart from others."
       }
     },
     {
@@ -573,14 +568,8 @@
       ],
       "forge_notes": "Forge may implement the Siege's defeat trigger engine-side rather than in the card script.",
       "detector": {
-        "family": "sba_zone_move",
-        "record_kind": "resolution",
-        "outcome": "A battle with no defense counters left is put into its owner's graveyard in the state-based check.",
-        "near_miss": "A battle that lost defense counters and still has some.",
-        "params": {
-          "check": "defense_zero"
-        },
-        "needs": []
+        "same_as": "704.5v-1",
+        "reason": "A battle with no defense counters put into the graveyard is 704.5v's fact."
       }
     },
     {
@@ -867,19 +856,7 @@
       ],
       "forge_notes": "Protector is not a record field; the reassignment shows in the legal attack targets. The graveyard branch of 310.11 (no player can be chosen) cannot arise in a two-player game.",
       "detector": {
-        "family": "legality_membership",
-        "record_kind": "playability",
-        "outcome": "A battle is among the defenders the anchored attacker may attack: its attacking player is not the battle's protector.",
-        "near_miss": "A battle is outside the anchored attacker's legal defenders because the attacking player protects it.",
-        "params": {
-          "list": "legal_defenders",
-          "fires_when": "inside",
-          "universe": "battlefield",
-          "judged_type": "battle"
-        },
-        "needs": [
-          "legal_defenders"
-        ]
+        "none": "Could not express: a change of a Siege's protector is read by no legality_membership parameter."
       }
     }
   ]

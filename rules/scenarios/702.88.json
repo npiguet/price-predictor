@@ -75,12 +75,13 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolving spell is put into exile instead of its owner's graveyard.",
-        "near_miss": "Not counted: without api only the fires side is tagged (the near miss would be a resolving spell put into the graveyard).",
+        "outcome": "A spell whose card prints rebound moves from the stack to exile as the keyword says.",
+        "near_miss": "A spell whose card prints rebound leaves the stack elsewhere.",
         "params": {
           "event": "zone_change",
           "from_zone": "stack",
-          "to_zone": "exile"
+          "to_zone": "exile",
+          "source_keyword": "Rebound"
         },
         "needs": []
       }
@@ -222,12 +223,13 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolving spell is put into exile instead of its owner's graveyard.",
-        "near_miss": "Not counted: without api only the fires side is tagged (the near miss would be a resolving spell put into the graveyard).",
+        "outcome": "A spell whose card prints rebound moves from the stack to exile as the keyword says.",
+        "near_miss": "A spell whose card prints rebound leaves the stack elsewhere.",
         "params": {
           "event": "zone_change",
           "from_zone": "stack",
-          "to_zone": "exile"
+          "to_zone": "exile",
+          "source_keyword": "Rebound"
         },
         "needs": []
       }

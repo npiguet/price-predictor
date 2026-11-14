@@ -22,11 +22,16 @@ sidecar. A card entity with no printed line names no script file and carries
 nothing.
 
 Shards are read once each, in parallel; a game never spans shards (a shard is
-one worker JVM's lifetime), so whether a game has a random seat is decided at
-the end of its shard. Each worker builds the detector index and its sidecar
-cache once. Prior art: the ``build-corpus`` survey (``corpus_survey``'s
-``_ShardSurveyor``), which reads shards the same way; it is not reused whole
-because its read context is built around the corpus's holdout and caps.
+one worker JVM's lifetime), so whether a game has a random seat, and whether a
+gen-3 game ended (its game-end marker read), is decided at the end of its
+shard. A gen-3 game without a marker was cut and ``build-corpus`` drops it
+whole: its records are read but count toward nothing (no tag, review,
+carrier, ``records`` or ``not_countable``, as the build's ``rule_counts``),
+and the counts say how many such games were left out (``cut_games``). Each worker builds the
+detector index and its sidecar cache once. Prior art: the ``build-corpus``
+survey (``corpus_survey``'s ``_ShardSurveyor``), which reads shards the same
+way; it is not reused whole because its read context is built around the
+corpus's holdout and caps.
 """
 
 from __future__ import annotations
@@ -34,10 +39,12 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from effects.application.parallel_map import run_parallel
+from effects.domain.game_ends import GameEnds
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import ProvenanceKey, SidecarLookup
 from effects.domain.records import EffectRecord, acting_keys
@@ -45,6 +52,8 @@ from effects.domain.rule_catalogue import NoDetector, Polarity
 from effects.domain.rule_detectors import DetectorIndex, RuleSource, RuleTag, tag_record
 from effects.domain.shard_generation import ShardGeneration
 from effects.domain.tally_merge import NOT_MERGED, merge_into
+from effects.infrastructure.shard_io import DecodeTally
+from effects.infrastructure.sidecar_io import JoinGaps
 
 logger = logging.getLogger(__name__)
 
@@ -69,17 +78,37 @@ class RuleCounts:
     #: The records' generation (``gen-2``, ``gen-3``), which the steered
     #: variant round checks (FR-058g); set once over the whole set.
     generation: str = field(default="", metadata=NOT_MERGED)
+    #: What reading the shards met without stopping, handed back by each
+    #: worker: values outside the closed lists, damaged last members.
+    decode: DecodeTally = field(default_factory=DecodeTally)
+    #: The keys the sidecar cache read as no line, by why.
+    joins: JoinGaps = field(default_factory=JoinGaps)
+    #: Shards a damaged member or line ended early, under ``salvage`` alone:
+    #: each one's message, its records before the damage counted.
+    damaged: list = field(default_factory=list)
+    #: Gen-3 games without a game-end marker, left out of every count.
+    cut_games: int = 0
 
-    def to_json(self, none: dict[str, str]) -> dict:
+    def to_json(self, standing: CatalogueStanding | Mapping[str, str] | None = None) -> dict:
+        """The counts file; ``standing`` a bare ``rule -> reason`` map of the
+        ``none`` rules where a caller has nothing more of the catalogue."""
+        if not isinstance(standing, CatalogueStanding):
+            standing = CatalogueStanding(none=dict(standing or {}))
         by_rule: dict[str, dict[str, dict[str, int]]] = {}
         for (rule, polarity, source), n in sorted(self.counts.items()):
             by_rule.setdefault(rule, {}).setdefault(polarity, {})[source] = n
+        not_countable = self.not_countable - set(by_rule)
         return {
             "generation": self.generation,
             "records": self.records,
+            "cut_games": self.cut_games,
             "rules": by_rule,
-            "not_countable": sorted(self.not_countable - set(by_rule)),
-            "none": dict(sorted(none.items())),
+            "declared_zero": sorted(standing.declared - set(by_rule) - not_countable,
+                                    key=rule_order),
+            "not_countable": sorted(not_countable),
+            "none": dict(sorted(standing.none.items())),
+            "untaggable": dict(sorted(standing.untaggable.items())),
+            "same_as": dict(sorted(standing.same_as.items())),
             "review": [{"record_id": r, "scenario": s} for r, s in sorted(self.review)],
             "carriers": self._carriers_json(),
         }
@@ -109,6 +138,38 @@ class RuleCounts:
             ]
             for rule, by_file in sorted(files.items())
         }
+
+
+@dataclass(frozen=True)
+class CatalogueStanding:
+    """What the catalogue says of the rules no count can show.
+
+    ``declared``: the rules a taggable declaration speaks for, so one the
+    records never tag is listed as declared with zero records rather than
+    omitted (D3); ``none``: rules every scenario of which declares no
+    detector, with the first reason; ``untaggable``: per scenario, a
+    declaration asking its record kind for an event that kind never lists
+    (``DetectorIndex.untaggable``); ``same_as``: per scenario, the scenario
+    it states the same fact as, under whose rules its own are counted.
+    """
+
+    declared: frozenset[str] = frozenset()
+    none: dict[str, str] = field(default_factory=dict)
+    untaggable: dict[str, dict] = field(default_factory=dict)
+    same_as: dict[str, dict] = field(default_factory=dict)
+
+    @classmethod
+    def of(cls, catalogue) -> CatalogueStanding:
+        index = DetectorIndex.of(catalogue)
+        return cls(
+            declared=index.declared_rules,
+            none=none_rules(catalogue),
+            untaggable={sid: {"rules": list(index.untaggable_rules[sid]), "reason": reason}
+                        for sid, reason in index.untaggable.items()},
+            same_as={sid: {"rules": list(d.rules), "same_as": list(d.same_as),
+                           "counted_under": list(d.counted_under)}
+                     for sid, d in index.duplicates.items()},
+        )
 
 
 @dataclass(frozen=True)
@@ -182,39 +243,94 @@ def _sidecar_keyword_keys(
     ]
 
 
-def count_shard(built, shard: Path) -> RuleCounts:
-    """One shard's counts. Tags are held per game until the shard ends, when
-    each game's source is known."""
-    from effects.infrastructure.shard_io import read_shard
+def count_shard(built, shard: Path, *, salvage: bool = False) -> RuleCounts:
+    """One shard's counts. Tags, review entries and carriers are held per game
+    until the shard ends, when each game's source is known and a cut gen-3
+    game (no game-end marker) is left out. ``salvage`` counts a damaged shard
+    up to the damage and names it in ``damaged`` (a collection run must not
+    stop on one); otherwise the damage raises, located."""
+    from effects.infrastructure.shard_io import SHARD_DAMAGE, read_shard, take_decode_tally
 
     index, sidecars, keywords = built
     out = RuleCounts()
     seat_games: set[str] = set()
-    pending: list[tuple[str, bool, object]] = []
-    for record in read_shard(shard):
-        out.records += 1
-        if record.random_seat:
-            seat_games.add(record.game_id)
-        result = tag_record(record, index, sidecars)
-        out.not_countable |= result.not_countable
-        out.review |= {(record.record_id, tag.scenario) for tag in result.review}
-        if result.tags:
-            pending.append((record.game_id, record.aimed_at is not None, result.tags))
-        carried = {
-            (tag.rule, script_file, key)
-            for tag in result.tags
-            for script_file, key in tag_carriers(record, tag, keywords, sidecars)
-        }
-        out.carriers.update(carried)
-    for game_id, aimed, tags in pending:
-        source = RuleSource.of(aimed=aimed, random_seat_game=game_id in seat_games)
-        for tag in tags:
+    ends = GameEnds()
+    pending: list[_Pending] = []
+    by_game = _GameReads()
+    try:
+        _count_records(read_shard(shard), by_game, index, sidecars, keywords, seat_games,
+                       pending, ends)
+    except SHARD_DAMAGE as exc:
+        if not salvage:
+            raise
+        logger.warning("%s; its records before the damage are counted", exc)
+        out.damaged.append(str(exc))
+    cut = ends.cut
+    out.cut_games = len(cut)
+    for game, records in by_game.records.items():
+        if game not in cut:
+            out.records += records
+            out.not_countable |= by_game.not_countable.get(game, set())
+    for found in pending:
+        if found.game_id in cut:
+            continue
+        out.review |= found.review
+        out.carriers.update(found.carried)
+        source = RuleSource.of(aimed=found.aimed, random_seat_game=found.game_id in seat_games)
+        for tag in found.tags:
             out.counts[(tag.rule, str(tag.polarity), str(source))] += 1
+    out.decode = take_decode_tally()
+    take_gaps = getattr(sidecars, "take_join_gaps", None)
+    if take_gaps is not None:
+        out.joins = take_gaps()
     return out
 
 
+@dataclass
+class _GameReads:
+    """What each game of a shard read, held until the shard ends: its
+    records and the rules its records could not count."""
+
+    records: Counter = field(default_factory=Counter)
+    not_countable: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class _Pending:
+    """What one record adds, held until its game is known to have ended."""
+
+    game_id: str
+    aimed: bool
+    tags: tuple
+    review: frozenset
+    carried: frozenset
+
+
+def _count_records(records, by_game: _GameReads, index, sidecars, keywords,
+                   seat_games: set[str], pending: list, ends: GameEnds) -> None:
+    for record in records:
+        by_game.records[record.game_id] += 1
+        ends.note(record)
+        if record.random_seat:
+            seat_games.add(record.game_id)
+        result = tag_record(record, index, sidecars)
+        if result.not_countable:
+            by_game.not_countable.setdefault(record.game_id, set()).update(
+                result.not_countable)
+        review = frozenset((record.record_id, tag.scenario) for tag in result.review)
+        carried = frozenset(
+            (tag.rule, script_file, key)
+            for tag in result.tags
+            for script_file, key in tag_carriers(record, tag, keywords, sidecars)
+        )
+        if result.tags or review:
+            pending.append(_Pending(record.game_id, record.aimed_at is not None,
+                                    tuple(result.tags), review, carried))
+
+
 def none_rules(catalogue) -> dict[str, str]:
-    """Rules whose every scenario declares no detector, with the first reason given."""
+    """Rules whose every scenario declares no detector, with the first reason
+    given; a ``same_as`` scenario declares its rule's detector elsewhere."""
     reasons: dict[str, str] = {}
     declared: set[str] = set()
     for scenario in catalogue.scenarios:
@@ -235,7 +351,7 @@ class RuleCountsConfig:
     workers: int | None = None
 
 
-def count(config: RuleCountsConfig) -> tuple[RuleCounts, dict[str, str]]:
+def count(config: RuleCountsConfig) -> tuple[RuleCounts, CatalogueStanding]:
     """Count every shard under ``config.records_dir``; refuse a mix of generations."""
     from effects.infrastructure.rules_catalogue_io import load_scenarios
     from effects.infrastructure.shard_io import NoShardsError, iter_shards, require_generation
@@ -252,7 +368,7 @@ def count(config: RuleCountsConfig) -> tuple[RuleCounts, dict[str, str]]:
         progress_every=50, context=CountContext(config.rules_dir, config.sidecar_roots),
     ):
         merge_into(total, found)
-    return total, none_rules(load_scenarios(config.rules_dir))
+    return total, CatalogueStanding.of(load_scenarios(config.rules_dir))
 
 
 def unit_of(rule: str) -> str:
@@ -272,12 +388,23 @@ def report_lines(counts: dict) -> list[str]:
     lines = [f"{'rule':12s} {'fires':>20s} {'does_not_fire':>20s}   "
              f"(each {' / '.join(str(s) for s in RuleSource)})"]
     unit = None
-    for rule, sides in sorted(counts["rules"].items(), key=lambda item: _rule_key(item[0])):
+    for rule, sides in sorted(counts["rules"].items(), key=lambda item: rule_order(item[0])):
         if unit_of(rule) != unit:
             unit = unit_of(rule)
             lines.append(f"-- {unit}")
         lines.append(f"{rule:12s} {split(sides, Polarity.FIRES):>20s} "
                      f"{split(sides, Polarity.DOES_NOT_FIRE):>20s}")
+    zero = counts.get("declared_zero", [])
+    lines.append(f"rules declared with zero records: {len(zero)}")
+    lines += [f"  {rule}" for rule in zero]
+    untaggable = counts.get("untaggable", {})
+    lines.append(f"scenarios no record can show (untaggable): {len(untaggable)}")
+    lines += [f"  {sid} ({', '.join(found['rules'])}): {found['reason']}"
+              for sid, found in untaggable.items()]
+    same_as = counts.get("same_as", {})
+    lines.append(f"scenarios counted under another (same_as): {len(same_as)}")
+    lines += [f"  {sid} ({', '.join(found['rules'])}) -> {', '.join(found['same_as'])} "
+              f"({', '.join(found['counted_under'])})" for sid, found in same_as.items()]
     lines.append(f"rules declared none: {len(counts['none'])}")
     lines += [f"  {rule}: {reason}" for rule, reason in counts["none"].items()]
     lines.append(f"rules not countable on these records: {len(counts['not_countable'])}")
@@ -286,19 +413,29 @@ def report_lines(counts: dict) -> list[str]:
     return lines
 
 
-def _rule_key(rule: str):
+def rule_order(rule: str):
     import re
 
     m = re.match(r"(\d+)\.(\d+)([a-z]*)", rule)
     return (int(m.group(1)), int(m.group(2)), m.group(3)) if m else (0, 0, rule)
 
 
+def cut_games_line(cut_games: int) -> str:
+    """What a count says of the gen-3 games it left out as cut."""
+    return (f"{cut_games} gen-3 game(s) without a game-end marker (cut) left out of "
+            "every count, as build-corpus drops them")
+
+
 def run(config: RuleCountsConfig) -> int:
-    counts, none = count(config)
-    document = counts.to_json(none)
+    counts, standing = count(config)
+    document = counts.to_json(standing)
     config.output.parent.mkdir(parents=True, exist_ok=True)
     config.output.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
     for line in report_lines(document):
         print(line)
+    for line in [*counts.decode.report_lines(), *counts.joins.report_lines()]:
+        print(line)
+    if counts.cut_games:
+        print(cut_games_line(counts.cut_games))
     print(f"{counts.records} records; counts written to {config.output}")
     return 0

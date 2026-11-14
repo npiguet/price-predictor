@@ -3,9 +3,11 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.effects.directed.KeywordEdit;
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.spellability.SpellAbility;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A <b>damage-step probe</b>: a fork that re-runs one combat with a keyword
@@ -55,24 +57,35 @@ final class DamageStepProbe {
      * @param step the damage step about to be dealt, which the fork deals too
      * @return the held branch, or null when the fork could not be taken
      */
+    /** A refusal's reason: the copy holds no combat to deal. */
+    static final String NO_COMBAT = "no combat in the copy";
+
     HeldProbe probe(String keyword, Card carrier, DamageStep step) {
         if (!budget.mayProbe(keyword) || carrier == null) {
             return null;
         }
         Forks.ForkRun run = new Forks.ForkRun(
-                game,
+                "probe", game,
                 budget::spendProbe,
                 () -> game.getPhaseHandler() == null
                         ? null : game.getPhaseHandler().getPlayerTurn());
         return run.take((verified, snapshots) -> {
             Game fork = verified.fork();
             Card forkCarrier = Forks.mappedCard(verified.copier(), carrier);
-            if (forkCarrier == null || fork.getCombat() == null) {
-                return null;
+            if (forkCarrier == null) {
+                throw new ForkRefusal(ForkRefusal.NO_COUNTERPART);
+            }
+            if (fork.getCombat() == null) {
+                throw new ForkRefusal(NO_COMBAT);
             }
             // A stripped keyword reaches combat states ordinary play does
-            // not; Forks.ForkRun discards the fork when one throws.
-            KeywordEdit.remove(fork, forkCarrier, keyword);
+            // not; Forks.ForkRun discards the fork when one throws. Every
+            // spelling the carrier has of it (trample, and trample over
+            // planeswalkers): one left behind keeps the keyword working.
+            List<String> spellings = KeywordEdit.carried(forkCarrier, keyword);
+            for (String spelling : spellings.isEmpty() ? List.of(keyword) : spellings) {
+                KeywordEdit.remove(fork, forkCarrier, spelling);
+            }
             // The state is the board as the step began, with the keyword
             // already gone: that is the input the counterfactual answers for.
             String state = snapshots.ofBoard().render();
@@ -86,7 +99,7 @@ final class DamageStepProbe {
                     // carries the counter across (GameCopier hands it to
                     // devModeSet). Read here so the branch remembers the step it
                     // belongs to.
-                    liveTurn());
+                    liveTurn(), verified.copyDropped());
         }, (verified, held) -> held);
     }
 
@@ -118,18 +131,36 @@ final class DamageStepProbe {
         // assignment only exists after. Both are read as the observed
         // record reads them, so the branch and the record it mirrors agree.
         CombatShape shape = CombatShape.of(fork.getCombat());
-        if (fork.getCombat().assignCombatDamage(firstStrike)) {
-            shape.addAssignment(fork.getCombat());
-            fork.getCombat().dealAssignedDamage();
-            // And then let the deaths happen. Damage alone kills nothing;
-            // a creature with lethal damage on it leaves the battlefield
-            // during state-based actions, and stopping before them would make
-            // the branch systematically miss every death the real step had —
-            // biasing the difference gate 2 computes towards "the keyword
-            // changed nothing". The same call Forge's own simulator makes
-            // after resolving a stack.
-            fork.getAction().checkStateEffects(false, new HashSet<>());
-        }
+        // What the observed combat record takes from the hooks rather than
+        // the bus, damage a shield or a protection prevented above all, is
+        // the branch's too: without it the difference gate 2 reads would
+        // hold a prevention the stripped keyword did not cause.
+        Forks.ForkHooks hooks = new Forks.ForkHooks() {
+            @Override
+            public void clauseEvent(SpellAbility clause, EffectEvent event) {
+                sink.fileOutcome(event, null);
+            }
+
+            @Override
+            public void outcome(SpellAbility ability, EffectEvent event) {
+                sink.fileOutcome(event, null);
+            }
+        };
+        Forks.listeningForHooks(hooks, () -> {
+            if (fork.getCombat().assignCombatDamage(firstStrike)) {
+                shape.addAssignment(fork.getCombat());
+                fork.getCombat().dealAssignedDamage();
+                // And then let the deaths happen. Damage alone kills nothing;
+                // a creature with lethal damage on it leaves the battlefield
+                // during state-based actions, and stopping before them would
+                // make the branch systematically miss every death the real
+                // step had — biasing the difference gate 2 computes towards
+                // "the keyword changed nothing". The same call Forge's own
+                // simulator makes after resolving a stack.
+                fork.getAction().checkStateEffects(false, new HashSet<>());
+            }
+            return null;
+        });
         return new ProbedStep(shape, sink.events());
     }
 
@@ -154,7 +185,18 @@ final class DamageStepProbe {
     record HeldProbe(
             String keyword, String carrier, String state,
             List<EffectEvent> events, String actor, CombatShape combat,
-            DamageStep substep, int turn) {
+            DamageStep substep, int turn, Map<String, Integer> copyDropped) {
+
+        HeldProbe {
+            copyDropped = copyDropped == null ? Map.of() : Map.copyOf(copyDropped);
+        }
+
+        /** A branch whose copy left nothing out. */
+        HeldProbe(String keyword, String carrier, String state,
+                  List<EffectEvent> events, String actor, CombatShape combat,
+                  DamageStep substep, int turn) {
+            this(keyword, carrier, state, events, actor, combat, substep, turn, Map.of());
+        }
 
         /**
          * The branch's payload, naming what was perturbed.
@@ -221,6 +263,7 @@ final class DamageStepProbe {
                 .fork(true)
                 .interventional(false)
                 .mirrorOf(mirrorOfRecordId)
+                .copyDropped(held.copyDropped())
                 .actor(held.actor())
                 .state(held.state())
                 .payload(held.payload()));

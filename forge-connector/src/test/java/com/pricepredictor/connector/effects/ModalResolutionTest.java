@@ -15,6 +15,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
 import static com.pricepredictor.connector.effects.RecordLines.linkOf;
@@ -178,28 +179,6 @@ class ModalResolutionTest {
                 "the second snapshot shows the first mode's effect: " + second);
     }
 
-    /** Spec Story 3 scenario 13 on the record: a repeated mode acts in two halves. */
-    @Test
-    void aRepeatedModeActsInOneHalfPerResolution() throws Throwable {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        SpellAbility charm = charmOf(game, game.getPlayers().get(0), "Brokers Confluence");
-        List<AbilitySub> clones = TestBoard.chain(charm, 0, 0, 2);
-
-        List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
-            bracket.beginBracket(charm);
-            for (AbilitySub clone : clones) {
-                collectors.clauses().clauseHandler().invoke(null, HookShapes.clauseResolving(), new Object[]{clone});
-            }
-            bracket.endBracket(charm.getId(), false);
-            bracket.onNextAction();
-        });
-
-        assertEquals(4, records.size(), records.toString());
-        assertEquals(0L, optionOf(records.get(1)), records.get(1));
-        assertEquals(0L, optionOf(records.get(2)), records.get(2));
-        assertEquals(2L, optionOf(records.get(3)), records.get(3));
-    }
-
     /**
      * A mode that fizzled on its own — no target left when it resolved —
      * still gets its half, with nothing in it, under its own option: the
@@ -223,6 +202,10 @@ class ModalResolutionTest {
         assertEquals(3, records.size(), records.toString());
         assertEquals(0L, optionOf(records.get(1)), records.get(1));
         assertEquals(List.of(), eventTypes(records.get(1)), records.get(1));
+        // An empty half is still the mode's: resolved, under the cast's link.
+        assertEquals("resolved", RecordLines.outcomeOf(records.get(1)), records.get(1));
+        assertEquals(linkOf(records.get(0)), linkOf(records.get(1)));
+        assertEquals(linkOf(records.get(0)), linkOf(records.get(2)));
         assertEquals(2L, optionOf(records.get(2)), records.get(2));
         assertEquals(List.of("keyword_change"), eventTypes(records.get(2)), records.get(2));
     }
@@ -418,6 +401,38 @@ class ModalResolutionTest {
     }
 
     /** Grizzly Bears for the second seat and Fiery Confluence in the first's hand, in play. */
+    /**
+     * A forced Kolaghan's Command's halves read the targets as the live
+     * bracket reads them: each half's {@code targets_at_cast} is the hook's,
+     * never null, and every card it names is an entity of that half's board
+     * (follow-up item 6).
+     */
+    @Test
+    void aForcedCharmsHalvesCarryTheirTargetsAsCast() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        TestBoard.onBattlefield(game, game.getPlayers().get(1), "Grizzly Bears");
+        TestBoard.onBattlefield(game, game.getPlayers().get(1), "Ornithopter");
+        Player caster = game.getPlayers().get(0);
+        Card command = TestBoard.inHand(game, caster, "Kolaghan's Command");
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
+                tempDir, game, TestCaps.caps().manaCap(2000).probes(0).build(), 7L,
+                TestBoard.charmOf(command, caster), STOCK_FORK);
+        assertTrue(fork.wrote(), "the forced resolution observed something");
+
+        for (String half : fork.records()) {
+            Map<String, Object> state = RecordLines.asMap(RecordLines.parse(half).get("state"));
+            Object atCast = RecordLines.asMap(state.get("refs")).get("targets_at_cast");
+            assertNotNull(atCast, half);
+            List<Object> ids = ((List<?>) state.get("entities")).stream()
+                    .map(entity -> RecordLines.asMap(entity).get("id")).toList();
+            for (Object ref : (List<?>) atCast) {
+                if (!String.valueOf(ref).startsWith("P")) {
+                    assertTrue(ids.contains(ref), ref + " is an entity: " + half);
+                }
+            }
+        }
+    }
+
     private static Game confluenceBoard() {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         TestBoard.onBattlefield(game, game.getPlayers().get(1), "Grizzly Bears");

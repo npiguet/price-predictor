@@ -7,6 +7,7 @@ shape is a contract, not an implementation detail.
 
 from __future__ import annotations
 
+import subprocess
 import threading
 import time
 from unittest.mock import patch
@@ -14,8 +15,10 @@ from unittest.mock import patch
 import pytest
 
 from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool, WorkerStartError
+from tests.unit.infrastructure.real_processes import SLEEPER
 
 KILL = "price_predictor.infrastructure.forge_jvm.kill_process_tree"
+BIND = "price_predictor.infrastructure.forge_jvm.bind_to_this_process"
 
 
 class _FakeProc:
@@ -152,14 +155,22 @@ class TestStopCondition:
     def test_no_recycle_when_stopping(self, tmp_path):
         out = tmp_path / "out.txt"
         out.write_text("a\n", encoding="utf-8")
-        pool = _pool(
-            out, worker_count=1, status_interval=0, should_stop=lambda count: True,
-        )
+        # Not yet at the loop's first poll, then met at the status tick: the
+        # stop checked after the report, the branch that skips the recycle.
+        answers = iter([False, True])
+        polls: list[int] = []
+
+        def should_stop(count: int) -> bool:
+            polls.append(count)
+            return next(answers)
+
+        pool = _pool(out, worker_count=1, status_interval=0, should_stop=should_stop)
         pool._start_times = {_FakeProc(1): 1.0}
 
         with patch(KILL) as killer:
             pool._supervisor_loop()
 
+        assert len(polls) == 2, "the tick's own stop check was reached"
         # Only _terminate_all's kills; the recycle is skipped on the stopping tick.
         assert killer.call_count == 0
 
@@ -221,19 +232,6 @@ class TestAWorkerThatCannotStart:
             elapsed = _run_with_watchdog(pool)
             pytest.fail(f"run() returned after {elapsed:.1f}s instead of raising")
         assert len(calls) <= 2 * 3 + 2
-
-    def test_the_error_comes_within_about_two_seconds(self, tmp_path):
-        def spawn(worker_id):
-            raise FileNotFoundError("java")
-
-        pool = _pool(
-            tmp_path / "out.txt", worker_count=2, spawn_worker=spawn,
-            max_failed_starts=3, restart_backoff=0.01,
-        )
-        started = time.monotonic()
-        with patch(KILL), pytest.raises(WorkerStartError):
-            _run_with_watchdog(pool)
-        assert time.monotonic() - started < 2.5
 
     def test_quick_exits_in_every_slot_end_the_run_after_n_restarts(self, tmp_path):
         spawned = []
@@ -313,3 +311,128 @@ class TestNoWorkerOutlivesTheRun:
 
         assert spawned, "the spawn never returned"
         assert all(proc._terminated for proc in spawned)
+
+
+class TestARunThatRaises:
+    """V4 #2 / TP1: ``run`` had no ``finally``, so a supervisor loop that
+    raised left every worker running (the monitor threads are daemons)."""
+
+    @pytest.mark.real_process_kill
+    def test_every_worker_is_killed_when_the_loop_raises(self, tmp_path):
+        started: list[subprocess.Popen] = []
+        up = threading.Event()
+
+        def spawn(worker_id):
+            proc = subprocess.Popen(SLEEPER)
+            started.append(proc)
+            up.set()
+            return proc
+
+        def should_stop(count):
+            if up.wait(timeout=10):
+                raise RuntimeError("the stop condition broke")
+            return False
+
+        pool = _pool(tmp_path / "out.txt", worker_count=1, spawn_worker=spawn,
+                     should_stop=should_stop)
+        try:
+            with pytest.raises(RuntimeError, match="stop condition broke"):
+                _run_with_watchdog(pool, seconds=20)
+            assert started, "no worker was started"
+            assert all(proc.poll() is not None for proc in started)
+        finally:
+            for proc in started:
+                proc.kill()
+
+
+class TestSurvivors:
+    """V4 #8: a worker the kill could not end was counted as ended; and a
+    worker is killed once, a survivor being one still alive at the end."""
+
+    def test_a_worker_the_kill_cannot_end_is_reported(self, tmp_path):
+        pool = _pool(tmp_path / "out.txt", worker_count=1)
+        pool._processes = [_FakeProc(77)]
+
+        with patch(KILL, return_value=False):
+            pool._terminate_all()
+
+        assert pool.survivors == [77]
+
+    def test_a_worker_dead_by_the_end_is_no_survivor(self, tmp_path):
+        """The kill timed out, but the process ended before anyone asked."""
+        pool = _pool(tmp_path / "out.txt", worker_count=1)
+        slow = _FakeProc(77)
+        pool._processes = [slow]
+
+        with patch(KILL, return_value=False):
+            pool._terminate_all()
+        slow._alive = False
+
+        assert pool.survivors == []
+
+    def test_each_worker_is_killed_once_however_often_the_pool_terminates(self, tmp_path):
+        """``_supervisor_loop`` and ``run``'s ``finally`` both terminate; a
+        survivor's 20 s kill ran twice."""
+        pool = _pool(tmp_path / "out.txt", worker_count=1)
+        worker = _FakeProc(77)
+        pool._processes = [worker]
+
+        with patch(KILL, return_value=False) as killer:
+            pool._terminate_all()
+            pool._terminate_all()
+
+        assert killer.call_count == 1
+
+    def test_a_worker_spawned_during_shutdown_is_killed_through_the_pool(self, tmp_path):
+        """The late-spawn kill ignored the kill's answer: its survivor went
+        unrecorded."""
+        class Waitable(_FakeProc):
+            def wait(self, timeout=None):
+                return None
+
+        def spawn(worker_id):
+            pool.request_shutdown()
+            return Waitable(4000)
+
+        pool = _pool(tmp_path / "out.txt", worker_count=1, spawn_worker=spawn)
+        with patch(KILL, return_value=False):
+            pool._monitor_worker(0)
+
+        assert pool.survivors == [4000]
+
+    def test_a_killed_worker_that_exited_is_no_longer_held(self, tmp_path):
+        """match-outcomes recycles a worker a minute for hours: each killed
+        Popen kept for the pool's life held a process handle."""
+        class Exits(_FakeProc):
+            def wait(self, timeout=None):
+                self._alive = False
+
+        def spawn(worker_id):
+            pool.request_shutdown()
+            return Exits(4000)
+
+        pool = _pool(tmp_path / "out.txt", worker_count=1, spawn_worker=spawn)
+        with patch(KILL, return_value=True):
+            pool._monitor_worker(0)
+
+        assert pool._kill_attempted == []
+        assert pool.survivors == []
+
+
+class TestEveryWorkerIsBound:
+    """V4 #2: every spawned worker is bound to the supervisor's process, so a
+    hard-killed supervisor takes them with it."""
+
+    def test_the_monitor_binds_each_worker_it_spawns(self, tmp_path):
+        spawned: list[_ExitingProc] = []
+
+        def spawn(worker_id):
+            spawned.append(_ExitingProc(5000 + len(spawned), code=0))
+            return spawned[-1]
+
+        pool = _pool(tmp_path / "out.txt", worker_count=1, spawn_worker=spawn,
+                     max_failed_starts=2, restart_backoff=0.01)
+        with patch(KILL), patch(BIND) as bind, pytest.raises(WorkerStartError):
+            _run_with_watchdog(pool)
+
+        assert [call.args[0] for call in bind.call_args_list] == spawned

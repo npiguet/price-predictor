@@ -562,14 +562,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "sba_zone_move",
-        "record_kind": "resolution",
-        "outcome": "Two or more legendary permanents with the same name under one controller after a resolution, one put into the graveyard by the state-based check.",
-        "near_miss": "A legendary permanent enters with no same-named twin under its controller.",
-        "params": {
-          "check": "legend_rule"
-        },
-        "needs": []
+        "same_as": "704.5j-1",
+        "reason": "Two legendary permanents (planeswalkers included) with one name and controller put all but one into the graveyard: 704.5j's fact."
       }
     },
     {
@@ -659,11 +653,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A spell with a script-level cast restriction (such as a legendary sorcery's required legendary permanent) fails that restriction and cannot be played.",
-        "near_miss": "No candidate of the decision fails the script-restriction check.",
+        "outcome": "A sorcery's cast fails its script restriction (a legendary sorcery with no legendary creature or planeswalker).",
+        "near_miss": "A sorcery's cast whose script restriction holds.",
         "params": {
           "bit": "failed_check",
-          "check": "script_restriction"
+          "check": "script_restriction",
+          "candidate": "cast",
+          "source_type": "sorcery"
         },
         "needs": [
           "failed_checks"
@@ -742,14 +738,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "sba_zone_move",
-        "record_kind": "resolution",
-        "outcome": "Two or more world permanents on the battlefield after a resolution, all but the newest put into the graveyard by the state-based check.",
-        "near_miss": "A world permanent enters alone.",
-        "params": {
-          "check": "world_rule"
-        },
-        "needs": []
+        "same_as": "704.5k-1",
+        "reason": "Both state the world rule."
       }
     }
   ]

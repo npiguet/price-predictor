@@ -263,10 +263,10 @@
       "detector": {
         "family": "trigger_mode",
         "record_kind": "trigger",
-        "outcome": "A dungeon room ability triggers when its owner's venture marker moves into that room (a RoomEntered trigger the Dungeon keyword generates, evaluated and fired).",
-        "near_miss": "A room ability of a dungeon in the command zone is evaluated against a venture and does not fire, its room not being the one entered.",
+        "outcome": "A room ability triggers as the venture marker moves into its room (Forge's RoomEntered trigger).",
+        "near_miss": "A room ability evaluated and not fired.",
         "params": {
-          "keyword": "Dungeon"
+          "mode": "RoomEntered"
         },
         "needs": []
       }

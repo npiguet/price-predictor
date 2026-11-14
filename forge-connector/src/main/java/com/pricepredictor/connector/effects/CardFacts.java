@@ -224,7 +224,7 @@ final class CardFacts {
                 Comparator<Card> byTimestamp = Comparator
                         .comparingLong(Card::getLayerTimestamp).thenComparingInt(Card::getId);
                 int rank = 0;
-                for (Card other : game.getCardsIn(ZoneType.Battlefield)) {
+                for (Card other : game.getCardsIncludePhasingIn(ZoneType.Battlefield)) {
                     if (other != card && byTimestamp.compare(other, card) < 0) {
                         rank++;
                     }
@@ -307,9 +307,19 @@ final class CardFacts {
      * of {0}; null for a card with no mana cost at all, such as a land.
      */
     static String manaCostJson(Card card) {
-        ManaCost cost = card.getManaCost();
+        return manaCostJson(card.getManaCost());
+    }
+
+    /** {@link #manaCostJson(Card)} of a mana cost read elsewhere: a board without a static's. */
+    static String manaCostJson(ManaCost cost) {
+        Map<String, Integer> symbols = manaCostSymbols(cost);
+        return symbols == null ? "null" : Json.value(symbols);
+    }
+
+    /** A mana cost's non-zero symbols as {@code mana_cost} spells them, or null for no cost. */
+    static Map<String, Integer> manaCostSymbols(ManaCost cost) {
         if (cost == null || cost.isNoCost()) {
-            return "null";
+            return null;
         }
         Map<String, Integer> symbols = new LinkedHashMap<>();
         if (cost.getGenericCost() > 0) {
@@ -318,7 +328,7 @@ final class CardFacts {
         for (ManaCostShard shard : cost) {
             symbols.merge(shard.toShortString(), 1, Integer::sum);
         }
-        return Json.value(symbols);
+        return symbols;
     }
 
     /** The owner of an entity, which control changes leave alone. */

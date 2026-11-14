@@ -48,6 +48,14 @@ _ALLOWED: dict[str, set[str] | None] = {
     "price_predictor.infrastructure.cli_run_manifest": {
         "READ_ONLY", "ManifestTable", "Writes", "dispatch", "tag_subcommands",
     },
+    # A collector's supervisor writes its run id, resolved caps and worker-log
+    # failures into the running command's run.json entry (V4 #3, #4).
+    "price_predictor.infrastructure.run_manifest": {"annotate_run"},
+    # The worker-log scan, shared with sealed match-outcomes (V4 #3).
+    "price_predictor.domain.worker_failures": {
+        "WorkerFailures", "render_fork_refusals", "render_hook_failures",
+    },
+    "price_predictor.infrastructure.worker_log_scan": {"WorkerLogReport"},
     "sealed.domain.manabase": {"compute_basic_lands"},
     "sealed.infrastructure.converted_card_locator": {"ConvertedCardLocator"},
     # The cap flags every collecting supervisor carries, one definition for
@@ -122,6 +130,12 @@ def test_effects_imports_only_the_declared_surface() -> None:
             allowed_names = _ALLOWED[module]
             if allowed_names is None:
                 continue
+            if not names:
+                # ``import pkg.module`` reaches every name the module has.
+                violations.append(
+                    f"{where}:{lineno} imports {module} whole; FR-002 declares "
+                    f"only {sorted(allowed_names)}"
+                )
             for name in names:
                 if name not in allowed_names:
                     violations.append(

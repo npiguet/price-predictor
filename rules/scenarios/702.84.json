@@ -298,12 +298,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An ability restricted to sorcery timing passes the casting-speed check in its controller's main phase with an empty stack.",
-        "near_miss": "The candidate fails the casting-speed check outside that window.",
+        "outcome": "A unearth candidate passes its casting-speed check (sorcery timing).",
+        "near_miss": "A unearth candidate that fails it.",
         "params": {
           "bit": "failed_check",
           "check": "casting_speed",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Unearth"
         },
         "needs": [
           "failed_checks"

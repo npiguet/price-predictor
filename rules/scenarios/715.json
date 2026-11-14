@@ -154,14 +154,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A candidate that targets a stack object has no legal target because the stack object lacks the characteristic the targeting clause needs.",
-        "near_miss": "A candidate whose targeting clause has a legal target.",
-        "params": {
-          "bit": "has_legal_target"
-        },
-        "needs": []
+        "none": "Could not express: which characteristics the card has in its zone (an Adventure's on the stack, a prototype's normal ones) is read by no verdict_bit filter."
       }
     },
     {
@@ -241,15 +234,7 @@
       ],
       "forge_notes": "The copy's use of Stomp's alternative characteristics is also what 715.2b makes copiable.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A copy-spell resolution holds a spell_copied event.",
-        "near_miss": "A CopySpellAbility resolution that produced no copy.",
-        "params": {
-          "event": "spell_copied",
-          "api": "CopySpellAbility"
-        },
-        "needs": []
+        "none": "Could not express: what the copy kept of the original (its source, its Adventure or prototyped characteristics) is read by no outcome_event parameter."
       }
     },
     {
@@ -328,12 +313,13 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolving spell moves from the stack to exile rather than the graveyard.",
-        "near_miss": "Not counted: an Adventure spell's acting line has no single api, so only the fires side is tagged.",
+        "outcome": "A spell cast as its card's other face (an Adventure) is exiled as it resolves.",
+        "near_miss": "A spell cast as its card's other face that leaves the stack elsewhere.",
         "params": {
           "event": "zone_change",
           "from_zone": "stack",
-          "to_zone": "exile"
+          "to_zone": "exile",
+          "acting_face": "alternative"
         },
         "needs": []
       }
@@ -401,15 +387,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A discard resolution holds a card_discarded event counting the cards actually discarded.",
-        "near_miss": "A Discard resolution that discarded nothing.",
-        "params": {
-          "event": "card_discarded",
-          "api": "Discard"
-        },
-        "needs": []
+        "none": "Could not express: that the discarded card is an adventurer card is read by no outcome_event parameter."
       }
     },
     {

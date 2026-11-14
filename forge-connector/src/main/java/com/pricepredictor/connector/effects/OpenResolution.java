@@ -28,7 +28,11 @@ final class OpenResolution {
     final String linkId;
     /** What its cast paid, or null for an item with no cost half. */
     final PaidCosts costs;
-    /** How many targets its root line had at the cast, for a partial fizzle. */
+    /**
+     * How many targets its chain had at the cast, every link's, for a
+     * partial fizzle where the resolution hook never told the targets as
+     * cast ({@link #castTargets}).
+     */
     final int targetsAtCast;
     /**
      * What the bus filed for this item, split by chosen mode as it resolves;
@@ -43,6 +47,18 @@ final class OpenResolution {
      * The board when its resolution started (FR-042b), or null until then.
      */
     private Snapshot resolutionState;
+
+    /**
+     * Its chain's targets when its resolution started, after Forge's check
+     * for illegal targets removed the illegal ones; null until then.
+     */
+    private ChainTargets resolvingTargets;
+
+    /**
+     * Its chain's targets as the resolution hook told them, before that
+     * check (608.2b); null until then, or where the hook could not copy them.
+     */
+    private ChainTargets castTargets;
 
     /**
      * The X it announced ({@link RefsJson#announcedX}), read once: when it
@@ -87,10 +103,64 @@ final class OpenResolution {
         }
     }
 
-    /** Its resolution has started, on this board (FR-042b). */
+    /**
+     * Its resolution has started, on this board (FR-042b). A refusal made
+     * since its cast was the cast's consequence and precedes this board, as
+     * the events gathered meanwhile do: it is not the resolution's.
+     */
     void resolutionStarted(Snapshot board) {
+        resolutionStarted(board, null, null);
+    }
+
+    /**
+     * Its resolution has started, on this board, holding {@code resolving}
+     * as its targets, and {@code atCast} before Forge's check for illegal
+     * targets (null where the hook could not tell them).
+     */
+    void resolutionStarted(Snapshot board, ChainTargets resolving, ChainTargets atCast) {
         resolutionState = board;
+        resolvingTargets = resolving;
+        castTargets = atCast;
+        declined = false;
         readX();
+    }
+
+    /**
+     * One effect half's {@code targets}: what its links held as its
+     * resolution started, or, where that was never told, what they hold now.
+     */
+    java.util.List<String> targetsOfHalf(int half, int halves, Integer option) {
+        ChainTargets targets = resolvingTargets != null
+                ? resolvingTargets : ChainTargets.now(ability);
+        return targets.ofHalf(half, halves, option);
+    }
+
+    /**
+     * Its targets before Forge's check for illegal targets, which its effect
+     * half's boards carry whatever zone they are in now, or as they last
+     * existed: the card that made it fizzle is among them. Null where they
+     * are unknown.
+     */
+    ChainTargets castTargets() {
+        return castTargets;
+    }
+
+    /**
+     * Of a half's {@code targets} and {@code targets_at_cast}, the refs that
+     * name a spell or ability on the stack, in the order written.
+     */
+    java.util.List<String> onStackOf(java.util.List<String> targets, java.util.List<String> atCast) {
+        java.util.List<String> written = new java.util.ArrayList<>(targets);
+        if (atCast != null) {
+            written.addAll(atCast);
+        }
+        ChainTargets now = resolvingTargets != null ? resolvingTargets : ChainTargets.now(ability);
+        return ChainTargets.onStackOf(written, now, castTargets);
+    }
+
+    /** One effect half's {@code targets_at_cast}, or null where they are unknown. */
+    java.util.List<String> targetsAtCastOfHalf(int half, int halves, Integer option) {
+        return castTargets == null ? null : castTargets.ofHalf(half, halves, option);
     }
 
     private void readX() {
@@ -145,6 +215,9 @@ final class OpenResolution {
         if (wasDeclined()) {
             return ActivationOutcome.DECLINED;
         }
+        if (castTargets != null && resolvingTargets != null) {
+            return outcomeOf(castTargets.count(), resolvingTargets.count());
+        }
         return outcomeOf(targetsAtCast, ability);
     }
 
@@ -158,9 +231,10 @@ final class OpenResolution {
      * in the record distinguishes a Lightning Helix that hit from one whose
      * creature had already died.
      *
-     * <p>Only the root line's targets are compared. A partial fizzle confined to
-     * a sub-ability reads as {@code resolved}, which understates rather than
-     * invents. Losing <b>every</b> target without the engine calling it a fizzle
+     * <p>Every link's targets are counted, a charm's modes' and a
+     * {@code SubAbility$}'s with the root's: a charm whose one mode lost its
+     * target while another kept its own partially fizzled. Losing <b>every</b>
+     * target without the engine calling it a fizzle
      * is the {@code CantFizzle} case (Gilded Drake), where the spell still does
      * what it does: that is {@code resolved} too.
      */
@@ -168,15 +242,19 @@ final class OpenResolution {
         if (resolved == null) {
             return ActivationOutcome.RESOLVED;
         }
-        int surviving = targetCount(resolved);
+        return outcomeOf(targetsAtCast, targetCount(resolved));
+    }
+
+    /** The outcome from the chain's target counts before and after the illegal-target check. */
+    static ActivationOutcome outcomeOf(int targetsAtCast, int surviving) {
         return surviving > 0 && surviving < targetsAtCast
                 ? ActivationOutcome.PARTIALLY_FIZZLED
                 : ActivationOutcome.RESOLVED;
     }
 
+    /** How many targets the ability's chain holds, every link's. */
     static int targetCount(SpellAbility ability) {
-        return ability == null || ability.getTargets() == null
-                ? 0 : ability.getTargets().size();
+        return ability == null ? 0 : ChainTargets.now(ability).count();
     }
 
     /** Whether this is the bracket of the ability the engine names by id. */
@@ -190,5 +268,23 @@ final class OpenResolution {
      */
     boolean hosts(SpellAbility clause) {
         return clause != null && clause.getHostCard() == ability.getHostCard();
+    }
+
+    /**
+     * Whether a clause is on this resolution's own line: its chain's root is
+     * the item the stack resolves, or, for a triggered ability, the ability
+     * its stack wrapper resolves. A clause another line of the same card
+     * resolves meanwhile — an enters-the-battlefield replacement's (Eddymurk
+     * Crab's "enters tapped if it's not your turn"), a static trigger's — is
+     * on the card ({@link #hosts}) and not on this line.
+     */
+    boolean onItsLine(SpellAbility clause) {
+        if (!hosts(clause)) {
+            return false;
+        }
+        SpellAbility root = clause.getRootAbility();
+        return root == ability
+                || ability instanceof forge.game.trigger.WrappedAbility wrapper
+                        && root == wrapper.getWrappedAbility();
     }
 }

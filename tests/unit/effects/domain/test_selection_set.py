@@ -107,6 +107,20 @@ def test_load_refuses_missing_other_corpus_and_edited_files(tmp_path) -> None:
         load_selection_set(path, "abc123")
 
 
+def test_a_set_already_frozen_for_the_corpus_is_never_replaced_by_another(tmp_path) -> None:
+    """Checkpoints were selected against the set on disk: freezing another for
+    the same corpus is refused and leaves the file alone, while freezing the
+    same set again is a no-op."""
+    path = selection_set_path(tmp_path, "abc123")
+    write_selection_set(path, _selection())
+    before = path.read_bytes()
+    write_selection_set(path, _selection())
+    assert path.read_bytes() == before
+    with pytest.raises(SelectionSetError, match="already holds"):
+        write_selection_set(path, _selection(r=2))
+    assert path.read_bytes() == before
+
+
 def test_infinite_standard_errors_are_written_as_null() -> None:
     assert error_value(math.inf) is None
     assert error_of(None) == math.inf

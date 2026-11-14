@@ -66,14 +66,17 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A candidate play is not legal (can_play false) because a static ability on the board forbids it, whatever other effects permit it.",
-        "near_miss": "A candidate a static is recorded against is still playable (can_play true).",
+        "outcome": "A land play a static forbids is not playable, whatever allows an additional land.",
+        "near_miss": "A land play no static forbids that is playable.",
         "params": {
           "bit": "can_play",
           "fires_when": false,
-          "responsible_static": true
+          "responsible_static": true,
+          "land_play": true
         },
-        "needs": []
+        "needs": [
+          "land_play"
+        ]
       }
     },
     {
@@ -141,16 +144,7 @@
       ],
       "forge_notes": "Forge enforces MustAttack requirements when validating the declaration; the declaration must be given explicitly.",
       "detector": {
-        "family": "legality_membership",
-        "record_kind": "playability",
-        "outcome": "A creature is outside the legal attackers because a static forbids it from attacking, whatever requirement says it attacks.",
-        "near_miss": "A creature is inside the legal attackers.",
-        "params": {
-          "list": "legal_attackers",
-          "fires_when": "outside",
-          "responsible_static": true
-        },
-        "needs": []
+        "none": "Could not express: a creature both required to attack and forbidden lies in two lists, which no one declaration reads together."
       }
     },
     {

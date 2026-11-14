@@ -1,16 +1,23 @@
 package com.pricepredictor.connector.effects.directed;
 
+import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.effects.directed.operations.TapOperation;
+import forge.model.FModel;
 import org.eclipse.jetty.util.ajax.JSON;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -34,7 +41,7 @@ class DirectedRulesContractTest {
     private static final Path SCENARIOS = Path.of("..", "rules", "scenarios");
 
     /** One scenario as the contract reads it: the rules it lists and each variant's operation. */
-    private record Scenario(List<String> rules, Map<String, Optional<String>> operations) {
+    private record Scenario(List<String> rules, Map<String, Optional<String>> operations, List<String> cards) {
     }
 
     /** Every scenario of the catalogue, by id. */
@@ -55,7 +62,8 @@ class DirectedRulesContractTest {
                         operations.put(String.valueOf(variant.get("label")),
                                 operation instanceof String name ? Optional.of(name) : Optional.empty());
                     }
-                    byId.put(String.valueOf(scenario.get("id")), new Scenario(rules, operations));
+                    List<String> cards = list(scenario.get("cards")).stream().map(String::valueOf).toList();
+                    byId.put(String.valueOf(scenario.get("id")), new Scenario(rules, operations, cards));
                 }
             }
         }
@@ -151,6 +159,73 @@ class DirectedRulesContractTest {
     void anUnknownScenarioFails() throws IOException {
         assertEquals(List.of("704.5f: no scenario 704.5f-99"), disagreements(
                 DirectedRules.of(rule("704.5f", "704.5f-99", "counters", ForkOperation.COUNTERS)), scenarios()));
+    }
+
+    /**
+     * Every rule {@code rules/directed-fork-rules.txt} lists has a
+     * registration, which the supervisor's startup check otherwise finds only
+     * by running {@code DirectedRulesMain}.
+     */
+    @Test
+    void everyListedRuleIsRegistered() throws IOException {
+        List<String> listed = Files.readAllLines(Path.of("..", "rules", "directed-fork-rules.txt"),
+                StandardCharsets.UTF_8).stream().map(String::trim).filter(line -> !line.isEmpty()).toList();
+        List<String> missing = listed.stream()
+                .filter(rule -> DirectedRules.registered().find(rule).isEmpty()).toList();
+        assertEquals(List.of(), missing);
+    }
+
+    /**
+     * TC3: the registry is tied to its scenarios by more than ids and labels.
+     * A card a rule class names (the Hill Giant a variant puts in a
+     * creature's place, the Lightning Bolt it puts in a library) is one of its
+     * scenario's {@code cards}: a rule that drifted to another card would
+     * fork a board the scenario does not describe.
+     */
+    @Nested
+    @ExtendWith(ForgeExtension.class)
+    class TheCardsARuleNames {
+
+        @Test
+        void areItsScenariosCards() throws Exception {
+            Map<String, Scenario> scenarios = scenarios();
+            Path sources = Path.of("src", "main", "java", "com", "pricepredictor", "connector",
+                    "effects", "directed", "rules");
+            List<String> wrong = new ArrayList<>();
+            int named = 0;
+            try (Stream<Path> files = Files.list(sources)) {
+                for (Path file : files.sorted().toList()) {
+                    String simple = file.getFileName().toString().replace(".java", "");
+                    Class<?> type = Class.forName("com.pricepredictor.connector.effects.directed.rules." + simple);
+                    Field ruleField;
+                    try {
+                        ruleField = type.getField("RULE");
+                    } catch (NoSuchFieldException e) {
+                        continue;  // Boards, Melds: shared reads, no rule
+                    }
+                    DirectedRule rule = DirectedRules.registered().find((String) ruleField.get(null)).orElseThrow();
+                    List<String> cards = scenarios.get(rule.scenario()).cards().stream()
+                            .map(name -> name.toLowerCase(Locale.ROOT)).toList();
+                    for (Field field : type.getDeclaredFields()) {
+                        if (field.getType() != String.class || !Modifier.isStatic(field.getModifiers())) {
+                            continue;
+                        }
+                        field.setAccessible(true);
+                        String value = (String) field.get(null);
+                        if (FModel.getMagicDb().getCommonCards().getCard(value) == null) {
+                            continue;
+                        }
+                        named++;
+                        if (!cards.contains(value.toLowerCase(Locale.ROOT))) {
+                            wrong.add(simple + "." + field.getName() + " names " + value
+                                    + ", not a card of " + rule.scenario());
+                        }
+                    }
+                }
+            }
+            assertEquals(List.of(), wrong);
+            assertTrue(named >= 15, "the rule classes name " + named + " cards");
+        }
     }
 
     @Test

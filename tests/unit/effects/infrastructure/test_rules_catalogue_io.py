@@ -114,3 +114,23 @@ def test_a_variant_without_a_script_edit_reads_none(tmp_path):
 def test_the_real_tree_names_the_cards_of_its_scenarios(catalogue):
     scenario = next(s for s in catalogue.scenarios if s.id == "704.5g-1")
     assert scenario.cards == ("Mountain", "Swamp", "Shock", "Drudge Skeletons")
+
+
+def test_a_scenario_id_declared_twice_is_refused_naming_both_files(tmp_path):
+    """TP4 / P3b: a second declaration of one id read silently, so the tags,
+    the review list and the budgets keyed by it mixed two scenarios."""
+    rules = _one_scenario_tree(tmp_path, {})
+    first = rules / "scenarios" / "704.json"
+    (rules / "scenarios" / "704b.json").write_text(first.read_text(encoding="utf-8"),
+                                                   encoding="utf-8")
+    with pytest.raises(ValueError, match=r"704\.5f-1.*704\.json.*704b\.json"):
+        load_scenarios(rules)
+
+
+def test_a_heads_line_declared_twice_is_refused(tmp_path):
+    heads = tmp_path / "rules" / "heads"
+    heads.mkdir(parents=True)
+    line = json.dumps({"id": "704.5f", "output": "trained", "outputs": ["zone_outcome"]})
+    (heads / "704.jsonl").write_text(line + "\n" + line + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"704\.5f.*twice"):
+        load_heads(tmp_path / "rules")

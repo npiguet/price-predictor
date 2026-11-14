@@ -90,14 +90,8 @@
       ],
       "forge_notes": "Worldly Tutor is ChangeZone Library to Library with LibraryPosition 0; check that Forge runs the shuffle that fires Shuffled triggers.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A shuffle trigger fires when a library is shuffled, whatever the library's size or the cards moved into it.",
-        "near_miss": "A shuffle trigger evaluated against an event that is not a shuffle of a library it watches.",
-        "params": {
-          "mode": "Shuffled"
-        },
-        "needs": []
+        "same_as": "701.24e-1",
+        "reason": "The record shows a shuffle trigger firing whatever the library or the cards shuffled in, 701.24e's fact."
       }
     },
     {
@@ -192,14 +186,8 @@
       ],
       "forge_notes": "Guile's trigger uses Defined$ TriggeredCardLKICopy with Origin$ Graveyard; if the card is no longer there Forge may skip the move and the shuffle, which would diverge from the rule. In the own-trickster variant A sacrifices Guile to Diabolic Edict by choice (Cosi's Trickster is also A's creature).",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A shuffle trigger fires when a library is shuffled, whatever the library's size or the cards moved into it.",
-        "near_miss": "A shuffle trigger evaluated against an event that is not a shuffle of a library it watches.",
-        "params": {
-          "mode": "Shuffled"
-        },
-        "needs": []
+        "same_as": "701.24e-1",
+        "reason": "The record shows a shuffle trigger firing whatever the library or the cards shuffled in, 701.24e's fact."
       }
     },
     {
@@ -287,14 +275,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A shuffle trigger fires when a library is shuffled, whatever the library's size or the cards moved into it.",
-        "near_miss": "A shuffle trigger evaluated against an event that is not a shuffle of a library it watches.",
-        "params": {
-          "mode": "Shuffled"
-        },
-        "needs": []
+        "same_as": "701.24e-1",
+        "reason": "The record shows a shuffle trigger firing whatever the library or the cards shuffled in, 701.24e's fact."
       }
     },
     {
@@ -496,14 +478,7 @@
       ],
       "forge_notes": "Each Darksteel Colossus replacement shuffles on its own; Forge may count two sequential shuffles rather than one simultaneous event, with the same trigger count. Barter in Blood does not target, and Indestructible does not matter for sacrifice. In the own-trickster variant B has only the two Grizzly Bears to sacrifice.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A shuffle trigger fires when a library is shuffled, whatever the library's size or the cards moved into it.",
-        "near_miss": "A shuffle trigger evaluated against an event that is not a shuffle of a library it watches.",
-        "params": {
-          "mode": "Shuffled"
-        },
-        "needs": []
+        "none": "How many times one event triggers an ability is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     },
     {

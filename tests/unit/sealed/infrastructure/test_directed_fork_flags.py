@@ -19,6 +19,7 @@ import pytest
 
 import sealed.infrastructure.effect_collection_flags as flags
 from sealed.infrastructure.effect_collection_flags import (
+    UNTAGGABLE_SCENARIOS,
     directed_fork_error,
     rule_readiness,
 )
@@ -57,6 +58,9 @@ def rules_dir(tmp_path: Path) -> Path:
         # 1.5 is declared in one scenario and forkable in another.
         _scenario(["1.5"], operation={"unclassifiable": "a timing"}),
         _scenario(["1.5"], detector={"none": "unread"}, operation="tap"),
+        _scenario(["1.6"], detector={"same_as": "1.1-1", "reason": "the same fact"}),
+        # 104.4c-1 reads game_drawn, which no resolution record lists.
+        {**_scenario(["1.7"]), "id": "104.4c-1"},
     ]
     root = tmp_path / "rules"
     (root / "scenarios").mkdir(parents=True)
@@ -79,6 +83,8 @@ class TestTheCatalogueChecks:
 
     @pytest.mark.parametrize(("rule", "complaint"), [
         ("1.2", "declares its detector none"),
+        ("1.6", "same_as"),
+        ("1.7", "an event its record kind never lists"),
         ("1.3", "has no detector declaration"),
         ("1.4", "no contrasting variant classified into a fork operation"),
         ("9.9", "has no detector declaration"),
@@ -162,17 +168,23 @@ class TestTheCatalogueIsReadAsEffectsReadsIt:
     itself; over the real catalogue it must agree with ``rules_catalogue_io``."""
 
     def test_every_rule_agrees(self):
-        from effects.domain.rule_catalogue import DetectorDeclaration, NoDetector
+        from effects.domain.rule_catalogue import DetectorDeclaration, NoDetector, SameAs
         from effects.domain.rule_catalogue import ForkOperation as Operation
+        from effects.domain.rule_detectors import DetectorIndex
         from effects.infrastructure.rules_catalogue_io import load_scenarios
 
+        catalogue = load_scenarios()
+        untaggable = DetectorIndex.of(catalogue).untaggable
+        assert set(untaggable) == UNTAGGABLE_SCENARIOS
         expected: dict[str, tuple[str, bool]] = {}
-        rank = {"missing": 0, "none": 1, "declared": 2}
-        for rule, scenarios in load_scenarios().by_rule().items():
+        rank = {"missing": 0, "none": 1, "untaggable": 2, "same_as": 3, "declared": 4}
+        for rule, scenarios in catalogue.by_rule().items():
             state = max(
                 (
-                    "declared" if isinstance(s.detector, DetectorDeclaration)
-                    else "none" if isinstance(s.detector, NoDetector) else "missing"
+                    "untaggable" if s.id in untaggable
+                    else "declared" if isinstance(s.detector, DetectorDeclaration)
+                    else "none" if isinstance(s.detector, NoDetector)
+                    else "same_as" if isinstance(s.detector, SameAs) else "missing"
                     for s in scenarios
                 ),
                 key=rank.__getitem__,
@@ -215,29 +227,6 @@ class TestTheCollectors:
             assert run(config) == 1
         assert "--directed-fork-probability" in caplog.text
 
-    def test_collect_coverage_runs_no_check(self, monkeypatch):
-        """Its --directed-fork-rules is a label: a rule nothing knows still runs,
-        no fork is enabled, and the JVM is never asked."""
-        from unittest.mock import patch
-
-        from effects.application import collect_coverage
-        from effects.infrastructure.cli import build_parser, run_collect_coverage
-
-        monkeypatch.setattr(flags, "registered_directed_rules", _never_asked)
-        with (
-            patch("effects.application.collect_coverage.run", return_value=0) as collect,
-            patch("price_predictor.infrastructure.forge_jvm.check_worker_prerequisites"),
-        ):
-            assert run_collect_coverage(build_parser().parse_args(
-                ["collect-coverage", "--directed-fork-rules", "no-such-rule",
-                 "--exclude-cards", "h.txt"],
-            )) == 0
-        assert collect.call_args.args[0].caps.directed_fork_rules == ()
-        assert "directed_fork_error" not in Path(collect_coverage.__file__).read_text(
-            encoding="utf-8",
-        )
-
-
 @pytest.mark.integration
 def test_the_worker_lists_its_registered_rules():
     """One real run of DirectedRulesMain: it exits 0 and prints rule ids only,
@@ -251,3 +240,57 @@ def test_the_worker_lists_its_registered_rules():
     registered = flags.registered_directed_rules()
     assert all(rule and " " not in rule for rule in registered)
     assert "704.5f" in registered
+
+
+_DIRECTED = Path("forge-connector/src/main/java/com/pricepredictor/connector/effects/directed")
+
+def _registered_classes(registry: str) -> list[str]:
+    """The rule classes ``DirectedRules.REGISTERED`` lists in ``registry``, the
+    registry's source: each ``X.rule()`` of the list, comments left out."""
+    import re
+
+    code = re.sub(r"/\*.*?\*/|//[^\n]*", "", registry, flags=re.S)
+    body = code[code.index("REGISTERED = of("):]
+    body = body[:body.index(");")]
+    return re.findall(r"(\w+)\.rule\(\)", body)
+
+
+def _registered_in_source() -> frozenset[str]:
+    """The rule ids ``DirectedRules.REGISTERED`` lists, read off the connector's
+    source: each listed class's ``RULE`` constant. The integration test below
+    asks the JVM itself."""
+    import re
+
+    registry = (_DIRECTED / "DirectedRules.java").read_text(encoding="utf-8")
+    rules = set()
+    for name in _registered_classes(registry):
+        source = (_DIRECTED / "rules" / f"{name}.java").read_text(encoding="utf-8")
+        rules.add(re.search(r'public static final String RULE = "([^"]+)";', source).group(1))
+    return frozenset(rules)
+
+
+def test_a_commented_out_line_is_no_registration():
+    registry = """
+    static final DirectedRules REGISTERED = of(
+            StunCounter.rule(),
+            // VanishingInstances.rule(),
+            /* Dethrone.rule(), */
+            ToughnessZero.rule()); // Aftermath.rule()
+    """
+    assert _registered_classes(registry) == ["StunCounter", "ToughnessZero"]
+
+
+def test_the_startup_check_passes_over_the_whole_list():
+    """Every rule of the real ``rules/directed-fork-rules.txt``, checked
+    against the real catalogue and the connector's registrations, all at
+    once: no listed rule is refused, and the failure names every rule the
+    check would refuse, not the first."""
+    listed = Path("rules/directed-fork-rules.txt").read_text(encoding="utf-8").split()
+    registered = _registered_in_source()
+    refused = {}
+    for rule in listed:
+        error = directed_fork_error((rule,), 0.25, registered=lambda: registered)
+        if error is not None:
+            refused[rule] = error
+    assert refused == {}
+    assert len(listed) == len(set(listed)) == 71

@@ -95,6 +95,66 @@ def gen3_fixture_records() -> list[dict]:
         return [json.loads(line) for line in handle if line.strip()]
 
 
+def game_end_marker(last: EffectRecord, *, records_withheld: int = 0) -> EffectRecord:
+    """The game-end marker a game whose last record is ``last`` writes (WP7):
+    a ``turn_action`` / ``game_end`` on ``last``'s board, no events."""
+    from dataclasses import replace
+
+    return replace(
+        last, record_id=f"{last.game_id}.game-end", kind=RecordKind.TURN_ACTION,
+        moment=None, subkind=TurnActionSubkind.GAME_END, ability=None,
+        ability_unresolved=None, link_id=None, mirror_of=None, variant_of=None,
+        interventional=False, fork=False, synthetic=False, directed=None, curation=None,
+        what_if=None, payload=TurnActionPayload(records_withheld=records_withheld),
+    )
+
+
+def with_game_end_markers(records) -> list[EffectRecord]:
+    """``records`` with a game-end marker after each gen-3 game's last record,
+    as a collection that ended every game writes its shard; an older
+    generation's games get none, as theirs never had one."""
+    records = list(records)
+    last: dict[str, int] = {}
+    for index, record in enumerate(records):
+        if record.generation == 3:
+            last[record.game_id] = index
+    ends = {index: game for game, index in last.items()}
+    out: list[EffectRecord] = []
+    for index, record in enumerate(records):
+        out.append(record)
+        if index in ends:
+            out.append(game_end_marker(record))
+    return out
+
+
+def write_ended_shard(path: Path, records) -> int:
+    """``write_shard`` of ``records`` with every gen-3 game ended by its marker."""
+    from effects.infrastructure.shard_io import write_shard
+
+    return write_shard(path, with_game_end_markers(records))
+
+
+def copy_gen3_fixture(directory: Path) -> Path:
+    """The gen-3 fixture's shard copied into ``directory``, a game-end marker
+    appended for each of its games.
+
+    A shim: the fixture predates the marker (WP7), so a build reading it as
+    it stands drops every game as cut. Its regeneration (D8) writes the
+    markers; this then becomes a plain copy of :data:`GEN3_RECORDS`.
+    """
+    import gzip
+
+    from effects.infrastructure.record_codec import format_record_line, record_from_dict
+
+    last = {raw["game_id"]: raw for raw in gen3_fixture_records()}
+    markers = "".join(format_record_line(game_end_marker(record_from_dict(raw))) + "\n"
+                      for raw in last.values())
+    target = Path(directory) / GEN3_RECORDS.name
+    # The fixture's own members unchanged, the markers one gzip member after them.
+    target.write_bytes(GEN3_RECORDS.read_bytes() + gzip.compress(markers.encode("utf-8")))
+    return target
+
+
 def curated_fixture_records() -> list:
     """The gen-3 fixture's records as a curated corpus holds them, parsed:
     every record but the ``turn_action`` ones, which ``build-corpus`` writes
@@ -278,11 +338,14 @@ class RawShardWriter:
 
 def write_plain_shard(
     directory, lifetime: str, records, *, run_id: str = "run", worker: int = 0,
+    ended: bool = True,
 ) -> Path:
     """A plain ``{run_id}.{worker}-{lifetime}.jsonl`` raw shard holding
-    ``records``, written through :class:`RawShardWriter`."""
+    ``records``, written through :class:`RawShardWriter`: each gen-3 game
+    ended by its game-end marker, as a worker that finished it writes it,
+    unless ``ended`` is False (a worker killed mid-game)."""
     with RawShardWriter(directory, run_id, worker, lifetime, compressed=False) as shard:
-        for record in records:
+        for record in with_game_end_markers(records) if ended else records:
             shard.write(record)
     return shard.path
 

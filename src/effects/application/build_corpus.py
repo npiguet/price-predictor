@@ -12,11 +12,12 @@ and ``rules/scenarios/`` are read once, here (FR-060a).
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import logging
 import shutil
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -45,7 +46,7 @@ from effects.application.corpus_write import (
     WriteTask,
     run_write_pass,
 )
-from effects.application.rule_counts import none_rules
+from effects.application.rule_counts import CatalogueStanding
 from effects.domain import default_paths
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.corpus_curation import (
@@ -93,6 +94,7 @@ from effects.domain.stratum_placement import (
     place_games,
     rule_test_misses,
 )
+from price_predictor.infrastructure.forge_jvm import MAX_WORKERS, worker_count
 
 if TYPE_CHECKING:
     from effects.infrastructure.converted_trees import ConvertedTrees, SourceTrees
@@ -208,9 +210,10 @@ class BuildCorpusConfig:
     seed: int = field(default=42, metadata={"help": (
         "Seeds the selection and the repacking (default: %(default)s)"
     )})
-    workers: int | None = field(default=None, metadata={"help": (
-        "Parallel shard readers; unset uses the CPU count"
-    )})
+    workers: int = field(default=MAX_WORKERS, metadata={
+        "type": worker_count,
+        "help": f"Parallel shard readers, 1 to {MAX_WORKERS} (default: %(default)s)",
+    })
     verify: bool = field(default=False, metadata={"help": (
         "Report drift against an existing manifest and write nothing"
     )})
@@ -407,7 +410,8 @@ class Decisions:
             games = survey.shard_games.get(shard.name, frozenset())
             tasks.append(WriteTask(shard=shard, copies={
                 game: self.copies[game] for game in games if game in self.copies
-            }))
+            }, surveyed=survey.shard_records.get(shard.name),
+                cut=survey.shard_cut.get(shard.name, frozenset())))
         return tasks
 
 
@@ -471,7 +475,7 @@ def decide(
     copies: dict[str, dict[int, tuple[str, ...]]] = dict(budgets.copies)
     for planned in validation.values():
         copies.update(planned.copies)
-    rule_counts = totals.rule_counts.to_json(none_rules(rules.scenarios))
+    rule_counts = totals.rule_counts.to_json(CatalogueStanding.of(rules.scenarios))
     return Decisions(
         selection=selection,
         strata=strata,
@@ -589,6 +593,7 @@ def _rule_budgets(
     )
     budgets = plan(
         _budgeted_records(training, key_text, natural), class_targets=selection.targets,
+        text_natural=selection.text_planned,
     )
     validation: dict[Stratum, RuleBudgets] = {}
     for stratum in (Stratum.CARD_DISJOINT, Stratum.GAME_DISJOINT):
@@ -599,10 +604,16 @@ def _rule_budgets(
             return natural_copies(multipliers.get(str(record.klass), 1.0), record.record_hash)
 
         targets: Counter[str] = Counter()
+        text_natural: dict[str, Counter[str]] = defaultdict(Counter)
         for record in records:
-            targets[str(record.klass)] += held(record)
+            copies = held(record)
+            targets[str(record.klass)] += copies
+            text = key_text.get(record.keys)
+            if text is not None:
+                text_natural[str(record.klass)][text] += copies
         validation[stratum] = plan(
             _budgeted_records(records, key_text, held), class_targets=dict(targets),
+            text_natural=text_natural,
         )
     return budgets, validation
 
@@ -683,7 +694,7 @@ def build(config: BuildCorpusConfig) -> int:
         return _verify(config, store)
 
     _require_generation(config.records_dir)
-    rules = RuleCatalogue.read(config.rules_dir)
+    rules = _read_rules(config.rules_dir)
     roots = config.source_trees.sidecar_roots()
     trees = _converted_trees(config, roots)
     held_out = _select_holdout(config, trees)
@@ -695,17 +706,22 @@ def build(config: BuildCorpusConfig) -> int:
         catalogue=rules.scenarios,
         rule_outputs={rule: tuple(entry.outputs) for rule, entry in rules.heads.items()},
     )
-    survey = _survey(config, read, rules)
+    with _unreadable_shards("nothing under --output was touched"):
+        survey = _survey(config, read, rules)
     decisions = _decide_or_refuse(config, survey, trees, surface, held_out, rules)
+    _warn_on_resized_shards(config.records_dir, survey)
 
     # Before the first output shard, and only on a real build: a rebuild
     # replaces the dataset rather than layering over it (FR-144).
     store.clear_outputs()
-    written = run_write_pass(
-        decisions.write_tasks(survey),
-        config=WriteConfig(read=read, plan=decisions.write_plan(store)),
-        workers=config.workers,
-    )
+    with _unreadable_shards(
+            "the shard changed after the survey read it whole; the dataset under "
+            "--output was already cleared (its manifest is manifest.previous.json)"):
+        written = run_write_pass(
+            decisions.write_tasks(survey),
+            config=WriteConfig(read=read, plan=decisions.write_plan(store)),
+            workers=config.workers,
+        )
     report_write_pass(survey, written)
     _repack_outputs(store, written, shard_records=config.shard_records, seed=config.seed)
     _write_validation_samples(config, store, WorkerContext(read))
@@ -813,10 +829,58 @@ def _require_generation(records_dir: Path) -> None:
     """Gen-3 only, before any record is read (FR-018, FR-020)."""
     from effects.infrastructure.shard_io import iter_shards, require_generation
 
+    with _unreadable_shards("nothing under --output was touched"):
+        try:
+            require_generation(iter_shards(records_dir), ShardGeneration.GEN_3)
+        except (MixedGenerationsError, UnacceptedGenerationError) as exc:
+            raise BuildCorpusError(str(exc)) from exc
+
+
+@contextlib.contextmanager
+def _unreadable_shards(consequence: str) -> Iterator[None]:
+    """A shard that cannot be read whole (a corrupt gzip member before the
+    last, a line that does not decode, a ``generation`` naming none) makes the
+    dataset unusable: the build stops with exit 1, naming the shard and line
+    the error names, and saying what became of ``--output``."""
+    from effects.domain.shard_generation import UnknownGenerationError
+    from effects.infrastructure.shard_io import SHARD_DAMAGE
+
     try:
-        require_generation(iter_shards(records_dir), ShardGeneration.GEN_3)
-    except (MixedGenerationsError, UnacceptedGenerationError) as exc:
-        raise BuildCorpusError(str(exc)) from exc
+        yield
+    except (*SHARD_DAMAGE, UnknownGenerationError) as exc:
+        raise BuildCorpusError(f"a raw shard cannot be read: {exc}; {consequence}.") from exc
+
+
+def _read_rules(rules_dir: Path) -> RuleCatalogue:
+    """The rules catalogue, refused when it holds no scenario or no heads line:
+    a build over it would tag and budget nothing and fail only at the
+    precision exit, after replacing the dataset (FR-060a)."""
+    rules = RuleCatalogue.read(rules_dir)
+    if not rules.scenarios.scenarios or not rules.heads:
+        raise BuildCorpusError(
+            f"the rules catalogue under {Path(rules_dir).resolve()} holds "
+            f"{len(rules.scenarios.scenarios)} scenario(s) and {len(rules.heads)} heads "
+            "line(s): a build reads rules/scenarios/*.json and rules/heads/*.jsonl, "
+            "relative to the working directory, and tags and budgets nothing without "
+            "them. Run from the repository root."
+        )
+    return rules
+
+
+def _warn_on_resized_shards(records_dir: Path, survey: Survey) -> None:
+    """Shards whose size moved since the survey read them, every one named:
+    the write pass writes none of the records past those the survey read
+    (``dropped-unsurveyed``)."""
+    def size(shard) -> int | None:
+        path = Path(records_dir) / shard.name
+        return path.stat().st_size if path.exists() else None
+
+    moved = [shard.name for shard in survey.shards if size(shard) != shard.size]
+    if moved:
+        logger.warning(
+            "%d raw shard(s) changed size since the survey read them (a collection "
+            "still writing under --records-dir?): %s. The records past those the "
+            "survey read are written to no stratum.", len(moved), ", ".join(moved))
 
 
 def _known_keywords(definitions: Path | None) -> frozenset[str]:
@@ -857,12 +921,26 @@ def _survey(config: BuildCorpusConfig, read: ReadConfig, rules: RuleCatalogue) -
     return survey
 
 
+def _refuse_every_game_cut(config: BuildCorpusConfig, survey: Survey) -> None:
+    """No game ended by its marker while some were read: the collection wrote
+    no marker at all (a connector older than the marker, or every worker
+    killed), and every game would be dropped as cut."""
+    cut = survey.totals.cut.games
+    if cut and not survey.totals.games.games:
+        raise BuildCorpusError(
+            f"none of the {len(cut)} gen-3 game(s) under {config.records_dir} has a "
+            "game-end marker (turn_action / game_end) in its shard, so every game is "
+            "dropped as cut: the collection wrote no marker (a connector built before "
+            "the marker existed?) or no game ended before its worker was killed.")
+
+
 def _decide_or_refuse(
     config: BuildCorpusConfig, survey: Survey, trees: ConvertedTrees, surface: Surface,
     held_out: HeldOutCards, rules: RuleCatalogue,
 ) -> Decisions:
-    """:func:`decide`, refusing a corpus the quality rules reject or a dataset
-    gate 1 could not be scored on."""
+    """:func:`decide`, refusing a corpus the quality rules reject, one whose
+    every game was cut, or a dataset gate 1 could not be scored on."""
+    _refuse_every_game_cut(config, survey)
     check_refusals(survey.totals.refusals, survey.totals.kept)
     decisions = decide(
         survey, sidecars=trees.sidecars, surface=surface, config=config, rules=rules,

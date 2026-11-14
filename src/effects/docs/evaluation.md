@@ -29,6 +29,7 @@ Rules to respect when running or changing `evaluate-effect-model`, a gate, the k
 - Gate 2, the damage-step keyword canary, only routes: its per-keyword verdict decides whether the probe machinery is worth building.
   - Per keyword: at least 200 qualifying records and at least 70% direction agreement under a model-side perturbation, the carrier stripped of the keyword (its kept flag cleared and every line of the keyword dropped, printed or granted).
   - The population is the real combats of the game-disjoint games. A probe fork or an intervention qualifies nothing.
+  - A row qualifies a carrier only on damage dealt or taken in the record's own step (rule 510.4), and a phased-out creature or a last-known copy takes no part. The full qualification rules are in `domain/damage_step_keywords.py`, which the survey's keyword threshold and the `keyword_combat` detector read too.
   - The 200 counts distinct `record_id`s; agreement averages over (record, carrier) observations.
   - Fields are read through `HeadReading`, the gate's probability times the expected value, since a field head trains only where an entity was affected.
   - Under-sampled routes the same way as wrong. Treating untested as passed is how a canary stops being one.
@@ -52,5 +53,6 @@ Rules to respect when running or changing `evaluate-effect-model`, a gate, the k
 
 - `output/effects/reports/selection-set-<corpus digest>.json`: canonical JSON with a `digest` over the rest, frozen once per curated corpus and found by the corpus digest.
 - Freeze it with `scripts/effect_knowledge_probes/run.py --freeze-probe-set --corpus DIR`; no checkpoint is needed. The freeze exits 1 when a half holds fewer than 300 games, a component's standard error passes 0.05 or a grid cell is empty.
+- A freeze never replaces a set already there by another: the same set again is a no-op, another exits 1 and leaves the file alone.
 - Its halves (`selection`, `reporting`) are the manifest's and are never reassigned.
 - `train-effect-model` scores the selection halves each epoch and refuses a corpus with no set, or one frozen against another corpus or edited. `evaluate-effect-model` and the probes score the reporting halves.

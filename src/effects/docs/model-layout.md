@@ -18,6 +18,8 @@ Rules to respect when changing the input layout, the relation attention or an ou
 - `slot_lines` is the one list of a card's ability slots, read by both the batcher and the surface builder. `board_entities` is the one card list.
 - A keyword keeps a card-level flag only where a Forge card-script selector or engine check names it. Every keyword is also read through its line's reminder text, a line with no key through `keyword-line/<fragment>`.
 - A face that is not up gives inactive slots.
+- The input reads targets as cast (`Refs.as_cast`: `targets_at_cast`, else `targets`) for `[ACT]`'s target count, every "targeted" bit and `[ACT]`'s `targets` relations. Reading `targets` on an effect half would hand the model the fizzle it is to predict. On a record without `targets_at_cast` the fallback still leaks it.
+- A keyword reads in one spelling, defined in `domain/keyword_names.py` (`Ward:2` → `ward`, `Protection:Goblin` → `protection_from_goblin`, `Trample:Planeswalker` → `trample_over_planeswalkers`, which is trample too).
 - Floating effects and delayed triggers with no entity in the snapshot are card slots after the board's. They are no per-entity target.
 - A dungeon is a card slot with one keyword line for all its rooms, so a room has no line of its own.
 

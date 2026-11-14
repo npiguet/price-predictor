@@ -47,11 +47,15 @@ class RandomChoicesTest {
 
     // ── modes ───────────────────────────────────────────────────────────
 
-    /** A "choose one" charm draws exactly one mode, and every mode is reachable. */
+    /**
+     * A "choose one" charm draws exactly one mode, and every mode is
+     * reachable: with a creature out for its double-strike mode to target.
+     */
     @Test
     void aChooseOneCharmDrawsOneModeAndReachesEveryMode() {
         Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
+        TestBoard.inPlay(game, caster, "Grizzly Bears");
         SpellAbility charm = TestBoard.charmOf(TestBoard.card(game, caster, "Boros Charm"), caster);
         List<AbilitySub> choices = charm.getAdditionalAbilityList("Choices");
 
@@ -62,6 +66,111 @@ class RandomChoicesTest {
             seen.add(choices.indexOf(modes.get(0)));
         }
         assertEquals(Set.of(0, 1, 2), seen);
+    }
+
+    /**
+     * A charm draws only among the modes whose targets exist: Abzan Charm in
+     * hand over a board with no creature draws its untargeted mode every
+     * time, and once a 3-power creature is out its targeted modes too.
+     */
+    @Test
+    void aCharmDrawsOnlyAmongModesWhoseTargetsExist() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        SpellAbility charm = TestBoard.charmOf(TestBoard.inHand(game, caster, "Abzan Charm"), caster);
+        List<AbilitySub> choices = charm.getAdditionalAbilityList("Choices");
+
+        Set<Integer> seen = new HashSet<>();
+        for (int seed = 0; seed < SEEDS; seed++) {
+            for (AbilitySub mode : drawsFor(seed).drawModes(charm)) {
+                seen.add(choices.indexOf(mode));
+            }
+        }
+        assertEquals(Set.of(1), seen, "no creature: only the mode that targets nothing");
+
+        TestBoard.inPlay(game, game.getPlayers().get(1), "Hill Giant");
+        seen.clear();
+        for (int seed = 0; seed < SEEDS; seed++) {
+            for (AbilitySub mode : drawsFor(seed).drawModes(charm)) {
+                seen.add(choices.indexOf(mode));
+            }
+        }
+        assertEquals(Set.of(0, 1, 2), seen, "a 3-power creature: every mode");
+    }
+
+    /**
+     * Whether a forced charm has its choices asks of every legal mode set,
+     * not of one draw's: with no creature out, the untargeted mode is one.
+     * And a forced charm's real draw then always finds its targets.
+     */
+    @Test
+    void aCharmWithOneModeLeftHasItsChoices() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card host = TestBoard.inHand(game, caster, "Abzan Charm");
+        SpellAbility charm = TestBoard.charmOf(host, caster);
+        InterventionFork forks = new InterventionFork(null, null, null, 0L);
+
+        assertTrue(forks.hasChoices(charm, caster));
+        for (int seed = 0; seed < SEEDS; seed++) {
+            SpellAbility trial = charm.copy(host, caster, true);
+            trial.setActivatingPlayer(caster);
+            assertTrue(drawsFor(seed).chooseModes(trial), "seed " + seed);
+            assertTrue(drawsFor(seed).chooseTargets(trial), "seed " + seed + ": " + trial.getChosenList());
+        }
+    }
+
+    /**
+     * A charm whose every mode targets, over a board with nothing to target,
+     * has no choices: Boros Charm's player mode always has one, so a charm
+     * built of creature modes alone.
+     */
+    @Test
+    void aCharmWithNoTargetableModeHasNoChoices() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card host = TestBoard.inHand(game, caster, "Grizzly Bears");
+        host.setSVar("A", "DB$ Pump | ValidTgts$ Creature | NumAtt$ +1 | SpellDescription$ a");
+        host.setSVar("B", "DB$ Destroy | ValidTgts$ Creature | SpellDescription$ b");
+        SpellAbility charm = AbilityFactory.getAbility("SP$ Charm | Choices$ A,B", host);
+        charm.setActivatingPlayer(caster);
+
+        assertNull(drawsFor(1).drawModes(charm));
+        assertFalse(new InterventionFork(null, null, null, 0L).hasChoices(charm, caster));
+
+        TestBoard.inPlay(game, caster, "Grizzly Bears");
+        assertNotNull(drawsFor(1).drawModes(charm));
+        assertTrue(new InterventionFork(null, null, null, 0L).hasChoices(charm, caster));
+    }
+
+    /**
+     * A mode whose target is in a later clause of its own chain has no
+     * targets either when that clause has none: Forge's own check of a
+     * mode's legality (603.3c, {@code CharmEffect.makePossibleOptions}) reads
+     * the mode's first clause alone, so the draw reads the whole chain. Over
+     * a board with no creature, "draw a card, then target creature gets +1/+0"
+     * is never drawn, and the charm still has its choices in the other mode.
+     */
+    @Test
+    void aModeWhoseLaterClauseHasNoTargetIsNeverDrawn() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card host = TestBoard.inHand(game, caster, "Grizzly Bears");
+        host.setSVar("A", "DB$ Draw | NumCards$ 1 | SubAbility$ A2 | SpellDescription$ a");
+        host.setSVar("A2", "DB$ Pump | ValidTgts$ Creature | NumAtt$ +1");
+        host.setSVar("B", "DB$ GainLife | Defined$ You | LifeAmount$ 2 | SpellDescription$ b");
+        SpellAbility charm = AbilityFactory.getAbility("SP$ Charm | Choices$ A,B", host);
+        charm.setActivatingPlayer(caster);
+        List<AbilitySub> choices = charm.getAdditionalAbilityList("Choices");
+
+        Set<Integer> seen = new HashSet<>();
+        for (int seed = 0; seed < SEEDS; seed++) {
+            for (AbilitySub mode : drawsFor(seed).drawModes(charm)) {
+                seen.add(choices.indexOf(mode));
+            }
+        }
+        assertEquals(Set.of(1), seen);
+        assertTrue(new InterventionFork(null, null, null, 0L).hasChoices(charm, caster));
     }
 
     /** A count uniform in [MinCharmNum, CharmNum], repeats only where allowed. */
@@ -145,6 +254,96 @@ class RandomChoicesTest {
     }
 
     // ── targets ─────────────────────────────────────────────────────────
+
+    /**
+     * A clause that divides its amount gets it split over its targets, every
+     * target a share and the shares summing to the amount (V3 #3): Arc
+     * Lightning's resolution reads a share per target and threw on a null.
+     */
+    @Test
+    void aDividedAmountIsSplitOverTheDrawnTargets() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player other = game.getPlayers().get(1);
+        TestBoard.inPlay(game, other, "Grizzly Bears");
+        TestBoard.inPlay(game, other, "Hill Giant");
+        SpellAbility arc = TestBoard.card(game, caster, "Arc Lightning").getFirstSpellAbility();
+        arc.setActivatingPlayer(caster);
+
+        Set<Integer> counts = new TreeSet<>();
+        for (int seed = 0; seed < SEEDS; seed++) {
+            assertTrue(drawsFor(seed).chooseTargets(arc));
+            int total = 0;
+            for (Object target : arc.getTargets().getTargetEntities()) {
+                Integer share = arc.getDividedValue((forge.game.GameObject) target);
+                assertNotNull(share, "every target has its share");
+                assertTrue(share >= 1, "at least one each");
+                total += share;
+            }
+            assertEquals(3, total, "the shares make the amount");
+            counts.add(arc.getTargets().size());
+        }
+        assertEquals(Set.of(1, 2, 3), counts);
+    }
+
+    /**
+     * A fixed amount smaller than the targets the clause allows is drawn
+     * over no more targets than the amount, each taking at least one
+     * (601.2d): 2 damage over up to four targets.
+     */
+    @Test
+    void aDividedAmountSmallerThanTheMaximumLimitsTheTargets() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player other = game.getPlayers().get(1);
+        for (String name : List.of("Grizzly Bears", "Hill Giant", "Gray Ogre", "Craw Wurm")) {
+            TestBoard.inPlay(game, other, name);
+        }
+        SpellAbility split = AbilityFactory.getAbility(
+                "SP$ DealDamage | ValidTgts$ Creature | NumDmg$ 2 | TargetMin$ 1 | TargetMax$ 4"
+                        + " | DividedAsYouChoose$ 2",
+                TestBoard.card(game, caster, "Forked Bolt"));
+        split.setActivatingPlayer(caster);
+
+        Set<Integer> counts = new TreeSet<>();
+        for (int seed = 0; seed < SEEDS; seed++) {
+            assertTrue(drawsFor(seed).chooseTargets(split));
+            int total = 0;
+            for (Object target : split.getTargets().getTargetEntities()) {
+                int share = split.getDividedValue((forge.game.GameObject) target);
+                assertTrue(share >= 1, "seed " + seed + ": every target takes one");
+                total += share;
+            }
+            assertEquals(2, total);
+            counts.add(split.getTargets().size());
+        }
+        assertEquals(Set.of(1, 2), counts);
+    }
+
+    /**
+     * A constraint across a clause's targets is honoured (V3 #4): Cannibalize
+     * takes two creatures one player controls, never one of each player's.
+     */
+    @Test
+    void aConstraintAcrossTargetsIsHonoured() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player other = game.getPlayers().get(1);
+        TestBoard.inPlay(game, caster, "Grizzly Bears");
+        TestBoard.inPlay(game, other, "Hill Giant");
+        TestBoard.inPlay(game, other, "Gray Ogre");
+        SpellAbility cannibalize = TestBoard.card(game, caster, "Cannibalize").getFirstSpellAbility();
+        cannibalize.setActivatingPlayer(caster);
+
+        for (int seed = 0; seed < SEEDS; seed++) {
+            if (!drawsFor(seed).chooseTargets(cannibalize)) {
+                continue;
+            }
+            Set<Player> controllers = new HashSet<>();
+            cannibalize.getTargets().getTargetCards().forEach(c -> controllers.add(c.getController()));
+            assertEquals(Set.of(other), controllers, "seed " + seed);
+        }
+    }
 
     /** "Up to two" over three candidates: a count in {0, 1, 2}, distinct targets. */
     @Test

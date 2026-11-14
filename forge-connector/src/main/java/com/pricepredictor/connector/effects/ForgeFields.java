@@ -75,6 +75,72 @@ final class ForgeFields {
                 ? table : null;
     }
 
+    /**
+     * The card's hidden extrinsic keywords keyed (timestamp, static id), or
+     * null: a {@code Pump}'s or {@code Animate}'s {@code KW$ HIDDEN …} under
+     * static id 0, a static's {@code AddHiddenKeyword$} under its own id.
+     * Forge hands out only the concatenated values.
+     */
+    static Table<?, ?, ?> hiddenExtrinsicKeywords(Card card) {
+        return read(Card.class, "hiddenExtrinsicKeywords", card) instanceof Table<?, ?, ?> table
+                ? table : null;
+    }
+
+    /** The card's can't-have keyword rows keyed (timestamp, static id), or null. */
+    static Table<?, ?, ?> cantHaveKeywords(Card card) {
+        return read(Card.class, "cantHaveKeywords", card) instanceof Table<?, ?, ?> table
+                ? table : null;
+    }
+
+    /**
+     * The card's temporary controllers keyed by the timestamp of the change
+     * that gave each (a resolved {@code GainControl}'s, a static's), or null.
+     */
+    static Map<?, ?> tempControllers(Card card) {
+        return read(Card.class, "tempControllers", card) instanceof Map<?, ?> map ? map : null;
+    }
+
+    /** The timestamps of every static effect Forge applies now; empty when unreadable. */
+    static java.util.Set<Long> staticEffectTimestamps(Game game) {
+        java.util.Set<Long> timestamps = new java.util.HashSet<>();
+        if (game != null && read(StaticEffects.class, "staticEffects", game.getStaticEffects())
+                instanceof Map<?, ?> effects) {
+            for (Object effect : effects.values()) {
+                if (effect instanceof StaticEffect applied) {
+                    timestamps.add(applied.getTimestamp());
+                }
+            }
+        }
+        return timestamps;
+    }
+
+    /** The card's layer-3 mana cost changes keyed (timestamp, static id), or null. */
+    static Table<?, ?, ?> changedCardManaCost(Card card) {
+        return read(Card.class, "changedCardManaCost", card) instanceof Table<?, ?, ?> table
+                ? table : null;
+    }
+
+    /**
+     * One mana cost change's cost and whether it adds to the cost before it
+     * ({@code Card.CardManaCost}, a private record, read by its accessors);
+     * null when unreadable.
+     */
+    static Map.Entry<forge.card.mana.ManaCost, Boolean> manaCostChange(Object change) {
+        if (change == null) {
+            return null;
+        }
+        try {
+            Method mana = change.getClass().getDeclaredMethod("mana");
+            Method additional = change.getClass().getDeclaredMethod("additional");
+            mana.setAccessible(true);
+            additional.setAccessible(true);
+            return Map.entry((forge.card.mana.ManaCost) mana.invoke(change),
+                    (Boolean) additional.invoke(change));
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return null;
+        }
+    }
+
     /** The card's layer-5 colour changes keyed (timestamp, static id), or null. */
     static Table<?, ?, ?> changedCardColors(Card card) {
         return read(Card.class, "changedCardColors", card) instanceof Table<?, ?, ?> table

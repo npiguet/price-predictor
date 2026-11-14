@@ -403,13 +403,11 @@ def test_a_training_record_acting_through_a_held_out_text_is_not_supplied(tmp_pa
 def gen3_survey(tmp_path_factory):
     """The gen-3 fixture surveyed with the real catalogue, every pool game a
     candidate (share 0.1, so the pool is every game)."""
-    import shutil
-
     from effects.infrastructure.rules_catalogue_io import load_heads, load_scenarios
-    from tests.unit.effects.builders import GEN3_RECORDS, GEN3_SIDECAR_FOLDERS
+    from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS, copy_gen3_fixture
 
     root = tmp_path_factory.mktemp("gen3-survey")
-    shutil.copy(GEN3_RECORDS, root / GEN3_RECORDS.name)
+    copy_gen3_fixture(root)
     heads = load_heads()
     config = SurveyConfig(
         read=ReadConfig(
@@ -430,9 +428,11 @@ def test_turn_action_records_are_counted_by_subkind_and_nothing_else(gen3_survey
     """Story 6 acceptance 8: none is kept, classed or supplied."""
     survey, _config = gen3_survey
     totals = survey.totals
+    # The fixture's 58 games, each ended by the marker its copy appends.
     assert totals.turn_actions == Counter({
         "draw": 2, "untap": 2, "day_night": 2, "cleanup_discard": 2,
-        "lore_counter": 2, "phasing": 2})
+        "lore_counter": 2, "phasing": 2, "game_end": 58})
+    assert not totals.cut.games
     assert sum(totals.kept.values()) + sum(totals.refusals.by_class.values()) == (
         totals.records - sum(totals.turn_actions.values()))
 
@@ -440,7 +440,8 @@ def test_turn_action_records_are_counted_by_subkind_and_nothing_else(gen3_survey
 def test_every_record_is_tagged_and_counted_as_rule_counts_counts_it(gen3_survey):
     survey, _config = gen3_survey
     counts = survey.totals.rule_counts
-    assert counts.records == survey.totals.records == 205
+    # The fixture's 205 records and the 58 markers its copy appends.
+    assert counts.records == survey.totals.records == 205 + 58
     assert counts.counts
     assert {source for (_rule, _polarity, source) in counts.counts} <= {
         "forge_ai", "random_seat", "aimed"}
@@ -486,3 +487,51 @@ def test_the_closed_lists_are_what_effects_grant_or_remove(gen3_survey):
             expected |= subtypes_named(record)
     assert survey.totals.subtypes <= expected
     assert survey.totals.subtypes
+
+
+class TestACutGame:
+    """WP7: a gen-3 game with no game-end marker in its shard was cut (a kill,
+    a game that threw): its records are incomplete, and the survey drops it
+    whole, counting it."""
+
+    @staticmethod
+    def _gen3(record_id: str, game_id: str, **overrides) -> EffectRecord:
+        return a_record(record_id=record_id, game_id=game_id, kind="rewrite",
+                        generation=3, **overrides)
+
+    def _shard(self, tmp_path, name: str, records) -> None:
+        write_shard(tmp_path / name, records)
+
+    def test_a_game_without_a_marker_reaches_no_tally_and_is_counted(self, tmp_path):
+        from tests.unit.effects.builders import game_end_marker
+
+        ended = [self._gen3("run.0-a.0", "g1"), self._gen3("run.0-a.1", "g1")]
+        cut = [self._gen3("run.0-a.2", "g2"), self._gen3("run.0-a.3", "g2")]
+        self._shard(tmp_path, "run.0-a.jsonl.gz", [*ended, game_end_marker(ended[-1]), *cut])
+
+        survey = run_survey(tmp_path, config=a_config(tmp_path), workers=1)
+        totals = survey.totals
+        assert totals.games.games == {"g1"}
+        assert (totals.cut.games, totals.cut.records) == ({"g2"}, 2)
+        assert sum(totals.kept.values()) == 2
+        assert totals.turn_actions == Counter({"game_end": 1})
+        assert totals.records == 5, "every line read, the write pass's bound"
+        assert totals.rule_counts.records == 3, "a cut game's records are tagged nowhere"
+        assert survey.shard_cut == {"run.0-a.jsonl.gz": frozenset({"g2"})}
+
+    def test_a_marker_counts_in_its_own_shard_alone(self, tmp_path):
+        from tests.unit.effects.builders import game_end_marker
+
+        first = self._gen3("run.0-a.0", "g1")
+        self._shard(tmp_path, "run.0-a.jsonl.gz", [first])
+        self._shard(tmp_path, "run.0-b.jsonl.gz", [game_end_marker(first)])
+        survey = run_survey(tmp_path, config=a_config(tmp_path), workers=1)
+        assert survey.shard_cut == {"run.0-a.jsonl.gz": frozenset({"g1"}),
+                                    "run.0-b.jsonl.gz": frozenset()}
+
+    def test_an_older_generation_s_game_is_never_cut(self, tmp_path):
+        """Gen-1 and gen-2 shards carry no marker at all."""
+        self._shard(tmp_path, "run.0-a.jsonl.gz", [
+            a_record(record_id="run.0-a.0", game_id="g1", kind="rewrite")])
+        survey = run_survey(tmp_path, config=a_config(tmp_path), workers=1)
+        assert survey.totals.games.games == {"g1"} and not survey.totals.cut.games

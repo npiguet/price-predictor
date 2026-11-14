@@ -18,7 +18,6 @@ from effects.domain.coverage import CoverageUnit
 from effects.domain.provenance import ProvenanceKey, SourceTree
 from effects.domain.records import EffectRecord, acting_keys
 from effects.domain.rule_catalogue import (
-    DetectorDeclaration,
     MapVerdict,
     Polarity,
     RuleMapEntry,
@@ -83,6 +82,11 @@ class VariantShardGames:
     games: dict[str, set[str]] = field(default_factory=dict)
     seen: set[str] = field(default_factory=set)
     records: int = 0
+    #: What ended a shard's read early (a damaged member or line), each its
+    #: read's message; the records before the damage are counted.
+    damaged: list[str] = field(default_factory=list)
+    #: Gen-3 games without a game-end marker, left out of ``games``.
+    cut_games: int = 0
 
     def add(self, record: EffectRecord) -> None:
         """Count one record: its acting key, or its decision candidate's key,
@@ -103,6 +107,17 @@ class VariantShardGames:
             self.games.setdefault(script_file, set()).update(games)
         self.seen |= other.seen
         self.records += other.records
+        self.damaged += other.damaged
+        self.cut_games += other.cut_games
+
+    def drop_games(self, cut: frozenset[str]) -> None:
+        """Leave the cut games out of every variant's games: build-corpus
+        drops a game its shard holds no game-end marker for. What their
+        snapshots showed stays shown."""
+        for games in self.games.values():
+            games -= cut
+        self.games = {script: games for script, games in self.games.items() if games}
+        self.cut_games += len(cut)
 
 
 def credit_games(
@@ -148,12 +163,13 @@ def pair_records(counts: Mapping, rule: str, polarity: Polarity) -> int:
 
 
 def detected_rules(catalogue: ScenarioCatalogue) -> frozenset[str]:
-    """The rules some scenario declares a detector for (not ``none``)."""
-    return frozenset(
-        rule for scenario in catalogue.scenarios
-        if isinstance(scenario.detector, DetectorDeclaration)
-        for rule in scenario.rules
-    )
+    """The rules some scenario declares a detector for that can tag a record:
+    not ``none``, not ``same_as`` another scenario, and asking no record kind
+    for an event it never lists (``DetectorIndex.untaggable``), since no
+    variant could fill such a rule's counts."""
+    from effects.domain.rule_detectors import DetectorIndex
+
+    return DetectorIndex.of(catalogue).declared_rules
 
 
 def short_pairs(

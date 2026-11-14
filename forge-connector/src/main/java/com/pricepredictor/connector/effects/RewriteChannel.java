@@ -1,8 +1,10 @@
 package com.pricepredictor.connector.effects;
 
 import forge.game.CardTraitBase;
+import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 
@@ -23,8 +25,29 @@ import java.util.List;
  * pairs nested strictly — an exile-instead runs its own zone change, which
  * other replacements see — so the boards wait on a stack, the innermost open
  * one closing first.
+ *
+ * <p>A damage replacement may set an ability aside to run once every
+ * replacement of the damage event has applied (Swans of Bryn Argoll's draw,
+ * Rock Hydra's counter removal, a {@code Prevent$ True} rider): Forge hands
+ * it as {@code onReplacement}'s sixth argument, {@code buffered}, never as
+ * the ability that ran instead. Such a record names it in {@code buffered}
+ * and waits for its run, which Forge brackets between
+ * {@code onBufferedAbilityStarting} and {@code onBufferedAbilityFinished}:
+ * every event published between the two is the run's, taken from the
+ * bracket into the waiting record's {@code buffered_events}. Forge sums the
+ * damage of several replacements naming one ability into one run, so the
+ * oldest record waiting on that ability takes the run's events and the rest,
+ * written when the state-based loop next begins, say {@code buffered_ran}
+ * with no events; a record whose ability never ran says it did not.
+ *
+ * <p>An {@code AddCounter} replacement over a map of several counter types
+ * writes one record per type whose count it changed, none for a type it left
+ * as it came ({@link RunParamNormalizer#changedCounterTypes}): each carries
+ * that type's counts as its {@code incoming} and {@code outgoing}, the
+ * call's result and the ability that ran, and the board read before the
+ * call with that {@code incoming} as its pending event.
  */
-final class RewriteChannel {
+final class RewriteChannel implements BusBracketCollector.EventTap {
 
     /** The worker's rewrite tally, shared by every game it plays. */
     static final RewriteTally JVM_REWRITES = new RewriteTally();
@@ -37,7 +60,36 @@ final class RewriteChannel {
     private final Deque<Pending> replacing = new ArrayDeque<>();
 
     /** A replacement's board, read before it ran, and the trait it was read for. */
-    private record Pending(Object trait, String state) {
+    private record Pending(Object trait, Snapshot board) {
+    }
+
+    /** The records waiting on their buffered ability's run, oldest first. */
+    private final List<Waiting> waiting = new ArrayList<>();
+    /** The buffered abilities running now, innermost on top. */
+    private final Deque<Run> running = new ArrayDeque<>();
+    /** The (effect, ability) pairs that ran since the waiting records were last written. */
+    private final List<Waiting> ranPairs = new ArrayList<>();
+
+    /** A replacement's record, built but for its payload, waiting on its buffered ability. */
+    private record Waiting(Object effect, Object ability, EffectRecord record, Rewrite rewrite) {
+        boolean waitsOn(Object effect, Object ability) {
+            return this.effect == effect && this.ability == ability;
+        }
+    }
+
+    /**
+     * What a rewrite record's payload says, rendered when it is written.
+     *
+     * @param buffered the buffered ability's keys, or null when none was set aside
+     */
+    private record Rewrite(
+            String mode, EffectEvent incoming, EffectEvent outgoing, boolean incomingUnknown,
+            String result, List<ProvenanceKey> replacedBy, List<ProvenanceKey> buffered,
+            Object before, Object after) {
+    }
+
+    /** One buffered ability's run, and the record that takes its events, or none. */
+    private record Run(Object effect, Object ability, Waiting taker, List<EffectEvent> events) {
     }
 
     RewriteChannel(LiveGame live, CollectorContext context, RecordDedup dedup) {
@@ -77,21 +129,142 @@ final class RewriteChannel {
             switch (callback) {
                 case ON_REPLACING -> replacing.push(new Pending(
                         args.get(0), board(args.get(0), args.get(1))));
-                case ON_REPLACEMENT -> context.emitDistinct(record(
+                case ON_REPLACEMENT -> replaced(
                         args.get(0), args.get(1), args.get(2), args.optional(3),
-                        args.optional(4), boardBefore(args.get(0))),
-                        dedup);
+                        args.optional(4), args.optional(5), boardBefore(args.get(0)));
+                case ON_BUFFERED_ABILITY_STARTING -> bufferedStarting(args.get(0), args.get(1));
+                case ON_BUFFERED_ABILITY_FINISHED -> bufferedFinished(args.get(0), args.get(1));
                 default -> { }
             }
         });
     }
 
     /**
+     * One replacement reported: its record, or one per counter type it
+     * changed, each written now or, when the replacement set an ability
+     * aside, held until that ability runs.
+     *
+     * @param board the board read at {@code onReplacing}, or null to read it now
+     */
+    private void replaced(
+            Object trait, Object before, Object after, Object result, Object replacedBy,
+            Object buffered, Snapshot board) {
+        List<String> types = RunParamNormalizer.changedCounterTypes(trait, before, after);
+        if (types.isEmpty()) {
+            replaced(trait, rewrite(trait, before, after, result, replacedBy, buffered, null),
+                    buffered, board == null ? null : board.render());
+            return;
+        }
+        for (String type : types) {
+            Rewrite rewrite = rewrite(trait, before, after, result, replacedBy, buffered, type);
+            // The board this type's event would have been read with: the
+            // same subjects and last-known card as the whole map's.
+            replaced(trait, rewrite, buffered,
+                    board == null ? null : board.withPendingEvent(rewrite.incoming()).render());
+        }
+    }
+
+    /** One record of a replacement, on {@code state}, or on the board now. */
+    private void replaced(Object trait, Rewrite rewrite, Object buffered, String state) {
+        EffectRecord record = shell(trait, rewrite.incoming(), state);
+        if (rewrite.buffered() == null) {
+            write(record, rewrite, false, List.of());
+            return;
+        }
+        waiting.add(new Waiting(trait, buffered, record, rewrite));
+    }
+
+    /** A buffered ability starts its run: the oldest record waiting on it takes its events. */
+    private void bufferedStarting(Object effect, Object ability) {
+        Waiting taker = null;
+        for (Waiting candidate : waiting) {
+            if (candidate.waitsOn(effect, ability)) {
+                taker = candidate;
+                break;
+            }
+        }
+        running.push(new Run(effect, ability, taker, new ArrayList<>()));
+    }
+
+    /** A buffered ability's run is over: its taker is written with the run's events. */
+    private void bufferedFinished(Object effect, Object ability) {
+        Run run = running.peek();
+        if (run == null || run.effect() != effect || run.ability() != ability) {
+            return;
+        }
+        running.pop();
+        if (run.taker() == null) {
+            return;
+        }
+        waiting.remove(run.taker());
+        ranPairs.add(run.taker());
+        write(run.taker().record(), run.taker().rewrite(), true, run.events());
+    }
+
+    /**
+     * An event published while a buffered ability runs is its run's, when a
+     * record waits to take it; the bracket routes it otherwise.
+     */
+    @Override
+    public boolean take(EffectEvent event, String namedCause) {
+        Run run = running.peek();
+        if (run == null || run.taker() == null) {
+            return false;
+        }
+        run.events().add(EventAttribution.stamp(
+                event, run.ability() instanceof SpellAbility sa ? sa : null, namedCause));
+        return true;
+    }
+
+    /**
+     * Write the records still waiting: one whose ability ran (its run went to
+     * an older record, Forge having summed the damage) says it ran, with no
+     * events; one whose ability never ran says it did not. At the state-based
+     * loop's start, which no buffered run straddles, and at the game's end.
+     */
+    void writeWaiting() {
+        for (Waiting held : waiting) {
+            boolean ran = ranPairs.stream()
+                    .anyMatch(done -> done.waitsOn(held.effect(), held.ability()));
+            write(held.record(), held.rewrite(), ran, List.of());
+        }
+        waiting.clear();
+        ranPairs.clear();
+    }
+
+    /** The state-based loop's signals: where the waiting records are written. */
+    PhaseSignals.Sink phaseSink() {
+        return new PhaseSignals.Sink() {
+            @Override
+            public void stateBasedLoopBegan() {
+                writeWaiting();
+            }
+        };
+    }
+
+    /**
+     * Write a record with its payload, counting it in the worker's tally
+     * when it reaches the shard of a live game, never a fork's (C5 #16).
+     */
+    private void write(
+            EffectRecord record, Rewrite rewrite, boolean bufferedRan,
+            List<EffectEvent> bufferedEvents) {
+        record.payload(RecordPayloads.rewritePayload(
+                rewrite.incoming(), rewrite.outgoing(), rewrite.result(), rewrite.replacedBy(),
+                rewrite.incomingUnknown(), rewrite.buffered(), bufferedRan, bufferedEvents));
+        if (context.emitDistinct(record, dedup) && !context.isFork()) {
+            JVM_REWRITES.record(
+                    rewrite.mode(), rewrite.result(), rewrite.outgoing() != null,
+                    !rewrite.replacedBy().isEmpty(), rewrite.before(), rewrite.after());
+        }
+    }
+
+    /**
      * The board a replacement is about to change, with the event as it
      * arrived: read at {@code onReplacing}, before anything ran.
      */
-    private String board(Object trait, Object runParams) {
-        return live.traitState(trait, RunParamNormalizer.describeParams(trait, runParams));
+    private Snapshot board(Object trait, Object runParams) {
+        return live.traitSnapshot(trait, RunParamNormalizer.describeParams(trait, runParams));
     }
 
     /**
@@ -99,13 +272,13 @@ final class RewriteChannel {
      * none was read for it: a jar whose listener never says {@code
      * onReplacing}, which the record then reads as before, now.
      */
-    private String boardBefore(Object trait) {
+    private Snapshot boardBefore(Object trait) {
         Pending open = replacing.peek();
         if (open == null || open.trait() != trait) {
             return null;
         }
         replacing.pop();
-        return open.state();
+        return open.board();
     }
 
     /**
@@ -148,8 +321,38 @@ final class RewriteChannel {
     EffectRecord record(
             Object trait, Object before, Object after, Object result,
             Object replacedBy, String state) {
-        EffectEvent incoming = RunParamNormalizer.describeParams(trait, before);
-        EffectEvent rendered = RunParamNormalizer.describeParams(trait, after);
+        Rewrite rewrite = rewrite(trait, before, after, result, replacedBy, null, null);
+        return shell(trait, rewrite.incoming(), state).payload(RecordPayloads.rewritePayload(
+                rewrite.incoming(), rewrite.outgoing(), rewrite.result(), rewrite.replacedBy(),
+                rewrite.incomingUnknown(), null, false, List.of()));
+    }
+
+    /** A rewrite record but for its payload, on {@code state}, or on the board now. */
+    private EffectRecord shell(Object trait, EffectEvent incoming, String state) {
+        return state == null
+                ? live.traitRecord(context, RecordKind.REWRITE, trait, incoming)
+                : live.traitRecordOn(
+                        context, RecordKind.REWRITE, trait, LiveGame.lineOf(trait), state);
+    }
+
+    /**
+     * What one replacement's record says.
+     *
+     * <p>A null {@code before} means Forge could not copy the run parameters:
+     * the event as it arrived is unknown, so nothing is compared against it.
+     * {@code incoming} is then the event as it left, {@code outgoing} null and
+     * {@code incoming_unknown} true.
+     *
+     * @param counterType the one counter type this record is about, or null
+     *                    for the whole event
+     */
+    private Rewrite rewrite(
+            Object trait, Object before, Object after, Object result, Object replacedBy,
+            Object buffered, String counterType) {
+        boolean unknown = before == null;
+        EffectEvent rendered = RunParamNormalizer.describeParams(trait, after, counterType);
+        EffectEvent incoming = unknown
+                ? rendered : RunParamNormalizer.describeParams(trait, before, counterType);
         // Null rather than a copy, and this is the whole of the contract. A
         // substitution does not edit the map -- it runs another ability and
         // returns a result -- so a copy here says "changed nothing observable"
@@ -157,8 +360,8 @@ final class RewriteChannel {
         // survives the comparison is the genuine in-place edit:
         // ReplaceCounterEffect.setCount, a halved draw, Orim's Cure taking five
         // combat damage down to one.
-        EffectEvent outgoing =
-                incoming.toJson().equals(rendered.toJson()) ? null : rendered;
+        EffectEvent outgoing = unknown || incoming.toJson().equals(rendered.toJson())
+                ? null : rendered;
         CardTraitBase ran = replacedBy instanceof CardTraitBase ctb ? ctb : null;
         // Keyed through the same resolver as the record's own acting line, so
         // both join the provenance sidecar identically. Usually it answers that
@@ -167,15 +370,11 @@ final class RewriteChannel {
         // does not is that an ability ran at all, and the rarer case where the
         // overriding ability was granted from somewhere else.
         List<ProvenanceKey> ranKeys = ran == null ? List.of() : ProvenanceResolver.keysOf(ran);
-        String wireResult = RecordPayloads.rewriteResult(result);
-        JVM_REWRITES.record(
-                RunParamNormalizer.modeOf(trait), wireResult, outgoing != null,
-                !ranKeys.isEmpty(), before, after);
-        EffectRecord record = state == null
-                ? live.traitRecord(context, RecordKind.REWRITE, trait, incoming)
-                : live.traitRecordOn(
-                        context, RecordKind.REWRITE, trait, LiveGame.lineOf(trait), state);
-        return record.payload(RecordPayloads.rewritePayload(
-                incoming, outgoing, wireResult, ranKeys));
+        List<ProvenanceKey> bufferedKeys = buffered instanceof CardTraitBase set
+                ? ProvenanceResolver.keysOf(set) : null;
+        return new Rewrite(
+                RunParamNormalizer.modeOf(trait), incoming, outgoing, unknown,
+                RecordPayloads.rewriteResult(result), ranKeys, bufferedKeys,
+                unknown ? after : before, after);
     }
 }

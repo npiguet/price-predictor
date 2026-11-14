@@ -102,16 +102,7 @@
       ],
       "forge_notes": "Forge implements the return as Defined$ ExiledWith, which selects the cards exiled by that Oblivion Ring object.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A resolution moves cards from exile to the battlefield: an ability returning the cards exiled with its source.",
-        "near_miss": "A linked return ability whose exiling ability exiled nothing, or nothing still in exile, returns no card; not counted, since outcome_event counts a near miss only with api set and every other ChangeZone resolution would then count as one.",
-        "params": {
-          "event": "zone_change",
-          "from_zone": "Exile",
-          "to_zone": "Battlefield"
-        },
-        "needs": []
+        "none": "Could not express: which ability a linked ability is linked to is in no parameter (the snapshot's exiled_with links are not read by outcome_event)."
       }
     },
     {
@@ -637,16 +628,7 @@
       ],
       "forge_notes": "Forge matches the kicker with Card.Self+kicked 1 and Card.Self+kicked 2.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "An enters trigger conditioned on its own object's kicker having been paid is evaluated and fires for an object cast with that kicker.",
-        "near_miss": "The same trigger is evaluated for an object cast without that kicker and does not fire.",
-        "params": {
-          "mode": "ChangesZone",
-          "destination": "Battlefield",
-          "selector": "Card.Self+kicked"
-        },
-        "needs": []
+        "none": "Could not express: which kicker cost a linked ability checks is read by no trigger_mode parameter."
       }
     },
     {
@@ -800,12 +782,13 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolution moves a card from exile to the battlefield, as champion's leaves-the-battlefield half returns the card its exile half exiled.",
-        "near_miss": "A linked return ability whose exiling ability exiled nothing, or nothing still in exile, returns no card; not counted, since outcome_event counts a near miss only with api set and every other ChangeZone resolution would then count as one.",
+        "outcome": "Champion's return ability returns the creature it exiled.",
+        "near_miss": "Champion's return ability resolving and returning nothing.",
         "params": {
           "event": "zone_change",
           "from_zone": "Exile",
-          "to_zone": "Battlefield"
+          "to_zone": "Battlefield",
+          "keyword": "Champion"
         },
         "needs": []
       }
@@ -1038,17 +1021,7 @@
       ],
       "forge_notes": "Forge's TrigReturn uses Defined$ ExiledWith, which returns every card exiled by the Oblivion Ring object; whether the copy's exile counts as the Oblivion Ring's depends on the copy keeping the Ring as its host.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "One resolution moves two or more cards from exile to the battlefield, as a return ability referring to \"the exiled card\" returns every card its linked ability exiled.",
-        "near_miss": "A return ability's linked exile ability exiled one card and one card returns; not counted, since without api outcome_event tags only the fires side.",
-        "params": {
-          "event": "zone_change",
-          "from_zone": "Exile",
-          "to_zone": "Battlefield",
-          "min_count": 2
-        },
-        "needs": []
+        "none": "Could not express: which cards a copied linked ability refers to is read by no parameter."
       }
     },
     {
@@ -1202,16 +1175,7 @@
       ],
       "forge_notes": "Forge gives the Elemental the abilities as a copy hosted by the Elemental, so ExiledWithSource on the Elemental differs from Sisters's own exiled cards.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A resolution moves cards from exile to the battlefield: an ability returning the cards exiled with its source.",
-        "near_miss": "A linked return ability whose exiling ability exiled nothing, or nothing still in exile, returns no card; not counted, since outcome_event counts a near miss only with api set and every other ChangeZone resolution would then count as one.",
-        "params": {
-          "event": "zone_change",
-          "from_zone": "Exile",
-          "to_zone": "Battlefield"
-        },
-        "needs": []
+        "none": "Could not express: which ability a linked ability is linked to is in no parameter (the snapshot's exiled_with links are not read by outcome_event)."
       }
     },
     {

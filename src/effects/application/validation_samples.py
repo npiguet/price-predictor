@@ -5,17 +5,23 @@ card-disjoint stratum's resolution classes draw from the gate-one slice first,
 the population checkpoints are selected on, and round-robin over the held-out
 texts (FR-051), so that number weighs held-out texts alike rather than by how
 often Forge cast them.
+
+A stratum writes a record once per copy, every copy under its one
+``record_id``; a sample holds each record once, its natural copy where it has
+one (an added copy only where none was written), so a class's quota counts
+distinct records whatever its copies.
 """
 
 from __future__ import annotations
 
+import heapq
 import logging
 import random
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from effects.domain.corpus_curation import CapHeap, KeyedCapHeap, record_hash
+from effects.domain.corpus_curation import record_hash
 from effects.domain.records import EffectRecord
 from effects.domain.sampling import SamplingClass
 from effects.domain.strata import VALIDATION_STRATA, Stratum
@@ -36,6 +42,53 @@ RECORDS_PER_TEXT_PER_ROUND = 4
 
 def _sample_hash(record: EffectRecord, seed: int) -> int:
     return record_hash(record.record_id, seed=seed + SAMPLE_SEED_OFFSET)
+
+
+def _is_added(record: EffectRecord) -> bool:
+    return record.curation is not None and record.curation.is_added
+
+
+class _DistinctSample:
+    """The ``cap`` records of smallest hash, each ``record_id`` once.
+
+    Every copy of a record shares its hash; a natural copy replaces an added
+    one already held, so the sample keeps the copy that trains every output.
+    """
+
+    __slots__ = ("_cap", "_held", "_order")
+
+    def __init__(self, cap: int) -> None:
+        self._cap = cap
+        self._held: dict[str, tuple[int, EffectRecord | None]] = {}
+        self._order: list[tuple[int, str]] = []  # (-hash, record_id): largest hash on top
+
+    def offer(self, value: int, record_id: str, record: EffectRecord | None = None) -> None:
+        held = self._held.get(record_id)
+        if held is not None:
+            if record is not None and held[1] is not None and _is_added(held[1]) and not (
+                    _is_added(record)):
+                self._held[record_id] = (value, record)
+            return
+        if self._cap <= 0:
+            return
+        if len(self._held) >= self._cap:
+            if -self._order[0][0] <= value:
+                return
+            _, evicted = heapq.heappop(self._order)
+            del self._held[evicted]
+        self._held[record_id] = (value, record)
+        heapq.heappush(self._order, (-value, record_id))
+
+    def values(self) -> list[int]:
+        return [value for value, _ in self._held.values()]
+
+    def items(self) -> list[EffectRecord]:
+        """The held records, smallest hash first (ties by ``record_id``)."""
+        return [record for _, _, record in sorted(
+            (value, record_id, record) for record_id, (value, record) in self._held.items())]
+
+    def __len__(self) -> int:
+        return len(self._held)
 
 
 def round_robin(by_text: Mapping[str, list[int]], quota: int,
@@ -73,7 +126,7 @@ def _gate_one_round_robin(
     from effects.domain.sampling import sampling_class
     from effects.infrastructure.shard_io import read_records
 
-    per_text: dict[str, dict[str, CapHeap]] = {
+    per_text: dict[str, dict[str, _DistinctSample]] = {
         name: {} for name in quota if name in GATE_ONE_CLASSES
     }
     for record in read_records(directory):
@@ -85,24 +138,23 @@ def _gate_one_round_robin(
             continue
         heap = per_text[name].get(text)
         if heap is None:
-            heap = per_text[name][text] = CapHeap(quota[name])
-        heap.offer(_sample_hash(record, seed))
+            heap = per_text[name][text] = _DistinctSample(quota[name])
+        heap.offer(_sample_hash(record, seed), record.record_id)
     chosen = {
         name: set(round_robin(
             {text: list(heap.values()) for text, heap in texts.items()}, quota[name],
         ))
         for name, texts in per_text.items()
     }
-    out: dict[str, list[EffectRecord]] = {name: [] for name in per_text}
-    seen: set[str] = set()
+    picked: dict[str, dict[str, EffectRecord]] = {name: {} for name in per_text}
     for record in read_records(directory):
         name = sampling_class(record)
-        if name not in chosen or record.record_id in seen:
+        if name not in chosen or _sample_hash(record, seed) not in chosen[name]:
             continue
-        if _sample_hash(record, seed) in chosen[name]:
-            seen.add(record.record_id)
-            out[name].append(record)
-    return out
+        held = picked[name].get(record.record_id)
+        if held is None or (_is_added(held) and not _is_added(record)):
+            picked[name][record.record_id] = record
+    return {name: list(records.values()) for name, records in picked.items()}
 
 
 def class_quota(mix: Mapping[str, float], size: int) -> dict[str, int]:
@@ -112,22 +164,15 @@ def class_quota(mix: Mapping[str, float], size: int) -> dict[str, int]:
 
 def _collect(
     directory: Path, quota: Mapping[str, int], *, seed: int,
-) -> dict[str, KeyedCapHeap[EffectRecord]]:
+) -> dict[str, _DistinctSample]:
     from effects.domain.sampling import sampling_class
     from effects.infrastructure.shard_io import read_records
 
-    heaps: dict[str, KeyedCapHeap[EffectRecord]] = {
-        name: KeyedCapHeap(cap) for name, cap in quota.items()
-    }
-    offered = 0
+    heaps = {name: _DistinctSample(cap) for name, cap in quota.items()}
     for record in read_records(directory):
         name = sampling_class(record)
-        if name not in heaps:
-            continue
-        # A counter ends the tie-break: a repeated record_id would otherwise
-        # compare two EffectRecords, which have no ordering.
-        offered += 1
-        heaps[name].offer(_sample_hash(record, seed), record, (record.record_id, offered))
+        if name in heaps:
+            heaps[name].offer(_sample_hash(record, seed), record.record_id, record)
     return heaps
 
 

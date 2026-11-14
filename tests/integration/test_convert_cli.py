@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -85,3 +87,83 @@ def test_convert_produces_output(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     assert (output_dir / "t" / "test_bear.txt").exists()
+
+
+#: Forge's own scripts of a saga and a haunt card: a Chapter or Haunt keyword
+#: line expands into several triggers, and each converted line must claim the
+#: triggers it printed alone.
+_FORGE_CARDS = (
+    "t/the_fall_of_lord_konda_fragment_of_konda.txt",
+    "b/blind_hunter.txt",
+)
+
+
+def _forge_cardsfolder() -> Path:
+    from price_predictor.infrastructure.forge_jvm import forge_dir
+
+    return forge_dir() / "forge-gui" / "res" / "cardsfolder"
+
+
+def _triggers(line: dict) -> frozenset[int]:
+    return frozenset(
+        key["index_within_kind"] for key in line["provenance"] if key["trait_kind"] == "trigger"
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not _convert_environment_available(),
+    reason="Java + Forge JARs + dependency directory required",
+)
+def test_convert_writes_the_current_provenance_sidecars(tmp_path):
+    """The sidecar beside each converted card, as the effects package reads it:
+    every line carries its ``prose_offset`` (where its prose starts after the
+    line's label), a saga's chapter lines each claim their own chapter's
+    trigger, and a haunt card's two haunt lines claim disjoint triggers."""
+    source = _forge_cardsfolder()
+    for relative in _FORGE_CARDS:
+        if not (source / relative).exists():
+            pytest.skip(f"{relative} is not in the sibling Forge checkout")
+        target = tmp_path / "cardsfolder" / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source / relative, target)
+    output_dir = tmp_path / "output"
+    tokens_dir = tmp_path / "tokenscripts"
+    tokens_dir.mkdir()
+
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "price_predictor", "convert",
+            "--cards-path", str(tmp_path / "cardsfolder"),
+            "--output-path", str(output_dir),
+            "--tokens-path", str(tokens_dir),
+            "--tokens-output-path", str(tmp_path / "tokens-output"),
+        ],
+        capture_output=True,
+        text=True,
+        cwd="src",
+    )
+    assert result.returncode == 0, result.stderr
+    # The run directory holds both converted trees: here their common parent.
+    assert (tmp_path / "run.json").exists(), "convert keeps no run manifest"
+
+    saga = json.loads(
+        (output_dir / "t" / "the_fall_of_lord_konda_fragment_of_konda.provenance.json")
+        .read_text(encoding="utf-8")
+    )
+    haunt = json.loads(
+        (output_dir / "b" / "blind_hunter.provenance.json").read_text(encoding="utf-8")
+    )
+    for sidecar in (saga, haunt):
+        assert sidecar["lines"], sidecar["card"]
+        for line in sidecar["lines"]:
+            assert isinstance(line.get("prose_offset"), int), line
+            assert line["prose_offset"] >= 0, line
+
+    chapters = [line for line in saga["lines"] if line["line_kind"] == "chapter"]
+    assert [sorted(_triggers(line)) for line in chapters] == [[0], [1], [2]], chapters
+
+    haunts = [line for line in haunt["lines"] if _triggers(line)]
+    assert len(haunts) == 2, haunt["lines"]
+    first, second = (_triggers(line) for line in haunts)
+    assert first and second and not first & second, (first, second)

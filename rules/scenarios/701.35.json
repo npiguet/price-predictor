@@ -84,11 +84,12 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A creature an effect forbids from blocking, as detain does, stands outside the legal blockers list.",
-        "near_miss": "A creature nothing forbids from blocking stands inside the legal blockers list.",
+        "outcome": "A creature the defending player controls is forbidden from blocking the anchored attacker and nothing the record shows explains it: no evasion, tap or landwalk, no static named as responsible (the connector names Pacifism's), no hidden can't-block keyword and no requirement binding it to another attacker. Forge forbids such a block only for a detained creature.",
+        "near_miss": "None: no record marks a detained creature, so a creature no detain keeps out reads as any legal blocker; the declaration speaks for the fires side alone.",
         "params": {
           "list": "legal_blockers",
-          "fires_when": "outside"
+          "fires_when": "outside",
+          "restriction": "effect"
         },
         "needs": []
       }
@@ -175,15 +176,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A candidate action a restriction forbids, such as a detained permanent's activated ability before its detainer's next turn, has can_play false.",
-        "near_miss": "A candidate action no restriction forbids has can_play true.",
-        "params": {
-          "bit": "can_play",
-          "fires_when": false
-        },
-        "needs": []
+        "none": "Detain sets a flag on the card (Card.detain) that no static, no designation and no failed check's responsible static carries: a detained creature's forbidden attack or activation reads like any other failed check. Taggable once the connector writes a detained designation."
       }
     },
     {
@@ -261,15 +254,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "An activated ability a restriction forbids, such as a detained permanent's, has can_play false.",
-        "near_miss": "An activated ability no restriction forbids has can_play true.",
-        "params": {
-          "bit": "can_play",
-          "fires_when": false
-        },
-        "needs": []
+        "none": "Detain sets a flag on the card (Card.detain) that no static, no designation and no failed check's responsible static carries: a detained creature's forbidden attack or activation reads like any other failed check. Taggable once the connector writes a detained designation."
       }
     }
   ]

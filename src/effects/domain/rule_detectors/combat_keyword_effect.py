@@ -7,7 +7,11 @@ fixes the situation it judges and what tells its two sides apart, read off a
 real combat (a damage-step probe strips only gate 2's keywords, so a probe
 shows nothing here):
 
-- ``toxic``: an attacker carrying it, with power, attacking a player. It is
+- ``toxic``: an attacker carrying it, with power, attacking a player, in the
+  damage step it deals its damage in (510.4: one without first or double
+  strike deals none in the first-strike step, one with first strike alone none
+  in the regular step; so for ``poisonous`` and
+  ``trample_over_planeswalkers``). It is
   on its ``fires`` side when its combat damage reaches that player and on its
   near miss when none does (blocked, prevented); the outcome entity is that
   player, observed by a ``poison_change`` at them in the step's own record
@@ -77,6 +81,8 @@ from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors import declared_values as dv
+from effects.domain.rule_outcomes import strikes_in_step
 from effects.domain.state_snapshot import (
     CombatSubstep,
     EntityState,
@@ -129,6 +135,13 @@ class _Combat:
     def events(self, kind: EventType):
         return (event for event in self.record.payload.events if event.type is kind)
 
+    def strikes(self, entity: EntityState) -> bool:
+        """Whether ``entity`` deals combat damage in this record's step (510.4,
+        702.7b, 702.4b): a creature striking in the other step shows neither
+        side of a rule about its damage here."""
+        step = self.state.global_.combat_substep or CombatSubstep.REGULAR
+        return strikes_in_step(self.keywords_of(entity), str(step))
+
     def damage_from(self, source: str) -> tuple[str, ...]:
         """What ``source`` dealt combat damage to in this step."""
         return tuple(dict.fromkeys(
@@ -158,7 +171,8 @@ def _poison(combat: _Combat, params: Mapping[str, Any], keyword: str,
             readable: bool) -> Iterator[_Finding]:
     for entity, participant in combat.attackers():
         player = participant.defending_player
-        if player is None or not entity.power >= 1 or keyword not in combat.keywords_of(entity):
+        if (player is None or not entity.power >= 1 or keyword not in combat.keywords_of(entity)
+                or not combat.strikes(entity)):
             continue
         hit = _players(combat.damage_from(entity.id))
         seen = None
@@ -193,7 +207,7 @@ def _trample_over_planeswalkers(combat: _Combat, params: Mapping[str, Any],
                                 keyword: str) -> Iterator[_Finding]:
     defender = params.get("defender", _PLANESWALKER)
     for entity, participant in combat.attackers():
-        if entity.power < 1:
+        if entity.power < 1 or not combat.strikes(entity):
             continue
         attacked = _attacked_card(combat.state, entity)
         if defender == _PLANESWALKER:
@@ -297,11 +311,9 @@ class CombatKeywordEffect:
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         return frozenset()
 
-    def match(self, record: EffectRecord, lines: SidecarLookup | None,
-              params: Mapping[str, Any]) -> FamilyMatch | None:
+    def validate(self, params: Mapping[str, Any]) -> None:
         keyword = params.get("keyword")
-        shape = _SHAPES.get(keyword)
-        if shape is None:
+        if keyword not in _SHAPES:
             raise ValueError(
                 f"combat_keyword_effect: {keyword!r} is not one of its keywords; "
                 f"known: {sorted(_SHAPES)}")
@@ -314,8 +326,15 @@ class CombatKeywordEffect:
                                      or params["defender"] not in (_PLANESWALKER, _GONE)):
             raise ValueError(f"combat_keyword_effect: defender {params['defender']!r} "
                              f"does not apply to {keyword!r}")
+        dv.check(self.id, params, {"tapped": dv.boolean})
         if "tapped" in params and keyword != "vigilance":
             raise ValueError(f"combat_keyword_effect: tapped does not apply to {keyword!r}")
+
+    def match(self, record: EffectRecord, lines: SidecarLookup | None,
+              params: Mapping[str, Any]) -> FamilyMatch | None:
+        keyword = params.get("keyword")
+        shape = _SHAPES[keyword]
+        fires_when = params.get("fires_when", _CARRIED)
         if record.kind is not RecordKind.COMBAT or record.is_probe:
             return None
         resolver = KeywordResolver(lines)

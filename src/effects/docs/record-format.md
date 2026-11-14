@@ -10,7 +10,14 @@ What a reader or writer of effect records has to know that no single source file
 
 - `output/effects/records/{run_id}.{worker}-{lifetime}.jsonl.gz`, one JSON record per line, append-only.
 - One shard per worker JVM lifetime, not per worker slot and not one shared file. Records are large enough that concurrent appends would interleave mid-record, and the supervisor replaces worker JVMs hundreds of times per run.
-- Each file is a concatenation of complete gzip members, one per block of 256 records. A worker killed mid-write truncates the last member and the reader stops there. A shard therefore ends at its last complete block.
+- Each file is a concatenation of complete gzip members, one per block of 256 records and one more at each game's end, after its game-end marker. A worker killed mid-write truncates the last member and the reader stops there, so a killed worker loses only the game in progress.
+- A game that ended writes a `turn_action` / `game_end` marker as its last record. A gen-3 game whose shard holds no marker was cut; `build-corpus`, the collectors' counters and `rule-counts` take nothing from it (`domain/game_ends.py`).
+- Damage is located, never skipped silently:
+  - A last member that does not decompress ends the read with a warning naming the shard and byte.
+  - A damaged member with another after it stops the read with `CorruptShardError`, because reading on would drop every later member unsaid.
+  - A line that does not decode raises `RecordDecodeError`, naming the shard and the line.
+  - `rule-counts`, `field-coverage`, `train-effect-model` and `evaluate-effect-model` exit 1 on either. `validate-corpus` reports it as the failed finding "every shard line decodes" and reads the other shards on. The collectors count a damaged shard up to the damage and list it in `run.json` as `corrupt_shards`, since one damaged shard must not stop a run.
+- Every reader that decodes records checks each raw record against the wire's closed lists (`domain/wire_closed_lists.py`, each pinned to its source by a test). A value outside its list decodes as written, is counted in the process's `shard_io.DecodeTally`, and is logged at its first sighting.
 - Plain `*.jsonl` still reads: older shards cannot be regenerated.
 - Discovery recurses. A depleted run and a full-strength one can sit in subdirectories and read as one corpus, and anything else placed under the tree is read as corpus too.
 - `record_id` is `{run_id}.{worker}-{lifetime}.{counter}` and `game_id` is `{run_id}.{worker}-{lifetime}.{game counter}`. Both carry the worker slot because workers count independently, and the lifetime because each JVM counts from zero. `game_id` is the join key for a checkpoint's recorded split, so a repeated one merges unrelated games. Corpora written before the lifetime segment existed stay readable and report an empty lifetime.
@@ -22,10 +29,10 @@ The envelope is frozen within a generation: a later capability makes new `kind` 
 | Member | Notes |
 |---|---|
 | `record_id`, `run_id`, `timestamp`, `game_id` | ids as above; timestamp ISO 8601 UTC |
-| `generation` | `3` on gen-3, absent before |
+| `generation` | `3` on gen-3, absent before; any other value is refused at decode (`UnknownGenerationError`) |
 | `kind` | `resolution`, `rewrite`, `continuous`, `combat`, `trigger`, `playability`, gen-3 `turn_action` |
 | `moment` | resolution kind only |
-| `subkind` | playability kind; on `turn_action` one of `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`, `lore_counter` |
+| `subkind` | playability kind; on `turn_action` one of `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`, `lore_counter`, `game_end` (the game-end marker, which carries `records_withheld`) |
 | `link_id` | joins a cost half with its effect halves; see below |
 | `mirror_of`, `variant_of` | the live record a fork mirrors; the variant source |
 | `mode` | `patched` or `degraded` |
@@ -34,12 +41,13 @@ The envelope is frozen within a generation: a later capability makes new `kind` 
 | `what_if` | gen-2 `attackers`/`blockers` only; gen-3 `attackers` records carry none |
 | `aimed_at` | gen-3: the rule ids a record was collected for |
 | `directed` | gen-3 directed forks only: `{variant, operation}` |
+| `copy_dropped` | gen-3 fork records only: what the copier left out of the fork's copy, by kind; absent on a live record and on a lossless copy; it gates nothing |
 | `actor_player` | on `playability` records of gen-2 on, the deciding player |
 | `ability` | provenance keys, a charm mode's with an `option`; absent for `combat` and `playability` |
 | `state`, `payload` | the board snapshot and the kind's payload |
 | `curation` | curated shards only, written by `build-corpus` |
 
-- `mode`, `interventional`, `fork`, `synthetic`, `random_seat`, `what_if`, `generation`, `aimed_at`, `directed` and `curation` are collection and curation metadata and never reach the model.
+- `mode`, `interventional`, `fork`, `synthetic`, `random_seat`, `what_if`, `generation`, `aimed_at`, `directed`, `copy_dropped` and `curation` are collection and curation metadata and never reach the model.
 - A `turn_action` record has no `ability`, its payload is its events, and no curated stratum holds it.
 
 ## Generations
@@ -65,7 +73,7 @@ The envelope is frozen within a generation: a later capability makes new `kind` 
 | Interventional resolution | true | true | effect half alone, no `link_id` |
 | Damage-step probe | true | false | `mirror_of`; payload `probed_keyword`, `probed_entity` |
 | Protection fork | true | true | any kind; cost halves linked as live ones |
-| Directed fork | true | false | `directed` set, `aimed_at = [rule]`; `mirror_of` only when a live record was open at the fork point |
+| Directed fork | true | false | `directed` set, `aimed_at = [rule]`; `mirror_of` null, since a phase boundary leaves no live record open |
 
 A protection copy written by `build-corpus` is a synthetic record `<record_id>~pc<i>`.
 
@@ -74,13 +82,15 @@ A protection copy written by `build-corpus` is a synthetic record `<record_id>~p
 - A snapshot lists every line of a card (`lines`), sets base P/T and boosts apart, and carries the facts of `rules/gen3-fields.json`, `links`, and extra card entities with a `role`.
 - A referenced card is always the game's own object for it: a dies trigger's host is its graveyard card, and its last-known copy is only `L<id>`.
 - `refs.x` is the paid X, else an `SVar:X` the acting chain names, read once before the resolution and never a `Count$Random`.
+- `refs.targets` holds every target of the acting chain, root first; on an effect half, those left after Forge's illegal-target check. `refs.targets_at_cast` holds the same links' targets before that check, a target gone since as an `L<id>` entity of role `last_known`. `refs.targets_on_stack` names the refs that are a spell or ability on the stack, by its card.
 - A provenance key's face is numbered over the converter's faces, never a face-down or empty-room state.
+- A gen-3 resolution record in the superseded payload shape is refused only once `record_codec.REFUSE_SUPERSEDED_GEN3_PAYLOADS` is on, which waits for the gen-3 test fixture's regeneration.
 - Decision candidates are enumerated by the collector itself at every priority stop and written as a two-stage sample (`--playability-rate`, then `--zone-candidate-rate` or `--plain-candidate-rate`). The sampling is what keeps a gen-3 game near 350 KB gzipped.
 - Attackers records are one per creature.
 - `validate-corpus` checks every gen-3 field is on every record that owes it, and `field-coverage` that each varies.
 
 ## Dropped-event counts
 
-- `{run_id}.{worker}-{lifetime}.dropped-events.tsv` beside the shard, written only under `--count-dropped-events`: one `event_type<TAB>phase<TAB>count` line per pair per game, appended as each game ends, because workers are killed, never stopped.
+- `{run_id}.{worker}-{lifetime}.dropped-events.tsv` beside the shard, written only under `--count-dropped-events`: one `event_type<TAB>phase<TAB>count` line per pair per game, appended as each game ends, because a worker that is killed runs no shutdown hook.
 - Lines repeat across games and are summed by the supervisor, which skips a line cut short by a kill.
 - The suffix is not a shard suffix, so no shard reader takes the file for one.

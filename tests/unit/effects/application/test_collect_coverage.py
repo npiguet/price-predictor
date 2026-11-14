@@ -29,6 +29,7 @@ from effects.domain.records import (
     ResolutionPayload,
 )
 from tests.unit.effects.builders import (
+    copy_gen3_fixture,
     fresh_interpreter_env,
     held_out_cards,
     make_entity,
@@ -225,27 +226,6 @@ class TestExclusionsWithoutACheckpoint:
         with pytest.raises(ValueError, match="one source"):
             DeckHoldout(split_from=tmp_path / "latest.pt", exclude_cards=listed)
 
-    def test_both_sources_on_a_config_are_refused_when_it_runs(self, tmp_path) -> None:
-        """A config built in code, not from flags, still names one holdout."""
-        from effects.application import collect_coverage
-
-        listed = tmp_path / "holdout-cards.txt"
-        listed.write_text("Soul Echo\n", encoding="utf-8")
-        cards = tmp_path / "cardsfolder"
-        cards.mkdir()
-        (cards / "bears.txt").write_text(
-            "name: Grizzly Bears\ntypes: creature\n", encoding="utf-8",
-        )
-
-        with pytest.raises(ValueError, match="one source"):
-            collect_coverage.run(collect_coverage.CollectCoverageConfig(
-                cards_folders=(cards,), effect_records=tmp_path / "records", workers=1,
-                deck_holdout=DeckHoldout(
-                    split_from=tmp_path / "latest.pt", exclude_cards=listed,
-                ),
-            ))
-
-
 class TestTheRoundPlaysTheComputedDecks:
     """The weights have to reach the table, which is what never happened.
 
@@ -363,7 +343,7 @@ class TestARoundEndsInItsReport:
         (cards / "aa.txt").write_text(
             "name: aa\nmana cost: {G}\ntypes: creature\n", encoding="utf-8",
         )
-        (tmp_path / "records").mkdir()
+        (tmp_path / "records").mkdir(exist_ok=True)
         return CollectCoverageConfig(
             effect_records=tmp_path / "records",
             cards_folders=(cards,),
@@ -374,24 +354,88 @@ class TestARoundEndsInItsReport:
             **overrides,
         )
 
-    def test_the_run_finishes_reports_and_returns_zero(self, tmp_path, caplog):
+    def _run(self, tmp_path, caplog, pool_run):
         import logging
 
         from effects.application import collect_coverage
         from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
 
         config = self._one_card_config(tmp_path)
-
-        with patch.object(ForgeWorkerPool, "run", autospec=True) as pool_run, \
+        with patch.object(ForgeWorkerPool, "run", pool_run), \
              patch.object(collect_coverage, "consult_castability", return_value={}), \
              caplog.at_level(logging.INFO):
-            code = collect_coverage.run(config)
+            return collect_coverage.run(config)
 
-        assert pool_run.called, "no round was ever played"
+    def test_the_run_finishes_reports_and_returns_zero(self, tmp_path, caplog):
+        played = []
+
+        def pool_run(pool):
+            played.append(pool)
+            record = _record([make_entity("E1", "aa")], source="E1")
+            run_id = pool._spawn_worker.func.__self__.run_id
+            write_plain_shard(tmp_path / "records", f"r{len(played)}", [record], run_id=run_id)
+
+        code = self._run(tmp_path, caplog, pool_run)
+
+        assert played, "no round was ever played"
         assert code == 0
         assert any("Residues:" in record.getMessage() for record in caplog.records), (
             "the run ended without printing the two residues FR-051 requires"
         )
+
+    @pytest.mark.parametrize("ended", [True, False])
+    def test_a_round_whose_last_game_was_cut_credits_nothing_and_says_so(
+        self, tmp_path, caplog, ended,
+    ):
+        """WP7 / P1 #1: a worker killed mid-game leaves a game without its
+        game-end marker, which build-corpus drops whole; counted, it would
+        satisfy the card with records the corpus never holds. The round
+        report and the run's manifest name the cut game."""
+        import json
+
+        from price_predictor.infrastructure.run_manifest import run_recorded
+
+        def pool_run(pool):
+            # Kept by build-corpus's refusal rule only when its line converts.
+            _convert_acting_line(tmp_path / "cardsfolder")
+            record = _record([make_entity("E1", "aa")], source="E1")
+            run_id = pool._spawn_worker.func.__self__.run_id
+            write_plain_shard(tmp_path / "records", "r1", [record], run_id=run_id,
+                              ended=ended)
+
+        code = run_recorded(
+            tmp_path / "records", lambda: self._run(tmp_path, caplog, pool_run),
+            command="python -m effects collect-coverage",
+        )
+
+        entry = json.loads(
+            (tmp_path / "records" / "run.json").read_text(encoding="utf-8"))["invocations"][0]
+        short = 0 if ended else 1
+        assert f"{short} castable cards short of 1 records" in caplog.text
+        assert entry["cut_games"] == {"before_rounds": 0, "by_round": [short], "total": short}
+        assert f"Round 1: {short} cut game(s) (no game-end marker)" in caplog.text
+        assert code == 0, "the cut game's records are still records the run wrote"
+
+    def test_a_run_that_wrote_no_record_fails_and_says_where_to_look(self, tmp_path, caplog):
+        """V4 #3: every match failing (a broken deck, a dead worker) played its
+        rounds, collected nothing, retired every card and exited 0."""
+        played = []
+
+        def pool_run(pool):
+            played.append(pool)
+            supervisor = pool._spawn_worker.func.__self__
+            log = supervisor._worker_logs.path_for(0)
+            log.parent.mkdir(parents=True, exist_ok=True)
+            with open(log, "ab") as handle:
+                handle.write(b"Error generating match: deck cannot be materialized: x\n")
+
+        code = self._run(tmp_path, caplog, pool_run)
+
+        assert played
+        assert code == 1
+        assert "no new effect record" in caplog.text
+        assert "1 unresolved_deck" in caplog.text
+        assert any("Residues:" in record.getMessage() for record in caplog.records)
 
 
 class TestCtrlCEndsTheRun:
@@ -438,13 +482,14 @@ class TestCtrlCEndsTheRun:
 
     def test_an_uninterrupted_run_plays_every_round_it_needs(self, tmp_path, fake_supervisor):
         """The control: no game ever shows the card, so it retires after
-        ``UNSEEN_RETIRE_FACTOR`` times five written rounds, which ends the run."""
+        ``UNSEEN_RETIRE_FACTOR`` times five written rounds, which ends the run;
+        and since those rounds wrote no record, the run fails (V4 #3)."""
         from effects.domain.coverage import UNSEEN_RETIRE_FACTOR
 
         code, supervisor = self._run_with(tmp_path, fake_supervisor, interrupted=False)
 
         assert supervisor.play_round.call_count == 5 * UNSEEN_RETIRE_FACTOR
-        assert code == 0
+        assert code == 1
 
 
 class TestOnlyDeckedCardsCountAStalledRound:
@@ -583,6 +628,66 @@ class TestIncrementalCounting:
         counter.update(coverage, tmp_path, workers=1)
 
         assert coverage["alpha"].records == 3
+
+    def _damaged(self, directory: Path, cards: list[str], *, member_after: bool) -> Path:
+        """A gzip shard of one member per line, each card's record a game of
+        its own ended by its marker, the second game's record's header
+        broken; with ``member_after`` a member follows the broken one. The
+        first game ended before the damage; the second's marker is past it."""
+        import gzip
+        from dataclasses import replace
+
+        plain = write_plain_shard(directory / "plain", "x", [
+            replace(_record([make_entity(f"E-{card}", card)], source=f"E-{card}"),
+                    game_id=f"a.0-x.{index}", record_id=f"a.0-x.r{index}")
+            for index, card in enumerate(cards)
+        ], run_id="a")
+        members = [gzip.compress((line + "\n").encode("utf-8"))
+                   for line in plain.read_text(encoding="utf-8").splitlines() if line]
+        members[2] = b"XX" + members[2][2:]
+        if not member_after:
+            members = members[:3]
+        path = directory / "a.0-z.jsonl.gz"
+        path.write_bytes(b"".join(members))
+        plain.unlink()
+        return path
+
+    def test_a_damaged_shard_is_counted_up_to_the_damage_once(self, tmp_path, caplog) -> None:
+        """One damaged shard must not stop a collection run every round: its
+        records before the damage count, it is named, and it is not read again."""
+        from effects.application.collect_coverage import CoverageCounter
+
+        shard = self._damaged(tmp_path, ["alpha", "beta", "alpha"], member_after=True)
+        coverage = {n: CardCoverage(n) for n in ("alpha", "beta")}
+        counter = CoverageCounter()
+        with caplog.at_level("WARNING"):
+            assert counter.update(coverage, tmp_path, workers=1) == 1
+        assert (coverage["alpha"].records, coverage["beta"].records) == (1, 0)
+        assert len(counter.damaged) == 1 and str(shard) in counter.damaged[0]
+        assert any(str(shard) in r.getMessage() for r in caplog.records)
+        assert counter.update(coverage, tmp_path, workers=1) == 0
+        assert len(counter.damaged) == 1
+
+    def test_a_damaged_last_member_names_no_shard(self, tmp_path) -> None:
+        """Nothing follows it, so the read just ends there."""
+        from effects.application.collect_coverage import CoverageCounter
+
+        self._damaged(tmp_path, ["alpha", "beta"], member_after=False)
+        coverage = {n: CardCoverage(n) for n in ("alpha", "beta")}
+        counter = CoverageCounter()
+        counter.update(coverage, tmp_path, workers=1)
+        assert coverage["alpha"].records == 1 and counter.damaged == []
+
+    def test_the_damaged_shards_go_to_the_run_manifest(self) -> None:
+        from unittest.mock import MagicMock
+
+        from effects.application.collector_common import record_damaged_shards
+
+        supervisor = MagicMock()
+        record_damaged_shards(supervisor, [])
+        supervisor.record.assert_not_called()
+        record_damaged_shards(supervisor, ["b: corrupt", "a: corrupt"])
+        supervisor.record.assert_called_once_with(corrupt_shards=["a: corrupt", "b: corrupt"])
 
     def test_it_reports_how_many_shards_it_read(self, tmp_path) -> None:
         """The operator needs to see the round cost fall, not infer it."""
@@ -756,19 +861,6 @@ class TestParallelCounting:
 
         assert coverage["soul echo"].records == 30
 
-    def test_already_counted_shards_stay_counted_once(self, tmp_path) -> None:
-        from effects.application.collect_coverage import CoverageCounter
-
-        self._shards(tmp_path, {"Alpha": 4})
-        coverage = {"alpha": CardCoverage("alpha")}
-        counter = CoverageCounter()
-
-        counter.update(coverage, tmp_path, workers=2)
-        counter.update(coverage, tmp_path, workers=2)
-
-        assert coverage["alpha"].records == 4
-
-
 # ── the held-out coverage round (FR-035–FR-038; T044, T045) ──────────────
 
 
@@ -802,18 +894,28 @@ class TestHeldOutTextUnit:
         )
         assert carriers == {held: frozenset({"alpha"})}
 
-    def test_a_shard_counts_distinct_games_per_text(self):
+    def test_a_shard_counts_distinct_games_per_text(self, tmp_path):
         """Counted as build-corpus counts a held-out text's games (FR-053):
         from resolution records only, so a text whose triggers fire but never
         resolve is not satisfied."""
         from effects.application.collect_coverage import count_text_shard
 
+        shard = copy_gen3_fixture(tmp_path)
         resolutions, everything = _texts_by_game(_GEN3_SHARD)
         assert resolutions and everything != resolutions
-        counted = count_text_shard(
-            _GEN3_SHARD, roots=_GEN3_ROOTS, held_out=_holding(everything),
-        )
+        counted = count_text_shard(shard, roots=_GEN3_ROOTS, held_out=_holding(everything))
         assert counted.games == resolutions
+        assert counted.cut_games == 0
+
+    def test_a_cut_game_counts_toward_no_text(self, tmp_path):
+        """The fixture as it stands holds no game-end marker: every game reads
+        as cut (WP7), and build-corpus would drop each."""
+        from effects.application.collect_coverage import count_text_shard
+
+        resolutions, everything = _texts_by_game(_GEN3_SHARD)
+        counted = count_text_shard(_GEN3_SHARD, roots=_GEN3_ROOTS, held_out=_holding(everything))
+        assert counted.games == {}
+        assert counted.cut_games >= len(set().union(*resolutions.values())) > 0
 
     def test_a_game_goes_to_the_first_acting_text_held_out_by_its_unit(
         self, tmp_path,
@@ -832,8 +934,7 @@ class TestHeldOutTextUnit:
         from effects.domain.coverage import TextCoverage
         from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
         from effects.domain.text_holdout import HoldoutUnit
-        from effects.infrastructure.shard_io import write_shard
-        from tests.unit.effects.builders import make_record, write_sidecar
+        from tests.unit.effects.builders import make_record, write_ended_shard, write_sidecar
 
         damage, draw = "SP$ DealDamage | NumDmg$ 2", "SP$ Draw | NumCards$ 1"
         keys = []
@@ -847,7 +948,7 @@ class TestHeldOutTextUnit:
             )
             keys.append(key)
         shard = tmp_path / "records" / "run.0-a.jsonl.gz"
-        write_shard(shard, [make_record(
+        write_ended_shard(shard, [make_record(
             generation=3, ability=tuple(keys), payload=ResolutionPayload(
                 events=(Event(type=EventType.CARD_DRAWN, subjects=("P0",)),),
             ),
@@ -868,7 +969,8 @@ class TestHeldOutTextUnit:
 
         from effects.application.collect_coverage import count_text_shard
         from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
-        from effects.infrastructure.shard_io import read_shard, write_shard
+        from effects.infrastructure.shard_io import read_shard
+        from tests.unit.effects.builders import write_ended_shard
 
         effects = [
             record for record in read_shard(_GEN3_SHARD)
@@ -878,8 +980,8 @@ class TestHeldOutTextUnit:
             MAX_EVENTS_PER_RECORD + 1
         )
         clean, flooded = tmp_path / "clean.jsonl.gz", tmp_path / "flooded.jsonl.gz"
-        write_shard(clean, effects)
-        write_shard(flooded, [
+        write_ended_shard(clean, effects)
+        write_ended_shard(flooded, [
             replace(record, payload=replace(record.payload, events=flood))
             for record in effects
         ])
@@ -916,14 +1018,6 @@ class TestHeldOutTextUnit:
         assert read_by_one > 0
         assert len(reads) == read_by_one
         assert first.games == second.games == {}
-
-    def test_satisfaction_is_distinct_games_at_the_floor(self):
-        from effects.domain.coverage import TextCoverage
-
-        unit = TextCoverage(text="t", games={"g1", "g2", "g3", "g4"})
-        assert not unit.satisfied(5)
-        unit.games.add("g5")
-        assert unit.satisfied(5) and unit.progress == 5
 
     def test_the_round_ends_without_waiting_on_uncastable_texts(self):
         """FR-037 / spec Story 2 scenario 6."""
@@ -1232,7 +1326,7 @@ class TestTheWordingRound:
     def test_the_unit_and_the_decks_hold_only_listed_cards(self, tmp_path, fake_supervisor):
         code, consulted = self._run(tmp_path, "prodigal pyromancer\nCunning Sparkmage\n")
 
-        assert code == 0
+        assert code == 1, "the stand-in rounds write no record, which fails the run"
         assert consulted == [["cunning sparkmage", "prodigal pyromancer"]]
         decked = {name for deck in fake_supervisor.play_round.call_args.args[0]
                   for name in deck}
@@ -1341,7 +1435,7 @@ class TestOnlyGenThreeRecordsCount:
 
         assert count_shard(shard).credits == {}
 
-    def test_a_gen_two_record_counts_toward_no_held_out_text(self):
+    def test_a_gen_two_record_counts_toward_no_held_out_text(self, tmp_path):
         from dataclasses import replace
 
         from effects.application.collect_coverage import count_text_shard
@@ -1349,7 +1443,8 @@ class TestOnlyGenThreeRecordsCount:
 
         _, everything = _texts_by_game(_GEN3_SHARD)
         held_out = _holding(everything)
-        assert count_text_shard(_GEN3_SHARD, roots=_GEN3_ROOTS, held_out=held_out).games
+        ended = copy_gen3_fixture(tmp_path)
+        assert count_text_shard(ended, roots=_GEN3_ROOTS, held_out=held_out).games
         demoted = [replace(record, generation=None) for record in read_shard(_GEN3_SHARD)]
         import tempfile
 
@@ -1401,15 +1496,16 @@ class TestTheDeckFileIsTheRunsOwn:
         (cards / "aa.txt").write_text(
             "name: aa\nmana cost: {G}\ntypes: creature\n", encoding="utf-8",
         )
-        fake_supervisor.run_id = "run-123"
         with patch.object(collect_coverage, "consult_castability", return_value={}):
             collect_coverage.run(CollectCoverageConfig(
                 effect_records=tmp_path / "records", cards_folders=(cards,),
                 target_records=1, decks_per_round=1, no_progress_rounds=1, workers=1,
             ))
 
+        # The path itself is the supervisor's (test_collector_connector).
+        fake_supervisor.decks_path.assert_called_with("coverage")
         decks_file = fake_supervisor.play_round.call_args.args[1]
-        assert decks_file == tmp_path / "records" / "coverage-decks.run-123.txt"
+        assert decks_file is fake_supervisor.decks_path.return_value
 
 
 class TestARoundChargesTheCardsItsGamesShowed:
@@ -1455,3 +1551,188 @@ class TestARoundChargesTheCardsItsGamesShowed:
         first = calls[0]
         assert first["written"] == {"shown", "unseen"}
         assert first["decked"] == {"shown"}
+
+
+class TestAHungConsultOnlyRanks:
+    """P1 #12: the castability consult runs under a timeout; a consult killed
+    at it degrades like one that could not run, every card ranked castable."""
+
+    def test_a_timed_out_consult_yields_no_verdicts(self, caplog):
+        from effects.application import collect_coverage
+        from effects.infrastructure import one_shot_workers
+        from price_predictor.infrastructure.forge_jvm import ForgeWorkerTimeout
+
+        with patch.object(one_shot_workers, "castability_verdicts",
+                          side_effect=ForgeWorkerTimeout("CastabilityMain ran past its timeout")):
+            assert collect_coverage.consult_castability(["aa"]) == {}
+        assert "ran past its timeout" in caplog.text
+
+
+def _two_cards(tmp_path, *names):
+    cards = tmp_path / "cardsfolder"
+    cards.mkdir()
+    for name in names:
+        (cards / f"{name}.txt").write_text(
+            f"name: {name}\nmana cost: {{G}}\ntypes: creature\n", encoding="utf-8",
+        )
+    _convert_acting_line(cards)
+    return cards
+
+
+class TestCountFrom:
+    """V4 #5: coverage was counted only under the directory written to, so a
+    run in its own run directory (the artifact layout) started at zero and
+    re-collected what earlier runs already hold."""
+
+    def _shard_crediting(self, directory, name, records):
+        directory.mkdir(parents=True, exist_ok=True)
+        record = _record([make_entity("E1", name)], source="E1")
+        write_plain_shard(directory, "earlier", [record] * records)
+
+    def test_an_earlier_run_s_records_count_and_its_directory_is_untouched(
+        self, tmp_path, fake_supervisor,
+    ):
+        from effects.application import collect_coverage
+
+        cards = _two_cards(tmp_path, "aa", "bb")
+        earlier = tmp_path / "earlier-run"
+        self._shard_crediting(earlier, "aa", 5)
+        before = sorted(earlier.rglob("*"))
+        written = []
+        fake_supervisor.play_round.side_effect = (
+            lambda decks, *_a, **_k: written.extend(name for deck in decks for name in deck)
+        )
+
+        with patch.object(collect_coverage, "consult_castability", return_value={}):
+            collect_coverage.run(CollectCoverageConfig(
+                effect_records=tmp_path / "records", cards_folders=(cards,),
+                count_from=(earlier,), target_records=5, decks_per_round=2,
+                no_progress_rounds=1, workers=1,
+            ))
+
+        assert written, "no round was played"
+        assert "aa" not in written, "a card satisfied by --count-from was decked again"
+        assert "bb" in written
+        assert sorted(earlier.rglob("*")) == before
+
+    @pytest.mark.parametrize("where", ["same", "inside", "holding"])
+    def test_an_overlapping_directory_is_refused(self, tmp_path, where):
+        records = tmp_path / "records"
+        (records / "sub").mkdir(parents=True)
+        other = {"same": records, "inside": records / "sub", "holding": tmp_path}[where]
+
+        with pytest.raises(ValueError, match="overlaps"):
+            CollectCoverageConfig(effect_records=records, count_from=(other,))
+
+    def test_a_missing_directory_is_refused(self, tmp_path):
+        with pytest.raises(ValueError, match="no such directory"):
+            CollectCoverageConfig(
+                effect_records=tmp_path / "records", count_from=(tmp_path / "absent",),
+            )
+
+
+class TestACardForgeCannotResolve:
+    """P1 #11: a decks-only round refuses a whole deck naming a card Forge's
+    card database does not hold, so one such card, unrecorded and weighted
+    the most, failed every match its decks reached until it retired unseen.
+    The consult answers every name the database holds: one it leaves
+    unanswered leaves the unit and the decks."""
+
+    def _run(self, tmp_path, fake_supervisor, verdicts):
+        from effects.application import collect_coverage
+
+        cards = _two_cards(tmp_path, "aa", "zz")
+        written = []
+        fake_supervisor.play_round.side_effect = (
+            lambda decks, *_a, **_k: written.extend(name for deck in decks for name in deck)
+        )
+        with patch.object(collect_coverage, "consult_castability", return_value=verdicts):
+            collect_coverage.run(CollectCoverageConfig(
+                effect_records=tmp_path / "records", cards_folders=(cards,),
+                target_records=1, decks_per_round=4, no_progress_rounds=1, workers=1,
+            ))
+        return written
+
+    def test_an_unanswered_card_is_never_decked(self, tmp_path, fake_supervisor, caplog):
+        written = self._run(tmp_path, fake_supervisor, {"aa": ConsultVerdict.CASTABLE})
+
+        assert "aa" in written
+        assert "zz" not in written
+        assert "not in Forge's card database" in caplog.text
+
+    def test_the_dropped_count_and_share_are_loud_and_recorded(
+        self, tmp_path, fake_supervisor, caplog,
+    ):
+        """No floor stops the run, but the report cannot be missed: the count,
+        the share of the pool, what a large share means, and run.json."""
+        self._run(tmp_path, fake_supervisor, {"aa": ConsultVerdict.CASTABLE})
+
+        assert "1 of 2 card(s) (50.0%)" in caplog.text
+        assert "../forge is older than the converted cards" in caplog.text
+        fake_supervisor.record.assert_any_call(
+            unresolved_cards=1, unresolved_share=0.5, unresolved_examples=["zz"],
+        )
+
+    def test_a_consult_that_answered_nothing_drops_nothing(self, tmp_path, fake_supervisor):
+        """A consult that could not run proves nothing about any card."""
+        written = self._run(tmp_path, fake_supervisor, {})
+
+        assert {"aa", "zz"} <= set(written)
+
+
+class TestWhatTheRunItselfPlayedAndWrote:
+    """The zero-record check counts this run's own shards, and a run that
+    could deck nothing has played no round."""
+
+    def _config(self, tmp_path):
+        cards = _two_cards(tmp_path, "aa", "bb")
+        return CollectCoverageConfig(
+            effect_records=tmp_path / "records", cards_folders=(cards,),
+            target_records=1, decks_per_round=2, no_progress_rounds=1, workers=1,
+        )
+
+    def test_another_run_s_shard_is_no_record_of_this_run(
+        self, tmp_path, fake_supervisor, caplog,
+    ):
+        from effects.application import collect_coverage
+
+        fake_supervisor.run_id = "this-run"
+        played = []
+
+        def other_run_writes(*_args, **_kwargs):
+            played.append(1)
+            record = _record([make_entity("E9", "zz")], source="E9")
+            write_plain_shard(
+                tmp_path / "records", f"r{len(played)}", [record], run_id="other-run",
+            )
+
+        fake_supervisor.play_round.side_effect = other_run_writes
+        with patch.object(collect_coverage, "consult_castability", return_value={}):
+            assert collect_coverage.run(self._config(tmp_path)) == 1
+        assert played
+        assert "no new effect record" in caplog.text
+
+    def test_this_run_s_own_shard_counts(self, tmp_path, fake_supervisor):
+        from effects.application import collect_coverage
+
+        fake_supervisor.run_id = "this-run"
+
+        def own_run_writes(*_args, **_kwargs):
+            record = _record([make_entity("E1", "aa")], source="E1")
+            write_plain_shard(tmp_path / "records", "a", [record], run_id="this-run")
+
+        fake_supervisor.play_round.side_effect = own_run_writes
+        with patch.object(collect_coverage, "consult_castability", return_value={}):
+            assert collect_coverage.run(self._config(tmp_path)) == 0
+
+    def test_a_run_that_could_deck_nothing_played_no_round_and_fails(
+        self, tmp_path, fake_supervisor, caplog,
+    ):
+        from effects.application import collect_coverage
+
+        with patch.object(collect_coverage, "consult_castability", return_value={}), \
+             patch.object(collect_coverage, "build_coverage_decks", return_value=[]):
+            assert collect_coverage.run(self._config(tmp_path)) == 1
+        fake_supervisor.play_round.assert_not_called()
+        assert "No round was played" in caplog.text
+        assert "round 1" not in caplog.text

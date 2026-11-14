@@ -302,14 +302,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A resolution copies a spell on the stack (a spell_copied event); the copy carries the original's chosen modes.",
-        "near_miss": "No near miss is tagged.",
-        "params": {
-          "event": "spell_copied"
-        },
-        "needs": []
+        "none": "Could not express: the copy's chosen mode is read by no outcome_event parameter."
       }
     },
     {

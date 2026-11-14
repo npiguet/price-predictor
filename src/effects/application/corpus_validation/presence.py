@@ -23,6 +23,7 @@ from effects.domain.records import (
     Moment,
     PlayabilitySubkind,
     RecordKind,
+    TurnActionSubkind,
 )
 from effects.domain.shard_generation import ShardGeneration
 
@@ -48,6 +49,8 @@ GEN3_CANDIDATE_MEMBERS = ("failed_checks", "land_play")
 GEN3_VERDICT_MEMBERS = ("timing",)
 #: A resolution's effect half: every one, its game-end rescue and mana ones too.
 GEN3_EFFECT_HALF_MEMBERS = ("conditions_met",)
+#: The game-end marker (WP7): the records of its game the cap withheld.
+GEN3_GAME_END_MEMBERS = ("records_withheld",)
 
 
 def _owed(data: Mapping) -> Iterator[tuple[str, bool]]:
@@ -67,6 +70,8 @@ def _owed(data: Mapping) -> Iterator[tuple[str, bool]]:
     kind, subkind = data.get("kind"), data.get("subkind")
     if kind == RecordKind.RESOLUTION and data.get("moment") == Moment.RESOLUTION:
         yield from _members("payload", payload, GEN3_EFFECT_HALF_MEMBERS)
+    elif kind == RecordKind.TURN_ACTION and subkind == TurnActionSubkind.GAME_END:
+        yield from _members("payload", payload, GEN3_GAME_END_MEMBERS)
     elif kind == RecordKind.PLAYABILITY and subkind == PlayabilitySubkind.ATTACKERS:
         yield from _members("payload", payload, GEN3_ATTACKERS_MEMBERS)
     elif kind == RecordKind.PLAYABILITY and subkind == PlayabilitySubkind.BLOCKERS:

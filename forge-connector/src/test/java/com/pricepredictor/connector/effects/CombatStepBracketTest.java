@@ -74,6 +74,13 @@ class CombatStepBracketTest {
         assertEquals(2L, damageOn(regular, giant), "the first-strike step's damage stays marked");
         assertEquals(0L, damageOn(regular, knight), "no regular damage yet");
 
+        // Each step's own damage, caused by the creature that dealt it: the
+        // knight's first strike, then the giant's regular damage.
+        assertEquals(List.of(Map.of("subjects", List.of(Refs.of(giant)), "amount", 2L,
+                        "cause", Refs.of(knight))), damageDealt(firstStrike), firstStrike.toString());
+        assertEquals(List.of(Map.of("subjects", List.of(Refs.of(knight)), "amount", 3L,
+                        "cause", Refs.of(giant))), damageDealt(regular), regular.toString());
+
         for (Map<String, Object> combat : combats) {
             Map<String, Object> payload = asMap(combat.get("payload"));
             assertFalse(((List<?>) payload.get("attackers")).isEmpty(), combat.toString());
@@ -81,6 +88,20 @@ class CombatStepBracketTest {
             assertFalse(asMap(payload.get("assignment_choices")).isEmpty(), combat.toString());
             assertFalse(((List<?>) payload.get("events")).isEmpty(), combat.toString());
         }
+    }
+
+    /** A combat record's damage_dealt events, as their subjects, amount and cause. */
+    private static List<Map<String, Object>> damageDealt(Map<String, Object> record) {
+        List<Map<String, Object>> dealt = new java.util.ArrayList<>();
+        for (Object item : (List<?>) asMap(record.get("payload")).get("events")) {
+            Map<String, Object> event = asMap(item);
+            if ("damage_dealt".equals(event.get("type"))) {
+                Map<String, Object> params = asMap(event.get("params"));
+                dealt.add(Map.of("subjects", event.get("subjects"), "amount", params.get("amount"),
+                        "cause", params.get("cause")));
+            }
+        }
+        return dealt;
     }
 
     private static Map<String, Object> global(Map<String, Object> record) {

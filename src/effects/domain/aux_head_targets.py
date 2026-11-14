@@ -167,13 +167,15 @@ def cost_adjustment(record: EffectRecord, candidate: Candidate) -> list[float] |
 
 
 def supervises_created_objects(record: EffectRecord) -> bool:
-    """Effect halves and in-place rewrites carry created-objects targets; any
-    other rewrite ran another ability, whose effect half supervises it."""
+    """Effect halves, in-place rewrites and the rewrite holding its set-aside
+    ability's run (whose events no effect half holds) carry created-objects
+    targets; any other rewrite ran another ability, whose effect half
+    supervises it, and one whose incoming event is unknown tells no edit."""
     match record.payload:
         case ResolutionPayload():
             return True
-        case RewritePayload(rewritten=rewritten):
-            return rewritten
+        case RewritePayload() as payload:
+            return payload.rewritten is True or payload.holds_buffered_run
     return False
 
 

@@ -29,6 +29,7 @@ import logging
 import random
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 
 from effects.application.collect_variants import (
@@ -41,7 +42,7 @@ from effects.application.collect_variants import (
     swap_protection_quality,
     write_variant,
 )
-from effects.application.collector_common import collector_supervisor
+from effects.application.collector_common import collector_supervisor, record_damaged_shards
 from effects.application.parallel_map import run_parallel
 from effects.domain.card_names import fold_card_name
 from effects.domain.provenance import ProvenanceKey, SourceTree, split_script_file
@@ -275,18 +276,31 @@ class RunRuleCounter:
         self.total = RuleCounts()
 
     def update(self) -> None:
-        from effects.application.rule_counts import CountContext, count_shard
+        """Count the run's shards not counted yet, and say, as ``rule-counts``
+        does, how many gen-3 games they left out as cut."""
+        from effects.application.rule_counts import CountContext, count_shard, cut_games_line
 
         fresh = [shard for shard in self._games.fresh_shards() if shard not in self._counted]
+        cut = 0
+        # A damaged shard is counted up to the damage: one must not stop the run.
         for found in run_parallel(
-            fresh, count_shard, workers=self._workers, label="Counted rules in",
+            fresh, partial(count_shard, salvage=True), workers=self._workers,
+            label="Counted rules in",
             progress_every=50, context=CountContext(self._rules_dir, self._roots),
         ):
+            cut += found.cut_games
             merge_into(self.total, found)
         self._counted.update(fresh)
+        if cut:
+            logger.info("Steered rule counts: %s", cut_games_line(cut))
 
     def document(self) -> dict:
-        return self.total.to_json({})
+        return self.total.to_json()
+
+    @property
+    def damaged(self) -> list[str]:
+        """Every damaged shard counted so far, as its read's message."""
+        return self.total.damaged
 
 
 def collect_steered(config: CollectVariantsConfig, sources: list[Path]) -> int:
@@ -316,6 +330,7 @@ def collect_steered(config: CollectVariantsConfig, sources: list[Path]) -> int:
         with collector_supervisor(
             workers=config.workers, effect_records=config.effect_records,
             caps=config.caps, variant_scripts=config.variant_scripts,
+            stop=config.worker_stop,
         ) as supervisor:
             games = VariantGameCounter(config.effect_records, supervisor.run_id, config.workers)
             ruled = RunRuleCounter(
@@ -362,6 +377,7 @@ def steer(config, generation: SteeredGeneration, counts, heads, detected,
             config, by_rule=True, rng=generation.rng,
         )
         ruled.update()
+        record_damaged_shards(supervisor, sorted({*games.damaged, *ruled.damaged}))
         after = combined_counts(counts, ruled.document())
         newly = rules_to_retire(gained(before, after, pairs), min_gain=config.steer_min_gain)
         retired |= newly

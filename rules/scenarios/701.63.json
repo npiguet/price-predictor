@@ -154,16 +154,7 @@
       ],
       "forge_notes": "In the endure_zero variant the activation has no counter or token choice to make.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "An endure resolution with N greater than 0 puts +1/+1 counters on the enduring permanent.",
-        "near_miss": "An endure resolution with N equal to 0, which puts no counter on the permanent and creates no token.",
-        "params": {
-          "event": "counter_change",
-          "counter_type": "+1/+1",
-          "api": "Endure"
-        },
-        "needs": []
+        "none": "Could not express: the endure amount (0) is read by no outcome_event parameter."
       }
     }
   ]

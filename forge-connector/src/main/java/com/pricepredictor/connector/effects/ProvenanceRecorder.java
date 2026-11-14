@@ -75,6 +75,12 @@ public final class ProvenanceRecorder {
      * is walked long after the keyword loop has moved on.
      */
     private final Map<String, List<Ability>> byKeyword = new LinkedHashMap<>();
+    /**
+     * The one line a keyword rendered for one of the traits it generates,
+     * where the keyword renders a line per trait (a saga's chapters, haunt's
+     * two halves): such a trait is claimed by its own line alone.
+     */
+    private final Map<CardTraitBase, Ability> renderedFor = new IdentityHashMap<>();
     /** Where a chain's undefined SVars go; shared across every face of a run. */
     private final MissingSVarReport missingSVars;
 
@@ -173,9 +179,28 @@ public final class ProvenanceRecorder {
                                    String original) {
         if (key == null) return;
         declare(key);
+        Ability own = renderedFor.get(trait);
+        if (own != null) {
+            attribute(List.of(own), key, trait);
+            return;
+        }
         List<Ability> abilities = byKeyword.get(original);
         if (abilities == null || abilities.isEmpty()) return;
         attribute(abilities, key, trait);
+    }
+
+    /**
+     * Note that a keyword rendered {@code line} for {@code trait}, one of the
+     * traits it generates.
+     *
+     * <p>A keyword rendering several lines, one per trait or group of traits,
+     * says so here while it renders: without it, every trait the keyword
+     * generated would be claimed by every one of its lines, and the join,
+     * which reads the first line holding a key, would give a saga's chapter II
+     * record chapter I's text.
+     */
+    public void rendered(CardTraitBase trait, Ability line) {
+        if (trait != null && line != null) renderedFor.put(trait, line);
     }
 
     /**

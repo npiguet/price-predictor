@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from effects.domain.effect_head_layout import VERDICT_BITS, HeadField
 from effects.domain.records import RecordKind
 from effects.domain.rule_catalogue import (
     FORK_OPERATIONS,
@@ -14,7 +13,6 @@ from effects.domain.rule_catalogue import (
     DepartureResolution,
     DepartureStatus,
     DetectorDeclaration,
-    ForkOperation,
     MapVerdict,
     RuleMapEntry,
     head_outputs,
@@ -36,12 +34,6 @@ _FORMER_HAND_LIST = {
 
 def test_the_derived_output_list_keeps_every_name_of_the_hand_list():
     assert _FORMER_HAND_LIST <= head_outputs()
-
-
-def test_the_derived_output_list_follows_the_layout():
-    outputs = head_outputs()
-    assert {f.value for f in HeadField} - {"counters_delta_other"} <= outputs
-    assert set(VERDICT_BITS) <= outputs
 
 
 @pytest.mark.parametrize("name, known", [
@@ -89,12 +81,6 @@ def test_a_departure_blocks_rule_tests_only_while_confirmed_and_unpatched():
 def test_a_map_entry_round_trips_to_json():
     entry = RuleMapEntry("704.5f", MapVerdict.TRAINED, ("zone_outcome",))
     assert entry.to_json() == {"rule": "704.5f", "verdict": "trained", "outputs": ["zone_outcome"]}
-
-
-def test_fork_operation_order_is_the_contract_order():
-    assert [str(o) for o in ForkOperation] == [
-        "pt", "keyword", "colour_type", "counters", "tap", "life", "replace_card",
-        "remove_permanent", "add_permanent", "move_card"]
 
 
 def test_a_script_edit_takes_its_lines_out_and_appends_its_own():

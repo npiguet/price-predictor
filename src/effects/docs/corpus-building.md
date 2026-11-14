@@ -17,6 +17,11 @@ Rules to respect when running or changing `build-corpus` or `holdout-cards`, or 
 - A checkpoint pins the manifest's digest, and `evaluate-effect-model` fails fast on a dataset rebuilt since. For that reason the legacy members `token_keys_remapped`, `token_keys_ambiguous` and `forge_tokenscripts` are still written (as `0`, `{}`, `""`), and a new manifest member is omitted at its gen-1 value. Removing or always writing one changes digests that checkpoints pinned.
 - The manifest records the unique-ability-text count of each output. That count, not any record count, says whether curation preserved the tail.
 - Only gen-3 shards are accepted; a records set holding any other exits 1 before a record is read.
+- A gen-3 game whose shard holds no game-end marker was cut, and its records are incomplete. The survey and the write pass both drop it whole (`dropped-cut`), so no stratum, derived copy or selection set holds one. The manifest counts them in `cut_games`, inside the digest. A records set none of whose gen-3 games has a marker is refused before `--output` is touched.
+- A record the write pass meets past what the survey read in its shard (a raw shard grown between the passes, a collection still writing) was never surveyed nor placed. It is written to no stratum and counted as `dropped-unsurveyed`, and the build names every raw shard whose size changed.
+- Before anything under `--output` is touched, the build refuses a rules directory holding no scenario or no heads line, and a raw shard the survey cannot read whole. The rules directory is read relative to the working directory, so a build started elsewhere would tag and budget nothing.
+- What the survey's reading met without stopping (`decode_off_list`, `damaged_tails`, `join_gaps`), `unsupervised_events`, `code_version` and `sidecar_digest` sit outside the digest, so that neither where the raw corpus sits nor what ran before in the process moves it.
+- `--workers` is 1 to 12 with a default of 12, never the CPU count.
 
 ## The split
 
@@ -33,7 +38,7 @@ Rules to respect when running or changing `build-corpus` or `holdout-cards`, or 
 
 - `--holdout-permille`, `--holdout-max-carriers` and `--holdout-unit` must be passed with the same values to `holdout-cards`, `build-corpus`, `collect-variants` and `collect-coverage --only-cards`. A depleted corpus was composed against them and a checkpoint records them. All four select through the one rule (`HeldOutCards`), so they agree whenever the values do.
 - `--vocab-path` decides the encoding surface the rarity table keys its texts on. Built on the other surface, the table keys every text differently while looking exactly as valid, which is why `train-effect-model --corpus` refuses a `--vocab-path` on the other one.
-- `--variant-scripts` names the perturbed-script tree. Without it a variant line resolves to no ability text, and a resolution record acting through it is refused as `no-acting-text`.
+- `--variant-scripts` names the perturbed-script tree. Without it a variant line resolves to no ability text, and a resolution record acting through it is refused as `no-acting-text`. Every key read as no line for want of its tree's root is counted by tree (`SidecarCache.unconfigured`).
 
 ## The holdout
 
@@ -53,8 +58,11 @@ Rules to respect when running or changing `build-corpus` or `holdout-cards`, or 
 - The survey reads shards keyed by provenance key, not by ability text, and one process folds keys to texts afterwards. Resolving a key needs a `SidecarCache` over tens of thousands of files, and building one per worker would cost more than the scan.
 - Only training games' records size the class, family and text quotas and the copy plans, so the plan never counts a record the write pass routes away. The rarity table, the legality mode counts, the rule and condition counts, the closed subtype and keyword lists and the held-out texts' game counts stay whole-corpus.
 - Every selection choice is a function of the record's hash and `--seed`.
+- In an outcome signature, a zone outcome the targets leave unknown reads `unknown`, never `stayed`; the acting spell's own move off the stack is left out; and a half that did not resolve names its outcome (`fizzled`, `declined`), so a fizzle never shares a cell with a kill.
+- A validation sample holds each `record_id` once, its natural copy where it has one, so a class's quota counts distinct records whatever the stratum's copies.
+- `--text-cap` counts every natural copy of the text in the class, of tagged and untagged records alike.
 - Each class budget is split equally over effect families, then over outcome signatures. A short family's records repeat up to `--reuse-cap` and its unused share passes on. Real legality decisions fill up to half the legality class first.
 - Rule budgets add copies to the rules the map marks `trained`. Every written copy carries a `curation` member, which the rule mask reads (`training.md`).
 - A validation stratum is written in the training stratum's class mix and drops no record. Gate 1 takes a card-disjoint record's natural copy alone.
-- A protection copy is written as a synthetic record `<record_id>~pc<i>`.
+- A protection copy is written as a synthetic record `<record_id>~pc<i>`. One is made only where the snapshot shows what the rule reads; the conditions per kind of copy are in `domain/protection_copies.py`.
 - `turn_action` records are written to no stratum. A permanent spell's resolution is kept, keyed to the permanent's card, although its implicit cast spell has no line. A decision whose candidate key is unjoinable is refused as `unjoinable-key`.

@@ -77,17 +77,7 @@
       ],
       "forge_notes": "Provoke is a may-trigger; the harness fixes the choice to use it.",
       "detector": {
-        "family": "legality_membership",
-        "record_kind": "playability",
-        "outcome": "A blockers legality record lists a creature a requirement (provoke's) makes block the anchored attacker if able.",
-        "near_miss": "A blockers legality record lists a creature that no requirement binds to block the anchor.",
-        "params": {
-          "list": "must_block",
-          "fires_when": "inside"
-        },
-        "needs": [
-          "must_block"
-        ]
+        "none": "Could not express: that the requirement comes from the anchor's provoke is read by no must_block parameter."
       }
     },
     {

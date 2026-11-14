@@ -21,8 +21,10 @@ game's end cannot say which rule ended it.
 The collector writes a non-combat kill's game end in a record of its own
 after the resolution, the game-end rescue of orphaned events, never in the
 resolution's effect half (gen-3's held half takes the check's moves from the
-battlefield, not the game's end), so an effect half holding no game-end event
-has its outcome unreadable (``observed`` None). The rescue record itself
+battlefield, not the game's end; only an ability that ends the game outright,
+a ``WinsGame`` or ``LosesGame`` line, holds it, ``emittable_events``), so an
+effect half holding no game-end event (:data:`_GAME_END`) has its outcome
+unreadable (``observed`` None). The rescue record itself
 shows no side: its board is read at the game's end, with the loser gone. A
 combat record holds its damage step's game end.
 """
@@ -83,11 +85,14 @@ class SbaGameLoss:
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         return frozenset()
 
-    def match(self, record: EffectRecord, lines: SidecarLookup | None,
-              params: Mapping[str, Any]) -> FamilyMatch | None:
+    def validate(self, params: Mapping[str, Any]) -> None:
         check = params.get("check")
         if check not in CHECKS:
             raise ValueError(f"sba_game_loss: unknown check {check!r}; known: {sorted(CHECKS)}")
+
+    def match(self, record: EffectRecord, lines: SidecarLookup | None,
+              params: Mapping[str, Any]) -> FamilyMatch | None:
+        check = params.get("check")
         effect_half = record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION
         if not effect_half and record.kind is not RecordKind.COMBAT:
             return None

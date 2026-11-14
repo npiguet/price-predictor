@@ -45,6 +45,28 @@ public class GamePlayer {
      */
     private final CollectionCaps caps;
 
+    /** Asked at each game end: whether the worker is to stop there (D2). */
+    private final WorkerStop stop;
+
+    /**
+     * The games this player has played to their end, recording closed: a
+     * stopped worker's stop line names them, since a best-of-N match stopped
+     * after a game counts as no match.
+     */
+    private long gamesPlayed;
+
+    /** Plays one game of a match to its end; {@link Match#startGame} but in a test. */
+    private final GameDriver driver;
+
+    /** The match's start in milliseconds, which seeds it; the wall clock but in a test. */
+    private final java.util.function.LongSupplier clock;
+
+    /** How a game of a match is played to its end, a seam for a test that makes one throw. */
+    @FunctionalInterface
+    interface GameDriver {
+        void play(Match match, forge.game.Game game);
+    }
+
     /**
      * Per-game outcome: which side won, which side was on the play, and the
      * non-basic, non-token card names that each side played during that game
@@ -106,9 +128,32 @@ public class GamePlayer {
      * were going to be played anyway.
      */
     public GamePlayer(int gamesPerMatch, RecordShardWriter effectRecords, CollectionCaps caps) {
+        this(gamesPerMatch, effectRecords, caps, WorkerStop.NEVER, Match::startGame);
+    }
+
+    /**
+     * A player that also stops at a game end when {@code stop} asks it to,
+     * throwing {@link WorkerStop.Requested} out of {@link #playMatch} once the
+     * game's recording is closed and its marker written.
+     */
+    GamePlayer(int gamesPerMatch, RecordShardWriter effectRecords, CollectionCaps caps,
+            WorkerStop stop, GameDriver driver) {
+        this(gamesPerMatch, effectRecords, caps, stop, driver, System::currentTimeMillis);
+    }
+
+    /**
+     * The same, the match's start read from {@code clock}: a test replaying
+     * one match twice gives both the same start, which seeds the match's
+     * source and its games' recordings.
+     */
+    GamePlayer(int gamesPerMatch, RecordShardWriter effectRecords, CollectionCaps caps,
+            WorkerStop stop, GameDriver driver, java.util.function.LongSupplier clock) {
         this.gamesPerMatch = gamesPerMatch;
         this.effectRecords = effectRecords;
         this.caps = caps;
+        this.stop = stop;
+        this.driver = driver;
+        this.clock = clock;
     }
 
     /**
@@ -182,13 +227,19 @@ public class GamePlayer {
         return playMatch(deckA, deckB, DeckRules.NONE);
     }
 
+    /** The games played to their end so far, in matches finished or not. */
+    public long gamesPlayed() {
+        return gamesPlayed;
+    }
+
     /**
      * {@link #playMatch(Deck, Deck)} for decks aimed at {@code deckRules}: a
      * steered variant round's decks (FR-058d), whose games' records carry
      * both decks' rules as {@code aimed_at}.
      */
     public PlayedMatch playMatch(Deck deckA, Deck deckB, DeckRules deckRules) {
-        long startMillis = System.currentTimeMillis();
+        long wallStart = System.currentTimeMillis();
+        long startMillis = clock.getAsLong();
         // The match's own seeded source, scrambled for the reason the
         // collectors' sampler is: consecutive matches start milliseconds
         // apart, and a linear congruential generator's first draw is nearly
@@ -196,25 +247,63 @@ public class GamePlayer {
         java.util.Random matchRandom =
                 new java.util.Random(GameRecording.scramble(startMillis));
         Optional<Side> randomSeat = drawRandomSeat(caps, matchRandom);
-        var players = registeredPlayers(
-                deckA, deckB, randomSeat, caps.randomSeatProbability(), matchRandom);
-
-        var rules = new GameRules(GameType.Sealed);
-        rules.setGamesPerMatch(gamesPerMatch);
-
-        var match = new Match(rules, players, "sealed-match");
-
         List<GameOutcome> outcomes = new ArrayList<>();
         // Seeds each game's recording, so a worker's games sample
         // independently of one another rather than all alike.
         long gameSeed = startMillis;
 
-        while (!match.isMatchOver()) {
-            playGame(match, gameSeed++, deckRules).ifPresent(outcomes::add);
+        // From the seat's draw on, whatever fails is a random-seat match's
+        // failure when the match has one: setting the match up, playing a
+        // game, closing its recording.
+        try {
+            var players = registeredPlayers(
+                    deckA, deckB, randomSeat, caps.randomSeatProbability(), matchRandom);
+            var rules = new GameRules(GameType.Sealed);
+            rules.setGamesPerMatch(gamesPerMatch);
+            var match = new Match(rules, players, "sealed-match");
+            while (!match.isMatchOver()) {
+                playGame(match, gameSeed++, deckRules).ifPresent(outcomes::add);
+                // At the game end, its records and marker written: the match
+                // is left unfinished and records no row (D2).
+                var reason = stop.reason();
+                if (reason.isPresent() && !match.isMatchOver()) {
+                    throw new WorkerStop.Requested(reason.get());
+                }
+            }
+        } catch (RandomSeatMatchFailed | WorkerStop.Requested passOn) {
+            throw passOn;
+        } catch (RuntimeException failure) {
+            if (randomSeat.isPresent()) {
+                throw new RandomSeatMatchFailed(failure);
+            }
+            throw failure;
+        } catch (Error error) {
+            // An Error is never caught: it ends the worker. Named here first,
+            // in the worker loop's own words, so a random-seat match it cut is
+            // counted as one.
+            if (randomSeat.isPresent()) {
+                System.err.println("Error generating match: " + RandomSeatMatchFailed.MARK + error);
+                System.err.flush();
+            }
+            throw error;
         }
 
-        int durationSeconds = (int) ((System.currentTimeMillis() - startMillis) / 1000);
+        int durationSeconds = (int) ((System.currentTimeMillis() - wallStart) / 1000);
         return new PlayedMatch(outcomes, durationSeconds, randomSeat.isPresent());
+    }
+
+    /**
+     * A random-seat match that threw: its message names it as one, so the
+     * worker's {@code Error generating match: [random-seat match] ...} line
+     * tells the supervisor which crashed matches were random-seat ones.
+     */
+    static final class RandomSeatMatchFailed extends RuntimeException {
+        /** What the message starts with, after the worker loop's prefix. */
+        static final String MARK = "[random-seat match] ";
+
+        RandomSeatMatchFailed(RuntimeException cause) {
+            super(MARK + cause.getMessage(), cause);
+        }
     }
 
     /**
@@ -235,6 +324,7 @@ public class GamePlayer {
         // what a fork clones and the controller is what a fork does not
         // attach.
         Optional<RandomSeatController> seat = randomSeatOf(game);
+        Throwable thrown = null;
         GameRecording recording = effectRecords == null ? null : new GameRecording(
                 game, effectRecords, effectRecords.nextGameId(), caps, gameSeed,
                 seat.map(s -> Refs.of(s.getPlayer())).orElse(null), GamePlayer::attachForkSeats,
@@ -254,12 +344,16 @@ public class GamePlayer {
             seat.ifPresent(s -> s.attach(
                     game, recording == null ? null : recording.priorityCandidates(),
                     recording == null ? null : recording.fruitlessActivations()));
-            match.startGame(game); // blocks until game is finished
+            driver.play(match, game); // blocks until game is finished
+        } catch (RuntimeException | Error failure) {
+            thrown = failure;
+            throw failure;
         } finally {
             if (recording != null) {
-                recording.close();
+                closeRecording(recording, thrown);
             }
         }
+        gamesPlayed++;
 
         var winningLobby = game.getOutcome().getWinningLobbyPlayer();
         if (winningLobby == null) {
@@ -273,6 +367,21 @@ public class GamePlayer {
         return Optional.of(new GameOutcome(
                 winner, playFirst,
                 collector.getCards(Side.A), collector.getCards(Side.B)));
+    }
+
+    /**
+     * Close a game's recording; a close that throws after the game threw is
+     * kept with the game's failure rather than masking it.
+     */
+    private static void closeRecording(GameRecording recording, Throwable gameFailure) {
+        try {
+            recording.close();
+        } catch (RuntimeException closeFailure) {
+            if (gameFailure == null) {
+                throw closeFailure;
+            }
+            gameFailure.addSuppressed(closeFailure);
+        }
     }
 
     /**

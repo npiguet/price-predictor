@@ -90,11 +90,12 @@
       "detector": {
         "family": "rewrite_event",
         "record_kind": "rewrite",
-        "outcome": "A destroy event is replaced (not carried out) by a replacement effect.",
-        "near_miss": "A destroy event that meets the replacement effect and is not replaced.",
+        "outcome": "Umbra armor replaces the enchanted permanent's destruction.",
+        "near_miss": "A destruction umbra armor meets and does not replace.",
         "params": {
           "event": "destroyed",
-          "result": "replaced"
+          "result": "replaced",
+          "keyword": "Umbra armor"
         },
         "needs": []
       }

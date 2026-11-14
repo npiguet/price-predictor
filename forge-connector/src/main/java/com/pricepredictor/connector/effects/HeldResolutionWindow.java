@@ -46,6 +46,22 @@ final class HeldResolutionWindow {
     /** The resolution waiting for its consequences, or null when none is. */
     private HeldResolution held;
 
+    /**
+     * A fizzled spell's effect halves, written with no event but its card's
+     * move off the stack, which Forge makes after publishing the
+     * resolution; null when none waits.
+     */
+    private FizzledSpell fizzled;
+
+    /**
+     * A fizzled spell's halves, their ids and boards fixed at the fizzle,
+     * waiting for the card's move off the stack (608.2b).
+     */
+    private record FizzledSpell(
+            SpellAbility root, int awaitedCard, String actor, String linkId,
+            List<HalfRecord> halves, ActivationOutcome outcome) {
+    }
+
     HeldResolutionWindow(CollectorContext context, FruitlessActivations fruitless) {
         this.context = context;
         this.fruitless = fruitless;
@@ -128,11 +144,13 @@ final class HeldResolutionWindow {
         // fizzled on its own carries an empty list under its key, which is
         // what the schema says of any resolution that did nothing observable.
         HeldHalves<HalfRecord> halves = new HeldHalves<>();
-        for (ModeSplit.ModeHalf half
-                : resolved.modes.halves(resolved.effectState())) {
-            // The random results are the half's own, and the library cards
-            // its events name join the board they were captured with.
-            String refs = RefsJson.renderResolved(resolved.ability, half.events(), resolved.x());
+        List<ModeSplit.ModeHalf> split = resolved.modes.halves(resolved.effectState());
+        for (int index = 0; index < split.size(); index++) {
+            ModeSplit.ModeHalf half = split.get(index);
+            // The random results and the targets are the half's own, and the
+            // library cards its events name join the board they were
+            // captured with.
+            String refs = refsOf(resolved, half, index, split.size(), half.events());
             halves.add(HalfRecord.of(
                     context.nextRecordId(), resolved.keys.withOption(half.mode().option()),
                     half.mode().state().withRefs(refs).withEventCards(half.events()).render(),
@@ -147,27 +165,100 @@ final class HeldResolutionWindow {
     /**
      * Write the effect half of an item that did nothing (FR-042b): one that
      * fizzled, or whose controller declined what it offered. Its halves
-     * have no events, and nothing joins them: a fizzled spell's move off
-     * the stack and anything after go to no record. They are split as a
-     * resolved item's are: one root half, or on a patched worker one per
-     * chosen mode of a modal item, through the mode's option line, under the
-     * cost half's link (FR-029a, FR-029c). A declined half keeps the
-     * conditions Forge decided on its way; a fizzled one decided none.
+     * have no events but one: a spell's own card's move off the stack
+     * (608.2b), which Forge makes after publishing the resolution, so a
+     * fizzled or declined spell's halves wait for it ({@link
+     * #takeMoveOffStack}) and the last of them takes it; an ability, and a
+     * copy of a spell, which ceases to exist without a move (707.10a), has
+     * none and is written now. Nothing after the move joins them.
+     * They are split as a resolved item's are: one root half, or on a
+     * patched worker one per chosen mode of a modal item, through the mode's
+     * option line, under the cost half's link (FR-029a, FR-029c). A declined
+     * half keeps the conditions Forge decided on its way; a fizzled one
+     * decided none.
+     *
+     * <p>Whatever its halves gathered anyway reaches no record and is
+     * counted as dropped.
      *
      * @param outcome {@link ActivationOutcome#FIZZLED} or {@link ActivationOutcome#DECLINED}
+     * @param dropped where what the halves gathered is counted
+     * @param phase   the engine phase it is counted in
      */
-    void writeEmpty(OpenResolution resolved, ActivationOutcome outcome) {
-        String refs = RefsJson.renderResolved(resolved.ability, List.of(), resolved.x());
-        for (ModeSplit.ModeHalf half : resolved.modes.halves(resolved.effectState())) {
+    void writeEmpty(
+            OpenResolution resolved, ActivationOutcome outcome, DroppedEvents dropped, String phase) {
+        List<ModeSplit.ModeHalf> split = resolved.modes.halves(resolved.effectState());
+        List<HalfRecord> halves = new java.util.ArrayList<>();
+        for (int index = 0; index < split.size(); index++) {
+            ModeSplit.ModeHalf half = split.get(index);
+            String refs = refsOf(resolved, half, index, split.size(), List.of());
+            for (EffectEvent gathered : half.events()) {
+                dropped.count(gathered.type(), phase);
+            }
             List<ConditionsMet> conditions = outcome == ActivationOutcome.DECLINED
                     ? half.conditions() : List.of();
-            context.emit(context.newResolution(Moment.RESOLUTION)
-                    .actor(resolved.actor)
-                    .ability(resolved.keys.withOption(half.mode().option()))
-                    .linkId(resolved.linkId)
-                    .state(half.mode().state().withRefs(refs).render())
-                    .payload(RecordPayloads.resolutionPayload(List.of(), conditions, outcome)));
+            halves.add(HalfRecord.of(
+                    context.nextRecordId(), resolved.keys.withOption(half.mode().option()),
+                    half.mode().state().withRefs(refs).render(), conditions));
         }
+        Card host = resolved.ability.getHostCard();
+        // A spell's card leaves the stack after a fizzle or a refusal as after
+        // any resolution; a copy's ceases to exist instead (707.10a) and
+        // publishes no move, so its halves are written now, empty.
+        if (resolved.ability.isSpell() && host != null && !host.isCopiedSpell()) {
+            fizzled = new FizzledSpell(resolved.ability, host.getId(), resolved.actor,
+                    resolved.linkId, halves, outcome);
+            return;
+        }
+        emitEmpty(halves, resolved.actor, resolved.linkId, outcome, null);
+    }
+
+    /**
+     * Write halves that did nothing, the last taking {@code move} when it is
+     * not null: a fizzled spell's card leaving the stack.
+     */
+    private void emitEmpty(
+            List<HalfRecord> halves, String actor, String linkId, ActivationOutcome outcome,
+            EffectEvent move) {
+        for (int index = 0; index < halves.size(); index++) {
+            HalfRecord record = halves.get(index);
+            List<EffectEvent> events = move != null && index == halves.size() - 1
+                    ? List.of(move) : List.of();
+            context.emit(context.newResolution(
+                    Moment.RESOLUTION, record.recordId(), record.timestamp())
+                    .actor(actor)
+                    .ability(record.keys())
+                    .linkId(linkId)
+                    .state(record.state())
+                    .payload(RecordPayloads.resolutionPayload(events, record.conditions(), outcome)));
+        }
+    }
+
+    /**
+     * Write the fizzled spell's waiting halves, with its card's move off the
+     * stack, or with nothing where the move never came.
+     */
+    private void writeFizzled(EffectEvent move) {
+        FizzledSpell writing = fizzled;
+        fizzled = null;
+        emitEmpty(writing.halves(), writing.actor(), writing.linkId(),
+                writing.outcome(),
+                move == null ? null : EventAttribution.stampAt(move, writing.root(), null, null));
+    }
+
+    /**
+     * One effect half's refs block: the half's random results, and the
+     * targets of its own links (a mode's half: the charm's and its mode's)
+     * as its resolution started and before Forge's check for illegal
+     * targets.
+     */
+    private static String refsOf(
+            OpenResolution resolved, ModeSplit.ModeHalf half, int index, int halves,
+            List<EffectEvent> events) {
+        Integer option = half.mode().option();
+        List<String> targets = resolved.targetsOfHalf(index, halves, option);
+        List<String> atCast = resolved.targetsAtCastOfHalf(index, halves, option);
+        return RefsJson.renderHalf(resolved.ability, events, resolved.x(), targets, atCast,
+                resolved.onStackOf(targets, atCast));
     }
 
     /**
@@ -181,6 +272,12 @@ final class HeldResolutionWindow {
      * @return whether the move was taken
      */
     boolean takeMoveOffStack(GameEventCardChangeZone event, EffectEvent moved) {
+        if (fizzled != null && event.card() != null
+                && event.card().getId() == fizzled.awaitedCard()
+                && event.from() != null && event.from().zoneType() == ZoneType.Stack) {
+            writeFizzled(moved);
+            return true;
+        }
         if (held == null || held.awaitedCard < 0 || event.card() == null
                 || event.card().getId() != held.awaitedCard
                 || event.from() == null || event.from().zoneType() != ZoneType.Stack) {
@@ -194,17 +291,6 @@ final class HeldResolutionWindow {
     /** Whether a resolution's halves are waiting for its consequences. */
     boolean isHolding() {
         return held != null;
-    }
-
-    /**
-     * The id of the held resolution's first effect half, or null when none
-     * is held: the live record a fork taken now was forked beside (D5).
-     */
-    String heldRecordId() {
-        if (held == null || held.halves.halves().isEmpty()) {
-            return null;
-        }
-        return held.halves.halves().get(0).about().recordId();
     }
 
     /**
@@ -244,8 +330,18 @@ final class HeldResolutionWindow {
      * <p>Only while {@link #isHolding}.
      */
     void fileDeath(EffectEvent moved, CardView card) {
-        held.halves.fileDeath(
-                EventAttribution.stampAt(moved, held.root, null, null), Refs.of(card));
+        fileConsequence(moved, Refs.of(card));
+    }
+
+    /**
+     * File another event of the state-based check into the held resolution,
+     * as {@link #fileDeath} files a death: an Aura or Equipment taken off a
+     * permanent, filed with the half that names {@code subject}.
+     *
+     * <p>Only while {@link #isHolding}.
+     */
+    void fileConsequence(EffectEvent event, String subject) {
+        held.halves.fileDeath(EventAttribution.stampAt(event, held.root, null, null), subject);
     }
 
     /**
@@ -254,6 +350,10 @@ final class HeldResolutionWindow {
      * halves, if one is held.
      */
     void close() {
+        if (fizzled != null) {
+            // The card never left the stack where this collector saw it.
+            writeFizzled(null);
+        }
         if (held == null) {
             return;
         }

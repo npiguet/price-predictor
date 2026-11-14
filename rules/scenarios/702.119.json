@@ -178,16 +178,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A candidate cast through an emerge-from-a-quality cost is affordable because sacrificing a permanent of that quality reduces its total cost by that permanent's mana value.",
-        "near_miss": "A candidate cast through its emerge cost that is not affordable.",
-        "params": {
-          "bit": "affordable",
-          "fires_when": true,
-          "keyword": "Emerge"
-        },
-        "needs": []
+        "none": "Could not express: emerge's quality is read by no verdict_bit filter."
       }
     }
   ]

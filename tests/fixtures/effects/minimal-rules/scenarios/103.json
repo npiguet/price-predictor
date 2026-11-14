@@ -1,0 +1,69 @@
+{
+ "unit": "103",
+ "scenarios": [
+  {
+   "id": "103.6a-1",
+   "rules": [
+    "103.6a"
+   ],
+   "title": "A card allowing it begins the game on the battlefield",
+   "record_kind": "resolution",
+   "setup": {
+    "active": "A",
+    "step": "upkeep",
+    "life": {
+     "A": 20,
+     "B": 20
+    },
+    "battlefield": {},
+    "hand": {
+     "A": [
+      "Leyline of Sanctity",
+      "Plains",
+      "Plains",
+      "Plains",
+      "Plains",
+      "Plains",
+      "Plains"
+     ]
+    },
+    "graveyard": {},
+    "library": {
+     "A": [
+      "Plains"
+     ]
+    },
+    "exile": {},
+    "notes": "Pre-game, after mulligans and before turn 1. The seven cards in A's hand are A's opening hand; A takes the opening-hand action."
+   },
+   "decisions": [
+    "A chooses to begin the game with Leyline of Sanctity on the battlefield."
+   ],
+   "variants": [
+    {
+     "label": "in_opening_hand",
+     "polarity": "fires",
+     "delta": "",
+     "expected": "Leyline of Sanctity moves from A's hand to the battlefield before turn 1; A's hand has six Plains and A has hexproof."
+    },
+    {
+     "label": "on_top_of_library",
+     "polarity": "does_not_fire",
+     "delta": "Leyline of Sanctity is the top card of A's library and the opening hand is seven Plains.",
+     "expected": "Leyline of Sanctity stays in A's library; nothing is put onto the battlefield before turn 1 and A does not have hexproof.",
+     "operation": {
+      "unclassifiable": "more than one fact: Leyline moves from hand to library top and a Plains moves the other way"
+     }
+    }
+   ],
+   "cards": [
+    "Leyline of Sanctity",
+    "Plains"
+   ],
+   "forge_notes": "",
+   "detector": {
+    "none": "The opening-hand action happens before turn 1 and is not a stack resolution; no gen-2 record kind is written for it, and gen-3 excludes pre-game actions from its fields (rules/gen3-fields.json new:pregame_action), so no record or zone_change event shows a card beginning the game on the battlefield."
+   }
+  }
+ ]
+}

@@ -54,6 +54,7 @@ from effects.domain.records import (
     TriggerPayload,
     TurnActionPayload,
 )
+from effects.domain.shard_generation import check_generation_member
 from effects.domain.state_snapshot import (
     CardChoices,
     CardHistory,
@@ -85,7 +86,8 @@ from effects.domain.state_snapshot import (
 _KNOWN_ENVELOPE_KEYS = frozenset({
     "record_id", "generation", "run_id", "timestamp", "game_id", "kind", "moment", "subkind",
     "link_id", "mirror_of", "variant_of", "mode", "interventional", "fork",
-    "synthetic", "random_seat", "what_if", "aimed_at", "directed", "curation", "actor_player",
+    "synthetic", "random_seat", "what_if", "aimed_at", "directed", "copy_dropped", "curation",
+    "actor_player",
     "ability",
     "ability_unresolved", "state", "payload",
 })
@@ -321,16 +323,22 @@ def _combat_status_from_json(data: dict) -> CombatStatus:
 
 
 def _granted_temporary_to_json(granted: GrantedTemporary) -> dict:
-    return {
+    out = {
         "keywords": list(granted.keywords),
         "abilities": _keys_to_json(granted.abilities),
     }
+    if granted.hidden_keywords is not None:
+        out["hidden_keywords"] = list(granted.hidden_keywords)
+    return out
 
 
 def _granted_temporary_from_json(data: dict) -> GrantedTemporary:
+    """Keywords in the package's spelling; hidden keywords as Forge writes
+    them, which name no keyword."""
     return GrantedTemporary(
         keywords=tuple(normalize_keyword(k) for k in data.get("keywords", ())),
         abilities=_keys_from_json(data.get("abilities")),
+        hidden_keywords=_tuple_or_none(data.get("hidden_keywords")),
     )
 
 
@@ -597,8 +605,12 @@ def _random_from_json(data: dict) -> RandomResults:
 
 
 def _refs_to_json(refs: Refs, gen3: bool) -> dict:
-    out = {
-        "targets": list(refs.targets),
+    out: dict = {"targets": list(refs.targets)}
+    # Both or neither, as the collector writes them since it wrote either.
+    if refs.targets_on_stack is not None or refs.targets_at_cast is not None:
+        out["targets_at_cast"] = _list_or_none(refs.targets_at_cast)
+        out["targets_on_stack"] = list(refs.targets_on_stack or ())
+    out |= {
         "source": refs.source,
         "modes": list(refs.modes),
         "x": refs.x,
@@ -612,6 +624,8 @@ def _refs_to_json(refs: Refs, gen3: bool) -> dict:
 def _refs_from_json(data: dict) -> Refs:
     return Refs(
         targets=tuple(data.get("targets", ())),
+        targets_at_cast=_tuple_or_none(data.get("targets_at_cast")),
+        targets_on_stack=_tuple_or_none(data.get("targets_on_stack")),
         source=data.get("source"),
         modes=tuple(data.get("modes", ())),
         x=data.get("x"),
@@ -748,22 +762,37 @@ def _resolution_from_json(data: dict) -> ResolutionPayload:
 
 
 def _rewrite_to_json(payload: RewritePayload) -> dict:
-    return {
+    """Gen-3's members after ``replaced_by``, each only where the collector
+    writes it: ``incoming_unknown`` when true, the buffered three on a
+    replacement that set an ability aside."""
+    out = {
         "incoming": payload.incoming.as_dict(),
         "outgoing": payload.outgoing.as_dict() if payload.outgoing else None,
         "result": payload.result.value if payload.result else None,
         "replaced_by": _keys_to_json(payload.replaced_by),
     }
+    if payload.incoming_unknown:
+        out["incoming_unknown"] = True
+    if payload.buffered is not None:
+        out["buffered"] = _keys_to_json(payload.buffered)
+        out["buffered_ran"] = bool(payload.buffered_ran)
+        out["buffered_events"] = _events_to_json(payload.buffered_events)
+    return out
 
 
 def _rewrite_from_json(data: dict) -> RewritePayload:
     outgoing = data.get("outgoing")
     result = data.get("result")
+    buffered = data.get("buffered")
     return RewritePayload(
         incoming=_event_from_json(data["incoming"]),
         outgoing=_event_from_json(outgoing) if outgoing else None,
         result=RewriteResult(result) if result else None,
         replaced_by=_keys_from_json(data.get("replaced_by")),
+        incoming_unknown=bool(data.get("incoming_unknown", False)),
+        buffered=_keys_from_json(buffered) if buffered is not None else None,
+        buffered_ran=bool(data.get("buffered_ran")) if buffered is not None else None,
+        buffered_events=_events_from_json(data.get("buffered_events")),
     )
 
 
@@ -775,8 +804,13 @@ def _contribution_to_json(contribution: Contribution) -> dict:
         out["set_pt"] = list(contribution.set_pt)
     out.update({
         "keywords": list(contribution.keywords), "types": list(contribution.types),
-        "colors": list(contribution.colors), "name": contribution.name,
+        "colors": list(contribution.colors),
     })
+    if contribution.abilities is not None:
+        out["abilities"] = list(contribution.abilities)
+    if contribution.hidden_keywords is not None:
+        out["hidden_keywords"] = list(contribution.hidden_keywords)
+    out["name"] = contribution.name
     if contribution.controller is not None:
         out["controller"] = contribution.controller
     return out
@@ -790,6 +824,8 @@ def _contribution_from_json(data: dict) -> Contribution:
         keywords=tuple(normalize_keyword(k) for k in data.get("keywords", ())),
         types=tuple(data.get("types", ())),
         colors=tuple(data.get("colors", ())),
+        abilities=_tuple_or_none(data.get("abilities")),
+        hidden_keywords=_tuple_or_none(data.get("hidden_keywords")),
         name=data.get("name"),
         controller=data.get("controller"),
     )
@@ -911,10 +947,17 @@ def _decision_from_json(data: dict) -> PlayabilityDecisionPayload:
 
 
 def _forbidden_to_json(forbidden: tuple[ForbiddenEntity, ...]) -> list[dict]:
+    """``responsible_own``, ``responsible_unresolved`` and
+    ``required_elsewhere`` after ``responsible_static``, in that order, each
+    only when set, as the collector writes them."""
     return [
         {
             "entity": f.entity,
             "responsible_static": _keys_to_json(f.responsible_static),
+            **({"responsible_own": True} if f.responsible_own else {}),
+            **({"responsible_unresolved": str(f.responsible_unresolved)}
+               if f.responsible_unresolved is not None else {}),
+            **({"required_elsewhere": True} if f.required_elsewhere else {}),
         }
         for f in forbidden
     ]
@@ -925,6 +968,9 @@ def _forbidden_from_json(data: Any) -> tuple[ForbiddenEntity, ...]:
         ForbiddenEntity(
             entity=f["entity"],
             responsible_static=_keys_from_json(f.get("responsible_static")),
+            required_elsewhere=bool(f.get("required_elsewhere", False)),
+            responsible_own=bool(f.get("responsible_own", False)),
+            responsible_unresolved=f.get("responsible_unresolved"),
         )
         for f in data or ()
     )
@@ -981,11 +1027,16 @@ def _blockers_from_json(data: dict) -> PlayabilityBlockersPayload:
 
 
 def _turn_action_to_json(payload: TurnActionPayload) -> dict:
-    return {"events": _events_to_json(payload.events)}
+    """The game-end marker's ``records_withheld`` after its (empty) events."""
+    out: dict = {"events": _events_to_json(payload.events)}
+    if payload.records_withheld is not None:
+        out["records_withheld"] = payload.records_withheld
+    return out
 
 
 def _turn_action_from_json(data: dict) -> TurnActionPayload:
-    return TurnActionPayload(events=_events_from_json(data.get("events")))
+    return TurnActionPayload(events=_events_from_json(data.get("events")),
+                             records_withheld=data.get("records_withheld"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -1064,6 +1115,8 @@ def record_to_dict(record: EffectRecord) -> dict:
     if record.directed is not None:
         out["directed"] = {"variant": record.directed.variant,
                            "operation": record.directed.operation.value}
+    if record.copy_dropped is not None:
+        out["copy_dropped"] = dict(record.copy_dropped)
     if record.curation is not None:
         out["curation"] = _curation_to_json(record.curation)
     out |= {
@@ -1107,8 +1160,45 @@ def _curation_from_json(data: dict) -> Curation:
     )
 
 
+#: Whether a gen-3 resolution record in the superseded payload shape is
+#: refused (:func:`check_gen3_payload_shape`). Off until the gen-3 test
+#: fixture is regenerated in the current shape; then on, for good.
+REFUSE_SUPERSEDED_GEN3_PAYLOADS = False
+
+
+class SupersededPayloadError(ValueError):
+    """A gen-3 resolution record in the payload shape gen-3 replaced."""
+
+
+def check_gen3_payload_shape(data: dict) -> None:
+    """Refuse a gen-3 resolution half in the superseded shape: a cost half
+    holds ``events`` and no ``outcome`` (``{events, costs}``), an effect half
+    carries ``outcome`` (null on a mana record and the rescue record)."""
+    if data.get("generation") != 3 or data.get("kind") != RecordKind.RESOLUTION:
+        return
+    payload = data.get("payload") or {}
+    moment = data.get("moment")
+    if moment == Moment.ACTIVATION and ("events" not in payload or "outcome" in payload):
+        raise SupersededPayloadError(
+            "a gen-3 cost half is {events, costs}; this one is the superseded "
+            f"{{{', '.join(payload)}}}")
+    if moment == Moment.RESOLUTION and "outcome" not in payload:
+        raise SupersededPayloadError(
+            "a gen-3 effect half carries outcome; this one, of the superseded "
+            "shape, carries none")
+
+
 def record_from_dict(data: dict) -> EffectRecord:
-    """Parse one shard line into an :class:`EffectRecord`."""
+    """Parse one shard line into an :class:`EffectRecord`.
+
+    A ``generation`` other than the integer 3 is refused
+    (:class:`~effects.domain.shard_generation.UnknownGenerationError`).
+    """
+    generation = data.get("generation")
+    if "generation" in data:
+        check_generation_member(generation)
+    if REFUSE_SUPERSEDED_GEN3_PAYLOADS:
+        check_gen3_payload_shape(data)
     kind = RecordKind(data["kind"])
     moment = Moment(data["moment"]) if data.get("moment") else None
     subkinds = SUBKINDS_OF.get(kind, PlayabilitySubkind)
@@ -1116,6 +1206,7 @@ def record_from_dict(data: dict) -> EffectRecord:
     ability = data.get("ability")
     aimed_at = data.get("aimed_at")
     directed = data.get("directed")
+    copy_dropped = data.get("copy_dropped")
     curation = data.get("curation")
     return EffectRecord(
         record_id=data["record_id"],
@@ -1137,10 +1228,12 @@ def record_from_dict(data: dict) -> EffectRecord:
         synthetic=data.get("synthetic", False),
         random_seat=data.get("random_seat"),
         what_if=data.get("what_if"),
-        generation=data.get("generation"),
+        generation=generation,
         aimed_at=tuple(aimed_at) if aimed_at is not None else None,
         directed=(DirectedTag(directed["variant"], ForkOperation(directed["operation"]))
                   if directed is not None else None),
+        copy_dropped=(tuple(sorted((str(kind), int(count)) for kind, count in copy_dropped.items()))
+                      if copy_dropped is not None else None),
         curation=_curation_from_json(curation) if curation is not None else None,
         ability=_keys_from_json(ability) if ability is not None else None,
         ability_unresolved=data.get("ability_unresolved"),

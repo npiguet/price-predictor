@@ -81,10 +81,11 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolution copies a spell on the stack (a spell_copied event), as a storm trigger does once for each spell cast before its spell that turn.",
-        "near_miss": "A storm trigger resolving with no spell cast before its spell that turn, which copies nothing; not counted, since no api singles out storm's resolutions.",
+        "outcome": "Storm's trigger copies the spell.",
+        "near_miss": "Storm's trigger resolving and copying nothing.",
         "params": {
-          "event": "spell_copied"
+          "event": "spell_copied",
+          "keyword": "Storm"
         },
         "needs": []
       }

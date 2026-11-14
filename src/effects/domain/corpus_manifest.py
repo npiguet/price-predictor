@@ -414,6 +414,57 @@ class CorpusManifest:
     halves: dict[str, dict[str, tuple[str, ...]]] = field(
         default_factory=dict, metadata=_gen1_implied(_nested_tuple_map),
     )
+    #: ``validation stratum -> class -> rule -> polarity -> RuleRow``: each
+    #: validation stratum's rule budgets, as ``rules`` holds the training
+    #: stratum's (FR-068a).
+    validation_rules: dict[str, dict[str, dict[str, dict[str, RuleRow]]]] = field(
+        default_factory=dict, metadata=_gen1_implied(
+            lambda values: {stratum: _rule_rows(rows) for stratum, rows in values.items()}),
+    )
+    #: ``class -> collection flag -> kept records`` over the records read
+    #: (``fork``, ``interventional``, ``directed``, ``aimed``, ``degraded``,
+    #: and ``runtime_only`` for a resolution acting only through runtime-only
+    #: keys); a flag no record of the class carries is left out.
+    record_flags: dict[str, dict[str, int]] = field(
+        default_factory=dict, metadata=_gen1_implied(_nested_int_map),
+    )
+    #: Placement's precision thresholds (research E5), config fields with no
+    #: flag: ``min_games_per_half``, ``max_item_error``, ``max_component_error``
+    #: (None where infinite).
+    placement_thresholds: dict[str, float | None] = field(
+        default_factory=dict, metadata=_gen1_implied(dict),
+    )
+    #: sha256 of the keyword-definition file the build read; "" without one.
+    keyword_definitions_digest: str = field(default="", metadata=_gen1_implied(str))
+    #: ``"<member> <repr of the value>" -> times read`` for every value of a
+    #: raw record outside the wire's closed lists (``shard_io.off_list_counts``).
+    decode_off_list: dict[str, int] = field(
+        default_factory=dict, metadata=_gen1_implied(_int_map),
+    )
+    #: Each raw shard whose damaged last gzip member ended its read.
+    damaged_tails: tuple[str, ...] = field(default=(), metadata=_gen1_implied(tuple))
+    #: Keys the survey read as no line, by why (``sidecar_io.JoinGaps``):
+    #: ``unresolved`` and ``undescribed`` by script file, ``unconfigured`` by
+    #: source tree, each with how often it was asked; an empty kind left out.
+    join_gaps: dict[str, dict[str, int]] = field(
+        default_factory=dict, metadata=_gen1_implied(_nested_int_map),
+    )
+    #: ``kind -> events`` of kept records no output column reads (a hidden
+    #: keyword change, a name change, a mana cost change;
+    #: ``effect_targets.RecordTargets.unsupervised``).
+    unsupervised_events: dict[str, int] = field(
+        default_factory=dict, metadata=_gen1_implied(_int_map),
+    )
+    #: The commit of the code that built the corpus (``git rev-parse HEAD``),
+    #: "" outside a checkout.
+    code_version: str = field(default="", metadata=_gen1_implied(str))
+    #: sha256 over every sidecar the build joined against, by tree, relative
+    #: path and size: a reconversion since the build moves it.
+    sidecar_digest: str = field(default="", metadata=_gen1_implied(str))
+    #: Gen-3 games dropped whole as cut, their shard holding no game-end marker
+    #: (WP7); their records are ``per_stratum["dropped-cut"]``. Inside the
+    #: digest: which games are cut decides which records the corpus holds.
+    cut_games: int = field(default=0, metadata=_gen1_implied(int))
 
     @property
     def budgeted_rules(self) -> frozenset[str]:
@@ -466,6 +517,12 @@ class CorpusManifest:
             rule: {"verdict": str(entry.verdict), "outputs": list(entry.outputs)}
             for rule, entry in self.rule_map.items()
         }
+        data["validation_rules"] = {
+            stratum: {klass: {rule: {polarity: row.as_dict() for polarity, row in rows.items()}
+                              for rule, rows in by_rule.items()}
+                      for klass, by_rule in by_class.items()}
+            for stratum, by_class in self.validation_rules.items()
+        }
         for name, default in _GEN1_DEFAULTS.items():
             if getattr(self, name) == default:
                 data.pop(name, None)
@@ -486,7 +543,14 @@ class CorpusManifest:
 
     #: Operator-facing tallies the digest leaves out, so a manifest written
     #: before one existed keeps the digest its checkpoints pin (FR-147).
-    _OUTSIDE_THE_DIGEST = ("no_acting_text_scripts",)
+    #: Fields no decision reads: what the build met reading (a tally a pool
+    #: worker's sidecar cache shapes, a shard's damaged tail), so neither
+    #: where the raw corpus sits nor what ran before moves the digest the
+    #: selection set and every checkpoint find the corpus by.
+    _OUTSIDE_THE_DIGEST = (
+        "no_acting_text_scripts", "decode_off_list", "damaged_tails", "join_gaps",
+        "unsupervised_events", "code_version", "sidecar_digest",
+    )
 
     def digest(self) -> str:
         """A stable hash over every decision: sorted keys and sources, so the

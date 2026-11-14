@@ -96,7 +96,7 @@ def test_a_confirmed_accepted_departure_passes(declared, families):
 
 
 def test_the_registry_the_validator_reads_is_the_package_s(families):
-    assert families["sba_zone_move"] == frozenset({"check"})
+    assert families["sba_zone_move"] == frozenset({"check", "marked_before", "aura_cause"})
 
 
 def test_the_real_tree_passes_every_check_but_the_gen3_fields():
@@ -149,7 +149,7 @@ def catalogue(tmp_path):
     rules = tmp_path / "rules"
     (rules / "scenarios").mkdir(parents=True)
     units = {
-        "121": [_scenario("121.4-1", ["121.4"], ["Mind Rot", "Swamp"],
+        "121": [_scenario("121.2-1", ["121.2"], ["Mind Rot", "Swamp"],
                           [("empty", "does_not_fire", "move_card"),
                            ("hand", "fires", "add_permanent")])],
         "400": [_scenario("400.6-1", ["400.6"], ["Rest in Peace"],
@@ -187,7 +187,7 @@ def catalogue(tmp_path):
     counts = {
         "records": 1000,
         "rules": {
-            "121.4": _sides(0, 94402),       # rare: the fires side is lacking
+            "121.2": _sides(0, 94402),       # rare: the fires side is lacking
             "400.6": _sides(23335, 0),       # one-sided: no does_not_fire record
             "500.1": _sides(5000, 4000),     # common and two-sided: out
             "500.2": _sides(3, 0),           # rare, but nothing forkable: out
@@ -225,7 +225,7 @@ def _run(args, capsys):
 def test_the_rare_and_one_sided_forkable_rules_and_704_5f_are_listed_by_unit(catalogue, capsys):
     listed, _, _ = _run(catalogue, capsys)
     # 500.3 has no record but a detector gen-2 records show: none of either side.
-    assert listed == ["121.4", "400.6", "500.3", "702.9a", "702.10b", "704.5f"]
+    assert listed == ["121.2", "400.6", "500.3", "702.9a", "702.10b", "704.5f"]
 
 
 def test_the_wording_cards_are_those_rules_scenarios_cards_as_converted_names(
@@ -246,10 +246,10 @@ def test_a_card_no_converted_file_carries_is_kept_and_named(catalogue, capsys):
 
 def test_each_rule_prints_its_counts_and_variants_lacking_polarity_first(catalogue, capsys):
     _, _, out = _run(catalogue, capsys)
-    block = out[out.index("121.4"):out.index("400.6")].splitlines()
-    assert block[0].split() == ["121.4", "fires", "0", "does_not_fire", "94402", "rare"]
-    assert block[1].split() == ["*", "121.4-1", "hand", "(fires):", "add_permanent"]
-    assert block[2].split() == ["121.4-1", "empty", "(does_not_fire):", "move_card"]
+    block = out[out.index("121.2"):out.index("400.6")].splitlines()
+    assert block[0].split() == ["121.2", "fires", "0", "does_not_fire", "94402", "rare"]
+    assert block[1].split() == ["*", "121.2-1", "hand", "(fires):", "add_permanent"]
+    assert block[2].split() == ["121.2-1", "empty", "(does_not_fire):", "move_card"]
     assert "704.5f       fires      6814 does_not_fire     15221  always" in out
     assert out.splitlines()[-1].startswith(
         "6 rules (3 rare, 3 one-sided, 1 always), 6 wording cards")
@@ -261,7 +261,7 @@ def test_the_subcommand_is_wired(catalogue, monkeypatch):
         "--cards-folder", str(catalogue.cards_folder), "--rules-dir", str(catalogue.rules_dir)])
     rc.main()
     assert (catalogue.rules_dir / "directed-fork-rules.txt").read_text(
-        encoding="utf-8").splitlines()[0] == "121.4"
+        encoding="utf-8").splitlines()[0] == "121.2"
 
 
 def test_a_rule_left_out_is_never_listed_and_its_reason_is_printed(
@@ -269,7 +269,7 @@ def test_a_rule_left_out_is_never_listed_and_its_reason_is_printed(
     monkeypatch.setattr(rc, "NOT_DIRECTED", {"400.6": "no detector tells its fork apart"})
     listed, cards, out = _run(catalogue, capsys)
     # 400.6 is one-sided with a forkable variant, so its counts alone would list it.
-    assert listed == ["121.4", "500.3", "702.9a", "702.10b", "704.5f"]
+    assert listed == ["121.2", "500.3", "702.9a", "702.10b", "704.5f"]
     assert "rest in peace" not in cards
     assert "left out 400.6: no detector tells its fork apart" in out
     assert out.splitlines()[-1].startswith("5 rules")
@@ -280,7 +280,7 @@ def test_a_rule_always_listed_is_listed_whatever_its_counts_without_its_cards(
     monkeypatch.setattr(rc, "ALWAYS_DIRECTED", {"704.5f": "always", "500.1": "kept by hand"})
     listed, cards, out = _run(catalogue, capsys)
     # 500.1 is common and two-sided; its card joins no wording list, as 704.5f's does not.
-    assert listed == ["121.4", "400.6", "500.1", "500.3", "702.9a", "702.10b", "704.5f"]
+    assert listed == ["121.2", "400.6", "500.1", "500.3", "702.9a", "702.10b", "704.5f"]
     assert "common card" not in cards
     assert "always listed 500.1: kept by hand" in out
 
@@ -290,9 +290,51 @@ def test_the_rules_always_listed_are_704_5f_and_702_98a_each_with_a_reason():
     assert all(reason.strip() for reason in rc.ALWAYS_DIRECTED.values())
 
 
-def test_the_rules_left_out_are_the_four_the_user_dropped_each_with_a_reason():
-    assert sorted(rc.NOT_DIRECTED) == ["104.2a", "500.11", "701.12d", "702.62d"]
+def test_the_rules_left_out_are_those_the_user_dropped_each_with_a_reason():
+    """2026-11-06: four no detector tells from their live game; 2026-11-14:
+    four that restate a listed rule, four the record cannot show, and 122.1h,
+    whose record names no replacing effect; and eight of the rules that
+    qualified after the list was first fixed, each with its own reason (no
+    detector reads it, its variant's edit is refused, its point needs a
+    choice no boundary foresees, or no sealed pool makes it happen)."""
+    assert sorted(rc.NOT_DIRECTED) == [
+        "104.2a", "104.4c", "115.7a", "121.4", "122.1g", "122.1h", "500.11", "505.5",
+        "614.10a", "701.10c", "701.11c", "701.12d", "701.24f", "701.40c", "701.40d",
+        "701.42c", "702.105b", "702.62d", "703.4m", "712.16", "712.4c"]
     assert all(reason.strip() for reason in rc.NOT_DIRECTED.values())
+    for rule, listed in {"121.4": "704.5b", "122.1g": "704.5v", "703.4m": "510.2",
+                         "701.42c": "701.42b"}.items():
+        assert listed in rc.NOT_DIRECTED[rule], rule
+
+
+def test_the_regenerated_list_is_the_committed_one():
+    """``directed-rules`` over the counts checked in beside the list writes
+    the committed list, order included, on any machine."""
+    counts = json.loads((rc.RULES / rc.DIRECTED_COUNTS).read_text(encoding="utf-8"))
+    chosen = rc.directed_rules(counts, rc.load_scenarios_by_rule(rc.RULES))
+    listed = (rc.RULES / "directed-fork-rules.txt").read_text(encoding="utf-8").split()
+    assert list(chosen) == listed
+
+
+def test_the_committed_counts_are_the_gen2_counts_cut_down():
+    """The checked-in counts are the part of ``output/effects/rule-counts-gen2.json``
+    the list is decided from; it needs that file, which output/ never commits."""
+    counts_path = rc.OUTPUT / "effects" / "rule-counts-gen2.json"
+    if not counts_path.exists():
+        pytest.skip("needs output/effects/rule-counts-gen2.json (never committed)")
+    counts = json.loads(counts_path.read_text(encoding="utf-8"))
+    committed = json.loads((rc.RULES / rc.DIRECTED_COUNTS).read_text(encoding="utf-8"))
+    assert committed == rc.decided_from(counts)
+
+
+def test_the_subcommand_writes_the_counts_it_decided_from(catalogue, capsys):
+    rc.cmd_directed_rules(catalogue)
+    written = json.loads((catalogue.rules_dir / rc.DIRECTED_COUNTS).read_text(encoding="utf-8"))
+    counts = json.loads(catalogue.counts.read_text(encoding="utf-8"))
+    assert written == rc.decided_from(counts)
+    assert "review" not in written and "records" not in written
+    assert list(rc.directed_rules(written, rc.load_scenarios_by_rule(catalogue.rules_dir))) == (
+        catalogue.rules_dir / "directed-fork-rules.txt").read_text(encoding="utf-8").split()
 
 
 # --- gen3-fields (T108): newly learnable rules and the turn_action verdict -------------------

@@ -457,12 +457,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A candidate ability that a restricting static forbids has can_play false.",
-        "near_miss": "A candidate ability of the same kind that the player can play.",
+        "outcome": "A typecycling candidate a static forbids is not playable (it stops cycling).",
+        "near_miss": "A typecycling candidate no static forbids.",
         "params": {
           "bit": "can_play",
           "fires_when": false,
-          "responsible_static": true
+          "responsible_static": true,
+          "keyword": "TypeCycling"
         },
         "needs": []
       }
@@ -538,14 +539,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A trigger on a player cycling a card is evaluated and fires when a card is cycled.",
-        "near_miss": "The same trigger evaluated against another event and not fired.",
-        "params": {
-          "mode": "Cycled"
-        },
-        "needs": []
+        "none": "Could not express: that the cycled card cycled through typecycling is read by no trigger_mode parameter."
       }
     }
   ]

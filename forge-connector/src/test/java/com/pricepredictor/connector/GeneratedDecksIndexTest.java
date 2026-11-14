@@ -50,14 +50,19 @@ class GeneratedDecksIndexTest {
         assertEquals(2, index.size());
         Set<String> seenSets = new HashSet<>();
         Set<String> seenLabels = new HashSet<>();
+        java.util.Map<String, List<String>> cardsBySet = new java.util.HashMap<>();
         Random rng = new Random(0);
         for (int i = 0; i < 50; i++) {
             GeneratedDecksIndex.GeneratedDeck pick = index.randomDeck(rng);
             seenSets.add(pick.setCode());
             seenLabels.add(pick.label());
+            cardsBySet.put(pick.setCode(), pick.cardNames());
         }
         assertEquals(Set.of("MH3", "BLB"), seenSets);
         assertEquals(Set.of("gen-2", "gen-3"), seenLabels);
+        // Each deck's own card names, in order, split on the pipe.
+        assertEquals(java.util.Map.of("MH3", List.of("A", "B", "C"),
+                "BLB", List.of("X", "Y", "Z", "W")), cardsBySet);
     }
 
     @Test
@@ -88,25 +93,6 @@ class GeneratedDecksIndexTest {
         Path file = writeDecks(tmp, List.of(line));
 
         assertThrows(IOException.class, () -> GeneratedDecksIndex.load(file));
-    }
-
-    @Test
-    void randomDeckPicksFromAllDecks(@TempDir Path tmp) throws IOException {
-        Path file = writeDecks(tmp, List.of(
-                deckLine("gen-2", "MH3", "mh3", 40),
-                deckLine("gen-2", "BLB", "blb", 40),
-                deckLine("gen-2", "RVR", "rvr", 40)
-        ));
-
-        GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
-        Random rng = new Random(0);
-
-        Set<String> seen = new HashSet<>();
-        for (int i = 0; i < 100; i++) {
-            seen.add(index.randomDeck(rng).setCode());
-        }
-
-        assertEquals(Set.of("MH3", "BLB", "RVR"), seen);
     }
 
     @Test

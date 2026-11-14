@@ -54,7 +54,7 @@ class SnapshotBuilderTest {
     @Test
     void refsRenderTheirFullShapeWithNoActingLine() {
         assertEquals(
-                "{\"targets\":[],\"source\":null,\"modes\":[],\"x\":null,"
+                "{\"targets\":[],\"targets_at_cast\":null,\"targets_on_stack\":[],\"source\":null,\"modes\":[],\"x\":null,"
                         + "\"choices\":{},\"random\":null}",
                 RefsJson.render(null));
     }
@@ -308,7 +308,8 @@ class SnapshotBuilderTest {
         @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
         @org.junit.jupiter.params.provider.CsvSource({
                 "Ravenous Chupacabra, cardsfolder/r/ravenous_chupacabra.txt, trigger",
-                "Dryad Militant, cardsfolder/d/dryad_militant.txt, replacement"})
+                "Dryad Militant, cardsfolder/d/dryad_militant.txt, replacement",
+                "Serra Angel, cardsfolder/s/serra_angel.txt, keyword"})
         void aClonesLinesKeyToWhatItCopied(String original, String script, String kind) {
             CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
             board.battlefield(original, board.opponent);
@@ -328,6 +329,144 @@ class SnapshotBuilderTest {
                     assertEquals(script, RecordLines.asMap(key).get("script_file"), lines.toString());
                 }
             }
+        }
+
+        /**
+         * A decision on an Adventure's spell, the card in hand: the host
+         * shows the Adventure's face, the spell the candidate casts, not
+         * the creature the hand holds it as (X1 #3); the hand card itself is
+         * left on its front.
+         */
+        @Test
+        void aHandCardShowsTheFaceItsActingAbilityIsOn() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card giant = board.hand("Bonecrusher Giant", board.you);
+            SpellAbility stomp = giant.getAllSpellAbilities().stream()
+                    .filter(sa -> sa.getCardState() != null && sa.getCardState().getStateName()
+                            == forge.card.CardStateName.Secondary)
+                    .findFirst().orElseThrow(() -> new AssertionError("no Stomp"));
+            stomp.setActivatingPlayer(board.you);
+
+            Map<String, Object> entity = entitiesIn(
+                    new SnapshotBuilder(board.game).ofCandidate(stomp).render()).stream()
+                    .filter(e -> Refs.of(giant).equals(e.get("id"))).findFirst().orElseThrow();
+
+            assertEquals("Stomp", entity.get("name"), entity.toString());
+            assertEquals(List.of("instant"), entity.get("types"), entity.toString());
+            assertEquals("hand", entity.get("zone"), entity.toString());
+            assertEquals("Bonecrusher Giant", giant.getName(), "the game's card is untouched");
+        }
+
+        /** The acting face of a card in hand, for an ability on {@code face}. */
+        private Map<String, Object> handEntityActingThrough(
+                String name, forge.card.CardStateName face) {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card card = board.hand(name, board.you);
+            SpellAbility acting = card.getAllSpellAbilities().stream()
+                    .filter(sa -> sa.getCardState() != null
+                            && sa.getCardState().getStateName() == face)
+                    .findFirst().orElseThrow(() -> new AssertionError("no ability on " + face));
+            acting.setActivatingPlayer(board.you);
+            return entitiesIn(new SnapshotBuilder(board.game).ofCandidate(acting).render())
+                    .stream().filter(e -> Refs.of(card).equals(e.get("id")))
+                    .findFirst().orElseThrow();
+        }
+
+        /** Fire // Ice in hand, its Ice half acting: the host shows Ice (X1 #3). */
+        @Test
+        void aSplitCardShowsTheHalfItsActingAbilityIsOn() {
+            Map<String, Object> entity = handEntityActingThrough(
+                    "Fire // Ice", forge.card.CardStateName.RightSplit);
+            assertEquals("Ice", entity.get("name"), entity.toString());
+            assertEquals("hand", entity.get("zone"), entity.toString());
+        }
+
+        /** A modal double-faced card acting through its back face shows that face (X1 #3). */
+        @Test
+        void aModalDoubleFacedCardShowsTheBackFaceItsAbilityIsOn() {
+            Map<String, Object> entity = handEntityActingThrough(
+                    "Agadeem's Awakening",
+                    forge.card.CardStateName.Backside);
+            assertEquals("Agadeem, the Undercrypt", entity.get("name"), entity.toString());
+            assertEquals("back", entity.get("face_state"), entity.toString());
+        }
+
+        /**
+         * A Clone of a transformed Delver copies its face up, Insectile
+         * Aberration: the copy's Flying keys to the Aberration's face of the
+         * Delver's file, not to the Clone's own line (V2 #4 edge).
+         */
+        @Test
+        void aCopyOfATransformedCardKeysToTheFaceItCopied() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card delver = board.battlefield("Delver of Secrets", board.opponent);
+            delver.changeCardState("Transform", null, null);
+            SpellAbility clone = board.spell(board.hand("Clone", board.you), board.you);
+            board.game.getStack().addAndUnfreeze(clone);
+            board.game.getStack().resolveStack();
+            Card copy = board.game.getCardsIn(ZoneType.Battlefield).stream()
+                    .filter(card -> card.getController() == board.you).findFirst().orElseThrow();
+            assertEquals("Insectile Aberration", copy.getName(), "the Clone copied the face up");
+
+            Map<String, Object> flying = keywordLine(linesOf(board, copy), "Flying");
+            Map<String, Object> key = RecordLines.asMap(((List<?>) flying.get("keys")).get(0));
+            assertEquals("cardsfolder/d/delver_of_secrets_insectile_aberration.txt",
+                    key.get("script_file"), flying.toString());
+            assertEquals(1L, key.get("face"), flying.toString());
+        }
+
+        /**
+         * A Clone's {@code copy_source} is the creature it copied, never the
+         * Clone itself (C2 #11, V2 #18).
+         */
+        @Test
+        void aClonesCopySourceIsWhatItCopied() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card angel = board.battlefield("Serra Angel", board.opponent);
+            SpellAbility clone = board.spell(board.hand("Clone", board.you), board.you);
+            board.game.getStack().addAndUnfreeze(clone);
+            board.game.getStack().resolveStack();
+            Card copy = board.game.getCardsIn(ZoneType.Battlefield).stream()
+                    .filter(card -> card.getController() == board.you).findFirst().orElseThrow();
+
+            assertEquals(Refs.of(angel), entityOf(board, copy).get("copy_source"));
+            assertEquals(null, entityOf(board, angel).get("copy_source"));
+        }
+
+        /**
+         * Phantasmal Image's copy keeps the copied creature's lines keyed to
+         * it, and the trigger the copy effect adds ({@code AddTriggers$}) keys
+         * to the Image's own line that made the copy, never to a trigger
+         * index of the Image's file, which prints none (X1 #6, C2 #2).
+         */
+        @Test
+        void aCopyEffectsAddedTriggerKeysToTheLineThatCopied() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            board.battlefield("Serra Angel", board.opponent);
+            SpellAbility image = board.spell(board.hand("Phantasmal Image", board.you), board.you);
+            board.game.getStack().addAndUnfreeze(image);
+            board.game.getStack().resolveStack();
+            Card copy = board.game.getCardsIn(ZoneType.Battlefield).stream()
+                    .filter(card -> card.getController() == board.you).findFirst().orElseThrow();
+            assertEquals("Serra Angel", copy.getName(), "the Image entered as a copy");
+
+            List<Map<String, Object>> lines = linesOf(board, copy);
+
+            List<Map<String, Object>> keys = new java.util.ArrayList<>();
+            for (Map<String, Object> line : lines) {
+                for (Object key : (List<?>) line.get("keys")) {
+                    keys.add(RecordLines.asMap(key));
+                }
+            }
+            assertTrue(keys.stream().anyMatch(key -> "cardsfolder/s/serra_angel.txt".equals(
+                    key.get("script_file")) && "keyword".equals(key.get("trait_kind"))), lines.toString());
+            assertTrue(lines.stream().anyMatch(line -> "trigger".equals(line.get("kind"))
+                    && ((List<?>) line.get("keys")).stream().map(RecordLines::asMap).anyMatch(key ->
+                            "cardsfolder/p/phantasmal_image.txt".equals(key.get("script_file")))),
+                    "the added trigger keys to the Image: " + lines);
+            assertTrue(keys.stream().noneMatch(key -> "cardsfolder/p/phantasmal_image.txt".equals(
+                    key.get("script_file")) && "trigger".equals(key.get("trait_kind"))),
+                    "no trigger index of the Image's file: " + lines);
         }
 
         /**
@@ -703,6 +842,45 @@ class SnapshotBuilderTest {
     @ExtendWith(ForgeExtension.class)
     class CardFactsOfASlot {
 
+        /**
+         * A phased-out permanent is still on the battlefield and in the
+         * snapshot, marked phased out (C2 #12, V2 #18).
+         */
+        @Test
+        void aPhasedOutPermanentIsAnEntity() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card bears = board.battlefield("Grizzly Bears", board.you);
+            bears.phase(false);
+            assertTrue(bears.isPhasedOut());
+
+            Map<String, Object> entity = entitiesIn(new SnapshotBuilder(board.game).ofBoard().render())
+                    .stream().filter(e -> Refs.of(bears).equals(e.get("id")))
+                    .findFirst().orElseThrow(() -> new AssertionError("no phased-out bears"));
+            assertEquals(List.of("phased_out"), entity.get("designations"));
+        }
+
+        /** A phased-out permanent takes a battlefield rank of its own, no other's. */
+        @Test
+        void aPhasedOutPermanentsRankIsItsOwn() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card bears = board.battlefield("Grizzly Bears", board.you);
+            bears.setGameTimestamp(board.game.getNextTimestamp());
+            Card elves = board.battlefield("Llanowar Elves", board.you);
+            elves.setGameTimestamp(board.game.getNextTimestamp());
+            Card angel = board.battlefield("Serra Angel", board.you);
+            angel.setGameTimestamp(board.game.getNextTimestamp());
+            elves.phase(false);
+
+            List<Map<String, Object>> entities = entitiesIn(
+                    new SnapshotBuilder(board.game).ofBoard().render());
+            List<Object> ranks = java.util.stream.Stream.of(bears, elves, angel)
+                    .map(card -> entities.stream().filter(e -> Refs.of(card).equals(e.get("id")))
+                            .findFirst().orElseThrow().get("order_rank"))
+                    .toList();
+            assertEquals(List.of(0L, 1L, 2L), ranks);
+        }
+
+
         @Test
         void faceStateNamesTheFaceUp() {
             CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
@@ -879,6 +1057,27 @@ class SnapshotBuilderTest {
             assertEquals("library", entity.get("zone"));
             assertEquals(0L, entity.get("order_rank"));
             assertFalse(idsIn(state).contains(Refs.of(bottom)), state);
+        }
+
+        /**
+         * Rendering a library card as it was in the library builds it from
+         * its printing once per card: a snapshot taken again parses nothing,
+         * so Forge's trait id counter, which every parsed ability advances,
+         * moves no further (C2 #14).
+         */
+        @Test
+        void aLibraryCardIsBuiltFromItsPrintingOnce() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card top = board.game.getAction().moveToLibrary(
+                    board.card("Prodigal Sorcerer", board.you), 0, null, null);
+            SnapshotBuilder snapshots = new SnapshotBuilder(board.game);
+            snapshots.ofBoard().render();
+
+            int before = forge.game.ability.AbilityFactory.getAbility("DB$ Draw", top).getId();
+            snapshots.ofBoard().render();
+            int after = forge.game.ability.AbilityFactory.getAbility("DB$ Draw", top).getId();
+
+            assertEquals(before + 1, after, "the second snapshot parsed no card");
         }
 
         /** A library card the record's events name joins at the write, where it sat. */

@@ -232,12 +232,12 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A spell whose cost holds a Phyrexian mana symbol (payable with life) is affordable when the player's life total covers the life payment.",
-        "near_miss": "The same kind of spell is not affordable because the life total falls short of the payment.",
+        "outcome": "A cost paying life is payable while the player's life total is at least the payment.",
+        "near_miss": "A cost paying life the player's life total cannot cover.",
         "params": {
           "bit": "affordable",
           "fires_when": true,
-          "cost_symbol": "phyrexian"
+          "cost_part": "PayLife"
         },
         "needs": []
       }
@@ -387,16 +387,7 @@
       ],
       "forge_notes": "Forge may hide X=1 from the announcement instead of rejecting the cast.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A candidate whose cost pays life is affordable when the payment is 0 even where life totals can't change, since 0 life can always be paid.",
-        "near_miss": "The same kind of candidate is not affordable when it needs a positive life payment that cannot be made.",
-        "params": {
-          "bit": "affordable",
-          "fires_when": true,
-          "cost_part": "PayLife"
-        },
-        "needs": []
+        "none": "Could not express: the amount of life paid (0) is read by no verdict_bit filter."
       }
     },
     {
@@ -545,14 +536,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "sba_game_loss",
-        "record_kind": "resolution",
-        "outcome": "A player whose life total after the resolution is 0 or less loses the game.",
-        "near_miss": "A player who lost life and stays above 0.",
-        "params": {
-          "check": "life_zero"
-        },
-        "needs": []
+        "same_as": "704.5a-1",
+        "reason": "A player at 0 or less life losing in the state-based check is 704.5a's fact."
       }
     },
     {
@@ -695,7 +680,8 @@
         "params": {
           "bit": "failed_check",
           "check": "cost",
-          "responsible_static": true
+          "responsible_static": true,
+          "cost_part": "PayLife"
         },
         "needs": [
           "failed_checks"
@@ -758,16 +744,7 @@
       ],
       "forge_notes": "Forge has no pure can't-lose-life effect, so Platinum Emperion (CantChangeLife) is used; it also stops gains, which is irrelevant because the exchange here would only lower.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "An exchange of a player's life total with a creature's toughness resolves without changing the life total: the exchange did not happen, as when it would raise a total a can't-gain-life effect protects or lower one a can't-lose-life effect protects.",
-        "near_miss": "The exchange happens: the ExchangeLifeVariant resolution holds a life_change.",
-        "params": {
-          "event": "life_change",
-          "api": "ExchangeLifeVariant",
-          "absent": true
-        },
-        "needs": []
+        "none": "Could not express: which prohibition (can't gain or can't lose life) stopped the exchange is read by no outcome_event parameter."
       }
     },
     {

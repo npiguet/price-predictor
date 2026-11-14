@@ -69,9 +69,10 @@ class KillGuard:
             weakref.WeakKeyDictionary()
         )
 
-    def stand_in(self, proc) -> None:
+    def stand_in(self, proc, **_options) -> bool:
         self._record_of.get(threading.current_thread(), self.killed).append(proc)
         proc.kill()
+        return True
 
     def begin_test(self) -> list:
         """Start a new record; threads alive now belong to earlier tests."""
@@ -123,6 +124,18 @@ def killed_process_trees(request, _kill_guard: KillGuard) -> Iterator[list]:
         for module, attr in _kill_guard.sites:
             real.setattr(module, attr, _REAL_KILL)
         yield killed
+
+
+@pytest.fixture(autouse=True)
+def _no_stale_staging_check(monkeypatch):
+    """Never empty the machine's real Forge custom-cards directory.
+
+    The first JVM command a process builds clears the variant scripts a
+    killed ``collect-variants`` left staged there; a unit test building a
+    command would otherwise reach the real ``../forge``."""
+    monkeypatch.setattr(forge_jvm, "clear_stale_staging", lambda: None)
+    # A collect-variants claims the real directory before its sidecar pass.
+    monkeypatch.setattr(forge_jvm, "claim_staging", lambda directory=None: None)
 
 
 @pytest.fixture(autouse=True)

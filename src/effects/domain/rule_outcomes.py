@@ -33,7 +33,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import NamedTuple
 
-from effects.domain.keyword_names import PROTECTION_FROM, normalize_keyword
+from effects.domain.forge_vocabularies import SUBTYPES
+from effects.domain.keyword_names import HEXPROOF_FROM, PROTECTION_FROM, normalize_keyword
 from effects.domain.state_snapshot import EntityState
 
 # ── 704.5f-g ─────────────────────────────────────────────────────────────
@@ -128,18 +129,31 @@ class Characteristics(NamedTuple):
     subtypes: frozenset[str]
     colours: frozenset[str]
     mana_value: int
+    #: The object has changeling: every creature type (702.73a), which no
+    #: subtype list of Forge's spells out.
+    changeling: bool = False
 
     @classmethod
     def of(cls, entity: EntityState) -> Characteristics:
-        return cls.made(entity.types, entity.subtypes, entity.colors, entity.mana_value)
+        return cls.made(entity.types, entity.subtypes, entity.colors, entity.mana_value,
+                        changeling=has_changeling(entity))
 
     @classmethod
     def made(cls, types: Iterable[str] = (), subtypes: Iterable[str] = (),
-             colours: Iterable[str] = (), mana_value: int = 0) -> Characteristics:
+             colours: Iterable[str] = (), mana_value: int = 0, *,
+             changeling: bool = False) -> Characteristics:
         return cls(
             frozenset(t.lower() for t in types), frozenset(s.lower() for s in subtypes),
             frozenset(c for c in colours if c in COLOUR_WORDS), int(mana_value),
+            bool(changeling),
         )
+
+
+def has_changeling(entity: EntityState) -> bool:
+    """Whether the entity has changeling, granted or on one of its lines."""
+    if "changeling" in entity.granted_temporary.keywords:
+        return True
+    return any(line.keyword == "changeling" for line in entity.lines or ())
 
 
 class QualityKind(StrEnum):
@@ -174,6 +188,8 @@ CONDITIONS: dict[str, _Condition] = {
     #: 702.16h: one protection per colour, so any coloured object.
     "each color": _Condition("Protection from each color", lambda c: bool(c.colours)),
 }
+#: Forge's subtypes, the creature types a keyword list's quality may name.
+_SUBTYPES = frozenset(SUBTYPES)
 _CONDITION_BY_FRAGMENT = {
     condition.fragment.lower(): name for name, condition in CONDITIONS.items()
 }
@@ -212,8 +228,8 @@ class ProtectionQuality:
     @property
     def keyword(self) -> str:
         """The keyword in the package's spelling, as a snapshot's keyword list
-        carries it: ``protection_from_red``, ``protection_from_everything``, or
-        bare ``protection`` where Forge writes the quality after a colon."""
+        carries it: ``protection_from_red``, ``protection_from_everything``,
+        ``protection_from_goblin`` for Forge's ``Protection:Goblin``."""
         return normalize_keyword(self.fragment)
 
     def covers(self, obj: Characteristics) -> bool:
@@ -225,7 +241,7 @@ class ProtectionQuality:
         if self.kind is QualityKind.CARD_TYPE:
             return self.value in obj.types
         if self.kind is QualityKind.CREATURE_TYPE:
-            return self.value in obj.subtypes
+            return self.value in obj.subtypes or obj.changeling
         return CONDITIONS[self.value].holds(obj)
 
     @classmethod
@@ -252,8 +268,10 @@ class ProtectionQuality:
 
     @classmethod
     def of_keyword(cls, keyword: str) -> ProtectionQuality | None:
-        """The quality a keyword list's ``protection_from_<x>`` names; None for
-        bare ``protection``, whose quality only its line's fragment states."""
+        """The quality a keyword list's ``protection_from_<x>`` names: a colour,
+        a card type, a creature type (one of Forge's subtypes), a condition or
+        everything; None for bare ``protection``, whose quality only its line's
+        fragment states, and for a quality none of those reads."""
         if not keyword.startswith(PROTECTION_FROM):
             return None
         value = keyword.removeprefix(PROTECTION_FROM).replace("_", " ")
@@ -263,6 +281,10 @@ class ProtectionQuality:
             return cls(QualityKind.COLOUR, value)
         if value in CONDITIONS:
             return cls(QualityKind.CONDITION, value)
+        if value in CARD_TYPES:
+            return cls(QualityKind.CARD_TYPE, value)
+        if value in _SUBTYPES:
+            return cls(QualityKind.CREATURE_TYPE, value)
         return None
 
 
@@ -292,6 +314,60 @@ def damage_prevented(qualities: Iterable[ProtectionQuality], source: Characteris
 # ── blocking ─────────────────────────────────────────────────────────────
 
 
+class BlockingRestriction(StrEnum):
+    """A rule that can keep one creature from blocking another (509.1b):
+    an evasion of the attacker's, or what the blocker itself must be."""
+
+    UNBLOCKABLE = "unblockable"
+    FLYING = "flying"  # 702.9b, 702.17b
+    HORSEMANSHIP = "horsemanship"  # 702.31b
+    FEAR = "fear"  # 702.36b
+    INTIMIDATE = "intimidate"  # 702.13b
+    SHADOW = "shadow"  # 702.28b, both ways
+    PROTECTION = "protection"  # 702.16f, j
+    SKULK = "skulk"  # 702.118b: no creature with greater power
+
+
+def blocking_restrictions(
+    attacker_keywords: Iterable[str], attacker_colours: Iterable[str],
+    blocker_keywords: Iterable[str], blocker_colours: Iterable[str],
+    blocker_types: Collection[str], *,
+    attacker_protections: Iterable[ProtectionQuality] = (),
+    blocker_subtypes: Collection[str] = (), blocker_mana_value: int = 0,
+    attacker_power: int | None = None, blocker_power: int | None = None,
+    blocker_changeling: bool = False,
+) -> frozenset[BlockingRestriction]:
+    """Every :class:`BlockingRestriction` that keeps the blocker from blocking
+    the attacker, as far as these keywords decide; empty where it may block.
+    :func:`may_block` is its emptiness."""
+    a, b = set(attacker_keywords), set(blocker_keywords)
+    attacker_colours, blocker_colours = set(attacker_colours), set(blocker_colours)
+    found: set[BlockingRestriction] = set()
+    if "unblockable" in a:
+        found.add(BlockingRestriction.UNBLOCKABLE)
+    if "flying" in a and not b & {"flying", "reach"}:
+        found.add(BlockingRestriction.FLYING)
+    if "horsemanship" in a and "horsemanship" not in b:
+        found.add(BlockingRestriction.HORSEMANSHIP)
+    if "fear" in a and "artifact" not in blocker_types and "B" not in blocker_colours:
+        found.add(BlockingRestriction.FEAR)
+    if ("intimidate" in a and "artifact" not in blocker_types
+            and not attacker_colours & blocker_colours):
+        found.add(BlockingRestriction.INTIMIDATE)
+    if ("shadow" in a) != ("shadow" in b):
+        found.add(BlockingRestriction.SHADOW)
+    if ("skulk" in a and attacker_power is not None and blocker_power is not None
+            and blocker_power > attacker_power):
+        found.add(BlockingRestriction.SKULK)
+    qualities = [q for q in map(ProtectionQuality.of_keyword, sorted(a)) if q is not None]
+    blocker = Characteristics.made(
+        blocker_types, blocker_subtypes, blocker_colours, blocker_mana_value,
+        changeling=blocker_changeling)
+    if _covered((*qualities, *attacker_protections), blocker):
+        found.add(BlockingRestriction.PROTECTION)
+    return frozenset(found)
+
+
 def may_block(attacker_keywords: Iterable[str], attacker_colours: Iterable[str],
               blocker_keywords: Iterable[str], blocker_colours: Iterable[str],
               blocker_types: Collection[str], *,
@@ -305,25 +381,71 @@ def may_block(attacker_keywords: Iterable[str], attacker_colours: Iterable[str],
     colour or from everything; ``attacker_protections`` adds the ones only a
     keyword line's fragment states (a card type, a creature type, a condition).
     """
-    a, b = set(attacker_keywords), set(blocker_keywords)
-    attacker_colours, blocker_colours = set(attacker_colours), set(blocker_colours)
-    if "unblockable" in a:
+    return not blocking_restrictions(
+        attacker_keywords, attacker_colours, blocker_keywords, blocker_colours, blocker_types,
+        attacker_protections=attacker_protections, blocker_subtypes=blocker_subtypes,
+        blocker_mana_value=blocker_mana_value)
+
+
+def landwalk_lands(selector: str, land: EntityState) -> bool | None:
+    """Whether ``land`` is a land a landwalk's Forge selector names (702.14c):
+    ``Swamp``, ``Desert``, ``Land.nonBasic``, ``Land.Legendary``,
+    ``Swamp.Snow``; None for one read off the game rather than the card
+    (``ChosenType``, ``YourBasic``)."""
+    base, *properties = selector.split(".")
+    if base in ("ChosenType", "YourBasic"):
+        return None
+    types = {t.lower() for t in land.types}
+    if "land" not in types:
         return False
-    if "flying" in a and not b & {"flying", "reach"}:
+    supertypes = {s.lower() for s in land.supertypes}
+    if base.lower() != "land" and base.lower() not in {s.lower() for s in land.subtypes}:
         return False
-    if "horsemanship" in a and "horsemanship" not in b:
-        return False
-    if "fear" in a and "artifact" not in blocker_types and "B" not in blocker_colours:
-        return False
-    if ("intimidate" in a and "artifact" not in blocker_types
-            and not attacker_colours & blocker_colours):
-        return False
-    if ("shadow" in a) != ("shadow" in b):
-        return False
-    qualities = [q for q in map(ProtectionQuality.of_keyword, sorted(a)) if q is not None]
-    blocker = Characteristics.made(
-        blocker_types, blocker_subtypes, blocker_colours, blocker_mana_value)
-    return not _covered((*qualities, *attacker_protections), blocker)
+    for prop in properties:
+        wanted = prop.lower()
+        if wanted == "nonbasic":
+            if "basic" in supertypes:
+                return False
+        elif wanted not in supertypes:
+            return False
+    return True
+
+
+# ── targeting (702.11, 702.16b, 702.18) ──────────────────────────────────
+
+
+class TargetingRestriction(StrEnum):
+    """A rule that can keep an object or player from being a legal target."""
+
+    HEXPROOF = "hexproof"  # 702.11b: an opponent's spells and abilities
+    HEXPROOF_FROM = "hexproof_from"  # 702.11d: an opponent's, of the quality
+    SHROUD = "shroud"  # 702.18a: anyone's
+    PROTECTION = "protection"  # 702.16b, j: of the quality
+
+
+def targeting_restrictions(
+    target_keywords: Iterable[str], *, source: Characteristics, opponents: bool,
+) -> frozenset[TargetingRestriction]:
+    """Every :class:`TargetingRestriction` that keeps what carries
+    ``target_keywords`` from being targeted by a spell or ability of
+    ``source``, ``opponents`` when the source's controller is an opponent of
+    the target's; empty where it may be targeted as far as these keywords
+    decide. The twin of :func:`blocking_restrictions`; :func:`may_target`
+    reads protection alone."""
+    keywords = set(target_keywords)
+    found: set[TargetingRestriction] = set()
+    if "shroud" in keywords:
+        found.add(TargetingRestriction.SHROUD)
+    if opponents and "hexproof" in keywords:
+        found.add(TargetingRestriction.HEXPROOF)
+    hexproof_from = [ProtectionQuality.of_keyword(PROTECTION_FROM + k.removeprefix(HEXPROOF_FROM))
+                     for k in keywords if k.startswith(HEXPROOF_FROM)]
+    if opponents and _covered([q for q in hexproof_from if q is not None], source):
+        found.add(TargetingRestriction.HEXPROOF_FROM)
+    protections = [q for q in map(ProtectionQuality.of_keyword, sorted(keywords)) if q is not None]
+    if not may_target(protections, source):
+        found.add(TargetingRestriction.PROTECTION)
+    return frozenset(found)
 
 
 # ── turn structure (500.1, 307.1, 702.61) ────────────────────────────────
@@ -387,9 +509,11 @@ def sorcery_timing(*, own_turn: bool, phase: str, stack_size: int) -> bool:
     return own_turn and phase in MAIN_PHASES and stack_size == 0
 
 
-def split_second_forbids(*, split_second_on_stack: bool, land_play: bool) -> bool:
+def split_second_forbids(*, split_second_on_stack: bool, land_play: bool,
+                         special_action: bool = False) -> bool:
     """Whether split second forbids a candidate: a spell with split second is
-    on the stack and the candidate is a spell or a non-mana ability, which
-    every candidate but a land play is (702.61a; mana abilities are never
-    candidates)."""
-    return split_second_on_stack and not land_play
+    on the stack and the candidate is a spell or a non-mana ability (702.61a;
+    mana abilities are never candidates). A land play and the other special
+    actions (turning a face-down permanent face up, suspending a card) stay
+    legal (702.61b); the caller says which candidate is one."""
+    return split_second_on_stack and not land_play and not special_action

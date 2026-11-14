@@ -23,6 +23,8 @@ def _line(text: str | None, api: str | None = "Keyword") -> SidecarLine:
     ("First Strike", "First Strike", "first_strike"),
     ("Ward:2", "Ward", "ward"),
     ("Protection from red", "Protection from red", "protection_from_red"),
+    # Thrasta's second trample line, as the converter writes it.
+    ("Trample:Planeswalker", "Trample", "trample_over_planeswalkers"),
     # A keyword whose script carries a parameter names its keyword, and is
     # not the keyword alone.
     ("Equip:2:::ReduceCost$ Y:This ability costs {2} less", "Equip", None),
@@ -45,7 +47,7 @@ def test_a_keyword_line_with_no_text_names_no_keyword():
     assert _line("").bare_keyword is None
 
 
-@pytest.mark.parametrize("tree", ["gen1-sidecars", "gen2-sidecars"])
+@pytest.mark.parametrize("tree", ["gen1-sidecars", "gen2-sidecars", "gen3-sidecars"])
 def test_every_fixture_sidecar_spells_its_kinds_from_the_vocabularies(tree):
     """The enums mirror the converter's ``AbilityType`` and ``TraitKind``, so
     a line or key of a kind they do not list is a converter they predate."""

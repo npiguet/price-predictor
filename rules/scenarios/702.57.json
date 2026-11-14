@@ -73,12 +73,15 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A hand-only ability candidate passes the zone check: its card is in its controller's hand.",
-        "near_miss": "A hand-only ability candidate fails the zone check: its card is in another zone.",
+        "outcome": "A Forecast candidate passes its zone check.",
+        "near_miss": "A Forecast candidate that fails it.",
         "params": {
           "bit": "failed_check",
           "check": "zone",
-          "fires_when": true
+          "fires_when": true,
+          "script_param": {
+            "Forecast": "True"
+          }
         },
         "needs": [
           "failed_checks"
@@ -156,12 +159,15 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An upkeep-only ability candidate passes the phase check during the upkeep step.",
-        "near_miss": "An upkeep-only ability candidate fails the phase check outside the upkeep step.",
+        "outcome": "A forecast candidate passes its phase check (its owner's upkeep).",
+        "near_miss": "A forecast candidate that fails it.",
         "params": {
           "bit": "failed_check",
           "check": "phase",
-          "fires_when": true
+          "fires_when": true,
+          "script_param": {
+            "Forecast": "True"
+          }
         },
         "needs": [
           "failed_checks"
@@ -232,12 +238,15 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A once-each-turn ability candidate passes the activation_limit check: it has not been activated this turn.",
-        "near_miss": "A once-each-turn ability candidate fails the activation_limit check after its first activation this turn.",
+        "outcome": "A forecast candidate passes its activation-limit check.",
+        "near_miss": "A forecast candidate that fails it (already activated).",
         "params": {
           "bit": "failed_check",
           "check": "activation_limit",
-          "fires_when": true
+          "fires_when": true,
+          "script_param": {
+            "Forecast": "True"
+          }
         },
         "needs": [
           "failed_checks"

@@ -97,7 +97,7 @@ State on master when this feature starts (the gen-3 record's Result):
 - Q: How does a record show it came from a directed fork or from collection aimed at a rule? → A:
   Through a new gen-3 envelope metadata field `aimed_at`, the list of rule ids the record was
   collected for: a directed-fork record sets it to its rule and carries `fork = true`,
-  `interventional = false`, `directed = {variant, operation}` and `mirror_of` its live twin; every
+  `interventional = false` and `directed = {variant, operation}`; every
   record of a `collect-coverage` or `collect-variants` run sets it, empty where the run names no
   rule; absent means natural; never a model input (FR-009, FR-009a, FR-018).
 - Q: Which matching phase boundaries get a directed fork when matches outnumber the per-game
@@ -592,6 +592,35 @@ and that the reporting half never enters the control score.
   detector looks for, and the near miss its contrasting variant gives; or `none`, with a reason,
   where no record field or event shows the outcome. `rules_catalogue.py validate` MUST fail on a
   scenario with neither.
+- **FR-002b**: Each rule's declaration MUST tell its records from every other rule's: no two
+  scenarios of different rules may share one declaration (family, record kind and parameters,
+  compared in normalised form: each family's defaults filled in, lists sorted, names compared
+  without case), and a test over the whole real catalogue MUST fail on one. A second test over
+  the fixtures' and goldens' records MUST list a declaration tagging most of its record kind's
+  records unless its rule is the kind's own general fact, and two scenarios of different rules,
+  not linked by `same_as`, tagging the same `fires` and near-miss records. A scenario stating
+  the same observable fact as another (a restatement, a redundant-instances rule, a general rule
+  one mechanism shows) MUST declare `{"same_as": scenario id or [ids], "reason": …}`, a list naming the scenarios whose
+  union it states: it tags nothing, its rules are counted once, under the named scenarios' rules,
+  and `rule-counts` lists it under them. A rule whose own condition the record cannot show, or that
+  no family parameter tells apart, MUST declare `none` with its reason. The blocking and targeting
+  rules name the rule that excludes an entity (`legality_membership`'s `restriction`, decided by
+  `rule_outcomes.blocking_restrictions` and `targeting_restrictions`); the timing rules narrow the
+  candidates by kind, card type, keyword, designation or sorcery speed (`verdict_bit`); a clause
+  with a legal object but fewer than it must name is `verdict_bit`'s `min_targets` with
+  `some_legal_target`, and a cost's action a replacement modified is `rewrite_event`'s
+  `caused_with_empty_stack`, which reads an event naming a cause while the stack is empty: it also catches
+  every other event a cause makes off the stack (a special action, a mana ability's effects, an
+  ability resolved without the stack) and misses a cost paid while the stack holds something, so a
+  declaration keeps to a cost's action through its other parameters.
+- **FR-002c**: Building the detector index (`DetectorIndex.of`) MUST refuse, naming the scenario, a
+  parameter its family does not declare and a value the family cannot read. A declaration asking
+  its record kind for an event the collector never writes on that kind (the per-kind table
+  `rule_detectors.emittable_events`, kept by the event's connector source), or asking a
+  resolution acting through a line for the game's end (filed in the game-end record), MUST be set
+  aside as untaggable with its reason: it tags nothing and `rule-counts` lists it. On a degraded
+  worker's record, and on a forced resolution (an interventional fork), a missing event only the
+  engine hooks build MUST read as unknown: neither an absence's `fires` side nor a near miss.
 - **FR-002a**: Rule 305's land-play scenarios MUST declare detectors over land-play candidates
   (FR-033a): the land-play limit through the `land_play_limit` check, and the turn and timing
   restrictions on candidates with `land_play = true`.
@@ -630,7 +659,12 @@ and that the reporting half never enters the control score.
   games, natural records of games between two Forge AIs, and aimed records (those carrying
   `aimed_at`, FR-009a, whatever their game). It MUST write them to `--output` (default
   `output/effects/rule-counts.json`) and print them. It reads gen-2 and gen-3 records; a gen-2
-  record carries no `aimed_at` and counts as natural.
+  record carries no `aimed_at` and counts as natural. Beside the counts it MUST list the rules a
+  taggable declaration speaks for that no record tags (`declared_zero`), the untaggable scenarios
+  with their reasons (FR-002c) and the `same_as` scenarios with the scenarios and rules they are
+  counted under (FR-002b): no declared rule is left out silently. A gen-3 game whose shard holds no
+  game-end marker (a cut game, which `build-corpus` drops, FR-060b) MUST count toward no rule, and
+  the counts file and the report MUST say how many such games were left out (`cut_games`).
 - **FR-009**: Records from directed forks and from collection aimed at a rule MUST be identifiable
   as such in every downstream reader, from the record alone, so they never become rule-test records
   wherever their game is placed. A record is aimed when it carries the envelope field `aimed_at`
@@ -641,8 +675,8 @@ and that the reporting half never enters the control score.
   `collect-variants` record MUST carry `aimed_at`, listing the rules its run names through
   `--directed-fork-rules` and empty where it names none. A directed-fork record MUST carry
   `aimed_at` set to its rule, `fork = true`, `interventional = false`, `directed =
-  {variant, operation}` (the scenario variant label and the fork operation applied), and
-  `mirror_of` set to the live record it was forked beside, where one exists. A
+  {variant, operation}` (the scenario variant label and the fork operation applied); its
+  `mirror_of` is `null`, since a phase boundary leaves no live record open. A
   `match-outcomes` record outside a directed fork MUST NOT carry `aimed_at`. `aimed_at` and
   `directed` are collection metadata and never reach the model.
 
@@ -695,7 +729,8 @@ and that the reporting half never enters the control score.
   the base spec's forks are.
 - **FR-014**: `match-outcomes` and `collect-variants` MUST exit 1 at startup when a rule in `--directed-fork-rules` has no
   detector, no board precondition, or none of its contrasting variants is classified into an
-  operation.
+  operation. A rule none of whose scenarios declares a taggable detector (each one `none`,
+  `same_as`, or reading an event its record kind never lists) has no detector.
 - **FR-014a**: A rule's board precondition MUST be a hand-written Java predicate over the live
   game state in `forge-connector`, registered by rule id, judging whether the board meets the
   scenario's base variant. It is separate from the rule's Python record detector (FR-006) and
@@ -706,11 +741,19 @@ and that the reporting half never enters the control score.
   counts (702.98a's few `does_not_fire` records being one creature in one game), and for every rule that gen-2's
   per-rule counts (`output/effects/rule-counts-gen2.json`) show with fewer than 100 `fires` records
   over all sources, or with no `does_not_fire` record, and that has a non-base variant classified
-  into an operation after the rerun of FR-003, except 104.2a, 500.11, 701.12d and 702.62d, whose
-  forks no detector can tell from their live games, and except the rules of `DEFERRED_DIRECTED`, which qualified only after the list was fixed for the production collection and wait for a later one
-  (`directed-rules` names each with its reason, decided 2026-11-06). The list is checked in as
-  `rules/directed-fork-rules.txt`, one rule id per line, and is what the full collection passes to
-  `--directed-fork-rules`.
+  into an operation after the rerun of FR-003, except the rules of `NOT_DIRECTED`: 104.2a, 500.11,
+  701.12d and 702.62d, whose forks no detector can tell from their live games; 121.4, 122.1g,
+  703.4m and 701.42c, which restate 704.5b, 704.5v, 510.2 and 701.42b, listed in their place;
+  505.5, 614.10a, 701.24f and 702.105b, whose fact the record cannot show; 122.1h, whose
+  rewrite record names no replacing effect for the replacement Forge builds at runtime from the
+  finality counter; 104.4c, whose GameDrawn draw no record shows; 701.10c, 701.11c and 712.4c,
+  whose scenarios declare no detector; 701.40c and 701.40d, whose variant replaces a face-down
+  permanent, which `replace_card` refuses; 115.7a, whose point needs a spell cast after the
+  boundary; and 712.16, whose point no sealed pool holds the cards for (`directed-rules`
+  names each with its reason). The list is checked in as `rules/directed-fork-rules.txt`, one rule
+  id per line, 71 rules in unit order, and is what the full collection passes to
+  `--directed-fork-rules`; `directed-rules` over the gen-2 counts writes it unchanged. Every
+  listed rule passes the startup check (FR-014).
 
 #### Rules-to-fields map (root § 7)
 
@@ -880,6 +923,22 @@ and that the reporting half never enters the control score.
   withheld record. The cap rides a cap property shared by both CLIs and pinned like the others.
 - **FR-042**: `validate-corpus` and `field-coverage` MUST cover every new field of root § 8.13,
   and a field's coverage MUST be checked before any figure computed from that field is published.
+  `validate-corpus` MUST also fail a gen-3 window of at least `--min-presence-records` (1000)
+  records lacking a kind every game writes (cost and effect halves, trigger, combat, the three
+  playability subkinds, the draw step's turn action; decision records only where the run's
+  `run.json` records a `playability_rate` above 0), a window whose trigger records of games that
+  ended in it hold fewer than `--min-trigger-fired-share` (0.05) positives (watched under 50 such
+  records; a gen-3 game has ended when its game-end marker is read, an older game when a record
+  holds `player_won` or `player_lost`), a window of at least
+  `--min-cost-evidence` gen-3 cost halves none of which meets its effect half (a lone one is
+  counted, and the countered ones named), and a window none of whose gen-3 games wrote a game-end
+  marker while one of them is followed by a later game of its JVM lifetime; report the gen-3 games
+  without a marker (count and share) and the records the markers say the cap withheld as watched
+  figures; report an undecodable shard line as a failed finding
+  naming the shard and line and read the other shards on; report the decode tally as watched
+  figures; read the variant tree through `--variant-scripts`, failing the keyword-join check on a
+  key in a tree it was not given. `field-coverage` MUST give each event parameter a cell of its own
+  and list the ones never written.
 
 #### Collection: record moments (root § 8.14)
 
@@ -891,8 +950,10 @@ and that the reporting half never enters the control score.
 - **FR-042b**: An effect half MUST take its snapshot when its resolution starts, before the first
   clause resolves (a modal half: before its mode's first clause), through a Forge hook at the start
   of `MagicStack.resolveStack`'s resolution. It MUST carry `outcome` (`resolved`, `fizzled`,
-  `partially_fizzled`, `declined`); a fizzled or declined resolution writes an effect half with
-  `events: []`. A spell's effect half MUST hold its card's `zone_change` off the stack after the resolution's own
+  `partially_fizzled`, `declined`); a fizzled or declined spell's effect half MUST hold exactly its
+  card's `zone_change` off the stack (608.2b), wherever the card goes; a fizzled or declined
+  ability, and a copy of a spell, which ceases to exist with no move (707.10a), writes an effect
+  half with `events: []`. A spell's effect half MUST hold its card's `zone_change` off the stack after the resolution's own
   events and before the state-based check's deaths. A copy of a spell or ability writes no cost half. A
   countered stack item MUST write no effect half; the countering clause's effect half MUST hold the
   countered spell's `spell_countered` and its card's move off the stack.
@@ -994,7 +1055,8 @@ and that the reporting half never enters the control score.
   divided by the number of budgeted rules tagged on the class's records, and add copies of a rule's records
   beyond their natural share, the copies gen-2's class, family and signature budgets give, until the
   rule's written records reach its share, through the gen-2 water-filling allocator, bounded by the
-  reuse cap and `--text-cap`. Added copies come on top of the class budget. A budgeted rule is one
+  reuse cap and `--text-cap`, the text cap counting the natural copies of every record of the text in
+  the class, tagged or not. Added copies come on top of the class budget. A budgeted rule is one
   the rules-to-fields map marks `trained`. A tagged rule with any other verdict gets no share and
   no added copy, and no added copy is drawn for it; its records are still counted per polarity and
   keep their natural share, and the manifest names it as unbudgeted.
@@ -1016,15 +1078,27 @@ and that the reporting half never enters the control score.
   MUST get examples from rule-labelled copies (a copy of a real record granting the quality and
   relabelling the outcomes by rule 702.16), from `collect-variants` swapping a protection keyword's
   quality as a whitelisted selector, and from interventional forks granting protection mid-game, in
-  amounts per-rule rebalancing sets.
+  amounts per-rule rebalancing sets. A rule-labelled copy MUST be made only where the snapshot shows
+  what the rule reads: a target-illegal copy from a candidate acting through the first face its card
+  shows (no Adventure, back face or split half); a damage-prevented copy of a permanent no clause or
+  mode of the acting chain targets (`refs.targets_at_cast` and `refs.targets`), refused on a half
+  without `targets_at_cast`, on damage that can't be prevented (`NoPrevention$` in the chain, an
+  active `Mode$ CantPreventDamage` static on the board) and on a chain with a later clause the
+  prevention would change unseen (remembering or storing what was dealt, an amount read from a
+  variable); an Aura-to-graveyard copy of an Aura without bestow, its targets read as cast, written
+  in a fizzled spell's shape (608.2b: `outcome` `fizzled`, its one event the card's move off the
+  stack, `refs.targets` empty and `refs.targets_at_cast` the target); and no quality, nor
+  protection from everything, that an Aura or Equipment attached to the protected permanent has
+  (702.16c-d).
 - **FR-058a**: `collect-variants --round untargeted|steered` (default `untargeted`, root § 8.15)
   MUST replace the single variant round and `--variant-volume`. The untargeted round MUST generate
   one variant of every eligible source script (single-faced, not held out under `build-corpus`'s
   holdout, perturbable) and play rounds of `--decks-per-round` matches, each variant weighted by the
   games it lacks, until every variant has `--variant-games` (default 2) games or has retired after
   `--no-progress-rounds` (default 3) rounds without a new game. A variant's games are the distinct
-  games holding a record whose acting key or decision candidate's key names its script file. Its
-  records carry `aimed_at = []`.
+  games holding a record whose acting key or decision candidate's key names its script file, in
+  this run's shards and in those of each run `--continues` names. Its records carry
+  `aimed_at = []`.
 - **FR-058b**: A variant MUST be named `<card> Variant <h>`, `h` the first eight hex digits of the
   SHA-256 of its perturbed script; an existing file of that name MUST be reused, never rewritten.
   Every variant of either round MUST be written to the variant tree with its sidecar before any deck
@@ -1060,7 +1134,44 @@ and that the reporting half never enters the control score.
   lines its tags act through and their record counts.
 - **FR-058g**: `collect-coverage` and `collect-variants` MUST exit 1 at startup without a holdout
   source (`--exclude-cards`, `--split-from` or `--training-corpus`); the steered round MUST exit 1
-  without `--rule-counts` or on counts of gen-2 records.
+  without `--rule-counts` or on counts of gen-2 records. Both MUST exit 1 when they play rounds and
+  write no record of their own, or play none while units remain that no deck could hold, and MUST
+  report their workers' failure lines by kind after each round and in `run.json`
+  (contracts/cli.md § Both collectors); `match-outcomes --effect-records` MUST do the same at each
+  status line and exit 1 when its matches wrote no effect record.
+- **FR-058h**: A card Forge's card database does not hold MUST NOT be decked: `collect-coverage`
+  MUST take every card the castability consult leaves unanswered, when the consult answers any,
+  out of the coverage unit and the decks, and MUST report their count and share of the consulted
+  pool and record both in `run.json`; no share stops the run. This is distinct from the castability
+  verdict, which only ranks a card and never drops one.
+- **FR-058i**: Every collecting command whose workers write effect records (`collect-coverage`,
+  `collect-variants`, `match-outcomes --effect-records`) MUST stop its match workers through the
+  stop protocol (contracts/cli.md § Match worker stop protocol). Its match workers MUST run in
+  process groups of their own, so a console Ctrl-C reaches the supervisor alone. A round's end,
+  the run's end and a first Ctrl-C ask each worker to stop at its game's end and wait for it,
+  killing (`taskkill /F /T`) only a worker still running `--stop-timeout` seconds after the
+  request (default 600, 1 to 3600); a worker whose log holds no startup line yet (still starting
+  Forge) MUST be killed at once, its stop file created first, and counted as `killed_starting`; a
+  second Ctrl-C kills at once. A worker MUST recycle itself at the first game end after
+  `--recycle-seconds` of its JVM's life (default 600, 300 to 86400) and be restarted, unless the
+  round's stop condition already holds; one still running `--recycle-seconds` + `--stop-timeout`
+  seconds after its start MUST be killed, its game cut and said so. Exit 0 with the stop line is a
+  normal end, never a failure; exit 0 without it, or any other code, is a crash; a worker that
+  recycled itself having played no game failed to start. A round MUST be counted only after every
+  worker of its pool has ended or been killed, and the command MUST NOT exit before. `run.json`
+  MUST record the resolved `stop_timeout` and `recycle_seconds` and how the workers ended
+  (`worker_stops`). `match-outcomes` without `--effect-records` keeps no worker log, MUST refuse
+  either flag (exit 2) and kills its workers as before, which the console Ctrl-C reaches.
+- **FR-058j**: The collectors' coverage and variant counters MUST credit no unit from a gen-3 game
+  whose shard holds no game-end marker, reading the markers in the pass that already reads each
+  shard (a damaged shard's game past the damage counts as cut), and MUST report the cut games each
+  round and in `run.json` (`cut_games`). The worker-log scan MUST count a random-seat match error
+  (`Error generating match: [random-seat match] `) apart from other match errors and an unwritten
+  game-end marker as a kind of its own, and MUST record the latest counts of the workers'
+  hook-failure report (`hook_failures`) and of their fork refusal tally (`fork_refusals`), the
+  refusals counting toward no failure kind, threshold or exit code; `match-outcomes` MUST count every match played to its end
+  (random-seat ones, which write no outcome row, included) and its random-seat match errors when
+  deciding that a run collected nothing.
 - **FR-059**: The game-disjoint stratum MUST keep only games between two Forge AIs; the card-disjoint
   stratum MUST keep every game naming a held-out card, random-seat games included. A permanent spell's
   resolution record MUST survive `build-corpus`, keyed to the permanent's card. A decision record
@@ -1077,9 +1188,25 @@ and that the reporting half never enters the control score.
   class the mix omits is written once a record.
 - **FR-060**: The manifest MUST add the per-rule counts (FR-008's shape, three sources), per class
   and rule the records available, share, written and shortfall, each split by polarity and by the
-  same three sources, the one-sided conditions
+  same three sources, for the training stratum and for each validation stratum, the one-sided conditions
   and one-sided rules (FR-054a), the unbudgeted rules with their counts (FR-054), and the closed subtype
-  and keyword lists of FR-052/FR-053.
+  and keyword lists of FR-052/FR-053; per class, the kept records collected as forks,
+  interventions, directed forks, aimed or degraded, and the resolutions acting only through
+  runtime-only keys; the placement thresholds and the keyword-definition file's hash the build ran
+  under; and, outside the digest, what the survey's reading met without stopping (values outside
+  the wire's closed lists, shards a damaged last member ended, by path under `--records-dir`, keys
+  read as no line: unresolved, undescribed or of a tree with no root), the events no output column
+  reads by kind, the commit the build ran on and a hash of the sidecar trees.
+- **FR-060b**: `build-corpus` MUST refuse a rules directory holding no scenario or no heads line
+  before the survey, and a raw shard the survey cannot read whole before it clears `--output`; a
+  shard that turns unreadable only in the write pass stops the build after `--output` was cleared,
+  saying so. The write pass MUST write no record past those the survey read in its shard (a shard
+  grown between the passes) and count each as `dropped-unsurveyed`. The survey MUST drop whole,
+  before any tally reads it, every gen-3 game whose shard holds no game-end marker (a cut game),
+  and the write pass the same games, counting their records as `dropped-cut` and the games in the
+  manifest's `cut_games`, inside the digest; a records set none of whose gen-3 games has a marker
+  MUST be refused before `--output` is cleared. Two builds of one raw corpus MUST reach one digest
+  wherever it sits and whatever ran before in the process.
 - **FR-060a**: `build-corpus` MUST read the rules-to-fields map (`rules/heads/`) once, and write
   into the manifest, for every tagged rule, its map verdict and the outputs the map names for it,
   with the map's content hash, and each rule's effective outputs: the outputs of its map entry at
@@ -1100,7 +1227,8 @@ and that the reporting half never enters the control score.
   output, outputs other than those of the record's drawn rules weighing n / d on each copy. Under
   both, the outputs of every rule an added copy of the record was drawn for MUST train at full
   weight on each copy. A gen-2 lethality copy trains every output at full weight. A record from a
-  directed fork or from collection aimed at a rule is a natural record like any other: it carries
+  directed fork or from collection aimed at a rule (one carrying `aimed_at`, `[]` included) is a
+  natural record like any other: it carries
   no drawn rule of its own, its natural copies train every output at full weight under both masks,
   and only the copies rule budgets add to it carry a drawn rule. Its `aimed_at` marks it only for
   exclusion from the rule tests (FR-009, FR-072).

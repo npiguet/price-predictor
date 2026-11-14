@@ -163,11 +163,11 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "An equip (Attach) ability resolves and attaches its permanent to its target: an attached event in the effect half.",
-        "near_miss": "An equip (Attach) ability resolves without an attached event, its target no longer legal.",
+        "outcome": "An equip ability attaches its Equipment on resolution.",
+        "near_miss": "An equip ability resolving and attaching nothing.",
         "params": {
           "event": "attached",
-          "api": "Attach"
+          "keyword": "Equip"
         },
         "needs": []
       }
@@ -237,12 +237,13 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
-        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
+        "outcome": "An equip ability's candidate leaves out an entity no hexproof, shroud or protection keeps out: the equip ability's own restriction (a creature you control, of the stated quality).",
+        "near_miss": "An entity among the equip ability's legal targets.",
         "params": {
           "list": "legal_targets",
           "fires_when": "outside",
-          "universe": "battlefield_and_players"
+          "restriction": "selector",
+          "candidate_keyword": "Equip"
         },
         "needs": []
       }
@@ -440,12 +441,14 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A spell or ability's candidate lists, among its legal targets, an entity or player that a restriction or permission makes targetable.",
-        "near_miss": "An entity or player that the candidate's targeting restriction excludes from its legal targets.",
+        "outcome": "A planeswalker is among the legal targets of an equip ability's candidate (equip planeswalker).",
+        "near_miss": "A planeswalker left out of an equip ability's legal targets with nothing but the equip restriction keeping it out.",
         "params": {
           "list": "legal_targets",
           "fires_when": "inside",
-          "universe": "battlefield_and_players"
+          "restriction": "selector",
+          "candidate_keyword": "Equip",
+          "judged_type": "planeswalker"
         },
         "needs": []
       }

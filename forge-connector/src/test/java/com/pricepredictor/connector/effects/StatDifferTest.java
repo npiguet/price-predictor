@@ -116,4 +116,205 @@ class StatDifferTest {
                 Map.of("power_delta", 0, "toughness_delta", 0, "set_pt", List.of(4, 4)),
                 events.get(0).params());
     }
+
+    // ── keywords, hidden keywords, abilities, control ───────────────────
+
+    /** Keywords gained are listed sorted, the same on every JVM (V2 #16). */
+    @Test
+    void gainedKeywordsAreSorted() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(0), "Grizzly Bears");
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        bears.addChangedCardKeywords(List.of("Vigilance", "Flying", "Trample"), List.of(), false,
+                game.getNextTimestamp(), null);
+
+        EffectEvent event = only(differ.diff(bears), EventType.KEYWORD_CHANGE);
+        assertEquals(List.of("flying", "trample", "vigilance"), event.params().get("keywords"));
+        assertEquals(false, event.params().get("removed"));
+    }
+
+    /** A second instance of a stacking keyword is a keyword gained (C2 #7). */
+    @Test
+    void aSecondInstanceOfAKeywordIsAChange() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(0), "Grizzly Bears");
+        bears.addChangedCardKeywords(List.of("Bushido:1"), List.of(), false,
+                game.getNextTimestamp(), null);
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        bears.addChangedCardKeywords(List.of("Bushido:1"), List.of(), false,
+                game.getNextTimestamp(), null);
+
+        EffectEvent event = only(differ.diff(bears), EventType.KEYWORD_CHANGE);
+        assertEquals(List.of("bushido:1"), event.params().get("keywords"));
+    }
+
+    /** A hidden keyword is a keyword change of its own, flagged hidden (X1 #10). */
+    @Test
+    void aHiddenKeywordIsAHiddenKeywordChange() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(0), "Grizzly Bears");
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        long timestamp = game.getNextTimestamp();
+        bears.addHiddenExtrinsicKeywords(timestamp, 0, List.of("CARDNAME can't block."));
+
+        EffectEvent gained = only(differ.diff(bears), EventType.KEYWORD_CHANGE);
+        assertEquals(Map.of("keywords", List.of("CARDNAME can't block."), "removed", false,
+                "hidden", true), gained.params());
+
+        bears.removeHiddenExtrinsicKeywords(timestamp, 0);
+        EffectEvent lost = only(differ.diff(bears), EventType.KEYWORD_CHANGE);
+        assertEquals(true, lost.params().get("removed"));
+        assertEquals(true, lost.params().get("hidden"));
+    }
+
+    /**
+     * An ability a static grants is an ability change naming its line, and
+     * one taken away an ability change marked removed (C2 #7).
+     */
+    @Test
+    void anAbilityGrantedAndTakenAwayIsAnAbilityChange() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        forge.game.player.Player you = game.getPlayers().get(0);
+        Card bears = TestBoard.inPlay(game, you, "Grizzly Bears");
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        Card rite = TestBoard.inPlay(game, you, "Cryptolith Rite");
+        game.getAction().checkStaticAbilities();
+
+        EffectEvent gained = only(differ.diff(bears), EventType.ABILITY_CHANGE);
+        assertEquals(false, gained.params().get("removed"));
+        assertTrue(String.valueOf(gained.params().get("abilities"))
+                .startsWith("(cardsfolder/c/cryptolith_rite.txt)"), gained.params().toString());
+
+        game.getAction().moveToGraveyard(rite, null);
+        game.getAction().checkStaticAbilities();
+        EffectEvent lost = only(differ.diff(bears), EventType.ABILITY_CHANGE);
+        assertEquals(Map.of("abilities", "", "removed", true), lost.params());
+    }
+
+    /** Re-applying the same static changes nothing: abilities are read by their text. */
+    @Test
+    void aStaticReappliedIsNoAbilityChange() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        forge.game.player.Player you = game.getPlayers().get(0);
+        Card bears = TestBoard.inPlay(game, you, "Grizzly Bears");
+        TestBoard.inPlay(game, you, "Cryptolith Rite");
+        game.getAction().checkStaticAbilities();
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        game.getAction().checkStaticAbilities();
+
+        assertTrue(differ.diff(bears).isEmpty());
+    }
+
+    /**
+     * A forgotten card is a new object: its next reading is a first reading
+     * and reports nothing, however it changed while forgotten; one not
+     * forgotten reports the change.
+     */
+    @Test
+    void aForgottenCardsNextReadingIsAFirstReading() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(0), "Grizzly Bears");
+        Card other = TestBoard.inPlay(game, game.getPlayers().get(0), "Hill Giant");
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        differ.prime(other);
+
+        differ.forget(bears.getId());
+        for (Card card : java.util.List.of(bears, other)) {
+            card.addPTBoost(2, 2, game.getNextTimestamp(), 0);
+        }
+
+        assertTrue(differ.diff(bears).isEmpty(), "forgotten: a first reading");
+        assertTrue(!differ.diff(other).isEmpty(), "remembered: the pump is a change");
+        assertTrue(differ.diff(other).isEmpty(), "and is reported once");
+    }
+
+    /**
+     * A rebaseline returns what changed since the last reading, unreported
+     * so far, and measures from the new reading on: the same change is not
+     * reported again.
+     */
+    @Test
+    void aRebaselineReturnsTheSwallowedChangesAndMeasuresFromThere() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(0), "Grizzly Bears");
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        bears.addPTBoost(1, 1, game.getNextTimestamp(), 0);
+
+        java.util.List<EffectEvent> swallowed = differ.rebaseline(java.util.List.of(bears));
+
+        assertTrue(!swallowed.isEmpty(), "the pump the snapshot already shows");
+        assertTrue(differ.diff(bears).isEmpty(), "measured from the rebaseline");
+    }
+
+    /** A control change names the new controller (TC2 #9). */
+    @Test
+    void aControlChangeNamesTheNewController() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(0), "Grizzly Bears");
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        forge.game.player.Player thief = game.getPlayers().get(1);
+        bears.addTempController(thief, game.getNextTimestamp());
+
+        EffectEvent event = only(differ.diff(bears), EventType.CONTROL_CHANGE);
+        assertEquals(Refs.of(thief), event.params().get("controller"));
+    }
+
+    /** An Animate's Name$ is a name change, naming the name now (follow-up item 10). */
+    @Test
+    void aNameAnEffectGivesIsANameChange() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        forge.game.player.Player you = game.getPlayers().get(0);
+        Card bears = TestBoard.inPlay(game, you, "Grizzly Bears");
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        forge.game.spellability.SpellAbility rename = forge.game.ability.AbilityFactory.getAbility(
+                "AB$ Animate | Cost$ 0 | Defined$ Self | Name$ Pigeon | Duration$ Permanent", bears);
+        rename.setActivatingPlayer(you);
+        rename.resolve();
+
+        EffectEvent event = only(differ.diff(bears), EventType.NAME_CHANGE);
+        assertEquals(Map.of("name", "Pigeon"), event.params());
+    }
+
+    /** A mana cost an effect sets is a mana cost change: the cost now and its value. */
+    @Test
+    void aManaCostAnEffectSetsIsAManaCostChange() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(0), "Grizzly Bears");
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        bears.addChangedManaCost(new forge.card.mana.ManaCost(
+                new forge.card.mana.ManaCostParser("5 G")), false, game.getNextTimestamp(), 0L);
+
+        EffectEvent event = only(differ.diff(bears), EventType.MANA_COST_CHANGE);
+        assertEquals(Map.of("generic", 5, "G", 1), event.params().get("mana_cost"));
+        assertEquals(6, event.params().get("mana_value"));
+    }
+
+    /** A transform's new name is the face change's, not a name change of its own. */
+    @Test
+    void aFaceChangesNameIsNoNameChange() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        Card avacyn = TestBoard.inPlay(game, game.getPlayers().get(0), "Archangel Avacyn");
+        StatDiffer differ = new StatDiffer();
+        differ.prime(avacyn);
+        avacyn.changeCardState("Transform", null, null);
+
+        assertTrue(differ.diff(avacyn).stream().noneMatch(e -> e.type() == EventType.NAME_CHANGE
+                || e.type() == EventType.MANA_COST_CHANGE));
+    }
+
+    private static EffectEvent only(List<EffectEvent> events, EventType type) {
+        List<EffectEvent> found = events.stream().filter(e -> e.type() == type).toList();
+        assertEquals(1, found.size(), events.toString());
+        return found.get(0);
+    }
 }

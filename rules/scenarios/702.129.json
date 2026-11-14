@@ -149,12 +149,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An activated ability restricted to sorcery timing passes the casting-speed check: its controller's main phase with an empty stack.",
-        "near_miss": "A candidate that fails the casting-speed check: outside its controller's main phase, or with a non-empty stack.",
+        "outcome": "A eternalize candidate passes its casting-speed check (sorcery timing).",
+        "near_miss": "A eternalize candidate that fails it.",
         "params": {
           "bit": "failed_check",
           "check": "casting_speed",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Eternalize"
         },
         "needs": [
           "failed_checks"

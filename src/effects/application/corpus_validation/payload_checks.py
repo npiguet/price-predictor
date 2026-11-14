@@ -18,6 +18,7 @@ from effects.application.corpus_validation.findings import (
     keep_example,
     share_of,
 )
+from effects.domain.event_schema import EventType
 from effects.domain.records import (
     REWRITE_RESULTS_RUNNING_AN_ABILITY,
     REWRITE_RESULTS_WITHOUT_ABILITY,
@@ -28,6 +29,7 @@ from effects.domain.records import (
     RewritePayload,
     RewriteResult,
     TriggerPayload,
+    is_game_end,
 )
 
 #: The six cost channels, in the order the schema lists them.
@@ -136,18 +138,34 @@ class Activations:
         )
 
 
+_GAME_END = frozenset({EventType.PLAYER_WON, EventType.PLAYER_LOST})
+
+
 class Triggers:
     """Fired against not-fired, aggregate and per evaluated mode, because a
     mode drawing no negatives hides behind every other mode's balance."""
 
+    #: Trigger records of games that ended in the window needed before the
+    #: floor judges: fewer say too little about one run.
+    MIN_FINISHED = 50
+
     def __init__(self) -> None:
         #: Per evaluated mode: how often it fired, of how often it was asked.
         self.modes: dict[str, Share] = defaultdict(Share)
+        #: Per game: how often its trigger records fired, of how many.
+        self.games: dict[str, Share] = defaultdict(Share)
+        #: Games that ended in the window: a gen-3 game by its game-end marker,
+        #: an older one by a record holding the game's outcome.
+        self.ended: set[str] = set()
 
     def add(self, record: EffectRecord) -> None:
         payload = record.payload
+        if is_game_end(record) or (record.generation != 3 and any(
+                event.type in _GAME_END for event in payload.listed_events())):
+            self.ended.add(record.game_id)
         if not isinstance(payload, TriggerPayload):
             return
+        self.games[record.game_id].note(payload.fired)
         # Forge's own mode name where written: the event-type vocabulary is
         # far coarser than Forge's trigger modes.
         mode = payload.event.params.get("mode") or payload.event.type.value
@@ -173,6 +191,35 @@ class Triggers:
                 for rate, mode, counts in skewed[:EXAMPLES]
             ),
         )
+        yield self._positives(limits)
+
+    def _positives(self, limits: Thresholds) -> Finding:
+        """The floor over the games that ended in the window. A fired trigger
+        record is written when its game ends (the per-line reservoir), an
+        unfired one as drawn, so a game still running holds its negatives
+        alone. A gen-3 game has ended when its game-end marker is read, which
+        the collector writes after every fired trigger record of the game; an
+        older one when a record holds ``player_won`` or ``player_lost`` (the
+        game-end record, a lethal combat, a game-ending ability)."""
+        finished = Share.total(share for game, share in self.games.items()
+                               if game in self.ended)
+        name = "trigger records hold positives"
+        if finished.seen < self.MIN_FINISHED:
+            return Finding.watch(name, (
+                f"{finished.seen} trigger records of games that ended in the window, under "
+                f"the {self.MIN_FINISHED} the floor judges at ({finished.hit} fired)"))
+        return floor_finding(
+            name=name,
+            floor=limits.min_trigger_fired_share,
+            seen=finished.seen,
+            rate=finished.rate,
+            measured=lambda limit: (
+                f"{finished.hit}:{finished.seen - finished.hit} fired:not-fired over "
+                f"{finished.seen} trigger records of {len(self.ended & set(self.games))} "
+                f"games that ended ({finished.rate:.1%} fired, {limit})"
+            ),
+            detail=(),
+        )
 
 
 @dataclass(slots=True)
@@ -181,6 +228,12 @@ class _ResultCounts:
 
     with_outgoing: int = 0
     with_replaced_by: int = 0
+    #: Damage replacements naming the ability they set aside (``buffered``).
+    with_buffered: int = 0
+    #: Records naming an ability either way, ``replaced_by`` or ``buffered``,
+    #: each counted once: a ``ReplaceDamage`` runs in place and sets its
+    #: sub-ability aside, so one record can carry both (Forcefield).
+    naming: int = 0
     seen: int = 0
 
 
@@ -195,7 +248,9 @@ class Rewrites:
         self.identity = 0
         self.identity_examples: list[str] = []
         #: ``prevented``/``skipped`` records carrying an ``outgoing`` or a
-        #: ``replaced_by``.
+        #: ``replaced_by``, buffered records naming their ability as run
+        #: instead or holding events of a run that never came, and records
+        #: whose unknown incoming event has an outgoing one.
         self.impossible = 0
         self.impossible_examples: list[str] = []
 
@@ -207,6 +262,8 @@ class Rewrites:
         counts = self.results[payload.result]
         counts.with_outgoing += payload.outgoing is not None
         counts.with_replaced_by += bool(payload.replaced_by)
+        counts.with_buffered += payload.buffered is not None
+        counts.naming += bool(payload.replaced_by) or payload.buffered is not None
         counts.seen += 1
         if payload.result is None:
             # Pre-contract shard: its writer always produced an identity
@@ -218,9 +275,7 @@ class Rewrites:
         ):
             self.identity += 1
             keep_example(self.identity_examples, example)
-        if payload.result in REWRITE_RESULTS_WITHOUT_ABILITY and (
-            payload.outgoing is not None or payload.replaced_by
-        ):
+        if _disagrees(payload):
             self.impossible += 1
             keep_example(self.impossible_examples, example)
 
@@ -289,12 +344,14 @@ class Rewrites:
         )
 
     def _outcomes_agree_with_their_payload(self) -> Finding:
-        """``prevented`` and ``skipped`` cannot carry a payload.
+        """``prevented`` and ``skipped`` cannot carry a payload, and a
+        buffered damage replacement keeps its shape (:func:`_disagrees`).
 
         Both return before ``executeReplacementUnobserved`` runs any ability, so
         an ``outgoing`` or ``replaced_by`` on one is a listener reading a stale
-        argument. ``not_replaced`` is not judged: its prevention branch writes
-        ``PreventedAmount`` before returning.
+        argument; a ``Prevent$ True`` rider is set aside (``buffered``), never
+        run instead. ``not_replaced`` is not judged: its prevention branch
+        writes ``PreventedAmount`` before returning.
         """
         ran = ", ".join(
             f"{name} {counts.with_outgoing}/{counts.seen} with outgoing, "
@@ -306,8 +363,10 @@ class Rewrites:
             name="outgoing is null on the results that rewrote nothing",
             ok=self.impossible == 0,
             measured=(
-                f"{self.impossible} {'/'.join(cannot)} records carry an "
-                f"outgoing or a replaced_by, of {self.rewrites} rewrites ({ran})"
+                f"{self.impossible} records contradict their payload ({'/'.join(cannot)} "
+                f"with an outgoing or a replaced_by, a buffered ability also run "
+                f"instead or with events of a run that never came, an outgoing "
+                f"beside an unknown incoming event), of {self.rewrites} rewrites ({ran})"
             ),
             detail=tuple(self.impossible_examples),
         )
@@ -319,7 +378,9 @@ class Rewrites:
         for result in REWRITE_RESULTS_RUNNING_AN_ABILITY:
             counts = self.results.get(result)
             if counts:
-                named += counts.with_replaced_by
+                # A buffered damage replacement names its ability in
+                # ``buffered``, its ``replaced_by`` empty by design.
+                named += counts.naming
                 seen += counts.seen
         rate = share_of(named, seen)
         return floor_finding(
@@ -332,7 +393,25 @@ class Rewrites:
                 f"key ({rate:.1%}, {limit})"
             ),
             detail=(
-                f"{name}: {counts.with_replaced_by}/{counts.seen} name one"
+                f"{name}: {counts.with_replaced_by}/{counts.seen} name one, "
+                f"{counts.with_buffered} a buffered one"
                 for name, counts in self._by_name()
             ),
         )
+
+
+def _disagrees(payload: RewritePayload) -> bool:
+    """A rewrite whose payload contradicts itself: a ``prevented`` or
+    ``skipped`` result with an ``outgoing`` or a ``replaced_by``; an ability
+    set aside (``buffered``) also named as run instead, or events of a run
+    that never came (``buffered_ran`` false); an ``outgoing`` beside an
+    unknown incoming event, which can be compared with nothing."""
+    if payload.result in REWRITE_RESULTS_WITHOUT_ABILITY and (
+        payload.outgoing is not None or payload.replaced_by
+    ):
+        return True
+    if payload.buffered is not None and (
+        payload.replaced_by or (not payload.buffered_ran and payload.buffered_events)
+    ):
+        return True
+    return payload.incoming_unknown and payload.outgoing is not None

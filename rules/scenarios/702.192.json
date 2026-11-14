@@ -86,12 +86,13 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A spell resolves and moves from the stack to exile instead of the graveyard.",
-        "near_miss": "A resolution that moves no spell from the stack to exile.",
+        "outcome": "A spell whose card prints paradigm moves from the stack to exile as the keyword says.",
+        "near_miss": "A spell whose card prints paradigm leaves the stack elsewhere.",
         "params": {
           "event": "zone_change",
           "from_zone": "stack",
-          "to_zone": "exile"
+          "to_zone": "exile",
+          "source_keyword": "Paradigm"
         },
         "needs": []
       }

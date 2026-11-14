@@ -221,14 +221,8 @@
       ],
       "forge_notes": "Vanishing is gained permanently by the Djinn's turned-face-up trigger; a puzzle setup must grant it explicitly. Tidewalker is the printed no-number vanishing creature but its power and toughness equal its time counters, which would confound the sacrifice.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A vanishing trigger of a permanent with vanishing without a number is evaluated at its controller's upkeep, or when the last time counter is removed, and fires.",
-        "near_miss": "A vanishing trigger is evaluated against an event it does not match and does not fire.",
-        "params": {
-          "keyword": "vanishing"
-        },
-        "needs": []
+        "same_as": "702.63a-2",
+        "reason": "Vanishing without a number triggers as vanishing does."
       }
     },
     {
@@ -296,14 +290,7 @@
       ],
       "forge_notes": "Reached with Backslide turning the Djinn face down and its morph turning it face up again. Whether Forge keeps the first Permanent-duration Pump of Vanishing across the face-down period needs checking; a puzzle setup may have to grant both instances explicitly.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "Each vanishing instance of one permanent is evaluated and fires separately.",
-        "near_miss": "A vanishing trigger is evaluated against an event it does not match and does not fire.",
-        "params": {
-          "keyword": "vanishing"
-        },
-        "needs": []
+        "none": "How many times one event triggers an ability is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     }
   ]

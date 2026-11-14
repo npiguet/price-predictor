@@ -19,24 +19,37 @@ record shows:
 - **damage prevented** (702.16e): a ``resolution`` effect half or a ``combat``
   record dealing damage to a permanent nothing else in the record touches but
   its own death; the protection covers every source that damaged it, and the
-  permanent is not a target of the acting ability (a targeted spell would lose
-  its target instead). Each ``damage_dealt`` becomes the ``damage_prevented``
-  Forge writes for a prevented hit, and a death the damage caused is undone. A
-  source with lifelink, infect or wither is refused: what its damage does
-  besides marking damage would have to be undone too;
+  permanent is no target of the acting chain, any clause or mode, as cast or
+  after Forge's illegal-target check (``refs.targets_at_cast``,
+  ``refs.targets``; a targeted spell would lose its target instead). Each
+  ``damage_dealt`` becomes the ``damage_prevented`` Forge writes for a
+  prevented hit, and a death the damage caused is undone. Refused: a source
+  with lifelink, infect or wither, whose damage does more than mark damage;
+  a resolution whose half does not say its targets as cast (no resolution
+  hook); damage that can't be prevented (``NoPrevention$`` in the chain, an
+  active ``Mode$ CantPreventDamage`` static on the board); and a chain with a
+  later clause the prevention would change unseen (one remembering or
+  storing what was dealt, or an amount read from a variable, a drain's
+  "gain life equal to the damage dealt");
 - **target made illegal** (702.16b): a decision whose candidate has at least
-  two legal targets loses one permanent from them, the verdict unchanged;
+  two legal targets loses one permanent from them, the verdict unchanged; the
+  candidate acts through the first face its card shows (no Adventure, back
+  face or split half, whose characteristics the snapshot does not hold);
 - **block made illegal** (702.16f): a real blockers record's anchored
   attacker gains protection from a quality one of its legal blockers has, and
   every legal blocker with the quality becomes forbidden;
 - **Aura put into the graveyard** (702.16c): an Aura spell's resolution whose
-  one target gains protection from the Aura; the spell resolves with no legal
-  target, so the Aura goes from the stack to the graveyard and nothing it
-  would have done happens.
+  one target gains protection from the Aura; the spell has no legal target
+  and fizzles (608.2b, ``outcome`` ``fizzled``), so the Aura goes from the
+  stack to the graveyard and nothing it would have done happens; a bestowed
+  Aura, which would resolve as a creature instead (702.103e), is not copied.
 
-Protection from everything (702.16j) covers every outcome; the rare qualities
-of the other rules are those of the covered object: its card types, its
-creature types where it is a creature or kindred, and the conditions it meets.
+Protection from everything (702.16j) covers every outcome; no quality is
+granted that an Aura or Equipment attached to the protected permanent has,
+which would make it fall off (702.16c-d), and no protection from everything
+then. The rare qualities of the other rules are those of the covered object:
+its card types, its creature types where it is a creature or kindred, and the
+conditions it meets.
 The quality is granted the way a resolved effect grants a keyword: a granted
 keyword line plus its kept flag (research M5,
 :meth:`~effects.domain.state_snapshot.EntityState.with_granted_keyword`).
@@ -54,6 +67,7 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 
 from effects.domain.event_schema import Event, EventType
+from effects.domain.provenance import SidecarLookup
 from effects.domain.records import (
     CombatPayload,
     EffectRecord,
@@ -61,6 +75,7 @@ from effects.domain.records import (
     Moment,
     PlayabilityBlockersPayload,
     PlayabilityDecisionPayload,
+    ResolutionOutcome,
     ResolutionPayload,
 )
 from effects.domain.rule_outcomes import (
@@ -75,7 +90,8 @@ from effects.domain.rule_outcomes import (
     may_enchant,
     may_target,
 )
-from effects.domain.state_snapshot import EntityState, Zone
+from effects.domain.script_text import api_of, params, root, segments
+from effects.domain.state_snapshot import EntityState, FaceState, LineKind, Zone
 
 
 class ProtectionOutcome(StrEnum):
@@ -117,6 +133,9 @@ class Opportunity:
     #: where they share none, which leaves the record to protection from
     #: everything alone.
     qualities: tuple[ProtectionQuality, ...]
+    #: Whether protection from everything shows the outcome: not where an
+    #: Aura or Equipment is attached to the protected permanent (702.16c-d).
+    everything: bool = True
 
     @property
     def rule(self) -> str:
@@ -164,7 +183,7 @@ def rules_offered(opportunities: tuple[Opportunity, ...]) -> tuple[str, ...]:
     outcome's rule where a rare quality covers its objects, and 702.16j
     wherever any outcome is open."""
     rules = {o.rule for o in opportunities if o.qualities}
-    if opportunities:
+    if any(o.everything for o in opportunities):
         rules.add(EVERYTHING_RULE)
     return tuple(sorted(rules))
 
@@ -172,24 +191,121 @@ def rules_offered(opportunities: tuple[Opportunity, ...]) -> tuple[str, ...]:
 # ── the qualifier ────────────────────────────────────────────────────────
 
 
-def qualify(record: EffectRecord) -> tuple[Opportunity, ...]:
-    """Every protection copy ``record`` can carry, in record order; empty for none."""
+def qualify(record: EffectRecord, lines: SidecarLookup | None = None
+            ) -> tuple[Opportunity, ...]:
+    """Every protection copy ``record`` can carry, in record order; empty for none.
+
+    ``lines`` reads the sidecars: a resolution's acting chain (``NoPrevention$``,
+    a later clause whose amount reads the damage dealt) and the statics on the
+    board (an active ``Mode$ CantPreventDamage``). Without ``lines`` neither is
+    read (a unit test's record).
+    """
     if record.fork or record.interventional or record.synthetic or record.directed is not None:
         return ()
-    payload = record.payload
     entities = {entity.id: entity for entity in record.state.entities}
+    return tuple(_keeping_attachments(o, record.state.entities)
+                 for o in _opportunities(record, lines, entities))
+
+
+def _keeping_attachments(opportunity: Opportunity, entities) -> Opportunity:
+    """``opportunity`` without the qualities an object attached to the
+    protected permanent has: a protection from it would make the Aura or
+    Equipment fall off (702.16c-d), which the copy does not show."""
+    attached = [Characteristics.of(e) for e in entities
+                if e.attached_to == opportunity.protected and e.on_battlefield]
+    if not attached:
+        return opportunity
+    return replace(opportunity, everything=False, qualities=tuple(
+        q for q in opportunity.qualities if not any(q.covers(a) for a in attached)))
+
+
+def _opportunities(record: EffectRecord, lines: SidecarLookup | None,
+                   entities) -> tuple[Opportunity, ...]:
+    payload = record.payload
     if isinstance(payload, PlayabilityDecisionPayload):
         return _target_opportunities(record, payload, entities)
     if isinstance(payload, PlayabilityBlockersPayload):
         return _block_opportunities(record, payload, entities)
     if isinstance(payload, CombatPayload):
+        if lines is not None and _no_prevention_on_the_board(record, lines):
+            return ()
         return _damage_opportunities(payload.events, entities, targets=())
     if isinstance(payload, ResolutionPayload) and record.moment is Moment.RESOLUTION:
         aura = _aura_opportunity(record, payload, entities)
         if aura is not None:
             return (aura,)
-        return _damage_opportunities(payload.events, entities, targets=record.state.refs.targets)
+        refs = record.state.refs
+        if refs.targets_at_cast is None:
+            # What the record cannot show: the targets before Forge's
+            # illegal-target check (a worker without the resolution hook).
+            return ()
+        if lines is not None and (_unpreventable_or_dependent(record, lines)
+                                  or _no_prevention_on_the_board(record, lines)):
+            return ()
+        # Every target of the acting chain, a sub-ability's and a mode's own
+        # included, as cast and after the check.
+        return _damage_opportunities(
+            payload.events, entities, targets=(*refs.targets_at_cast, *refs.targets))
     return ()
+
+
+#: The damage APIs whose amount the prevention changes.
+_DAMAGE_APIS = frozenset({"DealDamage", "DamageAll", "EachDamage"})
+#: Chain parameters after which a clause reads what the damage did.
+_DEPENDENT_PREFIXES = ("Remember", "Imprint")
+_DEPENDENT_APIS = frozenset({"StoreSVar"})
+
+
+def _unpreventable_or_dependent(record: EffectRecord, lines: SidecarLookup) -> bool:
+    """Whether the acting chain says its damage can't be prevented
+    (``NoPrevention$``), or holds a clause the prevention would change
+    without the copy showing it: one remembering what was dealt, storing an
+    amount, or reading an amount from a variable (a drain's ``LifeAmount$ Y``,
+    ``Y`` the damage dealt this way). Conservative: a variable amount in any
+    later clause refuses the record. An acting line the sidecars cannot show
+    refuses it too."""
+    keys = record.ability or ()
+    line = lines.first_line(keys)
+    if line is None or not line.script_text:
+        return bool(keys)
+    for segment in segments(line.script_text):
+        found = params(segment)
+        if "NoPrevention" in found:
+            return True
+        api = api_of(found)
+        if api in _DAMAGE_APIS:
+            continue
+        if api in _DEPENDENT_APIS or any(k.startswith(_DEPENDENT_PREFIXES) for k in found):
+            return True
+        if any(_is_amount(key) and not _literal(value) for key, value in found.items()):
+            return True
+    return False
+
+
+def _is_amount(key: str) -> bool:
+    return key.endswith(("Amount", "Num")) or key.startswith("Num") or key == "CounterNum"
+
+
+def _literal(value: str) -> bool:
+    return value.strip().lstrip("+-").isdigit()
+
+
+def _no_prevention_on_the_board(record: EffectRecord, lines: SidecarLookup) -> bool:
+    """Whether a static on the board says damage can't be prevented: an
+    active ``Mode$ CantPreventDamage`` line of a permanent or command-zone
+    object."""
+    for entity in record.state.entities:
+        if not entity.on_battlefield and entity.zone != Zone.COMMAND:
+            continue
+        for card_line in entity.lines or ():
+            if card_line.kind != LineKind.STATIC or card_line.active is False:
+                continue
+            for key in card_line.keys:
+                found = lines.line_or_none(key)
+                if found is not None and found.script_text and params(
+                        root(found.script_text)).get("Mode") == "CantPreventDamage":
+                    return True
+    return False
 
 
 def _permanent(entities: dict[str, EntityState], ref: str | None) -> EntityState | None:
@@ -206,11 +322,24 @@ def _target_opportunities(record, payload: PlayabilityDecisionPayload,
     source = entities.get(record.state.refs.source)
     if candidate.land_play or source is None or len(candidate.legal_targets) < 2:
         return ()
+    if not _shows_the_acting_face(source, candidate.ability or ()):
+        return ()
     qualities = rare_qualities(source)
     return tuple(
         Opportunity(ProtectionOutcome.TARGET_ILLEGAL, target, (source.id,), qualities)
         for target in candidate.legal_targets if _permanent(entities, target) is not None
     )
+
+
+def _shows_the_acting_face(source: EntityState, keys) -> bool:
+    """Whether the card's snapshot holds the characteristics of what acts:
+    its first face, shown face up, and not a split card, whose card in hand
+    shows both halves at once. An Adventure or a back face cast from hand has
+    characteristics the snapshot does not hold (Bonecrusher Giant shows the
+    Giant while Stomp is cast)."""
+    if source.face_state not in (None, FaceState.FRONT) or " // " in (source.name or ""):
+        return False
+    return all(key.face == 0 for key in keys)
 
 
 def _block_opportunities(record, payload: PlayabilityBlockersPayload,
@@ -287,9 +416,11 @@ def _aura_opportunity(record, payload: ResolutionPayload, entities) -> Opportuni
     refs = record.state.refs
     aura = entities.get(refs.source)
     if (aura is None or aura.zone != Zone.STACK
-            or "aura" not in {s.lower() for s in aura.subtypes} or len(refs.targets) != 1):
+            or "aura" not in {s.lower() for s in aura.subtypes} or len(refs.as_cast) != 1):
         return None
-    target = refs.targets[0]
+    if _bestowed(aura):
+        return None  # 702.103e: it would resolve as a creature, not fizzle
+    target = refs.as_cast[0]
     if _permanent(entities, target) is None:
         return None
     if any(set(event.subjects) - {aura.id, target} for event in payload.events):
@@ -298,6 +429,13 @@ def _aura_opportunity(record, payload: ResolutionPayload, entities) -> Opportuni
         return None
     return Opportunity(ProtectionOutcome.AURA_TO_GRAVEYARD, target, (aura.id,),
                        rare_qualities(aura))
+
+
+def _bestowed(aura: EntityState) -> bool:
+    """Whether the Aura spell carries bestow, by a keyword line or a grant."""
+    lines = aura.lines or ()
+    return ("bestow" in {k.lower() for k in aura.granted_temporary.keywords}
+            or any((line.fragment or "").lower().startswith("bestow") for line in lines))
 
 
 def _entering(events: tuple[Event, ...], aura: str) -> Event | None:
@@ -328,7 +466,7 @@ def protection_copy(record: EffectRecord, opportunities: tuple[Opportunity, ...]
     ``index`` numbers the copies of one record, which keeps their ids apart.
     """
     if rule == EVERYTHING_RULE:
-        pool = list(opportunities)
+        pool = [o for o in opportunities if o.everything]
     else:
         pool = [o for o in opportunities if o.rule == rule and o.qualities]
     if not pool:
@@ -356,11 +494,16 @@ def copied(record: EffectRecord, opportunity: Opportunity, quality: ProtectionQu
     )
     by_id = {entity.id: entity for entity in entities}
     payload, named = _REWRITES[opportunity.outcome](record.payload, opportunity, quality, by_id)
+    refs = record.state.refs
+    if opportunity.outcome is ProtectionOutcome.AURA_TO_GRAVEYARD and named:
+        # The fizzled spell's refs as the live shape holds them: no target
+        # left after the check, the protected one as cast.
+        refs = replace(refs, targets=(), targets_at_cast=refs.as_cast)
     return replace(
         record,
         record_id=f"{record.record_id}~pc{index}",
         synthetic=True,
-        state=replace(record.state, entities=entities),
+        state=replace(record.state, entities=entities, refs=refs),
         payload=payload,
     ), named
 
@@ -421,16 +564,20 @@ def _forbid(payload, opportunity: Opportunity, quality: ProtectionQuality, entit
 
 
 def _fizzle(payload, opportunity: Opportunity, quality: ProtectionQuality, entities):
-    """The Aura spell has no legal target left, so it moves from the stack to
-    its owner's graveyard and does nothing else (702.16c, rule 608.2b)."""
+    """The Aura spell has no legal target left, so it fizzles (rule 608.2b):
+    its half's ``outcome`` is ``fizzled`` and its one event the card's move
+    from the stack to its owner's graveyard, as a collected fizzled spell's
+    half holds it (``duration`` instant, ``attributed_to`` unresolved), which
+    is 702.16c's outcome; it does nothing else."""
     aura = opportunity.covered[0]
     if may_enchant((quality,), Characteristics.of(entities[aura])):
         return payload, ()
     moved = replace(_entering(payload.events, aura), params={
         "from_zone": Zone.STACK.value, "to_zone": Zone.GRAVEYARD.value, "cause": aura,
-    })
+    }, duration="instant", attributed_to="unresolved")
     conditions = None if payload.conditions_met is None else ()
-    return replace(payload, events=(moved,), conditions_met=conditions), (
+    return replace(payload, events=(moved,), conditions_met=conditions,
+                   outcome=ResolutionOutcome.FIZZLED, outcome_written=True), (
         aura, opportunity.protected)
 
 

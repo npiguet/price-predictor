@@ -84,3 +84,55 @@ def test_a_gen3_cost_half_shows_nothing(by_kind):
     cost = next(r for r in by_kind("resolution") if r.moment.value == "activation")
     gen3 = replace(cost, payload=ActivationPayload(costs=Costs(), events=()))
     assert FAMILY.match(gen3, None, {"outcome": "resolved", "near": ["fizzled"]}) is None
+
+
+def test_a_fizzled_half_reads_its_targets_as_cast():
+    """V5 #25: an effect half's ``targets`` lose the illegal targets; the
+    targets it was cast with are ``targets_at_cast`` (``Refs.as_cast``)."""
+    from effects.domain.records import ResolutionPayload
+    from effects.domain.state_snapshot import Refs
+    from tests.unit.effects.builders import make_record, make_snapshot
+
+    def half(outcome, targets, at_cast):
+        state = make_snapshot(refs=Refs(source="E1", targets=targets, targets_at_cast=at_cast))
+        return make_record(state=state, payload=ResolutionPayload(outcome=outcome),
+                           generation=3)
+
+    params = {"outcome": "fizzled", "targeted": True}
+    fizzled = FAMILY.match(half(ResolutionOutcome.FIZZLED, (), ("E2",)), None, params)
+    assert fizzled.polarity is Polarity.FIRES and fizzled.condition == ("E1", "E2")
+    untargeted = half(ResolutionOutcome.RESOLVED, (), ())
+    assert FAMILY.match(untargeted, None, params) is None
+    resolved = FAMILY.match(half(ResolutionOutcome.RESOLVED, ("E2",), ("E2",)), None, params)
+    assert resolved.polarity is Polarity.DOES_NOT_FIRE
+
+
+class _Keyworded:
+    """A sidecar lookup whose every card prints one keyword line, the acting
+    line among them."""
+
+    def __init__(self, keyword):
+        from types import SimpleNamespace
+
+        from effects.domain.provenance import KEYWORD_API_TYPE, SidecarLine
+
+        self.line = SidecarLine(line_index=0, line_kind="trigger", provenance=(),
+                                script_api_type=KEYWORD_API_TYPE, script_text=keyword)
+        self.sidecar = SimpleNamespace(lines=(self.line,))
+
+    def first_line(self, keys):
+        return self.line
+
+    def get(self, script_file):
+        return self.sidecar
+
+
+def test_keyword_and_source_keyword_read_the_acting_card_s_line(by_kind):
+    """Ward's counter (702.21a) acts through ward's line; a gift spell's
+    (702.174) card prints gift."""
+    record = _resolved(by_kind)
+    for param in ("keyword", "source_keyword"):
+        declared = {"outcome": "fizzled", param: "Ward"}
+        assert FAMILY.match(record, _Keyworded("Ward"), declared) is not None
+        assert FAMILY.match(record, _Keyworded("Gift"), declared) is None
+        assert FAMILY.match(record, None, declared) is None

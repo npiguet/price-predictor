@@ -60,15 +60,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A player with priority can activate an ability of an object they control (a candidate with can_play true).",
-        "near_miss": "A candidate the player cannot activate (can_play false).",
-        "params": {
-          "bit": "can_play",
-          "fires_when": true
-        },
-        "needs": []
+        "none": "The candidates the collector enumerates are each player's own objects' abilities, so no record shows an ability its player does not control as a candidate; the can_play verdict alone, unscoped, tagged every playable candidate."
       }
     },
     {

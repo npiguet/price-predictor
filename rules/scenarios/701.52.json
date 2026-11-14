@@ -70,14 +70,8 @@
       ],
       "forge_notes": "Forge rolls to visit automatically at the precombat main phase (PhaseHandler) only when the active player controls an Attraction; the die result must be forced.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "An Attraction's visit trigger is evaluated and fires because the visit roll matched one of its lit numbers.",
-        "near_miss": "A visit trigger is evaluated and does not fire.",
-        "params": {
-          "keyword": "Visit"
-        },
-        "needs": []
+        "same_as": "702.159a-1",
+        "reason": "The record shows a visit ability triggering on the visit roll, 702.159a's fact."
       }
     }
   ]

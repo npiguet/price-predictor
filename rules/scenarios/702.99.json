@@ -179,14 +179,7 @@
       ],
       "forge_notes": "Raging Goblin has haste, so the returned object can attack. In the flickered variant Cloudshift is cast in main1 before combat.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A cipher trigger on an encoded creature fires when the creature deals combat damage to a player.",
-        "near_miss": "A cipher trigger evaluated and not fired.",
-        "params": {
-          "keyword": "Cipher"
-        },
-        "needs": []
+        "none": "Could not express: whether the encoded card stays encoded is read by no trigger_mode parameter."
       }
     },
     {
@@ -270,14 +263,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A cipher trigger on an encoded creature fires when the creature deals combat damage to a player.",
-        "near_miss": "A cipher trigger evaluated and not fired.",
-        "params": {
-          "keyword": "Cipher"
-        },
-        "needs": []
+        "none": "Could not express: whether the encoded card stays encoded is read by no trigger_mode parameter."
       }
     }
   ]

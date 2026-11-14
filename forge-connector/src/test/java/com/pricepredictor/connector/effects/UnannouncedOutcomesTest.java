@@ -14,6 +14,8 @@ import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Outcomes no bus event announces as themselves, read as the collector reads
@@ -230,9 +231,18 @@ class UnannouncedOutcomesTest {
         assertNull(observe(bounce).finish());
     }
 
-    /** A token put onto the battlefield attacking entered combat; the declared attacker did not. */
-    @Test
-    void aCreatureMadeAttackingEnteredCombat() {
+    /**
+     * A creature put onto the battlefield attacking entered combat; the
+     * declared attacker did not. One case per API the rule is keyed by,
+     * each through its own clause, so a key missing from the rule fails here.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "SP$ Token | TokenScript$ r_1_1_goblin | TokenAttacking$ True",
+            "SP$ CopyPermanent | Defined$ Self | TokenAttacking$ True",
+            "SP$ ChangeZoneAll | ChangeType$ Creature.YouOwn | Origin$ Hand"
+                    + " | Destination$ Battlefield | Attacking$ True"})
+    void aCreatureMadeAttackingEnteredCombat(String script) {
         Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player a = game.getPlayers().get(0);
         Player b = game.getPlayers().get(1);
@@ -241,8 +251,7 @@ class UnannouncedOutcomesTest {
         combat.addAttacker(declared, b);
         game.getPhaseHandler().setCombat(combat);
         Card made = TestBoard.inPlay(game, a, "Hill Giant");
-        SpellAbility token = scripted(
-                "SP$ Token | TokenScript$ r_1_1_goblin | TokenAttacking$ True", made, a);
+        SpellAbility token = scripted(script, made, a);
         ApiEvents.ClauseObservation<?> observed = observe(token);
 
         combat.addAttacker(made, b);
@@ -277,6 +286,33 @@ class UnannouncedOutcomesTest {
         assertEquals(EventType.BECAME_BLOCKED, event.type());
         assertEquals(List.of(Refs.of(attacker)), event.subjects());
         assertEquals(List.of(), event.params().get("blockers"));
+    }
+
+    /** A clause making a creature block an attacker: the attacker became blocked, by it. */
+    @Test
+    void anAttackerAClauseBlockedNamesItsBlocker() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        Player b = game.getPlayers().get(1);
+        Card attacker = TestBoard.inPlay(game, a, "Grizzly Bears");
+        Card blocker = TestBoard.inPlay(game, b, "Hill Giant");
+        Combat combat = new Combat(a);
+        combat.addAttacker(attacker, b);
+        combat.setBlocked(attacker, false);
+        game.getPhaseHandler().setCombat(combat);
+        SpellAbility block = scripted(
+                "SP$ Block | DefinedAttacker$ Valid Creature.attacking | DefinedBlocker$ Self",
+                blocker, b);
+        ApiEvents.ClauseObservation<?> observed = observe(block);
+
+        combat.addBlocker(attacker, blocker);
+        combat.setBlocked(attacker, true);
+        EffectEvent event = observed.finish();
+
+        assertNotNull(event);
+        assertEquals(EventType.BECAME_BLOCKED, event.type());
+        assertEquals(List.of(Refs.of(attacker)), event.subjects());
+        assertEquals(List.of(Refs.of(blocker)), event.params().get("blockers"));
     }
 
     @Test
@@ -348,15 +384,5 @@ class UnannouncedOutcomesTest {
         assertNotNull(event);
         assertEquals("merged", event.params().get("flag"));
         assertEquals(List.of(Refs.of(bears)), event.subjects());
-    }
-
-    /** Each new rule's API is a real {@code ApiType} member. */
-    @Test
-    void theNewRulesAreKeyedByRealApis() {
-        for (String api : List.of("ChangeZone", "ChangeZoneAll", "Token", "CopyPermanent",
-                "BecomesBlocked", "Block", "ClassLevelUp", "UnlockDoor", "Bond", "Mutate")) {
-            assertTrue(ApiEvents.apiNames().contains(api), api);
-            assertNotNull(ApiEvents.ruleFor(ApiType.smartValueOf(api)), api);
-        }
     }
 }

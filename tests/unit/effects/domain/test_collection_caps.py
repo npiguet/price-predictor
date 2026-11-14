@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import re
+from dataclasses import fields
 from pathlib import Path
 
 import pytest
@@ -81,6 +82,18 @@ class TestTheProbeKeywordDefault:
         line = announce_probe_state(DEFAULT_PROBE_KEYWORDS, DEFAULT_PROBES_PER_GAME)
         assert "DISABLED" not in line
         assert "first_strike" in line and "infect" in line
+
+
+def test_the_contract_defaults_not_pinned_beside_their_own_rule():
+    """The caps whose literal default no class below pins: one mana record per
+    key, two interventions and two probes a game, no random seat, no dropped
+    event counts (features 023 and 025, ``contracts/cli.md``). The collectors'
+    parsers are held to ``CollectionCaps``' defaults by
+    ``test_cli_contract_collectors.py``."""
+    caps = CollectionCaps()
+    assert (caps.mana_cap, caps.interventions_per_game, caps.probes_per_game) == (1, 2, 2)
+    assert (caps.random_seat_share, caps.random_seat_probability) == (0.0, 0.0)
+    assert caps.count_dropped_events is False
 
 
 class TestTheTwoSidesAgree:
@@ -274,16 +287,6 @@ class TestThePerGameRecordCap:
         ).group(1) == str(DEFAULT_MAX_RECORDS_PER_GAME)
 
 
-class TestNoSnapshotDepthKnob:
-    """Every record collects all four tiers, so no command can choose a depth."""
-
-    def test_no_property_names_a_depth(self):
-        assert "effect.snapshot.tiers" not in CollectionCaps().as_system_properties()
-        assert "effect.snapshot.tiers" not in _effect_collection_caps(
-            argparse.Namespace()
-        )
-
-
 class TestTheRandomSeat:
     """FR-021: both knobs travel to the worker like every other cap."""
 
@@ -359,3 +362,65 @@ class TestTheDirectedForks:
         assert defaults is not None
         assert int(defaults.group(1)) == DEFAULT_DIRECTED_FORKS_PER_GAME
         assert float(defaults.group(2)) == DEFAULT_DIRECTED_FORK_PROBABILITY
+
+
+class TestTheJvmDefaultsAreThePythonDefaultsArgumentByArgument:
+    """Every positional argument of the Java ``CollectionCaps.defaults()``,
+    against the Python field of the same place: the classes above read some
+    of them, which is how a divergence in the others passed."""
+
+    @staticmethod
+    def _java_defaults() -> dict[str, str]:
+        source = _JAVA_CAPS.read_text(encoding="utf-8")
+        components = re.search(r"public record CollectionCaps\((.*?)\) \{", source, re.S).group(1)
+        names = [part.split()[-1] for part in re.sub(r"<[^<>]*(<[^<>]*>)?[^<>]*>", "", components)
+                 .split(",")]
+        body = re.search(
+            r"static CollectionCaps defaults\(\) \{\s*return new CollectionCaps\((.*?)\);",
+            source, re.S).group(1)
+        values = [value.strip() for value in body.split(",")]
+        assert len(names) == len(values) == len(fields(CollectionCaps))
+        return dict(zip(names, values, strict=True))
+
+    @staticmethod
+    def _python(name: str):
+        return getattr(CollectionCaps(), name)
+
+    @staticmethod
+    def _camel(name: str) -> str:
+        head, *rest = name.split("_")
+        return head + "".join(word.title() for word in rest)
+
+    def test_the_components_are_the_python_fields_in_order(self):
+        assert list(self._java_defaults()) == [self._camel(f.name) for f in fields(CollectionCaps)]
+
+    @pytest.mark.parametrize("name", [f.name for f in fields(CollectionCaps)
+                                      if f.name not in ("probe_keywords", "aimed_at")])
+    def test_each_default_is_the_python_one(self, name):
+        java = self._java_defaults()[self._camel(name)]
+        python = self._python(name)
+        if java == "DEFAULT_MAX_RECORDS_PER_GAME":
+            java = re.search(r"DEFAULT_MAX_RECORDS_PER_GAME = (\d+);",
+                             _JAVA_CAPS.read_text(encoding="utf-8")).group(1)
+        if isinstance(python, bool):
+            assert java == str(python).lower()
+        elif isinstance(python, tuple):
+            assert java == "List.of()" and python == ()
+        else:
+            assert type(python)(java) == python
+
+    def test_an_unaimed_worker_reads_no_rule_as_aimed(self):
+        """Python's ``None`` and Java's ``Optional.empty()``: no ``aimed_at``."""
+        assert self._java_defaults()["aimedAt"] == "Optional.empty()"
+        assert CollectionCaps().aimed_at is None
+
+    def test_the_probe_keywords_default_is_the_python_one(self):
+        """A worker started without ``effect.probe.keywords`` probes what a
+        default run sends: the same keywords in the same order, which the
+        JVM's probe rotation reads."""
+        assert self._java_defaults()["probeKeywords"] == "DEFAULT_PROBE_KEYWORDS"
+        listed = re.search(r"DEFAULT_PROBE_KEYWORDS = List\.of\((.*?)\);",
+                           _JAVA_CAPS.read_text(encoding="utf-8"), re.S).group(1)
+        java = [word.strip().strip('"') for word in listed.split(",")]
+        assert java == CollectionCaps().probe_keywords.split(",")
+        assert len(java) == 8

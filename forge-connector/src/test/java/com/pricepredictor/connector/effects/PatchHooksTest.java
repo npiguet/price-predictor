@@ -76,14 +76,46 @@ class PatchHooksTest {
     }
 
     /**
-     * The read-only sub-ability hook answers null outside a resolution.
+     * The sibling {@code ../forge} checkout this suite runs against is the
+     * patched one ({@code effect-record-hooks}), with every hook.
      *
-     * <p>True on a stock checkout because the method does not exist, and true
-     * on a patched one because no sub-ability is resolving on this thread —
-     * the test asserts the caller-visible behaviour that holds either way.
+     * <p>Unconditional: every test that needs a hook skips on a checkout
+     * without it (the degradation a worker makes), so on a stock or stale
+     * checkout about sixty tests and every golden comparison would skip and
+     * the suite would still read green. This one fails instead, naming what
+     * is missing.
      */
     @Test
-    void theSubAbilityHookReadsNullOutsideAResolution() {
+    void theSiblingForgeCheckoutIsThePatchedOne() {
+        assertEquals(AttributionMode.PATCHED, AttributionMode.detect(),
+                "../forge lacks the effect-record hooks: " + PatchHooks.report());
+        assertEquals(List.of(), PatchHooks.missing(), PatchHooks.report());
+    }
+
+    /**
+     * The sub-ability pointer is put back once a resolution is over: a
+     * Lightning Bolt resolves through the hooks, its damage read the pointer
+     * while it resolved (its event names the root), and the pointer reads
+     * null afterwards.
+     */
+    @Test
+    void theSubAbilityHookReadsNullOnceAResolutionIsOver(@org.junit.jupiter.api.io.TempDir
+                                                        java.nio.file.Path dir) throws Throwable {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        forge.game.player.Player you = game.getPlayers().get(0);
+        forge.game.player.Player opponent = game.getPlayers().get(1);
+
+        List<String> records = ShardRun.recordsWithClauseHook(dir, game, "", () -> {
+            TestBoard.cast(game, TestBoard.inHand(game, you, "Lightning Bolt"), you, opponent);
+            game.getStack().resolveStack();
+            // The next step closes the held half.
+            TestBoard.nextStep(game);
+        });
+
+        String half = RecordLines.only(records, "resolution", "cardsfolder/l/lightning_bolt.txt");
+        assertEquals(List.of("root"), RecordLines.events(half).stream()
+                .filter(event -> "damage_dealt".equals(event.get("type")))
+                .map(event -> event.get("attributed_to")).toList(), half);
         assertNull(PatchHooks.currentSubAbility());
     }
 
@@ -122,7 +154,8 @@ class PatchHooksTest {
      * insertion would not fail a build, because neither side compiles against
      * the other, and the handlers would misread every call from then on. A
      * listener may instead match an older shape a worker still accepts, which
-     * for the replacement listener means three arguments rather than five.
+     * for the replacement listener means three or five arguments rather than
+     * six, and for the resolution listener two rather than three.
      * Skipped on a checkout without the setter, the same degradation every
      * hook lookup makes.
      */
@@ -175,22 +208,59 @@ class PatchHooksTest {
         }
     }
 
-    /** How {@code shape} differs from {@code declared}, or empty when it restates it. */
+    /**
+     * How {@code shape} differs from {@code declared}, or empty when it
+     * restates it: each of its methods is one Forge declares with exactly
+     * those parameters. By signature rather than by name, because a listener
+     * Forge widened declares the old call and the new one under one name.
+     */
     private static String mismatch(Class<?> shape, Class<?> declared) {
         for (Method ours : shape.getDeclaredMethods()) {
-            Method theirs = Arrays.stream(declared.getMethods())
-                    .filter(method -> method.getName().equals(ours.getName()))
-                    .findFirst().orElse(null);
-            if (theirs == null) {
-                return declared.getName() + " declares no " + ours.getName();
-            }
-            if (!Arrays.equals(ours.getParameterTypes(), theirs.getParameterTypes())) {
-                return ours.getName() + " takes " + Arrays.toString(theirs.getParameterTypes())
-                        + " in Forge and " + Arrays.toString(ours.getParameterTypes())
-                        + " in " + shape.getSimpleName();
+            try {
+                declared.getMethod(ours.getName(), ours.getParameterTypes());
+            } catch (NoSuchMethodException absent) {
+                List<String> theirs = Arrays.stream(declared.getMethods())
+                        .filter(method -> method.getName().equals(ours.getName()))
+                        .map(method -> Arrays.toString(method.getParameterTypes()))
+                        .toList();
+                return theirs.isEmpty()
+                        ? declared.getName() + " declares no " + ours.getName()
+                        : ours.getName() + " takes " + String.join(" or ", theirs) + " in Forge and "
+                                + Arrays.toString(ours.getParameterTypes()) + " in " + shape.getSimpleName();
             }
         }
         return "";
+    }
+
+    /**
+     * Every method Forge's listener declares is restated by the stand-in or
+     * one of its older shapes, and so dispatched by its hook to a collector
+     * ({@link #eachListenerHookDeclaresItsStandInsCallbacks}).
+     *
+     * <p>The other direction from {@link #eachStandInIsForgesOwnDeclaration}:
+     * a notification Forge adds reaches the connector's proxy and would be
+     * answered with nothing, silently. No allow-list: such a method fails
+     * here until a collector reads it. Skipped on a checkout without the
+     * setter, which {@link #theSiblingForgeCheckoutIsThePatchedOne} fails.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("com.pricepredictor.connector.effects.HookShapes#declared")
+    void everyMethodForgesListenerDeclaresIsRestatedOrListed(HookShapes.Declared standIn) {
+        Optional<Method> setter = standIn.setter().lookUp();
+        Assumptions.assumeTrue(setter.isPresent(), "the checkout lacks " + standIn.setter());
+        Class<?> declared = setter.get().getParameterTypes()[0];
+        List<Class<?>> accepted = new ArrayList<>(List.of(standIn.shape()));
+        accepted.addAll(standIn.older());
+
+        for (Method theirs : declared.getMethods()) {
+            boolean restated = accepted.stream().anyMatch(shape -> Arrays.stream(shape.getMethods()).anyMatch(
+                    ours -> ours.getName().equals(theirs.getName())
+                            && Arrays.equals(ours.getParameterTypes(), theirs.getParameterTypes())));
+            assertTrue(restated,
+                    declared.getName() + " declares " + theirs.getName()
+                            + Arrays.toString(theirs.getParameterTypes())
+                            + ", which no collector reads: " + accepted + " restates none of it");
+        }
     }
 
     /**

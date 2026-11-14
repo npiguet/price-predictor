@@ -175,16 +175,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "An exchange of control completes: two control_change events in one resolution.",
-        "near_miss": "An exchange-control resolution that produced no control change.",
-        "params": {
-          "event": "control_change",
-          "min_count": 2,
-          "api": "ExchangeControl"
-        },
-        "needs": []
+        "none": "Could not express: that the two permanents share a controller is read by no outcome_event parameter."
       }
     },
     {

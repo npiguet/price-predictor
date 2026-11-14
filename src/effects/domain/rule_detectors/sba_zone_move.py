@@ -4,7 +4,11 @@ Rule 704.5 lists the state-based actions that move a permanent from the
 battlefield to the graveyard. Gen-2 already files every such move made in the
 check after a resolution in that resolution's effect half, as a
 ``zone_change`` attributed ``unresolved``, so the family runs on gen-2
-records and needs no gen-3 field.
+records and needs no gen-3 field. A combat damage step's record holds its
+own check the same way (its deaths, attributed ``unresolved``), and the
+family reads it too; a damage-step probe, whose snapshot still shows the
+keyword it stripped, it leaves out. Indestructible is read off the snapshot
+and off the keywords the record itself grants.
 
 Parameter ``check`` names which action, each read off the board the record
 shows (the snapshot before the resolution, plus the resolution's own events):
@@ -16,7 +20,9 @@ shows (the snapshot before the resolution, plus the resolution's own events):
                        is 0 or less; the near miss is one it lowered that
                        keeps 1 or more
 ``lethal_damage``      704.5g: a creature the resolution dealt damage to, by
-                       whether the damage marked reaches its toughness
+                       whether the damage marked reaches its toughness; damage
+                       from a wither or infect source marks none (-1/-1
+                       counters, 704.5f's) and is left out
 ``deathtouch_damage``  704.5h: a creature dealt non-lethal damage by a source
                        with deathtouch; the near miss is non-lethal damage
                        from a source without it
@@ -25,7 +31,9 @@ shows (the snapshot before the resolution, plus the resolution's own events):
 ``defense_zero``       704.5v: a battle the resolution removed defense
                        counters from, by whether none remain
 ``legend_rule``        704.5j: two or more legendary permanents with one name
-                       under one controller; the near miss is a legendary
+                       under one controller, one of them touched by the
+                       record (a pair already standing, as under Mirror
+                       Gallery, shows no check); the near miss is a legendary
                        permanent entering with no such twin
 ``world_rule``         704.5k: two or more world permanents; the near miss is
                        a world permanent entering alone
@@ -34,6 +42,12 @@ shows (the snapshot before the resolution, plus the resolution's own events):
                        Aura's colours; the near miss is an Aura whose host the
                        record touched and which stayed legal
 =====================  ======================================================
+
+Two parameters narrow a check: ``marked_before`` (``lethal_damage`` only)
+keeps the creatures the board already shows damage marked on, the damage
+accumulating over the turn (120.6); ``aura_cause`` (``aura_illegal`` only),
+``left`` or ``protection``, keeps the Auras whose host left, or gained a
+protection, in the record.
 
 The polarity is read from the board, ``observed`` from the record's own move,
 so a record where Forge disagrees with the rule is the one
@@ -87,6 +101,7 @@ from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, Moment, RecordKind
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import is_rescued_orphans
 from effects.domain.rule_outcomes import damage_lethal
 from effects.domain.state_snapshot import EntityState, normalize_counter_type
@@ -214,15 +229,24 @@ def _protection_side(aura: EntityState, protections: list[str]) -> bool | None:
     return found
 
 
-def _deathtouched(record, touched, t: _Touched, keywords) -> bool:
-    """Whether a source of the damage the creature was dealt has deathtouch,
-    printed, granted on the board, or granted by the record itself."""
+def _source_has(record, touched, t: _Touched, keywords, wanted: frozenset[str]) -> bool:
+    """Whether a source of the damage the creature was dealt has one of
+    ``wanted``, printed, granted on the board, or granted by the record itself."""
     for source in t.damage_sources:
         entity = record.state.entity(source)
-        if "deathtouch" in touched.get(source, _Touched()).gained or (
-                entity is not None and "deathtouch" in keywords(entity)):
+        if wanted & touched.get(source, _Touched()).gained or (
+                entity is not None and wanted & keywords(entity)):
             return True
     return False
+
+
+def _deathtouched(record, touched, t: _Touched, keywords) -> bool:
+    return _source_has(record, touched, t, keywords, frozenset({"deathtouch"}))
+
+
+#: Damage from a source with one of these is dealt as -1/-1 counters and
+#: marks none (702.80a, 702.90b).
+_COUNTER_DAMAGE = frozenset({"wither", "infect"})
 
 
 def _zero_toughness_on_entry(record, touched, entity_id) -> bool:
@@ -251,9 +275,11 @@ def _creature_checks(record, touched, check, keywords) -> tuple[list, list, list
             side = toughness <= 0
             if not side and 0 < toughness <= entity.damage:
                 continue  # marked damage now lethal: 704.5g's, not a near miss
-        elif not t.damage_dealt or "indestructible" in keywords(entity):
+        elif not t.damage_dealt or "indestructible" in keywords(entity) | t.gained:
             continue
         elif check == "lethal_damage":
+            if _source_has(record, touched, t, keywords, _COUNTER_DAMAGE):
+                continue  # -1/-1 counters, no marked damage: 704.5f's
             side = damage_lethal(toughness, entity.damage, t.damage_dealt)
             if not side and _deathtouched(record, touched, t, keywords):
                 continue  # 704.5h's, not a near miss of 704.5g
@@ -303,6 +329,10 @@ def _uniqueness_checks(record, touched, check) -> tuple[list, list, list]:
     for members in groups.values():
         died = [m for m in members if touched.get(m, _Touched()).died]
         if len(members) >= 2:
+            if not any(m in touched for m in members):
+                # A pair the record's changes did not make (Mirror Gallery,
+                # or one the check already let stand) shows no check.
+                continue
             fires += members
             observed += died
         elif any(touched.get(m, _Touched()).entered for m in members):
@@ -314,9 +344,14 @@ def _uniqueness_checks(record, touched, check) -> tuple[list, list, list]:
     return fires, spared, observed
 
 
-def _aura_checks(record, touched, keywords) -> tuple[list, list, list]:
+#: Why an Aura's host stops being legal: it left, or it gained protection.
+AURA_CAUSES = frozenset({"left", "protection"})
+
+
+def _aura_checks(record, touched, keywords, cause: str | None = None
+                 ) -> tuple[list, list, list]:
     fires, spared, observed = [], [], []
-    acted_on = {record.state.refs.source, *record.state.refs.targets}
+    acted_on = {record.state.refs.source, *record.state.refs.as_cast}
     for aura in record.state.entities:
         if ("aura" not in {s.lower() for s in aura.subtypes} or not aura.attached_to
                 or not aura.on_battlefield or aura.id in acted_on
@@ -333,6 +368,11 @@ def _aura_checks(record, touched, keywords) -> tuple[list, list, list]:
             # every enchant keyword ``enchant``), so a host changing types or
             # gaining an unnamed protection says nothing of its legality.
             continue
+        if cause == "left" and not host.left and protected:
+            continue
+        if cause == "protection" and (host.left or not any(
+                k.startswith("protection") for k in host.gained)):
+            continue
         (fires if host.left or protected else spared).append(aura.id)
         if touched.get(aura.id, _Touched()).died:
             observed.append(aura.id)
@@ -342,29 +382,49 @@ def _aura_checks(record, touched, keywords) -> tuple[list, list, list]:
 @dataclass(frozen=True, slots=True)
 class SbaZoneMove:
     id: str = "sba_zone_move"
-    params: frozenset[str] = frozenset({"check"})
+    params: frozenset[str] = frozenset({"check", "marked_before", "aura_cause"})
     general: frozenset[str] = frozenset({"check"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         return frozenset()
 
-    def match(self, record: EffectRecord, lines: SidecarLookup | None,
-              params: Mapping[str, Any]) -> FamilyMatch | None:
+    def validate(self, params: Mapping[str, Any]) -> None:
         check = params.get("check")
         if check not in CHECKS:
             raise ValueError(f"sba_zone_move: unknown check {check!r}; known: {sorted(CHECKS)}")
-        if (record.kind is not RecordKind.RESOLUTION or record.moment is not Moment.RESOLUTION
-                or is_rescued_orphans(record) or game_ends(record)):
+        dv.check(self.id, params, {"marked_before": dv.boolean})
+        if "marked_before" in params and check != "lethal_damage":
+            raise ValueError("sba_zone_move: marked_before reads lethal_damage")
+        if "aura_cause" in params and (check != "aura_illegal"
+                                       or params["aura_cause"] not in AURA_CAUSES):
+            raise ValueError(f"sba_zone_move: aura_cause is one of {sorted(AURA_CAUSES)}, "
+                             "with aura_illegal")
+
+    def match(self, record: EffectRecord, lines: SidecarLookup | None,
+              params: Mapping[str, Any]) -> FamilyMatch | None:
+        check = params.get("check")
+        effect_half = (record.kind is RecordKind.RESOLUTION
+                       and record.moment is Moment.RESOLUTION)
+        combat = record.kind is RecordKind.COMBAT and not record.is_probe
+        if (not (effect_half or combat) or is_rescued_orphans(record)
+                or game_ends(record)):
             return None
         touched = _touched(record)
         if check in ("toughness_zero", "lethal_damage", "deathtouch_damage"):
             keywords = KeywordResolver(lines).keywords_of
             fires, spared, observed = _creature_checks(record, touched, check, keywords)
+            if params.get("marked_before"):
+                # Damage accumulating over the turn (120.6): only a creature
+                # the board shows damage already marked on.
+                def marked(entity_id: str) -> bool:
+                    entity = record.state.entity(entity_id)
+                    return entity is not None and entity.damage > 0
+                fires, spared = [e for e in fires if marked(e)], [e for e in spared if marked(e)]
         elif check in _COUNTER_OF:
             fires, spared, observed = _counter_checks(record, touched, check)
         elif check == "aura_illegal":
             fires, spared, observed = _aura_checks(
-                record, touched, KeywordResolver(lines).keywords_of)
+                record, touched, KeywordResolver(lines).keywords_of, params.get("aura_cause"))
         else:
             fires, spared, observed = _uniqueness_checks(record, touched, check)
         for polarity, judged in ((Polarity.FIRES, fires), (Polarity.DOES_NOT_FIRE, spared)):

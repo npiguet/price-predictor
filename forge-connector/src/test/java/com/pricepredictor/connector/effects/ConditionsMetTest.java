@@ -123,6 +123,65 @@ class ConditionsMetTest {
         assertEquals(List.of(), conditionsOf(effectHalf(records)));
     }
 
+    /**
+     * A conditional clause of another line of the same card is not the
+     * resolution's: Eddymurk Crab's "enters tapped if it's not your turn"
+     * is an enters-the-battlefield replacement whose clause resolves while
+     * the creature spell resolves, and the spell's effect half writes no
+     * condition of it.
+     */
+    @Test
+    void anotherLinesConditionalClauseIsNotTheResolutions() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card crab = TestBoard.inHand(game, caster, "Eddymurk Crab");
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            EffectEndingTheTurnTest.castWithoutTarget(game, crab, caster);
+            game.getStack().resolveStack();
+            game.getAction().checkStateEffects(false);
+            nextStep(game);
+        });
+
+        assertTrue(game.getCardsIn(forge.game.zone.ZoneType.Battlefield).stream()
+                .anyMatch(card -> card.getId() == crab.getId() && !card.isTapped()),
+                "the crab entered untapped on its controller's turn");
+        String half = RecordLines.only(records, "resolution", "cardsfolder/e/eddymurk_crab.txt", "spell");
+        assertEquals(List.of(), conditionsOf(half), half);
+    }
+
+    /**
+     * A chosen charm mode's conditional sub-ability is on the mode's line:
+     * Archdruid's Charm's first mode searches out a Forest and its
+     * sub-ability puts it onto the battlefield only if it is a land. The
+     * mode's half writes that clause's condition, counted down the option
+     * line, met.
+     */
+    @Test
+    void aChosenModesConditionalClauseIsTheModesHalfs() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card forest = TestBoard.card(game, caster, "Forest");
+        game.getAction().moveToLibrary(forest, null, null);
+        Card charmCard = TestBoard.inHand(game, caster, "Archdruid's Charm");
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            Card onStack = game.getAction().moveToStack(charmCard, null);
+            SpellAbility charm = TestBoard.charmOf(onStack, caster);
+            TestBoard.chain(charm, 0);
+            game.getStack().add(charm);
+            game.getStack().resolveStack();
+            game.getAction().checkStateEffects(false);
+            nextStep(game);
+        });
+
+        assertTrue(game.getCardsIn(forge.game.zone.ZoneType.Battlefield).stream()
+                .anyMatch(card -> card.getId() == forest.getId()), "the Forest entered");
+        String half = RecordLines.only(records, "resolution", "cardsfolder/a/archdruids_charm.txt");
+        assertEquals(0L, RecordLines.optionOf(half), half);
+        assertEquals(List.of(Map.of("segment", "0", "met", true)), conditionsOf(half), half);
+    }
+
     /** A forced resolution reads its clauses' conditions as an observed one does. */
     @Test
     void aForcedResolutionCarriesItsConditions() throws java.io.IOException {

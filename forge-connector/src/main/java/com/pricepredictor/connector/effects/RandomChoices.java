@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import forge.ai.ComputerUtilMana;
 import forge.game.GameEntity;
+import forge.game.GameObject;
 import forge.game.ability.AbilityUtils;
 import forge.game.ability.ApiType;
 import forge.game.ability.effects.CharmEffect;
@@ -63,6 +64,13 @@ public final class RandomChoices {
      * clones of them, which is how a mode's targets, drawn on the original,
      * reach the clone that resolves.
      *
+     * <p>Only among the modes whose targets exist (603.3c): a mode any
+     * clause of whose chain needs more targets than the board offers is no
+     * legal choice. Forge's own list ({@code CharmEffect.makePossibleOptions})
+     * reads a mode's first clause alone, so a mode targeting in a later
+     * clause is read here, and a draw never lands on a mode set the targets
+     * draw would then fail on.
+     *
      * @return the modes, possibly empty where the charm's minimum is zero;
      *         null when the ability is not a charm or has no legal mode set
      */
@@ -70,12 +78,18 @@ public final class RandomChoices {
         if (charm.getApi() != ApiType.Charm) {
             return null;
         }
-        List<AbilitySub> options = CharmEffect.makePossibleOptions(charm);
-        if (options == null || options.isEmpty()) {
+        List<AbilitySub> printed = CharmEffect.makePossibleOptions(charm);
+        if (printed == null || printed.isEmpty()) {
             return null;
         }
+        List<AbilitySub> options = new ArrayList<>();
+        for (AbilitySub option : printed) {
+            if (hasItsTargets(option, charm.getActivatingPlayer())) {
+                options.add(option);
+            }
+        }
         if (charm.isEntwine()) {
-            return new ArrayList<>(options);
+            return options.size() == printed.size() ? new ArrayList<>(options) : null;
         }
         Card host = charm.getHostCard();
         boolean repeat = charm.hasParam("CanRepeatModes");
@@ -86,7 +100,14 @@ public final class RandomChoices {
                 host, charm.getParamOrDefault("CharmNum", "1"), charm);
         int min = CharmModes.minimumModes(charm);
         if (!repeat) {
+            // A mode set of the printed size needs that many distinct legal
+            // modes: fewer legal than the charm's minimum is no legal set.
+            if (Math.min(min, printed.size()) > options.size()) {
+                return null;
+            }
             max = Math.min(max, options.size());
+        } else if (options.isEmpty() && min > 0) {
+            return null;
         }
         min = Math.max(0, Math.min(min, max));
         if (max < 0) {
@@ -130,6 +151,33 @@ public final class RandomChoices {
                 remaining.remove(pick);
             }
         }
+    }
+
+    /**
+     * Whether every targeting clause of {@code mode}'s chain has as many
+     * legal candidates as its minimum, for {@code activator}: each counted
+     * alone, so a cross-target constraint is left to the targets draw.
+     */
+    static boolean hasItsTargets(SpellAbility mode, Player activator) {
+        for (SpellAbility clause = mode; clause != null; clause = clause.getSubAbility()) {
+            if (!clause.usesTargeting() || clause.getMinTargets() <= 0) {
+                continue;
+            }
+            Player was = clause.getActivatingPlayer();
+            if (was == null && activator != null) {
+                clause.setActivatingPlayer(activator);
+            }
+            int legal = 0;
+            for (GameEntity candidate : clause.getTargetRestrictions().getAllCandidates(clause)) {
+                if (clause.canTarget(candidate)) {
+                    legal++;
+                }
+            }
+            if (legal < clause.getMinTargets()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static int pawprintCost(AbilitySub option) {
@@ -188,24 +236,88 @@ public final class RandomChoices {
 
     /**
      * One clause's targets: a count uniform in [min, max], then that many
-     * distinct legal candidates (FR-022b).
+     * distinct legal candidates (FR-022b), and a divided amount split among
+     * them.
+     *
+     * <p>The candidates are offered in a random order and each is taken only
+     * if the clause can still target it beside those already taken
+     * ({@code SpellAbility.canTarget}), which is where Forge reads the
+     * constraints across a clause's targets: different or the same
+     * controllers, different names or mana values, a total mana value or
+     * power (V3 #4). A clause that "divides as you choose" gets its amount
+     * split at random over its targets, each at least one while the amount
+     * lasts ({@link #divide}); without it the resolution reads a null share
+     * (V3 #3).
      */
     public boolean chooseTargetsFor(SpellAbility clause) {
-        clause.resetTargets();
+        // clearTargets also sets the amount a divided clause splits.
+        clause.clearTargets();
         List<GameEntity> candidates = clause.getTargetRestrictions().getAllCandidates(clause);
         int min = Math.max(0, clause.getMinTargets());
         int max = Math.min(clause.getMaxTargets(), candidates.size());
+        if (clause.isDividedAsYouChoose()) {
+            // Each target takes at least one of the amount (601.2d): no more
+            // targets than the amount, which an announced X decides, and at
+            // least one target for an amount to divide at all.
+            int amount = dividedAmount(clause);
+            max = Math.min(max, amount);
+            if (amount > 0) {
+                min = Math.max(min, 1);
+            }
+        }
         if (max < min) {
             return false;
         }
         int count = between(min, max);
-        for (GameEntity target : drawDistinct(candidates, count, random)) {
-            if (!clause.canAddMoreTarget()) {
+        for (GameEntity target : drawDistinct(candidates, candidates.size(), random)) {
+            if (clause.getTargets().size() >= count || !clause.canAddMoreTarget()) {
                 break;
             }
-            clause.getTargets().add(target);
+            if (clause.canTarget(target)) {
+                clause.getTargets().add(target);
+            }
         }
-        return clause.isTargetNumberValid();
+        if (!clause.isTargetNumberValid()) {
+            return false;
+        }
+        if (clause.isDividedAsYouChoose()) {
+            divide(clause);
+        }
+        return true;
+    }
+
+    /** The amount a divided clause splits, with its X as announced; never below zero. */
+    private static int dividedAmount(SpellAbility clause) {
+        Integer amount = clause.getDividedValue();
+        if (amount == null) {
+            amount = AbilityUtils.calculateAmount(
+                    clause.getHostCard(), clause.getParam("DividedAsYouChoose"), clause);
+        }
+        return Math.max(0, amount);
+    }
+
+    /**
+     * Split a divided clause's amount among its targets at random: each
+     * target one while the amount lasts, the rest one at a time to a
+     * uniformly drawn target.
+     */
+    void divide(SpellAbility clause) {
+        List<GameObject> targets = new ArrayList<>();
+        clause.getTargets().getTargetEntities().forEach(targets::add);
+        if (targets.isEmpty()) {
+            return;
+        }
+        int[] shares = new int[targets.size()];
+        int left = dividedAmount(clause);
+        for (int i = 0; i < shares.length && left > 0; i++, left--) {
+            shares[i] = 1;
+        }
+        while (left-- > 0) {
+            shares[random.nextInt(shares.length)]++;
+        }
+        for (int i = 0; i < shares.length; i++) {
+            clause.addDividedAllocation(targets.get(i), shares[i]);
+        }
     }
 
     // ── X ───────────────────────────────────────────────────────────────

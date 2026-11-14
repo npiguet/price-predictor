@@ -181,12 +181,15 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A populate or copy-permanent resolution creates no copy (no permanent_copied event), as when its controller controls no creature token.",
-        "near_miss": "A populate or copy-permanent resolution that created a copy (a permanent_copied event).",
+        "outcome": "A populate with no creature token to copy creates nothing.",
+        "near_miss": "A populate creating a token copy.",
         "params": {
           "event": "permanent_copied",
           "api": "CopyPermanent",
-          "absent": true
+          "absent": true,
+          "script_param": {
+            "Populate": "True"
+          }
         },
         "needs": []
       }

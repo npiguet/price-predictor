@@ -184,15 +184,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "continuous_contribution",
-        "record_kind": "continuous",
-        "outcome": "A static conditioned on at least N level counters grants the host keywords while it has that many counters.",
-        "near_miss": "A level-conditioned static whose host has fewer level counters than its threshold, so it gives the host nothing.",
-        "params": {
-          "field": "keywords",
-          "counter_condition": "LEVEL"
-        },
-        "needs": []
+        "none": "Could not express: whether the static's level condition is a bounded range or the open-ended N3+ one is in its IsPresent$ value, which counter_condition does not tell apart (it reads the counter type)."
       }
     },
     {

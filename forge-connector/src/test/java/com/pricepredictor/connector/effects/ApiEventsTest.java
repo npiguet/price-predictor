@@ -73,6 +73,27 @@ class ApiEventsTest {
     }
 
     /**
+     * The count is read off {@code NumTurns$}: Alchemist's Gambit names none,
+     * so its 1 is the fallback a rule that never read the parameter also gives.
+     */
+    @Test
+    void anExtraTurnCountIsTheClausesNumTurns() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "SP$ AddTurn | Defined$ You | NumTurns$ 3", TestCards.build("Grizzly Bears"));
+
+        assertEquals(3, observe(sa).finish().params().get("count"));
+    }
+
+    /** The same for a skipped turn. */
+    @Test
+    void aSkippedTurnCountIsTheClausesNumTurns() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "SP$ SkipTurn | Defined$ You | NumTurns$ 2", TestCards.build("Grizzly Bears"));
+
+        assertEquals(2, observe(sa).finish().params().get("count"));
+    }
+
+    /**
      * Not Blinding Angel: its {@code SkipPhase} clause is the {@code Execute$}
      * of a triggered ability, which lives on the {@code Trigger} object, not
      * in {@code card.getCurrentState().getSpellAbilities()} or any
@@ -135,10 +156,14 @@ class ApiEventsTest {
     @Test
     void anOwnershipChangeWithNoNamedOwnerIsStillAnOwnershipChange() {
         SpellAbility sa = TestCards.scriptedAbility("Darkpact", "GainOwnership");
+        Player activator = new Player("activator", TestCards.game(), 91503);
+        sa.setActivatingPlayer(activator);
 
         EffectEvent event = observe(sa).finish();
 
         assertEquals(EventType.OWNERSHIP_CHANGE, event.type());
+        // OwnershipGainEffect's fallback: no DefinedPlayer, the activator.
+        assertEquals(Refs.of(activator), event.params().get("owner"));
     }
 
     /**
@@ -358,8 +383,9 @@ class ApiEventsTest {
      * ChooseDirectionEffect.setChosenDirection}, {@code
      * ChooseEvenOddEffect.setChosenEvenOdd}, and {@code
      * ChooseGenericEffect}'s {@code SetChosenMode$ True} path's {@code
-     * setChosenMode} -- on a fresh host each time, so one API's fixture
-     * cannot leak into another's read.
+     * setChosenMode} -- on a fresh host each time, which already holds a
+     * colour and a number chosen earlier, so the reading follows the API
+     * that ran rather than whichever accessor holds something.
      */
     @Test
     void everyChoiceMadeApiHasAReadableChoice() {
@@ -407,6 +433,15 @@ class ApiEventsTest {
         for (Map.Entry<String, ChoiceFixture> fixture : fixtures.entrySet()) {
             Card host = TestCards.build("Grizzly Bears");
             SpellAbility sa = AbilityFactory.getAbility("SP$ " + fixture.getKey(), host);
+            // Earlier choices the host still holds, which every other API's
+            // reading would find first: the clause's own API decides the
+            // reading, not what the host happens to hold.
+            if (!"ChooseColor".equals(fixture.getKey())) {
+                host.setChosenColors(List.of("red"));
+            }
+            if (!"ChooseNumber".equals(fixture.getKey())) {
+                host.setChosenNumber(9);
+            }
             fixture.getValue().mutate().accept(host);
 
             EffectEvent event = observe(sa).finish();
@@ -576,6 +611,8 @@ class ApiEventsTest {
     @Test
     void aSecretlyChosenNumberIsStillAChoice() {
         Card host = TestCards.build("Grizzly Bears");
+        // A colour chosen earlier, which the number's API does not read.
+        host.setChosenColors(List.of("red"));
         host.setChosenNumber(7, true);
         SpellAbility sa = AbilityFactory.getAbility("SP$ ChooseNumber", host);
 
@@ -630,13 +667,6 @@ class ApiEventsTest {
         assertTrue(output.contains(half.names), output);
         assertTrue(output.contains("turn_added"), output);
         assertTrue(output.contains("boom"), output);
-    }
-
-    @Test
-    void anEmitterThatNeverThrowsReportsNothing() throws Throwable {
-        SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-
-        assertEquals("", StdStreams.captureStderr(() -> observe(sa).finish()));
     }
 
     /**

@@ -68,18 +68,8 @@
       ],
       "forge_notes": "The end-step variant sets setup.step to end; the tapped variant sets the Mountain's tapped flag.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A card's suspend special action is a candidate whose timing check passes because the card could begin to be cast now.",
-        "near_miss": "A suspend candidate whose timing check fails.",
-        "params": {
-          "bit": "timing",
-          "fires_when": true,
-          "keyword": "Suspend"
-        },
-        "needs": [
-          "timing"
-        ]
+        "same_as": "116.2f-1",
+        "reason": "Both state when a card with suspend may be exiled with suspend."
       }
     },
     {
@@ -278,12 +268,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A static that prohibits casting makes the candidate's can_play false.",
-        "near_miss": "The same candidate has can_play true with no prohibiting static.",
+        "outcome": "A suspend candidate a casting prohibition forbids is not playable.",
+        "near_miss": "A suspend candidate no static forbids.",
         "params": {
           "bit": "can_play",
           "fires_when": false,
-          "responsible_static": true
+          "responsible_static": true,
+          "keyword": "Suspend"
         },
         "needs": []
       }
@@ -365,7 +356,8 @@
         "params": {
           "bit": "affordable",
           "fires_when": false,
-          "responsible_static": true
+          "responsible_static": true,
+          "source_keyword": "Suspend"
         },
         "needs": []
       }

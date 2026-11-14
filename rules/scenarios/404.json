@@ -68,16 +68,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "An instant or sorcery spell that finished resolving moves from the stack to its owner's graveyard.",
-        "near_miss": "A resolution of a spell that did not move it to the graveyard (flashback exile).",
-        "params": {
-          "event": "zone_change",
-          "from_zone": "stack",
-          "to_zone": "graveyard"
-        },
-        "needs": []
+        "same_as": "304.2-1",
+        "reason": "An instant put into the graveyard as it resolves is 304.2's fact."
       }
     },
     {
@@ -238,14 +230,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "sba_zone_move",
-        "record_kind": "resolution",
-        "outcome": "A creature with lethal damage marked dies in the state-based check and is put into the graveyard.",
-        "near_miss": "A creature dealt damage short of its toughness stays on the battlefield.",
-        "params": {
-          "check": "lethal_damage"
-        },
-        "needs": []
+        "same_as": "704.5g-1",
+        "reason": "The record shows a creature with lethal damage marked put into the graveyard in the state-based check, 704.5g's fact."
       }
     },
     {
@@ -317,17 +303,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A discard effect moves a card from hand to the graveyard.",
-        "near_miss": "A Discard resolution that moved no card from hand to the graveyard.",
-        "params": {
-          "event": "zone_change",
-          "from_zone": "hand",
-          "to_zone": "graveyard",
-          "api": "Discard"
-        },
-        "needs": []
+        "same_as": "701.9a-1",
+        "reason": "A discarded card put into its owner's graveyard is 701.9a's fact."
       }
     },
     {
@@ -403,17 +380,8 @@
       ],
       "forge_notes": "A token named Grizzly Bears stands for a vanilla 2/2 green Bear token.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A sacrificed permanent moves from the battlefield to the graveyard.",
-        "near_miss": "A Sacrifice resolution that moved no permanent to the graveyard.",
-        "params": {
-          "event": "zone_change",
-          "from_zone": "battlefield",
-          "to_zone": "graveyard",
-          "api": "Sacrifice"
-        },
-        "needs": []
+        "same_as": "701.21a-1",
+        "reason": "A sacrificed permanent put into its owner's graveyard is 701.21a's fact."
       }
     }
   ]

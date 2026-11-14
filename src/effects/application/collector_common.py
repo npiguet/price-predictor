@@ -8,6 +8,7 @@ everything here is the plumbing beneath both, so neither imports the other.
 
 from __future__ import annotations
 
+import argparse
 import random
 import uuid
 from collections.abc import Iterator, Mapping
@@ -20,6 +21,17 @@ from effects.domain import default_paths
 from effects.domain.card_names import fold_card_name
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.split import HoldoutRule
+from price_predictor.infrastructure.forge_jvm import (
+    DEFAULT_RECYCLE_SECONDS,
+    DEFAULT_STOP_TIMEOUT,
+    MAX_WORKERS,
+    RECYCLE_SECONDS_HELP,
+    STOP_TIMEOUT_HELP,
+    WorkerStopSettings,
+    recycle_seconds,
+    stop_timeout,
+    worker_count,
+)
 from sealed.domain.manabase import compute_basic_lands
 
 if TYPE_CHECKING:
@@ -27,9 +39,29 @@ if TYPE_CHECKING:
     from effects.infrastructure.collector_connector import CollectorSupervisor
     from effects.infrastructure.converted_trees import SourceTrees
 
-#: Java worker processes, for both collectors.
+#: Java worker processes, for both collectors; the most a run may take is
+#: ``forge_jvm.MAX_WORKERS``, which its shard counters also run.
 DEFAULT_WORKERS = 12
 DEFAULT_DECKS_PER_ROUND = 500
+
+
+def positive_int(text: str) -> int:
+    """A count of at least 1: a round of no decks, a target of no records or
+    no rounds before retiring is no run (V4 #9)."""
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1, got {value}")
+    return value
+
+
+def non_negative_int(text: str) -> int:
+    """A count of at least 0."""
+    value = int(text)
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"must be at least 0, got {value}")
+    return value
+
+
 
 #: Seeds both collectors' deck draws, and the variant collector's perturbations.
 RANDOM_SEED = 42
@@ -78,10 +110,23 @@ class CollectorConfig:
     cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     deck_holdout: DeckHoldout = DeckHoldout()
     decks_per_round: int = field(default=DEFAULT_DECKS_PER_ROUND, metadata={
+        "type": positive_int,
         "help": "Decks played as matches per round (default: %(default)s)",
     })
     workers: int = field(default=DEFAULT_WORKERS, metadata={
-        "help": "Parallel Java worker processes (default: %(default)s)",
+        "type": worker_count,
+        "help": (
+            f"Parallel Java worker processes, and shard-counting processes, 1 to "
+            f"{MAX_WORKERS} (default: %(default)s)"
+        ),
+    })
+    stop_timeout: int = field(default=DEFAULT_STOP_TIMEOUT, metadata={
+        "type": stop_timeout,
+        "help": STOP_TIMEOUT_HELP,
+    })
+    recycle_seconds: int = field(default=DEFAULT_RECYCLE_SECONDS, metadata={
+        "type": recycle_seconds,
+        "help": RECYCLE_SECONDS_HELP,
     })
     #: Every record a collector writes is aimed (FR-009a): at the run's
     #: ``--directed-fork-rules``, and at no rule, ``[]``, where it names none.
@@ -105,6 +150,11 @@ class CollectorConfig:
         from effects.infrastructure.converted_trees import SourceTrees
 
         return SourceTrees.of(self.cards_folders)
+
+    @property
+    def worker_stop(self) -> WorkerStopSettings:
+        """How the run's workers are stopped and recycled."""
+        return WorkerStopSettings(timeout=self.stop_timeout, recycle_seconds=self.recycle_seconds)
 
 
 TWO_HOLDOUT_SOURCES = (
@@ -267,6 +317,7 @@ def collector_supervisor(
     effect_records: Path,
     caps: CollectionCaps,
     variant_scripts: Path | None = None,
+    stop: WorkerStopSettings | None = None,
 ) -> Iterator[CollectorSupervisor]:
     """A records-only supervisor under a fresh run id, stopped however its
     rounds end: without ``stop()`` the worker logs holding the latched failure
@@ -276,6 +327,7 @@ def collector_supervisor(
     supervisor = CollectorSupervisor(
         worker_count=workers, effect_records=effect_records,
         run_id=str(uuid.uuid4()), caps=caps, variant_scripts=variant_scripts,
+        stop=stop,
     )
     try:
         yield supervisor
@@ -283,3 +335,8 @@ def collector_supervisor(
         supervisor.stop()
 
 
+def record_damaged_shards(supervisor, damaged: list[str]) -> None:
+    """Keep every damaged shard the run has read so far, each its read's
+    message, in ``run.json`` as ``corrupt_shards``; nothing when there is none."""
+    if damaged:
+        supervisor.record(corrupt_shards=sorted(damaged))

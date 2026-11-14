@@ -203,16 +203,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A counterspell resolves and counters nothing: its target spell has a static ability saying it can't be countered, so no spell_countered event is written.",
-        "near_miss": "A counterspell resolves and removes its target spell from the stack, writing a spell_countered event.",
-        "params": {
-          "event": "spell_countered",
-          "api": "Counter",
-          "absent": true
-        },
-        "needs": []
+        "same_as": "113.6g-1",
+        "reason": "A can't-be-countered spell resolving despite a counterspell is 113.6g's fact."
       }
     },
     {
@@ -337,17 +329,8 @@
       ],
       "forge_notes": "Forge implements this restriction as an ActivationPhases parameter on the spell, not as a static ability.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A candidate spell fails the phase check because its own 'cast only during/before ...' static ability excludes the current step.",
-        "near_miss": "A decision in which every candidate passes the phase check, a phase-restricted spell in a step its restriction allows included.",
-        "params": {
-          "bit": "failed_check",
-          "check": "phase"
-        },
-        "needs": [
-          "failed_checks"
-        ]
+        "same_as": "506.8a-1",
+        "reason": "The record shows a spell in hand failing its phase check, 506.8a's fact; that the restriction functions from the hand adds no observable."
       }
     },
     {

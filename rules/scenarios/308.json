@@ -71,11 +71,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A kindred card's cast candidate whose timing is that of its other card type (legal timing).",
-        "near_miss": "A kindred sorcery candidate on the opponent's turn has timing false.",
+        "outcome": "A kindred card's cast candidate has the timing of its other card type.",
+        "near_miss": "A kindred card's cast candidate whose timing is false.",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "candidate": "cast",
+          "source_type": "kindred"
         },
         "needs": [
           "timing"
@@ -143,12 +145,13 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolved spell moves from the stack to the battlefield when its other type is a permanent type (zone_change in the effect half).",
-        "near_miss": "A kindred instant or sorcery moves to the graveyard instead; not counted without an api.",
+        "outcome": "A resolving kindred spell is put onto the battlefield.",
+        "near_miss": "A kindred spell's resolution that puts nothing onto the battlefield.",
         "params": {
           "event": "zone_change",
           "from_zone": "stack",
-          "to_zone": "battlefield"
+          "to_zone": "battlefield",
+          "source_type": "kindred"
         },
         "needs": []
       }

@@ -386,9 +386,27 @@ def selection_set_path(reports_dir: Path, corpus_digest: str) -> Path:
 
 
 def write_selection_set(path: Path, selection: SelectionSet) -> Path:
-    """Write ``selection`` sealed, as indented JSON with sorted keys."""
+    """Write ``selection`` sealed, as indented JSON with sorted keys.
+
+    A set already at ``path`` is never replaced by another: checkpoints were
+    selected against it, so a different one is refused
+    (:class:`SelectionSetError`) and the same one leaves the file as it is.
+    """
     sealed = selection if selection.digest else selection.sealed()
     path = Path(path)
+    if path.exists():
+        try:
+            held = json.loads(path.read_text(encoding="utf-8")).get("digest")
+        except (OSError, ValueError, AttributeError):
+            held = None
+        if held == sealed.digest:
+            return path
+        raise SelectionSetError(
+            f"{path} already holds a selection set (digest {held}) other than the "
+            f"one just frozen (digest {sealed.digest}). Checkpoints trained on this "
+            "corpus were selected against the one on disk; delete it first to "
+            "replace it."
+        )
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8", newline="\n") as handle:
         json.dump(sealed.to_json(), handle, indent=1, sort_keys=True)

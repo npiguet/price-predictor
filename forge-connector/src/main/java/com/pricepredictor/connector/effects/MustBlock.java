@@ -36,7 +36,10 @@ import forge.game.staticability.StaticAbilityMustBlock;
  * legal list says it cannot block. A requirement whose block costs something
  * is none, as rule 509.1c and Forge both have it. The attacker's "must be
  * blocked if able" variants are left out: they require something of the
- * block as a whole, not of any one creature.
+ * block as a whole, not of any one creature. A blocker's
+ * {@code required_elsewhere} reads them anyway, through Forge's own check
+ * ({@link PlayabilityChannel#requiredElsewhere}), which holds every able
+ * blocker to them while they are unmet.
  */
 final class MustBlock {
 

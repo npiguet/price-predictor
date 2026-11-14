@@ -27,11 +27,15 @@ from effects.application.collector_common import (
     CollectorConfig,
     build_coverage_decks,
     collector_supervisor,
+    non_negative_int,
+    positive_int,
+    record_damaged_shards,
 )
 from effects.application.parallel_map import run_parallel
 from effects.domain import default_paths
 from effects.domain.card_names import fold_card_name
 from effects.domain.coverage import DeckCandidate, is_complete, retire_stalled
+from effects.domain.game_ends import GameEnds
 from effects.domain.rule_outcomes import (
     CARD_TYPES,
     CONDITIONS,
@@ -64,7 +68,7 @@ from effects.domain.variant_rounds import (
     variant_script_file,
 )
 from effects.infrastructure.one_shot_workers import write_variant_sidecars
-from effects.infrastructure.variant_staging import unstage_variants
+from effects.infrastructure.variant_staging import claim_staging, unstage_variants
 from price_predictor.infrastructure.card_filenames import sanitize_card_name
 from sealed.infrastructure.effect_collection_flags import directed_fork_error
 
@@ -99,9 +103,11 @@ class CollectVariantsConfig(CollectorConfig):
         ),
     })
     variant_games: int = field(default=DEFAULT_VARIANT_GAMES, metadata={
+        "type": positive_int,
         "help": "Games each variant is played to (default: %(default)s)",
     })
     no_progress_rounds: int = field(default=DEFAULT_NO_PROGRESS_ROUNDS, metadata={
+        "type": positive_int,
         "help": (
             "Rounds without a new game before a variant retires "
             "(default: %(default)s)"
@@ -112,26 +118,37 @@ class CollectVariantsConfig(CollectorConfig):
         "collected, gen-3"
     )})
     steer_floor: int = field(default=DEFAULT_STEER_FLOOR, metadata={
+        "type": positive_int,
         "help": "Records below which a (rule, polarity) is short (default: %(default)s)",
     })
     steer_variants: int = field(default=DEFAULT_STEER_VARIANTS, metadata={
+        "type": positive_int,
         "help": (
             "Variants per iteration, split over the short pairs by shortfall "
             "(default: %(default)s)"
         ),
     })
     steer_min_gain: int = field(default=DEFAULT_STEER_MIN_GAIN, metadata={
+        "type": non_negative_int,
         "help": (
             "Records of its short polarity an iteration must add to keep a rule "
             "(default: %(default)s)"
         ),
     })
     steer_iterations: int = field(default=DEFAULT_STEER_ITERATIONS, metadata={
+        "type": positive_int,
         "help": "Iterations of the steered round at most (default: %(default)s)",
     })
     #: The catalogue the steered round reads its short pairs, scenario cards
     #: and script edits from; no flag, as on build-corpus.
     rules_dir: Path = Path("rules")
+    #: Supervisor run ids of earlier, interrupted runs into the same
+    #: ``--effect-records`` (``--continues``, repeatable): their shards' games
+    #: count before the first round, so a finished variant is not replayed.
+    continues: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        self.continues = tuple(self.continues or ())
     #: The base field, with the help a variant round needs: it seeds the
     #: perturbation as well as the decks.
     seed: int = field(default=RANDOM_SEED, metadata={
@@ -398,8 +415,15 @@ def _collect(config: CollectVariantsConfig) -> int:
         with collector_supervisor(
             workers=config.workers, effect_records=config.effect_records,
             caps=config.caps, variant_scripts=config.variant_scripts,
+            stop=config.worker_stop,
         ) as supervisor:
-            counter = VariantGameCounter(config.effect_records, supervisor.run_id, config.workers)
+            counter = VariantGameCounter(
+                config.effect_records, supervisor.run_id, config.workers,
+                continues=config.continues,
+            )
+            counter.seed(units)
+            record_damaged_shards(supervisor, counter.damaged)
+            supervisor.count_cut_games(counter.cut_games)
             play_variant_rounds(units, candidates, supervisor, counter, config)
         return finish(config, units, counter, interrupted=supervisor.interrupted)
     finally:
@@ -451,8 +475,16 @@ def _generate(
 
 def _write_sidecars(variant_scripts: Path) -> None:
     """Write every variant's sidecar before the first game: a variant without
-    one produces records nothing can join. Aborts with the worker's code."""
-    code = write_variant_sidecars(variant_scripts)
+    one produces records nothing can join. Aborts with the worker's code, or
+    1 when it ran past its timeout and was killed."""
+    # The sidecar pass is the run's first staging: claim it first, so another
+    # command's first JVM leaves it alone while this run lasts.
+    claim_staging()
+    try:
+        code = write_variant_sidecars(variant_scripts)
+    except TimeoutError as exc:
+        logger.error("%s; variant records would have no sidecar to join against", exc)
+        raise CollectorAbort from exc
     if code != 0:
         logger.error(
             "VariantSidecarMain exited %d; variant records would have no "
@@ -547,52 +579,100 @@ def _keep_unheld(
 
 
 def count_variant_shard(shard: Path) -> VariantShardGames:
-    """One shard's variant games: every record read once."""
-    from effects.infrastructure.shard_io import read_shard
+    """One shard's variant games: every record read once, a damaged shard's
+    up to the damage, which it names, and a gen-3 game without a game-end
+    marker (cut; build-corpus drops it) left out."""
+    from effects.infrastructure.shard_io import SHARD_DAMAGE, read_shard
 
     found = VariantShardGames()
-    for record in read_shard(shard):
-        found.add(record)
+    ends = GameEnds()
+    try:
+        for record in read_shard(shard):
+            found.add(record)
+            ends.note(record)
+    except SHARD_DAMAGE as exc:
+        found.damaged.append(str(exc))
+    found.drop_games(ends.cut)
     return found
 
 
 class VariantGameCounter:
-    """Each variant's games from this run's own shards, each read once.
+    """Each variant's games from this run's own shards, and from those of the
+    runs it continues, each read once.
 
     A shard is named ``{run_id}.{worker}-{lifetime}``, so another run writing
-    to the same directory never counts here; and a shard is final once its
-    round's workers are stopped, so no later round reopens one.
+    to the same directory never counts here unless named in ``continues``; and
+    a shard is final once its round's workers are stopped, so no later round
+    reopens one. A cut game (no game-end marker) counts toward no variant.
     """
 
-    def __init__(self, records_dir: Path, run_id: str, workers: int | None) -> None:
+    def __init__(
+        self, records_dir: Path, run_id: str, workers: int | None,
+        *, continues: tuple[str, ...] = (),
+    ) -> None:
         self._records_dir = Path(records_dir)
         self._prefix = f"{run_id}."
+        self._continued = tuple(f"{earlier}." for earlier in continues)
         self._workers = workers
         self._counted: set[Path] = set()
-        #: Every record this run's shards hold, over every round so far.
+        #: Every record this run's own shards hold, over every round so far.
         self.records = 0
+        #: Rounds counted so far.
+        self.rounds = 0
+        #: Every damaged shard read so far, as its read's message: counted up
+        #: to the damage, once, like any other shard.
+        self.damaged: list[str] = []
+        #: Cut games left out: over every count so far, and in the last one.
+        self.cut_games = 0
+        self.last_cut = 0
 
     def fresh_shards(self) -> list[Path]:
         """This run's shards not yet counted."""
+        return self._fresh((self._prefix,))
+
+    def _fresh(self, prefixes: tuple[str, ...]) -> list[Path]:
         from effects.infrastructure.shard_io import iter_shards
 
         return [
             shard for shard in iter_shards(self._records_dir)
-            if shard.name.startswith(self._prefix) and shard not in self._counted
+            if shard.name.startswith(prefixes) and shard not in self._counted
         ]
+
+    def _count(self, shards: list[Path]) -> VariantShardGames:
+        found = VariantShardGames()
+        for part in run_parallel(
+            shards, count_variant_shard, workers=self._workers, label="Counted",
+            progress_every=PROGRESS_EVERY_SHARDS,
+        ):
+            found.merge(part)
+        self._counted.update(shards)
+        self.last_cut = found.cut_games
+        self.cut_games += found.cut_games
+        for message in found.damaged:
+            logger.warning("%s; its records before the damage are counted, and the "
+                           "shard is not read again", message)
+        self.damaged += found.damaged
+        return found
+
+    def seed(self, units: Mapping[str, VariantGames]) -> None:
+        """Credit the games of the continued runs' shards to ``units``, before
+        the first round; their records are no record of this run's."""
+        if not self._continued:
+            return
+        shards = self._fresh(self._continued)
+        credit_games(units, self._count(shards))
+        logger.info(
+            "Counted %d shard(s) of the continued run(s); %d of %d variants "
+            "already have their games", len(shards),
+            sum(1 for unit in units.values() if unit.progress), len(units),
+        )
 
     def update(self, units: Mapping[str, VariantGames]) -> set[str]:
         """Credit the new shards' games to ``units``; the names of the units
         their snapshots showed."""
-        fresh = self.fresh_shards()
-        found = VariantShardGames()
-        for part in run_parallel(
-            fresh, count_variant_shard, workers=self._workers, label="Counted",
-            progress_every=PROGRESS_EVERY_SHARDS,
-        ):
-            found.merge(part)
-        self._counted.update(fresh)
+        found = self._count(self.fresh_shards())
         self.records += found.records
+        self.rounds += 1
         return credit_games(units, found)
 
 
@@ -639,7 +719,7 @@ def play_variant_rounds(
     of them in a row; one written into decks no game showed retires after
     ``UNSEEN_RETIRE_FACTOR`` times as many.
     """
-    decks_file = config.effect_records / f"variant-decks.{supervisor.run_id}.txt"
+    decks_file = supervisor.decks_path("variant")
     rng = rng if rng is not None else random.Random(config.seed)
     target = config.variant_games
     round_number = 0
@@ -658,6 +738,8 @@ def play_variant_rounds(
             decks, decks_file, label="variant", matches=config.decks_per_round, rules=rules,
         )
         shown = counter.update(units)
+        record_damaged_shards(supervisor, counter.damaged)
+        supervisor.count_cut_games(counter.last_cut)
         retired = retire_stalled(
             units, previous, no_progress_rounds=config.no_progress_rounds,
             decked=written & shown, written=written,
@@ -687,7 +769,7 @@ def finish(
     counter: VariantGameCounter, *, interrupted: bool,
 ) -> int:
     """Report what the run's rounds collected; 130 when Ctrl-C ended them, 1
-    when they wrote no record at all."""
+    when they played and wrote no record at all."""
     played = sum(1 for unit in units.values() if unit.progress)
     retired = sum(1 for unit in units.values() if unit.retired)
     if interrupted:
@@ -696,6 +778,20 @@ def finish(
             counter.records,
         )
         return 130
+    if counter.rounds == 0:
+        if is_complete(units, config.variant_games):
+            logger.info(
+                "Every one of %d variants already has its %d games or has retired; "
+                "no round to play", len(units), config.variant_games,
+            )
+            return 0
+        logger.error(
+            "No round was played and %d variant(s) still short of %d games: "
+            "none of them could be decked.",
+            sum(1 for unit in units.values() if not unit.done(config.variant_games)),
+            config.variant_games,
+        )
+        return 1
     if counter.records <= 0:
         logger.error(
             "The variant round played its matches and added no new effect "

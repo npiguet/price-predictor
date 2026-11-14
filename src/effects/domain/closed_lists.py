@@ -17,7 +17,7 @@ from collections.abc import Iterable
 from effects.domain.effect_head_input import CARD_TYPES, OVERLAY_KEYWORDS, SUPERTYPES
 from effects.domain.event_schema import EventType
 from effects.domain.forge_vocabularies import SUBTYPES
-from effects.domain.keyword_names import normalize_keyword, overlay_keyword
+from effects.domain.keyword_names import changed_keyword, normalize_keyword
 from effects.domain.records import ContinuousPayload, EffectRecord, events_of
 
 _SUBTYPE_ORDER: dict[str, int] = {name: index for index, name in enumerate(SUBTYPES)}
@@ -65,7 +65,7 @@ def subtypes_named(record: EffectRecord) -> set[str]:
 
 def keywords_named(record: EffectRecord, known: frozenset[str]) -> set[str]:
     """Every keyword one record's effects grant or remove, or that a token it
-    created carries, in the head's spelling (:func:`overlay_keyword`).
+    created carries, in the head's spelling (:func:`changed_keyword`).
 
     ``known`` holds Forge's keywords in :func:`normalize_keyword`'s spelling;
     a granted static's text, which Forge lists beside the keywords, is none.
@@ -84,7 +84,7 @@ def keywords_named(record: EffectRecord, known: frozenset[str]) -> set[str]:
             raw.extend((*change.gained, *change.lost))
     names = set()
     for keyword in raw:
-        name = overlay_keyword(keyword)
+        name = changed_keyword(keyword)
         if name in OVERLAY_KEYWORDS or normalize_keyword(keyword) in known:
             names.add(name)
     return names

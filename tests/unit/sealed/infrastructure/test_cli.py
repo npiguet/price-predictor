@@ -63,6 +63,7 @@ class TestMatchOutcomesSideDecks:
             "sealed.application.match_outcomes.MatchOutcomeSupervisor"
         ) as mock_sup:
             mock_sup.return_value.run.return_value = None
+            mock_sup.return_value.collected_nothing = False
             rc = run_match_outcomes(_args())
         assert rc == 0
         kwargs = mock_sup.call_args.kwargs
@@ -77,6 +78,7 @@ class TestMatchOutcomesSideDecks:
             "sealed.application.match_outcomes.MatchOutcomeSupervisor"
         ) as mock_sup:
             mock_sup.return_value.run.return_value = None
+            mock_sup.return_value.collected_nothing = False
             rc = run_match_outcomes(_args(side_a_decks=str(side_a)))
         assert rc == 0
         kwargs = mock_sup.call_args.kwargs
@@ -90,6 +92,7 @@ class TestMatchOutcomesSideDecks:
             "sealed.application.match_outcomes.MatchOutcomeSupervisor"
         ) as mock_sup:
             mock_sup.return_value.run.return_value = None
+            mock_sup.return_value.collected_nothing = False
             rc = run_match_outcomes(_args(
                 side_b_decks=str(side_b), side_b_decks_weight=8,
             ))
@@ -118,6 +121,7 @@ class TestMatchOutcomesBestOf:
             "sealed.application.match_outcomes.MatchOutcomeSupervisor"
         ) as mock_sup:
             mock_sup.return_value.run.return_value = None
+            mock_sup.return_value.collected_nothing = False
             rc = run_match_outcomes(_args())
         assert rc == 0
         kwargs = mock_sup.call_args.kwargs
@@ -129,6 +133,7 @@ class TestMatchOutcomesBestOf:
                 "sealed.application.match_outcomes.MatchOutcomeSupervisor"
             ) as mock_sup:
                 mock_sup.return_value.run.return_value = None
+                mock_sup.return_value.collected_nothing = False
                 rc = run_match_outcomes(_args(best_of=n))
             assert rc == 0
             kwargs = mock_sup.call_args.kwargs

@@ -129,6 +129,17 @@ final class StackBrackets {
     }
 
     /**
+     * File an event as the orphans, whatever bracket is open: an event of a
+     * step the resolving effect handed the game to, which no bracket takes in
+     * an ordinary step either.
+     */
+    void fileOrphan(EffectEvent event, String phase) {
+        if (orphans.file(event)) {
+            orphanPhases.add(phase);
+        }
+    }
+
+    /**
      * Whether the action in progress is the open bracket's own cast, the rest
      * of whose {@code MagicStack.add} runs after the cast is published. An
      * activation is pushed as a copy of the ability the action names.
@@ -280,13 +291,22 @@ final class StackBrackets {
      * they gathered is anyone's, and each such event is counted as dropped.
      * One of them may have been open.
      *
-     * @param phase the engine phase the removal is noticed in
+     * <p>While the stack resolves, the resolving item's bracket stays,
+     * whether or not the stack still holds it. An effect that ends the turn
+     * or the combat phase (Time Stop, Mandate of Peace) exiles every item on
+     * the stack, its own included, and moves the game to another step before
+     * its resolution is published: its bracket is what that resolution
+     * closes and writes.
+     *
+     * @param phase     the engine phase the removal is noticed in
+     * @param resolving whether the stack is resolving now
      */
-    void removeAbsent(Set<Integer> onStack, String phase) {
+    void removeAbsent(Set<Integer> onStack, String phase, boolean resolving) {
+        OpenResolution kept = resolving ? resolvingBracket() : null;
         List<OpenResolution> gone = new ArrayList<>();
         for (List<OpenResolution> list : List.of(items, waiting)) {
             for (OpenResolution item : list) {
-                if (!onStack.contains(item.ability.getId())) {
+                if (item != kept && !onStack.contains(item.ability.getId())) {
                     gone.add(item);
                 }
             }
@@ -310,6 +330,22 @@ final class StackBrackets {
         for (EffectEvent event : item.modes.buffer().drain()) {
             dropped.count(event.type(), phase);
         }
+    }
+
+    /**
+     * The bracket of the item resolving now, asked only while the stack
+     * resolves: the open one, as the resolution hook or the first event of
+     * the resolution opened it, else the top's; none while a published
+     * resolution is still being finished, whose bracket has left.
+     */
+    private OpenResolution resolvingBracket() {
+        if (finishing != null) {
+            return null;
+        }
+        if (open != null && items.contains(open)) {
+            return open;
+        }
+        return top();
     }
 
     /** The top item's bracket, or null when no item is on the stack. */

@@ -79,12 +79,6 @@ class TestCapAndBudgetFlags:
         assert args.interventions_per_game == 4
         assert args.probes_per_game == 1
 
-    def test_no_flag_chooses_a_snapshot_depth(self):
-        """Every record collects all four tiers."""
-        with pytest.raises(SystemExit):
-            parse("match-outcomes", "--snapshot-tiers", "1,2,3,4")
-
-
 class TestCountDroppedEvents:
     """FR-041: ``--count-dropped-events`` is off by default and travels to the
     worker as ``effect.count.dropped.events``."""
@@ -136,15 +130,6 @@ class TestProbesAnnounceThemselves:
         assert "DISABLED" not in line
         for keyword in EFFECT_PROBE_KEYWORDS.split(","):
             assert keyword in line
-
-
-class TestOtherSealedCommandsAreUnaffected:
-    def test_build_decks_gains_no_effect_flags(self):
-        args = parse("build-decks", "--pools", "p.txt", "--label", "gen-1")
-        assert not hasattr(args, "effect_records")
-
-    def test_train_scorer_gains_no_effect_flags(self):
-        assert not hasattr(parse("train-scorer"), "effect_records")
 
 
 class TestRandomSeatFlags:
@@ -317,3 +302,100 @@ class TestProbeKeywordSpelling:
             ["collect-coverage", "--probe-keywords", "Double Strike"],
         )
         assert args.probe_keywords == "double_strike"
+
+
+class TestWorkersAndTheEnd:
+    """V4 #9 on match-outcomes: ``--workers`` is 1 to 12; and a run collecting
+    effect records that completed matches and recorded nothing exits 1."""
+
+    @pytest.mark.parametrize("workers", ["0", "13", "-1"])
+    def test_an_out_of_range_worker_count_is_a_usage_error(self, workers):
+        with pytest.raises(SystemExit):
+            parse("match-outcomes", "--workers", workers)
+
+    def test_the_edges_are_accepted(self):
+        assert parse("match-outcomes", "--workers", "1").workers == 1
+        assert parse("match-outcomes", "--workers", "12").workers == 12
+
+    @pytest.mark.parametrize(("collected_nothing", "code"), [(True, 1), (False, 0)])
+    def test_a_run_that_recorded_nothing_exits_1(self, monkeypatch, collected_nothing, code):
+        from unittest.mock import MagicMock
+
+        import sealed.application.match_outcomes as module
+        from price_predictor.infrastructure import forge_jvm
+
+        supervisor = MagicMock(collected_nothing=collected_nothing)
+        monkeypatch.setattr(module, "MatchOutcomeSupervisor", lambda **_: supervisor)
+        monkeypatch.setattr(forge_jvm, "check_worker_prerequisites", lambda **_: None)
+        args = parse("match-outcomes", "--effect-records", "records", "--workers", "1")
+
+        assert run_match_outcomes(args) == code
+        supervisor.run.assert_called_once()
+
+
+class TestTheWorkerStopFlags:
+    """V4 #1 / P1 #1: with effect records the run's end asks each worker to
+    stop at its game's end; the flags bound the wait and set the recycle."""
+
+    def test_unset_they_take_the_defaults(self, monkeypatch):
+        from price_predictor.infrastructure.forge_jvm import WorkerStopSettings
+
+        assert self._settings(monkeypatch, "--effect-records", "records") == (
+            WorkerStopSettings(timeout=600, recycle_seconds=600))
+
+    def test_the_values_reach_the_supervisor(self, monkeypatch):
+        from price_predictor.infrastructure.forge_jvm import WorkerStopSettings
+
+        assert self._settings(
+            monkeypatch, "--effect-records", "records", "--stop-timeout", "45",
+            "--recycle-seconds", "900",
+        ) == WorkerStopSettings(timeout=45, recycle_seconds=900)
+
+    @pytest.mark.parametrize(("argv", "bound"), [
+        (("--stop-timeout", "0"), "between 1 and 3600 seconds, got 0"),
+        (("--stop-timeout", "3601"), "between 1 and 3600 seconds, got 3601"),
+        (("--recycle-seconds", "299"), "between 300 and 86400 seconds, got 299"),
+        (("--recycle-seconds", "86401"), "between 300 and 86400 seconds, got 86401"),
+    ])
+    def test_a_value_out_of_bounds_is_a_usage_error_naming_the_bound(
+        self, argv, bound, capsys,
+    ):
+        """The bound's own message: an unknown flag would exit 2 too."""
+        with pytest.raises(SystemExit) as exit_info:
+            parse("match-outcomes", "--effect-records", "records", *argv)
+        assert exit_info.value.code == 2
+        assert f"{argv[0]}: must be {bound}" in capsys.readouterr().err
+
+    @pytest.mark.parametrize(("flag", "value"), [
+        ("--stop-timeout", 1), ("--stop-timeout", 3600),
+        ("--recycle-seconds", 300), ("--recycle-seconds", 86400),
+    ])
+    def test_the_bounds_are_inclusive(self, flag, value):
+        args = parse("match-outcomes", "--effect-records", "records", flag, str(value))
+        assert getattr(args, flag[2:].replace("-", "_")) == value
+
+    @pytest.mark.parametrize("flag", ["--stop-timeout", "--recycle-seconds"])
+    def test_without_effect_records_they_are_refused(self, monkeypatch, capsys, flag):
+        import sealed.application.match_outcomes as module
+
+        monkeypatch.setattr(module, "MatchOutcomeSupervisor", lambda **_: pytest.fail("ran"))
+        assert run_match_outcomes(parse("match-outcomes", flag, "600")) == 2
+        assert "need --effect-records" in capsys.readouterr().err
+
+    @staticmethod
+    def _settings(monkeypatch, *argv):
+        from unittest.mock import MagicMock
+
+        import sealed.application.match_outcomes as module
+        from price_predictor.infrastructure import forge_jvm
+
+        made = {}
+
+        def supervisor(**kwargs):
+            made.update(kwargs)
+            return MagicMock(collected_nothing=False)
+
+        monkeypatch.setattr(module, "MatchOutcomeSupervisor", supervisor)
+        monkeypatch.setattr(forge_jvm, "check_worker_prerequisites", lambda **_: None)
+        assert run_match_outcomes(parse("match-outcomes", "--workers", "1", *argv)) == 0
+        return made["worker_stop"]

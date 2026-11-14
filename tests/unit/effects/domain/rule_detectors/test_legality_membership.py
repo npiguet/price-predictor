@@ -47,7 +47,8 @@ def test_responsible_static_counts_only_what_a_static_forbids(by_kind):
         ForbiddenEntity(f.entity) for f in record.payload.forbidden)))
     found = FAMILY.match(unattributed, None,
                          {"list": "legal_blockers", "responsible_static": True})
-    assert found is None or found.polarity is Polarity.DOES_NOT_FIRE
+    # Nothing a static forbids and nobody left legal to compare: no tag at all.
+    assert found is None
 
 
 def test_inside_reads_the_legal_list(by_kind):
@@ -111,8 +112,7 @@ class TestUniverse:
 
     def test_an_unknown_universe_is_refused(self, by_kind):
         with pytest.raises(ValueError, match="universe"):
-            FAMILY.match(by_kind("playability", "attackers")[0], None,
-                         {"list": "legal_attackers", "universe": "graveyard"})
+            FAMILY.validate({"list": "legal_attackers", "universe": "graveyard"})
 
 
 def test_the_list_must_match_the_subkind(by_kind):
@@ -139,6 +139,22 @@ class TestTheGen3Lists:
                              {"list": "legal_defenders", "fires_when": "inside"})
         assert found.polarity is Polarity.FIRES and found.condition == ("P1", "E2")
         assert found.outcome == ("P1",)
+
+    def test_an_anchored_attackers_record_judges_its_anchor_alone(self):
+        """P3b #11: each of a declaration's per-creature records lists the same
+        ``legal_attackers`` and ``forbidden``; judging the whole list on each
+        would count every creature once per creature."""
+        inside = {"list": "legal_attackers", "fires_when": "inside"}
+        legal, forbidden = self._anchor("E2"), self._anchor("E3")
+        found = FAMILY.match(legal, None, inside)
+        assert (found.polarity, found.condition, found.outcome) == (
+            Polarity.FIRES, ("E2",), ("E2",))
+        found = FAMILY.match(forbidden, None, inside)
+        assert (found.polarity, found.condition, found.outcome) == (
+            Polarity.DOES_NOT_FIRE, ("E3",), ("E3",))
+        outside = {"list": "legal_attackers", "responsible_static": True}
+        assert FAMILY.match(legal, None, outside).condition == ("E2",)
+        assert FAMILY.match(forbidden, None, outside).polarity is Polarity.FIRES
 
     def test_a_creature_that_may_attack_nothing_lists_no_inside(self):
         assert FAMILY.match(self._anchor("E3"), None,
@@ -234,7 +250,7 @@ class TestKeywordAndCounter:
         for counters, forbidden in (({}, True), ({"+1/+1": 2}, False)):
             edited = self._edited(record, entity_id, counters=counters, forbidden=forbidden)
             found = FAMILY.match(edited, gen2_sidecars, self._declared(keyword))
-            assert found is None or entity_id not in found.entities
+            assert found is None, (counters, forbidden, found)
 
     def test_an_entity_whose_card_lacks_the_keyword_is_not_counted(
             self, by_kind, gen2_sidecars):
@@ -283,8 +299,7 @@ class TestAnchorLists:
 
     def test_at_least_reads_only_min_blockers(self, by_kind):
         with pytest.raises(ValueError, match="at_least"):
-            FAMILY.match(by_kind("playability", "blockers")[0], None,
-                         {"list": "legal_blockers", "at_least": 2})
+            FAMILY.validate({"list": "legal_blockers", "at_least": 2})
 
 
 class TestJudgedKind:
@@ -316,4 +331,47 @@ class TestJudgedKind:
         one = replace(two, state=replace(two.state, entities=tuple(
             replace(e, types=("creature",)) for e in two.state.entities)))
         found = FAMILY.match(one, None, declared)
-        assert found is None or judged not in _judged(found, one)
+        assert found is None
+
+    def test_judged_not_type_keeps_only_an_entity_without_the_type(self, by_kind):
+        record = _forbidden_block(by_kind)
+        judged = record.payload.forbidden[0].entity
+        declared = {"list": "legal_blockers", "judged_not_type": "creature"}
+        assert FAMILY.match(record, None, declared) is None
+        edited = replace(record, state=replace(record.state, entities=tuple(
+            replace(e, types=("artifact",)) if e.id == judged else e
+            for e in record.state.entities)))
+        found = FAMILY.match(edited, None, declared)
+        assert found.polarity is Polarity.FIRES and _judged(found, edited) == (judged,)
+
+
+class TestAttackerRestrictions:
+    """508.1a's two conditions on a gen-3 attackers record's anchor."""
+
+    @staticmethod
+    def _anchor(anchor, **flags):
+        record = next(r for r in TestTheGen3Lists._golden("attackers")
+                      if r.payload.anchor_attacker == anchor)
+        return replace(record, state=replace(record.state, entities=tuple(
+            replace(e, **flags) if e.id == anchor else e for e in record.state.entities)))
+
+    def test_a_tapped_creature_kept_out_fires_and_an_untapped_legal_one_is_the_near_miss(self):
+        declared = {"list": "legal_attackers", "restriction": "tapped"}
+        found = FAMILY.match(self._anchor("E3", tapped=True), None, declared)
+        assert (found.polarity, found.condition) == (Polarity.FIRES, ("E3",))
+        found = FAMILY.match(self._anchor("E2"), None, declared)
+        assert (found.polarity, found.condition) == (Polarity.DOES_NOT_FIRE, ("E2",))
+
+    def test_a_kept_out_creature_neither_tapped_nor_sick_shows_no_side(self):
+        for restriction in ("tapped", "sick"):
+            assert FAMILY.match(self._anchor("E3"), None,
+                                {"list": "legal_attackers", "restriction": restriction}) is None
+
+    def test_a_summoning_sick_creature_kept_out_fires_sick(self):
+        found = FAMILY.match(self._anchor("E3", sick=True), None,
+                             {"list": "legal_attackers", "restriction": "sick"})
+        assert (found.polarity, found.condition) == (Polarity.FIRES, ("E3",))
+
+    def test_an_unknown_attacker_restriction_is_refused(self):
+        with pytest.raises(ValueError):
+            FAMILY.validate({"list": "legal_attackers", "restriction": "skulk"})

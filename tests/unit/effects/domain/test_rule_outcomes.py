@@ -135,18 +135,34 @@ class TestProtectionQuality:
         ("Protection from everything", QualityKind.EVERYTHING, "", "protection_from_everything"),
         ("Protection from each color", QualityKind.CONDITION, "each color",
          "protection_from_each_color"),
-        ("Protection:Artifact", QualityKind.CARD_TYPE, "artifact", "protection"),
-        ("Protection:Goblin", QualityKind.CREATURE_TYPE, "goblin", "protection"),
-        ("Protection:Assembly-Worker", QualityKind.CREATURE_TYPE, "assembly-worker", "protection"),
+        ("Protection:Artifact", QualityKind.CARD_TYPE, "artifact", "protection_from_artifact"),
+        ("Protection:Goblin", QualityKind.CREATURE_TYPE, "goblin", "protection_from_goblin"),
+        ("Protection:Assembly-Worker", QualityKind.CREATURE_TYPE, "assembly-worker",
+         "protection_from_assembly-worker"),
         ("Protection:Card.MultiColor:multicolored", QualityKind.CONDITION, "multicolored",
-         "protection"),
+         "protection_from_multicolored"),
         ("Protection:Card.cmcLE3:mana value 3 or less", QualityKind.CONDITION,
-         "mana value 3 or less", "protection"),
+         "mana value 3 or less", "protection_from_mana_value_3_or_less"),
     ])
     def test_forge_s_fragment_round_trips(self, fragment, kind, value, keyword):
         quality = ProtectionQuality.parse(fragment)
         assert quality == ProtectionQuality(kind, value)
         assert quality.fragment == fragment and quality.keyword == keyword
+
+    def test_every_whitelisted_quality_round_trips_through_its_keyword(self):
+        """A keyword list carries ``quality.keyword``; reading it back gives
+        the quality for every one a protection copy or fork can grant."""
+        from effects.application.collect_variants import PROTECTION_QUALITY_WHITELIST
+
+        for fragment in PROTECTION_QUALITY_WHITELIST:
+            quality = ProtectionQuality.parse(fragment)
+            assert ProtectionQuality.of_keyword(quality.keyword) == quality, fragment
+
+    @pytest.mark.parametrize("keyword", [
+        "protection_from_creatures", "protection_from_player", "protection",
+    ])
+    def test_a_keyword_naming_no_quality_reads_as_none(self, keyword):
+        assert ProtectionQuality.of_keyword(keyword) is None
 
     @pytest.mark.parametrize("fragment", [
         "Flying", "Protection:Player.Opponent:each of your opponents",
@@ -199,3 +215,9 @@ class TestTurnStructure:
         assert split_second_forbids(split_second_on_stack=True, land_play=False)
         assert not split_second_forbids(split_second_on_stack=True, land_play=True)
         assert not split_second_forbids(split_second_on_stack=False, land_play=False)
+
+    def test_split_second_allows_a_special_action(self):
+        """702.61b: turning a face-down creature face up, suspending a card and
+        the other special actions stay legal (TP4's suspected expected value)."""
+        assert not split_second_forbids(split_second_on_stack=True, land_play=False,
+                                        special_action=True)

@@ -28,6 +28,11 @@ public class DraftGameWorkerMain {
     static final int PROGRESS_EVERY = 5;
 
     public static void main(String[] args) {
+        ToolMain.guard(() -> work(args));
+    }
+
+    /** The worker itself; an exit it requests ends the process through {@link ToolMain#guard}. */
+    static void work(String[] args) {
         String seatsFileProp = WorkerProperties.require("seats.file");
         String outputFileProp = WorkerProperties.require("output.file");
         String runId = WorkerProperties.require("run.id");

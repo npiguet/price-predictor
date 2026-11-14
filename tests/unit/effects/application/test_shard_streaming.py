@@ -1,26 +1,13 @@
-"""Reading the corpus one shard at a time (T155).
+"""Reading the corpus one shard at a time (T155): which shards an epoch
+reads, how its steps divide among them, and which step reports.
 
-The corpus reaches 14M records and would need hundreds of gigabytes to hold, so
-the trainer never holds more than one shard. Four properties make that safe, and
-each has a test below.
-
-**A game never spans two shards**, so which stratum a game belongs to is
-decidable from the shard alone. The collector gives every shard its own game-id
-namespace, which is what lets the split be accumulated rather than derived.
-
-**Validation comes from reserved shards the trainer never trains on.** Freezing
-the validation records is what keeps ``--patience`` meaningful: an early-stopping
-rule that compared a new sample of records each epoch would measure which
-records got drawn rather than whether the model improved.
-
-**A game naming a held-out card is excluded from training wherever it is found**,
-not only in the reserved shards. Training on it would make the card-disjoint
-number — the one that picks the shipping checkpoint — score partly on cards the
-encoder had already seen.
-
-**The split is enumerated as it accumulates.** The checkpoint records game ids
-rather than the rule that produced them, because the corpus is append-only and
-re-deriving the split against a grown corpus gives a different answer.
+The corpus reaches 14M records and would need hundreds of gigabytes to hold,
+so the trainer never holds more than one shard. What makes that safe — a game
+never spanning two shards, validation from strata the trainer never trains on,
+a game naming a held-out card kept out of training wherever it is found — is
+decided by ``build-corpus`` and tested with it (``test_build_corpus*.py``); the
+trainer's refusal of a shard holding a validation game is
+``ValidationGameInTrainingError``'s tests.
 """
 
 from __future__ import annotations
@@ -28,12 +15,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from effects.application.training_schedule import epoch_shards, steps_per_shard
-from effects.domain.split import HeldOutCards
-from tests.unit.effects.builders import held_out_cards
-
-
-def _held() -> HeldOutCards:
-    return held_out_cards({"Serra Angel"})
 
 
 class TestEpochShards:

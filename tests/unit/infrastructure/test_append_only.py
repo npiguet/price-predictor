@@ -89,3 +89,33 @@ class TestCountAndTruncate:
     def test_empty_and_missing_files_count_zero(self, tmp_path):
         assert count_complete_lines_and_truncate_partial(_write(tmp_path, "")) == 0
         assert count_complete_lines_and_truncate_partial(tmp_path / "absent.txt") == 0
+
+
+class TestHasShardRecord:
+    """The zero-record check reads no further than the first record."""
+
+    def test_the_first_record_ends_the_search(self, tmp_path, monkeypatch):
+        import gzip
+
+        from price_predictor.infrastructure import append_only
+
+        for index in range(3):
+            with gzip.open(tmp_path / f"run.0-{index}.jsonl.gz", "wt", encoding="utf-8") as out:
+                out.write("{}\n" * 5)
+        opened = []
+        real = append_only.iter_gzip_complete_lines
+        monkeypatch.setattr(
+            append_only, "iter_gzip_complete_lines",
+            lambda path: opened.append(path) or real(path),
+        )
+
+        assert append_only.has_shard_record(tmp_path, "run") is True
+        assert len(opened) == 1
+
+    def test_another_run_s_shards_and_blank_lines_are_no_record(self, tmp_path):
+        from price_predictor.infrastructure.append_only import has_shard_record
+
+        (tmp_path / "other.0-a.jsonl").write_text("{}\n", encoding="utf-8")
+        (tmp_path / "run.0-a.jsonl").write_text("\n\n", encoding="utf-8")
+
+        assert has_shard_record(tmp_path, "run") is False

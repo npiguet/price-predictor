@@ -65,3 +65,23 @@ def test_the_directory_is_forge_s_user_custom_cards_under_the_headless_assets_di
     reads its user dir as ``<assets>/data/``; ``USER_CUSTOM_CARDS_DIR`` is
     ``<user>/custom/cards/``."""
     assert custom_cards_dir().parts[-5:] == ("forge", "forge-gui", "data", "custom", "cards")
+
+
+def test_unstaging_drops_the_owner_record(tmp_path):
+    """The owner record lives as long as the staging it guards."""
+    from price_predictor.infrastructure import forge_jvm
+
+    _staged(tmp_path, "bolt_variant_0a1b2c3d.txt")
+    (tmp_path / forge_jvm.STAGING_OWNER).write_text('{"pid": 1, "started": 1}', encoding="utf-8")
+
+    unstage_variants(tmp_path)
+
+    assert not (tmp_path / forge_jvm.STAGING_OWNER).exists()
+
+
+def test_an_unreadable_manifest_never_stops_the_run_s_end(tmp_path, caplog):
+    tmp_path.mkdir(exist_ok=True)
+    (tmp_path / STAGED_MANIFEST).write_bytes(b"\xff\xfe\x00bad")
+
+    assert unstage_variants(tmp_path) == 0
+    assert "Could not unstage" in caplog.text

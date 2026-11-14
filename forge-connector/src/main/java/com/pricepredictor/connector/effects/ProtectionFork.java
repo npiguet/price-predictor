@@ -110,17 +110,17 @@ final class ProtectionFork {
      */
     boolean take(Grant grant) {
         Forks.ForkRun run = new Forks.ForkRun(
-                game, () -> { }, () -> game.getPhaseHandler().getPlayerTurn());
+                "protection", game, () -> { }, () -> game.getPhaseHandler().getPlayerTurn());
         ForkPlayForward.Played played = run.take((verified, snapshots) -> {
             Card forked = Forks.mappedCard(verified.copier(), grant.creature());
             if (forked == null) {
-                return null;
+                throw new ForkRefusal(ForkRefusal.NO_COUNTERPART);
             }
             // Before the fork's collectors listen (ForkPlayForward.play opens
             // them): the grant publishes a stats change, which is the fork's
             // premise, not something its turn did.
             KeywordOperation.adding(forked, grant.quality()).apply(verified.fork());
-            return playForward.play(verified.fork(), FLAGS);
+            return playForward.play(verified.fork(), FLAGS.andThen(verified::stamp));
         }, (verified, result) -> result);
         return played != null;
     }

@@ -336,6 +336,114 @@ class TraitScriptChainTest {
         }
     }
 
+    // ── a keyword rendering one line per trait it generates (WP12 N1) ───
+
+    /** The keys of the line whose text starts with {@code prefix}, ignoring the card-wide keyword's. */
+    private static List<ProvenanceKey> keysOfLine(Converted converted, String prefix) {
+        List<ProvenanceSidecar.Line> lines = converted.sidecar().lines().stream()
+                .filter(line -> converted.lines().get(line.lineIndex()).startsWith(prefix))
+                .toList();
+        assertEquals(1, lines.size(), prefix + " in " + converted.lines());
+        return lines.get(0).provenance().stream()
+                .filter(key -> key.traitKind() != TraitKind.KEYWORD).toList();
+    }
+
+    private static ProvenanceKey trigger(String file, int index) {
+        return new ProvenanceKey(file, 0, TraitKind.TRIGGER, index);
+    }
+
+    /**
+     * The Chapter keyword generates one trigger per chapter and the converter
+     * one line per distinct chapter ability: each line carries its own
+     * chapters' triggers and no other, so a chapter II record reads chapter
+     * II's text (the join takes the first line holding a key). A line
+     * printed for two chapters ("I, II —") carries both, and its mode lines
+     * the modes of both and of no third.
+     */
+    @Test
+    void eachChapterLineCarriesItsOwnChaptersTriggersAlone() {
+        Converted saga = convert("l/life_of_toshiro_umezawa_memory_of_toshiro.txt");
+        String file = "cardsfolder/l/life_of_toshiro_umezawa_memory_of_toshiro.txt";
+
+        assertEquals(List.of(trigger(file, 0), trigger(file, 1)),
+                keysOfLine(saga, "chapter: I, II "));
+        assertEquals(List.of(trigger(file, 2)), keysOfLine(saga, "chapter: III "));
+        for (ProvenanceSidecar.Line option : linesOfKind(saga, "option")) {
+            assertFalse(option.provenance().stream().anyMatch(
+                    key -> key.traitKind() == TraitKind.TRIGGER && key.indexWithinKind() == 2),
+                    "chapter III has no modes: " + option.provenance());
+        }
+    }
+
+    /** Three chapters of three abilities: one trigger a line, in chapter order. */
+    @Test
+    void aSagaOfThreeAbilitiesKeysOneTriggerToEachChapterLine() {
+        Converted konda = convertInline("t/the_fall_of_lord_konda_fragment_of_konda.txt",
+                String.join("\n",
+                        "Name:The Fall of Lord Konda",
+                        "ManaCost:2 W",
+                        "Types:Enchantment Saga",
+                        "K:Chapter:3:DBExile,DBRetake,DBTransform",
+                        "SVar:DBExile:DB$ ChangeZone | ValidTgts$ Creature.OppCtrl+cmcGE4"
+                                + " | Origin$ Battlefield | Destination$ Exile | SpellDescription$ Exile"
+                                + " target creature an opponent controls with mana value 4 or greater.",
+                        "SVar:DBRetake:DB$ GainControlVariant | AllValid$ Permanent"
+                                + " | ChangeController$ CardOwner"
+                                + " | SpellDescription$ Each player gains control of all permanents they own.",
+                        "SVar:DBTransform:DB$ ChangeZone | Origin$ Battlefield | Destination$ Exile"
+                                + " | SpellDescription$ Exile this Saga, then return it transformed.",
+                        "Oracle:Exile."));
+        String file = "cardsfolder/t/the_fall_of_lord_konda_fragment_of_konda.txt";
+
+        assertEquals(List.of(trigger(file, 0)), keysOfLine(konda, "chapter: I "));
+        assertEquals(List.of(trigger(file, 1)), keysOfLine(konda, "chapter: II "));
+        assertEquals(List.of(trigger(file, 2)), keysOfLine(konda, "chapter: III "));
+    }
+
+    /**
+     * Haunt renders a creature's two lines from five generated triggers: the
+     * enters-or-haunted-dies line carries the two that run its ability, the
+     * haunt line the one that haunts and the two that end the haunting.
+     */
+    @Test
+    void aHauntingCreaturesTwoLinesEachCarryTheirOwnTriggers() {
+        Converted thrull = convertInline("a/absolver_thrull.txt", String.join("\n",
+                "Name:Absolver Thrull",
+                "ManaCost:3 W",
+                "Types:Creature Thrull Cleric",
+                "PT:2/3",
+                "K:Haunt:TrigDestroy",
+                "SVar:TrigDestroy:DB$ Destroy | ValidTgts$ Enchantment | SpellDescription$ Destroy target enchantment.",
+                "Oracle:Haunt"));
+        String file = "cardsfolder/a/absolver_thrull.txt";
+
+        assertEquals(List.of(trigger(file, 2), trigger(file, 4)),
+                keysOfLine(thrull, "triggered: when "));
+        assertEquals(List.of(trigger(file, 0), trigger(file, 1), trigger(file, 3)),
+                keysOfLine(thrull, "triggered: haunt"));
+    }
+
+    /** A haunting sorcery: its spell line keeps the spell, the haunt lines the triggers. */
+    @Test
+    void aHauntingSpellsSpellLineCarriesTheSpellAlone() {
+        Converted moons = convertInline("b/benediction_of_moons.txt", String.join("\n",
+                "Name:Benediction of Moons",
+                "ManaCost:W",
+                "Types:Sorcery",
+                "K:Haunt:TrigGainLife",
+                "SVar:TrigGainLife:DB$ GainLife | Defined$ You | LifeAmount$ X"
+                        + " | SpellDescription$ You gain 1 life for each player.",
+                "SVar:X:PlayerCountPlayers$Amount",
+                "Oracle:You gain 1 life for each player."));
+        String file = "cardsfolder/b/benediction_of_moons.txt";
+
+        assertEquals(List.of(new ProvenanceKey(file, 0, TraitKind.SPELL, 0)),
+                keysOfLine(moons, "spell"));
+        assertEquals(List.of(trigger(file, 0), trigger(file, 1), trigger(file, 2)),
+                keysOfLine(moons, "triggered: haunt"));
+        assertEquals(List.of(trigger(file, 3)), keysOfLine(moons, "triggered: when "));
+    }
+
     @Test
     void aPawprintCharmKeepsItsBudgetOnTheRootAndItsCostsOnTheModes() {
         Converted season = convert("s/season_of_gathering.txt");
@@ -454,5 +562,40 @@ class TraitScriptChainTest {
             assertTrue(keys.contains(new ProvenanceKey(file, 0, TraitKind.TRIGGER, 0, i)), keys.toString());
             assertTrue(keys.contains(new ProvenanceKey(file, 0, TraitKind.TRIGGER, 1, i)), keys.toString());
         }
+    }
+
+    // ── the other chain keys Forge parses (C2 #10, V2 #19) ──────────────
+
+    /**
+     * Every parameter Forge parses into an ability of the chain ({@code
+     * AbilityFactory.additionalAbilityKeys}) is a link the renderer follows.
+     */
+    @Test
+    void everyChainKeyForgeParsesIsFollowed() {
+        java.util.Set<String> followed = TraitScript.chainKeys();
+        java.util.List<String> missing = forge.game.ability.AbilityFactory.additionalAbilityKeys
+                .stream().filter(key -> !followed.contains(key)).toList();
+        assertEquals(List.of(), missing);
+    }
+
+    /** A coin flip's win and lose abilities are segments of its chain. */
+    @Test
+    void aCoinFlipsOutcomesAreSegmentsOfItsChain() {
+        Converted coin = convertInline("t/test_coin.txt", String.join("\n",
+                "Name:Test Coin",
+                "ManaCost:1 R",
+                "Types:Instant",
+                "A:SP$ FlipCoin | WinSubAbility$ DBDraw | LoseSubAbility$ DBDamage | SpellDescription$ Flip a coin.",
+                "SVar:DBDraw:DB$ Draw | NumCards$ 1",
+                "SVar:DBDamage:DB$ DealDamage | Defined$ You | NumDmg$ 1",
+                "Oracle:Flip a coin."));
+        String text = onlyLineOfKind(coin, "spell").script().scriptText();
+
+        assertTrue(text.contains("LoseSubAbility$ SV") && text.contains("WinSubAbility$ SV"), text);
+        assertTrue(text.contains("DB$ Draw") && text.contains("DB$ DealDamage"), text);
+        assertEquals(2, RecordLines.count(text, "[SEG]"), text);
+        assertFalse(text.contains("DBDraw") || text.contains("DBDamage"),
+                "no author label survives: " + text);
+        assertTrue(coin.report().drain().isEmpty(), "nothing is reported missing");
     }
 }

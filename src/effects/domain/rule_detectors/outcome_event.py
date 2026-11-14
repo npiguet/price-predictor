@@ -83,6 +83,8 @@ leaving the battlefield that was not in combat):
   (``melded``, ``face_down``, ``flipped``, ``back``, ``front``);
 - ``subject_designation``: the subject holds this gen-3 designation
   (``unearthed``, ``suspected``, ``monstrous`` …);
+- ``subject_type``: the subject has this card type in the snapshot (an
+  attached permanent that is a creature);
 - ``with_event``, ``without_event``: the same record does, or does not, hold
   an event of this type as well (the sacrifice beside the counters it pays for,
   the Equipment entering with no ``attached`` event): a type, or a map of
@@ -91,6 +93,21 @@ leaving the battlefield that was not in combat):
   writes one).
 
 A qualifier cannot be combined with ``absent``.
+
+Record filters, which narrow both sides to records whose acting source or
+targets are of one kind (D4): ``source_type`` (the source card, as the
+snapshot shows it, has this card type: a resolving artifact spell, an
+instant), ``acting_face`` (``front`` or ``alternative``: an acting key on
+its card's first face or another, an Adventure or a back face) and
+``target_face_state`` (a target of the acting ability is in this gen-3 face
+state). Like ``api`` they read the acting line's record, so an ``absent``
+declaration still needs ``api``, ``keyword`` or ``source_keyword``.
+
+A record kind lists only some event types (``emittable_events``): a
+declaration asking its kind for one it never lists is set aside by the index
+as untaggable. On a degraded worker's record and on a forced resolution a
+missing event only the engine hooks build may have happened, so neither an
+``absent`` declaration's ``fires`` side nor a scoped near miss is read there.
 
 Entities. The condition entities are the acting ability's source, its
 targets and its controller (``actor_player``): what the rule's condition
@@ -116,19 +133,23 @@ from typing import Any
 from effects.domain.effect_targets import placed_subjects
 from effects.domain.event_schema import EVENT_PARAMS, Event, EventType
 from effects.domain.provenance import SidecarLine, SidecarLookup
-from effects.domain.records import EffectRecord, Moment, RecordKind
+from effects.domain.records import EffectRecord, Moment, RecordKind, ResolutionOutcome
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import (
     acting_line,
     card_has_keyword,
     is_keyword_line,
     root_params_of,
     script_params_match,
+    source_entities,
     source_ids,
     source_is_token_of_kind,
 )
+from effects.domain.rule_detectors.emittable_events import absence_readable
 from effects.domain.rule_detectors.entity_facts import (
+    has_card_type,
     has_designation,
     has_face_state,
     is_copy,
@@ -137,9 +158,11 @@ from effects.domain.rule_detectors.entity_facts import (
 from effects.domain.script_text import api_of, segments
 from effects.domain.script_text import params as params_of
 from effects.domain.state_snapshot import EntityState, StateSnapshot, normalize_counter_type
+from effects.domain.wire_closed_lists import DAMAGE_TYPES, GAME_LOSS_REASONS
 
 __all__ = ["EVENT_FILTERS", "FAMILY", "SUBJECT_QUALIFIERS", "SUBJECT_QUALIFIER_NEEDS",
-           "acting_api", "event_filters", "source_is_token_of_kind", "subject_verdict",
+           "acting_api", "declared_events", "event_filters", "source_is_token_of_kind",
+           "subject_verdict",
            "token_kind_of"]
 
 #: Event parameters a declaration may not filter on: they name a card or an
@@ -148,9 +171,33 @@ __all__ = ["EVENT_FILTERS", "FAMILY", "SUBJECT_QUALIFIERS", "SUBJECT_QUALIFIER_N
 _UNFILTERABLE = frozenset({
     "cause", "source", "card_name", "token_script_id", "copy_source", "characteristics",
     "controller", "owner", "attached_to", "detached_from", "targets", "blockers", "blocked",
-    "defender", "called", "options", "piles", "mana_by_color"})
+    "defender", "called", "options", "piles", "mana_by_color", "name", "mana_cost"})
 EVENT_FILTERS = frozenset(
     name for names in EVENT_PARAMS.values() for name in names) - _UNFILTERABLE
+
+
+#: The checks an event filter's value passes (``declared_values``).
+EVENT_FILTER_CHECKS = {
+    "from_zone": dv.zone, "to_zone": dv.zone, "counter_type": dv.counter_type,
+    "to_state": dv.face_state, "damage_type": dv.one_of(*DAMAGE_TYPES),
+    "reason": dv.one_of(*GAME_LOSS_REASONS),
+}
+#: The checks the subject qualifiers' values pass.
+QUALIFIER_CHECKS = {
+    "subject_in_combat": dv.boolean, "subject_is_token": dv.boolean,
+    "controller_is_owner": dv.boolean, "subject_is_source": dv.boolean,
+    "subject_is_copy": dv.boolean, "subject_merged": dv.boolean,
+    "subject_face_state": dv.face_state, "subject_designation": dv.designation,
+    "subject_type": dv.card_type,
+}
+_CHECKS = {
+    **EVENT_FILTER_CHECKS, **QUALIFIER_CHECKS,
+    "api": dv.api, "keyword": dv.keyword, "source_keyword": dv.keyword,
+    "source_token_kind": dv.token_kind, "token_kind": dv.token_kind, "min_count": dv.integer,
+    "absent": dv.boolean, "api_in_chain": dv.boolean, "script_param": dv.script_param,
+    "chain_param": dv.script_param, "source_type": dv.card_type,
+    "target_face_state": dv.face_state,
+}
 
 
 def _flag(read):
@@ -191,6 +238,7 @@ SUBJECT_QUALIFIERS = {
     "subject_merged": _flag(is_merged),
     "subject_face_state": lambda entity, state, wanted: has_face_state(entity, wanted),
     "subject_designation": lambda entity, state, wanted: has_designation(entity, wanted),
+    "subject_type": lambda entity, state, wanted: has_card_type(entity, wanted),
 }
 #: The gen-3 field each subject qualifier reads, where it reads one.
 SUBJECT_QUALIFIER_NEEDS = {
@@ -200,10 +248,17 @@ SUBJECT_QUALIFIER_NEEDS = {
     "subject_designation": "designations",
 }
 _RECORD_QUALIFIERS = frozenset({"with_event", "without_event"})
+#: The parameters that read the acting line or its source.
+_LINE_PARAMS = frozenset({"api", "keyword", "source_keyword", "script_param", "chain_param",
+                          "source_token_kind", "source_type", "acting_face",
+                          "target_face_state"})
 _QUALIFIERS = frozenset(SUBJECT_QUALIFIERS) | _RECORD_QUALIFIERS
+#: Record filters read off the acting source and its targets (D4).
+_SOURCE_FILTERS = frozenset({"source_type", "acting_face", "target_face_state",
+                             "half_outcome"})
 _OWN = frozenset({"event", "min_count", "api", "api_in_chain", "keyword", "source_keyword",
                   "script_param", "chain_param", "absent", "token_kind",
-                  "source_token_kind"}) | _QUALIFIERS
+                  "source_token_kind"}) | _QUALIFIERS | _SOURCE_FILTERS
 #: The record kinds whose payload lists the events a rule's outcome is.
 _EVENT_KINDS = frozenset({RecordKind.RESOLUTION, RecordKind.COMBAT, RecordKind.TURN_ACTION})
 
@@ -255,6 +310,15 @@ def _event_spec(spec: Any) -> tuple[EventType, dict[str, Any]]:
         event = EventType(spec["event"])
         return event, event_filters("outcome_event", event, spec, frozenset({"event"}))
     return EventType(spec), {}
+
+
+def declared_events(params: Mapping[str, Any]) -> frozenset[EventType]:
+    """Every event type a declaration reads: its ``event`` and the types its
+    ``with_event``/``without_event`` name."""
+    found = {EventType(params["event"])}
+    for name in _RECORD_QUALIFIERS & set(params):
+        found.add(_event_spec(params[name])[0])
+    return frozenset(found)
 
 
 def _holds(listed: tuple[Event, ...], spec: Any) -> bool:
@@ -310,8 +374,17 @@ class OutcomeEvent:
         {"event", "api", "api_in_chain", "keyword", "source_keyword", "absent"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
-        return frozenset(field for name, field in SUBJECT_QUALIFIER_NEEDS.items()
-                         if name in params)
+        found = {field for name, field in SUBJECT_QUALIFIER_NEEDS.items() if name in params}
+        if "target_face_state" in params:
+            found.add("face_state")
+        return frozenset(found)
+
+    def events(self, params: Mapping[str, Any]) -> frozenset[EventType]:
+        return declared_events(params)
+
+    def reads_acting_line(self, params: Mapping[str, Any]) -> bool:
+        """Whether the declaration only speaks for records acting through a line."""
+        return bool(_LINE_PARAMS & set(params))
 
     def _filters(self, event: EventType, params: Mapping[str, Any]) -> dict[str, Any]:
         filters = event_filters(self.id, event, params, _OWN)
@@ -320,6 +393,23 @@ class OutcomeEvent:
         for name in _RECORD_QUALIFIERS & set(params):
             _event_spec(params[name])  # an unknown type or filter raises
         return filters
+
+    def validate(self, params: Mapping[str, Any]) -> None:
+        self._filters(EventType(params["event"]), params)
+        dv.check(self.id, params, _CHECKS)
+        scoped = any(params.get(name) is not None
+                     for name in ("api", "keyword", "source_keyword"))
+        absent = bool(params.get("absent"))
+        if absent and not scoped:
+            raise ValueError("outcome_event: absent needs api, keyword or source_keyword, "
+                             "or every resolution fires")
+        if absent and _QUALIFIERS & set(params):
+            raise ValueError("outcome_event: a qualifier picks among events that happened, "
+                             "which absent says did not")
+        if params.get("acting_face", "front") not in ("front", "alternative"):
+            raise ValueError("outcome_event: acting_face is front or alternative")
+        if "half_outcome" in params:
+            ResolutionOutcome(params["half_outcome"])
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
@@ -330,12 +420,6 @@ class OutcomeEvent:
         scoped = api is not None or keyword is not None or source_keyword is not None
         absent = bool(params.get("absent"))
         qualified = bool(_QUALIFIERS & set(params))
-        if absent and not scoped:
-            raise ValueError("outcome_event: absent needs api, keyword or source_keyword, "
-                             "or every resolution fires")
-        if absent and qualified:
-            raise ValueError("outcome_event: a qualifier picks among events that happened, "
-                             "which absent says did not")
         if record.kind not in _EVENT_KINDS or (
                 record.kind is RecordKind.RESOLUTION and record.moment is not Moment.RESOLUTION):
             return None
@@ -356,6 +440,8 @@ class OutcomeEvent:
         kind = params.get("source_token_kind")
         if kind is not None and not source_is_token_of_kind(record.state, kind, record.ability):
             return None
+        if not _source_fits(record, params):
+            return None
         token_kind = params.get("token_kind")
         listed = record.payload.listed_events()
         wanted = [
@@ -363,8 +449,11 @@ class OutcomeEvent:
             if e.type is event
             and meets_filters(e, filters)
             and (token_kind is None or token_kind.lower() in token_kind_of(e))]
+        # A hook-derived event a hookless record lacks may have happened: no
+        # side that reads its absence (V5 #15).
+        absence = all(absence_readable(record, e) for e in declared_events(params))
         if qualified:
-            return self._qualified(record, params, wanted, listed, scoped)
+            return self._qualified(record, params, wanted, listed, scoped, absence)
         happened = len(wanted) >= int(params.get("min_count", 1))
         condition = _condition(record)
         outcome = _outcome(record, wanted)
@@ -372,16 +461,17 @@ class OutcomeEvent:
             # The rule's outcome is the event's absence, so that is what is observed.
             if happened:
                 return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition, outcome)
-            return FamilyMatch(Polarity.FIRES, True, condition)
+            return FamilyMatch(Polarity.FIRES, True, condition) if absence else None
         if happened:
             return FamilyMatch(Polarity.FIRES, True, condition, outcome)
-        if not scoped:
+        if not scoped or not absence:
             return None
         return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition)
 
     @staticmethod
     def _qualified(record: EffectRecord, params: Mapping[str, Any], wanted: list[Event],
-                   listed: tuple[Event, ...], scoped: bool) -> FamilyMatch | None:
+                   listed: tuple[Event, ...], scoped: bool,
+                   absence: bool = True) -> FamilyMatch | None:
         """The rule's side among the events that happened, by its qualifiers."""
         record_ok = all((
             "with_event" not in params or _holds(listed, params["with_event"]),
@@ -393,6 +483,8 @@ class OutcomeEvent:
         condition = _condition(record)
         if len(meeting) >= int(params.get("min_count", 1)):
             return FamilyMatch(Polarity.FIRES, True, condition, _outcome(record, meeting))
+        if not absence:
+            return None
         if read:
             return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition,
                                _outcome(record, [e for e, _ in read if e not in meeting]))
@@ -401,10 +493,39 @@ class OutcomeEvent:
         return None
 
 
+def _source_fits(record: EffectRecord, params: Mapping[str, Any]) -> bool:
+    """The record filters read off the acting source and its targets:
+    ``source_type`` (the source card, as the snapshot shows it, has this card
+    type), ``acting_face`` (``front`` for an acting key on its card's first
+    face, ``alternative`` for another: an Adventure, a back face, a split
+    half), ``target_face_state`` (a target of the acting ability is in
+    this gen-3 face state) and ``half_outcome`` (the effect half's own outcome:
+    a fizzled or declined spell's half holds its card's move off the stack).
+    A record none can be read on fits none."""
+    if "source_type" in params:
+        wanted = params["source_type"].lower()
+        if not any(wanted in {t.lower() for t in e.types}
+                   for e in source_entities(record.state, record.ability or ())):
+            return False
+    if "acting_face" in params:
+        keys = record.ability or ()
+        if not keys or (keys[0].face != 0) != (params["acting_face"] == "alternative"):
+            return False
+    if "half_outcome" in params and getattr(record.payload, "outcome", None) != (
+            ResolutionOutcome(params["half_outcome"])):
+        return False
+    if "target_face_state" in params:
+        targets = [record.state.entity(t) for t in record.state.refs.as_cast]
+        if not any(t is not None and has_face_state(t, params["target_face_state"])
+                   for t in targets):
+            return False
+    return True
+
+
 def _condition(record: EffectRecord) -> tuple[str, ...]:
     """The acting ability's source, its targets and its controller."""
     actor = (record.actor_player,) if record.actor_player else ()
-    return tuple(dict.fromkeys((*source_ids(record), *record.state.refs.targets, *actor)))
+    return tuple(dict.fromkeys((*source_ids(record), *record.state.refs.as_cast, *actor)))
 
 
 _OWNED_ZONES = frozenset({"hand", "library"})

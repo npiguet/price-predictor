@@ -26,6 +26,12 @@ import java.util.function.Supplier;
  */
 final class InterventionFork implements InterventionScheduler.Forcing {
 
+    /** A refusal's reason: the forced ability never reached the copy's stack (a special action). */
+    static final String NOT_ON_THE_STACK = "nothing reached the stack";
+
+    /** A refusal's reason: the forced ability reached the stack, never began to resolve and did nothing. */
+    static final String NEVER_RESOLVED = "never resolved";
+
     private final Game game;
     private final CollectorContext context;
     private final ForkBudget budget;
@@ -76,23 +82,26 @@ final class InterventionFork implements InterventionScheduler.Forcing {
             return false;
         }
         Forks.ForkRun run = new Forks.ForkRun(
-                game, () -> budget.spendIntervention(realResolutionId), perspective);
+                "intervention", game, () -> budget.spendIntervention(realResolutionId), perspective);
         Boolean written = run.take((verified, snapshots) -> {
             SpellAbility forked = Forks.mappedAbility(verified.copier(), ability);
             Player actor = forked == null
                     ? null : Forks.mappedPlayer(verified.copier(), verified.perspective());
             if (forked == null || actor == null) {
-                return null;
+                throw new ForkRefusal(ForkRefusal.NO_COUNTERPART);
             }
             ForcedResolution resolution = forceResolution(verified.fork(), forked, actor, snapshots);
-            // An empty event list is not an observation. "The ability resolved
-            // and did nothing" and "the ability never got to act" render the
-            // same record, and nothing in it tells them apart. A
-            // counterfactual nobody can read is worse than one that was never
-            // written, so this drops it.
-            return resolution == null || resolution.isEmpty() ? null : resolution;
+            // "Never got to act" and "resolved and did nothing" both leave no
+            // event; the resolution hook tells them apart. One whose
+            // resolution started is written as a live one is, its halves
+            // empty ([], resolved or fizzled); one that never started is
+            // nothing to write.
+            if (resolution.isEmpty() && !resolution.started()) {
+                throw new ForkRefusal(NEVER_RESOLVED);
+            }
+            return resolution;
         }, (verified, resolution) -> {
-            write(resolution, ability, verified.perspective());
+            write(resolution, ability, verified);
             return Boolean.TRUE;
         });
         return Boolean.TRUE.equals(written);
@@ -101,25 +110,28 @@ final class InterventionFork implements InterventionScheduler.Forcing {
     /**
      * Write a forced resolution's effect halves.
      *
-     * @param perspective the live player the fork acted for
+     * @param verified the fork: the live player it acted for, and what its
+     *                 copy left out, which every half carries
      */
-    private void write(ForcedResolution resolution, SpellAbility ability, Player perspective) {
+    private void write(ForcedResolution resolution, SpellAbility ability, Forks.VerifiedFork verified) {
         // The *live* ability's keys, not the fork's. A provenance key
         // names a printed line, which the copy shares — but keying off
         // the copy would make the record's identity depend on a game
         // that no longer exists.
         ProvenanceKey.Resolved keys = ProvenanceResolver.resolve(ability);
-        String actorId = Refs.of(perspective);
+        String actorId = Refs.of(verified.perspective());
         // A modal resolution writes one half per chosen mode, by the same
         // rule the live bracket applies (FR-029f), each through the mode's
         // option line and with the board as it stood when that mode's
         // first clause began. Events before the first mode's clause — the
         // charm's own, of which there are none — ride with the first.
-        for (HeldHalves.Half<ModeSplit.ModeHalf> half : resolution.halves()) {
-            context.emit(forkedHalf(
+        List<HeldHalves.Half<ModeSplit.ModeHalf>> halves = resolution.halves();
+        for (int index = 0; index < halves.size(); index++) {
+            HeldHalves.Half<ModeSplit.ModeHalf> half = halves.get(index);
+            context.emit(verified.stamp(forkedHalf(
                     actorId, keys.withOption(half.about().mode().option()),
-                    resolution.render(half.about().mode().state(), half.events()),
-                    half.events(), half.about().conditions(), resolution.outcome()));
+                    resolution.render(half.about().mode(), half.events(), index, halves.size()),
+                    half.events(), half.about().conditions(), resolution.outcome())));
         }
     }
 
@@ -149,21 +161,42 @@ final class InterventionFork implements InterventionScheduler.Forcing {
      *                resolving, where the live bracket re-reads it, or null
      *                when the fork never saw it finish
      * @param outcome what became of it, as a live effect half says
-     *                (FR-042b): resolved or partially fizzled; a fizzled
-     *                one did nothing and is never written
+     *                (FR-042b): resolved, partially fizzled or fizzled; a
+     *                fizzled one holds its spell card's move off the stack
+     *                and nothing else, an ability's nothing at all
+     * @param started whether the resolution hook told the forced item's
+     *                resolution starting: a resolution that started and did
+     *                nothing is written with empty halves, one that never
+     *                started is not
      */
     private record ForcedResolution(
             String refs, List<HeldHalves.Half<ModeSplit.ModeHalf>> halves,
-            ActivationOutcome outcome) {
+            ActivationOutcome outcome, ChainTargets resolving, ChainTargets atCast,
+            boolean started) {
 
         /**
-         * A board this resolution read, paired with its refs as the live
-         * bracket pairs them: the half's random results in the refs, and the
-         * library cards its events name among the entities.
+         * A half's board, paired with its refs as the live bracket pairs
+         * them: the half's random results and its own links' targets, as
+         * its resolution started and as cast, in the refs, and the library
+         * cards its events name among the entities.
          */
-        String render(Snapshot board, List<EffectEvent> events) {
-            Snapshot read = refs == null ? board : board.withRefs(RefsJson.withRandom(refs, events));
-            return read.withEventCards(events).render();
+        String render(ModeSplit.Mode mode, List<EffectEvent> events, int index, int count) {
+            Snapshot board = mode.state();
+            if (refs == null) {
+                return board.withEventCards(events).render();
+            }
+            String read = RefsJson.withRandom(refs, events);
+            if (resolving != null) {
+                List<String> now = resolving.ofHalf(index, count, mode.option());
+                List<String> cast = atCast == null ? null : atCast.ofHalf(index, count, mode.option());
+                List<String> written = new java.util.ArrayList<>(now);
+                if (cast != null) {
+                    written.addAll(cast);
+                }
+                read = RefsJson.withTargets(read, now, cast,
+                        ChainTargets.onStackOf(written, resolving, atCast));
+            }
+            return board.withRefs(read).withEventCards(events).render();
         }
 
         /** Whether no half holds an event: the forced ability did nothing observable. */
@@ -221,15 +254,17 @@ final class InterventionFork implements InterventionScheduler.Forcing {
      * Lava Axe pushed with no target resolves into nothing.
      *
      * @return what resolved, one half per chosen mode; every half empty if the
-     *         ability resolved and did nothing observable; null if it could
-     *         not be resolved at all
+     *         ability resolved and did nothing observable, or never began to
+     *         resolve ({@link ForcedResolution#started} tells which)
+     * @throws ForkRefusal when its choices cannot be drawn or nothing
+     *         reached the stack
      */
     private ForcedResolution forceResolution(
             Game fork, SpellAbility ability, Player actor, SnapshotBuilder snapshots) {
         // Not guarded here: a forced resolution reaches states ordinary play
         // does not, and Forks.ForkRun discards the fork when a card throws.
         if (!drawForcedChoices(ability, actor)) {
-            return null;
+            throw new ForkRefusal(ForkRefusal.NO_CHOICES);
         }
         fork.copyLastState();
         ForkEventSink sink = ForkEventSink.forCast(fork, ability);
@@ -242,7 +277,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
             // live opens no bracket for one either, so there is no
             // resolution record to write. Otherwise a frozen stack parked
             // it or its targeting was refused, and nothing will resolve.
-            return null;
+            throw new ForkRefusal(NOT_ON_THE_STACK);
         }
         // The ability on the stack is the sink's root from here, as the
         // live bracket's root is the stack's: an event's attributed_to is
@@ -254,7 +289,10 @@ final class InterventionFork implements InterventionScheduler.Forcing {
         // resolution's start, where its board is read (FR-042b); a mode's
         // first clause, the boundary between per-mode halves and the moment
         // its snapshot is taken (FR-029b, FR-029f); each conditional clause's
-        // answer (FR-034); and the mana its own effect makes (C3).
+        // answer (FR-034); the mana its own effect makes (C3); and the events
+        // its clauses promise and its effects report (a token made, a coin
+        // flipped, damage prevented), which the live bracket hears from the
+        // hooks too.
         //
         // Only this ability's own modes and clauses count: the live clause
         // handler forwards every clause it drops, and anything else resolving
@@ -266,12 +304,30 @@ final class InterventionFork implements InterventionScheduler.Forcing {
         // charm must be the very ability on the stack, the one this record
         // is about, and a clause or a producer its chain.
         boolean[] fizzled = {false};
+        boolean[] started = {false};
+        // Whether the forced item's controller turned down a "you may" while
+        // it resolved, told by the confirm hook as the live bracket is told.
+        boolean[] declined = {false};
+        // The forced item's targets as its resolution started and as cast,
+        // read as the live bracket reads them.
+        ChainTargets[] targets = {null, null};
         Forks.ForkHooks hooks = new Forks.ForkHooks() {
             @Override
             public void resolutionStarting(SpellAbility item, boolean itemFizzled) {
+                resolutionStarting(item, itemFizzled, null);
+            }
+
+            @Override
+            public void resolutionStarting(
+                    SpellAbility item, boolean itemFizzled, Object targetsAtCast) {
                 if (item.getId() == onStack.getId()) {
-                    fizzled[0] = itemFizzled;
-                    sink.resolutionStarted(snapshots.ofResolving(onStack));
+                    started[0] = true;
+                    // A bestowed Aura or a mutating spell whose target went
+                    // resolves as a creature spell, as the live bracket reads it.
+                    fizzled[0] = itemFizzled && !BusBracketCollector.resolvesAsACreature(item);
+                    targets[0] = ChainTargets.now(item);
+                    targets[1] = ChainTargets.atCast(item, targetsAtCast);
+                    sink.resolutionStarted(snapshots.ofResolving(onStack, targets[1]));
                 }
             }
 
@@ -279,7 +335,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
             public void clauseResolving(SpellAbility clause) {
                 CharmModes.ModeStart start = CharmModes.modeStartOf(clause);
                 if (start != null && start.charm() == onStack) {
-                    sink.beginMode(start.option(), snapshots.ofResolving(onStack));
+                    sink.beginMode(start.option(), snapshots.ofResolving(onStack, targets[1]));
                 }
             }
 
@@ -296,14 +352,90 @@ final class InterventionFork implements InterventionScheduler.Forcing {
                     sink.manaProduced(produced);
                 }
             }
+
+            // What the live bracket takes from the hooks rather than the
+            // bus: filed as the live router files it, where the forced
+            // ability stands deciding whether it is the forced ability's.
+            @Override
+            public void clauseEvent(SpellAbility clause, EffectEvent event) {
+                sink.fileOutcome(event, null);
+            }
+
+            @Override
+            public void outcome(SpellAbility ability, EffectEvent event) {
+                sink.fileOutcome(event, null);
+            }
+
+            // While the forced item resolves: its start told, its end not yet
+            // (the refs are read at its end), as the live bracket scopes a
+            // refusal to the bracket that is open.
+            @Override
+            public void declined(SpellAbility offered) {
+                if (started[0] && cast.refs() == null
+                        && (offered == null || offered.getRootAbility() == onStack
+                                || offered.getId() == onStack.getId())) {
+                    declined[0] = true;
+                }
+            }
         };
         Forks.listeningForHooks(hooks, () -> {
             GameSimulator.resolveStack(fork, actor.getWeakestOpponent());
             return null;
         });
+        // Counted as the live bracket counts: the hook's targets as cast
+        // against those left when the resolution started, every link's.
+        List<HeldHalves.Half<ModeSplit.ModeHalf>> halves = sink.halves();
+        // A refusal is the outcome only where nothing happened but the
+        // spell's card leaving the stack, as live (OpenResolution.wasDeclined).
         ActivationOutcome outcome = fizzled[0] ? ActivationOutcome.FIZZLED
-                : OpenResolution.outcomeOf(cast.targetsAtCast(), onStack);
-        return new ForcedResolution(cast.refs(), sink.halves(), outcome);
+                : declined[0] && nothingButTheMoveOffTheStack(halves, onStack)
+                        ? ActivationOutcome.DECLINED
+                : targets[0] != null && targets[1] != null
+                        ? OpenResolution.outcomeOf(targets[1].count(), targets[0].count())
+                        : OpenResolution.outcomeOf(cast.targetsAtCast(), onStack);
+        if (outcome == ActivationOutcome.FIZZLED) {
+            halves = onlyMoveOffTheStack(halves, onStack);
+        }
+        return new ForcedResolution(cast.refs(), halves, outcome, targets[0], targets[1], started[0]);
+    }
+
+    /** Whether no half holds anything but the forced spell's own card leaving the stack. */
+    private static boolean nothingButTheMoveOffTheStack(
+            List<HeldHalves.Half<ModeSplit.ModeHalf>> halves, SpellAbility onStack) {
+        String card = onStack.isSpell() && onStack.getHostCard() != null
+                ? Refs.of(onStack.getHostCard()) : null;
+        for (HeldHalves.Half<ModeSplit.ModeHalf> half : halves) {
+            for (EffectEvent event : half.events()) {
+                boolean move = card != null && event.type() == EventType.ZONE_CHANGE
+                        && List.of(card).equals(event.subjects())
+                        && "stack".equals(event.params().get("from_zone"));
+                if (!move) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * A fizzled forced item's halves as a live one's (608.2b): nothing but a
+     * spell's own card's move off the stack, in the last half; nothing for
+     * an ability, or a copy, which leaves no card behind.
+     */
+    private static List<HeldHalves.Half<ModeSplit.ModeHalf>> onlyMoveOffTheStack(
+            List<HeldHalves.Half<ModeSplit.ModeHalf>> halves, SpellAbility onStack) {
+        String card = onStack.isSpell() && onStack.getHostCard() != null
+                ? Refs.of(onStack.getHostCard()) : null;
+        HeldHalves<ModeSplit.ModeHalf> kept = new HeldHalves<>();
+        for (HeldHalves.Half<ModeSplit.ModeHalf> half : halves) {
+            List<EffectEvent> move = half.events().stream()
+                    .filter(event -> card != null && event.type() == EventType.ZONE_CHANGE
+                            && List.of(card).equals(event.subjects())
+                            && "stack".equals(event.params().get("from_zone")))
+                    .limit(1).toList();
+            kept.add(half.about(), move);
+        }
+        return kept.halves();
     }
 
     /**
@@ -315,14 +447,42 @@ final class InterventionFork implements InterventionScheduler.Forcing {
      */
     private boolean drawForcedChoices(SpellAbility ability, Player actor) {
         ability.setActivatingPlayer(actor);
-        if (!choices.chooseModes(ability) || !choices.chooseTargets(ability)) {
+        return drawChoices(choices, ability, actor);
+    }
+
+    /**
+     * Modes, then X, then targets, the order a cast takes them (601.2b-c):
+     * a clause dividing X among its targets splits the X just announced, and
+     * one drawn before it split nothing.
+     *
+     * @param payer whose leftover mana bounds X, or null to announce the floor
+     */
+    private static boolean drawChoices(RandomChoices from, SpellAbility ability, Player payer) {
+        if (!from.chooseModes(ability)) {
             return false;
         }
         // Floor one: an X of zero resolves into the same silence a
         // missing target does, and the fork never pays, so the leftover mana of
         // the forked actor is what bounds the draw above it.
-        choices.announceX(ability, actor, 1);
-        return true;
+        from.announceX(ability, payer, 1);
+        return from.chooseTargets(ability);
+    }
+
+    /**
+     * Whether {@code ability} has a mode and targets for {@code holder} on
+     * the live board: the forced choices tried on a copy of it, with draws
+     * of their own, so neither the live ability nor any stream is touched.
+     * A copy that cannot be tried is let through, to the fork's own guard.
+     */
+    @Override
+    public boolean hasChoices(SpellAbility ability, Player holder) {
+        try {
+            SpellAbility trial = ability.copy(ability.getHostCard(), holder, true);
+            trial.setActivatingPlayer(holder);
+            return drawChoices(new RandomChoices(new Random(0L)), trial, null);
+        } catch (RuntimeException e) {
+            return true;
+        }
     }
 
     /**

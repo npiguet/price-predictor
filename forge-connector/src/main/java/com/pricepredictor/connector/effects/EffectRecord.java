@@ -4,6 +4,7 @@ import com.pricepredictor.connector.WireNamed;
 import com.pricepredictor.connector.effects.directed.DirectedTag;
 import com.pricepredictor.connector.json.Json;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -68,6 +69,12 @@ public final class EffectRecord {
     private List<String> aimedAt;
     /** What a directed fork changed; null on every record but a directed fork's. */
     private DirectedTag directed;
+    /**
+     * What the copier left out of a fork's copy, by kind, to how many; empty
+     * on a live record and on a fork whose copy left nothing out, and absent
+     * from the JSON then.
+     */
+    private Map<String, Integer> copyDropped = Map.of();
     private String actorPlayer;
     private List<ProvenanceKey> ability;
     private UnresolvedReason abilityUnresolved;
@@ -188,6 +195,15 @@ public final class EffectRecord {
     /** A directed fork's variant and operation; null leaves the member out. */
     public EffectRecord directed(DirectedTag tag) {
         this.directed = tag;
+        return this;
+    }
+
+    /**
+     * What the copier left out of this fork's copy, by kind as
+     * {@code Forks.dropped} spells it; empty leaves the member out.
+     */
+    public EffectRecord copyDropped(Map<String, Integer> dropped) {
+        this.copyDropped = dropped == null ? Map.of() : new java.util.TreeMap<>(dropped);
         return this;
     }
 
@@ -319,6 +335,9 @@ public final class EffectRecord {
         }
         if (directed != null) {
             json.raw("directed", directed.toJson());
+        }
+        if (!copyDropped.isEmpty()) {
+            json.value("copy_dropped", copyDropped);
         }
         return json
                 .value("actor_player", actorPlayer)

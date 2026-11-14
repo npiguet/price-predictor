@@ -46,6 +46,7 @@ public final class PatchHooks {
     static final String MAGIC_STACK = "forge.game.zone.MagicStack";
     static final String COST_PAYMENT = "forge.game.cost.CostPayment";
     /** The enum the clause hook's "resolved" call carries, read by constant name. */
+    static final String EFFECT_RECORD_HOOK = "forge.game.ability.EffectRecordHook";
     static final String CLAUSE_RUN = "forge.game.ability.ClauseRun";
 
     /**
@@ -84,6 +85,20 @@ public final class PatchHooks {
         /** Remove the listener this setter holds, or do nothing. */
         void uninstall() {
             PatchHooks.uninstall(owner, method);
+        }
+
+        /**
+         * Whether this setter's listener interface declares a method named
+         * {@code name}: a callback an older jar never makes, which a channel
+         * relying on it must do without.
+         */
+        boolean listenerDeclares(String name) {
+            return lookUp()
+                    .filter(setter -> setter.getParameterCount() == 1)
+                    .map(setter -> java.util.Arrays.stream(
+                                    setter.getParameterTypes()[0].getMethods())
+                            .anyMatch(declared -> declared.getName().equals(name)))
+                    .orElse(false);
         }
 
         /**
@@ -128,7 +143,10 @@ public final class PatchHooks {
     enum Callback {
         ON_REPLACING("onReplacing", 2),
         ON_REPLACEMENT("onReplacement", 3),
+        ON_BUFFERED_ABILITY_STARTING("onBufferedAbilityStarting", 2),
+        ON_BUFFERED_ABILITY_FINISHED("onBufferedAbilityFinished", 2),
         ON_CONDITION_EVALUATED("onConditionEvaluated", 3),
+        ON_TRIGGER_RUN("onTriggerRun", 2),
         ON_ATTACKERS_DECLARABLE("onAttackersDeclarable", 4),
         ON_BLOCKERS_DECLARABLE("onBlockersDeclarable", 5),
         ON_CLAUSE_RESOLVING("onClauseResolving", 1),
@@ -173,7 +191,9 @@ public final class PatchHooks {
      * <p>Any other method the proxy is asked for, and a callback called with
      * fewer arguments than its {@link Callback#arity}, answers null and does
      * nothing, the way an absent hook would: a handler that threw instead
-     * would throw out of the engine's own call.
+     * would throw out of the engine's own call. A short call is counted
+     * ({@link HookFailures#countShortCall}): it loses what it would have
+     * recorded.
      *
      * <p>What the body throws is counted against the hook
      * ({@link HookFailures}) and goes on to Forge, which contains it.
@@ -184,13 +204,17 @@ public final class PatchHooks {
         public Object invoke(Object proxy, Method invoked, Object[] args) {
             for (Callback callback : hook.callbacks()) {
                 if (callback.methodName().equals(invoked.getName())) {
-                    if (args != null && args.length >= callback.arity()) {
-                        try {
-                            body.on(callback, new Args(args));
-                        } catch (RuntimeException failure) {
-                            HookFailures.count(hook, failure);
-                            throw failure;
-                        }
+                    int given = args == null ? 0 : args.length;
+                    if (given < callback.arity()) {
+                        HookFailures.countShortCall(
+                                hook, callback.methodName(), given, callback.arity());
+                        return null;
+                    }
+                    try {
+                        body.on(callback, new Args(args));
+                    } catch (RuntimeException failure) {
+                        HookFailures.count(hook, failure);
+                        throw failure;
                     }
                     return null;
                 }
@@ -252,15 +276,18 @@ public final class PatchHooks {
             + "the hook mode detection probes");
     static final Hook TRIGGER_LISTENER = new Hook(
             TRIGGER_HANDLER, "setEffectRecordTriggerListener",
-            "trigger records, fired and not",
-            List.of(Callback.ON_CONDITION_EVALUATED));
+            "trigger records, fired and not; a firing is confirmed by the trigger's run",
+            List.of(Callback.ON_CONDITION_EVALUATED, Callback.ON_TRIGGER_RUN));
     static final Hook REPLACEMENT_LISTENER = new Hook(
             REPLACEMENT_HANDLER, "setEffectRecordListener",
             "rewrite records: the event a replacement received, what it "
             + "rewrote in place, which of the five ReplacementResults "
             + "it returned and which ability stood in for the event; "
-            + "their board, read before the replacement runs",
-            List.of(Callback.ON_REPLACING, Callback.ON_REPLACEMENT));
+            + "their board, read before the replacement runs; a buffered "
+            + "damage ability and the events of its later run",
+            List.of(Callback.ON_REPLACING, Callback.ON_REPLACEMENT,
+                    Callback.ON_BUFFERED_ABILITY_STARTING,
+                    Callback.ON_BUFFERED_ABILITY_FINISHED));
     static final Hook CLAUSE_LISTENER = new Hook(
             ABILITY_UTILS, "setEffectRecordClauseListener",
             "the events an effect API describes but the bus never announces",
@@ -273,6 +300,11 @@ public final class PatchHooks {
             "each forbidden attacker's responsible_static");
     static final Hook CANT_BLOCK_BY_STATIC = new Hook(CANT_ATTACK_BLOCK, "cantBlockByStatic",
             "each forbidden blocker's responsible_static");
+    static final Hook CANT_BLOCK_STATIC = new Hook(CANT_ATTACK_BLOCK, "cantBlockStatic",
+            "the responsible_static of a blocker no static lets block at all (Pacifism)");
+    static final Hook FAILURE_COUNTS = new Hook(EFFECT_RECORD_HOOK, "failureCounts",
+            "the worker's report of the failures Forge contained in every hook slot,"
+                    + " argument builds included");
     static final Hook MANA_LISTENER = new Hook(
             ABILITY_MANA_PART, "setEffectRecordManaListener",
             "mana records, and with them the role-polarity probe",
@@ -369,7 +401,7 @@ public final class PatchHooks {
     public static final List<Hook> REQUIRED = List.of(
             SUB_ABILITY, TRIGGER_LISTENER, REPLACEMENT_LISTENER, CLAUSE_LISTENER,
             COMBAT_LISTENER, CANT_ATTACK_STATIC,
-            CANT_BLOCK_BY_STATIC, MANA_LISTENER, CHANGED_TYPES_BY_STATIC,
+            CANT_BLOCK_BY_STATIC, CANT_BLOCK_STATIC, FAILURE_COUNTS, MANA_LISTENER, CHANGED_TYPES_BY_STATIC,
             CHANGED_COLORS_BY_STATIC, TYPE_WITHOUT, COLOR_WITHOUT, KEYWORDS_WITHOUT,
             PT_WITHOUT, CONTROLLER_WITHOUT, TRAITS_WITHOUT,
             CHANGED_NAMES, ASSIGNED_DAMAGE, CONFIRM_LISTENER, OUTCOME_LISTENER,
@@ -644,6 +676,24 @@ public final class PatchHooks {
      */
     static String clauseRunName(Object run) {
         return run instanceof Enum<?> constant ? constant.name() : null;
+    }
+
+    /**
+     * Forge's own count of the failures each hook slot contained in this JVM
+     * ({@code EffectRecordHook.failureCounts()}), by slot name; empty on a
+     * checkout without it.
+     */
+    public static Map<String, Long> forgeFailureCounts() {
+        Object counts = readStatic(FAILURE_COUNTS.owner(), FAILURE_COUNTS.method());
+        Map<String, Long> read = new java.util.TreeMap<>();
+        if (counts instanceof Map<?, ?> map) {
+            map.forEach((slot, n) -> {
+                if (n instanceof Number number) {
+                    read.put(String.valueOf(slot), number.longValue());
+                }
+            });
+        }
+        return read;
     }
 
     /** The sub-ability currently resolving, when the pointer hook is present. */

@@ -8,8 +8,10 @@ import forge.game.event.GameEventCardAttachment;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCardCounters;
 import forge.game.event.GameEventCardDamaged;
+import forge.game.event.GameEventCardDestroyed;
 import forge.game.event.GameEventCardPhased;
 import forge.game.event.GameEventCardRegenerated;
+import forge.game.event.GameEventCardSacrificed;
 import forge.game.event.GameEventCardStatsChanged;
 import forge.game.event.GameEventCardTapped;
 import forge.game.event.GameEventDayTimeChanged;
@@ -74,6 +76,28 @@ abstract class BusEventReader {
 
     /** The library-to-hand moves filed as draws whose draw counter is still read live. */
     private final DrawCheck.Pending draws = new DrawCheck.Pending();
+
+    /**
+     * Each battlefield card's face as last read ({@link CardFacts#faceState}),
+     * by card id, so a stats change can say the card turned: read as it
+     * enters, at each snapshot that rebaselines, and at each face change.
+     */
+    private final Map<Integer, String> faces = new HashMap<>();
+
+    /**
+     * Whether Forge has just said a permanent is destroyed, which its next
+     * move off the battlefield is: {@code GameEventCardDestroyed} names no
+     * card, and {@code GameAction.destroy} publishes it right before it
+     * moves the card.
+     */
+    private boolean destroyPending;
+
+    /**
+     * The {@code sacrificed} events Forge published for cards it has not
+     * moved yet, by card id: {@code Player.addSacrificedThisTurn} publishes
+     * the sacrifice right before {@code GameAction.sacrifice} moves the card.
+     */
+    private final Map<Integer, EffectEvent> sacrificesPending = new HashMap<>();
 
     /** A player's blessing and completed dungeons. */
     private record CommandMarks(boolean blessed, int dungeonsCompleted) {
@@ -289,7 +313,35 @@ abstract class BusEventReader {
     @Subscribe
     public void onGameOutcome(GameEventGameOutcome event) {
         if (game != null) {
+            for (EffectEvent lost : BusEvents.playersLost(game)) {
+                fileOutcome(lost, null);
+            }
             file(BusEvents.gameOutcome(event, game), null);
+        }
+    }
+
+    /**
+     * A permanent destroyed (701.8): {@code destroyed}, filed with the
+     * permanent's move off the battlefield that follows, which names the
+     * card ({@link #onCardChangeZone}). A destruction a regeneration shield
+     * or another replacement stopped publishes nothing.
+     */
+    @Subscribe
+    public void onDestroyed(GameEventCardDestroyed event) {
+        destroyPending = true;
+    }
+
+    /**
+     * A permanent sacrificed (701.21): {@code sacrificed}, filed with the
+     * permanent's move off the battlefield that follows
+     * ({@link #onCardChangeZone}), so a sacrifice the state-based check makes
+     * goes where its move goes.
+     */
+    @Subscribe
+    public void onSacrificed(GameEventCardSacrificed event) {
+        EffectEvent sacrificed = BusEvents.sacrificed(event);
+        if (sacrificed != null) {
+            sacrificesPending.put(event.card().getId(), sacrificed);
         }
     }
 
@@ -323,6 +375,11 @@ abstract class BusEventReader {
             draws.settle(libraryOwner);
         }
         EffectEvent moved = BusEvents.cardMoved(event);
+        for (EffectEvent how : howItLeft(event)) {
+            // Filed as the move is, ahead of it, so a state-based death's
+            // destroyed joins the record its move joins.
+            fileMove(event, how);
+        }
         if (moved != null) {
             placeInLibrary(event, moved);
             fileMove(event, moved);
@@ -339,13 +396,18 @@ abstract class BusEventReader {
             // Off the battlefield a card's computed characteristics stop
             // meaning anything, and one that returns is a new object.
             stats.forget(event.card().getId());
+            faces.remove(event.card().getId());
         }
         if (event.to() != null && event.to().zoneType() == ZoneType.Battlefield) {
             // Forge publishes a stats change after applying it, so without a
             // reading taken now the first pump finds no earlier value and
             // reports nothing. Read off the battlefield object, which the
             // statics and the counters it entered with have already reached.
-            stats.prime(cardById(event.card().getId()));
+            Card entered = cardById(event.card().getId());
+            stats.prime(entered);
+            if (entered != null) {
+                faces.put(entered.getId(), CardFacts.faceState(entered));
+            }
         }
         if (event.to() != null && event.to().zoneType() == ZoneType.Battlefield) {
             enteredTapped(event);
@@ -372,6 +434,29 @@ abstract class BusEventReader {
         if (entered != null && entered.isTapped()) {
             fileOutcome(new EffectEvent(EventType.TAPPED).subject(Refs.of(entered)), null);
         }
+    }
+
+    /**
+     * How a permanent leaving the battlefield left, as Forge said just
+     * before moving it: {@code sacrificed}, {@code destroyed}, or both
+     * empty. A pending destruction is the next move's only, whatever it is,
+     * so a destruction whose move never came names nothing later.
+     */
+    private List<EffectEvent> howItLeft(GameEventCardChangeZone event) {
+        boolean destroyed = destroyPending;
+        destroyPending = false;
+        if (event.card() == null || !leavesBattlefield(event)) {
+            return List.of();
+        }
+        List<EffectEvent> how = new ArrayList<>(2);
+        EffectEvent sacrificed = sacrificesPending.remove(event.card().getId());
+        if (sacrificed != null) {
+            how.add(sacrificed);
+        }
+        if (destroyed) {
+            how.add(new EffectEvent(EventType.DESTROYED).subject(Refs.of(event.card())));
+        }
+        return how;
     }
 
     /**
@@ -439,7 +524,33 @@ abstract class BusEventReader {
         if (game == null) {
             return List.of();
         }
-        return stats.rebaseline(game.getCardsIn(ZoneType.Battlefield));
+        List<EffectEvent> unreported = new ArrayList<>();
+        for (Card card : game.getCardsIn(ZoneType.Battlefield)) {
+            EffectEvent turned = faceChange(card);
+            if (turned != null) {
+                unreported.add(turned);
+            }
+        }
+        unreported.addAll(stats.rebaseline(game.getCardsIn(ZoneType.Battlefield)));
+        return unreported;
+    }
+
+    /**
+     * The card's face change since its face was last read, as a {@code
+     * face_change} whose {@code to_state} is the face now up ({@link
+     * CardFacts#faceState}: {@code front}, {@code back}, {@code flipped},
+     * {@code melded}, {@code face_down}), or null when it has not turned or
+     * was never read; the face is read now either way.
+     */
+    private EffectEvent faceChange(Card card) {
+        String now = CardFacts.faceState(card);
+        String before = faces.put(card.getId(), now);
+        if (before == null || before.equals(now)) {
+            return null;
+        }
+        return new EffectEvent(EventType.FACE_CHANGE)
+                .subject(Refs.of(card))
+                .param("to_state", now);
     }
 
     /**
@@ -449,6 +560,11 @@ abstract class BusEventReader {
      * animation and a colour change alike, and it names only the card. Without
      * the difference, the whole "gets +2/+2 and gains flying" family — most of
      * what a limited deck does — resolved into an empty event list.
+     *
+     * <p>A face turning — transformed, flipped, turned face up or face down —
+     * publishes the same event ({@code Card.setState}), once or more: a
+     * {@code face_change} names the face now up, beside what the new face
+     * changed.
      */
     @Subscribe
     public void onStatsChanged(GameEventCardStatsChanged event) {
@@ -461,11 +577,27 @@ abstract class BusEventReader {
             }
             Card card = cardById(view.getId());
             if (card != null) {
+                EffectEvent turned = faceChange(card);
+                if (turned != null) {
+                    fileOutcome(turned, null);
+                }
+                boolean animating = animating();
                 for (EffectEvent changed : stats.diff(card)) {
-                    fileOutcome(changed, null);
+                    // An Animate clause's grants are its own clause rule's
+                    // ability_change (ApiEvents), named by their SVars.
+                    if (!(animating && changed.type() == EventType.ABILITY_CHANGE)) {
+                        fileOutcome(changed, null);
+                    }
                 }
             }
         }
+    }
+
+    /** Whether the clause resolving now is an {@code Animate} or {@code AnimateAll}. */
+    private static boolean animating() {
+        return PatchHooks.currentSubAbility() instanceof forge.game.spellability.SpellAbility clause
+                && (clause.getApi() == forge.game.ability.ApiType.Animate
+                        || clause.getApi() == forge.game.ability.ApiType.AnimateAll);
     }
 
     @Subscribe
@@ -495,6 +627,9 @@ abstract class BusEventReader {
     @Subscribe
     public void onStepBoundary(GameEventTurnPhase event) {
         draws.settleAll();
+        // A sacrifice or a destruction whose move never came names nothing.
+        sacrificesPending.clear();
+        destroyPending = false;
     }
 
     /** The player whose library this move takes a card out of, or null when it is none or this reader has no game. */

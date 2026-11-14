@@ -60,22 +60,20 @@ def test_the_records_it_writes_are_still_well_formed(tmp_path: Path) -> None:
     assert all(record.mode.value in ("degraded", "patched") for record in records)
 
 
-def _deck_of(
-    name: str, count: int = 23, lands: tuple[str, ...] = ("Forest",) * 17,
-) -> list[str]:
-    return [name] * count + list(lands)
+def _deck_of(lands: tuple[str, ...]) -> list[str]:
+    """Llanowar Elves, the card the test looks for, beside Lightning Bolt, so
+    a game ends in a few turns: a mirror of mana dorks alone has nothing to
+    press an advantage with and ends by decking out some thirty turns in,
+    which a recorded game does not reach inside the window."""
+    return ["Llanowar Elves"] * 8 + ["Lightning Bolt"] * 15 + list(lands)
 
 
-#: A mirror of mana-dork-only decks has nothing to press an advantage with,
-#: so any one Bo1 game between them can run long -- Forge's AI is in no hurry
-#: to trade 1/1s and the game only otherwise ends by decking out ~30 turns in.
-#: A lone worker would then make the progress-file assertion hostage to
-#: whichever single game it happened to draw. Running several workers against
-#: the one shared progress file -- exactly what ``CollectorSupervisor`` does
-#: in production, just at a smaller scale -- means only the *fastest* of
-#: several games has to finish inside the window. ``ProgressWriter`` is
-#: documented to support concurrent appends from exactly this kind of pool.
-_WORKER_COUNT = 4
+#: Several workers against the one shared progress file -- what
+#: ``CollectorSupervisor`` does in production, at a smaller scale -- so only
+#: the fastest of their games has to finish inside the window.
+#: ``ProgressWriter`` is documented to support concurrent appends from exactly
+#: this kind of pool.
+_WORKER_COUNT = 2
 
 
 def test_a_named_deck_reaches_the_records(tmp_path: Path) -> None:
@@ -135,8 +133,8 @@ def test_a_named_deck_reaches_the_records(tmp_path: Path) -> None:
     decks_file = tmp_path / "decks.txt"
     write_deck_file(
         [
-            _deck_of("Llanowar Elves"),
-            _deck_of("Llanowar Elves", lands=("Forest",) * 16 + ("Plains",)),
+            _deck_of(("Forest",) * 9 + ("Mountain",) * 8),
+            _deck_of(("Forest",) * 8 + ("Mountain",) * 9),
         ],
         decks_file,
         label="coverage",

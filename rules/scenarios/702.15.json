@@ -286,14 +286,7 @@
       ],
       "forge_notes": "Each lifelink source gains life separately in Forge; the Pridemate trigger count is the observable.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A life-gain trigger is evaluated and fires for a life-gain event.",
-        "near_miss": "A life-gain trigger is evaluated and does not fire.",
-        "params": {
-          "mode": "LifeGained"
-        },
-        "needs": []
+        "none": "How many times one event triggers an ability is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     }
   ]

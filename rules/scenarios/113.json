@@ -142,17 +142,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "An activated ability whose per-turn activation limit is already used (a loyalty ability of a permanent after one of that permanent's loyalty abilities was activated this turn) is not playable: its activation-limit check fails.",
-        "near_miss": "An activated-ability candidate whose activation-limit check passes.",
-        "params": {
-          "bit": "failed_check",
-          "check": "activation_limit"
-        },
-        "needs": [
-          "failed_checks"
-        ]
+        "same_as": "606.3-1",
+        "reason": "A planeswalker's second loyalty ability in a turn failing its limit is 606.3's fact."
       }
     },
     {
@@ -466,17 +457,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A spell with a casting-timing restriction is not castable outside its permitted phase (phase check fails).",
-        "near_miss": "A candidate whose phase check passes.",
-        "params": {
-          "bit": "failed_check",
-          "check": "phase"
-        },
-        "needs": [
-          "failed_checks"
-        ]
+        "same_as": "506.8a-1",
+        "reason": "The record shows a spell in hand failing its phase check, 506.8a's fact; that the restriction functions from the hand adds no observable."
       }
     },
     {
@@ -683,16 +665,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A replacement effect modifies a permanent's zone change to the battlefield as it enters (result updated, e.g. enters tapped).",
-        "near_miss": "A zone change to the battlefield that met the replacement and was not modified.",
-        "params": {
-          "event": "zone_change",
-          "result": "updated",
-          "to_zone": "battlefield"
-        },
-        "needs": []
+        "same_as": "614.12-1",
+        "reason": "An enters-tapped replacement applying as the permanent enters is 614.12's fact."
       }
     },
     {
@@ -1252,15 +1226,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "continuous_contribution",
-        "record_kind": "continuous",
-        "outcome": "A static removes an ability (keyword) from an object.",
-        "near_miss": "A static contributes no keyword removal.",
-        "params": {
-          "field": "keywords",
-          "value": "-flying"
-        },
-        "needs": []
+        "none": "How many instances of an ability an object had is in no field: the record shows the ability lost, not its count."
       }
     },
     {

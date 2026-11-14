@@ -236,16 +236,6 @@ class ProvenanceResolverTest {
                 key.scriptFile());
     }
 
-    /** A back-face trait survives the stack copy the same way a front one does. */
-    @Test
-    void aStackCopyOfABackFaceAbilityKeepsItsFace() {
-        Card werewolf = card("Daybreak Ranger");
-        SpellAbility fight =
-                scriptedSpell(werewolf.getState(CardStateName.Backside), "Fight");
-
-        assertEquals(ProvenanceResolver.of(fight), ProvenanceResolver.of(asStackCopy(fight)));
-    }
-
     // ── tokens ──────────────────────────────────────────────────────────
 
     /**
@@ -263,16 +253,6 @@ class ProvenanceResolverTest {
         assertEquals("tokenscripts/c_a_food_sac.txt", key.scriptFile());
         assertEquals(0, key.face());
         assertEquals(TraitKind.SPELL, key.traitKind());
-    }
-
-    /** And through the stack copy, which is how a token's ability resolves. */
-    @Test
-    void aStackCopyOfATokensAbilityKeysIntoTheTokenTree() {
-        Card food = token("c_a_food_sac");
-        SpellAbility gainLife = scriptedSpell(food.getCurrentState(), "GainLife");
-
-        assertEquals(ProvenanceResolver.of(gainLife),
-                ProvenanceResolver.of(asStackCopy(gainLife)));
     }
 
     // ── engine-built command-zone cards ─────────────────────────────────

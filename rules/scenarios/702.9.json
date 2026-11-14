@@ -98,10 +98,11 @@
         "family": "legality_membership",
         "record_kind": "playability",
         "outcome": "A creature without flying or reach is forbidden from blocking a flying attacker.",
-        "near_miss": "A creature with flying or reach is listed among the legal blockers of the flying attacker.",
+        "near_miss": "A creature with flying or reach is among the legal blockers of the flying attacker.",
         "params": {
           "list": "legal_blockers",
-          "fires_when": "outside"
+          "fires_when": "outside",
+          "restriction": "flying"
         },
         "needs": []
       }

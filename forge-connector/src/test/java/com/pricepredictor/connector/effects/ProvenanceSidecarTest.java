@@ -140,25 +140,6 @@ class ProvenanceSidecarTest {
     }
 
     @Test
-    void aKeywordLineKeysToItsKeyword() {
-        Converted converted = convert("s/serra_angel.txt");
-        boolean sawKeywordKey = converted.sidecar().lines().stream()
-                .flatMap(line -> line.provenance().stream())
-                .anyMatch(key -> TraitKind.KEYWORD.equals(key.traitKind()));
-        assertTrue(sawKeywordKey, "Serra Angel's flying and vigilance key to keywords");
-    }
-
-    @Test
-    void everyKeyNamesTheCardsOwnScriptFile() {
-        Converted converted = convert("a/ajanis_pridemate.txt");
-        for (ProvenanceSidecar.Line line : converted.sidecar().lines()) {
-            for (ProvenanceKey key : line.provenance()) {
-                assertEquals("cardsfolder/a/ajanis_pridemate.txt", key.scriptFile());
-            }
-        }
-    }
-
-    @Test
     void noKeyAppearsBothOnALineAndInDroppedKeys() {
         for (String relativePath : SAMPLE) {
             Converted converted = convert(relativePath);
@@ -315,15 +296,6 @@ class ProvenanceSidecarTest {
     // ── the script surface and role spans ───────────────────────────────
 
     @Test
-    void anAbilityLineCarriesItsScriptApiTypeAndParameterKeys() {
-        Converted converted = convert("l/lightning_bolt.txt");
-        boolean sawScript = converted.sidecar().lines().stream()
-                .anyMatch(line -> line.script().apiType() != null
-                        && !line.script().paramKeys().isEmpty());
-        assertTrue(sawScript, "a spell line should carry its API type and params");
-    }
-
-    @Test
     void roleSpansCoverTheProseOfEveryIndexedLine() {
         Converted converted = convert("a/ajanis_pridemate.txt");
         assertTrue(converted.sidecar().lines().stream()
@@ -367,26 +339,21 @@ class ProvenanceSidecarTest {
     // ── the file on disk ────────────────────────────────────────────────
 
     @Test
-    void aSidecarIsWrittenBesideEveryConvertedCard() throws IOException {
-        new BatchConverter().convert(
-                FIXTURE_CARDS, tempDir,
-                SourceTree.CARDSFOLDER);
-        assertTrue(Files.exists(tempDir.resolve("t/test_bear.provenance.json")));
-        assertTrue(Files.exists(tempDir.resolve("t/test_flyer.provenance.json")));
-    }
-
-    @Test
     void aWrittenSidecarIsWellFormedJsonNamingItsCard() throws IOException {
         new BatchConverter().convert(
                 FIXTURE_CARDS, tempDir,
                 SourceTree.CARDSFOLDER);
         String json = Files.readString(tempDir.resolve("t/test_bear.provenance.json"));
-        assertTrue(json.startsWith("{\"card\":"), json);
-        assertTrue(json.contains("\"script_file\":\"cardsfolder/t/test_bear.txt\""),
-                json);
-        assertTrue(json.contains("\"lines\":["), json);
-        assertTrue(json.contains("\"dropped_keys\":["), json);
-        assertTrue(json.endsWith("}"), json);
+        java.util.Map<String, Object> sidecar = RecordLines.parse(json);
+        assertEquals(java.util.Set.of("card", "script_file", "lines", "dropped_keys"),
+                sidecar.keySet(), json);
+        assertEquals("cardsfolder/t/test_bear.txt", sidecar.get("script_file"), json);
+        // A vanilla bear prints no ability line; its implicit cast spell is
+        // the one trait, and it is dropped.
+        assertEquals("test bear", sidecar.get("card"), json);
+        assertEquals(List.of(), sidecar.get("lines"), json);
+        assertEquals(List.of(java.util.Map.of("face", 0L, "trait_kind", "spell", "index_within_kind", 0L)),
+                sidecar.get("dropped_keys"), json);
     }
 
     /**

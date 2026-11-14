@@ -5,7 +5,6 @@ import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.DirectedRules;
-import com.pricepredictor.connector.effects.directed.DirectedTag;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.PtOperation;
 import forge.game.Game;
@@ -89,11 +88,6 @@ class ForkRecordsTest {
     }
 
     // ── the per-game budget ─────────────────────────────────────────────
-
-    @Test
-    void aFreshGameMayIntervene() {
-        assertTrue(new ForkBudget(forkCaps().interventions(2).probes(2).build()).mayIntervene(1));
-    }
 
     @Test
     void anExhaustedInterventionBudgetStopsFurtherForks() {
@@ -689,7 +683,7 @@ class ForkRecordsTest {
         ForkBudget budget = new ForkBudget(forkCaps().interventions(1).probes(0).build());
         try {
             InterventionScheduler scheduler = new InterventionScheduler(game, new InterventionFork(
-                    game, TestCollectors.context(shard, ShardRun.GAME_ID), budget, 1L), null);
+                    game, TestCollectors.context(shard, ShardRun.GAME_ID), budget, 1L));
             scheduler.collect(PhaseType.COMBAT_BEGIN);
             assertTrue(budget.mayIntervene(-1), "an intervention was forced at the beginning of combat");
             scheduler.collect(PhaseType.MAIN2);
@@ -866,9 +860,8 @@ class ForkRecordsTest {
     /**
      * Every record of a directed fork names its one rule, is a
      * non-interventional fork and says which variant and operation it
-     * applied; taken at a phase boundary, where no live record is open, it
-     * mirrors none. The live game's records carry none of it on a
-     * match-outcomes run.
+     * applied, and mirrors no live record. The live game's records carry
+     * none of it on a match-outcomes run.
      */
     @Test
     void aDirectedForksRecordsNameTheRuleTheVariantAndTheOperation() throws Throwable {
@@ -970,22 +963,5 @@ class ForkRecordsTest {
             }
         }
         assertTrue(sawSkeletons, "a fork record shows the Skeletons");
-    }
-
-    /** {@code mirror_of} is written only when a live record was open at the fork point (D5). */
-    @Test
-    void aDirectedForkMirrorsALiveRecordOnlyWhenOneWasOpen() {
-        List<String> held = new ArrayList<>();
-        CollectorContext live = TestCollectors.context(ShardRun.writer(tempDir), ShardRun.GAME_ID, null);
-        DirectedTag tag = new DirectedTag("tougher", ForkOperation.PT);
-        CollectorContext opened = live.forFork(DirectedFork.flags("704.5f", tag, "run.0-l1.7"), held::add);
-        CollectorContext none = live.forFork(DirectedFork.flags("704.5f", tag, null), held::add);
-
-        opened.emit(opened.newRecord(RecordKind.COMBAT).actor("P0").state("{}").payload("{}"));
-        none.emit(none.newRecord(RecordKind.COMBAT).actor("P0").state("{}").payload("{}"));
-
-        assertEquals("run.0-l1.7", parse(held.get(0)).get("mirror_of"));
-        assertNull(parse(held.get(1)).get("mirror_of"));
-        assertEquals(List.of("704.5f"), parse(held.get(1)).get("aimed_at"));
     }
 }

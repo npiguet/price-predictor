@@ -45,7 +45,6 @@ class LineAppenderTest {
     @Test
     void concurrentAppendersKeepEveryLineWhole(@TempDir Path tmp) throws Exception {
         Path file = tmp.resolve("lines.txt");
-        LineAppender appender = new LineAppender(file);
         int writers = 4;
         int linesPerWriter = 50;
         Set<String> expected = new HashSet<>();
@@ -55,6 +54,9 @@ class LineAppenderTest {
                 expected.add(line(t, i));
             }
             final int id = t;
+            // An appender of its own per writer, as each worker JVM has: only
+            // the append itself keeps a line whole, no monitor they share.
+            LineAppender appender = new LineAppender(file);
             pool.submit(() -> {
                 for (int i = 0; i < linesPerWriter; i++) {
                     appender.append(line(id, i));

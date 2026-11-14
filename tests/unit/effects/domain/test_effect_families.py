@@ -119,6 +119,21 @@ def test_a_combat_family_is_the_sorted_keyword_set(records, sidecars):
     assert effect_family(edited, sidecars) == "first_strike,trample"
 
 
+def test_a_phased_out_or_last_known_participant_names_no_combat_family(records, sidecars):
+    """702.26b: a phased-out creature takes no part in combat, and a last-known
+    copy (no zone) is no creature on the battlefield."""
+    record = _first(records, RecordKind.COMBAT, test=lambda r: not r.fork)
+    for gone in ({"designations": ("phased_out",)}, {"zone": None}):
+        entities = tuple(
+            dataclasses.replace(entity, granted_temporary=GrantedTemporary(
+                keywords=("trample",)), **gone) if entity.combat is not None else entity
+            for entity in record.state.entities
+        )
+        edited = dataclasses.replace(
+            record, state=dataclasses.replace(record.state, entities=entities))
+        assert effect_family(edited, sidecars) == FamilySentinel.NONE, gone
+
+
 def test_a_keyword_acting_line_is_its_keywords_family(records):
     """Spec Story 4 scenario 7 / FR-048: whatever the kind."""
     record = _first(records, RecordKind.TRIGGER)
@@ -207,7 +222,29 @@ def test_a_legality_record_with_no_static_is_none(records, sidecars):
 
 
 def test_every_fixture_record_has_a_family(records, sidecars):
-    assert all(effect_family(record, sidecars) for record in records)
+    """A name or a sentinel, never an empty string (every sentinel is truthy,
+    so a truthiness check alone would only say nothing raised)."""
+    families = [effect_family(record, sidecars) for record in records]
+    assert all(isinstance(f, str) and f.strip() for f in families)
+    assert any(f not in set(FamilySentinel) for f in families)
+
+
+def test_a_gen3_record_takes_its_family_through_the_gen3_line_model():
+    """The gen-3 fixture's records against the converter's gen-3 sidecars:
+    one family per kind, read through the same join a build uses."""
+    from effects.infrastructure.record_codec import record_from_dict
+    from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS, gen3_fixture_records
+
+    cache = SidecarCache({folder.name: folder for folder in GEN3_SIDECAR_FOLDERS})
+    seen = {(record.kind, effect_family(record, cache))
+            for record in map(record_from_dict, gen3_fixture_records())}
+    assert {
+        (RecordKind.RESOLUTION, "DealDamage"), (RecordKind.RESOLUTION, "Charm"),
+        (RecordKind.TRIGGER, "ChangesZone"), (RecordKind.CONTINUOUS, "Continuous"),
+        (RecordKind.REWRITE, "ETBReplacement"), (RecordKind.COMBAT, "first_strike"),
+        (RecordKind.PLAYABILITY, FamilySentinel.UNAFFORDABLE),
+        (RecordKind.TURN_ACTION, FamilySentinel.NO_TEXT),
+    } <= seen
 
 
 class _Lines:

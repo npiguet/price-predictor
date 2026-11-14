@@ -82,14 +82,14 @@
       "detector": {
         "family": "resolution_outcome",
         "record_kind": "resolution",
-        "outcome": "A spell or ability with a target is countered on the stack, as ward counters one whose controller does not pay the ward cost.",
-        "near_miss": "A spell or ability with a target resolves.",
+        "outcome": "A ward trigger counters the spell or ability that targeted its permanent.",
+        "near_miss": "A ward trigger resolves and counters nothing (the cost was paid).",
         "params": {
           "outcome": "countered",
           "near": [
             "resolved"
           ],
-          "targeted": true
+          "keyword": "Ward"
         },
         "needs": []
       }
@@ -162,14 +162,14 @@
       "detector": {
         "family": "resolution_outcome",
         "record_kind": "resolution",
-        "outcome": "A spell or ability with a target is countered on the stack, as ward counters one whose controller does not pay the ward cost.",
-        "near_miss": "A spell or ability with a target resolves.",
+        "outcome": "A ward trigger counters the spell or ability that targeted its permanent.",
+        "near_miss": "A ward trigger resolves and counters nothing (the cost was paid).",
         "params": {
           "outcome": "countered",
           "near": [
             "resolved"
           ],
-          "targeted": true
+          "keyword": "Ward"
         },
         "needs": []
       }

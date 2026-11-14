@@ -15,7 +15,8 @@ Subcommands:
   directed-rules --counts FILE
             write rules/directed-fork-rules.txt (the rules enabled for directed forks) and
             rules/coverage-wording-cards.txt (the cards of their scenarios) from gen-2's
-            per-rule counts
+            per-rule counts, and rules/directed-fork-counts.json (the part of the counts
+            the list is decided from)
 
 A unit is a three-digit section (704), except sections 701 and 702, whose units are their
 second-level rules (702.2, one keyword each), because those two sections hold a third of all rules.
@@ -421,6 +422,13 @@ def validate_gen3_fields(s, families):
     elif "none" in detector:
         if len(detector) != 1 or not str(detector["none"]).strip():
             errs.append(f"{sid}: a none detector carries its reason and nothing else")
+    elif "same_as" in detector:
+        if set(detector) != {"same_as", "reason"} or not str(detector["reason"]).strip():
+            errs.append(f"{sid}: a same_as detector names its scenario and the fact the two "
+                        "share (reason), and nothing else")
+        elif sid in (detector["same_as"] if isinstance(detector["same_as"], list)
+                     else [detector["same_as"]]):
+            errs.append(f"{sid}: a scenario is no duplicate of itself")
     else:
         family = detector.get("family")
         if family not in families:
@@ -707,7 +715,7 @@ def turn_action_rules(by_rule):
     out = set()
     for rule, scenarios in by_rule.items():
         kinds = [s["detector"].get("record_kind") for s in scenarios
-                 if isinstance(s.get("detector"), dict) and "none" not in s["detector"]]
+                 if isinstance(s.get("detector"), dict) and "family" in s["detector"]]
         if kinds and all(kind == RecordKind.TURN_ACTION for kind in kinds):
             out.add(rule)
     return out
@@ -906,8 +914,10 @@ ALWAYS_DIRECTED = {
                "below the 68 per polarity a rule test needs (the user's decision of 2026-11-06)",
 }
 #: Left out whatever their counts, each for its reason: no detector can tell
-#: their fork from its live game, so a directed fork of theirs would add no
-#: record of the side it is for (the user's decision of 2026-11-06, T096).
+#: their fork from its live game, no fork of their board can be taken or kept,
+#: or no sealed pool makes their point happen, so a directed fork of theirs
+#: would add no record of the side it is for (the user's decisions of
+#: 2026-11-06, T096, and 2026-11-14).
 NOT_DIRECTED = {
     "104.2a": "the AI never concedes, the only forkable variant (add Platinum Angel) stops "
               "any other loss, and the lacking polarity is no event",
@@ -917,15 +927,37 @@ NOT_DIRECTED = {
                "701.12d-2's contrast is ownership, not a board edit",
     "702.62d": "the suspend cast happens inside a resolution, never at a priority stop, so "
                "no playability record exists for it",
+    **{rule: f"restates {other}, which is listed in its place (the user's decision of "
+             "2026-11-14): its scenario declares the same fact as " + other + "'s"
+       for rule, other in {"121.4": "704.5b", "122.1g": "704.5v", "703.4m": "510.2",
+                           "701.42c": "701.42b"}.items()},
+    **dict.fromkeys(("505.5", "614.10a", "701.24f", "702.105b"),
+                    "the record cannot show the rule's fact, so its scenarios declare no "
+                    "detector (the user's decision of 2026-11-14)"),
+    "122.1h": "the rewrite record names no replacing effect for a replacement Forge builds at "
+              "runtime from the finality counter, so its scenario declares no detector (the "
+              "user's decision of 2026-11-14)",
+    "104.4c": "no record shows the draw: Forge's GameDrawn ends the game naming no loser and "
+              "no winner and no record kind lists game_drawn, so 104.4c-1's declaration is "
+              "untaggable; the effect half's conditions_met says whether the GameDrawn "
+              "clause's condition held, but no detector family reads it",
+    "115.7a": "its point is a target-changing spell or ability resolving, cast by a player "
+              "at a spell on the stack after the boundary (every boundary a fork is taken at "
+              "has the stack empty), so no precondition knows the spell or the other legal "
+              "target its variant replaces",
+    **dict.fromkeys(("701.10c", "701.11c"),
+                    "its scenario declares no detector: no detector parameter reads whether "
+                    "the power doubled or tripled was negative"),
+    "712.4c": "its scenario declares no detector: no detector parameter reads why a "
+              "transform instruction did nothing",
+    **dict.fromkeys(("701.40c", "701.40d"),
+                    "its variant puts another card in the manifested permanent's place, and "
+                    "replace_card refuses every face-down permanent, so every fork would be "
+                    "refused"),
+    "712.16": "no sealed pool makes it happen: no set with draft boosters holds both a card "
+              "turning a permanent face down (Ixidron and Vesuvan Shapeshifter in Time "
+              "Spiral, Illithid Harvester, the morph sets) and a double-faced card",
 }
-#: Left out of this collection only: they qualified on the recount after the T030
-#: detectors (2026-11-06), when the list of 70 was fixed for production; by the user's
-#: rule, more than five newcomers wait for a later collection rather than delay this one
-#: by a registration each.
-DEFERRED_DIRECTED = dict.fromkeys((
-    "104.4a", "104.4c", "115.7a", "701.10c", "701.11c", "701.40c", "701.40d",
-    "702.19c", "702.19e", "702.19f", "702.131a", "702.170c", "712.4c", "712.16",
-), "qualified after the production list was fixed; registered for a later collection")
 FIRES, DOES_NOT_FIRE = "fires", "does_not_fire"
 
 
@@ -991,11 +1023,10 @@ def forkable_variants(scenarios, lacking):
 def directed_rules(counts, by_rule):
     """The rules FR-014b enables, in unit order: ``rule -> {counts, lacking,
     variants, by_counts}``; ``by_counts`` is False for a rule listed only as
-    one of ``ALWAYS_DIRECTED``. A rule of ``NOT_DIRECTED`` or ``DEFERRED_DIRECTED`` is
-    never listed."""
+    one of ``ALWAYS_DIRECTED``. A rule of ``NOT_DIRECTED`` is never listed."""
     out = {}
     for rule, scenarios in by_rule.items():
-        if rule in NOT_DIRECTED or rule in DEFERRED_DIRECTED:
+        if rule in NOT_DIRECTED:
             continue
         found = rule_counts(counts, rule, scenarios)
         lacking = lacking_polarities(*found) if found is not None else set()
@@ -1039,6 +1070,30 @@ def wording_cards(chosen, by_rule, card_of_face):
     return sorted({card_of_face.get(name, name) for name in named}), unknown
 
 
+#: The part of the counts ``directed_rules`` reads, checked in beside the list.
+DIRECTED_COUNTS = "directed-fork-counts.json"
+
+
+def decided_from(counts):
+    """The members of a ``rule-counts`` file ``directed_rules`` reads: each
+    rule's records by polarity and source, and the ids of the rules the
+    counts cannot speak for (``not_countable``, ``none``)."""
+    return {"rules": counts["rules"], "not_countable": sorted(counts["not_countable"]),
+            "none": sorted(counts["none"])}
+
+
+def write_decided_from(path, counts):
+    """``decided_from(counts)`` as JSON, one rule a line."""
+    kept = decided_from(counts)
+    rules = ",\n".join(f"    {json.dumps(rule)}: {json.dumps(kept['rules'][rule], sort_keys=True)}"
+                       for rule in sorted(kept["rules"], key=rule_sort_key))
+    path.write_text("{\n"
+                    f'  "not_countable": {json.dumps(kept["not_countable"])},\n'
+                    f'  "none": {json.dumps(kept["none"])},\n'
+                    f'  "rules": {{\n{rules}\n  }}\n'
+                    "}\n", encoding="utf-8", newline="\n")
+
+
 def cmd_directed_rules(args):
     rules_dir = args.rules_dir
     counts = json.loads(args.counts.read_text(encoding="utf-8"))
@@ -1047,6 +1102,7 @@ def cmd_directed_rules(args):
     cards, unknown = wording_cards(chosen, by_rule, converted_card_of_face(args.cards_folder))
     (rules_dir / "directed-fork-rules.txt").write_text(
         "".join(f"{rule}\n" for rule in chosen), encoding="utf-8", newline="\n")
+    write_decided_from(rules_dir / DIRECTED_COUNTS, counts)
     (rules_dir / "coverage-wording-cards.txt").write_text(
         "".join(f"{card}\n" for card in cards), encoding="utf-8", newline="\n")
     for rule, row in chosen.items():
@@ -1061,7 +1117,7 @@ def cmd_directed_rules(args):
     one_sided = sum(DOES_NOT_FIRE in row["lacking"] for row in chosen.values())
     for rule, reason in ALWAYS_DIRECTED.items():
         print(f"always listed {rule}: {reason}")
-    for rule, reason in {**NOT_DIRECTED, **DEFERRED_DIRECTED}.items():
+    for rule, reason in NOT_DIRECTED.items():
         print(f"left out {rule}: {reason}")
     print(f"{len(chosen)} rules ({rare} rare, {one_sided} one-sided, "
           f"{sum(not row['by_counts'] for row in chosen.values())} always), {len(cards)} wording "
@@ -1087,8 +1143,9 @@ def main():
     p = sub.add_parser("gen3-fields", help="write each heads line's gen-3 ids and "
                        "learnable_after_gen3, and print the rules newly learnable (FR-016)")
     p.add_argument("--rules-dir", type=Path, default=RULES, help=argparse.SUPPRESS)
-    p = sub.add_parser("directed-rules", help="write the rules enabled for directed forks and "
-                       "the cards of their scenarios (FR-014b, FR-038a)")
+    p = sub.add_parser("directed-rules", help="write the rules enabled for directed forks, "
+                       "the cards of their scenarios and the counts they were decided from "
+                       "(FR-014b, FR-038a)")
     p.add_argument("--counts", type=Path, required=True,
                    help="gen-2's per-rule counts, as `effects rule-counts` writes them")
     p.add_argument("--cards-folder", type=Path, default=OUTPUT / "cardsfolder",

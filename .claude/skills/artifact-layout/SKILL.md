@@ -66,8 +66,8 @@ checkpoint are not inside it: they go to `output/<module>/<gen>/cache/<run>/` an
 |---|---|---|
 | `run.json` | by the command itself: at start, completed at the end | the run manifest below |
 | `console.log` | throughout | the command's stdout and stderr, unbuffered (`python -u … 2>&1 \| tee console.log`), its first line the command |
-| `logs/` | throughout | every other log: Forge worker logs, per-process logs, supervisor logs |
-| the artifacts | — | whatever the run produces, in the layout its command defines |
+| `logs/` | throughout | every other log: Forge worker logs, per-process logs, supervisor logs, and the scratch counters a supervisor reads its workers' progress from; a collecting supervisor's per-slot stop files (`<run id>.<slot>.stop`) live here while its workers run and are deleted when its pool ends (kept only beside a worker that outlived the kill) |
+| the artifacts | — | whatever the run produces, in the layout its command defines; inputs the run's own workers read while it runs (a collector's decks files) go in a subdirectory of their own, such as `decks/` |
 
 `run.json` is one JSON object, read and edited by scripts as well as by hand:
 
@@ -92,6 +92,10 @@ checkpoint are not inside it: they go to `output/<module>/<gen>/cache/<run>/` an
   replacing run's path when `superseded`. A run that never reaches `keep` belongs under `scratch`.
 - A resumed or restarted command appends its command line to `commands` and sets `status` back to
   `running`.
+- `invocations` holds one entry per line of `commands`, in order: that command's own `commits`,
+  `started`, `ended` and `outcome`, and what it records while it runs (a collector's supervisor
+  `run_id`, resolved `caps` and worker-log failures). The top-level `commits` and `started` are the
+  run's first command's; `ended` and `outcome` its last's.
 - The run directory is the command's output directory argument, or the directory holding its output
   file argument.
 - `inputs` and `continues` hold run paths relative to the repository root.

@@ -15,7 +15,7 @@ File `rules/scenarios/<unit>.json`, keys as `rules/README.md` specifies, plus:
 
 | Field | Type | Rule |
 |---|---|---|
-| `detector` | `DetectorDeclaration` or `{"none": reason}` | required on every scenario (FR-002) |
+| `detector` | `DetectorDeclaration`, `{"none": reason}` or `{"same_as": id or [ids], "reason": …}` | required on every scenario (FR-002); `same_as` names scenarios declaring a detector (FR-002b) |
 | `departure` | `Departure`, optional | absent means no departure recorded |
 | `variants[].operation` | `ForkOperation` or `{"unclassifiable": reason}` | required on every non-base variant (FR-003) |
 
@@ -31,7 +31,9 @@ File `rules/scenarios/<unit>.json`, keys as `rules/README.md` specifies, plus:
 | `needs` | list of field names | gen-3 fields the detector reads; empty when it runs on gen-2 records |
 
 Validation: `rules_catalogue.py validate` fails on an unknown family, on parameters the family does not
-declare, and on a scenario with neither `detector` form.
+declare, and on a scenario with no `detector` form; `DetectorIndex.of` also refuses a value the
+family cannot read and sets aside an untaggable declaration (FR-002c). No two scenarios of
+different rules share one `(family, record_kind, params)` (FR-002b).
 
 ### Departure (new)
 
@@ -104,10 +106,13 @@ carries `aimed_at`). A gen-2 record is natural.
 ### RuleCounts (new; `rule-counts.json` and the manifest)
 
 ```
-records: n, rules: rule → { polarity → { source → count } }, not_countable: [rule], none: {rule → reason}, review: [{record_id, scenario}]
+records: n, rules: rule → { polarity → { source → count } }, declared_zero: [rule], not_countable: [rule],
+none: {rule → reason}, untaggable: {scenario → {rules, reason}},
+same_as: {scenario → {rules, same_as: [scenario], counted_under: [rule]}}, review: [{record_id, scenario}]
 ```
 
-A rule no record tags is absent from `rules`; absent is not "not countable".
+A rule no record tags is absent from `rules` and listed in `declared_zero` when a taggable
+declaration speaks for it; absent from both is not "not countable".
 
 ## Records
 
@@ -115,13 +120,19 @@ A rule no record tags is absent from `rules`; absent is not "not countable".
 
 | Field | Type | Kinds | Rule |
 |---|---|---|---|
-| `generation` | int, `3` | all | absent: gen-1 or gen-2 (feature 024's rule) |
+| `generation` | int, `3` | all | absent: gen-1 or gen-2 (feature 024's rule); any other value is refused |
 | `aimed_at` | list of rule ids | all, aimed records only | directed fork: `[rule]`; `collect-coverage` / `collect-variants`: the run's `--directed-fork-rules`, possibly `[]`; absent on every other record |
 | `directed` | `{variant, operation}` | all, directed-fork records only | `operation` a `ForkOperation` |
-| `kind` | adds `turn_action` | | subkinds `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`, `lore_counter` |
+| `copy_dropped` | `{kind: count}` | all, fork records only | what the copier left out of the fork's copy for want of a counterpart, by `GameCopier.NoCounterpart` kind lower-cased (`command`, `delayed_trigger`, `remembered`, `link`, `attack`, `ability`, `activation`), each count at least 1; absent on live records and on a fork whose copy left nothing out |
+| `kind` | adds `turn_action` | | subkinds `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`, `lore_counter`, `game_end` (the game-end marker: one per game that ended, its last record, never withheld) |
 
-`generation`, `aimed_at`, `directed` are collection metadata; `test_schema_compatibility.py` checks that
-flipping them leaves `SurfaceBuilder.build` unchanged.
+`generation`, `aimed_at`, `directed`, `copy_dropped` are collection metadata;
+`test_schema_compatibility.py` checks that flipping them leaves `SurfaceBuilder.build` unchanged.
+`copy_dropped` gates nothing: a lossy fork's records are kept, trained on and counted like any
+other fork's, and `validate-corpus` reports the share of fork records carrying each kind, and of
+forks: the wire names no fork, so a fork is counted as the fork records alike in game, game turn
+and kind of fork (a probe also by its `mirror_of`, a directed fork by its `directed`), a lower bound
+on the forks taken. A `copy_dropped` that is empty or holds a count below 1 is refused.
 
 Flag signatures added: directed fork = any kind, `interventional = false`, `fork = true`, `directed`
 set; protection fork (FR-058) = any kind, `interventional = true`, `fork = true`, its cost halves
@@ -143,7 +154,13 @@ Global: `day_night` (`day` | `night` | null). Command zone: `floating_effects` a
 room}`). Extra card entities are appended to `entities` after the tiers, each with its `role`:
 `library_card` (top card plus every one the events name, with position), `exiled_with`,
 `mutate_component`, `last_known` (the pending event's subject, under id `L<card id>`). `refs.random`
-holds the half's dice and coin flips. Gen-2's `printed`, `granted_attached` and `pt` are gone.
+holds the half's dice and coin flips. `refs.targets` holds every target of the acting item's chain
+(root, sub-abilities, a charm's modes; an effect half: its own links' as its resolution started), and
+`refs.targets_at_cast` an effect half's targets before Forge's illegal-target check (null where
+unknown and on every other refs block). `granted_temporary.hidden_keywords` lists Forge's hidden
+keywords. A phased-out permanent is an entity that no reader takes for a permanent on the
+battlefield (702.26b); `copy_source` names what a copy copies; a
+candidate's or cost half's host off the battlefield and the stack shows its acting ability's face. Gen-2's `printed`, `granted_attached` and `pt` are gone.
 Relations: `links: [{from, to, type, index?}]` with the § 10.3 family names, each link written once in
 its forward direction, `index` on `targets` only; the four families the reader builds (`line_of`,
 `line_of_the_same_card`, `mode_of`, `has_the_same_name`) are not collected; an `affects` link ends at
@@ -159,11 +176,22 @@ players. Shapes as
 | playability `decision` candidate | `verdict.timing`, `failed_checks: [{check, responsible_static}]`, `legal_targets` (all clauses, no cap), `land_play` | `timing = false` ⇒ a `casting_speed` entry; a land-play candidate (`land_play = true`, FR-033a) fails only `whose_turn`, `casting_speed`, `zone`, `static_prohibition` or `land_play_limit` |
 | `attackers` | `anchor_attacker`, `legal_defenders`, `must_attack`, `tapped_by_attack?` | one record per creature the attacking player controls, a tapped one included; `tapped_by_attack` only when the anchor was declared; gen-2's `legal_attackers` and `forbidden` kept; no `what_if` |
 | `blockers` | `must_block` | the refs of the listed creatures a requirement makes block the anchor |
+| `blockers` | `forbidden[].responsible_static`, `forbidden[].responsible_own?`, `forbidden[].responsible_unresolved?`, `forbidden[].required_elsewhere?` | the static keeping the creature from blocking the anchor, else from blocking at all (`cantBlockStatic`), else the creature's own can't-block keyword line; `required_elsewhere: true` when Forge refuses the block for a requirement to block another attacker (a lure, an attacker that must be blocked if able); `responsible_own`, `responsible_unresolved` as the record-schema delta has them; a forbidden blocker no responsible line (keyed or `responsible_unresolved`), evasion, tap, can't-block keyword of its own or hidden, or `required_elsewhere` explains is `legality_membership`'s `effect` restriction (detain), which has no near miss |
 | `turn_action` | `events` | |
+| `turn_action` / `game_end` | `events: []`, `records_withheld` | the records `--max-records-per-game` kept out for the game; a game with no marker is cut. The marker derives no target and no detector reads it; `build-corpus` drops a gen-3 game with no marker in its shard |
+| `rewrite` | `incoming_unknown?`, `buffered?`, `buffered_ran?`, `buffered_events?` | `incoming_unknown: true` when Forge could not copy the incoming event (then `outgoing` null, no in-place edit is told and `rewrite_event` reads the record on neither side); on a damage replacement that set an ability aside, its keys, whether it ran, and the events of its run, which are the record's happened events: they supervise its per-entity targets and, when non-empty, its record heads; detectors read them only as a place of their own (`emittable_events.BUFFERED`) |
+| `trigger` | `fired` | true only for a trigger Forge ran; an evaluation that held and never ran writes nothing |
+| resolution, mana record | `events` | `tapped`, the other events of its own payment, `mana_produced`, the events of its own sub-abilities; every one supervises the mana ability's per-entity targets |
 | `combat` | snapshot at the start of the damage step | shape at the first damage event |
 | `combat`, observed and probe | damage events carry `source` | the bus's `cause`, else from `assignment_choices` |
 | decision candidate | `cost_after_adjustment` | the cost after Forge's cost adjustment |
-| events | `pt_change.set_pt`, zone changes' `library_position`, `card_looked_at.mode`, `token_created` controller and counters, `ability_change` subjects, new `state_flag_change` flags | wire shapes in [contracts/record-schema-delta.md](contracts/record-schema-delta.md) |
+| events | `pt_change.set_pt`, zone changes' `library_position`, `card_looked_at.mode`, `token_created` controller and counters, `ability_change` subjects, new `state_flag_change` flags, `damage_dealt.damage_type`, `attached.attached_to` and `unattached.detached_from` on bus events, `destroyed`, `sacrificed` and `face_change` (FaceState `to_state`) on resolution and combat records, `player_lost` on the record the game's outcome is written in (a `LosesGame` or `WinsGame` effect half that ended the game, else the game-end record), `card_revealed.from_zone` and `card_made.to_zone` lower-cased, `choice_made.choice_kind` by API, run-parameter events read per Forge mode with signed `delta` (a loss negative) and FaceState `to_state`, `keyword_change` sorted with `hidden` on a hidden keyword's, `ability_change` from stat changes | wire shapes in [contracts/record-schema-delta.md](contracts/record-schema-delta.md) |
+| resolution, effect half | `events` of a fizzled or declined spell | exactly its card's `zone_change` off the stack; `[]` on a fizzled or declined ability's half and a copy of a spell's |
+| refs | `targets_on_stack`; `L<id>` in `targets_at_cast` | the targets that are spells or abilities on the stack, by their cards; a target as cast gone or a new object named as it last existed |
+| links | `targets` on an effect half | the acting line's targets as cast (`refs.targets_at_cast`), not those left after the illegal-target check |
+| events | `attributed_to` of a chain's damage | a damage, and every event a `DamageResolve` clause publishes, whose subject an earlier link targets carries that link's index |
+| events | `name_change`, `mana_cost_change` | new types, from stat changes with no face change and no copy effect |
+| `continuous` | contributions' `abilities`, `hidden_keywords`; `=` in `keywords` | layer-6 grants by line key, removals as `-key`; a static's hidden keywords; a static removing every keyword |
 
 ## Curation
 
@@ -202,14 +230,33 @@ Per class, rule and polarity, each count split by `RuleSource`:
 Adds `rule_counts`, `rule_map`, `rule_map_digest`, `effective_outputs`, `rules` (class → rule → polarity → `RuleRow`),
 `one_sided_rules`, `one_sided_conditions`, `unbudgeted_rules` (rule → counts), `left_out_of_half`
 (stratum → half → [rule]), `turn_action_left_out` (subkind → count), `subtypes` and `keywords` (the
-closed lists), `halves` (stratum → half → [game_id]). Gen-3 manifests only; no gen-2 compatibility.
+closed lists), `halves` (stratum → half → [game_id]), `validation_rules` (validation stratum → class →
+rule → polarity → `RuleRow`), `record_flags` (class → `fork` | `interventional` | `directed` | `aimed` |
+`degraded` → kept records read), `placement_thresholds` (`min_games_per_half`, `max_item_error`,
+`max_component_error`, null where infinite), `keyword_definitions_digest` (sha256 of the file read, ""
+without one), `decode_off_list` (`"<member> <repr of value>"` → times read outside the wire's closed
+lists), `damaged_tails` ([shard path under `--records-dir`, byte] a damaged last gzip member
+ended) and `join_gaps`
+(`unresolved` | `undescribed` → script file → keys, `unconfigured` → source tree → keys: keys read as
+no line), all three the survey's; `unsupervised_events` (kind → events no output column reads),
+`code_version` (`git rev-parse HEAD`, "" outside a checkout) and `sidecar_digest` (sha256 over the
+sidecars by tree, path and size). These six are outside the digest; `cut_games` (gen-3 games
+dropped whole for want of a game-end marker in their shard) is inside it; `record_flags` also counts
+`runtime_only` resolutions. `rule_counts` carries `declared_zero`, `none`, `untaggable` and
+`same_as` (`CatalogueStanding`). `per_stratum` counts `dropped-unsurveyed`: records past those the
+survey read in their shard, a new game's or a placed game's (a shard
+grown between the two passes), written to no stratum, and `dropped-cut`: the records of the cut
+games, written to no stratum. Gen-3 manifests only; no gen-2 compatibility.
 
 ### Placement (new, `stratum_placement.py`)
 
 Input: `GameCensus` (games, held-out games, random-seat games, keyword-combat games, held-out text
 games, per-game inventories `game → {(rule, polarity): n}` of rule-test-eligible records) and a
 `PlacementRule` (gen-2's draws, the pool factor, the half minimum, the item error). Only Forge-AI
-games enter a validation stratum. Output: `GameStrata` gains `halves` and `left_out_of_half`.
+games enter a validation stratum. Output: `GameStrata` gains `halves`, `left_out_of_half` and
+`surveyed` (every game the survey saw); a game outside `surveyed` is `dropped-unsurveyed`, never
+training, as is every record past the survey's count of its shard (`WriteTask.surveyed`); a game
+the survey found cut in a shard is `dropped-cut` there (`WriteTask.cut`).
 Deterministic for a given corpus; not stable across corpus growth (R3).
 
 ## Model
@@ -220,7 +267,10 @@ Deterministic for a given corpus; not stable across corpus growth (R3).
 each forward and reverse, `targets` per index 0, 1, 2 and 3+; 68 types). Collated as a `(N, 4)` long
 tensor `[batch, from, to, type]`. Built after context dropout and gate-2 stripping, from the record's
 `links`, the four reader-built families and `[ACT]`'s `targets` and `source_of`; a line end with no
-slot reads its card's, and a link to an object with no slot is dropped.
+slot reads its card's, and a link to an object with no slot is dropped. `[ACT]`'s `targets`, its
+target count and every card's and player's targeted bit read the targets as cast:
+`refs.targets_at_cast`, else `refs.targets` where it is null; a card `refs.targets_on_stack` names
+outside the stack (a permanent whose ability is targeted) is not itself targeted.
 
 ### Card slot (extended)
 

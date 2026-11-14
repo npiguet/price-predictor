@@ -65,11 +65,12 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A creature that cannot legally block an attacker with an evasion restriction is listed among the forbidden entities of the blockers record.",
-        "near_miss": "A creature that satisfies the restriction is listed among the legal blockers.",
+        "outcome": "A creature is forbidden from blocking because exactly one of it and the anchored attacker has shadow.",
+        "near_miss": "A legal blocker where the attacker or the blocker has shadow (both do).",
         "params": {
           "list": "legal_blockers",
-          "fires_when": "outside"
+          "fires_when": "outside",
+          "restriction": "shadow"
         },
         "needs": []
       }
@@ -149,11 +150,12 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A creature restricted to blocking only creatures with a matching evasion ability is among the forbidden blockers against an attacker that lacks it.",
-        "near_miss": "A creature allowed to block that attacker is among the legal blockers.",
+        "outcome": "A creature is forbidden from blocking because exactly one of it and the anchored attacker has shadow.",
+        "near_miss": "A legal blocker where the attacker or the blocker has shadow (both do).",
         "params": {
           "list": "legal_blockers",
-          "fires_when": "outside"
+          "fires_when": "outside",
+          "restriction": "shadow"
         },
         "needs": []
       }
@@ -232,15 +234,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "legality_membership",
-        "record_kind": "playability",
-        "outcome": "A creature that cannot legally block an attacker with an evasion restriction is among the forbidden blockers, however many instances of the ability the attacker has.",
-        "near_miss": "A creature that satisfies the restriction is among the legal blockers.",
-        "params": {
-          "list": "legal_blockers",
-          "fires_when": "outside"
-        },
-        "needs": []
+        "same_as": "702.28b-1",
+        "reason": "Redundant instances of shadow forbid exactly the blockers one instance forbids; no record field counts instances."
       }
     }
   ]

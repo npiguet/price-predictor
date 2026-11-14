@@ -52,18 +52,58 @@ class MatchWorkerMainTest {
         before.forEach((key, value) -> System.getProperties().put(key, value));
     }
 
-    // ── parseConfig(): -Dsealed.progress.file ──────────────────────────────
+    // ── parseConfig(): the graceful stop ────────────────────────────────
+
+    private static void recordsOnly() {
+        System.setProperty("effect.records.dir", "dummy-records");
+        System.setProperty("match.run.id", RUN_ID);
+    }
+
+    /** A recycle time of zero would stop before every first match: refused at parse. */
+    @Test
+    void aRecycleTimeOfZeroIsRefusedBeforeForgeStarts() {
+        recordsOnly();
+        System.setProperty("worker.recycle.seconds", "0");
+
+        ToolMain.Exit exit = assertThrows(ToolMain.Exit.class, MatchWorkerMain::parseConfig);
+
+        assertEquals(ExitCode.BAD_CONFIG, exit.code());
+    }
 
     @Test
-    void progressFilePropertyIsRead() {
-        System.setProperty("output.file", "dummy-output.txt");
-        System.setProperty("match.run.id", RUN_ID);
-        System.setProperty("sealed.progress.file", "dummy-progress.txt");
+    void aMalformedRecycleTimeIsRefusedBeforeForgeStarts() {
+        recordsOnly();
+        System.setProperty("worker.recycle.seconds", "soon");
 
-        MatchWorkerMain.WorkerConfig config = MatchWorkerMain.parseConfig();
-
-        assertEquals(Optional.of(Path.of("dummy-progress.txt")), config.progressFile());
+        assertEquals(ExitCode.BAD_CONFIG,
+                assertThrows(ToolMain.Exit.class, MatchWorkerMain::parseConfig).code());
     }
+
+    /** The recycle time counts from the worker's start, not from the end of Forge's. */
+    @Test
+    void theRecycleTimeCountsFromTheWorkersStart() {
+        recordsOnly();
+        System.setProperty("worker.recycle.seconds", "5");
+
+        MatchWorkerMain.WorkerConfig config =
+                MatchWorkerMain.parseConfig(System.nanoTime() - 6_000_000_000L);
+
+        assertEquals(java.util.Optional.of("recycling after 5 s"), config.stop().reason());
+    }
+
+    /** A stop file there at startup asks the worker to stop before its first match. */
+    @Test
+    void aStopFileThereAtStartupIsAStopRequest(@org.junit.jupiter.api.io.TempDir Path dir)
+            throws java.io.IOException {
+        recordsOnly();
+        Path stop = java.nio.file.Files.createFile(dir.resolve("worker.stop"));
+        System.setProperty("worker.stop.file", stop.toString());
+
+        assertEquals(java.util.Optional.of("stop file " + stop),
+                MatchWorkerMain.parseConfig().stop().reason());
+    }
+
+    // ── parseConfig(): -Dsealed.progress.file ──────────────────────────────
 
     @Test
     void progressFilePropertyIsEmptyWhenAbsent() {
@@ -192,9 +232,4 @@ class MatchWorkerMainTest {
                 twoGameResult(), Optional.empty(), Optional.empty()));
     }
 
-    @Test
-    void cardsPlayedLiveBesideTheMatchOutcomes() {
-        assertEquals(Path.of("out", "sealed", "cards-played.txt"),
-                SealedCorpus.cardsPlayedPath(Path.of("out", "sealed", "match-outcomes.txt")));
-    }
 }

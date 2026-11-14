@@ -82,10 +82,11 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolution copies a spell on the stack (spell_copied event).",
-        "near_miss": "No copy is made. Not counted: the replicate trigger is a keyword line, whose API type (Keyword) is shared by every keyword ability, so no api restricts the near miss.",
+        "outcome": "Replicate's trigger copies the spell.",
+        "near_miss": "Replicate's trigger resolving and copying nothing.",
         "params": {
-          "event": "spell_copied"
+          "event": "spell_copied",
+          "keyword": "Replicate"
         },
         "needs": []
       }

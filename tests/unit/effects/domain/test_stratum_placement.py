@@ -190,7 +190,7 @@ def test_rule_test_records_are_natural_observed_tags():
 def _two_halves(selection: dict, reporting: dict):
     strata = GameStrata(
         card_disjoint=frozenset(), game_disjoint=frozenset({"a", "b"}),
-        held_out=frozenset(),
+        held_out=frozenset(), surveyed=frozenset({"a", "b"}),
         halves={Stratum.GAME_DISJOINT: {
             Half.SELECTION: frozenset({"a"}), Half.REPORTING: frozenset({"b"})}},
     )

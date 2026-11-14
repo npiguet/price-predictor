@@ -121,6 +121,21 @@ public final class BusBracketCollector extends BusEventReader {
     /** Whether something went on the stack during the state-based loop running now. */
     private boolean stackUsedInLoop;
 
+    /**
+     * Whether the game has moved on to another step inside the resolution
+     * running now: an effect that ends the turn or the combat phase
+     * (Time Stop's {@code EndTurn}, Mandate of Peace's {@code
+     * EndCombatPhase}) has run its own state-based check and handed the game
+     * to the step it skips to, whose own actions follow while the stack
+     * still resolves. From here to the resolution's end what the bus
+     * publishes is that step's, routed as in an ordinary step ({@link
+     * #route}), and not the resolving spell's. Set at the end of the
+     * effect's own check, and at a phase event that arrives while the stack
+     * resolves where no loop signal came; cleared when a resolution starts
+     * or ends, and at a priority.
+     */
+    private boolean stepTakenOver;
+
     /** Where this game's {@link PhaseSignals} deliver the loop's two signals. */
     private final PhaseSignals.Sink phaseSink = new PhaseSignals.Sink() {
         @Override
@@ -200,16 +215,22 @@ public final class BusBracketCollector extends BusEventReader {
      * the cost half describes. Starting a cast at priority is the next
      * action, so the held resolution's consequences are over; one started by
      * a resolving ability (cascade, a "you may cast") is part of that
-     * resolution and ends nothing.
+     * resolution and ends nothing, and leaves the stat differ alone: the
+     * resolving item's bracket keeps its events, measured from its own
+     * snapshot, and the cast spell's effect half reads the board again when
+     * its resolution starts.
      */
     void castStarting(SpellAbility cast) {
-        if (!inStateBasedLoop && !game.getStack().isResolving()) {
+        boolean resolving = game.getStack().isResolving();
+        if (!inStateBasedLoop && !resolving) {
             onNextAction();
         }
         Card host = cast.getHostCard();
         pendingCast = new PendingCast(
                 cast, host == null ? -1 : host.getId(), snapshots.ofResolving(cast));
-        rebaselineAtSnapshot();
+        if (!resolving) {
+            rebaselineAtSnapshot();
+        }
     }
 
     /**
@@ -226,9 +247,9 @@ public final class BusBracketCollector extends BusEventReader {
             }
             boolean fizzled = Boolean.TRUE.equals(args.get(1));
             if (owns(item)) {
-                resolutionStarting(item, fizzled);
+                resolutionStarting(item, fizzled, args.optional(2));
             } else {
-                Forks.forkHooks().resolutionStarting(item, fizzled);
+                Forks.forkHooks().resolutionStarting(item, fizzled, args.optional(2));
             }
         });
     }
@@ -252,6 +273,16 @@ public final class BusBracketCollector extends BusEventReader {
      *                none of the item's clauses will run
      */
     void resolutionStarting(SpellAbility item, boolean fizzled) {
+        resolutionStarting(item, fizzled, null);
+    }
+
+    /**
+     * The same with the hook's third argument: each link's targets before
+     * Forge's check for illegal targets, root first (null where the hook
+     * could not copy them, or an older Forge did not pass them).
+     */
+    void resolutionStarting(SpellAbility item, boolean fizzled, Object targetsAtCast) {
+        stepTakenOver = false;
         if (!inStateBasedLoop) {
             onNextAction();
         }
@@ -260,8 +291,9 @@ public final class BusBracketCollector extends BusEventReader {
             return;
         }
         brackets.countDropped(resolving, DroppedEvents.phaseOf(game));
-        Snapshot board = snapshots.ofResolving(resolving.ability);
-        resolving.resolutionStarted(board);
+        ChainTargets atCast = ChainTargets.atCast(item, targetsAtCast);
+        Snapshot board = snapshots.ofResolving(resolving.ability, atCast);
+        resolving.resolutionStarted(board, ChainTargets.now(item), atCast);
         if (fizzled) {
             for (Integer option : CharmModes.chosenOptions(item)) {
                 resolving.modes.begin(option, board);
@@ -318,11 +350,16 @@ public final class BusBracketCollector extends BusEventReader {
                 brackets.waitForResolution(cast);
             }
         } else {
-            if (cast != null && started == null) {
+            if (cast != null && started == null && !inStateBasedLoop) {
                 // Its board was read just now, at the cast event, where no
                 // hook told the cast's start: its stat changes are measured
                 // from here. Not while an ability resolves, whose bracket
-                // keeps the events, and whose snapshot is older.
+                // keeps the events, and whose snapshot is older; nor for a
+                // trigger the state-based loop puts on the stack between
+                // two passes, where the loop has applied statics it
+                // publishes only at its end, which a damage step's record
+                // still takes (FR-028): the trigger's effect half reads the
+                // board again when its resolution starts.
                 rebaselineAtSnapshot();
             }
             brackets.openCast(cast);
@@ -461,6 +498,7 @@ public final class BusBracketCollector extends BusEventReader {
      *                  in which case it never ran at all
      */
     void endBracket(int abilityId, boolean fizzled) {
+        stepTakenOver = false;
         // Another resolution has run since the held one ended, so the held
         // one's state-based check is over: what dies after this is this
         // resolution's doing, or a mix nobody can untangle.
@@ -474,9 +512,10 @@ public final class BusBracketCollector extends BusEventReader {
         // The last mode's half closes with the resolution, since no next
         // mode's first clause comes to close it.
         resolved.modes.close();
-        ActivationOutcome outcome = resolved.outcome(fizzled);
+        ActivationOutcome outcome = resolved.outcome(fizzled && !resolvesAsACreature(resolved.ability));
         if (outcome == ActivationOutcome.FIZZLED || outcome == ActivationOutcome.DECLINED) {
-            heldResolution.writeEmpty(resolved, outcome);
+            heldResolution.writeEmpty(resolved, outcome, dropped,
+                    game == null ? DroppedEvents.NO_PHASE : DroppedEvents.phaseOf(game));
             return;
         }
         // Held rather than written: the deaths this resolution causes have
@@ -485,15 +524,22 @@ public final class BusBracketCollector extends BusEventReader {
         boolean free = resolved.costs != null && resolved.ability.isActivatedAbility()
                 && resolved.costs.spentNoManaAndMovedNoCard();
         heldResolution.hold(resolved, outcome, free);
+        if (game != null && game.isGameOver()) {
+            // The resolution ended the game (a "loses the game", a "wins the
+            // game" ability): no next action or loop end will write it.
+            onNextAction();
+        }
     }
 
     /**
-     * The id of a live record still open, its id already taken, or null: the
-     * held resolution's first effect half. A directed fork taken at a phase
-     * boundary finds none, because the boundary closes the held window first.
+     * Whether an item Forge reports as fizzled still resolved: a bestowed
+     * Aura spell or a mutating creature spell whose target became illegal
+     * stops being one and resolves as a creature spell (702.103e,
+     * 702.140b; {@code MagicStack.resolveStack}), its permanent entering the
+     * battlefield. Its effect half is a resolution's, held with its events.
      */
-    String heldRecordId() {
-        return heldResolution.heldRecordId();
+    static boolean resolvesAsACreature(SpellAbility ability) {
+        return ability.isBestow() || ability.isMutate();
     }
 
     /**
@@ -508,6 +554,11 @@ public final class BusBracketCollector extends BusEventReader {
      */
     @Subscribe
     public void onPhase(GameEventTurnPhase event) {
+        if (game.getStack().isResolving()) {
+            // A step begun by the resolving effect itself: what follows is
+            // the step's, not the effect's.
+            stepTakenOver = true;
+        }
         turnActions.close();
         onStepBoundary();
         // An effect that empties the stack -- ending the turn, ending combat --
@@ -587,11 +638,23 @@ public final class BusBracketCollector extends BusEventReader {
      */
     void endStateBasedLoop() {
         inStateBasedLoop = false;
+        if (game.getStack().isResolving() && endsTheStep(PatchHooks.currentSubAbility())) {
+            // The effect's own check is the last thing it does itself; the
+            // step it ends, and the one it skips to, follow.
+            stepTakenOver = true;
+        }
         onNextAction();
         if (stackUsedInLoop) {
             combatStep.closeWindow();
         }
         stackUsedInLoop = false;
+    }
+
+    /** Whether a resolving clause ends the turn or the combat phase. */
+    private static boolean endsTheStep(Object clause) {
+        return clause instanceof SpellAbility ending && ending.getApi() != null
+                && (ending.getApi() == forge.game.ability.ApiType.EndTurn
+                        || ending.getApi() == forge.game.ability.ApiType.EndCombatPhase);
     }
 
     /** This game's events that reached no record so far. */
@@ -697,7 +760,25 @@ public final class BusBracketCollector extends BusEventReader {
      */
     @Override
     void fileOutcome(EffectEvent event, String namedCause) {
-        route(event, namedCause, Filing.OUTCOME);
+        fileOutcome(event, namedCause, Filing.OUTCOME);
+    }
+
+    private void fileOutcome(EffectEvent event, String namedCause, Filing filing) {
+        if (event.type() == EventType.UNATTACHED && heldResolution.isHolding()
+                && (inStateBasedLoop || game.getTracker().isFrozen())
+                && !event.subjects().isEmpty()) {
+            // An Aura or Equipment the state-based check takes off a
+            // permanent the held resolution killed or changed: part of that
+            // check's moves, as the Aura's own move to the graveyard is,
+            // filed with the half that names the permanent it left. The
+            // check is told as fileMove tells it: the loop's signals, or a
+            // frozen tracker without them.
+            Object host = event.params().get("detached_from");
+            heldResolution.fileConsequence(
+                    event, host instanceof String left ? left : event.subjects().get(0));
+            return;
+        }
+        route(event, namedCause, filing);
     }
 
     /**
@@ -709,7 +790,7 @@ public final class BusBracketCollector extends BusEventReader {
      */
     void recordClauseEvent(EffectEvent event) {
         if (event != null) {
-            record(event);
+            fileOutcome(event, null, Filing.CLAUSE);
         }
     }
 
@@ -728,7 +809,9 @@ public final class BusBracketCollector extends BusEventReader {
          * A cost is being paid — for something being cast or activated, or,
          * while an ability resolves, for a spell it casts
          * ({@link #payingForACast}). The paid ability's cost half records
-         * it; the event goes nowhere.
+         * what was paid, in its {@code costs}; the event goes nowhere and
+         * is counted as dropped, the costs' channels (tapped, sacrificed,
+         * discarded, exiled, life, mana) and the rest alike.
          */
         PAYMENT,
         /**
@@ -780,7 +863,14 @@ public final class BusBracketCollector extends BusEventReader {
          * bracket's, whose cast did not leave the board in that state
          * (FR-029).
          */
-        STATE_BASED_DEATH
+        STATE_BASED_DEATH,
+        /**
+         * What a resolving clause did, told at the clause's end: the resolving
+         * item's even when the clause handed the game to another step
+         * ({@link #stepTakenOver}) — Mandate of Peace's {@code combat_ended}
+         * is told after the combat phase it ended is over.
+         */
+        CLAUSE
     }
 
     /**
@@ -876,12 +966,20 @@ public final class BusBracketCollector extends BusEventReader {
      * @param filing what kind of event it is, which narrows where it may go
      */
     private void route(EffectEvent event, String namedCause, Filing filing) {
+        for (EventTap tap : taps) {
+            if (tap.take(event, namedCause)) {
+                return;
+            }
+        }
         Now now = classifyNow();
         switch (now.cause()) {
+            // What a payment publishes: the paid ability's cost half holds
+            // its costs, never an event, so the event reaches no record.
             case PAYMENT -> {
                 if (!game.getStack().isResolving()) {
                     brackets.closeForAction();
                 }
+                dropped.count(event.type(), DroppedEvents.phaseOf(game));
             }
             // What a card's move onto the stack set off: after the cost
             // half's board, which records only the move and the costs, and
@@ -903,10 +1001,54 @@ public final class BusBracketCollector extends BusEventReader {
                             DroppedEvents.phaseOf(game));
                 }
             }
-            case RESOLUTION -> brackets.file(
-                    EventAttribution.stamp(event, brackets.resolving(), namedCause),
+            case RESOLUTION -> {
+                if (stepTakenOver && filing != Filing.CLAUSE) {
+                    fileAsTheStepsOwn(event, namedCause, filing);
+                } else {
+                    brackets.file(
+                            EventAttribution.stamp(event, brackets.resolving(), namedCause),
+                            DroppedEvents.phaseOf(game));
+                }
+            }
+        }
+    }
+
+    /**
+     * An event of the step a resolving effect handed the game to ({@link
+     * #stepTakenOver}), routed as the same event of an ordinary step with no
+     * bracket open: a turn-based action's into its window (the cleanup's
+     * discard to hand size, a {@code cleanup_discard} record), a state-based
+     * death with nothing holding it counted as dropped (FR-029), and any
+     * other — damage wearing off, an "until end of turn" or "until end of
+     * combat" effect ending — to the orphans, which count it as dropped when
+     * they are discarded, as an ordinary cleanup's are.
+     */
+    private void fileAsTheStepsOwn(EffectEvent event, String namedCause, Filing filing) {
+        if (filing == Filing.STATE_BASED_DEATH) {
+            dropped.count(event.type(), DroppedEvents.phaseOf(game));
+        } else if (!turnActions.take(event, namedCause)) {
+            brackets.fileOrphan(
+                    EventAttribution.stampAt(event, null, null, namedCause),
                     DroppedEvents.phaseOf(game));
         }
+    }
+
+    /**
+     * A channel that takes, before they are routed, the events of a moment it
+     * records itself: a buffered damage ability's run ({@link RewriteChannel}),
+     * a mana ability's own activation ({@link ManaChannel}).
+     */
+    interface EventTap {
+        /** Whether the event, published now, is this tap's; it is then routed nowhere else. */
+        boolean take(EffectEvent event, String namedCause);
+    }
+
+    /** The taps asked, in order, before an event is routed. */
+    private final List<EventTap> taps = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** Ask {@code tap} first, before routing any event. */
+    void addTap(EventTap tap) {
+        taps.add(tap);
     }
 
     /**
@@ -932,6 +1074,7 @@ public final class BusBracketCollector extends BusEventReader {
      */
     @Subscribe
     public void onPriority(GameEventPlayerPriority event) {
+        stepTakenOver = false;
         brackets.finished();
         castsUnderWay.abandonAll();
         // A cast started before priority and never pushed was given up.
@@ -971,7 +1114,7 @@ public final class BusBracketCollector extends BusEventReader {
         if (open == null || !fromOpenBracket(cause) || !open.hosts(clause)) {
             return;
         }
-        open.modes.begin(option, snapshots.ofResolving(open.ability));
+        open.modes.begin(option, snapshots.ofResolving(open.ability, open.castTargets()));
         rebaselineAtSnapshot();
     }
 
@@ -992,10 +1135,11 @@ public final class BusBracketCollector extends BusEventReader {
      * Whether a conditional clause met its condition (FR-034), as Forge
      * decided it, filed into the half its events joined: called by the clause
      * hook when the clause's own effect is over, before a later mode's first
-     * clause begins. Filed by the test {@link #beginMode} applies:
-     * a consequence of the open bracket, of a clause on its card; a clause
-     * of a mana ability or a special action resolves at an action and is no
-     * resolution's.
+     * clause begins. Filed when it is a consequence of the open bracket, of
+     * a clause on its own line ({@link OpenResolution#onItsLine}): a clause
+     * another line of the card resolves meanwhile, an enters-the-battlefield
+     * replacement's, is not the resolution's; a clause of a mana ability or
+     * a special action resolves at an action and is no resolution's.
      */
     void recordClauseCondition(SpellAbility clause, ConditionsMet condition) {
         if (condition == null) {
@@ -1003,7 +1147,7 @@ public final class BusBracketCollector extends BusEventReader {
         }
         Cause cause = classifyNow().cause();
         OpenResolution open = brackets.open();
-        if (open == null || !fromOpenBracket(cause) || !open.hosts(clause)) {
+        if (open == null || !fromOpenBracket(cause) || !open.onItsLine(clause)) {
             return;
         }
         open.modes.noteCondition(condition);
@@ -1053,7 +1197,8 @@ public final class BusBracketCollector extends BusEventReader {
      * @param onStack the ability ids still on the stack
      */
     void writeOffRemoved(Set<Integer> onStack) {
-        brackets.removeAbsent(onStack, game == null ? null : DroppedEvents.phaseOf(game));
+        brackets.removeAbsent(onStack, game == null ? null : DroppedEvents.phaseOf(game),
+                game != null && game.getStack().isResolving());
     }
 
     /**
@@ -1150,14 +1295,31 @@ public final class BusBracketCollector extends BusEventReader {
             // pays a cost or resolves an optional clause (GameSimulator builds
             // its own PlayerControllerAi over the forked Game, but the static
             // listener it calls is this game's). args[0] is declared
-            // SpellAbility on Forge's side; a value this cannot identify
-            // still counts as this game's refusal.
+            // SpellAbility on Forge's side. A refusal of another game's
+            // ability, and one naming no ability while a fork that is not
+            // this collector's game runs on this thread, is handed to the
+            // forced resolution listening there (Forks.forkHooks), as the
+            // clause and outcome handlers hand theirs.
+            if (!Boolean.FALSE.equals(args.get(1))) {
+                return;
+            }
             SpellAbility offered = args.get(0, SpellAbility.class);
-            if (Boolean.FALSE.equals(args.get(1))
-                    && (offered == null || belongsToLiveGame(offered))) {
+            boolean ours = offered != null ? belongsToLiveGame(offered) : ownsNullConfirm();
+            if (ours) {
                 noteDeclined();
+            } else {
+                Forks.forkHooks().declined(offered);
             }
         });
+    }
+
+    /**
+     * Whether a refusal naming no ability is this game's: not while a fork
+     * runs on this thread, unless it is the fork played on that this
+     * collector records.
+     */
+    private boolean ownsNullConfirm() {
+        return !Forks.isForkRunningOnThisThread() || Forks.playingForwardOnThisThread() == game;
     }
 
     /**

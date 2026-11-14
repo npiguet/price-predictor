@@ -20,6 +20,7 @@ from price_predictor.infrastructure.cli_run_manifest import (
     labelled_paths,
     tag_subcommands,
 )
+from price_predictor.infrastructure.forge_jvm import worker_count
 
 # Architecture flags forbidden alongside --resume / --checkpoint (SC-006); they
 # register with default=None so "was it supplied?" is detectable.
@@ -144,8 +145,8 @@ def _build_play_draft_games_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
-        "--workers", type=int, default=12,
-        help="Concurrent Forge worker processes (default: 12)",
+        "--workers", type=worker_count, default=12,
+        help="Concurrent Forge worker processes, 1 to 12 (default: 12)",
     )
 
 

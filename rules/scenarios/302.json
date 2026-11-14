@@ -95,11 +95,14 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A decision candidate whose timing bit is true: it may be played at this time (for a spell without flash, a main phase of its controller's turn with an empty stack).",
-        "near_miss": "A decision candidate whose timing bit is false: wrong phase or step, the opponent's turn, or a non-empty stack.",
+        "outcome": "A sorcery-speed creature card's cast has its timing true: a main phase of its controller's turn with an empty stack.",
+        "near_miss": "A sorcery-speed creature card's cast whose timing is false.",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "candidate": "cast",
+          "source_type": "creature",
+          "sorcery_speed": true
         },
         "needs": [
           "timing"
@@ -175,12 +178,13 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A permanent spell resolves and moves from the stack to the battlefield under its controller's control.",
-        "near_miss": "A spell on the stack that is countered instead and goes to the graveyard (not counted: a permanent spell's implicit trait has no line, so no api can be set).",
+        "outcome": "A resolving creature spell is put onto the battlefield.",
+        "near_miss": "A creature spell's resolution that puts nothing onto the battlefield.",
         "params": {
           "event": "zone_change",
           "from_zone": "stack",
-          "to_zone": "battlefield"
+          "to_zone": "battlefield",
+          "source_type": "creature"
         },
         "needs": []
       }
@@ -250,15 +254,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "combat",
-        "outcome": "A creature deals combat damage equal to its power: the combat record holds a combat damage_dealt event from it.",
-        "near_miss": "A creature in combat with power 0 or less deals no combat damage (no near miss is counted without an api).",
-        "params": {
-          "event": "damage_dealt",
-          "combat": true
-        },
-        "needs": []
+        "same_as": "510.1a-1",
+        "reason": "A creature dealing combat damage equal to its power is 510.1a's fact."
       }
     },
     {
@@ -323,14 +320,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "sba_zone_move",
-        "record_kind": "resolution",
-        "outcome": "A creature dealt damage whose marked damage reaches its toughness is destroyed and moves to the graveyard in the state-based check.",
-        "near_miss": "A creature dealt damage that stays below its toughness and stays on the battlefield.",
-        "params": {
-          "check": "lethal_damage"
-        },
-        "needs": []
+        "same_as": "704.5g-1",
+        "reason": "The record shows a creature with lethal damage marked put into the graveyard in the state-based check, 704.5g's fact."
       }
     },
     {
@@ -399,14 +390,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "continuous_contribution",
-        "record_kind": "continuous",
-        "outcome": "A static ability contributes a P/T modification to an affected creature.",
-        "near_miss": "A static ability applies to the board and contributes no P/T modification.",
-        "params": {
-          "field": "pt"
-        },
-        "needs": []
+        "same_as": "604.2-1",
+        "reason": "The record shows a static's power and toughness contribution applying while its source is on the battlefield, 604.2's fact."
       }
     },
     {
@@ -462,15 +447,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "legality_membership",
-        "record_kind": "playability",
-        "outcome": "A creature is listed among the legal attackers of an attackers record.",
-        "near_miss": "A creature the attackers record lists as forbidden (tapped, summoning-sick or restricted); a noncreature permanent is never a candidate, so it shows on neither side.",
-        "params": {
-          "list": "legal_attackers",
-          "fires_when": "inside"
-        },
-        "needs": []
+        "same_as": "506.3-1",
+        "reason": "A noncreature permanent is no legal attacker: 506.3's fact."
       }
     },
     {
@@ -531,15 +509,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "legality_membership",
-        "record_kind": "playability",
-        "outcome": "A creature is listed among the legal blockers of a blockers record.",
-        "near_miss": "A creature the blockers record lists as forbidden (tapped, summoning-sick or restricted); a noncreature permanent is never a candidate, so it shows on neither side.",
-        "params": {
-          "list": "legal_blockers",
-          "fires_when": "inside"
-        },
-        "needs": []
+        "same_as": "506.3-2",
+        "reason": "A noncreature permanent is no legal blocker: 506.3's fact."
       }
     },
     {
@@ -802,16 +773,12 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "combat",
-        "outcome": "Combat damage dealt to a creature by a source without infect or wither is marked on it: a combat damage_dealt to a creature in combat with no -1/-1 counter_change in the record.",
-        "near_miss": "Combat damage to a creature in combat comes with -1/-1 counters (infect or wither), so it is not marked as damage.",
+        "outcome": "Combat damage from a wither or infect source to a creature is dealt as -1/-1 counters and marks none.",
+        "near_miss": "Combat damage to a creature marked as damage.",
         "params": {
           "event": "damage_dealt",
           "combat": true,
-          "subject_in_combat": true,
-          "without_event": {
-            "event": "counter_change",
-            "counter_type": "M1M1"
-          }
+          "damage_type": "m1m1_counters"
         },
         "needs": []
       }
@@ -879,14 +846,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A resolution's effect half holds a regenerated event: a creature's destruction was replaced by its regeneration shield, so it is tapped, removed from combat and the damage marked on it is removed.",
-        "near_miss": "A resolution without a regenerated event (not counted: no api is set, because a regeneration replaces a destruction of any origin, so only the fires side is tagged).",
-        "params": {
-          "event": "regenerated"
-        },
-        "needs": []
+        "same_as": "120.6-3",
+        "reason": "Both state that regenerating removes the damage marked on the permanent; the record shows the same regeneration."
       }
     }
   ]

@@ -70,14 +70,7 @@
       ],
       "forge_notes": "Forge's TapOrUntap prompt may not offer tap for an already tapped permanent; force the choice if so.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A trigger on a permanent becoming tapped fires when an untapped permanent is tapped.",
-        "near_miss": "A becomes-tapped trigger evaluated against a tap of a permanent it does not watch does not fire; an instruction to tap a permanent already tapped is no tap event and evaluates no trigger.",
-        "params": {
-          "mode": "Taps"
-        },
-        "needs": []
+        "none": "Tapping a permanent that is already tapped writes no event, so no trigger record contrasts with it."
       }
     },
     {

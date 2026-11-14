@@ -66,6 +66,11 @@ final class LayerContributions {
         for (Table.Cell<Long, Long, KeywordsChange> cell
                 : card.getChangedCardKeywords().cellSet()) {
             Contribution into = contribution(cell.getColumnKey(), entity);
+            // "Loses all abilities" (RemoveAllAbilities$): the keyword line
+            // is set outright, to what the static grants after the marker.
+            if (cell.getValue().isRemoveAllKeywords()) {
+                into.keyword("=");
+            }
             for (KeywordInterface keyword : cell.getValue().getKeywords()) {
                 into.keyword(keyword.getOriginal());
             }
@@ -76,10 +81,89 @@ final class LayerContributions {
                 into.keyword("-" + removed);
             }
         }
+        addTraits(card, entity);
+        addHiddenKeywords(card, entity);
         addLayerChanges(card, entity, PatchHooks.CHANGED_TYPES_BY_STATIC,
                 LayerContributions::typeTokens);
         addLayerChanges(card, entity, PatchHooks.CHANGED_COLORS_BY_STATIC,
                 LayerContributions::colorTokens);
+    }
+
+    /**
+     * Layer 6's ability changes, filed under the static that made each: an
+     * ability it grants as its line's key ({@code ProvenanceKey.describe},
+     * {@code runtime} where it keys to none), and an ability it takes away
+     * as {@code -} and that key, found as the abilities the card has without
+     * the static and lacks with it. A keyword's own traits are its keyword's.
+     */
+    private void addTraits(Card card, String entity) {
+        for (Table.Cell<Long, Long, forge.game.card.ICardTraitChanges> cell
+                : card.getChangedCardTraits().cellSet()) {
+            if (!(cell.getValue() instanceof forge.game.card.CardTraitChanges changes)) {
+                continue;
+            }
+            Contribution into = contribution(cell.getColumnKey(), entity);
+            for (Iterable<? extends forge.game.CardTraitBase> granted : List.of(
+                    changes.getAbilities(), changes.getTriggers(),
+                    changes.getReplacements(), changes.getStaticAbilities())) {
+                for (forge.game.CardTraitBase trait : granted) {
+                    into.ability(nameOf(trait));
+                }
+            }
+            if (changes.remove() != null && cell.getColumnKey() != 0L) {
+                for (forge.game.CardTraitBase lost : removedBy(card, cell.getColumnKey())) {
+                    into.ability("-" + nameOf(lost));
+                }
+            }
+        }
+    }
+
+    /** The abilities, no keyword's, the card has without one static and lacks with it. */
+    private static List<forge.game.CardTraitBase> removedBy(Card card, long staticId) {
+        StaticSuppression without = StaticSuppression.ofId(staticId);
+        forge.game.card.CardState state = card.getCurrentState();
+        Set<forge.game.CardTraitBase> now = java.util.Collections.newSetFromMap(
+                new java.util.IdentityHashMap<>());
+        List<forge.game.CardTraitBase> lost = new ArrayList<>();
+        now.addAll(state.getSpellAbilities());
+        now.addAll(state.getTriggers());
+        now.addAll(state.getStaticAbilities());
+        now.addAll(state.getReplacementEffects());
+        for (Iterable<? extends forge.game.CardTraitBase> had : List.of(
+                without.spellAbilities(state), without.triggers(state),
+                without.staticAbilities(state), without.replacementEffects(state))) {
+            for (forge.game.CardTraitBase trait : had) {
+                if (trait.getKeyword() == null && !now.contains(trait)) {
+                    lost.add(trait);
+                }
+            }
+        }
+        return lost;
+    }
+
+    private static String nameOf(forge.game.CardTraitBase trait) {
+        ProvenanceKey key = ProvenanceResolver.of(trait);
+        return key == null ? "runtime" : key.describe();
+    }
+
+    /**
+     * A static's {@code AddHiddenKeyword$} grants ("CARDNAME can't block."),
+     * in Forge's hidden-keyword table under the static's id.
+     */
+    private void addHiddenKeywords(Card card, String entity) {
+        Table<?, ?, ?> hidden = ForgeFields.hiddenExtrinsicKeywords(card);
+        if (hidden == null) {
+            return;
+        }
+        for (Table.Cell<?, ?, ?> cell : hidden.cellSet()) {
+            if (cell.getColumnKey() instanceof Long staticId
+                    && cell.getValue() instanceof Iterable<?> keywords) {
+                Contribution into = contribution(staticId, entity);
+                for (Object keyword : keywords) {
+                    into.hiddenKeyword(String.valueOf(keyword));
+                }
+            }
+        }
     }
 
     /**
@@ -289,6 +373,10 @@ final class LayerContributions {
         // the statics that are not one of the handful that rename anything --
         // that is the correct, meaningful answer, not a missing one.
         private String name;
+        // Layer 6: each ability granted by its key, each taken away as "-key".
+        private final List<String> abilities = new ArrayList<>();
+        // Forge's hidden keywords the static grants, as Forge spells them.
+        private final List<String> hiddenKeywords = new ArrayList<>();
 
         Contribution(String entity) {
             this.entity = entity;
@@ -328,6 +416,14 @@ final class LayerContributions {
             }
         }
 
+        void ability(String token) {
+            abilities.add(token);
+        }
+
+        void hiddenKeyword(String keyword) {
+            hiddenKeywords.add(keyword);
+        }
+
         void name(String value) {
             if (value != null && !value.isEmpty()) {
                 name = value;
@@ -349,6 +445,8 @@ final class LayerContributions {
             json.raw("keywords", Json.stringArray(keywords))
                     .raw("types", Json.stringArray(types))
                     .raw("colors", Json.stringArray(colors))
+                    .raw("abilities", Json.stringArray(abilities))
+                    .raw("hidden_keywords", Json.stringArray(hiddenKeywords))
                     .value("name", name);
             if (controller != null) {
                 json.value("controller", controller);

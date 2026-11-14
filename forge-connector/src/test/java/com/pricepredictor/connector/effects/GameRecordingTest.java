@@ -15,16 +15,35 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** What a game's recording leaves behind on the engine's static hooks. */
 @ExtendWith(ForgeExtension.class)
 class GameRecordingTest {
+
+    /**
+     * A marker that cannot be written (its board snapshot throws) is counted,
+     * the game left without one, and close carries on: the match plays on.
+     */
+    @org.junit.jupiter.api.Test
+    void aMarkerThatCannotBeWrittenIsCountedAndTheGameGoesOn() {
+        long before = HookFailures.counts().getOrDefault("game-end marker", 0L);
+
+        boolean written = GameRecording.writeMarker("run.0-l1.0", () -> {
+            throw new IllegalStateException("a snapshot that throws");
+        });
+
+        org.junit.jupiter.api.Assertions.assertFalse(written);
+        org.junit.jupiter.api.Assertions.assertEquals(before + 1,
+                HookFailures.counts().get("game-end marker"));
+    }
 
     @TempDir
     Path tempDir;
@@ -67,6 +86,41 @@ class GameRecordingTest {
                 "the mana hook outlived a close that threw");
         assertNull(installed(PlayerControllerAi.class, "CONFIRM_HOOK"),
                 "the confirm hook outlived a close that threw");
+        assertEquals(List.of(), hooksStillInstalled(), "hooks that outlived a close that threw");
+    }
+
+    /** Every engine class that holds an effect-record hook, by name. */
+    private static final List<String> HOOK_OWNERS = List.of(
+            "forge.ai.PlayerControllerAi", "forge.game.ability.AbilityUtils",
+            "forge.game.ability.EffectRecordOutcomes", "forge.game.combat.CombatLegalityObserver",
+            "forge.game.cost.CostPayment", "forge.game.phase.PhaseHandler",
+            "forge.game.replacement.ReplacementObserver", "forge.game.spellability.AbilityManaPart",
+            "forge.game.trigger.TriggerHandler", "forge.game.zone.MagicStack");
+
+    /**
+     * Every static {@code EffectRecordHook} field of the engine's hook
+     * owners that still holds a listener: all of them, not the two a test
+     * happened to name. A hook owner Forge renames fails here by name.
+     */
+    private static List<String> hooksStillInstalled() throws Exception {
+        List<String> installed = new java.util.ArrayList<>();
+        int hooks = 0;
+        for (String owner : HOOK_OWNERS) {
+            for (Field field : Class.forName(owner).getDeclaredFields()) {
+                if (!java.lang.reflect.Modifier.isStatic(field.getModifiers())
+                        || !field.getType().getSimpleName().equals("EffectRecordHook")) {
+                    continue;
+                }
+                hooks++;
+                field.setAccessible(true);
+                Object hook = field.get(null);
+                if (hook.getClass().getMethod("get").invoke(hook) != null) {
+                    installed.add(owner + "." + field.getName());
+                }
+            }
+        }
+        assertTrue(hooks >= HOOK_OWNERS.size(), "found only " + hooks + " hooks");
+        return installed;
     }
 
     /**
@@ -150,6 +204,7 @@ class GameRecordingTest {
         assertNull(installed(PlayerControllerAi.class, "CONFIRM_HOOK"),
                 "the confirm hook outlived the close");
         assertNull(installed(AbilityManaPart.class, "MANA_HOOK"));
+        assertEquals(List.of(), hooksStillInstalled(), "hooks that outlived the close");
     }
 
     /** The listener a patched engine class's hook holds, or null when none is. */
@@ -208,11 +263,18 @@ class GameRecordingTest {
         try (GameRecording recording = new GameRecording(game, writer, ShardRun.GAME_ID, caps, 7L, null,
                 ForkSeats.NONE, com.pricepredictor.connector.effects.directed.DirectedRules.of(atUntap), tally)) {
             recording.open();
-            TestBoard.enterStep(game, forge.game.phase.PhaseType.UNTAP);
+            // Enough untap boundaries, each in a game turn of its own, for
+            // the forced resolutions' gate (drawn once a turn) to open at
+            // several, were it asked there; devModeSet publishes the step.
+            forge.game.phase.PhaseHandler phases = game.getPhaseHandler();
+            for (int boundary = 0; boundary < 40; boundary++) {
+                phases.devModeSet(forge.game.phase.PhaseType.UNTAP, active, phases.getTurn() + 1);
+            }
             assertEquals(1, tally.taken("A"), "the directed rule bound at UNTAP forked there");
 
-            game.getPhaseHandler().devModeSet(forge.game.phase.PhaseType.UPKEEP, active);
-            TestBoard.enterStep(game, forge.game.phase.PhaseType.UPKEEP);
+            for (int boundary = 0; boundary < 40; boundary++) {
+                phases.devModeSet(forge.game.phase.PhaseType.UPKEEP, active, phases.getTurn() + 1);
+            }
         } finally {
             writer.close();
         }

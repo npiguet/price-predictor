@@ -151,4 +151,85 @@ class FirstStatChangeTest {
         assertEquals(2L, toughnessIn(triggerHalf, daxos), triggerHalf);
         assertEquals(List.of("life_change"), RecordLines.eventTypes(triggerHalf), triggerHalf);
     }
+
+    /**
+     * A cast started while something resolves — cascade, a "you may cast" —
+     * is part of that resolution: the resolving item keeps the stat changes
+     * it made, measured from its own snapshot, and the cast's start re-reads
+     * nothing. A pump applied and not yet published when the cast starts is
+     * the resolving item's once Forge publishes it.
+     */
+    @Test
+    void aCastStartedWhileSomethingResolvesLeavesItsStatChangesToIt() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        SpellAbility bolt = TestBoard.spellOf(TestBoard.inHand(game, caster, "Lightning Bolt"), caster);
+        bolt.resetTargets();
+        bolt.getTargets().add(opponent);
+        SpellAbility shock = TestBoard.spellOf(TestBoard.inHand(game, caster, "Shock"), caster);
+        AtomicReference<Card> bears = new AtomicReference<>();
+
+        List<String> records = ShardRun.observed(tempDir, game, bracket -> {
+            bears.set(TestBoard.onBattlefield(game, caster, "Grizzly Bears"));
+            game.getStack().add(bolt);
+            game.getStack().setResolving(true);
+            bracket.resolutionStarting(bolt, false);
+            // Applied now, published later, as Forge applies a static.
+            bears.get().addPTBoost(3, 3, game.getNextTimestamp(), 0);
+            bracket.castStarting(shock);
+            game.fireEvent(new forge.game.event.GameEventCardStatsChanged(bears.get()));
+            game.getStack().setResolving(false);
+            bracket.endBracket(bolt.getId(), false);
+            bracket.onNextAction();
+        });
+
+        String boltHalf = RecordLines.only(records, "resolution", "cardsfolder/l/lightning_bolt.txt");
+        assertTrue(boltHalf.contains(pumpOf(bears.get())), "the pump is the Bolt's: " + boltHalf);
+    }
+
+    /**
+     * A lord killed in combat: Lord of Atlantis attacks and Hill Giant blocks
+     * it. The state-based loop after the damage kills the lord, applies the
+     * statics — the Merfolk it pumped shrinks back to 1/1 — and puts Blood
+     * Artist's dies trigger on the stack between two passes; the shrink is
+     * published at the loop's end. It is the combat's consequence: the
+     * damage step's record holds it, the trigger's push re-reading nothing.
+     */
+    @Test
+    void aTriggerInTheLoopLeavesTheCombatsStatChangesToIt() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DECLARE_BLOCKERS);
+        Player attacking = game.getPlayers().get(0);
+        Player defending = game.getPlayers().get(1);
+        game.setAge(forge.game.GameStage.Play);
+        Card lord = TestBoard.inPlay(game, attacking, "Lord of Atlantis");
+        Card merfolk = TestBoard.inPlay(game, attacking, "Merfolk of the Pearl Trident");
+        TestBoard.inPlay(game, attacking, "Blood Artist");
+        Card giant = TestBoard.inPlay(game, defending, "Hill Giant");
+        TestBoard.blockedCombat(game, attacking, defending, lord, giant);
+        game.getAction().checkStaticAbilities();
+        assertEquals(2, merfolk.getNetToughness(), "the lord pumps the Merfolk");
+        // Cards moved onto the battlefield by hand are not in the last-state
+        // battlefield a dies trigger looks back at.
+        game.getTriggerHandler().resetActiveTriggers(false, null);
+        game.copyLastState();
+
+        forge.game.phase.PhaseHandler phases = game.getPhaseHandler();
+        List<String> records = ShardRun.recordsWithClauseHook(
+                tempDir, game, "for the state-based loop's signals", () -> {
+                    for (int step = 0; step < 30 && !phases.is(PhaseType.COMBAT_END); step++) {
+                        phases.mainLoopStep();
+                    }
+                    assertTrue(phases.is(PhaseType.COMBAT_END), "the game reached the end of combat");
+                });
+
+        assertEquals(1, merfolk.getNetToughness(), "the lord died and the Merfolk shrank");
+        String shrink = "{\"type\":\"pt_change\",\"subjects\":[\"E" + merfolk.getId()
+                + "\"],\"params\":{\"power_delta\":-1,\"toughness_delta\":-1";
+        List<String> combats = records.stream()
+                .filter(record -> "combat".equals(RecordLines.parse(record).get("kind"))).toList();
+        assertEquals(1, combats.size(), records.toString());
+        assertTrue(combats.get(0).contains(shrink),
+                "the Merfolk's shrink is the combat's: " + combats.get(0));
+    }
 }

@@ -87,6 +87,17 @@ record LibraryCapture(
                 || card.getCopiedPermanent() != null) {
             return card;
         }
+        Map<Integer, Card> built;
+        synchronized (BUILT) {
+            built = BUILT.computeIfAbsent(card.getGame(), game -> new java.util.HashMap<>());
+        }
+        synchronized (built) {
+            Card cached = built.get(card.getId());
+            if (cached != null && cached.getPaperCard() == card.getPaperCard()
+                    && cached.getOwner() == card.getOwner()) {
+                return cached;
+            }
+        }
         try {
             Card fresh = CardFactory.getCard(
                     card.getPaperCard(), card.getOwner(), card.getId(), card.getGame());
@@ -94,9 +105,24 @@ record LibraryCapture(
             // the one it came into its zone, and a library card is in no
             // zone a turn could name.
             fresh.setTurnInZone(-1);
+            synchronized (built) {
+                built.put(card.getId(), fresh);
+            }
             return fresh;
         } catch (RuntimeException e) {
             return card;
         }
     }
+
+    /**
+     * Each game's library cards as built from their printings, by card id.
+     *
+     * <p>Built once per card rather than once per snapshot: parsing a card
+     * advances Forge's global trait id counters, so a build per snapshot —
+     * every library's top card, in every record — renumbered every trait
+     * the game created afterwards, and cost a script parse each time. The
+     * object is never put in a zone, so nothing changes it. Weak on the game,
+     * so a finished game and its forks take their cards with them.
+     */
+    private static final Map<Game, Map<Integer, Card>> BUILT = new java.util.WeakHashMap<>();
 }

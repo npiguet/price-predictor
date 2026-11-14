@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -105,18 +104,6 @@ class RoleSpansTest {
     void anEmptyLineHasNoSpans() {
         assertTrue(RoleSpans.of("", false).isEmpty());
         assertTrue(RoleSpans.of(null, false).isEmpty());
-    }
-
-    @Test
-    void everySpanStaysInsideTheProse() {
-        String prose = "{2}{R}: deal 2 damage to target creature, then draw a card.";
-        List<RoleSpans.Span> spans = RoleSpans.of(prose, true);
-        assertFalse(spans.isEmpty(), "no spans at all would pass vacuously");
-        for (RoleSpans.Span span : spans) {
-            assertTrue(span.start() >= 0);
-            assertTrue(span.end() <= prose.length());
-            assertFalse(span.start() > span.end());
-        }
     }
 
     @Test

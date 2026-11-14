@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import forge.game.CardTraitBase;
 import forge.game.card.Card;
 
 import java.util.ArrayList;
@@ -8,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * Changes to a card's computed characteristics, as events.
@@ -34,13 +36,30 @@ import java.util.Set;
  * the cards they moved once, at its end — so a change made before a
  * snapshot, and therefore already shown in it, would otherwise be reported
  * again as an event of that record.
+ *
+ * <p>Keywords, hidden keywords and abilities are multisets, kept sorted: a
+ * second instance of a keyword (a second Annihilator, a second Bushido) is a
+ * change, and every list an event carries is in one order on every JVM. The
+ * face is not read here: {@link BusEventReader} reads it beside these
+ * changes and writes its {@code face_change} once.
  */
 final class StatDiffer {
 
-    /** One card's computed characteristics, as of the last time it was read. */
+    /**
+     * One card's computed characteristics, as of the last time it was read.
+     *
+     * @param keywords       its keywords, lower-cased, sorted, repeats kept
+     * @param hiddenKeywords its hidden extrinsic keywords as Forge spells
+     *                       them, sorted, repeats kept
+     * @param abilities      one signature per ability that is no keyword's
+     *                       (a spell, activated or mana ability, trigger,
+     *                       static or replacement), sorted, repeats kept
+     */
     private record Stats(
-            int power, int toughness, int basePower, int baseToughness, Set<String> keywords,
-            Set<String> types, Set<String> colors, String controller) {
+            int power, int toughness, int basePower, int baseToughness, List<String> keywords,
+            List<String> hiddenKeywords, List<String> abilities,
+            Set<String> types, Set<String> colors, String controller,
+            String name, String manaCost, int manaValue, String face, int copies) {
     }
 
     private final Map<Integer, Stats> last = new HashMap<>();
@@ -81,7 +100,11 @@ final class StatDiffer {
             }
             events.add(pt);
         }
-        addKeywordEvents(events, subject, before.keywords(), now.keywords());
+        addKeywordEvents(events, subject, before.keywords(), now.keywords(), false);
+        // "Can't block", "doesn't untap during its controller's next untap
+        // step": Forge's hidden keywords, which no keyword list holds.
+        addKeywordEvents(events, subject, before.hiddenKeywords(), now.hiddenKeywords(), true);
+        addAbilityEvents(events, subject, card, before.abilities(), now.abilities());
         addSetChangeEvent(events, subject, EventType.TYPE_CHANGE,
                 "types_added", "types_removed", before.types(), now.types());
         // colors_removed is this side's addition to the type's normalization:
@@ -93,6 +116,20 @@ final class StatDiffer {
             events.add(new EffectEvent(EventType.CONTROL_CHANGE)
                     .subject(subject)
                     .param("controller", now.controller()));
+        }
+        // A name or mana cost a face change or a copy effect brought is that
+        // change's: the face_change and the copy say it already.
+        boolean ownChange = before.face().equals(now.face()) && before.copies() == now.copies();
+        if (ownChange && !java.util.Objects.equals(before.name(), now.name())) {
+            events.add(new EffectEvent(EventType.NAME_CHANGE)
+                    .subject(subject)
+                    .param("name", now.name()));
+        }
+        if (ownChange && !java.util.Objects.equals(before.manaCost(), now.manaCost())) {
+            events.add(new EffectEvent(EventType.MANA_COST_CHANGE)
+                    .subject(subject)
+                    .param("mana_cost", CardFacts.manaCostSymbols(card.getManaCost()))
+                    .param("mana_value", now.manaValue()));
         }
         return events;
     }
@@ -131,23 +168,77 @@ final class StatDiffer {
         last.remove(cardId);
     }
 
+    /**
+     * One {@code keyword_change} for the keywords gained and one for those
+     * lost, each list sorted; a hidden keyword's carry {@code hidden: true}
+     * and Forge's own text ("CARDNAME can't block.").
+     */
     private static void addKeywordEvents(
             List<EffectEvent> events, String subject,
-            Set<String> before, Set<String> now) {
-        Set<String> gained = difference(now, before);
-        Set<String> lost = difference(before, now);
+            List<String> before, List<String> now, boolean hidden) {
+        List<String> gained = difference(now, before);
+        List<String> lost = difference(before, now);
         if (!gained.isEmpty()) {
-            events.add(new EffectEvent(EventType.KEYWORD_CHANGE)
+            events.add(keywordEvent(subject, gained, false, hidden));
+        }
+        if (!lost.isEmpty()) {
+            events.add(keywordEvent(subject, lost, true, hidden));
+        }
+    }
+
+    private static EffectEvent keywordEvent(
+            String subject, List<String> keywords, boolean removed, boolean hidden) {
+        EffectEvent event = new EffectEvent(EventType.KEYWORD_CHANGE)
+                .subject(subject)
+                .param("keywords", keywords)
+                .param("removed", removed);
+        if (hidden) {
+            event.param("hidden", true);
+        }
+        return event;
+    }
+
+    /**
+     * An {@code ability_change} naming the abilities gained, comma-joined by
+     * their provenance keys ({@code ProvenanceKey.describe}, {@code runtime}
+     * for one that keys to no line), and one with {@code removed: true} and
+     * no names when any was lost — the shape the {@code Animate} clause rule
+     * writes, read the same way: a count of what was granted, and whether
+     * anything went.
+     */
+    private static void addAbilityEvents(
+            List<EffectEvent> events, String subject, Card card,
+            List<String> before, List<String> now) {
+        List<String> gained = difference(now, before);
+        List<String> lost = difference(before, now);
+        if (!gained.isEmpty()) {
+            events.add(new EffectEvent(EventType.ABILITY_CHANGE)
                     .subject(subject)
-                    .param("keywords", List.copyOf(gained))
+                    .param("abilities", String.join(",", namesOf(card, gained)))
                     .param("removed", false));
         }
         if (!lost.isEmpty()) {
-            events.add(new EffectEvent(EventType.KEYWORD_CHANGE)
+            events.add(new EffectEvent(EventType.ABILITY_CHANGE)
                     .subject(subject)
-                    .param("keywords", List.copyOf(lost))
+                    .param("abilities", "")
                     .param("removed", true));
         }
+    }
+
+    /** The gained abilities' names, in signature order. */
+    private static List<String> namesOf(Card card, List<String> gained) {
+        Map<String, List<CardTraitBase> > bySignature = new HashMap<>();
+        for (CardTraitBase trait : abilitiesOf(card)) {
+            bySignature.computeIfAbsent(signature(trait), s -> new ArrayList<>()).add(trait);
+        }
+        List<String> names = new ArrayList<>();
+        for (String signature : gained) {
+            List<CardTraitBase> traits = bySignature.get(signature);
+            CardTraitBase trait = traits == null || traits.isEmpty() ? null : traits.remove(0);
+            ProvenanceKey key = trait == null ? null : ProvenanceResolver.of(trait);
+            names.add(key == null ? "runtime" : key.describe());
+        }
+        return names;
     }
 
     /** One event naming what joined and what left a set, or none when neither did. */
@@ -155,8 +246,10 @@ final class StatDiffer {
             List<EffectEvent> events, String subject, EventType type,
             String addedParam, String removedParam,
             Set<String> before, Set<String> now) {
-        Set<String> added = difference(now, before);
-        Set<String> removed = difference(before, now);
+        Set<String> added = new LinkedHashSet<>(now);
+        added.removeAll(before);
+        Set<String> removed = new LinkedHashSet<>(before);
+        removed.removeAll(now);
         if (added.isEmpty() && removed.isEmpty()) {
             return;
         }
@@ -166,20 +259,64 @@ final class StatDiffer {
                 .param(removedParam, List.copyOf(removed)));
     }
 
-    private static Set<String> difference(Set<String> from, Set<String> without) {
-        Set<String> result = new LinkedHashSet<>(from);
-        result.removeAll(without);
-        return result;
+    /** {@code from} less {@code without}, as multisets: each repeat counts. */
+    private static List<String> difference(List<String> from, List<String> without) {
+        List<String> left = new ArrayList<>(from);
+        for (String each : without) {
+            left.remove(each);
+        }
+        return left;
+    }
+
+    /** The card's abilities that no keyword built: its lines other than keywords. */
+    private static List<CardTraitBase> abilitiesOf(Card card) {
+        List<CardTraitBase> abilities = new ArrayList<>();
+        addOwn(abilities, card.getSpellAbilities());
+        addOwn(abilities, card.getTriggers());
+        addOwn(abilities, card.getStaticAbilities());
+        addOwn(abilities, card.getReplacementEffects());
+        return abilities;
+    }
+
+    private static void addOwn(List<CardTraitBase> into, Iterable<? extends CardTraitBase> traits) {
+        for (CardTraitBase trait : traits) {
+            if (trait.getKeyword() == null) {
+                into.add(trait);
+            }
+        }
+    }
+
+    /**
+     * An ability's identity across Forge's recomputes: its kind and its
+     * script parameters, which a static's re-granted copy keeps while its
+     * object and id are new.
+     */
+    private static String signature(CardTraitBase trait) {
+        return trait.getClass().getSimpleName() + new TreeMap<>(trait.getOriginalMapParams());
+    }
+
+    private static List<String> sorted(List<String> values) {
+        List<String> sorted = new ArrayList<>(values);
+        java.util.Collections.sort(sorted);
+        return sorted;
     }
 
     private static Stats read(Card card) {
-        Set<String> keywords = new LinkedHashSet<>(CardSpelling.keywordNames(card.getKeywords()));
+        List<String> abilities = new ArrayList<>();
+        for (CardTraitBase trait : abilitiesOf(card)) {
+            abilities.add(signature(trait));
+        }
         Set<String> types = new LinkedHashSet<>(TypeLine.names(card.getType()));
         return new Stats(
                 card.getNetPower(), card.getNetToughness(),
                 card.getNetPowerBreakdown().currentValue,
-                card.getNetToughnessBreakdown().currentValue, keywords, types,
+                card.getNetToughnessBreakdown().currentValue,
+                sorted(CardSpelling.keywordNames(card.getKeywords())),
+                sorted(StaticSuppression.NONE.hiddenKeywords(card)),
+                sorted(abilities), types,
                 new LinkedHashSet<>(CardSpelling.colorLetters(card.getColor())),
-                Refs.ofNullable(card.getController()));
+                Refs.ofNullable(card.getController()),
+                card.getName(), CardFacts.manaCostJson(card), card.getCMC(),
+                CardFacts.faceState(card), card.getCloneStates().size());
     }
 }

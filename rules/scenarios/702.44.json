@@ -250,16 +250,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A creature permanent spell with sunburst resolves and the creature enters from the stack with +1/+1 counters, one per colour of mana spent.",
-        "near_miss": "A permanent whose card prints sunburst enters with no counters. A permanent that enters from somewhere other than the stack gets none.",
-        "params": {
-          "event": "counter_change",
-          "counter_type": "+1/+1",
-          "source_keyword": "Sunburst"
-        },
-        "needs": []
+        "none": "Could not express: where the permanent entered from, or a second keyword beside sunburst, is read by no parameter of this declaration."
       }
     },
     {
@@ -342,16 +333,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A creature permanent spell with sunburst and modular resolves and the creature enters with +1/+1 counters, one per colour of mana spent.",
-        "near_miss": "A permanent whose card prints sunburst enters with no counters. Only colourless mana spent gives none.",
-        "params": {
-          "event": "counter_change",
-          "counter_type": "+1/+1",
-          "source_keyword": "Sunburst"
-        },
-        "needs": []
+        "none": "Could not express: where the permanent entered from, or a second keyword beside sunburst, is read by no parameter of this declaration."
       }
     }
   ]

@@ -1,0 +1,73 @@
+"""Every command that reads shards exits 1 on a damaged shard, a line that
+does not decode or an unknown generation, naming where (WP9).
+
+One damaged shard used to be truncated silently; now the read refuses it,
+and the command maps the refusal to exit 1 with the located message rather
+than a traceback.
+"""
+
+from __future__ import annotations
+
+import gzip
+import json
+from pathlib import Path
+
+import pytest
+
+from effects.domain.shard_generation import UnknownGenerationError
+from effects.infrastructure import cli
+from effects.infrastructure.shard_io import CorruptShardError, RecordDecodeError
+
+FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
+
+
+@pytest.mark.parametrize("handler", [
+    cli.run_rule_counts, cli.run_field_coverage,
+    cli.run_train_effect_model, cli.run_evaluate_effect_model,
+])
+@pytest.mark.parametrize("error", [
+    CorruptShardError("s.jsonl.gz: the gzip member starting at byte 9 is corrupt"),
+    RecordDecodeError.at(Path("s.jsonl.gz"), 3, KeyError("kind")),
+    UnknownGenerationError("s.jsonl.gz, line 1: generation 4"),
+])
+def test_each_reader_exits_1_on_a_refused_shard(handler, error):
+    assert cli._exit_code(handler.exit_codes, error) == 1
+
+
+def _gen2_lines() -> list[str]:
+    with gzip.open(FIXTURES / "gen2-records.jsonl.gz", "rt", encoding="utf-8") as source:
+        return [line.rstrip("\n") for line in source if line.strip()]
+
+
+def _field_coverage(records: Path) -> int:
+    args = cli.build_parser().parse_args(["field-coverage", "--effect-records", str(records)])
+    return args.func(args)
+
+
+def test_field_coverage_exits_1_naming_the_line_that_does_not_decode(tmp_path, caplog):
+    lines = _gen2_lines()
+    broken = json.loads(lines[1])
+    broken["kind"] = "no_such_kind"
+    (tmp_path / "a.jsonl").write_text(f"{lines[0]}\n{json.dumps(broken)}\n", encoding="utf-8")
+    with caplog.at_level("ERROR"):
+        assert _field_coverage(tmp_path) == 1
+    assert any("a.jsonl, line 2" in r.getMessage() for r in caplog.records)
+
+
+def test_field_coverage_prints_the_values_outside_the_closed_lists(tmp_path, capsys):
+    odd = json.loads(_gen2_lines()[0])
+    odd["state"]["global"]["phase"] = "teatime"
+    (tmp_path / "a.jsonl").write_text(json.dumps(odd) + "\n", encoding="utf-8")
+    assert _field_coverage(tmp_path) == 0
+    assert "global.phase 'teatime': 1" in capsys.readouterr().out
+
+
+def test_validate_corpus_exits_1_naming_the_line_that_does_not_decode(tmp_path, caplog):
+    lines = _gen2_lines()
+    (tmp_path / "a.jsonl").write_text(f"{lines[0]}\n[1, 2]\n", encoding="utf-8")
+    args = cli.build_parser().parse_args([
+        "validate-corpus", "--effect-records", str(tmp_path),
+        "--cards-folder", str(tmp_path / "none")])
+    with caplog.at_level("ERROR"):
+        assert args.func(args) == 1
+    assert any("a.jsonl, line 2" in r.getMessage() for r in caplog.records)

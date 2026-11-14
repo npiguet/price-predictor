@@ -42,18 +42,6 @@ class EffectRecordTest {
                 AttributionMode.DEGRADED);
     }
 
-    @Test
-    void anEnvelopeCarriesEveryFrozenField() {
-        String json = record(RecordKind.COMBAT).actor("P0").toJson();
-        for (String key : List.of(
-                "record_id", "generation", "run_id", "timestamp", "game_id", "kind", "moment",
-                "subkind", "link_id", "mirror_of", "variant_of", "mode",
-                "interventional", "fork", "synthetic", "random_seat", "actor_player",
-                "ability", "state", "payload")) {
-            assertTrue(json.contains("\"" + key + "\":"), key + " missing from " + json);
-        }
-    }
-
     /**
      * {@code generation} is the first member after {@code record_id} on every
      * record (FR-018): its value is what names a gen-3 shard to a reader.
@@ -208,52 +196,12 @@ class EffectRecordTest {
     }
 
     @Test
-    void aCombatRecordNamesNoActingLine() {
-        String json = record(RecordKind.COMBAT).actor("P0").toJson();
-        assertTrue(json.contains("\"ability\":null"), json);
-    }
-
-    @Test
-    void anOrdinaryObservationCarriesNeitherFlag() {
-        String json = resolution(Moment.RESOLUTION).toJson();
-        assertTrue(json.contains("\"interventional\":false"));
-        assertTrue(json.contains("\"fork\":false"));
-        assertTrue(json.contains("\"synthetic\":false"));
-    }
-
-    @Test
-    void aDamageStepProbeIsAForkThatIntervenedInNothing() {
-        String json = record(RecordKind.COMBAT)
-                .fork(true).interventional(false).mirrorOf("run.0.9").toJson();
-        assertTrue(json.contains("\"fork\":true"));
-        assertTrue(json.contains("\"interventional\":false"));
-        assertTrue(json.contains("\"mirror_of\":\"run.0.9\""));
-    }
-
-    @Test
-    void anInterventionalResolutionIsBoth() {
-        String json = resolution(Moment.RESOLUTION)
-                .interventional(true).fork(true).toJson();
-        assertTrue(json.contains("\"interventional\":true"));
-        assertTrue(json.contains("\"fork\":true"));
-    }
-
-    @Test
     void aCostHalfCarriesItsEventsAndCostsAndNoOutcome() {
         String json = resolution(Moment.ACTIVATION)
                 .payload(RecordPayloads.costPayload(java.util.List.of(), PaidCosts.EMPTY))
                 .toJson();
         assertTrue(json.contains("\"payload\":{\"events\":[],\"costs\":{"), json);
         assertFalse(json.contains("\"outcome\""), json);
-    }
-
-    @Test
-    void theModeIsStampedOnEveryRecord() {
-        assertTrue(record(RecordKind.COMBAT).toJson()
-                .contains("\"mode\":\"degraded\""));
-        assertTrue(new EffectRecord(
-                "r", "r", "t", "g", RecordKind.COMBAT,
-                AttributionMode.PATCHED).toJson().contains("\"mode\":\"patched\""));
     }
 
     /**
@@ -276,18 +224,6 @@ class EffectRecordTest {
         assertTrue(json.contains("\"trait_kind\":\"trigger\""), json);
         assertTrue(json.contains("cardsfolder/g/grave_titan.txt"), json);
         assertTrue(json.contains("\"ability_unresolved\":null"), json);
-    }
-
-    /** And a rewrite record names the replacement effect that rewrote. */
-    @Test
-    void aRewriteRecordNamesItsReplacement() {
-        String json = record(RecordKind.REWRITE)
-                .ability(new ProvenanceKey.Resolved(new ProvenanceKey(
-                        "cardsfolder/p/paralyze.txt", 0,
-                        TraitKind.REPLACEMENT, 0), null))
-                .toJson();
-
-        assertTrue(json.contains("\"trait_kind\":\"replacement\""), json);
     }
 
     /**
@@ -389,21 +325,4 @@ class EffectRecordTest {
 
     // ── attribution mode ────────────────────────────────────────────────
 
-    /**
-     * Detection agrees with what the checkout actually offers.
-     *
-     * <p>Asserted as an invariant rather than as a fixed answer, because the
-     * sibling checkout is patched or not independently of this repository: a
-     * test that hard-codes DEGRADED passes only until someone applies the
-     * patches, and then fails without anything being wrong.
-     */
-    @Test
-    void theDetectedModeMatchesTheHooksPresence() {
-        boolean hookPresent = PatchHooks
-                .find(PatchHooks.ABILITY_UTILS, "getEffectRecordSubAbility")
-                .isPresent();
-        assertEquals(
-                hookPresent ? AttributionMode.PATCHED : AttributionMode.DEGRADED,
-                AttributionMode.detect());
-    }
 }

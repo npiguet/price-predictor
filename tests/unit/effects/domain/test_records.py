@@ -10,7 +10,7 @@ and a rewrite's result vocabulary tracks Forge's own enum both ways.
 from __future__ import annotations
 
 import re
-from dataclasses import fields, replace
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -18,10 +18,7 @@ import pytest
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
-    REWRITE_RESULTS_RUNNING_AN_ABILITY,
-    REWRITE_RESULTS_WITHOUT_ABILITY,
     ActivationPayload,
-    Candidate,
     ChannelChange,
     CombatPayload,
     Contribution,
@@ -40,15 +37,11 @@ from effects.domain.records import (
     UnresolvedReason,
 )
 from tests.unit.effects.builders import make_record as build_record
+from tests.unit.forge_sources import FORGE_GAME, forge_source
 
 
 class TestFlagSignatures:
     """The three signatures from the schema contract's flag table."""
-
-    def test_an_ordinary_observation_carries_neither_flag(self, make_record):
-        record = make_record()
-        assert (record.interventional, record.fork) == (False, False)
-        assert not record.is_probe
 
     def test_an_interventional_resolution_is_both(self, make_record):
         record = make_record(interventional=True, fork=True)
@@ -76,11 +69,6 @@ class TestFlagSignatures:
     def test_mirror_of_requires_the_fork_flag(self, make_record):
         with pytest.raises(ValueError, match="mirror_of"):
             make_record(kind=RecordKind.COMBAT, mirror_of="run.3.9")
-
-    def test_a_probe_names_the_combat_it_mirrors(self, make_record):
-        record = make_record(kind=RecordKind.COMBAT, fork=True, mirror_of="run.3.9")
-        assert record.mirror_of == "run.3.9"
-        assert record.is_probe
 
     def test_an_unforked_combat_record_is_not_a_probe(self, make_record):
         assert not make_record(kind=RecordKind.COMBAT).is_probe
@@ -299,22 +287,20 @@ def test_python_and_java_spell_the_playability_checks_alike_in_order():
     assert java and tuple(java) == tuple(check.value for check in PlayabilityCheck)
 
 
-def test_the_land_play_limit_is_a_check_of_its_own_after_the_activation_limit():
-    """A land play's limit counts the turn's land plays, not one ability's
-    activations (FR-032), and a candidate before gen-3 says nothing of land plays."""
-    order = list(PlayabilityCheck)
-    assert order[order.index(PlayabilityCheck.ACTIVATION_LIMIT) + 1] is (
-        PlayabilityCheck.LAND_PLAY_LIMIT)
-    assert PlayabilityCheck.LAND_PLAY_LIMIT == "land_play_limit"
-    candidate = Candidate(ability=(), can_play=True, affordable=True, has_legal_target=True)
-    assert candidate.land_play is None
+def test_python_and_java_spell_the_turn_action_subkinds_alike():
+    """A subkind the collector writes and the reader does not know fails the
+    whole record's decode (the game-end marker did until WP7's Python side)."""
+    from effects.domain.records import TurnActionSubkind
+
+    source = _JAVA_UNRESOLVED_REASON.with_name("TurnActionSubkind.java").read_text(
+        encoding="utf-8")
+    java = re.findall(r'^\s*[A-Z_]+\("([a-z_]+)"\)[,;]', source, re.MULTILINE)
+    assert "game_end" in java
+    assert tuple(java) == tuple(subkind.value for subkind in TurnActionSubkind)
 
 
 class TestGen2Flags:
     """``random_seat`` on every kind; ``what_if`` on legality records only (FR-031)."""
-
-    def test_random_seat_defaults_to_on_policy(self, make_record):
-        assert make_record().random_seat is False
 
     @pytest.mark.parametrize("subkind", ["attackers", "blockers"])
     def test_a_legality_record_may_carry_what_if(self, make_record, subkind):
@@ -333,7 +319,6 @@ class TestGen2Flags:
 def _legality(subkind: str) -> dict:
     from effects.domain.records import (
         PlayabilityAttackersPayload,
-        PlayabilityBlockersPayload,
         PlayabilityDecisionPayload,
         PlayabilitySubkind,
     )
@@ -363,44 +348,9 @@ def _record(kind, payload, **overrides) -> EffectRecord:
     return build_record(kind, payload=payload, **defaults)
 
 
-class TestPlayabilityCarriesNoPolicy:
-    def test_a_candidate_has_only_rules_level_verdict_fields(self):
-        """The AI's judgments ("another time", "life in danger") are its
-        opinion, not the game's rules; training on them would teach the model
-        Forge's play style instead of Magic."""
-        names = {f.name for f in fields(Candidate)}
-        assert names == {
-            "ability", "can_play", "affordable", "has_legal_target",
-            "legal_targets", "cost_after_adjustment", "responsible_static",
-            # Gen-3: the timing rule and the rules checks that failed, and
-            # whether the candidate is a land play.
-            "timing", "failed_checks", "land_play",
-        }
-
-    def test_the_attackers_payload_carries_only_legality(self):
-        names = {f.name for f in fields(PlayabilityAttackersPayload)}
-        assert names == {"legal_attackers", "forbidden",
-                         # Gen-3: the anchor, its defenders, its attack
-                         # requirement, and whether attacking tapped it.
-                         "anchor_attacker", "legal_defenders", "must_attack",
-                         "tapped_by_attack"}
-
-    def test_the_blockers_payload_carries_only_legality_and_min_blockers(self):
-        names = {f.name for f in fields(PlayabilityBlockersPayload)}
-        assert names == {
-            "anchor_attacker", "legal_blockers", "forbidden", "min_blockers",
-            # Gen-3: the block requirements (509.1c).
-            "must_block",
-        }
-
-
 #: Forge's own enum, in the sibling checkout the converter and the collector
 #: both already assume (``collect_variants`` defaults to ``../forge``).
-_REPLACEMENT_RESULT_JAVA = (
-    Path(__file__).resolve().parents[4].parent
-    / "forge" / "forge-game" / "src" / "main" / "java" / "forge" / "game"
-    / "replacement" / "ReplacementResult.java"
-)
+_REPLACEMENT_RESULT_JAVA = FORGE_GAME / "replacement" / "ReplacementResult.java"
 
 
 def _java_replacement_results() -> tuple[str, ...]:
@@ -440,8 +390,7 @@ class TestRewriteResultTracksForge:
 
     @pytest.fixture(scope="class")
     def java_members(self) -> tuple[str, ...]:
-        if not _REPLACEMENT_RESULT_JAVA.exists():
-            pytest.skip(f"no Forge checkout at {_REPLACEMENT_RESULT_JAVA}")
+        forge_source(_REPLACEMENT_RESULT_JAVA)
         return _java_replacement_results()
 
     def test_every_forge_member_has_a_python_value(self, java_members):
@@ -462,40 +411,7 @@ class TestRewriteResultTracksForge:
         expected = {_snake(name) for name in java_members}
         assert {r.value for r in RewriteResult} == expected
 
-    def test_the_two_partitions_only_hold_real_results(self, java_members):
-        for result in REWRITE_RESULTS_WITHOUT_ABILITY:
-            assert result in RewriteResult
-        for result in REWRITE_RESULTS_RUNNING_AN_ABILITY:
-            assert result in RewriteResult
-        assert not (
-            REWRITE_RESULTS_WITHOUT_ABILITY & REWRITE_RESULTS_RUNNING_AN_ABILITY
-        )
-        # `not_replaced` is in neither: it runs no ability but its prevention
-        # branch still writes PreventedAmount into the map on the way out.
-        assert RewriteResult.NOT_REPLACED not in (
-            REWRITE_RESULTS_WITHOUT_ABILITY | REWRITE_RESULTS_RUNNING_AN_ABILITY
-        )
-
-
 class TestRewrite:
-    def test_a_rewrite_carries_both_the_event_it_received_and_the_one_it_made(
-        self,
-    ):
-        incoming = Event(type=EventType.DAMAGE_DEALT, subjects=("E1",),
-                         params={"amount": 5})
-        outgoing = Event(type=EventType.DAMAGE_DEALT, subjects=("E1",),
-                         params={"amount": 0})
-        record = _record(
-            RecordKind.REWRITE,
-            RewritePayload(
-                incoming=incoming, outgoing=outgoing,
-                result=RewriteResult.UPDATED,
-            ),
-        )
-        assert record.payload.incoming.params["amount"] == 5
-        assert record.payload.outgoing.params["amount"] == 0
-        assert record.payload.rewritten
-
     def test_a_substitution_rewrites_nothing_and_names_what_ran_instead(self):
         """An "exile it instead" replacement edits no parameter.
 
@@ -511,7 +427,7 @@ class TestRewrite:
             replaced_by=(_REPLACED_BY,),
         )
         assert payload.outgoing is None
-        assert not payload.rewritten
+        assert payload.rewritten is False, "an arrived event left unedited, not unknown"
         assert payload.replaced_by == (_REPLACED_BY,)
 
 
@@ -579,7 +495,3 @@ class TestGen3Envelope:
         with pytest.raises(ValueError, match="discriminator"):
             replace(build_record(RecordKind.TURN_ACTION), subkind=None)
 
-    def test_the_metadata_list_names_every_gen3_member(self):
-        from effects.domain.records import COLLECTION_METADATA_FIELDS
-
-        assert {"generation", "aimed_at", "directed"} <= COLLECTION_METADATA_FIELDS

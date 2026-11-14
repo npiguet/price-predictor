@@ -142,17 +142,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "legality_membership",
-        "record_kind": "playability",
-        "outcome": "A permanent with two or more card types (an artifact creature) is among the legal targets of a candidate whose restriction names only one of those types: it counts as each of its types.",
-        "near_miss": "A permanent with two or more card types is outside the legal targets of a candidate that targets.",
-        "params": {
-          "list": "legal_targets",
-          "fires_when": "inside",
-          "universe": "battlefield",
-          "min_types": 2
-        },
-        "needs": []
+        "same_as": "205.2b-1",
+        "reason": "Both state that an artifact creature is subject to effects for each of its types."
       }
     }
   ]

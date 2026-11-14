@@ -226,18 +226,7 @@
       ],
       "forge_notes": "Variant speed_4_on_battlefield moves the card from the graveyard to the battlefield, so A's graveyard is empty in that variant.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A candidate ability that states it functions from a zone other than the battlefield passes the zone check while its card is in that zone.",
-        "near_miss": "A candidate ability activated from a zone it does not function from fails the zone check.",
-        "params": {
-          "bit": "failed_check",
-          "check": "zone",
-          "fires_when": true
-        },
-        "needs": [
-          "failed_checks"
-        ]
+        "none": "Could not express: that a granted ability names the graveyard is read by no verdict_bit filter."
       }
     }
   ]

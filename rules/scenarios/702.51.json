@@ -251,16 +251,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A spell whose card has convoke is affordable once its cost has been reduced by cost changes.",
-        "near_miss": "A convoke spell that is not affordable.",
-        "params": {
-          "bit": "affordable",
-          "fires_when": true,
-          "source_keyword": "Convoke"
-        },
-        "needs": []
+        "none": "Could not express: the cost reductions convoke applies after are read by no verdict_bit filter."
       }
     }
   ]

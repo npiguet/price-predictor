@@ -31,16 +31,6 @@ from tests.unit.effects.infrastructure.test_record_codec import (
 )
 
 
-class TestShardDirectory:
-    def test_every_shard_in_the_directory_is_loaded(self, tmp_path):
-        for worker in (0, 1, 2):
-            with RawShardWriter(tmp_path, "run", worker, f"L{worker}") as writer:
-                writer.write(_record(record_id=f"run.{worker}.1"))
-        assert {r.record_id for r in read_records(tmp_path)} == {
-            "run.0.1", "run.1.1", "run.2.1",
-        }
-
-
 class TestCompressedShards:
     """The Java writer emits `.jsonl.gz` as concatenated gzip members, one per
     block of records. The corpus is the run's real cost on disk — a few
@@ -85,6 +75,23 @@ class TestCompressedShards:
         data = path.read_bytes()
         path.write_bytes(data[: len(data) - 12])
         assert [r.record_id for r in read_shard(path)] == ["run.0.1"]
+
+    def test_a_block_cut_midway_keeps_every_whole_record_before_the_cut(self, tmp_path):
+        """The Java writer's members are blocks of many records; a kill cuts
+        one midway. Every record whole before the cut reads, in order, and the
+        one the cut went through is dropped, never read as a broken line."""
+        path = tmp_path / "run.0.jsonl.gz"
+        block = [self._line(f"run.0.{i}") for i in range(2, 40)]
+        self._write_members(path, [[self._line("run.0.1")], block])
+        data = path.read_bytes()
+        first = len(gzip.compress((self._line("run.0.1") + "\n").encode("utf-8")))
+        path.write_bytes(data[: first + (len(data) - first) * 3 // 4])
+
+        read = [r.record_id for r in read_shard(path)]
+
+        expected = [f"run.0.{i}" for i in range(1, 40)]
+        assert 2 < len(read) < len(expected)
+        assert read == expected[: len(read)]
 
     def test_a_half_written_line_inside_a_member_is_skipped(self, tmp_path):
         path = tmp_path / "run.0.jsonl.gz"
@@ -180,6 +187,145 @@ class TestCompressedShards:
         assert list(iter_shard_lines(plain)) == list(iter_shard_lines(packed)) == [line, line]
 
 
+class TestDamagedShards:
+    """A killed worker can only cut the last member short, which ends the read
+    quietly. Damage in the last member (power lost mid-write, a flipped bit)
+    ends it too, with a warning and a tally entry, since nothing follows to
+    lose; damage before the last would silently drop every later member, so
+    it stops the read naming the shard and the byte the damaged member starts
+    at. A line that does not decode names its shard and line."""
+
+    def _line(self, record_id: str) -> str:
+        return format_record_line(_record(record_id=record_id))
+
+    def _members(self, *record_ids: str) -> list[bytes]:
+        return [gzip.compress((self._line(r) + "\n").encode("utf-8")) for r in record_ids]
+
+    def test_a_member_with_a_bad_header_mid_shard_stops_the_read_loudly(self, tmp_path):
+        from effects.infrastructure.shard_io import CorruptShardError
+
+        first, second, third = self._members("r.1", "r.2", "r.3")
+        path = tmp_path / "run.0-L1.jsonl.gz"
+        path.write_bytes(first + b"XX" + second[2:] + third)
+        read = []
+        with pytest.raises(CorruptShardError, match=rf"run\.0-L1\.jsonl\.gz.*byte {len(first)}"):
+            read.extend(iter_shard_lines(path))
+        assert read == [self._line("r.1")]
+
+    def test_a_flipped_bit_mid_shard_stops_the_read_loudly(self, tmp_path):
+        """The member's check sum catches it, so no later member is lost unsaid."""
+        from effects.infrastructure.shard_io import CorruptShardError
+
+        first, second, third = self._members("r.1", "r.2", "r.3")
+        damaged = bytearray(second)
+        damaged[len(damaged) - 6] ^= 0x01  # inside the CRC-32 trailer
+        path = tmp_path / "run.0-L1.jsonl.gz"
+        path.write_bytes(first + bytes(damaged) + third)
+        with pytest.raises(CorruptShardError, match=rf"byte {len(first)}"):
+            list(iter_shard_lines(path))
+
+    def test_a_truncated_final_member_still_ends_the_read_quietly(self, tmp_path):
+        first, second = self._members("r.1", "r.2")
+        path = tmp_path / "run.0-L1.jsonl.gz"
+        path.write_bytes(first + second[:-8])
+        assert list(iter_shard_lines(path)) == [self._line("r.1"), self._line("r.2")]
+        path.write_bytes(first + second[:5])
+        assert list(iter_shard_lines(path)) == [self._line("r.1")]
+
+    def test_a_line_that_does_not_decode_names_its_shard_and_line(self, tmp_path):
+        from effects.infrastructure.shard_io import RecordDecodeError, iter_shard_matching
+
+        path = tmp_path / "run.0-L1.jsonl.gz"
+        broken = json.loads(self._line("r.2"))
+        broken["kind"] = "no_such_kind"
+        body = f"{self._line('r.1')}\n\n{json.dumps(broken)}\n"
+        path.write_bytes(gzip.compress(body.encode("utf-8")))
+        for read in (lambda: list(read_shard(path)),
+                     lambda: list(read_window(tmp_path)),
+                     lambda: list(iter_shard_matching(path))):
+            with pytest.raises(RecordDecodeError,
+                               match=r"run\.0-L1\.jsonl\.gz, line 3: .*no_such_kind"):
+                read()
+
+    def _ends_quietly(self, path, caplog, expected):
+        from effects.infrastructure import shard_io
+
+        shard_io.reset_decode_tally()
+        with caplog.at_level("WARNING", logger=shard_io.__name__):
+            assert list(iter_shard_lines(path)) == expected
+        assert shard_io.take_decode_tally().damaged_tails == [f"{path}, byte {self._at}"]
+        assert any("is corrupt" in r.getMessage() and str(path) in r.getMessage()
+                   for r in caplog.records)
+
+    def test_a_flipped_check_sum_in_the_last_member_ends_the_read_quietly(
+            self, tmp_path, caplog):
+        first, second = self._members("r.1", "r.2")
+        damaged = bytearray(second)
+        damaged[len(damaged) - 6] ^= 0x01  # inside the CRC-32 trailer
+        path = tmp_path / "run.0-L1.jsonl.gz"
+        path.write_bytes(first + bytes(damaged))
+        self._at = len(first)
+        self._ends_quietly(path, caplog, [self._line("r.1")])
+
+    def test_garbage_after_the_last_member_ends_the_read_quietly(self, tmp_path, caplog):
+        """Power lost mid-write can leave anything at the end of the file."""
+        first, second = self._members("r.1", "r.2")
+        path = tmp_path / "run.0-L1.jsonl.gz"
+        path.write_bytes(first + second + b"\xffgarbage\x01\x02")
+        self._at = len(first) + len(second)
+        self._ends_quietly(path, caplog, [self._line("r.1"), self._line("r.2")])
+
+    def test_a_bad_header_on_the_last_member_ends_the_read_quietly(self, tmp_path, caplog):
+        first, second = self._members("r.1", "r.2")
+        path = tmp_path / "run.0-L1.jsonl.gz"
+        path.write_bytes(first + b"XX" + second[2:])
+        self._at = len(first)
+        self._ends_quietly(path, caplog, [self._line("r.1")])
+
+    def test_the_corrupt_shard_error_pickles_with_its_location(self):
+        import pickle
+
+        from effects.infrastructure.shard_io import RecordDecodeError
+
+        error = RecordDecodeError.at(Path("s.jsonl.gz"), 7, KeyError("kind"))
+        back = pickle.loads(pickle.dumps(error))
+        assert (str(back), back.path, back.line) == (str(error), Path("s.jsonl.gz"), 7)
+
+    @pytest.mark.parametrize("line", [
+        "[1, 2]", '"a string"',
+        None,  # an entity that is a string: built below
+    ])
+    def test_a_malformed_shape_names_its_shard_and_line(self, tmp_path, line):
+        from effects.infrastructure.shard_io import RecordDecodeError
+
+        if line is None:
+            raw = record_to_dict(_record(record_id="r.2"))
+            raw["state"]["entities"] = ["E1"]
+            line = json.dumps(raw)
+        path = tmp_path / "run.0-L1.jsonl"
+        path.write_text(f"{self._line('r.1')}\n{line}\n", encoding="utf-8")
+        for read in (lambda: list(read_shard(path)), lambda: list(read_window(tmp_path))):
+            with pytest.raises(RecordDecodeError, match=r"run\.0-L1\.jsonl, line 2"):
+                read()
+
+    def test_a_line_of_bad_utf8_in_a_gzip_shard_names_its_shard_and_line(self, tmp_path):
+        from effects.infrastructure.shard_io import RecordDecodeError
+
+        path = tmp_path / "run.0-L1.jsonl.gz"
+        body = (self._line("r.1") + "\n").encode("utf-8") + b'{"record_id": "\xff\xfe"}\n'
+        path.write_bytes(gzip.compress(body))
+        with pytest.raises(RecordDecodeError, match=r"run\.0-L1\.jsonl\.gz, line 2"):
+            list(read_shard(path))
+
+    def test_a_line_that_is_no_json_names_its_shard_and_line(self, tmp_path):
+        from effects.infrastructure.shard_io import RecordDecodeError
+
+        path = tmp_path / "run.0-L1.jsonl"
+        path.write_text(f"{self._line('r.1')}\n{{not json\n", encoding="utf-8")
+        with pytest.raises(RecordDecodeError, match=r"run\.0-L1\.jsonl, line 2"):
+            list(read_shard(path))
+
+
 class TestShardsInSubdirectories:
     """Shards nested under the corpus directory are part of the corpus (T173).
 
@@ -213,21 +359,108 @@ class TestShardsInSubdirectories:
 
         assert len(iter_shards(tmp_path)) == 2
 
-    def test_a_nested_gz_is_not_claimed_twice(self, tmp_path) -> None:
-        """Each spelling's glob claims its own shards, and only those."""
-        self._shard(tmp_path / "sub" / "run.0-a.jsonl.gz")
+    def test_the_order_is_path_order_across_directories_and_spellings(self, tmp_path) -> None:
+        """Shard order fixes the epoch walk and the split's accumulation: one
+        path order over every subdirectory, both spellings interleaved."""
+        for name in ("dirb/run.0-b.jsonl", "dira/run.0-z.jsonl", "dirc/run.0-c.jsonl.gz",
+                     "dira/run.0-a.jsonl.gz", "top.0-t.jsonl"):
+            self._shard(tmp_path / name)
 
-        found = iter_shards(tmp_path)
+        assert [p.relative_to(tmp_path).as_posix() for p in iter_shards(tmp_path)] == [
+            "dira/run.0-a.jsonl.gz", "dira/run.0-z.jsonl", "dirb/run.0-b.jsonl",
+            "dirc/run.0-c.jsonl.gz", "top.0-t.jsonl",
+        ]
 
-        assert len(found) == 1
 
-    def test_the_order_is_stable_across_calls(self, tmp_path) -> None:
-        """Shard order fixes the epoch walk and the split's accumulation."""
-        for name in ("b", "a", "c"):
-            self._shard(tmp_path / f"dir{name}" / f"run.0-{name}.jsonl.gz")
+class TestJavaWrittenShards:
+    """The shard writer's own lines (``ShardCharacterizationTest``), read
+    as a shard: what a gen-3 worker writes is what every reader here reads."""
 
-        assert iter_shards(tmp_path) == iter_shards(tmp_path)
-        assert iter_shards(tmp_path) == sorted(iter_shards(tmp_path))
+    @staticmethod
+    def _shard(tmp_path: Path, golden: str) -> Path:
+        from tests.unit.effects.builders import JAVA_GOLDENS
+
+        shard = tmp_path / "run.0-l1.jsonl.gz"
+        lines = (JAVA_GOLDENS / golden).read_text(encoding="utf-8")
+        shard.write_bytes(gzip.compress(lines.encode("utf-8")))
+        return shard
+
+    def test_a_finished_game_reads_whole_and_ends_in_its_marker(self, tmp_path):
+        from effects.domain.records import TurnActionSubkind
+        from effects.infrastructure.shard_io import ended_games, read_shard
+
+        shard = self._shard(tmp_path, "shard-game-end.jsonl")
+        records = list(read_shard(shard))
+
+        assert [r.kind for r in records] == [RecordKind.RESOLUTION] * 3 + [RecordKind.TURN_ACTION]
+        assert [r.record_id for r in records] == [f"run.0-l1.{i}" for i in range(4)]
+        assert {r.game_id for r in records} == {"run.0-l1.0"}
+        assert {r.generation for r in records} == {3}
+        marker = records[-1]
+        assert marker.subkind is TurnActionSubkind.GAME_END
+        assert (marker.payload.events, marker.payload.records_withheld) == ((), 0)
+        assert ended_games(shard) == {"run.0-l1.0"}
+
+    def test_a_game_without_its_marker_reads_as_cut(self, tmp_path):
+        from effects.infrastructure.shard_io import ended_games, read_shard
+
+        shard = self._shard(tmp_path, "shard-spell-and-combat.jsonl")
+
+        assert [r.kind for r in read_shard(shard)] == [
+            RecordKind.RESOLUTION, RecordKind.RESOLUTION, RecordKind.COMBAT]
+        assert ended_games(shard) == frozenset()
+
+    @staticmethod
+    def _gzip_shard(tmp_path: Path) -> tuple[Path, bytes]:
+        """``shard-two-games.jsonl.gz``, byte for byte: Java's gzip members,
+        one a game, as ``RecordShardWriter`` flushes them at each game end."""
+        from tests.unit.effects.builders import JAVA_GOLDENS
+
+        data = (JAVA_GOLDENS / "shard-two-games.jsonl.gz").read_bytes()
+        shard = tmp_path / "run.0-l1.jsonl.gz"
+        shard.write_bytes(data)
+        return shard, data
+
+    @staticmethod
+    def _first_member_length(data: bytes) -> int:
+        import zlib
+
+        inflater = zlib.decompressobj(wbits=31)
+        inflater.decompress(data)
+        return len(data) - len(inflater.unused_data)
+
+    def test_a_java_written_shard_reads_game_by_game_each_ended_by_its_marker(self, tmp_path):
+        from effects.domain.records import TurnActionSubkind
+        from effects.infrastructure.shard_io import ended_games, read_shard
+
+        shard, data = self._gzip_shard(tmp_path)
+        records = list(read_shard(shard))
+
+        games = list(dict.fromkeys(r.game_id for r in records))
+        assert games == ["run.0-l1.0", "run.0-l1.1"]
+        assert [r.record_id for r in records] == [f"run.0-l1.{i}" for i in range(len(records))]
+        for game in games:
+            own = [r for r in records if r.game_id == game]
+            assert [r.subkind for r in own].count(TurnActionSubkind.GAME_END) == 1
+            assert own[-1].subkind is TurnActionSubkind.GAME_END
+            assert own[-1].payload.records_withheld == 0
+        assert ended_games(shard) == {"run.0-l1.0", "run.0-l1.1"}
+        # One member a game: the first ends exactly where game 0's marker does.
+        first = gzip.decompress(data[:self._first_member_length(data)]).decode("utf-8")
+        assert [json.loads(line)["game_id"] for line in first.splitlines()] == [
+            "run.0-l1.0"] * sum(r.game_id == "run.0-l1.0" for r in records)
+
+    def test_a_java_written_shard_cut_in_its_second_game_keeps_the_first_whole(self, tmp_path):
+        """A worker killed while its second game's block was being appended:
+        the first game, flushed whole at its end, still reads as ended."""
+        from effects.infrastructure.shard_io import ended_games, read_shard
+
+        shard, data = self._gzip_shard(tmp_path)
+        first = self._first_member_length(data)
+        shard.write_bytes(data[:first + (len(data) - first) // 2])
+
+        assert ended_games(shard) == {"run.0-l1.0"}
+        assert {r.game_id for r in read_shard(shard)} == {"run.0-l1.0"}
 
 
 def test_write_shard_round_trips_through_the_reader(tmp_path):
@@ -538,6 +771,22 @@ class TestReadRecordsMatching:
         head = peek_envelope(format_record_line(record))
         assert head == (record.record_id, record.game_id, "playability")
 
+    def test_the_head_is_read_off_every_line_the_java_writer_wrote(self):
+        """The head regex is written against the Java writer's layout: on every
+        characterization line, of every kind, it reads what parsing reads."""
+        from effects.infrastructure.shard_io import peek_envelope
+        from tests.unit.effects.builders import JAVA_GOLDENS
+
+        lines = [line for path in sorted(JAVA_GOLDENS.glob("*.jsonl"))
+                 for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        kinds = set()
+        for line in lines:
+            raw = json.loads(line)
+            assert peek_envelope(line) == (raw["record_id"], raw["game_id"], raw["kind"]), line[:80]
+            kinds.add(raw["kind"])
+        assert {"resolution", "rewrite", "trigger", "combat", "playability", "continuous",
+                "turn_action"} <= kinds
+
     def test_a_head_of_another_shape_reads_as_none(self):
         from effects.infrastructure.shard_io import peek_envelope
 
@@ -565,3 +814,62 @@ class TestTheWindow:
         )))
         shard = iter_shards(tmp_path)[0].relative_to(tmp_path).as_posix()
         assert seen == [(shard, record.record_id) for record in records]
+
+
+class TestValuesOutsideTheClosedLists:
+    """A value outside the wire's closed lists decodes, and is counted, the
+    first sighting reported by shard and line."""
+
+    def test_it_is_counted_and_reported_once(self, tmp_path, caplog):
+        from effects.infrastructure import shard_io
+
+        raw = record_to_dict(_record(record_id="r.1", generation=3))
+        raw["state"]["entities"][0]["zone"] = "nowhere-zone"
+        line = json.dumps(raw)
+        path = tmp_path / "run.0-L1.jsonl"
+        path.write_text(f"{line}\n{line}\n", encoding="utf-8")
+        shard_io.reset_decode_tally()
+        with caplog.at_level("WARNING", logger=shard_io.__name__):
+            records = list(read_shard(path))
+        assert [r.state.entities[0].zone for r in records] == ["nowhere-zone"] * 2
+        assert shard_io.decode_tally().off_list[("entity.zone", "'nowhere-zone'")] == 2
+        warned = [r.getMessage() for r in caplog.records if "nowhere-zone" in r.getMessage()]
+        assert len(warned) == 1 and "run.0-L1.jsonl, line 1: entity.zone" in warned[0]
+
+    def test_a_taken_tally_travels_and_sums(self, tmp_path):
+        """What a pool worker hands back with a shard's result, its caller adds
+        to its own: the tally is per process, emptied when taken."""
+        from effects.infrastructure import shard_io
+
+        raw = record_to_dict(_record(record_id="r.1", generation=3))
+        raw["state"]["entities"][0]["zone"] = "elsewhere-zone"
+        path = tmp_path / "run.0-L1.jsonl"
+        path.write_text(json.dumps(raw) + "\n", encoding="utf-8")
+        shard_io.reset_decode_tally()
+        list(read_shard(path))
+        taken = shard_io.take_decode_tally()
+        assert not shard_io.decode_tally()
+        shard_io.absorb_decode_tally(taken)
+        shard_io.absorb_decode_tally(taken)
+        total = shard_io.decode_tally()
+        assert total.off_list[("entity.zone", "'elsewhere-zone'")] == 2
+        assert "  entity.zone 'elsewhere-zone': 2" in total.report_lines()
+        shard_io.reset_decode_tally()
+
+
+def test_ended_games_are_the_games_whose_marker_the_shard_holds(tmp_path):
+    """WP7: what the build reads for cut games, a reordered envelope included."""
+    from dataclasses import replace
+
+    from effects.infrastructure.shard_io import ended_games, write_shard
+    from tests.unit.effects.builders import game_end_marker
+
+    ended = replace(_record(), game_id="g1", generation=3)
+    cut = replace(_record(), record_id="run-uuid.4.2", game_id="g2", generation=3)
+    reordered = replace(_record(), record_id="run-uuid.4.3", game_id="g3", generation=3)
+    shard = tmp_path / "run.0-a.jsonl.gz"
+    write_shard(shard, [ended, game_end_marker(ended), cut, reordered])
+    marker = record_to_dict(game_end_marker(reordered))
+    with gzip.open(shard, "at", encoding="utf-8") as handle:
+        handle.write(json.dumps(dict(reversed(list(marker.items())))) + "\n")
+    assert ended_games(shard) == {"g1", "g3"}

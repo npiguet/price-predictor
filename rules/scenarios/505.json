@@ -74,14 +74,8 @@
       ],
       "forge_notes": "Forge adds the lore counter in PhaseHandler on entering MAIN1 with no stack object; the chapter trigger caused by the added counter is what reaches the stack.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A Saga's chapter ability (the keyword Chapter) is evaluated as a lore counter is put on the Saga, such as the one the active player adds as their precombat main phase begins, and fires.",
-        "near_miss": "A chapter ability evaluated against a lore counter that reaches none of its chapter numbers, which does not fire.",
-        "params": {
-          "keyword": "Chapter"
-        },
-        "needs": []
+        "same_as": "714.2b-1",
+        "reason": "The record shows a chapter ability triggering for a chapter number its lore counters reach, 714.2b's fact."
       }
     },
     {
@@ -144,14 +138,7 @@
       ],
       "forge_notes": "Forge rolls in PhaseHandler on entering MAIN1 only if the active player controls an Attraction. The die result has to be fixed through a test hook; the lights of Balloon Stand (2 and 6 is Variant A) depend on the variant Forge picks when the card is created.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A Visit ability (a keyword-generated trigger) is evaluated after the active player's roll to visit Attractions at the start of the precombat main phase, and fires when the roll matches one of the Attraction's lights.",
-        "near_miss": "The Visit trigger is evaluated and does not fire because the roll matches none of the Attraction's lights.",
-        "params": {
-          "keyword": "Visit"
-        },
-        "needs": []
+        "none": "The visit roll is a turn-based action no record writes (no turn_action subkind for it); the visit trigger it sets off is 702.159a's."
       }
     },
     {
@@ -231,17 +218,15 @@
       ],
       "forge_notes": "The nonactive_player variant moves the whole setup to B (B's battlefield and hand hold the lands and spells above).",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A sorcery-speed spell candidate of the active player has its timing allowed: a main phase with an empty stack.",
-        "near_miss": "The same kind of candidate has its timing refused: another step, a non-empty stack or another player's turn.",
-        "params": {
-          "bit": "timing",
-          "fires_when": true
-        },
-        "needs": [
-          "timing"
-        ]
+        "same_as": [
+          "301.1-1",
+          "302.1-1",
+          "303.1-1",
+          "306.1-1",
+          "307.1-1",
+          "310.1-1"
+        ],
+        "reason": "Casting artifact, creature, enchantment, planeswalker and sorcery spells in a main phase is the union of each card type's own casting rule."
       }
     },
     {
@@ -405,20 +390,8 @@
       ],
       "forge_notes": "The played-land counter is 1 in both variants.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A land-play candidate does not fail the land-play limit check, because the player has a land play left.",
-        "near_miss": "A land-play candidate fails the land-play limit: a land was played and no effect allows another.",
-        "params": {
-          "bit": "failed_check",
-          "check": "land_play_limit",
-          "fires_when": true,
-          "land_play": true
-        },
-        "needs": [
-          "failed_checks",
-          "land_play"
-        ]
+        "same_as": "305.2a-1",
+        "reason": "A second land play passing the land-play limit check under an additional-land effect is 305.2a's fact."
       }
     },
     {

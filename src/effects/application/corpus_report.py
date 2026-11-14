@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from collections import Counter
 from collections.abc import Iterable, Mapping
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from effects.application.corpus_survey import RefusalTally, Survey
@@ -134,6 +135,33 @@ def report_write_pass(survey: Survey, written: WriteResult) -> None:
             dict(sorted(survey.totals.refusals.by_reason.items())),
             dict(sorted(written.refusals.by_reason.items())),
         )
+    cut = survey.totals.cut.games
+    if cut:
+        read = len(cut | survey.totals.games.games)
+        logger.warning(
+            "%d of %d game(s) (%.1f%%) have no game-end marker in their shard: cut by a "
+            "killed worker or a game that threw, their records incomplete; %d record(s) "
+            "are written to no stratum (manifest cut_games, per_stratum \"dropped-cut\").",
+            len(cut), read, 100.0 * len(cut) / read, survey.totals.cut.records)
+    unsurveyed = written.strata.records.get(Stratum.DROPPED_UNSURVEYED, 0)
+    if unsurveyed:
+        logger.warning(
+            "%d record(s) belong to games the survey never saw: a raw shard grew "
+            "between the survey and the write pass (a collection still writing "
+            "under --records-dir?). Those games were never placed, so their "
+            "records are written to no stratum (manifest per_stratum "
+            "\"dropped-unsurveyed\"); `build-corpus --verify` names the shards "
+            "that changed.", unsurveyed,
+        )
+    # The decode tally alone: the two passes read the same bytes, but ask the
+    # sidecar cache different numbers of times, so their join gaps differ.
+    surveyed, rewritten = survey.totals.reading, written.reading
+    if (surveyed.off_list, sorted(surveyed.damaged_tails)) != (
+            rewritten.off_list, sorted(rewritten.damaged_tails)):
+        logger.warning(
+            "The survey and the write pass met different decode tallies reading the "
+            "same shards: the corpus changed between the passes. The manifest "
+            "records the survey's.")
     if survey.split_games:
         logger.warning(
             "%d game(s) appear in more than one raw shard. A raw shard is one "
@@ -267,7 +295,93 @@ def build_manifest(
         game_disjoint_keywords=tuple(config.game_disjoint_keywords),
         reuse_cap=config.reuse_cap,
         **decisions.rule_fields,
+        **_collection_fields(config, survey, decisions),
     )
+
+
+def _code_version() -> str:
+    """``git rev-parse HEAD`` of the checkout this code runs from; "" outside one."""
+    import subprocess
+
+    try:
+        done = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=Path(__file__).parent, capture_output=True,
+            text=True, timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return done.stdout.strip() if done.returncode == 0 else ""
+
+
+def _sidecar_digest(roots: Mapping[str, Path]) -> str:
+    """sha256 over every sidecar under ``roots``, by tree, relative path and
+    size: cheap enough for tens of thousands of files, and moved by a
+    reconversion."""
+    import hashlib
+
+    from effects.infrastructure.sidecar_io import sidecar_paths
+
+    digest = hashlib.sha256()
+    for tree, root in sorted(roots.items()):
+        for path in sidecar_paths(Path(root)):
+            relative = path.relative_to(root).as_posix()
+            digest.update(f"{tree}/{relative}:{path.stat().st_size}\n".encode())
+    return digest.hexdigest()
+
+
+def _under(where: str, records_dir: Path) -> str:
+    """A tally's ``<shard path>, byte <n>`` with the shard's path relative to
+    ``--records-dir``, so the manifest does not depend on where the raw
+    corpus sits."""
+    path, comma, rest = where.partition(", ")
+    try:
+        relative = Path(path).resolve().relative_to(Path(records_dir).resolve()).as_posix()
+    except ValueError:
+        return where
+    return f"{relative}{comma}{rest}"
+
+
+def _collection_fields(
+    config: BuildCorpusConfig, survey: Survey, decisions: Decisions,
+) -> dict:
+    """How the records were collected and read, and what the build ran under
+    (P3a #17): the manifest's ``validation_rules``, ``record_flags``,
+    ``placement_thresholds``, ``keyword_definitions_digest``,
+    ``decode_off_list``, ``damaged_tails``, ``join_gaps`` and ``cut_games``, the survey's:
+    the write pass reads the same bytes, and a difference is warned of
+    (:func:`report_write_pass`)."""
+    import hashlib
+    import math
+
+    totals = survey.totals
+    reading = totals.reading
+    flags: dict[str, dict[str, int]] = {}
+    for (klass, flag), count in sorted(totals.flags.items()):
+        flags.setdefault(klass, {})[flag] = count
+    definitions = config.keyword_definitions
+    digest = (hashlib.sha256(Path(definitions).read_bytes()).hexdigest()
+              if definitions is not None and Path(definitions).exists() else "")
+    return {
+        "validation_rules": {str(stratum): planned.rows
+                             for stratum, planned in sorted(decisions.validation_budgets.items())},
+        "record_flags": flags,
+        "placement_thresholds": {
+            name: None if math.isinf(value) else value
+            for name, value in (("min_games_per_half", config.min_games_per_half),
+                                ("max_item_error", config.max_item_error),
+                                ("max_component_error", config.max_component_error))},
+        "keyword_definitions_digest": digest,
+        "decode_off_list": {f"{member} {value}": count
+                            for (member, value), count in sorted(reading.off_list.items())},
+        "damaged_tails": tuple(sorted(
+            _under(where, config.records_dir) for where in reading.damaged_tails)),
+        "unsupervised_events": dict(sorted(totals.unsupervised.items())),
+        "cut_games": len(totals.cut.games),
+        "code_version": _code_version(),
+        "sidecar_digest": _sidecar_digest(config.source_trees.sidecar_roots()),
+        "join_gaps": {kind: dict(sorted(counts.items())) for kind, counts in (
+            ("unresolved", reading.unresolved), ("undescribed", reading.undescribed),
+            ("unconfigured", reading.unconfigured)) if counts},
+    }
 
 
 def log_report(
@@ -286,6 +400,7 @@ def log_report(
         len(manifest.held_out_texts_under_five_games), HELD_OUT_GAME_FLOOR,
     )
     _log_rules(manifest, decisions, written)
+    _log_reading(manifest)
 
 
 def _log_rules(manifest: CorpusManifest, decisions: Decisions, written: WriteResult) -> None:
@@ -317,6 +432,27 @@ def _log_rules(manifest: CorpusManifest, decisions: Decisions, written: WriteRes
         "turn_action record(s) written nowhere: %s",
         dict(manifest.turn_action_left_out) or "none",
     )
+
+
+def _log_reading(manifest: CorpusManifest) -> None:
+    """What reading the raw shards met without stopping: reported, never fatal."""
+    if manifest.decode_off_list:
+        logger.warning(
+            "%d value(s) outside the wire's closed lists were read as written "
+            "(manifest decode_off_list): %s", sum(manifest.decode_off_list.values()),
+            ", ".join(f"{k}: {v}" for k, v in list(manifest.decode_off_list.items())[:5]))
+    if manifest.damaged_tails:
+        logger.warning(
+            "%d raw shard(s) ended at a damaged last gzip member (manifest "
+            "damaged_tails), e.g. %s", len(manifest.damaged_tails), manifest.damaged_tails[0])
+    if manifest.unsupervised_events:
+        logger.info(
+            "events no output column reads, by kind (manifest unsupervised_events): %s",
+            manifest.unsupervised_events)
+    for kind, counts in manifest.join_gaps.items():
+        logger.warning(
+            "%d key(s) read as no line, %s (manifest join_gaps), e.g. %s",
+            sum(counts.values()), kind, ", ".join(list(counts)[:3]))
 
 
 def _log_counts(manifest: CorpusManifest) -> None:

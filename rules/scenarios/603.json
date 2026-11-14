@@ -101,15 +101,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A zone-change trigger for a permanent entering the battlefield is evaluated against the entering event and fires.",
-        "near_miss": "The same kind of trigger is evaluated against an event and does not fire.",
-        "params": {
-          "mode": "ChangesZone",
-          "destination": "Battlefield"
-        },
-        "needs": []
+        "same_as": "603.6a-1",
+        "reason": "The record shows an enters trigger firing or not, 603.6a's fact; this general rule about triggering adds no observable of its own."
       }
     },
     {
@@ -180,15 +173,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A zone-change trigger for a permanent entering the battlefield is evaluated against the entering event and fires.",
-        "near_miss": "The same kind of trigger is evaluated against an event and does not fire.",
-        "params": {
-          "mode": "ChangesZone",
-          "destination": "Battlefield"
-        },
-        "needs": []
+        "same_as": "603.6a-1",
+        "reason": "The record shows an enters trigger firing or not, 603.6a's fact; this general rule about triggering adds no observable of its own."
       }
     },
     {
@@ -253,14 +239,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A beginning-of-step trigger is evaluated as that step begins and fires.",
-        "near_miss": "The same kind of trigger is evaluated at a step it does not name and does not fire.",
-        "params": {
-          "mode": "Phase"
-        },
-        "needs": []
+        "same_as": "500.6-1",
+        "reason": "Both state that a beginning-of-step trigger triggers as the step begins."
       }
     },
     {
@@ -340,15 +320,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A zone-change trigger for a permanent entering the battlefield is evaluated against the entering event and fires.",
-        "near_miss": "The same kind of trigger is evaluated against an event and does not fire.",
-        "params": {
-          "mode": "ChangesZone",
-          "destination": "Battlefield"
-        },
-        "needs": []
+        "none": "How many times one event triggers an ability is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     },
     {
@@ -418,15 +390,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A zone-change trigger for a permanent entering the battlefield is evaluated against the entering event and fires.",
-        "near_miss": "The same kind of trigger is evaluated against an event and does not fire.",
-        "params": {
-          "mode": "ChangesZone",
-          "destination": "Battlefield"
-        },
-        "needs": []
+        "none": "How many times one event triggers an ability is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     },
     {
@@ -647,14 +611,7 @@
       ],
       "forge_notes": "Forge scripts the clause as ResolvedLimit$ 1 on the trigger; check that a resolution where the optional gain was declined does not count toward the limit.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A cast trigger limited to once each turn is evaluated and fires when its action has not yet been taken this turn.",
-        "near_miss": "The same trigger evaluated after the limited action was taken this turn does not fire.",
-        "params": {
-          "mode": "SpellCast"
-        },
-        "needs": []
+        "none": "Could not express: a once-each-turn instruction and a copy that is not cast are read by no trigger_mode parameter (a copy writes no cast event to evaluate at all)."
       }
     },
     {
@@ -795,15 +752,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A zone-change trigger for a permanent entering the battlefield is evaluated against the entering event and fires.",
-        "near_miss": "The same kind of trigger is evaluated against an event and does not fire.",
-        "params": {
-          "mode": "ChangesZone",
-          "destination": "Battlefield"
-        },
-        "needs": []
+        "none": "The trigger record's actor is by construction the player controlling the trigger's source when it triggered; no record contrasts with it."
       }
     },
     {
@@ -1017,14 +966,7 @@
       ],
       "forge_notes": "Check that Forge re-evaluates LifeTotal/LifeAmount on resolution (intervening if).",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A beginning-of-step trigger with an intervening if clause is evaluated as the step begins and fires when the condition holds.",
-        "near_miss": "The same trigger evaluated when its intervening condition does not hold does not fire.",
-        "params": {
-          "mode": "Phase"
-        },
-        "needs": []
+        "none": "Could not express: the trigger's condition (an intervening if, a face-down creature among the named ones) is read by no trigger_mode parameter."
       }
     },
     {
@@ -1092,10 +1034,13 @@
       "detector": {
         "family": "trigger_mode",
         "record_kind": "trigger",
-        "outcome": "An optional cast trigger is evaluated against a matching spell and fires, going on the stack whatever its controller will choose.",
-        "near_miss": "The same trigger evaluated against a spell that does not match does not fire.",
+        "outcome": "An optional cast trigger (OptionalDecider$) triggers; the choice is made on resolution.",
+        "near_miss": "The optional trigger evaluated and not fired.",
         "params": {
-          "mode": "SpellCast"
+          "mode": "SpellCast",
+          "script_param": {
+            "OptionalDecider": "*"
+          }
         },
         "needs": []
       }
@@ -1318,15 +1263,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A zone-change trigger for a permanent entering the battlefield is evaluated against the entering event and fires.",
-        "near_miss": "The same kind of trigger is evaluated against an event and does not fire.",
-        "params": {
-          "mode": "ChangesZone",
-          "destination": "Battlefield"
-        },
-        "needs": []
+        "none": "Whether a continuous effect modified the entering permanent before its enters triggers were checked is in no field: the trigger record gives the verdict, not the characteristics it read."
       }
     },
     {
@@ -1388,15 +1325,7 @@
       ],
       "forge_notes": "Check that Forge applies the Living Plane type change as the land enters, before checking triggers.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A zone-change trigger for a permanent entering the battlefield is evaluated against the entering event and fires.",
-        "near_miss": "The same kind of trigger is evaluated against an event and does not fire.",
-        "params": {
-          "mode": "ChangesZone",
-          "destination": "Battlefield"
-        },
-        "needs": []
+        "none": "Whether a continuous effect modified the entering permanent before its enters triggers were checked is in no field: the trigger record gives the verdict, not the characteristics it read."
       }
     },
     {
@@ -1806,14 +1735,7 @@
       ],
       "forge_notes": "Check how Forge schedules AtEOT when it is applied during the end step itself.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A delayed triggered ability fires on the first matching event after it was created.",
-        "near_miss": "A delayed triggered ability is evaluated against an event and does not fire.",
-        "params": {
-          "spawned_by": "DelayedTrigger"
-        },
-        "needs": []
+        "none": "Could not express: when the delayed trigger was created relative to the event is read by no trigger_mode parameter."
       }
     },
     {
@@ -2207,14 +2129,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "An unattached trigger is evaluated as an attached object becomes unattached and fires.",
-        "near_miss": "The same trigger evaluated for an object that was not attached does not fire.",
-        "params": {
-          "mode": "Unattached"
-        },
-        "needs": []
+        "same_as": "701.3d-1",
+        "reason": "A becomes-unattached trigger firing (looking back in time) is 701.3d's fact."
       }
     },
     {
@@ -2529,14 +2445,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A reflexive triggered ability fires once for its creating resolution.",
-        "near_miss": "A reflexive triggered ability is evaluated and does not fire.",
-        "params": {
-          "spawned_by": "ImmediateTrigger"
-        },
-        "needs": []
+        "none": "How many times one event triggers an ability is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     }
   ]

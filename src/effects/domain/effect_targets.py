@@ -14,7 +14,7 @@ fields train on every entity they name whether or not the gate's target fires.
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import partial
@@ -40,8 +40,8 @@ from effects.domain.effect_head_layout import (
     counter_field,
     mana_field,
 )
-from effects.domain.event_schema import Event, EventType
-from effects.domain.keyword_names import overlay_keyword
+from effects.domain.event_schema import Event, EventType, signed_delta
+from effects.domain.keyword_names import changed_keyword
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.records import (
     ContinuousPayload,
@@ -49,8 +49,10 @@ from effects.domain.records import (
     PlayabilityAttackersPayload,
     PlayabilityBlockersPayload,
     PlayabilityDecisionPayload,
+    RewritePayload,
     TriggerPayload,
     events_of,
+    is_game_end,
 )
 from effects.domain.sampling import SamplingClass, sampling_class
 from effects.domain.state_snapshot import COLORS, Zone, normalize_counter_type
@@ -67,7 +69,9 @@ _ZONE_BY_EVENT: dict[EventType, ZoneOutcome] = {
 #: A ``zone_change``'s destination as a zone outcome. A move to the
 #: battlefield or the library is refined once the whole record is read
 #: (:func:`_refine_zone_outcomes`): a blink against any other entry, and the
-#: library's top, bottom or shuffle.
+#: library's top, bottom or shuffle. A destination the table does not name
+#: (the stack, the sideboard, a mutated permanent's ``merged`` cards) leaves
+#: the outcome unknown: the card moved, so "stayed" would be wrong.
 _ZONE_BY_DESTINATION: dict[str, ZoneOutcome] = {
     Zone.GRAVEYARD: ZoneOutcome.DIED,
     Zone.EXILE: ZoneOutcome.EXILED,
@@ -78,9 +82,6 @@ _ZONE_BY_DESTINATION: dict[str, ZoneOutcome] = {
     #: The collector's spelling of a move to no zone at all.
     "none": ZoneOutcome.CEASED_TO_EXIST,
 }
-#: The outcome of a ``zone_change`` to a destination the table does not name.
-_STAYED = ZoneOutcome.STAYED
-
 _LIBRARY_EVENT_BY_TYPE: dict[EventType, LibraryEvent] = {
     EventType.LIBRARY_REORDERED: LibraryEvent.REORDER,
     EventType.CARD_REVEALED: LibraryEvent.REVEAL,
@@ -89,10 +90,8 @@ _LIBRARY_EVENT_BY_TYPE: dict[EventType, LibraryEvent] = {
 
 #: ``type -> (field, parameter, default when absent, sign)``.
 _ADDITIVE: dict[EventType, tuple[str, str, float, float]] = {
-    EventType.DAMAGE_DEALT: (HeadField.DAMAGE_TAKEN, "amount", 0, 1.0),
     EventType.DAMAGE_HEALED: (HeadField.DAMAGE_TAKEN, "amount", 0, -1.0),
     EventType.DAMAGE_PREVENTED: (HeadField.DAMAGE_PREVENTED, "amount", 0, 1.0),
-    EventType.LIFE_CHANGE: (HeadField.LIFE_DELTA, "delta", 0, 1.0),
     EventType.POISON_CHANGE: (HeadField.POISON_DELTA, "delta", 0, 1.0),
     EventType.ENERGY_CHANGE: (HeadField.ENERGY_DELTA, "delta", 0, 1.0),
     EventType.RADIATION_CHANGE: (HeadField.RAD_DELTA, "delta", 0, 1.0),
@@ -140,8 +139,9 @@ _STATE_FLAG_FIELDS: dict[str, HeadField] = {
 
 
 def keyword_index(raw: str) -> int | None:
-    """The keyword-output column a keyword, in any spelling Forge writes, sets."""
-    return vocabulary_slot(overlay_keyword(raw), KEYWORDS_CHANGED)
+    """The keyword-output column a keyword, in any spelling Forge writes,
+    sets (:func:`~effects.domain.keyword_names.changed_keyword`)."""
+    return vocabulary_slot(changed_keyword(raw), KEYWORDS_CHANGED)
 
 
 @dataclass
@@ -189,17 +189,39 @@ class EntityTargets:
 
 class RecordTargets(dict[str, EntityTargets]):
     """``entity or player id -> EntityTargets`` for one record, and whether
-    the record trains the affected gate (a playability record does not)."""
+    the record trains the affected gate (a playability record does not).
+
+    ``unsupervised`` counts, by kind, the events the record carries that no
+    output column reads (:func:`unsupervised_kind`): their subjects are
+    affected, and nothing else is written for them.
+    """
 
     def __init__(self, *, gated: bool = True) -> None:
         super().__init__()
         self.gated = gated
+        self.unsupervised: Counter[str] = Counter()
+
+
+def unsupervised_kind(event: Event) -> str | None:
+    """The kind an event is counted under when no output column reads it,
+    else None: a change of Forge's hidden keywords (its text, ``CARDNAME can't
+    block.``, names no keyword column), a name change and a mana cost change
+    (no column in the gen-3 layout)."""
+    if event.type is EventType.KEYWORD_CHANGE and event.params.get("hidden"):
+        return "hidden_keyword_change"
+    if event.type in (EventType.NAME_CHANGE, EventType.MANA_COST_CHANGE):
+        return event.type.value
+    return None
 
 
 def derive_targets(record: EffectRecord) -> RecordTargets:
-    """``entity or player id -> EntityTargets`` for one record."""
+    """``entity or player id -> EntityTargets`` for one record; none for the
+    game-end marker, which names nobody and trains no gate."""
+    if is_game_end(record):
+        return RecordTargets(gated=False)
     record_class = sampling_class(record)
-    targets = RecordTargets(gated=not _is_playability(record))
+    targets = RecordTargets(
+        gated=not _is_playability(record) and not _outcome_partly_unknown(record))
     players = {player.id for player in record.state.players}
 
     def slot(subject: str) -> EntityTargets:
@@ -213,6 +235,9 @@ def derive_targets(record: EffectRecord) -> RecordTargets:
 
     events = _target_events(record)
     for event in events:
+        kind = unsupervised_kind(event)
+        if kind is not None:
+            targets.unsupervised[kind] += 1
         for subject in event.subjects:
             entry = slot(subject)
             entry.affected = True
@@ -223,6 +248,19 @@ def derive_targets(record: EffectRecord) -> RecordTargets:
     _apply_playability(record, slot)
     _apply_continuous(record, slot)
     return targets
+
+
+def _outcome_partly_unknown(record: EffectRecord) -> bool:
+    """Whether a rewrite record cannot say who its replacement left
+    unaffected, so it trains no gate: what came in is unknown
+    (``incoming_unknown``: what changed is unknown), or the ability it set
+    aside ran and another record holds that run's events. The events it does
+    hold (its own outgoing event, a run it holds) are still supervised."""
+    payload = record.payload
+    if not isinstance(payload, RewritePayload):
+        return False
+    return payload.incoming_unknown or (
+        bool(payload.buffered_ran) and not payload.holds_buffered_run)
 
 
 def _is_playability(record: EffectRecord) -> bool:
@@ -278,11 +316,28 @@ def _flag_library(entry: EntityTargets, library_event: LibraryEvent) -> None:
 
 
 def _apply_zone_change(entry: EntityTargets, event: Event) -> None:
-    destination = str(event.params.get("to_zone", "")).lower()
-    entry.set(
-        HeadField.ZONE_OUTCOME,
-        ZONE_OUTCOMES.index(_ZONE_BY_DESTINATION.get(destination, _STAYED)),
-    )
+    outcome = _ZONE_BY_DESTINATION.get(str(event.params.get("to_zone", "")).lower())
+    if outcome is None:
+        entry.forget(HeadField.ZONE_OUTCOME)
+        return
+    entry.set(HeadField.ZONE_OUTCOME, ZONE_OUTCOMES.index(outcome))
+
+
+def _apply_life_change(entry: EntityTargets, event: Event) -> None:
+    entry.add(HeadField.LIFE_DELTA, signed_delta(event))
+
+
+#: Damage dealt as -1/-1 counters (wither, infect to a creature): the record's
+#: own ``counter_change`` adds them, and no damage is marked.
+_COUNTERS_DAMAGE = "m1m1_counters"
+
+
+def _apply_damage_dealt(entry: EntityTargets, event: Event) -> None:
+    """Marked damage, never the damage dealt as -1/-1 counters
+    (:meth:`_RecordPass._damage_as_counters` takes a deathtouch witherer's out)."""
+    if event.params.get("damage_type") == _COUNTERS_DAMAGE:
+        return
+    entry.add(HeadField.DAMAGE_TAKEN, float(event.params.get("amount", 0)))
 
 
 def _apply_counter_change(entry: EntityTargets, event: Event) -> None:
@@ -292,7 +347,7 @@ def _apply_counter_change(entry: EntityTargets, event: Event) -> None:
         if counter in _OUTPUT_COUNTERS
         else HeadField.COUNTERS_DELTA_OTHER
     )
-    entry.add(name, float(event.params.get("delta", 0)))
+    entry.add(name, signed_delta(event))
 
 
 _OUTPUT_COUNTERS = frozenset(OUTPUT_COUNTER_TYPES)
@@ -359,6 +414,10 @@ def _apply_multi(
 
 
 def _apply_keywords(entry: EntityTargets, params: dict) -> None:
+    """Keywords gained or lost; a hidden keyword's text names no column
+    (:func:`unsupervised_kind`)."""
+    if params.get("hidden"):
+        return
     name = HeadField.KEYWORDS_LOST if params.get("removed") else HeadField.KEYWORDS_GAINED
     for keyword in params.get("keywords") or ():
         _flag_keyword(entry, name, str(keyword))
@@ -457,6 +516,8 @@ def _appliers() -> dict[EventType, Callable[[EntityTargets, Event], None]]:
 #: The events no table above states, each read off its own parameters.
 _PARAMETER_APPLIERS: dict[EventType, Callable[[EntityTargets, Event], None]] = {
     EventType.ZONE_CHANGE: _apply_zone_change,
+    EventType.DAMAGE_DEALT: _apply_damage_dealt,
+    EventType.LIFE_CHANGE: _apply_life_change,
     EventType.COUNTER_CHANGE: _apply_counter_change,
     EventType.PT_CHANGE: _apply_pt_change,
     EventType.KEYWORD_CHANGE: lambda entry, event: _apply_keywords(entry, event.params),
@@ -504,6 +565,7 @@ class _RecordPass:
         self.unknown: set[str] = set()
 
     def run(self) -> None:
+        self._damage_as_counters()
         self._zone_outcomes()
         self._library_events()
         self._base_pt()
@@ -513,6 +575,28 @@ class _RecordPass:
         for name in self.unknown:
             for entry in self.targets.values():
                 entry.forget(name)
+
+    # ── damage dealt as counters ──
+
+    def _damage_as_counters(self) -> None:
+        """A deathtouch source with wither or infect reads ``deathtouch``
+        (Forge's damage type), yet its damage to a creature is -1/-1 counters,
+        which the record's ``counter_change`` adds: each such hit matched by a
+        -1/-1 counter change of its amount on its subject is taken back out of
+        the marked damage."""
+        counters: dict[str, list[float]] = defaultdict(list)
+        for event in self.by_type[EventType.COUNTER_CHANGE]:
+            if normalize_counter_type(str(event.params.get("counter_type", ""))) == "M1M1":
+                for subject in event.subjects:
+                    counters[subject].append(signed_delta(event))
+        for event in self.by_type[EventType.DAMAGE_DEALT]:
+            if event.params.get("damage_type") != "deathtouch":
+                continue
+            amount = float(event.params.get("amount", 0))
+            for subject in event.subjects:
+                if amount and amount in counters[subject]:
+                    counters[subject].remove(amount)
+                    self.targets[subject].add(HeadField.DAMAGE_TAKEN, -amount)
 
     # ── zone outcomes ──
 
@@ -529,9 +613,10 @@ class _RecordPass:
             entry = self.targets[subject]
             last = history[-1]
             destination = str(last.params.get("to_zone", "")).lower()
-            written = entry.fields.get(HeadField.ZONE_OUTCOME)
-            if written != ZONE_OUTCOMES.index(_ZONE_BY_DESTINATION.get(destination, _STAYED)):
-                continue  # a later event (destroyed, countered, phased) said more
+            outcome = _ZONE_BY_DESTINATION.get(destination)
+            if outcome is None or entry.fields.get(HeadField.ZONE_OUTCOME) != (
+                    ZONE_OUTCOMES.index(outcome)):
+                continue  # unnamed, or a later event (destroyed, countered, phased) said more
             if destination == Zone.BATTLEFIELD:
                 self._entered(entry, subject, history)
             elif destination == Zone.LIBRARY:
@@ -782,7 +867,7 @@ def _attackers_legality(record, payload: PlayabilityAttackersPayload, slot) -> N
     defenders = set(payload.legal_defenders)
     candidates = [player.id for player in record.state.players] + [
         entity.id for entity in record.state.entities
-        if entity.zone == Zone.BATTLEFIELD
+        if entity.on_battlefield  # a phased-out one is no defender at all
         and {"planeswalker", "battle"} & {kind.lower() for kind in entity.types}
     ]
     for ref in candidates:

@@ -60,11 +60,12 @@
       "detector": {
         "family": "continuous_contribution",
         "record_kind": "continuous",
-        "outcome": "A static ability adds the creature type to a permanent.",
-        "near_miss": "A static contributing no creature type on the board.",
+        "outcome": "Living metal makes its permanent a creature during its controller's turn.",
+        "near_miss": "The living metal static applying and contributing no type.",
         "params": {
           "field": "types",
-          "value": "Creature"
+          "value": "Creature",
+          "source_keyword": "Living metal"
         },
         "needs": []
       }

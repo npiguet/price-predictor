@@ -42,6 +42,13 @@ final class CollectorContext {
     private final Consumer<EffectRecord> forkFlags;
     /** Where a finished record's line goes: the shard, or a fork's held lines. */
     private final Consumer<String> out;
+    /**
+     * Where an end-of-game record's line goes: the shard past the per-game
+     * cap ({@link RecordShardWriter#writeUncapped}), or a fork's held lines.
+     */
+    private final Consumer<String> endOfGameOut;
+    /** Whether this context writes a fork's records. */
+    private final boolean fork;
 
     CollectorContext(
             RecordShardWriter writer, String gameId, AttributionMode mode,
@@ -50,13 +57,14 @@ final class CollectorContext {
                 aimedAt == null ? null : List.copyOf(aimedAt), record -> { },
                 // Not writer::write, which would dereference a writer a
                 // collector that never writes is built without.
-                line -> writer.write(line));
+                line -> writer.write(line), line -> writer.writeUncapped(line), false);
     }
 
     private CollectorContext(
             RecordShardWriter writer, String gameId, AttributionMode mode,
             String randomSeatPlayerId, List<String> aimedAt,
-            Consumer<EffectRecord> forkFlags, Consumer<String> out) {
+            Consumer<EffectRecord> forkFlags, Consumer<String> out,
+            Consumer<String> endOfGameOut, boolean fork) {
         this.writer = writer;
         this.gameId = gameId;
         this.mode = mode;
@@ -64,6 +72,8 @@ final class CollectorContext {
         this.aimedAt = aimedAt;
         this.forkFlags = forkFlags;
         this.out = out;
+        this.endOfGameOut = endOfGameOut;
+        this.fork = fork;
     }
 
     /**
@@ -73,7 +83,8 @@ final class CollectorContext {
      * than the shard, so a fork that ends in a throw can be dropped whole.
      */
     CollectorContext forFork(Consumer<EffectRecord> flags, Consumer<String> out) {
-        return new CollectorContext(writer, gameId, mode, randomSeatPlayerId, aimedAt, flags, out);
+        return new CollectorContext(
+                writer, gameId, mode, randomSeatPlayerId, aimedAt, flags, out, out, true);
     }
 
     /** This game's recording has ended: the shard writer reports what its cap withheld. */
@@ -81,6 +92,16 @@ final class CollectorContext {
         if (writer != null) {
             writer.endGame(gameId);
         }
+    }
+
+    /** Whether this context writes a fork's records rather than a live game's. */
+    boolean isFork() {
+        return fork;
+    }
+
+    /** The records this game has had withheld by {@code --max-records-per-game} so far. */
+    int withheld() {
+        return writer == null ? 0 : writer.withheld(gameId);
     }
 
     /** Write lines a {@link #forFork fork's} context held, to this context's shard. */
@@ -163,6 +184,24 @@ final class CollectorContext {
     }
 
     /**
+     * {@link #emitDistinct}, for a record written at the game's end: past
+     * {@code --max-records-per-game} on a live game ({@link #endOfGameOut}).
+     */
+    boolean emitDistinctAtGameEnd(EffectRecord record, RecordDedup dedup) {
+        if (!dedup.allowDistinct(record)) {
+            return false;
+        }
+        emitAtGameEnd(record);
+        return true;
+    }
+
+    /** {@link #emit}, for a record written at the game's end ({@link #endOfGameOut}). */
+    void emitAtGameEnd(EffectRecord record) {
+        stamp(record);
+        endOfGameOut.accept(record.toJson());
+    }
+
+    /**
      * Set a fork's flags, stamp {@code random_seat} and the game's
      * {@code aimed_at}, and write.
      *
@@ -170,12 +209,17 @@ final class CollectorContext {
      * rule it forked for, which is narrower than the run's list.
      */
     void emit(EffectRecord record) {
+        stamp(record);
+        out.accept(record.toJson());
+    }
+
+    /** A fork's flags, {@code random_seat} and the game's {@code aimed_at}. */
+    private void stamp(EffectRecord record) {
         forkFlags.accept(record);
         record.randomSeat(
                 randomSeatPlayerId != null && randomSeatPlayerId.equals(record.actorPlayer()));
         if (aimedAt != null && !record.isAimed()) {
             record.aimedAt(aimedAt);
         }
-        out.accept(record.toJson());
     }
 }

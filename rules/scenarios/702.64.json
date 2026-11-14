@@ -85,11 +85,12 @@
       "detector": {
         "family": "rewrite_event",
         "record_kind": "rewrite",
-        "outcome": "A damage event meets a prevention effect that prevents part of it: the handler lowers the amount and reports updated.",
-        "near_miss": "A damage event meets the prevention effect and is not reduced by it.",
+        "outcome": "Absorb prevents part of the damage dealt to its creature.",
+        "near_miss": "Damage absorb meets and does not change.",
         "params": {
           "event": "damage_dealt",
-          "result": "updated"
+          "result": "updated",
+          "keyword": "Absorb"
         },
         "needs": []
       }
@@ -299,15 +300,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A damage event meets a prevention effect that prevents part of it: the handler lowers the amount and reports updated.",
-        "near_miss": "A damage event meets the prevention effect and is not reduced by it.",
-        "params": {
-          "event": "damage_dealt",
-          "result": "updated"
-        },
-        "needs": []
+        "none": "How many times one event meets one prevention effect is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     }
   ]

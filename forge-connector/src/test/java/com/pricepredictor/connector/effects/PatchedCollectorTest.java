@@ -45,6 +45,8 @@ class PatchedCollectorTest {
 
     private static final Method ON_CONDITION_EVALUATED =
             HookShapes.method(HookShapes.TriggerFire.class, "onConditionEvaluated");
+    private static final Method ON_TRIGGER_RUN =
+            HookShapes.method(HookShapes.TriggerFire.class, "onTriggerRun");
     private static final Method ON_ATTACKERS_DECLARABLE =
             HookShapes.method(HookShapes.CombatLegality.class, "onAttackersDeclarable");
     private static final Method ON_MANA_PRODUCED =
@@ -117,9 +119,12 @@ class PatchedCollectorTest {
         Card forkCard = TestBoard.cardInAnotherGame("Paralyze");
         Trigger forkTrigger = forkCard.getCurrentState().getTriggers().get(0);
 
-        Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collectors) ->
-                collectors.triggers().handler().invoke(null, ON_CONDITION_EVALUATED,
-                        new Object[]{forkTrigger, Map.of(), true}));
+        Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collectors) -> {
+            collectors.triggers().handler().invoke(null, ON_CONDITION_EVALUATED,
+                    new Object[]{forkTrigger, Map.of(), true});
+            collectors.triggers().handler().invoke(null, ON_TRIGGER_RUN,
+                    new Object[]{forkTrigger, Map.of(), null});
+        });
 
         assertFalse(Files.exists(shard),
                 "a fork's own trigger evaluation must not land in the live shard");
@@ -182,9 +187,12 @@ class PatchedCollectorTest {
         Card liveCard = TestCards.build("Paralyze");
         Trigger liveTrigger = liveCard.getCurrentState().getTriggers().get(0);
 
-        List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) ->
-                collectors.triggers().handler().invoke(null, ON_CONDITION_EVALUATED,
-                        new Object[]{liveTrigger, Map.of(), true}));
+        List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
+            collectors.triggers().handler().invoke(null, ON_CONDITION_EVALUATED,
+                    new Object[]{liveTrigger, Map.of(), true});
+            collectors.triggers().handler().invoke(null, ON_TRIGGER_RUN,
+                    new Object[]{liveTrigger, Map.of(), null});
+        });
         assertTrue(lines.stream().anyMatch(l -> l.contains("\"kind\":\"trigger\"")),
                 "a live trigger evaluation must reach the shard: " + lines);
     }

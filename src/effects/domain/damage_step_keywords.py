@@ -7,9 +7,18 @@ player-side fields are exclusive by construction.
 
 A combat record covers one damage step, so first strike and double strike are
 visible only in the first-strike step's record; in the regular step the board
-already carries the first hit. A row's ``qualifies`` is derived from its
-effects, so the counter that decides "under-sampled" and the scorer that
-decides "agrees" read one population (FR-122). Evasion keywords are absent:
+already carries the first hit. Every other row reads damage a creature deals
+in the record's own step (rule 510.4): a creature without first or double
+strike deals none in the first-strike step, and one with first strike alone
+none in the regular step (``rule_outcomes.strikes_in_step``). A record whose
+step is unknown is read as if every creature struck in it. Damage reaches a
+creature only where no protection of its prevents it (702.16e), and a
+blocked attacker whose blockers all left deals none unless it has trample,
+which then assigns it all to the player (509.1h, 510.1c, 702.19e). A
+phased-out creature and a last-known copy take no part in a combat. A row's
+``qualifies`` is derived from its effects, so the counter that decides
+"under-sampled" and the scorer that decides "agrees" read one population
+(FR-122). Evasion keywords are absent:
 their signal is in playability records.
 """
 
@@ -21,8 +30,15 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from effects.domain.effect_head_layout import HeadField, ZoneOutcome, counter_field
+from effects.domain.keyword_names import with_implied
 from effects.domain.provenance import ProvenanceKey, SidecarLookup
 from effects.domain.records import RecordKind
+from effects.domain.rule_outcomes import (
+    Characteristics,
+    ProtectionQuality,
+    damage_prevented,
+    strikes_in_step,
+)
 from effects.domain.state_snapshot import CombatSubstep, EntityState, StateSnapshot
 
 
@@ -62,9 +78,19 @@ class CombatParticipant:
 
     @property
     def is_unblocked(self) -> bool:
-        """An attacker no creature blocks."""
+        """An attacker no creature blocked: one whose blockers all left
+        combat is still blocked, and deals no combat damage without trample
+        (509.1h, 510.1c)."""
         combat = self.carrier.combat
-        return bool(combat and combat.attacking is not None and not combat.blocked_by)
+        return bool(combat and combat.attacking is not None and not combat.blocked_by
+                    and not combat.became_blocked)
+
+    @property
+    def is_blockerless(self) -> bool:
+        """A blocked attacker every creature blocking it has left (509.1h)."""
+        combat = self.carrier.combat
+        return bool(combat and combat.attacking is not None and combat.became_blocked
+                    and not self.opponents)
 
     @property
     def has_opponents(self) -> bool:
@@ -124,9 +150,10 @@ def combat_participant(
         opponent_ids = combat.blocking
     else:
         return None
+    # A phased-out creature is treated as though it does not exist (702.26b).
     opponents = tuple(
         entity for entity in (state.entity(i) for i in opponent_ids)
-        if entity is not None
+        if entity is not None and entity.on_battlefield
     )
     return CombatParticipant(
         carrier=carrier,
@@ -177,9 +204,12 @@ def _kills_outright(
     participant: CombatParticipant, keywords_of: KeywordsOf,
 ) -> bool:
     """One hit from the carrier would kill the creature it is fighting,
-    deathtouch making one point lethal."""
+    deathtouch making one point lethal; an indestructible creature dies to
+    neither (702.12b)."""
     opponent = participant.lone_opponent
-    if opponent is None:
+    if opponent is None or "indestructible" in keywords_of(opponent):
+        return False
+    if not _reaches(participant.carrier, opponent, keywords_of):
         return False
     power = participant.carrier.power
     if "deathtouch" in keywords_of(participant.carrier):
@@ -204,6 +234,41 @@ def _survives_a_normal_hit(participant: CombatParticipant) -> bool:
 
 def _always(_participant: CombatParticipant, _keywords_of: KeywordsOf) -> bool:
     return True
+
+
+def _strikes_now(
+    participant: CombatParticipant, creature: EntityState, keywords_of: KeywordsOf,
+) -> bool:
+    """Whether ``creature`` deals its combat damage in the record's step: it has
+    power and the step is its own (rules 510.4, 702.7b, 702.4b); an unknown
+    step lets every creature strike."""
+    if creature.power < 1:
+        return False
+    step = participant.combat_substep
+    return step is None or strikes_in_step(keywords_of(creature), step)
+
+
+def _carrier_strikes(participant: CombatParticipant, keywords_of: KeywordsOf) -> bool:
+    return _strikes_now(participant, participant.carrier, keywords_of)
+
+
+def _protections(entity: EntityState, keywords_of: KeywordsOf) -> tuple[ProtectionQuality, ...]:
+    """The protections ``entity``'s keywords state."""
+    return tuple(quality for keyword in keywords_of(entity) if keyword.startswith("protection")
+                 if (quality := ProtectionQuality.of_keyword(keyword)) is not None)
+
+
+def _reaches(source: EntityState, target: EntityState, keywords_of: KeywordsOf) -> bool:
+    """Whether damage ``source`` deals ``target`` is not prevented by a
+    protection of ``target``'s (702.16e)."""
+    return not damage_prevented(_protections(target, keywords_of), Characteristics.of(source))
+
+
+def _hits_its_opponent(participant: CombatParticipant, keywords_of: KeywordsOf) -> bool:
+    """The carrier strikes, and its hit reaches the creature an ``OPPONENT``
+    effect is read at, the first it fights."""
+    return (_carrier_strikes(participant, keywords_of) and participant.has_opponents
+            and _reaches(participant.carrier, participant.opponents[0], keywords_of))
 
 
 def _strikes_first_because_of(keyword: str) -> Applies:
@@ -239,39 +304,62 @@ def _strikes_first_and(keyword: str, holds: Applies) -> Applies:
 
 
 def _an_opponent_survives_a_normal_hit(
-    participant: CombatParticipant, _keywords_of: KeywordsOf,
+    participant: CombatParticipant, keywords_of: KeywordsOf,
 ) -> bool:
-    return participant.deals_damage and _survives_a_normal_hit(participant)
-
-
-def _damages_a_creature(
-    participant: CombatParticipant, _keywords_of: KeywordsOf,
-) -> bool:
-    return participant.deals_damage and participant.has_opponents
-
-
-def _damages_anything(
-    participant: CombatParticipant, _keywords_of: KeywordsOf,
-) -> bool:
-    return participant.deals_damage and (
-        participant.has_opponents or participant.is_unblocked
+    """The carrier strikes, and its one opponent would survive the hit without
+    deathtouch and die with it: not an indestructible one (702.12b)."""
+    opponent = participant.lone_opponent
+    return (
+        _carrier_strikes(participant, keywords_of)
+        and _survives_a_normal_hit(participant)
+        and opponent is not None and "indestructible" not in keywords_of(opponent)
+        and _reaches(participant.carrier, opponent, keywords_of)
     )
 
 
-def _damages_the_defending_player(
-    participant: CombatParticipant, _keywords_of: KeywordsOf,
+def _damages_a_creature(
+    participant: CombatParticipant, keywords_of: KeywordsOf,
 ) -> bool:
-    return participant.deals_damage and participant.is_unblocked
+    return _hits_its_opponent(participant, keywords_of)
+
+
+def _damages_anything(
+    participant: CombatParticipant, keywords_of: KeywordsOf,
+) -> bool:
+    """The carrier's damage reaches a creature it fights or the defending
+    player (an unblocked attacker, or a trampler whose blockers left)."""
+    if not _carrier_strikes(participant, keywords_of):
+        return False
+    if participant.is_unblocked or (
+            participant.is_blockerless and "trample" in keywords_of(participant.carrier)):
+        return True
+    return any(_reaches(participant.carrier, opponent, keywords_of)
+               for opponent in participant.opponents)
+
+
+def _damages_the_defending_player(
+    participant: CombatParticipant, keywords_of: KeywordsOf,
+) -> bool:
+    return _carrier_strikes(participant, keywords_of) and participant.is_unblocked
 
 
 def _runs_over_its_blockers(
-    participant: CombatParticipant, _keywords_of: KeywordsOf,
+    participant: CombatParticipant, keywords_of: KeywordsOf,
 ) -> bool:
-    """A blocked attacker with more power than its blockers can soak."""
+    """A blocked attacker striking in this step with more power than its
+    blockers can soak, or whose blockers all left, which assigns all its
+    damage to the player (702.19e)."""
+    if not _carrier_strikes(participant, keywords_of):
+        return False
+    if participant.is_blockerless:
+        return True
     if not participant.is_attacking or not participant.has_opponents:
         return False
+    # With deathtouch one damage is lethal damage (702.2c, 702.19b).
+    deadly = "deathtouch" in keywords_of(participant.carrier)
     soaked = sum(
-        max(0, blocker.remaining_toughness)
+        min(1, max(0, blocker.remaining_toughness)) if deadly
+        else max(0, blocker.remaining_toughness)
         for blocker in participant.opponents
     )
     return soaked < participant.carrier.power
@@ -280,18 +368,22 @@ def _runs_over_its_blockers(
 def _would_be_destroyed(
     participant: CombatParticipant, keywords_of: KeywordsOf,
 ) -> bool:
-    """The damage coming in would otherwise be lethal: enough of it, summed
-    over every opponent, or any of it from a deathtouch creature."""
+    """The damage coming in this step would otherwise be lethal: enough of it,
+    summed over every opponent striking in the step, or any of it from a
+    deathtouch creature."""
     if not participant.has_opponents:
         return False
-    hitters = [o for o in participant.opponents if o.power >= 1]
+    hitters = [o for o in participant.opponents if _strikes_now(participant, o, keywords_of)
+               and _reaches(o, participant.carrier, keywords_of)]
+    if not hitters:
+        return False
     if any(_COUNTER_DAMAGE & keywords_of(opponent) for opponent in hitters):
         # -1/-1 counters kill an indestructible creature without destroying
         # it, so the keyword saves nothing the record could show.
         return False
     if any("deathtouch" in keywords_of(opponent) for opponent in hitters):
         return True
-    incoming = sum(opponent.power for opponent in participant.opponents)
+    incoming = sum(opponent.power for opponent in hitters)
     return incoming >= participant.carrier.remaining_toughness
 
 
@@ -409,8 +501,9 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
     DamageStepKeyword(
         keyword="deathtouch",
         qualifies_when=(
-            "the carrier deals combat damage to exactly one creature, and that "
-            "creature would survive that much damage normally"
+            "the carrier deals combat damage in the record's step to exactly one "
+            "creature, not an indestructible one, and that creature would "
+            "survive that much damage normally"
         ),
         effects=(
             KeywordEffect(
@@ -421,7 +514,9 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
     ),
     DamageStepKeyword(
         keyword="lifelink",
-        qualifies_when="the carrier deals combat damage to a creature or player",
+        qualifies_when=(
+            "the carrier deals combat damage in the record's step to a creature or player"
+        ),
         effects=(
             KeywordEffect(
                 HeadField.LIFE_DELTA, Subject.CONTROLLER, direction=1,
@@ -432,8 +527,9 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
     DamageStepKeyword(
         keyword="trample",
         qualifies_when=(
-            "the carrier is blocked by creatures with less remaining toughness "
-            "between them than the carrier's power"
+            "the carrier strikes in the record's step and is blocked by creatures "
+            "with less remaining toughness between them than the carrier's power, "
+            "each needing one damage where the carrier has deathtouch"
         ),
         effects=(
             KeywordEffect(
@@ -445,9 +541,9 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
     DamageStepKeyword(
         keyword="indestructible",
         qualifies_when=(
-            "the carrier takes combat damage at least equal to its remaining "
-            "toughness, or any of it from a creature with deathtouch, and none "
-            "of it from a creature with wither or infect"
+            "the carrier takes combat damage in the record's step at least equal "
+            "to its remaining toughness, or any of it from a creature with "
+            "deathtouch, and none of it from a creature with wither or infect"
         ),
         effects=(
             KeywordEffect(
@@ -458,7 +554,7 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
     ),
     DamageStepKeyword(
         keyword="wither",
-        qualifies_when="the carrier deals combat damage to a creature",
+        qualifies_when="the carrier deals combat damage in the record's step to a creature",
         effects=(
             KeywordEffect(
                 _M1M1_COUNTERS, Subject.OPPONENT, direction=1,
@@ -472,7 +568,9 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
     ),
     DamageStepKeyword(
         keyword="infect",
-        qualifies_when="the carrier deals combat damage to a creature or player",
+        qualifies_when=(
+            "the carrier deals combat damage in the record's step to a creature or player"
+        ),
         effects=(
             KeywordEffect(
                 _M1M1_COUNTERS, Subject.OPPONENT, direction=1,
@@ -515,7 +613,9 @@ class KeywordResolver:
 
     Printed and attachment-granted keywords arrive as ability tokens; only an
     until-end-of-turn grant is a bare string in the overlay, so reading the
-    overlay alone misses the common case.
+    overlay alone misses the common case. A keyword another implies is added
+    (``keyword_names.with_implied``): a creature with trample over
+    planeswalkers alone is a trampler.
     """
 
     def __init__(self, sidecars: SidecarLookup | None = None) -> None:
@@ -531,13 +631,13 @@ class KeywordResolver:
     def keywords_of(self, entity) -> set[str]:
         # Already normalized by ``record_codec`` at parse time.
         found = set(entity.granted_temporary.keywords)
-        if self._sidecars is None:
-            return found
-        for key in entity.ability_keys:
-            keyword = self._keyword_for(key)
-            if keyword is not None:
-                found.add(keyword)
-        return found
+        if self._sidecars is not None:
+            for key in entity.ability_keys:
+                keyword = self._keyword_for(key)
+                if keyword is not None:
+                    found.add(keyword)
+        # Trample over planeswalkers is trample too (702.19c).
+        return with_implied(found)
 
 
 def qualifying_observations(
@@ -551,7 +651,8 @@ def qualifying_observations(
     wanted = {row.keyword for row in rows}
     keywords_of = _memoized(resolver.keywords_of)
     for entity in record.state.entities:
-        if entity.combat is None:
+        # A last-known copy (no zone) or a phased-out creature is in no combat.
+        if entity.combat is None or not entity.on_battlefield:
             continue
         carried = keywords_of(entity) & wanted
         if not carried:

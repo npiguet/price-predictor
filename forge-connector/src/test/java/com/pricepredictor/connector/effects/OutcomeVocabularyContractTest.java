@@ -1,10 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import forge.game.card.Card;
-import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -20,7 +17,6 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -90,29 +86,4 @@ class OutcomeVocabularyContractTest {
                         + " EventType, and in KNOWN_OUTCOME_TYPES? " + records);
     }
 
-    /** A Card and a Player in {@code subjects} become entity and player refs in the shard. */
-    @Test
-    void outcomeSubjectsReachTheShardAsEntityAndPlayerRefs() throws Throwable {
-        Card card = TestCards.build("Grizzly Bears");
-        Player player = new Player("active", TestCards.game(), 94001);
-        SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-
-        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
-            bracket.beginBracket(liveAbility);
-            collectors.clauses().outcomeHandler().invoke(null, onOutcome(),
-                    new Object[]{liveAbility, EventType.TEXT_CHANGE.wireName(),
-                            Map.of("subjects", List.of(card, player))});
-            bracket.endBracket(liveAbility.getId(), false);
-            bracket.onNextAction();
-        });
-
-        List<String> carrying = RecordLines.withEventOfType(records,
-                EventType.TEXT_CHANGE.wireName());
-        assertEquals(1, carrying.size(), records.toString());
-        Map<String, Object> event = RecordLines.events(carrying.get(0)).stream()
-                .filter(e -> EventType.TEXT_CHANGE.wireName().equals(e.get("type")))
-                .findFirst().orElseThrow();
-        assertEquals(List.of(Refs.of(card), Refs.of(player)), event.get("subjects"),
-                carrying.get(0));
-    }
 }

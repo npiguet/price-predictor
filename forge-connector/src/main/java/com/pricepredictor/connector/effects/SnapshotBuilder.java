@@ -92,13 +92,9 @@ public final class SnapshotBuilder {
         if (ability.getHostCard() != null) {
             referenced.add(ability.getHostCard());
         }
-        if (ability.getTargets() != null) {
-            for (Object target : ability.getTargets()) {
-                if (target instanceof Card card) {
-                    referenced.add(card);
-                }
-            }
-        }
+        // Every link's targets: a charm's modes' and a sub-ability's too,
+        // which an exiled or library card is otherwise in no tier for.
+        referenced.addAll(ChainTargets.cardsOf(ability));
         return referenced;
     }
 
@@ -113,7 +109,7 @@ public final class SnapshotBuilder {
      *                   they sit in (tier 1)
      */
     Snapshot ofAbility(SpellAbility acting, Iterable<Card> referenced) {
-        return snapshot(referenced, StaticSuppression.NONE, acting, null, null, true);
+        return snapshot(referenced, StaticSuppression.NONE, acting, null, null, true, List.of());
     }
 
     /**
@@ -130,7 +126,7 @@ public final class SnapshotBuilder {
     Snapshot ofCandidate(SpellAbility candidate) {
         Card host = candidate.getHostCard();
         return snapshot(host == null ? List.of() : List.of(host), StaticSuppression.NONE,
-                candidate, host, null, false);
+                candidate, host, null, false, List.of());
     }
 
     /**
@@ -142,12 +138,35 @@ public final class SnapshotBuilder {
     }
 
     /**
+     * {@link #ofResolving} with an effect half's targets as cast too, which
+     * Forge's check for illegal targets has taken off the ability by the
+     * time its resolution starts: each that is still that object referenced
+     * (tier 1), and each that ceased to exist or became a new object as it
+     * was targeted, {@code L<id>} with role {@code last_known} and no zone.
+     *
+     * @param atCast the targets as cast, or null where they are unknown
+     */
+    Snapshot ofResolving(SpellAbility acting, ChainTargets atCast) {
+        List<Card> referenced = referencedOf(acting);
+        if (atCast == null) {
+            return ofAbility(acting, referenced);
+        }
+        for (Card card : atCast.cards()) {
+            if (!referenced.contains(card)) {
+                referenced.add(card);
+            }
+        }
+        return snapshot(referenced, StaticSuppression.NONE, acting, null, null, true,
+                atCast.lastKnown(), atCast.all());
+    }
+
+    /**
      * The snapshot for a record no single line acts in — a damage step, a
      * legality question, a mana activation, an orphaned outcome — so its refs
      * block is the empty shape.
      */
     Snapshot ofBoard() {
-        return snapshot(List.of(), StaticSuppression.NONE, null, null, null, true);
+        return snapshot(List.of(), StaticSuppression.NONE, null, null, null, true, List.of());
     }
 
     /**
@@ -156,7 +175,7 @@ public final class SnapshotBuilder {
      * the answer the record labels.
      */
     Snapshot ofBoardWithout(StaticAbility stat) {
-        return snapshot(List.of(), StaticSuppression.of(stat), null, null, null, true);
+        return snapshot(List.of(), StaticSuppression.of(stat), null, null, null, true, List.of());
     }
 
     /**
@@ -179,7 +198,7 @@ public final class SnapshotBuilder {
      */
     Snapshot ofTrait(Card source, EffectEvent pending) {
         return snapshot(source == null ? List.of() : List.of(source), StaticSuppression.NONE,
-                null, source, pending, true);
+                null, source, pending, true, List.of());
     }
 
     /**
@@ -197,13 +216,38 @@ public final class SnapshotBuilder {
      */
     private Snapshot snapshot(
             Iterable<Card> referenced, StaticSuppression board, SpellAbility acting, Card source,
-            EffectEvent pending, boolean chosen) {
+            EffectEvent pending, boolean chosen, List<Card> lastKnownTargets) {
+        return snapshot(referenced, board, acting, source, pending, chosen, lastKnownTargets, null);
+    }
+
+    /**
+     * The same, the acting ability's {@code targets} links drawn from
+     * {@code actingTargetsAsCast} (refs, root first) rather than from its
+     * clauses: an effect half's, whose clauses Forge's check for illegal
+     * targets has already thinned, so links read off them would show the
+     * fizzle the half is to predict, as {@code refs.targets} would.
+     *
+     * @param actingTargetsAsCast the acting chain's targets as cast, or null
+     *                            to read its clauses
+     */
+    private Snapshot snapshot(
+            Iterable<Card> referenced, StaticSuppression board, SpellAbility acting, Card source,
+            EffectEvent pending, boolean chosen, List<Card> lastKnownTargets,
+            List<String> actingTargetsAsCast) {
         Set<Card> tiers = collectEntities(referenced);
         List<String> entities = new ArrayList<>();
         Set<String> present = new HashSet<>();
         for (Card card : tiers) {
-            entities.add(EntityJson.render(game, card, board));
+            entities.add(renderTier(card, acting, board));
             present.add(Refs.of(card));
+        }
+        for (Card gone : lastKnownTargets) {
+            // A target that ceased to exist or became a new object, as it was
+            // targeted: no zone holds that object any more.
+            if (present.add(ChainTargets.lastKnownRef(gone))) {
+                entities.add(EntityJson.render(game, gone, board, EntityJson.Beyond.lastKnown(
+                        ChainTargets.lastKnownRef(gone), ROLE_LAST_KNOWN)));
+            }
         }
         LibraryCapture libraries = LibraryCapture.of(game, board, present);
         List<Card> cards = new ArrayList<>(tiers);
@@ -212,10 +256,55 @@ public final class SnapshotBuilder {
         return new Snapshot(
                 globalToJson(tiers, board), players, "[" + String.join(",", entities) + "]",
                 SnapshotLinks.render(
-                        game, cards, tiers, acting, chosen, pending, board, floating),
+                        game, cards, tiers, acting, chosen, pending, board, floating,
+                        actingTargetsAsCast),
                 RefsJson.render(chosen ? acting : null, source),
                 pending == null ? "null" : pending.toJson(),
                 libraries);
+    }
+
+    /**
+     * One entity of the tiers. The acting ability's host, off the
+     * battlefield and the stack, shows the face the ability is on: an
+     * Adventure's spell, a split card's half, a modal double-faced card's
+     * back face, cast from a hand that holds the card on its front (or, for
+     * a split card, on its combined face). Read off a last-known copy turned
+     * to that face, so the game's card is not touched; its zone and rank are
+     * the card's own.
+     */
+    private String renderTier(Card card, SpellAbility acting, StaticSuppression board) {
+        Card shown = actingFaceOf(card, acting);
+        if (shown == card) {
+            return EntityJson.render(game, card, board);
+        }
+        var zone = card.getZone();
+        return EntityJson.render(game, shown, board, new EntityJson.Beyond(
+                null, zone == null ? null : CardSpelling.zoneName(zone.getZoneType()),
+                CardFacts.orderRank(game, card), null));
+    }
+
+    /**
+     * {@code card} turned to the face {@code acting} is on, or {@code card}
+     * itself where it is not the acting host, is on the battlefield or the
+     * stack, already shows that face, or the face cannot be shown.
+     */
+    private static Card actingFaceOf(Card card, SpellAbility acting) {
+        if (acting == null || acting.getHostCard() == null
+                || acting.getHostCard().getId() != card.getId()
+                || card.isInZone(ZoneType.Battlefield) || card.isInZone(ZoneType.Stack)
+                || card.isFaceDown() || acting.getCardState() == null) {
+            return card;
+        }
+        forge.card.CardStateName face = acting.getCardState().getStateName();
+        if (face == null || face == card.getCurrentStateName() || !card.hasState(face)) {
+            return card;
+        }
+        try {
+            Card copy = new forge.game.card.CardCopyService(card).getLKICopy();
+            return copy.setState(face, false) || copy.getCurrentStateName() == face ? copy : card;
+        } catch (RuntimeException e) {
+            return card;
+        }
     }
 
     static final String ROLE_LIBRARY_CARD = "library_card";
@@ -326,7 +415,10 @@ public final class SnapshotBuilder {
                 entities.add(game.getCardState(card, card));
             }
         }
-        entities.addAll(game.getCardsIn(EnumSet.of(ZoneType.Battlefield, ZoneType.Command)));
+        // Phased-out permanents too, which getCardsIn leaves out: they are
+        // still on the battlefield (702.26d), and a phasing record names them.
+        entities.addAll(game.getCardsIncludePhasingIn(ZoneType.Battlefield));
+        entities.addAll(game.getCardsIn(ZoneType.Command));
         entities.addAll(game.getCardsIn(ZoneType.Stack));
         entities.addAll(game.getCardsIn(EnumSet.of(ZoneType.Hand, ZoneType.Graveyard)));
         return entities;

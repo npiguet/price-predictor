@@ -234,17 +234,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A Meld resolution puts nothing onto the battlefield: objects that cannot be melded stay in their zone.",
-        "near_miss": "A Meld resolution puts the melded permanent onto the battlefield.",
-        "params": {
-          "event": "zone_change",
-          "to_zone": "battlefield",
-          "api": "Meld",
-          "absent": true
-        },
-        "needs": []
+        "same_as": "701.42b-1",
+        "reason": "Objects that can't be melded staying where they are is 701.42b's fact."
       }
     }
   ]

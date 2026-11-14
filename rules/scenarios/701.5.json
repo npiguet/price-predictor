@@ -138,15 +138,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A spell candidate whose costs can be paid is affordable.",
-        "near_miss": "A spell candidate whose costs cannot be paid.",
-        "params": {
-          "bit": "affordable",
-          "fires_when": true
-        },
-        "needs": []
+        "none": "Could not express: affordability is decided for every candidate and no filter names what makes a cost payable here (mana matching the coloured symbols, the whole cost); the verdict is computed for every candidate, so a declaration naming the check alone tags every candidate of every decision record."
       }
     }
   ]

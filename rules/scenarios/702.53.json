@@ -76,12 +76,13 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolution moves a card from its owner's library to their hand (a search that finds a card).",
-        "near_miss": "A search finds no qualifying card and moves nothing to the hand. Not counted: the transmute ability is a keyword line, whose API type (Keyword) is shared by every keyword ability, so no api restricts the near miss.",
+        "outcome": "Transmute puts the card it found into its owner's hand.",
+        "near_miss": "A transmute ability resolving and finding nothing.",
         "params": {
           "event": "zone_change",
           "from_zone": "library",
-          "to_zone": "hand"
+          "to_zone": "hand",
+          "keyword": "Transmute"
         },
         "needs": []
       }
@@ -173,12 +174,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A sorcery-speed ability candidate passes the casting_speed check (its controller's main phase, empty stack).",
-        "near_miss": "A sorcery-speed ability candidate fails the casting_speed check.",
+        "outcome": "A transmute candidate passes its casting-speed check (sorcery timing).",
+        "near_miss": "A transmute candidate that fails it.",
         "params": {
           "bit": "failed_check",
           "check": "casting_speed",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Transmute"
         },
         "needs": [
           "failed_checks"

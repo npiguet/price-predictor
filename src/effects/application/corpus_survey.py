@@ -23,6 +23,15 @@ game:
 
 ``turn_action`` records are written to no stratum (FR-059): the survey counts
 them by subkind and reads nothing else of them but their game's properties.
+
+A gen-3 game whose shard holds no game-end marker (``turn_action`` /
+``game_end``, WP7) was cut: a killed worker, a game or an end-of-game write
+that threw. Its records are incomplete (no fired-trigger or mana record, maybe
+a missing tail), so the survey drops it whole before any tally reads it,
+counting it in :class:`CutTally`, and the write pass drops the same games
+(:attr:`Survey.shard_cut`). The shard is read for its markers first
+(``shard_io.ended_games``). Gen-1 and gen-2 games have no marker and are never
+cut.
 Both passes read through one :class:`WorkerContext`, so the refusal rule, the
 held-out test, the tags and a record's cell cannot drift apart.
 """
@@ -57,15 +66,17 @@ from effects.domain.corpus_plan import (
     TrainingSupply,
 )
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME, qualifying_observations
-from effects.domain.effect_targets import derive_targets
+from effects.domain.effect_targets import derive_targets, unsupervised_kind
 from effects.domain.protection_copies import (
     PROTECTION_RULES,
     protection_copy,
     qualify,
     rules_offered,
 )
+from effects.domain.provenance import KeyResolution
 from effects.domain.record_quality import QualityDefect, record_refusal
 from effects.domain.records import (
+    CollectionMode,
     EffectRecord,
     RecordKind,
     acting_keys,
@@ -161,6 +172,12 @@ class WorkerContext:
         from effects.infrastructure.shard_io import read_shard
 
         return read_shard(shard.path(self.read.records_dir))
+
+    def ended_games(self, shard: SourceShard) -> frozenset[str]:
+        """The shard's games that wrote their game-end marker."""
+        from effects.infrastructure.shard_io import ended_games
+
+        return ended_games(shard.path(self.read.records_dir))
 
     def refusal(self, record: EffectRecord) -> QualityDefect | None:
         """The one refusal rule both passes apply."""
@@ -260,6 +277,15 @@ class GameTally:
     held_out_text_games: dict[str, set[str]] = field(default_factory=dict)
 
 
+@dataclass(slots=True)
+class CutTally:
+    """Gen-3 games whose shard holds no game-end marker, dropped whole."""
+
+    games: set[str] = field(default_factory=set)
+    #: Their records, turn actions included.
+    records: int = 0
+
+
 @dataclass(frozen=True, slots=True)
 class SurveyedRecord:
     """One kept record as the rule budgets, placement and the supply fold read it.
@@ -281,6 +307,36 @@ class SurveyedRecord:
     held_out_text: bool = False
     protection: tuple[str, ...] = ()
     protection_hash: int = 0
+
+
+@dataclass(slots=True)
+class ReadGaps:
+    """What reading shards met without stopping, as a pool worker hands it
+    back with each shard's result and the parent sums it (``merge_into``):
+    the decode tally (``shard_io.DecodeTally``: ``(member, repr of the value)
+    -> times read`` outside the wire's closed lists, and each shard a damaged
+    last gzip member ended) and the sidecar cache's join gaps
+    (``sidecar_io.JoinGaps``: keys read as no line, by script file or tree)."""
+
+    off_list: Counter[tuple[str, str]] = field(default_factory=Counter)
+    damaged_tails: list[str] = field(default_factory=list)
+    unresolved: Counter[str] = field(default_factory=Counter)
+    undescribed: Counter[str] = field(default_factory=Counter)
+    unconfigured: Counter[str] = field(default_factory=Counter)
+
+    @classmethod
+    def take(cls, sidecars: SidecarCache) -> ReadGaps:
+        """What this process's reads and ``sidecars`` met since the last take."""
+        from effects.infrastructure.shard_io import take_decode_tally
+
+        decode, gaps = take_decode_tally(), sidecars.take_join_gaps()
+        return cls(Counter(decode.off_list), list(decode.damaged_tails),
+                   Counter(gaps.unresolved), Counter(gaps.undescribed),
+                   Counter(gaps.unconfigured))
+
+    def __bool__(self) -> bool:
+        return bool(self.off_list or self.damaged_tails or self.unresolved
+                    or self.undescribed or self.unconfigured)
 
 
 @dataclass(slots=True)
@@ -321,6 +377,16 @@ class ShardSurvey:
     #: The closed lists' names (FR-052, FR-053), read off every kept record.
     subtypes: set[str] = field(default_factory=set)
     keywords: set[str] = field(default_factory=set)
+    #: ``(class, flag) -> kept records`` for the collection flags
+    #: (:data:`RECORD_FLAGS`): how the class's records were collected.
+    flags: Counter[tuple[str, str]] = field(default_factory=Counter)
+    #: What reading the shard met without stopping.
+    reading: ReadGaps = field(default_factory=ReadGaps)
+    #: Events of kept records no output column reads, by kind
+    #: (``effect_targets.RecordTargets.unsupervised``).
+    unsupervised: Counter[str] = field(default_factory=Counter)
+    #: Gen-3 games with no game-end marker in the shard, dropped whole.
+    cut: CutTally = field(default_factory=CutTally)
 
 
 @dataclass(frozen=True, slots=True)
@@ -344,6 +410,12 @@ class Survey:
     #: Shard name -> the games it holds a kept record of: what the write pass
     #: hands each shard's worker of the copy map.
     shard_games: dict[str, frozenset[str]] = field(default_factory=dict)
+    #: Shard name -> the records the survey read in it: the write pass writes
+    #: none past them (a shard grown between the passes).
+    shard_records: dict[str, int] = field(default_factory=dict)
+    #: Shard name -> its cut games, which the write pass drops as the survey
+    #: did, whatever the shard holds by then.
+    shard_cut: dict[str, frozenset[str]] = field(default_factory=dict)
 
 
 # ── the pass ────────────────────────────────────────────────────────────
@@ -368,6 +440,22 @@ class SurveyConfig:
     known_keywords: frozenset[str] = frozenset()
 
 
+#: The collection flags the manifest counts per class (``record_flags``).
+RECORD_FLAGS: tuple[str, ...] = ("fork", "interventional", "directed", "aimed", "degraded")
+
+
+def record_flags(record: EffectRecord) -> tuple[str, ...]:
+    """The collection flags ``record`` carries, of :data:`RECORD_FLAGS`."""
+    held = {
+        "fork": record.fork,
+        "interventional": record.interventional,
+        "directed": record.directed is not None,
+        "aimed": record.aimed_at is not None,
+        "degraded": record.mode is CollectionMode.DEGRADED,
+    }
+    return tuple(flag for flag in RECORD_FLAGS if held[flag])
+
+
 class SurveyWorker:
     """One process's survey side: the config, and the read context every shard
     it surveys shares. Built once per process by :func:`run_parallel`."""
@@ -377,13 +465,17 @@ class SurveyWorker:
         self.context = WorkerContext(config.read)
 
     def survey(self, shard: SourceShard) -> ShardSurvey:
-        """One shard's survey, its games split at the end of the shard."""
+        """One shard's survey, its games split at the end of the shard, with
+        what reading it met without stopping."""
+        ReadGaps.take(self.context.sidecars)
         surveyor = _ShardSurveyor(self.config, self.context, ShardSurvey(
             shard=shard, supply=TrainingSupply(self.config.heap_cap),
-        ))
+        ), ended=self.context.ended_games(shard))
         for record in self.context.records(shard):
             surveyor.observe(record)
-        return surveyor.finish()
+        out = surveyor.finish()
+        out.reading = ReadGaps.take(self.context.sidecars)
+        return out
 
 
 class _Fate(StrEnum):
@@ -417,10 +509,13 @@ class _ShardSurveyor:
 
     def __init__(
         self, config: SurveyConfig, context: WorkerContext, out: ShardSurvey,
+        ended: frozenset[str] | None = None,
     ) -> None:
         self.config = config
         self.context = context
         self.out = out
+        #: The shard's games that wrote their marker; None judges none cut.
+        self.ended = ended
         self.keyword_rows = tuple(
             KEYWORDS_BY_NAME[name] for name in config.game_disjoint_keywords
             if name in KEYWORDS_BY_NAME
@@ -433,6 +528,10 @@ class _ShardSurveyor:
 
     def observe(self, record: EffectRecord) -> None:
         self.out.records += 1
+        if self._cut(record):
+            self.out.cut.games.add(record.game_id)
+            self.out.cut.records += 1
+            return
         self._note_game_properties(record)
         found = self._count_tags(record)
         if record.kind is RecordKind.TURN_ACTION:
@@ -442,7 +541,28 @@ class _ShardSurveyor:
         if klass is None:
             return
         self.out.kept[klass] += 1
+        self.out.flags.update((str(klass), flag) for flag in record_flags(record))
+        if self._runtime_only(record):
+            self.out.flags[str(klass), "runtime_only"] += 1
+        if any(unsupervised_kind(event) for event in record.payload.all_events()):
+            self.out.unsupervised.update(derive_targets(record).unsupervised)
         self.pending.append(self._kept(record, klass, found))
+
+    def _cut(self, record: EffectRecord) -> bool:
+        """A gen-3 record of a game with no game-end marker in the shard."""
+        return (self.ended is not None and record.generation == 3
+                and record.game_id not in self.ended)
+
+    def _runtime_only(self, record: EffectRecord) -> bool:
+        """A kept resolution acting only through keys the join reads as
+        runtime-only traits: no line, yet a real ability (``KeyResolution``)."""
+        if record.kind is not RecordKind.RESOLUTION or not record.ability:
+            return False
+        try:
+            found = {self.context.sidecars.resolution_of(key) for key in record.ability}
+        except KeyError:
+            return False
+        return KeyResolution.RUNTIME_ONLY in found and KeyResolution.LINE not in found
 
     def _note_game_properties(self, record: EffectRecord) -> None:
         """The keyword threshold, the random seat and the held-out test:
@@ -530,7 +650,7 @@ class _ShardSurveyor:
         each counted toward the outputs a copy drawn for it carries."""
         if not self.protection_rules:
             return ()
-        opportunities = qualify(record)
+        opportunities = qualify(record, self.context.sidecars)
         offered = tuple(rule for rule in rules_offered(opportunities)
                         if rule in self.protection_rules)
         for rule in offered:
@@ -556,7 +676,8 @@ class _ShardSurveyor:
             source = RuleSource.of(aimed=aimed, random_seat_game=game in seat_games)
             for tag in tags:
                 self.out.rule_counts.counts[tag.rule, str(tag.polarity), str(source)] += 1
-        self.out.rule_counts.records = self.out.records
+        # The records the tags were read on: a cut game's are not.
+        self.out.rule_counts.records = self.out.records - self.out.cut.records
         candidates = self._candidate_games()
         inventories: dict[str, Counter[RuleCell]] = defaultdict(Counter)
         held_out = self.out.games.held_out
@@ -615,6 +736,8 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
     games_by_source: dict[str, set[str]] = defaultdict(set)
     held_by_source: dict[str, set[str]] = defaultdict(set)
     shard_games: dict[str, frozenset[str]] = {}
+    shard_records: dict[str, int] = {}
+    shard_cut: dict[str, frozenset[str]] = {}
     split_games = 0
 
     for part in parts:
@@ -625,6 +748,8 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
         games_by_source[source] |= part.games.games
         held_by_source[source] |= part.games.held_out
         shard_games[part.shard.name] = frozenset(part.games.games)
+        shard_records[part.shard.name] = part.records
+        shard_cut[part.shard.name] = frozenset(part.cut.games)
     total.supply = total.supply.resolved(total.mode_counts)
 
     return Survey(
@@ -634,6 +759,8 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
         held_out_games_by_source={s: len(g) for s, g in held_by_source.items()},
         split_games=split_games,
         shard_games=shard_games,
+        shard_records=shard_records,
+        shard_cut=shard_cut,
     )
 
 

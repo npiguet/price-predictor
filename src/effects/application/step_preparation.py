@@ -353,7 +353,8 @@ class StepPreparer:
                 continue
             key = record.ability[0]
             line = batcher.line_of(key)
-            qualified = qualify(record, line, record_targets, self._keywords.keywords_of)
+            qualified = qualify(record, line, record_targets, self._keywords.keywords_of,
+                                lines=self.sidecars)
             if qualified is None:
                 continue
             for number in range(self.config.lethality_copies):

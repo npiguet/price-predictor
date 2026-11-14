@@ -55,6 +55,16 @@ public final class VariantRegistry {
         }
     }
 
+    /**
+     * Forget names registered here: for a test, which shares this JVM-wide
+     * set with every test after it, to put it back as it found it.
+     */
+    static void forget(String... cardNames) {
+        for (String name : cardNames) {
+            NAMES.remove(name);
+        }
+    }
+
     public static boolean isVariant(String cardName) {
         return cardName != null && NAMES.contains(cardName);
     }

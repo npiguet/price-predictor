@@ -54,6 +54,19 @@ public record TraitScript(
         List<SubAbilityLink> subAbilityLinks
 ) {
 
+    /**
+     * Every parameter a chain is followed through: one label naming one
+     * ability ({@code SubAbility$}, {@code Execute$}, {@code ReplaceWith$}
+     * and Forge's other additional abilities), and a chooser's {@code
+     * Choices$}.
+     */
+    static Set<String> chainKeys() {
+        Set<String> keys = new HashSet<>(ChainRenderer.SINGLE_LINK_KEYS);
+        keys.addAll(ChainRenderer.ADDITIONAL_LINK_KEYS);
+        keys.add(ChainRenderer.CHOICES);
+        return keys;
+    }
+
     /** What separates two segments of a chain; seeded as a special token. */
     public static final String SEGMENT_SEPARATOR = " [SEG] ";
 
@@ -212,6 +225,21 @@ public record TraitScript(
         /** A parameter whose value is one SVar label naming one ability. */
         private static final Set<String> SINGLE_LINK_KEYS =
                 Set.of("Execute", "SubAbility", "RepeatSubAbility", "ReplaceWith");
+        /**
+         * The other parameters whose value is one label naming one ability,
+         * as Forge parses them into its additional abilities ({@code
+         * AbilityFactory.additionalAbilityKeys}: a clash's, a coin flip's, a
+         * branch's, a pile's, a gift's…), followed when Forge holds that
+         * ability; elsewhere the same parameter is written as it is.
+         */
+        private static final Set<String> ADDITIONAL_LINK_KEYS = additionalLinkKeys();
+
+        private static Set<String> additionalLinkKeys() {
+            Set<String> keys = new HashSet<>(forge.game.ability.AbilityFactory.additionalAbilityKeys);
+            keys.removeAll(SINGLE_LINK_KEYS);
+            return Set.copyOf(keys);
+        }
+
         /** The parameter whose value is a comma-separated list of labels. */
         private static final String CHOICES = "Choices";
         /**
@@ -272,6 +300,12 @@ public record TraitScript(
                     String reference = value.trim();
                     out.append(number(reference));
                     follow(name, reference, linked(name, reference, trait));
+                } else if (ADDITIONAL_LINK_KEYS.contains(name) && value != null
+                        && trait instanceof SpellAbility sa
+                        && sa.getAdditionalAbility(name) != null) {
+                    String reference = value.trim();
+                    out.append(number(reference));
+                    follow(name, reference, sa.getAdditionalAbility(name));
                 } else if (CHOICES.equals(name) && value != null && isChooser(trait)) {
                     renderChoices(value, (SpellAbility) trait);
                 } else {

@@ -80,12 +80,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A card with an alternative-cast condition is a legal candidate when the condition holds.",
-        "near_miss": "The same card is a candidate the condition rejects.",
+        "outcome": "A foretell cast passes its condition check (the turn it was foretold is over).",
+        "near_miss": "A foretell cast that fails it.",
         "params": {
           "bit": "failed_check",
           "check": "script_condition",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Foretell"
         },
         "needs": [
           "failed_checks"
@@ -164,18 +165,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A card with an alternative-cast condition is a legal candidate when the condition holds.",
-        "near_miss": "The same card is a candidate the condition rejects.",
-        "params": {
-          "bit": "failed_check",
-          "check": "script_condition",
-          "fires_when": true
-        },
-        "needs": [
-          "failed_checks"
-        ]
+        "same_as": "702.143a-1",
+        "reason": "A card foretold through an effect casts for its foretell cost under the same condition; the record shows 702.143a's fact."
       }
     },
     {
@@ -237,12 +228,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An action restricted to the owner's own turn is a legal candidate on that turn.",
-        "near_miss": "The same action is a candidate rejected on another player's turn.",
+        "outcome": "A foretell candidate passes its whose-turn check during its owner's turn.",
+        "near_miss": "A foretell candidate on another player's turn.",
         "params": {
           "bit": "failed_check",
           "check": "whose_turn",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Foretell"
         },
         "needs": [
           "failed_checks"

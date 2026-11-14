@@ -94,15 +94,14 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A candidate restricted to sorcery timing has a true timing verdict: its controller's main phase with an empty stack.",
-        "near_miss": "A candidate whose timing verdict is false: not its controller's main phase, or the stack is not empty.",
+        "outcome": "A plot candidate's timing is true: its owner's main phase, with priority and an empty stack (Forge applies sorcery timing).",
+        "near_miss": "A plot candidate whose timing is false.",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Plot"
         },
-        "needs": [
-          "timing"
-        ]
+        "needs": []
       }
     },
     {
@@ -333,14 +332,17 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A candidate restricted to sorcery timing, such as casting a plotted card, has a true timing verdict: its controller's main phase with an empty stack (the later-turn condition is not part of the timing verdict).",
-        "near_miss": "A candidate whose timing verdict is false: not its controller's main phase, or the stack is not empty.",
+        "outcome": "A plotted card's cast candidate has its timing true: its owner's main phase with an empty stack.",
+        "near_miss": "A plotted card's cast candidate whose timing is false.",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "candidate": "cast",
+          "source_designation": "plotted"
         },
         "needs": [
-          "timing"
+          "timing",
+          "designations"
         ]
       }
     },

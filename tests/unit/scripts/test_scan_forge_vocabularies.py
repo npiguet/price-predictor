@@ -79,8 +79,7 @@ def test_the_checked_in_lists_hold_what_the_input_relies_on():
     assert len(KEYWORD_COUNTERS) == 15 and "first_strike" in KEYWORD_COUNTERS
 
 
-_REAL = pytest.mark.skipif(not (sfv.FORGE / sfv.TYPE_LISTS).is_file(),
-                           reason="no ../forge checkout")
+_REAL = pytest.mark.skipif(not sfv.FORGE.is_dir(), reason="no ../forge checkout")
 
 
 @_REAL

@@ -81,11 +81,12 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolution puts a level counter on a permanent, which is what a level up ability does.",
-        "near_miss": "Not counted: no api singles out level up's Keyword line, so only the fires side is tagged.",
+        "outcome": "A level up ability puts a level counter on its permanent.",
+        "near_miss": "A level up ability resolving and putting no level counter.",
         "params": {
           "event": "counter_change",
-          "counter_type": "level"
+          "counter_type": "level",
+          "keyword": "Level up"
         },
         "needs": []
       }
@@ -165,12 +166,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An ability restricted to sorcery timing passes the casting-speed check in its controller's main phase with an empty stack.",
-        "near_miss": "The candidate fails the casting-speed check outside that window.",
+        "outcome": "A level up candidate passes its casting-speed check (sorcery timing).",
+        "near_miss": "A level up candidate that fails it.",
         "params": {
           "bit": "failed_check",
           "check": "casting_speed",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Level up"
         },
         "needs": [
           "failed_checks"

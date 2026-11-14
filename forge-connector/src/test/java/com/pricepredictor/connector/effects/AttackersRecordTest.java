@@ -150,6 +150,7 @@ class AttackersRecordTest {
             assertFalse(record.containsKey("what_if"), "no what-if attackers record: " + record);
             assertFalse(payload.containsKey("tapped_by_attack"), "nothing declared: " + payload);
             assertEquals(Refs.of(board.attacking()), record.get("actor_player"));
+            assertEquals(false, record.get("random_seat"), "an AI seat's declaration: " + record);
             assertEquals(List.of(Refs.of(board.juggernaut()), Refs.of(board.angel())),
                     payload.get("legal_attackers"), "the declaration's, on every record");
             assertEquals(Refs.of(board.tapped()),

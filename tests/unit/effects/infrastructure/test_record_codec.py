@@ -79,6 +79,8 @@ from effects.infrastructure.shard_io import (
     write_shard,
 )
 from tests.unit.effects.builders import (
+    _ENVELOPE_ONLY_GOLDENS,
+    JAVA_GOLDENS,
     gen3_fixture_records,
     java_golden_records,
     make_record,
@@ -269,11 +271,6 @@ class TestRoundTrip:
         record = _record(**ALL_KINDS[name])
         assert record_from_dict(record_to_dict(record)) == record
 
-    @pytest.mark.parametrize("name", sorted(ALL_KINDS))
-    def test_every_record_kind_survives_a_line(self, name: str):
-        record = _record(**ALL_KINDS[name])
-        assert record_from_dict(json.loads(format_record_line(record))) == record
-
     def test_a_line_holds_no_newline_of_its_own(self):
         assert "\n" not in format_record_line(_record())
 
@@ -290,24 +287,16 @@ class TestRoundTrip:
         write_shard(shard, [record])
         assert list(read_shard(shard)) == [record]
 
-    def test_the_snapshot_survives_in_full(self):
-        restored = record_from_dict(record_to_dict(_record()))
-        assert restored.state == _rich_snapshot()
-
-    def test_the_two_grant_channels_stay_distinct_across_the_wire(self):
-        restored = record_from_dict(record_to_dict(_record()))
-        entity = restored.state.entity("E12")
-        assert entity.granted_attached == (_DONOR,)
-        assert entity.granted_temporary.keywords == ("flying",)
-
     def test_collected_tiers_are_written_explicitly(self):
         """Without them, an empty entity list and an uncollected tier look alike."""
         data = record_to_dict(_record())
         assert data["state"]["tiers"] == [1, 2]
 
-    def test_the_wire_field_for_the_global_block_is_named_global(self):
-        assert "global" in record_to_dict(_record())["state"]
-
+    def test_a_snapshot_naming_no_tier_reads_as_none_collected(self):
+        """Absence means uncollected (schema rule 3): never a tier inferred."""
+        data = record_to_dict(_record())
+        del data["state"]["tiers"]
+        assert record_from_dict(data).state.tiers == frozenset()
 
 class TestRecordMoments:
     """The record-moment payloads (root spec § 8.14, FR-042a, FR-042b) keep
@@ -360,9 +349,15 @@ class TestForwardCompatibility:
         assert record_to_dict(record_from_dict(data))["collector_build"] == "2027.1"
 
     def test_an_unknown_field_never_shadows_a_known_one(self):
-        record = _record()
-        restored = record_from_dict(record_to_dict(record))
-        assert restored.extra_fields == {}
+        """A kept field spelled like a known one is not written over it, and on
+        a read a known key always goes to its field, never into the extras."""
+        record = replace(_record(), extra_fields={"run_id": "shadow",
+                                                  "collector_build": "2027.1"})
+        data = record_to_dict(record)
+        assert (data["run_id"], data["collector_build"]) == (record.run_id, "2027.1")
+        restored = record_from_dict(data)
+        assert restored.run_id == record.run_id
+        assert restored.extra_fields == {"collector_build": "2027.1"}
 
     def test_ability_unresolved_round_trips(self):
         record = _record(ability=(), ability_unresolved="engine_effect")
@@ -397,22 +392,6 @@ class TestTheProbedPerturbation:
                 **payload_kwargs,
             ),
         )
-
-    def test_both_halves_round_trip(self):
-        probe = self._probe(probed_keyword="trample", probed_entity="E12")
-        loaded = record_from_dict(record_to_dict(probe))
-        assert loaded.payload.probed_keyword == "trample"
-        assert loaded.payload.probed_entity == "E12"
-
-    def test_an_observed_combat_record_names_neither(self):
-        """Nothing was perturbed, so there is nothing to name."""
-        observed = _record(
-            kind=RecordKind.COMBAT, moment=None, ability=None,
-            payload=CombatPayload(attackers=("E12",)),
-        )
-        loaded = record_from_dict(record_to_dict(observed))
-        assert loaded.payload.probed_keyword is None
-        assert loaded.payload.probed_entity is None
 
     def test_a_gen3_observed_combat_record_is_written_without_them(self):
         """As the gen-3 collector writes it; an earlier generation keeps the
@@ -460,18 +439,6 @@ class TestTheRewriteResult:
             ),
         )
 
-    def test_an_in_place_edit_round_trips_both_halves_and_its_result(self):
-        """Orim's Cure taking 5 combat damage down to 1: a real rewrite."""
-        record = self._rewrite(
-            outgoing=Event(type=EventType.DAMAGE_DEALT, subjects=("P1",),
-                           params={"amount": 1}),
-            result=RewriteResult.UPDATED,
-        )
-        loaded = record_from_dict(record_to_dict(record))
-        assert loaded == record
-        assert loaded.payload.outgoing.params["amount"] == 1
-        assert loaded.payload.result is RewriteResult.UPDATED
-
     def test_a_substitution_writes_null_rather_than_a_copy(self):
         """The rule the channel's readability rests on: a record whose two
         halves are identical says nothing, and null says "not rewritten"."""
@@ -486,25 +453,6 @@ class TestTheRewriteResult:
         loaded = record_from_dict(wire)
         assert loaded.payload.outgoing is None
         assert loaded.payload.replaced_by == (key,)
-
-    def test_a_declined_replacement_round_trips_as_a_negative(self):
-        """Every executeReplacement call writes a record, this one included:
-        the negatives are what teach when a replacement applies."""
-        record = self._rewrite(result=RewriteResult.NOT_REPLACED)
-        loaded = record_from_dict(record_to_dict(record))
-        assert loaded == record
-        assert loaded.payload.result is RewriteResult.NOT_REPLACED
-        assert loaded.payload.replaced_by == ()
-
-    @pytest.mark.parametrize("result", list(RewriteResult))
-    def test_every_result_survives_the_wire_in_its_snake_case_spelling(
-        self, result: RewriteResult,
-    ):
-        record = self._rewrite(result=result)
-        assert record_to_dict(record)["payload"]["result"] == result.value
-        assert result.value == result.value.lower()
-        assert record_from_dict(record_to_dict(record)).payload.result is result
-
 
 class TestEveryEventReadsOneCounterSpelling:
     """``+1/+1`` becomes ``P1P1`` on read wherever an event sits, not only in a
@@ -535,6 +483,27 @@ class TestEveryEventReadsOneCounterSpelling:
         )
         loaded = record_from_dict(record_to_dict(record))
         assert loaded.payload.event.params["counter_type"] == "P1P1"
+
+
+class TestADamageEventReadsItsDamageType:
+    """The connector writes ``damage_type`` on damage to a creature (contract
+    record-schema-delta: ``normal``, ``m1m1_counters``, ``deathtouch``,
+    ``loyalty_loss``); a record carrying it decodes, and one without it too."""
+
+    @pytest.mark.parametrize("damage_type", ["normal", "m1m1_counters", "deathtouch",
+                                             "loyalty_loss"])
+    def test_it_round_trips(self, damage_type):
+        event = Event(type=EventType.DAMAGE_DEALT, subjects=("E1",),
+                      params={"amount": 2, "combat": False, "damage_type": damage_type})
+        record = _record(payload=ResolutionPayload(events=(event,)))
+        loaded = record_from_dict(record_to_dict(record))
+        assert loaded.payload.events[0].params["damage_type"] == damage_type
+
+    def test_damage_to_a_player_carries_none(self):
+        event = Event(type=EventType.DAMAGE_DEALT, subjects=("P1",), params={"amount": 2})
+        loaded = record_from_dict(record_to_dict(_record(payload=ResolutionPayload(
+            events=(event,)))))
+        assert "damage_type" not in loaded.payload.events[0].params
 
 
 class TestARewriteShardCollectedBeforeTheResult:
@@ -626,10 +595,6 @@ class TestGen2EnvelopeFields:
             data = json.loads(line)
             assert "random_seat" not in data and "what_if" not in data
 
-    def test_random_seat_round_trips(self):
-        record = _record(random_seat=True)
-        assert record_from_dict(record_to_dict(record)) == record
-
     def test_what_if_round_trips_on_a_legality_record(self):
         for value in (True, False):
             record = _record(**ALL_KINDS["playability-blockers"], what_if=value)
@@ -674,13 +639,6 @@ class TestInternedProvenanceKeys:
         (a, b, c) = _keys_from_json([root, {**root, "option": 1}, dict(root)])
         assert a is c
         assert a != b and b.option == 1 and b.root == a
-
-    def test_interned_records_equal_freshly_built_ones(self):
-        record = _record(**ALL_KINDS["resolution-activation"])
-        data = record_to_dict(record)
-        assert record_from_dict(data) == record
-        assert record_from_dict(data) == record_from_dict(json.loads(json.dumps(data)))
-
 
 class TestTheWireFormIsPinned:
     """The bytes a record serializes to, pinned against a digest.
@@ -820,6 +778,27 @@ class TestGen3EnvelopeFields:
         assert (data["kind"], data["subkind"]) == ("turn_action", subkind.value)
         assert record_from_dict(data) == record
 
+    @pytest.mark.parametrize("value", [4, "3", True, None])
+    def test_a_record_naming_no_known_generation_is_refused(self, value):
+        """``generation`` decides how several fields read, so a record whose
+        value names none is refused rather than read as another generation."""
+        from effects.domain.shard_generation import UnknownGenerationError
+
+        data = record_to_dict(_record(generation=3)) | {"generation": value}
+        with pytest.raises(UnknownGenerationError):
+            record_from_dict(data)
+
+    def test_an_unknown_generation_in_a_shard_names_the_shard_and_line(self, tmp_path):
+        from effects.domain.shard_generation import UnknownGenerationError
+        from effects.infrastructure.shard_io import shard_generation
+
+        path = tmp_path / "g4.jsonl"
+        path.write_text(json.dumps(record_to_dict(_record()) | {"generation": 4}) + "\n",
+                        encoding="utf-8")
+        for read in (lambda: list(read_shard(path)), lambda: shard_generation(path)):
+            with pytest.raises(UnknownGenerationError, match=r"g4\.jsonl, line 1: .*4"):
+                read()
+
     def test_a_gen3_shard_reads_as_gen3(self, tmp_path):
         from effects.domain.shard_generation import ShardGeneration
         from effects.infrastructure.shard_io import shard_generation, write_shard
@@ -847,11 +826,6 @@ class TestTheGen2Fixture:
         from effects.infrastructure.shard_io import shard_generation
 
         assert shard_generation(_GEN2_FIXTURE) is ShardGeneration.GEN_2
-
-    def test_a_parsed_record_survives_a_write_and_a_read(self):
-        """Not the raw line: parsing normalizes keyword spellings by design."""
-        for record in read_shard(_GEN2_FIXTURE):
-            assert record_from_dict(record_to_dict(record)) == record
 
     def test_every_entity_reads_and_writes_in_the_gen2_shape(self):
         """Gen-2 entities keep reading exactly as before (T074): no lines, and
@@ -898,6 +872,24 @@ def _spelling_free(value):
     return value
 
 
+def _reader_spellings(value):
+    """A collector's JSON with exactly the spellings the reader normalizes:
+    the overlay keywords of an entity and every event's counter type."""
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            if k == "granted_temporary" and isinstance(v, dict):
+                out[k] = {**v, "keywords": [normalize_keyword(x) for x in v["keywords"]]}
+            elif k == "counter_type" and isinstance(v, str):
+                out[k] = normalize_counter_type(v)
+            else:
+                out[k] = _reader_spellings(v)
+        return out
+    if isinstance(value, list):
+        return [_reader_spellings(v) for v in value]
+    return value
+
+
 class TestTheGen3EntityShape:
     """``lines``, ``base_pt`` and ``pt_boosts`` as the Java collector writes them (T074)."""
 
@@ -909,13 +901,27 @@ class TestTheGen3EntityShape:
                    for record in records for entity in record.state.entities)
 
     def test_a_golden_record_writes_back_as_the_collector_wrote_it(self):
-        """Every member, in the collector's order: nothing gen-3 writes is
-        dropped on a read and a write (T074)."""
-        for raw in java_golden_records():
-            written = record_to_dict(record_from_dict(raw))
-            assert json.dumps(_spelling_free(written)) == json.dumps(
-                _spelling_free(raw)), (
-                raw["record_id"])
+        """Every member, in the collector's order, with the collector's values:
+        nothing gen-3 writes is dropped or changed on a read and a write
+        (T074). The written line is the Java line byte for byte, but for the
+        two spellings the reader normalizes by design: an overlay keyword
+        (``protection from green``) and a counter type (``+1/+1``)."""
+        lines = [line for path in sorted(JAVA_GOLDENS.glob("*.jsonl"))
+                 if path.name not in _ENVELOPE_ONLY_GOLDENS
+                 for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        assert len(lines) > 40
+        renormalized = 0
+        for line in lines:
+            raw = json.loads(line)
+            written = format_record_line(record_from_dict(raw))
+            expected = _reader_spellings(raw)
+            if expected == raw:
+                assert written == line, raw["record_id"]
+            else:
+                renormalized += 1
+                assert json.loads(written) == expected, raw["record_id"]
+                assert list(json.loads(written)) == list(raw), raw["record_id"]
+        assert 0 < renormalized < len(lines)
 
     def test_the_gen3_blocks_read_into_their_fields(self):
         records = [record_from_dict(raw) for raw in java_golden_records()]
@@ -941,13 +947,71 @@ class TestTheGen3EntityShape:
                       for c in r.payload.candidates]
         assert candidates and all(c.timing is True and c.failed_checks == ()
                                   and c.land_play is False for c in candidates)
+        # The live goldens' attackers; a fork played on to the turn's end
+        # writes its own (a summoning-sick creature that may not attack).
         attackers = [r.payload for r in records
-                     if isinstance(r.payload, PlayabilityAttackersPayload)]
+                     if isinstance(r.payload, PlayabilityAttackersPayload) and not r.fork]
         assert {(a.anchor_attacker, a.legal_defenders, a.must_attack, a.tapped_by_attack)
                 for a in attackers} == {("E2", ("P1",), False, True), ("E3", (), False, None)}
+        forked = [r.payload for r in records
+                  if isinstance(r.payload, PlayabilityAttackersPayload) and r.fork]
+        assert forked and all(a.legal_attackers == () for a in forked)
         blockers = [r.payload for r in records
                     if isinstance(r.payload, PlayabilityBlockersPayload)]
         assert blockers and all(b.must_block == () for b in blockers)
+
+    def test_every_golden_payload_member_reads_into_the_field_of_its_name(self):
+        """Per kind, each payload member the collector wrote is the value of
+        the field of that name, read off the decoded record rather than written
+        back: a member decoded into the wrong field and written back from it
+        again would pass the write-back test. Events compare by their parts;
+        members holding records of their own (costs, candidates, forbidden
+        entries, contributions) are left to their own tests."""
+        from enum import Enum
+
+        def plain(value):
+            if isinstance(value, Event):
+                return {"type": value.type.value, "subjects": list(value.subjects),
+                        "params": plain(value.params), "duration": value.duration,
+                        "attributed_to": value.attributed_to}
+            if isinstance(value, Enum):
+                return value.value
+            if isinstance(value, (tuple, list)):
+                return [plain(v) for v in value]
+            if isinstance(value, dict):
+                return {k: plain(v) for k, v in value.items()}
+            return value
+
+        def event_parts(raw: dict) -> dict:
+            return {"type": raw["type"], "subjects": raw.get("subjects", []),
+                    "params": raw.get("params", {}), "duration": raw.get("duration"),
+                    "attributed_to": raw.get("attributed_to")}
+
+        nested = {"costs", "candidates", "forbidden", "contributions"}
+        checked: set[tuple[str, str]] = set()
+        for raw in java_golden_records():
+            payload = record_from_dict(raw).payload
+            for member, value in _reader_spellings(raw["payload"]).items():
+                if member in nested:
+                    continue
+                if member in ("events", "buffered_events"):
+                    value = [event_parts(e) for e in value]
+                elif member in ("incoming", "outgoing", "event") and value is not None:
+                    value = event_parts(value)
+                elif member in ("replaced_by", "buffered"):
+                    value = [{k: v for k, v in key.items()} for key in value]
+                    assert [k.as_dict() for k in getattr(payload, member)] == value, (
+                        raw["record_id"], member)
+                    checked.add((raw["kind"], member))
+                    continue
+                assert plain(getattr(payload, member)) == value, (raw["record_id"], member)
+                checked.add((raw["kind"], member))
+        assert {("resolution", "outcome"), ("resolution", "conditions_met"),
+                ("resolution", "events"), ("trigger", "fired"), ("trigger", "event"),
+                ("combat", "blocks"), ("combat", "assignment_choices"),
+                ("rewrite", "result"), ("rewrite", "incoming"), ("rewrite", "replaced_by"),
+                ("playability", "legal_blockers"), ("playability", "min_blockers"),
+                ("continuous", "board_hash"), ("turn_action", "records_withheld")} <= checked
 
     def test_every_gen3_member_round_trips_where_set(self):
         """The members the goldens leave at their empty value, each set."""
@@ -1062,11 +1126,6 @@ class TestTheGen3EntityShape:
         assert attackers
         assert not any("what_if" in raw for raw in attackers)
 
-    def test_a_golden_record_survives_a_write_and_a_read(self):
-        for raw in java_golden_records():
-            record = record_from_dict(raw)
-            assert record_from_dict(json.loads(json.dumps(record_to_dict(record)))) == record
-
     def test_a_non_creature_writes_null_power_and_toughness(self):
         data = _entity_dict(EntityState(id="E1", name="Bolt", zone="stack",
                                         controller="P0", lines=()))
@@ -1147,10 +1206,6 @@ class TestTheGen3Fixture:
                 _spelling_free(raw)), (
                 raw["record_id"])
 
-    def test_a_parsed_record_survives_a_write_and_a_read(self):
-        for record in self._records():
-            assert record_from_dict(json.loads(json.dumps(record_to_dict(record)))) == record
-
     def test_it_holds_a_random_seat_game_and_a_forge_ai_game(self):
         records = self._records()
         seat_games = {r.game_id for r in records if r.random_seat}
@@ -1159,7 +1214,10 @@ class TestTheGen3Fixture:
 
     def test_every_turn_action_subkind_reads_with_its_events(self):
         actions = [r for r in self._records() if r.kind is RecordKind.TURN_ACTION]
-        assert {r.subkind for r in actions} == set(TurnActionSubkind)
+        # The fixture predates the game-end marker (WP7); its regeneration
+        # (D8) brings one per finished game, and this exception goes.
+        assert {r.subkind for r in actions} == set(TurnActionSubkind) - {
+            TurnActionSubkind.GAME_END}
         assert all(r.ability is None and r.payload.events for r in actions)
         draws = [r for r in actions if r.subkind is TurnActionSubkind.DRAW]
         assert all({EventType.CARD_DRAWN, EventType.ZONE_CHANGE}

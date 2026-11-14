@@ -37,6 +37,39 @@ The candidates a rule speaks for, each filter narrowing both sides:
   on a candidate whose line the sidecar dropped (a permanent spell);
 - ``script_param``: the line's root segment holds this parameter, a name or a
   name -> value map as ``outcome_event`` reads it;
+- ``candidate``: ``cast`` for the candidate's card's own cast (a spell line,
+  or a permanent's implicit cast spell the converter drops), ``activated``
+  for an activated ability (a land play is neither);
+- ``source_type``: the candidate's card, as the snapshot shows it
+  (``refs.source``), has this card type (``creature``, ``sorcery``,
+  ``kindred`` …), compared without case;
+- ``source_tapped``, ``source_sick``: the candidate's card is (true) or is
+  not (false) tapped, or summoning sick, in the snapshot;
+- ``source_designation``: the candidate's card holds this gen-3 designation
+  (``plotted``, ``foretold`` …);
+- ``sorcery_speed``: true for a candidate its rules restrict to sorcery
+  timing (307.5): a cast of a card neither an instant nor with flash, or an
+  activated ability whose line says ``SorcerySpeed$`` or ``Planeswalker$``
+  (a loyalty ability, 606.3); false for the rest; unreadable on a keyword's
+  line, whose speed the keyword fixes (name it with ``keyword``);
+- ``phase_list_first``, ``phase_list_last``: the first or the last step
+  the candidate's ``ActivationPhases$`` names (``combat_begin`` for "only
+  before attackers are declared", Forge's ``Upkeep->BeginCombat``;
+  ``combat_declare_attackers`` for "before blockers"; ``combat_declare_blockers``
+  first for "after blockers"), in ``rule_outcomes.PHASE_ORDER``'s spelling;
+- ``min_targets``: an integer of 2 or more: the candidate's line has one
+  targeting clause (one segment with ``ValidTgts$``), whose ``TargetMin$``
+  is at least this; read off the sidecar, so a candidate whose line it
+  dropped is unreadable. Its ``legal_targets`` are then that clause's, and
+  with ``some_legal_target`` the ``fires`` side of ``has_legal_target``
+  false is a clause that has a legal object but fewer than it must name,
+  which it cannot name twice (601.2c: Undo with one creature out). A
+  candidate with no legal choice whose clause has as many legal objects as
+  its ``TargetMin$`` or more is on neither side: a restriction over the
+  chosen set (different controllers, a shared type) decides it, not the
+  count;
+- ``some_legal_target``: the candidate's ``legal_targets`` list is (true) or
+  is not (false) empty;
 - ``candidate_face``: ``front`` for a candidate acting through its card's
   first face, ``alternative`` for one acting through another (a double-faced
   card's back face, an Adventure, an Omen, a split card's second half), read
@@ -60,6 +93,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_targets import target_legality_subjects
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import (
@@ -71,6 +105,7 @@ from effects.domain.records import (
 )
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import (
     card_has_keyword,
     is_keyword_line,
@@ -78,12 +113,22 @@ from effects.domain.rule_detectors.acting_line import (
     root_params_of,
     script_params_match,
 )
+from effects.domain.rule_detectors.entity_facts import has_designation
+from effects.domain.rule_outcomes import PHASE_ORDER, forge_phases
+from effects.domain.script_text import params as segment_params
+from effects.domain.script_text import segments
 
 GEN2_BITS = frozenset({"can_play", "affordable", "has_legal_target"})
 GEN3_BITS = frozenset({"timing", "failed_check"})
 FILTERS = frozenset({"keyword", "source_keyword", "cost_symbol", "cost_part", "script_param",
-                     "land_play", "candidate_face"})
+                     "land_play", "candidate_face", "candidate", "source_type",
+                     "source_designation", "sorcery_speed", "phase_list_first",
+                     "phase_list_last", "source_tapped", "source_sick", "min_targets",
+                     "some_legal_target"})
 CANDIDATE_FACES = frozenset({"front", "alternative"})
+#: What a candidate is: its card's cast, or an activated ability (a land play
+#: is ``land_play``'s).
+CANDIDATE_KINDS = frozenset({"cast", "activated"})
 CHECKS = frozenset(check.value for check in PlayabilityCheck)
 
 #: A mana symbol as ``Cost$`` spells it (``W``, ``12``, ``W/U``, ``2/W``,
@@ -130,10 +175,114 @@ def _holds_symbol(symbols: frozenset[str], wanted: str) -> bool:
     return wanted.upper() in symbols
 
 
+def candidate_kind(candidate: Candidate, lines: SidecarLookup | None) -> str | None:
+    """``cast`` or ``activated``; None for a land play or an unreadable key."""
+    if candidate.land_play or not candidate.ability:
+        return None
+    key = candidate.ability[0]
+    if key.trait_kind == "keyword":
+        return "activated"
+    if key.trait_kind != "spell":
+        return None
+    line = line_of(candidate.ability, lines)
+    if line is None:
+        # A permanent's implicit cast spell, which the converter drops.
+        return "cast" if key.index_within_kind == 0 and key.option is None else None
+    found = root_params_of(line) or {}
+    return "cast" if "SP" in found else "activated" if "AB" in found else None
+
+
+def sorcery_speed(candidate: Candidate, record: EffectRecord,
+                  lines: SidecarLookup | None) -> bool | None:
+    """Whether the candidate's rules restrict it to sorcery timing; None
+    where nothing read says (a keyword's line, an unreadable card)."""
+    kind = candidate_kind(candidate, lines)
+    if kind == "cast":
+        source = _source(record)
+        if source is None:
+            return None
+        flash = "flash" in KeywordResolver(lines).keywords_of(source) or card_has_keyword(
+            candidate.ability, lines, "Flash")
+        return "instant" not in {t.lower() for t in source.types} and not flash
+    if kind == "activated":
+        line = line_of(candidate.ability, lines)
+        if line is None or line.keyword_display_name:
+            return None
+        found = root_params_of(line) or {}
+        return any(str(found.get(name, "")).lower() == "true"
+                   for name in ("SorcerySpeed", "Planeswalker"))
+    return None
+
+
+def _phase_list(candidate: Candidate, lines: SidecarLookup | None) -> list[str] | None:
+    """The steps the candidate's ``ActivationPhases$`` names, in turn order;
+    None where its line names none."""
+    found = root_params_of(line_of(candidate.ability, lines)) or {}
+    phases = forge_phases(found.get("ActivationPhases"))
+    return None if phases is None else [p for p in PHASE_ORDER if p in phases]
+
+
+def sole_clause_minimum(candidate: Candidate, lines: SidecarLookup | None) -> int | None:
+    """The ``TargetMin$`` of the candidate's one targeting clause (1 where it
+    names none); None where its line is unreadable or has no targeting clause
+    or several, or the minimum is no number (an X)."""
+    line = line_of(candidate.ability, lines)
+    if line is None or not line.script_text:
+        return None
+    clauses = [segment_params(segment) for segment in segments(line.script_text)]
+    targeting = [clause for clause in clauses if "ValidTgts" in clause]
+    if len(targeting) != 1:
+        return None
+    written = targeting[0].get("TargetMin", "1").strip()
+    return int(written) if written.isdigit() else None
+
+
+def _source(record: EffectRecord):
+    source = record.state.refs.source
+    return record.state.entity(source) if source else None
+
+
 def _passes(candidate: Candidate, lines: SidecarLookup | None,
-            params: Mapping[str, Any]) -> bool:
+            params: Mapping[str, Any], record: EffectRecord) -> bool:
     """Whether the candidate is one the declaration's filters speak for."""
     if "land_play" in params and candidate.land_play is not bool(params["land_play"]):
+        return False
+    if "candidate" in params and candidate_kind(candidate, lines) != params["candidate"]:
+        return False
+    if "source_type" in params:
+        source = _source(record)
+        if source is None or params["source_type"].lower() not in {
+                t.lower() for t in source.types}:
+            return False
+    for flag in ("source_tapped", "source_sick"):
+        if flag in params:
+            source = _source(record)
+            held = None if source is None else getattr(source, flag.removeprefix("source_"))
+            if held is not bool(params[flag]):
+                return False
+    if "source_designation" in params:
+        source = _source(record)
+        if source is None or not has_designation(source, params["source_designation"]):
+            return False
+    if "sorcery_speed" in params and sorcery_speed(candidate, record, lines) is not bool(
+            params["sorcery_speed"]):
+        return False
+    if "phase_list_first" in params or "phase_list_last" in params:
+        listed = _phase_list(candidate, lines)
+        if listed is None:
+            return False
+        if "phase_list_first" in params and listed[0] != params["phase_list_first"]:
+            return False
+        if "phase_list_last" in params and listed[-1] != params["phase_list_last"]:
+            return False
+    if "min_targets" in params:
+        minimum = sole_clause_minimum(candidate, lines)
+        if minimum is None or minimum < params["min_targets"]:
+            return False
+        if not candidate.has_legal_target and len(set(candidate.legal_targets)) >= minimum:
+            return False  # enough legal objects: a restriction on the set decides it
+    if "some_legal_target" in params and bool(candidate.legal_targets) is not bool(
+            params["some_legal_target"]):
         return False
     if "candidate_face" in params:
         if not candidate.ability:
@@ -181,14 +330,15 @@ class VerdictBit:
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         bit = params.get("bit")
         needs = {"land_play"} if "land_play" in params else set()
+        if "source_designation" in params:
+            needs.add("designations")
         if bit == "timing":
             needs.add("timing")
         if bit == "failed_check":
             needs.add("failed_checks")
         return frozenset(needs)
 
-    def match(self, record: EffectRecord, lines: SidecarLookup | None,
-              params: Mapping[str, Any]) -> FamilyMatch | None:
+    def validate(self, params: Mapping[str, Any]) -> None:
         bit = params.get("bit")
         if bit not in GEN2_BITS | GEN3_BITS:
             raise ValueError(f"verdict_bit: unknown bit {bit!r}")
@@ -197,6 +347,26 @@ class VerdictBit:
                              f"one of {sorted(CHECKS)}; got {params.get('check')!r}")
         if params.get("candidate_face", "front") not in CANDIDATE_FACES:
             raise ValueError(f"verdict_bit: candidate_face is one of {sorted(CANDIDATE_FACES)}")
+        if params.get("candidate", "cast") not in CANDIDATE_KINDS:
+            raise ValueError(f"verdict_bit: candidate is one of {sorted(CANDIDATE_KINDS)}")
+        dv.check(self.id, params, {
+            "fires_when": dv.boolean, "responsible_static": dv.boolean,
+            "land_play": dv.boolean, "sorcery_speed": dv.boolean, "keyword": dv.keyword,
+            "source_keyword": dv.keyword, "cost_symbol": dv.cost_symbol,
+            "script_param": dv.script_param, "source_type": dv.card_type,
+            "source_designation": dv.designation, "source_tapped": dv.boolean,
+            "source_sick": dv.boolean, "some_legal_target": dv.boolean,
+            "min_targets": dv.integer, "phase_list_first": dv.one_of(*PHASE_ORDER),
+            "phase_list_last": dv.one_of(*PHASE_ORDER)})
+        if "min_targets" in params and params["min_targets"] < 2:
+            raise ValueError("verdict_bit: min_targets is 2 or more; a clause of one "
+                             "target is any targeting clause")
+        if "check" in params and bit != "failed_check":
+            raise ValueError("verdict_bit: check names a failed_check declaration's check")
+
+    def match(self, record: EffectRecord, lines: SidecarLookup | None,
+              params: Mapping[str, Any]) -> FamilyMatch | None:
+        bit = params.get("bit")
         if record.kind is not RecordKind.PLAYABILITY or (
                 record.subkind is not PlayabilitySubkind.DECISION):
             return None
@@ -206,7 +376,7 @@ class VerdictBit:
         candidates = [
             c for c in record.payload.candidates
             if (not params.get("responsible_static") or c.responsible_static)
-            and _passes(c, lines, params)]
+            and _passes(c, lines, params, record)]
         values = [_bit(c, bit, params.get("check")) for c in candidates]
         values = [v for v in values if v is not None]
         if not values:

@@ -1,7 +1,7 @@
 package com.pricepredictor.connector;
 
-import com.pricepredictor.connector.effects.TestCaps;
 import com.pricepredictor.connector.effects.CollectionCaps;
+import com.pricepredictor.connector.effects.TestCaps;
 import com.pricepredictor.connector.effects.GameRecording;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 import com.pricepredictor.connector.effects.Refs;
@@ -134,6 +134,125 @@ class RandomSeatControllerTest {
 
         assertEquals(1, game.getStack().size(), "the spell is on the stack");
         assertTrue(a.getCardsIn(ZoneType.Hand).isEmpty(), "and no longer in hand");
+        // Cast as the engine casts: its mana paid, and it resolves.
+        assertTrue(a.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(card -> card.getName().equals("Forest")).allMatch(Card::isTapped),
+                "the two Forests paid for it");
+        game.getStack().resolveStack();
+        assertTrue(a.getCardsIn(ZoneType.Battlefield).stream()
+                .anyMatch(card -> card.getName().equals("Grizzly Bears")), "the bears resolved");
+    }
+
+    /**
+     * What the seat drew resolves (TC4): Arc Lightning, its 3 damage divided
+     * among the targets drawn, deals all of it, where an undivided draw threw
+     * at resolution and lost the match (V3 #3).
+     */
+    @Test
+    void aDividedSpellTheSeatDrewResolves() {
+        for (long seed = 1; seed <= 5; seed++) {
+            Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, seed);
+            Player a = game.getPlayers().get(0);
+            Player b = game.getPlayers().get(1);
+            for (int i = 0; i < 3; i++) {
+                TestBoard.inPlay(game, a, "Mountain");
+            }
+            TestBoard.inPlay(game, b, "Craw Wurm");
+            TestBoard.inHand(game, a, "Arc Lightning");
+            RandomSeatController seat = seatOf(game);
+            seat.attach(game, null, null);
+            int life = a.getLife() + b.getLife();
+
+            SpellAbility arc = seat.chooseSpellAbilityToPlay().get(0);
+            assertTrue(seat.playChosenSpellAbility(arc), "seed " + seed);
+            game.getStack().resolveStack();
+
+            Card wurm = b.getCardsIn(ZoneType.Battlefield).stream()
+                    .filter(c -> c.getName().equals("Craw Wurm")).findFirst().orElseThrow();
+            int dealt = life - a.getLife() - b.getLife() + wurm.getDamage();
+            assertEquals(3, dealt, "seed " + seed + ": all three damage was dealt");
+        }
+    }
+
+    /**
+     * The seat never strands a card in the stack zone (V3 #7): Fireball with
+     * two Mountains against three creatures costs {1} more per target past
+     * the first, which the rules-only affordability does not see. The AI's
+     * payment is asked before the card moves, so a draw it cannot pay is
+     * redrawn, never cast and left in the stack zone with an empty stack.
+     */
+    @Test
+    void theSeatNeverStrandsACardInTheStackZone() {
+        for (long seed = 1; seed <= 6; seed++) {
+            Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, seed);
+            Player a = game.getPlayers().get(0);
+            Player b = game.getPlayers().get(1);
+            TestBoard.inPlay(game, a, "Mountain");
+            TestBoard.inPlay(game, a, "Mountain");
+            for (String name : List.of("Grizzly Bears", "Hill Giant", "Gray Ogre")) {
+                TestBoard.inPlay(game, b, name);
+            }
+            TestBoard.inHand(game, a, "Fireball");
+            RandomSeatController seat = seatOf(game);
+            seat.attach(game, null, null);
+            java.io.PrintStream out = System.out;
+            java.io.ByteArrayOutputStream printed = new java.io.ByteArrayOutputStream();
+
+            List<SpellAbility> chosen = seat.chooseSpellAbilityToPlay();
+            System.setOut(new java.io.PrintStream(printed, true));
+            try {
+                if (chosen != null) {
+                    seat.playChosenSpellAbility(chosen.get(0));
+                }
+            } finally {
+                System.setOut(out);
+            }
+
+            assertFalse(printed.toString().contains("random seat failed to play"),
+                    "seed " + seed + ": " + printed);
+            assertTrue(!game.getStack().isEmpty() || game.getCardsIn(ZoneType.Stack).isEmpty(),
+                    "seed " + seed + ": a card in the stack zone with an empty stack");
+        }
+    }
+
+    /**
+     * A divided X the seat draws is announced before the targets (601.2b,
+     * 601.2c): Rolling Thunder deals exactly the X paid, every target at
+     * least one, where targets drawn before X shared an amount of zero.
+     */
+    @Test
+    void aDividedXTheSeatDrewDealsItsX() {
+        java.util.Set<Integer> xs = new java.util.TreeSet<>();
+        for (long seed = 1; seed <= 10; seed++) {
+            Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, seed);
+            Player a = game.getPlayers().get(0);
+            Player b = game.getPlayers().get(1);
+            for (int i = 0; i < 7; i++) {
+                TestBoard.inPlay(game, a, "Mountain");
+            }
+            TestBoard.inPlay(game, b, "Darksteel Colossus");
+            TestBoard.inHand(game, a, "Rolling Thunder");
+            RandomSeatController seat = seatOf(game);
+            seat.attach(game, null, null);
+            int life = a.getLife() + b.getLife();
+
+            SpellAbility thunder = seat.chooseSpellAbilityToPlay().get(0);
+            assertTrue(seat.playChosenSpellAbility(thunder), "seed " + seed);
+            int x = thunder.getXManaCostPaid() == null ? 0 : thunder.getXManaCostPaid();
+            for (Object target : thunder.getTargets().getTargetEntities()) {
+                assertTrue(thunder.getDividedValue((forge.game.GameObject) target) >= 1,
+                        "seed " + seed + ": every target takes at least one");
+            }
+            game.getStack().resolveStack();
+
+            int dealt = life - a.getLife() - b.getLife();
+            for (Card card : b.getCardsIn(ZoneType.Battlefield)) {
+                dealt += card.getDamage();
+            }
+            assertEquals(x, dealt, "seed " + seed + ": the damage dealt is the X paid");
+            xs.add(x);
+        }
+        assertTrue(xs.stream().anyMatch(x -> x > 0), "some draw paid an X: " + xs);
     }
 
     /**
@@ -440,8 +559,11 @@ class RandomSeatControllerTest {
         int draws = 400;
         int[] attacks = new int[creatures.size()];
         try (GameRecording recording = new GameRecording(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L,
+                game, writer, "run.0-l1.0", TestCaps.unprobed(), 1L,
                 Refs.of(a))) {
+            // Every collector live, so "no record" is the seat's doing and not
+            // a recording that never listened.
+            recording.open();
             seat.attach(game, recording.priorityCandidates(), recording.fruitlessActivations());
             for (int draw = 0; draw < draws; draw++) {
                 Combat combat = new Combat(a);
@@ -490,8 +612,11 @@ class RandomSeatControllerTest {
         boolean blockedOnce = false;
         boolean heldBackOnce = false;
         try (GameRecording recording = new GameRecording(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L,
+                game, writer, "run.0-l1.0", TestCaps.unprobed(), 1L,
                 Refs.of(a))) {
+            // Every collector live, so "no record" is the seat's doing and not
+            // a recording that never listened.
+            recording.open();
             seat.attach(game, recording.priorityCandidates(), recording.fruitlessActivations());
             for (int draw = 0; draw < 100; draw++) {
                 Combat combat = new Combat(b);

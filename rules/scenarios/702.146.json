@@ -72,12 +72,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A card with an alternative graveyard-casting permission is a legal candidate in the graveyard.",
-        "near_miss": "The same card is a candidate rejected for casting from the graveyard by its normal cost.",
+        "outcome": "A Disturb candidate passes its zone check.",
+        "near_miss": "A Disturb candidate that fails it.",
         "params": {
           "bit": "failed_check",
           "check": "zone",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Disturb"
         },
         "needs": [
           "failed_checks"

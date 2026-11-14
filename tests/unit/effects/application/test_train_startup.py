@@ -204,7 +204,9 @@ def test_a_corpus_without_a_frozen_selection_set_is_refused(corpus, config, star
 
 def test_a_selection_set_frozen_for_another_corpus_is_refused(corpus, config, started, reports):
     digest = corpus.load().digest()
-    write_selection_set(selection_set_path(reports, digest), _frozen("another corpus"))
+    path = selection_set_path(reports, digest)
+    path.unlink()  # a writer never replaces a frozen set by another
+    write_selection_set(path, _frozen("another corpus"))
     with pytest.raises(SelectionSetError, match="frozen against corpus digest another"):
         run(config)
     assert not started

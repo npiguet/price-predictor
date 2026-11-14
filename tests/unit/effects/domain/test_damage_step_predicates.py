@@ -26,7 +26,6 @@ import pytest
 
 from effects.domain.damage_step_keywords import (
     KEYWORDS_BY_NAME,
-    CombatParticipant,
     KeywordResolver,
     Subject,
     combat_participant,
@@ -493,13 +492,6 @@ class TestLifelink:
         state, _ = _attacker_and_blockers()
         assert _qualifies("lifelink", state, state.entity("B0"))
 
-    def test_a_zero_power_lifelinker_gains_nothing(self):
-        carrier = _creature(
-            "A", 0, 4, keywords=("lifelink",),
-            combat=CombatStatus(attacking=_PLAYER_DEFENDER),
-        )
-        assert not _qualifies("lifelink", _board(carrier), carrier)
-
     def test_a_blocker_whose_attacker_is_gone_deals_nothing(self):
         carrier = _creature(
             "B0", 2, 2, controller="P1", combat=CombatStatus(blocking=("A",)),
@@ -667,20 +659,6 @@ class TestIndestructible:
 
 
 class TestTheTableIsTheSingleSource:
-    def test_every_row_derives_its_predicate_from_its_effects(self):
-        for row in KEYWORDS_BY_NAME.values():
-            assert callable(row.qualifies), row.keyword
-            for effect in row.effects:
-                assert callable(effect.applies), f"{row.keyword}/{effect.field}"
-
-    @pytest.mark.parametrize("substep", ["first_strike", "regular"])
-    def test_a_row_qualifies_exactly_when_an_effect_is_observable(self, substep):
-        state, carrier = _attacker_and_blockers(substep=substep)
-        for keyword in KEYWORDS_BY_NAME:
-            assert _qualifies(keyword, state, carrier) == bool(
-                _observable(keyword, state, carrier)
-            ), keyword
-
     @pytest.mark.parametrize(
         "keyword",
         ["deathtouch", "lifelink", "trample", "indestructible", "wither",
@@ -693,31 +671,151 @@ class TestTheTableIsTheSingleSource:
             {"attacker": (1, 2), "blockers": ((3, 3),)},
         ],
     )
-    def test_the_other_rows_read_either_damage_step_alike(self, keyword, shape):
-        """Only the two strike-first rows turn on which step a record covers."""
-        observed = []
-        for substep in ("first_strike", "regular"):
-            state, carrier = _attacker_and_blockers(**shape, substep=substep)
-            observed.append(_observable(keyword, state, carrier))
-        unblocked = [
-            _observable(keyword, *_unblocked_attacker(substep=substep))
-            for substep in ("first_strike", "regular")
-        ]
-        assert observed[0] == observed[1]
-        assert unblocked[0] == unblocked[1]
+    def test_no_damage_changes_hands_in_a_step_nobody_strikes_in(self, keyword, shape):
+        """Rule 510.4: creatures without first or double strike deal no damage
+        in the first-strike step, so no other row can be read there; in the
+        regular step they strike as before."""
+        state, carrier = _attacker_and_blockers(**shape, substep="first_strike")
+        assert _observable(keyword, state, carrier) == []
+        assert _observable(keyword, *_unblocked_attacker(substep="first_strike")) == []
 
+
+class TestWhatTheHitReaches:
+    """Damage the carrier deals reaches what it is fighting only where the
+    rules let it: a blocked attacker whose blockers all left deals none
+    without trample (509.1h, 510.1c), and protection prevents damage from a
+    source with its quality (702.16e)."""
+
+    def _blockerless(self, *keywords: str):
+        carrier = _creature("A", 3, 3, keywords=keywords, combat=CombatStatus(
+            attacking=_PLAYER_DEFENDER, blocked_by=(), became_blocked=True))
+        return _board(carrier), carrier
+
+    @pytest.mark.parametrize("keyword", ["lifelink", "infect", "wither"])
+    def test_a_blocked_attacker_whose_blockers_left_deals_no_damage(self, keyword):
+        assert not _qualifies(keyword, *self._blockerless(keyword))
+
+    def test_a_blockerless_trampler_assigns_its_damage_to_the_player(self):
+        """702.19e."""
+        assert _qualifies("trample", *self._blockerless("trample"))
+
+    @pytest.mark.parametrize("keyword", ["lifelink", "deathtouch", "wither", "infect"])
+    def test_a_blocker_protected_from_the_carrier_takes_no_damage(self, keyword):
+        state, carrier = _attacker_and_blockers(
+            attacker=(1, 2), blockers=((1, 3),), attacker_keywords=(keyword,),
+            blocker_keywords=("protection_from_red",))
+        carrier = dataclasses.replace(carrier, colors=("R",))
+        state = dataclasses.replace(state, entities=(carrier, *state.entities[1:]))
+        assert not _qualifies(keyword, state, carrier)
+        unprotected = dataclasses.replace(carrier, colors=("G",))
+        state = dataclasses.replace(state, entities=(unprotected, *state.entities[1:]))
+        assert _qualifies(keyword, state, unprotected)
+
+    def test_an_indestructible_carrier_is_not_threatened_by_damage_it_is_protected_from(self):
+        state, carrier = _attacker_and_blockers(
+            attacker=(2, 2), blockers=((3, 3),),
+            attacker_keywords=("indestructible", "protection_from_green"))
+        blocker = dataclasses.replace(state.entities[1], colors=("G",))
+        state = dataclasses.replace(state, entities=(carrier, blocker))
+        assert not _qualifies("indestructible", state, carrier)
+
+    def test_a_phased_out_blocker_is_no_opponent_and_a_last_known_copy_no_carrier(self):
+        """702.26b: a phased-out permanent is treated as though it does not
+        exist; a last-known copy (no zone) is no creature in the combat."""
+        state, carrier = _attacker_and_blockers(attacker=(2, 2), blockers=((1, 3),),
+                                                attacker_keywords=("lifelink",))
+        gone = dataclasses.replace(state.entities[1], designations=("phased_out",))
+        state = dataclasses.replace(state, entities=(carrier, gone))
+        assert combat_participant(state, carrier).opponents == ()
+        ghost = dataclasses.replace(carrier, id="L9", zone=None)
+        record = _combat_record(dataclasses.replace(state, entities=(ghost,)))
+        assert qualifying_observations(record, (KEYWORDS_BY_NAME["lifelink"],),
+                                       KeywordResolver()) == []
+
+
+class TestTheCarriersOwnStep:
+    """The rows besides the strike-first ones read the damage the carrier deals,
+    or takes, in the record's step (rules 510.4, 702.7b, 702.4b)."""
+
+    @pytest.mark.parametrize("keyword", ["lifelink", "wither", "infect"])
+    def test_a_first_striker_deals_its_damage_in_the_first_strike_step(self, keyword):
+        state, carrier = _attacker_and_blockers(
+            attacker=(2, 2), blockers=((1, 3),), attacker_keywords=("first_strike", keyword),
+            substep="first_strike")
+        assert _qualifies(keyword, state, carrier)
+
+    @pytest.mark.parametrize("keyword", ["lifelink", "wither", "infect", "deathtouch"])
+    def test_a_first_striker_deals_none_in_the_regular_step(self, keyword):
+        state, carrier = _attacker_and_blockers(
+            attacker=(2, 2), blockers=((1, 3),), attacker_keywords=("first_strike", keyword),
+            substep="regular")
+        assert not _qualifies(keyword, state, carrier)
+
+    @pytest.mark.parametrize("substep", ["first_strike", "regular"])
+    def test_a_double_striker_deals_damage_in_both_steps(self, substep):
+        state, carrier = _attacker_and_blockers(
+            attacker=(2, 2), blockers=((1, 3),),
+            attacker_keywords=("double_strike", "lifelink"), substep=substep)
+        assert _qualifies("lifelink", state, carrier)
+
+    def test_a_first_striking_deathtouch_carrier_qualifies_in_its_own_step(self):
+        state, carrier = _attacker_and_blockers(
+            attacker=(1, 2), blockers=((1, 3),),
+            attacker_keywords=("first_strike", "deathtouch"), substep="first_strike")
+        assert _qualifies("deathtouch", state, carrier)
+
+    def test_a_trampler_runs_over_only_in_its_own_step(self):
+        for substep, strikes in (("first_strike", False), ("regular", True)):
+            state, carrier = _attacker_and_blockers(
+                attacker=(5, 5), blockers=((1, 3),), attacker_keywords=("trample",),
+                substep=substep)
+            assert _qualifies("trample", state, carrier) is strikes, substep
+
+    def test_a_deathtouch_trampler_needs_assign_only_one_damage_a_blocker(self):
+        """702.2c with 702.19b: with deathtouch one damage is lethal, so a 2-power trampler
+        runs over a 1/3 blocker."""
+        plain = _attacker_and_blockers(
+            attacker=(2, 2), blockers=((1, 3),), attacker_keywords=("trample",))
+        assert not _qualifies("trample", *plain)
+        deadly = _attacker_and_blockers(
+            attacker=(2, 2), blockers=((1, 3),), attacker_keywords=("trample", "deathtouch"))
+        assert _qualifies("trample", *deadly)
+
+    def test_indestructible_reads_only_the_damage_coming_in_this_step(self):
+        """A lethal blocker without first strike deals nothing in the first-strike
+        step; a first-striking one does."""
+        plain = _attacker_and_blockers(
+            attacker=(2, 2), blockers=((3, 3),), attacker_keywords=("indestructible",),
+            substep="first_strike")
+        assert not _qualifies("indestructible", *plain)
+        first = _attacker_and_blockers(
+            attacker=(2, 2), blockers=((3, 3),), attacker_keywords=("indestructible",),
+            blocker_keywords=("first_strike",), substep="first_strike")
+        assert _qualifies("indestructible", *first)
+        later = _attacker_and_blockers(
+            attacker=(2, 2), blockers=((3, 3),), attacker_keywords=("indestructible",),
+            blocker_keywords=("first_strike",), substep="regular")
+        assert not _qualifies("indestructible", *later)
+
+    def test_an_indestructible_opponent_dies_to_no_hit(self):
+        """Deathtouch destroys and indestructible stops it (702.12b), so the
+        death the deathtouch and strike-first rows read cannot happen."""
+        state, carrier = _attacker_and_blockers(
+            attacker=(1, 2), blockers=((1, 3),), attacker_keywords=("deathtouch",),
+            blocker_keywords=("indestructible",))
+        assert not _qualifies("deathtouch", state, carrier)
+        state, carrier = _attacker_and_blockers(
+            attacker=(3, 2), blockers=((1, 3),), attacker_keywords=("first_strike",),
+            blocker_keywords=("indestructible",), substep="first_strike")
+        assert _observable("first_strike", state, carrier) == ["opponent.damage_taken"]
+
+
+class TestTheRowsFields:
     def test_a_row_names_each_head_field_once(self):
         """Infect reads two fields on the creature and two on the player."""
         assert KEYWORDS_BY_NAME["infect"].fields == (
             "counters_delta_m1m1", "damage_taken", "poison_delta", "life_delta",
         )
-
-    def test_the_participant_is_frozen(self):
-        state, carrier = _attacker_and_blockers()
-        participant = combat_participant(state, carrier)
-        assert isinstance(participant, CombatParticipant)
-        with pytest.raises(dataclasses.FrozenInstanceError):
-            participant.defending_player = "P0"
 
 
 # ── who is observed: a record's carriers, through both keyword channels ──

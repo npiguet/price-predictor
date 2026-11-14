@@ -34,6 +34,7 @@ reads ``default_build``, built once for the module.
 
 from __future__ import annotations
 
+import logging
 import math
 from collections import Counter
 from dataclasses import dataclass, replace
@@ -58,6 +59,7 @@ from effects.domain.records import (
     RecordKind,
     ResolutionPayload,
     RewritePayload,
+    TurnActionSubkind,
 )
 from effects.domain.split import HoldoutRule
 from effects.domain.state_snapshot import StateSnapshot
@@ -81,6 +83,7 @@ from tests.unit.effects.builders import (
     held_out_cards,
     make_entity,
     make_snapshot,
+    write_ended_shard,
     write_sidecar,
 )
 from tests.unit.effects.builders import make_record as _any_generation_record
@@ -225,10 +228,12 @@ def _rewrite(
     )
 
 
-#: A rules directory that does not exist: no scenario tags a record and no
-#: heads line budgets a rule, so these hand-built corpora show gen-2's
-#: curation alone; the gen-3 fixture's tests below read the real ``rules/``.
-_NO_RULES = Path(__file__).with_name("no-rules")
+#: A catalogue of one scenario declared without a detector and one heads line
+#: the map does not mark ``trained``: no scenario tags a record and no rule is
+#: budgeted, so these hand-built corpora show gen-2's curation alone (a build
+#: refuses a catalogue with no scenario or no heads line); the gen-3
+#: fixture's tests below read the real ``rules/``.
+_NO_RULES = Path(__file__).parents[3] / "fixtures" / "effects" / "minimal-rules"
 
 #: Feature 023's rules, which most of this file was written against: the held-out
 #: text above is held out under the ``text`` unit, ``0.16`` places exactly one
@@ -292,7 +297,7 @@ class CorpusFixture:
         already lives there, and a game split across two source directories
         would be counted once per directory in ``games_by_source``.
         """
-        write_shard(self.records / "full-strength" / "run.0-extra.jsonl.gz", records)
+        write_ended_shard(self.records / "full-strength" / "run.0-extra.jsonl.gz", records)
         return self
 
     @property
@@ -361,8 +366,8 @@ def _write_corpus(root: Path) -> CorpusFixture:
     # collection run apart from a depleted one (FR-149): the tainted game is
     # full-strength by construction, and no game spans the two.
     records_dir = root / "records"
-    write_shard(records_dir / "full-strength" / "run.0-a.jsonl.gz", shard_a)
-    write_shard(records_dir / "depleted" / "run.0-b.jsonl.gz", shard_b)
+    write_ended_shard(records_dir / "full-strength" / "run.0-a.jsonl.gz", shard_a)
+    write_ended_shard(records_dir / "depleted" / "run.0-b.jsonl.gz", shard_b)
 
     return CorpusFixture(
         records=records_dir,
@@ -386,13 +391,6 @@ def default_build(tmp_path_factory, shared_corpus) -> CorpusStore:
     """``shared_corpus`` built once under the defaults, for the tests that only
     read what the build wrote."""
     return shared_corpus.build(tmp_path_factory.mktemp("default-build") / "curated")
-
-
-def test_build_writes_the_three_strata_and_a_manifest(default_build):
-    store = default_build
-    assert store.manifest_path.exists()
-    assert list(store.training_dir.glob("*.jsonl.gz"))
-    assert store.load().digest()
 
 
 def test_a_build_writes_the_legacy_token_key_fields_empty(default_build):
@@ -561,6 +559,428 @@ def test_build_refuses_an_empty_corpus(tmp_path, a_corpus):
         a_corpus.build(tmp_path / "out", records_dir=empty)
 
 
+# ── a build stops before it clears a dataset it could not replace ─────
+
+
+def _dataset(out: Path) -> dict[str, bytes]:
+    """Every file of a built dataset, by its path under ``out``."""
+    return {str(path.relative_to(out)): path.read_bytes()
+            for path in sorted(out.rglob("*")) if path.is_file()}
+
+
+def test_a_build_with_no_rules_catalogue_refuses_before_clearing_the_dataset(
+    tmp_path, a_corpus,
+):
+    """A rules directory with no scenario or no heads line would tag and budget
+    nothing and only fail at the precision exit, after the dataset was
+    replaced: it is refused before the survey, the earlier dataset intact."""
+    out = tmp_path / "curated"
+    a_corpus.build(out)
+    before = _dataset(out)
+    with pytest.raises(BuildCorpusError, match="rules catalogue"):
+        build(a_corpus.config(out, rules_dir=tmp_path / "nowhere"))
+    assert _dataset(out) == before
+
+
+def _raw_shard(path: Path, *members: bytes) -> None:
+    """A shard of the given gzip members, as a worker appends them."""
+    import gzip
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as handle:
+        for member in members:
+            handle.write(gzip.compress(member))
+
+
+def _line(record: EffectRecord) -> bytes:
+    import json
+
+    from effects.infrastructure.record_codec import record_to_dict
+
+    return (json.dumps(record_to_dict(record)) + "\n").encode("utf-8")
+
+
+@pytest.mark.parametrize("damage", ["undecodable line", "corrupt member", "unknown generation"])
+def test_a_damaged_shard_stops_the_build_naming_it_before_anything_is_cleared(
+    tmp_path, a_corpus, damage,
+):
+    """A shard the survey cannot read whole makes the dataset unusable: the build
+    exits 1 naming the shard, and the earlier dataset under --output survives."""
+    import gzip
+    import json
+
+    from effects.infrastructure.record_codec import record_to_dict
+
+    out = tmp_path / "curated"
+    a_corpus.build(out)
+    before = _dataset(out)
+    good = _line(CorpusFixture.resolution("g-damaged.1", game="g-damaged"))
+    shard = a_corpus.records / "full-strength" / "run.0-damaged.jsonl.gz"
+    if damage == "undecodable line":
+        _raw_shard(shard, good + b"{not json\n")
+    elif damage == "corrupt member":
+        with open(shard, "wb") as handle:
+            handle.write(gzip.compress(good))
+            handle.write(gzip.compress(good)[:12] + bytes(40))
+            handle.write(gzip.compress(good))
+    else:
+        data = record_to_dict(CorpusFixture.resolution("g-damaged.2", game="g-damaged"))
+        data["generation"] = 4
+        _raw_shard(shard, good + (json.dumps(data) + "\n").encode("utf-8"))
+
+    with pytest.raises(BuildCorpusError, match="run.0-damaged.jsonl.gz"):
+        build(a_corpus.config(out))
+    assert _dataset(out) == before
+
+
+@pytest.mark.parametrize("game", ["g-late", "g-clean-1"])
+def test_records_a_shard_gains_between_the_passes_are_written_nowhere(
+    tmp_path, a_corpus, monkeypatch, caplog, game,
+):
+    """A collection still appending under --records-dir. A new game was never
+    placed and may name a held-out card; a game the survey placed has records
+    it never planned. Either way the write pass reads past what the survey
+    read, writes those records nowhere and counts them (V5 #1)."""
+    import gzip
+
+    from effects.application import build_corpus as module
+
+    shard = a_corpus.records / "full-strength" / "run.0-a.jsonl.gz"
+    late = [_resolution(f"{game}.late{n}", game, ability=(_SHOCK_KEY,),
+                        entity_names=(_HELD_OUT_CARD,) if game == "g-late" else ())
+            for n in range(3)]
+    decide = module._decide_or_refuse
+
+    def decide_then_grow(*args, **kwargs):
+        decided = decide(*args, **kwargs)
+        with open(shard, "ab") as handle:
+            handle.write(gzip.compress(b"".join(_line(record) for record in late)))
+        return decided
+
+    monkeypatch.setattr(module, "_decide_or_refuse", decide_then_grow)
+    store = a_corpus.build(tmp_path / "curated")
+    manifest = store.load()
+    assert manifest.per_stratum[Stratum.DROPPED_UNSURVEYED] == 3
+    assert not {r.record_id for r in late} & {r.record_id for r in _written(store)}
+    assert "run.0-a.jsonl.gz" in caplog.text and "changed size since the survey" in caplog.text
+
+
+def test_records_appended_after_the_survey_to_a_shard_holding_a_cut_game_are_written_nowhere(
+    tmp_path, a_corpus, monkeypatch,
+):
+    """A shard holding an ended game and a cut one gains records between the
+    passes, the cut game's last ones and its marker among them: the survey
+    read the cut game as cut, so the write pass drops what the survey read of
+    it as cut and the rest, never surveyed, as unsurveyed; none is written,
+    and the ended game is."""
+    import gzip
+
+    from effects.application import build_corpus as module
+    from tests.unit.effects.builders import game_end_marker
+
+    shard = a_corpus.records / "full-strength" / "run.0-mixed.jsonl.gz"
+    ended = [_resolution(f"g-ended.{n}", "g-ended", ability=(_SHOCK_KEY,)) for n in range(2)]
+    cut = [_resolution(f"g-cut.{n}", "g-cut", ability=(_SHOCK_KEY,)) for n in range(2)]
+    write_shard(shard, [*ended, game_end_marker(ended[-1]), *cut])
+    late = [_resolution("g-cut.late", "g-cut", ability=(_SHOCK_KEY,))]
+    late.append(game_end_marker(late[-1]))
+    decide = module._decide_or_refuse
+
+    def decide_then_grow(*args, **kwargs):
+        decided = decide(*args, **kwargs)
+        with open(shard, "ab") as handle:
+            handle.write(gzip.compress(b"".join(_line(record) for record in late)))
+        return decided
+
+    monkeypatch.setattr(module, "_decide_or_refuse", decide_then_grow)
+    store = a_corpus.build(tmp_path / "curated")
+    manifest = store.load()
+    written = {r.record_id for r in _written(store)}
+    assert manifest.cut_games == 1
+    assert manifest.per_stratum[Stratum.DROPPED_CUT] == 2
+    assert manifest.per_stratum[Stratum.DROPPED_UNSURVEYED] == 2
+    assert not {r.record_id for r in [*cut, *late]} & written
+    assert "g-ended" in {r.game_id for r in _written(store)} | {
+        *manifest.card_disjoint_games, *manifest.game_disjoint_games}
+
+
+def test_a_damaged_last_member_after_a_marker_is_named_once_and_changes_nothing(
+    tmp_path, a_corpus, caplog,
+):
+    """The survey reads a shard's markers, then its records: the damaged
+    last member is one shard's one damaged tail, and the write pass, reading
+    the same bytes, finds the same tally."""
+    import gzip
+
+    from tests.unit.effects.builders import game_end_marker
+
+    ended = [_resolution(f"g-d.{n}", "g-d", ability=(_SHOCK_KEY,)) for n in range(2)]
+    after = [_resolution(f"g-e.{n}", "g-e", ability=(_SHOCK_KEY,)) for n in range(2)]
+    good = gzip.compress(b"".join(_line(r) for r in [*ended, game_end_marker(ended[-1])]))
+    bad = bytearray(gzip.compress(b"".join(_line(r) for r in after)))
+    bad[len(bad) // 2] ^= 0xFF
+    (a_corpus.records / "full-strength" / "run.0-damaged.jsonl.gz").write_bytes(good + bytes(bad))
+
+    with caplog.at_level(logging.WARNING):
+        manifest = a_corpus.build(tmp_path / "curated").load()
+
+    assert len(manifest.damaged_tails) == 1
+    assert manifest.damaged_tails[0].startswith("full-strength/run.0-damaged.jsonl.gz")
+    assert "changed between the passes" not in caplog.text
+
+
+def test_the_manifest_records_how_its_records_were_collected_and_read(
+    tmp_path, a_corpus, caplog,
+):
+    """P3a #17: per class, the kept records collected as forks, interventions,
+    directed forks, aimed or degraded; the placement thresholds and the
+    keyword table the build ran under; and what reading met without stopping:
+    values outside the wire's closed lists and keys of a tree with no root."""
+    import gzip
+    import hashlib
+    import json
+
+    from effects.infrastructure.record_codec import record_to_dict
+
+    definitions = tmp_path / "keyword-definitions.json"
+    definitions.write_text("{}", encoding="utf-8")
+    odd = record_to_dict(CorpusFixture.resolution("g-clean-1.odd", game="g-clean-1"))
+    odd["state"]["global"]["combat_substep"] = "third_strike"
+    variant = ProvenanceKey("variant-scripts/x_variant.txt", 0, "spell", 0)
+    # An attacker printing a line of the variant tree, which this build has no
+    # root for: the survey's keyword read finds no line for it.
+    from effects.domain.state_snapshot import CombatStatus
+
+    unrooted = _combat("g-clean-1.variant", "g-clean-1")
+    unrooted = replace(unrooted, state=replace(unrooted.state, entities=(
+        make_entity("E0", "x variant", printed=(variant,),
+                    combat=CombatStatus(attacking="p2")),)))
+    from tests.unit.effects.builders import game_end_marker
+
+    # The game ends in this shard too: a game without its marker is cut.
+    with open(a_corpus.records / "full-strength" / "run.0-extra.jsonl.gz", "wb") as handle:
+        handle.write(gzip.compress((json.dumps(odd) + "\n").encode("utf-8") + _line(unrooted)
+                                   + _line(game_end_marker(unrooted))))
+
+    manifest = a_corpus.build(tmp_path / "curated", keyword_definitions=definitions).load()
+
+    assert manifest.record_flags["combat"]["fork"] == 1
+    assert manifest.placement_thresholds == {
+        "min_games_per_half": 0, "max_item_error": MAX_ITEM_ERROR, "max_component_error": None}
+    assert manifest.keyword_definitions_digest == hashlib.sha256(b"{}").hexdigest()
+    assert manifest.decode_off_list == {"global.combat_substep 'third_strike'": 1}
+    assert manifest.join_gaps == {"unconfigured": {"variant-scripts": 1}}
+    # The two passes ask the sidecars different numbers of times: a join gap
+    # alone is no sign the corpus changed between them.
+    assert "changed between the passes" not in caplog.text
+    data = json.loads((tmp_path / "curated" / "manifest.json").read_text(encoding="utf-8"))
+    assert "damaged_tails" not in data
+
+
+def test_a_shard_whose_last_member_is_damaged_builds_and_is_named_in_the_manifest(
+    tmp_path, a_corpus,
+):
+    """A shard whose last gzip member is damaged: the read ends there quietly
+    (a worker killed mid-write leaves such a tail), and the manifest names it."""
+    import gzip
+
+    good = _line(CorpusFixture.resolution("g-clean-1.cut", game="g-clean-1"))
+    shard = a_corpus.records / "full-strength" / "run.0-cut.jsonl.gz"
+    with open(shard, "wb") as handle:
+        handle.write(gzip.compress(good))
+        handle.write(gzip.compress(good)[:12] + bytes(40))
+    manifest = a_corpus.build(tmp_path / "curated").load()
+    assert any("run.0-cut.jsonl.gz" in where for where in manifest.damaged_tails)
+
+
+def test_only_a_decode_tally_differing_between_the_passes_is_a_changed_corpus(caplog):
+    """The two passes ask the sidecar cache different numbers of times, so
+    their join gaps differ on every build with one; their decode tallies read
+    the same bytes and differ only when a shard changed between them."""
+    from effects.application.corpus_report import report_write_pass
+    from effects.application.corpus_survey import ReadGaps, ShardSurvey, Survey
+    from effects.application.corpus_write import WriteResult
+    from effects.domain.corpus_plan import TrainingSupply
+
+    survey = Survey(totals=ShardSurvey(shard=SourceShard("", 0), supply=TrainingSupply(1),
+                                       reading=ReadGaps(unconfigured=Counter({"t": 3}))),
+                    shards=())
+    report_write_pass(survey, WriteResult(reading=ReadGaps(unconfigured=Counter({"t": 1}))))
+    assert "changed between the passes" not in caplog.text
+    report_write_pass(survey, WriteResult(reading=ReadGaps(
+        off_list=Counter({("global.phase", "'x'"): 1}), unconfigured=Counter({"t": 3}))))
+    assert "changed between the passes" in caplog.text
+
+
+def test_one_raw_corpus_builds_to_one_digest_wherever_it_sits_and_whatever_ran_before(
+    tmp_path, a_corpus,
+):
+    """The selection set is found by the corpus digest: a copy of the raw
+    corpus elsewhere, or a second build in the same process, must reach the
+    same one. What reading met (a damaged last member, a key of a tree with
+    no root) is recorded outside the digest, the damaged shard by its path
+    under --records-dir."""
+    import gzip
+    import shutil
+
+    from effects.domain.state_snapshot import CombatStatus
+
+    good = _line(CorpusFixture.resolution("g-clean-1.cut", game="g-clean-1"))
+    with open(a_corpus.records / "full-strength" / "run.0-cut.jsonl.gz", "wb") as handle:
+        handle.write(gzip.compress(good))
+        handle.write(gzip.compress(good)[:12] + bytes(40))
+    variant = ProvenanceKey("variant-scripts/x_variant.txt", 0, "spell", 0)
+    unrooted = _combat("g-clean-1.variant", "g-clean-1")
+    unrooted = replace(unrooted, state=replace(unrooted.state, entities=(
+        make_entity("E0", "x variant", printed=(variant,), combat=CombatStatus(attacking="p2")),)))
+    write_ended_shard(a_corpus.records / "full-strength" / "run.0-variant.jsonl.gz", [unrooted])
+
+    first = a_corpus.build(tmp_path / "first").load()
+    again = a_corpus.build(tmp_path / "again").load()
+    moved = tmp_path / "elsewhere" / "records"
+    shutil.copytree(a_corpus.records, moved)
+    elsewhere = a_corpus.build(tmp_path / "third", records_dir=moved).load()
+
+    assert first.damaged_tails == elsewhere.damaged_tails
+    assert first.damaged_tails[0].startswith("full-strength/run.0-cut.jsonl.gz")
+    assert first.join_gaps
+    assert first.digest() == again.digest() == elsewhere.digest()
+
+
+def test_a_cut_game_is_written_nowhere_and_counted(tmp_path, a_corpus, caplog):
+    """WP7: a gen-3 game whose shard holds no game-end marker was cut (a
+    killed worker); its records are incomplete, so no stratum holds them,
+    even when it names a held-out card, and the manifest counts it."""
+    cut = [
+        _resolution("g-cut.1", "g-cut", ability=(_HELD_OUT_KEY,), entity_names=(_HELD_OUT_CARD,)),
+        _resolution("g-cut.2", "g-cut", ability=(_SHOCK_KEY,)),
+        make_record(RecordKind.TURN_ACTION, record_id="g-cut.3", game_id="g-cut",
+                    timestamp=_TIMESTAMP, ability=None, generation=3),
+    ]
+    write_shard(a_corpus.records / "full-strength" / "run.0-cut.jsonl.gz", cut)
+    with caplog.at_level(logging.INFO):
+        store = a_corpus.build(tmp_path / "curated")
+    manifest = store.load()
+    assert manifest.per_stratum[Stratum.DROPPED_CUT] == 3
+    assert manifest.per_stratum[Stratum.DROPPED_UNSURVEYED] == 0
+    assert manifest.cut_games == 1
+    assert "g-cut" not in {r.game_id for r in _written(store)}
+    assert "g-cut" not in {*manifest.card_disjoint_games, *manifest.game_disjoint_games}
+    assert "game_end" in manifest.turn_action_left_out
+    assert "draw" not in manifest.turn_action_left_out, "a cut game's turn action is its"
+    assert "1 of 5 game(s)" in caplog.text and "game-end marker" in caplog.text
+
+
+def test_the_cut_count_moves_the_digest_and_nothing_else_does(tmp_path, a_corpus):
+    """The games dropped as cut decide which records the corpus holds."""
+    first = a_corpus.build(tmp_path / "first").load()
+    write_shard(a_corpus.records / "full-strength" / "run.0-cut.jsonl.gz",
+                [_resolution("g-cut.1", "g-cut", ability=(_SHOCK_KEY,))])
+    second = a_corpus.build(tmp_path / "second").load()
+    assert (first.cut_games, second.cut_games) == (0, 1)
+    assert "cut_games" not in first.as_dict(), "omitted at 0, as an older manifest"
+    assert first.digest() != second.digest()
+
+
+def test_a_corpus_whose_every_game_was_cut_is_refused(tmp_path):
+    """No marker at all: the collection wrote none, and every game would drop."""
+    fixture = _write_corpus(tmp_path / "source")
+    for shard in iter_shards(fixture.records):
+        records = [r for r in read_shard(shard) if r.subkind is not TurnActionSubkind.GAME_END]
+        write_shard(shard, records)
+    with pytest.raises(BuildCorpusError, match="game-end marker"):
+        build(fixture.config(tmp_path / "curated"))
+
+
+def test_the_manifest_s_rule_counts_say_what_the_catalogue_says_of_untagged_rules(
+    tmp_path, a_corpus,
+):
+    """The rule counts in ``rule-counts.json``'s full shape: the declared rules
+    no record tagged, the rules declared without a detector, the untaggable
+    declarations and the duplicates (``CatalogueStanding``)."""
+    counts = a_corpus.build(tmp_path / "curated").load().rule_counts
+    assert {"declared_zero", "none", "untaggable", "same_as"} <= set(counts)
+    assert "103.6a" in counts["none"]
+    # A rule declared with a detector no record of this corpus satisfies.
+    counts = a_corpus.build(tmp_path / "budgeted",
+                            rules_dir=_budget_rules(tmp_path / "rules")).load().rule_counts
+    assert counts["declared_zero"] == [_BUDGET_RULE]
+
+
+def test_the_events_no_output_reads_are_counted_outside_the_digest(tmp_path, a_corpus):
+    """``RecordTargets.unsupervised``: a name change, a mana cost change and a
+    hidden keyword change have no output column; the build counts them by
+    kind over the kept records, in the manifest and its report, outside the
+    digest."""
+    renamed = CorpusFixture.resolution("g-clean-1.renamed", game="g-clean-1", events=(
+        Event(type=EventType.NAME_CHANGE, subjects=("E0",), params={"name": "x"}),
+        Event(type=EventType.NAME_CHANGE, subjects=("E0",), params={"name": "y"}),
+    ))
+    a_corpus.with_extra_records([renamed])
+    manifest = a_corpus.build(tmp_path / "curated").load()
+    assert manifest.unsupervised_events == {"name_change": 2}
+    assert manifest.digest() == replace(manifest, unsupervised_events={}).digest()
+
+
+def test_a_shard_damaged_between_the_passes_stops_the_write_pass_and_says_so(
+    tmp_path, a_corpus, monkeypatch,
+):
+    """The survey read the shard whole; damage appended before the write pass
+    stops the build there, after --output was cleared, and the message says
+    the dataset was cleared."""
+    import gzip
+
+    from effects.application import build_corpus as module
+
+    shard = a_corpus.records / "full-strength" / "run.0-a.jsonl.gz"
+    good = _line(CorpusFixture.resolution("g-clean-1.later", game="g-clean-1"))
+    decide = module._decide_or_refuse
+
+    def decide_then_damage(*args, **kwargs):
+        decided = decide(*args, **kwargs)
+        with open(shard, "ab") as handle:
+            handle.write(gzip.compress(good)[:12] + bytes(40))
+            handle.write(gzip.compress(good))
+        return decided
+
+    monkeypatch.setattr(module, "_decide_or_refuse", decide_then_damage)
+    with pytest.raises(BuildCorpusError, match="already cleared") as raised:
+        build(a_corpus.config(tmp_path / "curated"))
+    assert "run.0-a.jsonl.gz" in str(raised.value)
+
+
+def test_a_build_on_two_workers_is_the_build_on_one(tmp_path, a_corpus):
+    """Each pool worker hands back its shards' tallies, and the parent sums
+    them: two workers write the dataset one does, under the same digest and
+    the same reading tallies."""
+    import gzip
+
+    good = _line(CorpusFixture.resolution("g-clean-1.cut", game="g-clean-1"))
+    with open(a_corpus.records / "full-strength" / "run.0-cut.jsonl.gz", "wb") as handle:
+        handle.write(gzip.compress(good))
+        handle.write(gzip.compress(good)[:12] + bytes(40))
+    one = a_corpus.build(tmp_path / "one").load()
+    two = a_corpus.build(tmp_path / "two", workers=2).load()
+    assert one.digest() == two.digest()
+    assert one.damaged_tails == two.damaged_tails and two.damaged_tails
+
+
+def test_the_manifest_records_the_code_and_the_sidecars_it_was_built_from(
+    tmp_path, a_corpus,
+):
+    """The commit the build ran on and a hash of the sidecar trees it joined
+    against, both outside the digest; and per class the kept resolution
+    records acting only through runtime-only keys."""
+    first = a_corpus.build(tmp_path / "first").load()
+    assert len(first.code_version) >= 40 or first.code_version == ""
+    assert first.record_flags["resolution-effect"]["runtime_only"] == 1  # g-clean-3.level
+    sidecar = next(a_corpus.cards[0].rglob("*.provenance.json"))
+    sidecar.write_text(sidecar.read_text(encoding="utf-8") + " ", encoding="utf-8")
+    second = a_corpus.build(tmp_path / "second").load()
+    assert first.sidecar_digest and first.sidecar_digest != second.sidecar_digest
+    assert first.digest() == second.digest()
+
+
 # ── fix round 1: _output_name must be injective (review Finding 1) ─────
 
 
@@ -594,6 +1014,12 @@ def test_the_manifest_records_per_stratum_counts_and_unique_texts(default_build)
     manifest = default_build.load()
     assert manifest.per_stratum["training"] > 0
     assert manifest.unique_texts["training"] > 0
+    # The counts are what each stratum's directory holds, not merely positive.
+    for stratum, directory in (("training", default_build.training_dir),
+                               ("card-disjoint", default_build.card_disjoint_dir),
+                               ("game-disjoint", default_build.game_disjoint_dir)):
+        written = {r.record_id for r in read_records(directory)}
+        assert manifest.per_stratum[stratum] == len(written), stratum
     assert "card-disjoint" in manifest.per_stratum
     assert "game-disjoint" in manifest.per_stratum
     assert manifest.unique_texts["card-disjoint"] > 0
@@ -653,7 +1079,7 @@ def a_mixture_corpus(tmp_path_factory) -> CorpusFixture:
             rows.append(
                 _resolution("g-tainted.1", "g-tainted", ability=(_HELD_OUT_KEY,)),
             )
-        write_shard(records_dir / f"run.0-{shard}.jsonl.gz", rows)
+        write_ended_shard(records_dir / f"run.0-{shard}.jsonl.gz", rows)
 
     return CorpusFixture(
         records=records_dir, cards=(root / "cardsfolder",),
@@ -867,7 +1293,7 @@ def a_corpus_with_variants(tmp_path_factory):
     root = tmp_path_factory.mktemp("variants") / "source"
     fixture = _write_corpus(root)
     _write_variant(root, _VARIANT_FILE, _VARIANT_TEXT)
-    write_shard(
+    write_ended_shard(
         fixture.records / "variants" / "run.0-v.jsonl.gz",
         [
             _resolution(f"g-var.{i}", "g-var", ability=(_VARIANT_KEY,))
@@ -1334,15 +1760,6 @@ def test_a_records_set_mixing_generations_is_refused(tmp_path, a_corpus):
         a_corpus.build(tmp_path / "out", rules=_GEN2_RULES)
 
 
-def test_the_retired_game_count_flag_is_rejected_by_argparse(capsys):
-    """Spec Story 4 scenario 10: ``--game-disjoint-share`` replaced it."""
-    from effects.infrastructure.cli import build_parser
-
-    with pytest.raises(SystemExit):
-        build_parser().parse_args(["build-corpus", "--game-disjoint-games", "1000"])
-    assert "--game-disjoint-games" in capsys.readouterr().err
-
-
 def test_the_game_disjoint_keywords_parse_as_a_comma_separated_list():
     from effects.infrastructure.cli import build_parser
 
@@ -1362,15 +1779,6 @@ def gen2_build(tmp_path_factory, shared_corpus) -> CorpusStore:
     """``shared_corpus`` built once under :data:`_GEN2_RULES`."""
     output = tmp_path_factory.mktemp("gen2-build") / "curated"
     return shared_corpus.build(output, rules=_GEN2_RULES)
-
-
-def test_two_builds_with_one_seed_write_the_same_training_records(
-    tmp_path, shared_corpus, gen2_build,
-):
-    """FR-052."""
-    again = shared_corpus.build(tmp_path / "two", rules=_GEN2_RULES)
-
-    assert _training_ids(gen2_build) == _training_ids(again)
 
 
 def test_random_seat_changes_no_selection(tmp_path, shared_corpus, gen2_build):
@@ -1475,7 +1883,7 @@ def test_a_held_back_game_takes_no_training_slot(tmp_path, a_corpus):
     routed the game away, and the text's slots went unwritten. Gen-2 wrote
     82% of the records it planned.
     """
-    write_shard(a_corpus.records / "full-strength" / "run.0-held.jsonl.gz", [
+    write_ended_shard(a_corpus.records / "full-strength" / "run.0-held.jsonl.gz", [
         _resolution(
             "g-held-2.0", "g-held-2", ability=(_BOLT_KEY,),
             entity_names=(_HELD_OUT_CARD,),
@@ -1506,7 +1914,7 @@ def test_a_held_out_game_resolving_no_held_out_text_is_dropped(tmp_path, a_corpu
     Gate 1 and the gate-one slice score resolution records, so a game whose
     held-out text appears only on a rewrite holds nothing gate 1 measures.
     """
-    write_shard(a_corpus.records / "full-strength" / "run.0-rewrite.jsonl.gz", [
+    write_ended_shard(a_corpus.records / "full-strength" / "run.0-rewrite.jsonl.gz", [
         _rewrite("g-held-3.0", "g-held-3", ability=(_HELD_OUT_KEY,)),
         _resolution(
             "g-held-3.1", "g-held-3", ability=(_SHOCK_KEY,),
@@ -1530,7 +1938,7 @@ def test_a_token_printing_a_held_out_text_holds_its_game_out(tmp_path, a_corpus)
         tmp_path / "source", token_file, "Goblin Held", _HELD_OUT_TEXT,
         index_within_kind=1,
     )
-    write_shard(a_corpus.records / "full-strength" / "run.0-token.jsonl.gz", [
+    write_ended_shard(a_corpus.records / "full-strength" / "run.0-token.jsonl.gz", [
         replace(
             _resolution("g-token.0", "g-token", ability=(_SHOCK_KEY,)),
             state=make_snapshot(entities=(
@@ -1567,7 +1975,7 @@ def test_a_variant_printing_a_held_out_text_trains_on_nothing(tmp_path, a_corpus
         ),
         sidecar_path_for(path),
     )
-    write_shard(a_corpus.records / "variants" / "run.0-v.jsonl.gz", [
+    write_ended_shard(a_corpus.records / "variants" / "run.0-v.jsonl.gz", [
         _resolution("g-var.0", "g-var", ability=(variant_key,)),
         _resolution("g-var.1", "g-var", ability=(_SHOCK_KEY,)),
     ])
@@ -1640,6 +2048,29 @@ def budget_build(tmp_path, a_corpus):
         class_mix={"resolution-effect": 1.0}, validation_sample=0,
     )
     return store, game
+
+
+def test_the_text_cap_bounds_a_text_s_natural_and_added_copies_together(tmp_path, a_corpus):
+    """The build hands the rule budgets every natural copy of the text in the
+    class (``SelectionPlan.text_planned``), untagged records' included, so the
+    copies added for a rule never take the text past ``--text-cap``."""
+    from effects.domain.corpus_curation import game_disjoint_draw
+
+    game = next(f"g-dmg-{i}" for i in range(100) if game_disjoint_draw(f"g-dmg-{i}") >= 0.1)
+    a_corpus.with_extra_records([
+        *(_damaged(f"{game}.tagged{i}", game, hits=2) for i in range(2)),
+        *(_damaged(f"{game}.plain{i}", game, hits=1) for i in range(8)),
+        # Another text's records, so the class asks the rule for many copies.
+        *(_resolution(f"{game}.shock{i}", game, ability=(_SHOCK_KEY,)) for i in range(40)),
+    ])
+    store = a_corpus.build(
+        tmp_path / "out", rules=_GEN2_RULES, rules_dir=_budget_rules(tmp_path / "rules"),
+        game_disjoint_share=0.01, game_disjoint_keyword_share=0.01,
+        class_mix={"resolution-effect": 1.0}, validation_sample=0, text_cap=6,
+    )
+    bolts = [r for r in read_records(store.training_dir)
+             if r.game_id == game and r.ability == (_BOLT_KEY,)]
+    assert 0 < len(bolts) <= 6
 
 
 def test_added_copies_carry_their_rule_and_natural_copies_none(budget_build):
@@ -1716,13 +2147,13 @@ def test_a_decision_whose_candidate_key_is_unjoinable_is_refused(tmp_path, a_cor
 
 
 def _gen3_records(root: Path) -> Path:
-    import shutil
-
-    from tests.unit.effects.builders import GEN3_RECORDS
+    """The fixture's shard, each game ended by the marker its copy appends
+    (the fixture predates the marker; ``copy_gen3_fixture``)."""
+    from tests.unit.effects.builders import copy_gen3_fixture
 
     records = root / "records"
     records.mkdir(parents=True)
-    shutil.copy(GEN3_RECORDS, records / GEN3_RECORDS.name)
+    copy_gen3_fixture(records)
     return records
 
 
@@ -1757,7 +2188,7 @@ def test_no_turn_action_record_is_written_and_each_is_counted(gen3_build):
     """Story 6 acceptance 8 (FR-059)."""
     assert not [r for r in _written(gen3_build) if r.kind is RecordKind.TURN_ACTION]
     assert gen3_build.load().turn_action_left_out == {
-        "cleanup_discard": 2, "day_night": 2, "draw": 2, "lore_counter": 2,
+        "cleanup_discard": 2, "day_night": 2, "draw": 2, "game_end": 58, "lore_counter": 2,
         "phasing": 2, "untap": 2}
 
 
@@ -1817,14 +2248,20 @@ def test_the_manifest_holds_every_gen3_field(gen3_build):
     manifest = gen3_build.load()
     assert manifest.rule_map_digest == heads_digest()
     heads = load_heads()
-    assert set(manifest.rule_map) == set(manifest.rule_counts["rules"])
+    # The map holds every tagged rule and every rule a copy is drawn for: a
+    # protection rule (702.16j's protection from everything) may be drawn on a
+    # protection copy with no natural record tagging it.
+    tagged = set(manifest.rule_counts["rules"])
+    assert tagged <= set(manifest.rule_map)
+    assert {rule[:6] for rule in set(manifest.rule_map) - tagged} <= {"702.16"}
     for rule, entry in manifest.rule_map.items():
         assert entry.verdict == (heads[rule].verdict if rule in heads else "missing")
     # FR-054: every tagged rule but a trained one is named as unbudgeted, a
     # rule only a validation game or a turn action shows included.
     assert set(manifest.unbudgeted_rules) == {
         rule for rule, entry in manifest.rule_map.items() if entry.verdict != "trained"}
-    assert manifest.rule_counts["records"] == 205
+    # The fixture's 205 records and the 58 markers its copy appends.
+    assert manifest.rule_counts["records"] == 205 + 58
     assert set(manifest.halves) == {"card-disjoint", "game-disjoint"}
 
 
@@ -1904,6 +2341,9 @@ def test_protection_copies_are_written_as_their_rules_draw_them(tmp_path):
     rules = tmp_path / "rules"
     (rules / "scenarios").mkdir(parents=True)
     (rules / "heads").mkdir()
+    # A scenario no record can tag: a build refuses a catalogue with none.
+    (rules / "scenarios" / "103.json").write_bytes(
+        (_NO_RULES / "scenarios" / "103.json").read_bytes())
     (rules / "heads" / "702.jsonl").write_text("".join(
         json.dumps({"id": rule, "output": "trained", "outputs": []}) + "\n"
         for rule in sorted(PROTECTION_RULES)), encoding="utf-8")

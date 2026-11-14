@@ -68,14 +68,8 @@
       ],
       "forge_notes": "In the second variant the harness fixes the attacker and blocker declarations for the swapped sides.",
       "detector": {
-        "family": "keyword_combat",
-        "record_kind": "combat",
-        "outcome": "An attacking creature with trample, attacking a player, is blocked by creatures whose remaining toughness sums to less than its power, so its excess combat damage can reach the defending player.",
-        "near_miss": "A damage-step probe fork re-running the same combat with trample stripped from the attacker, so none of its damage reaches the defending player.",
-        "params": {
-          "keyword": "trample"
-        },
-        "needs": []
+        "same_as": "702.19b-1",
+        "reason": "The record shows a trampling attacker assigning its excess to the player, 702.19b's fact."
       }
     },
     {
@@ -358,14 +352,7 @@
       ],
       "forge_notes": "In the second variant Craw Wurm's summoning sickness is also cleared.",
       "detector": {
-        "family": "keyword_combat",
-        "record_kind": "combat",
-        "outcome": "A real combat in which an attacker with trample deals combat damage, the excess reaching the defending player.",
-        "near_miss": "A damage-step probe re-running the combat with trample stripped from the attacker.",
-        "params": {
-          "keyword": "trample"
-        },
-        "needs": []
+        "none": "Could not express: a blocker removed from combat is read by no keyword_combat parameter."
       }
     },
     {

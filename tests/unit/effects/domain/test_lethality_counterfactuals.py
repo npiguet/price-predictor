@@ -12,10 +12,13 @@ import random
 from dataclasses import replace
 from types import SimpleNamespace
 
+import pytest
+
 from effects.domain.effect_head_layout import ZONE_OUTCOMES
 from effects.domain.effect_targets import derive_targets
 from effects.domain.event_schema import Event, EventType
 from effects.domain.lethality_counterfactuals import (
+    SOURCE_EXCLUSIONS,
     EffectKind,
     counterfactual,
     edit_text,
@@ -48,12 +51,12 @@ def _creature(entity_id: str, toughness: int, *, damage: int = 0, **overrides) -
     )
 
 
-def _record(events, entities, *, x=None, targets=("E1",)) -> EffectRecord:
+def _record(events, entities, *, x=None, targets=("E1",), source_x_paid=None) -> EffectRecord:
     state = make_snapshot(
         global_=GlobalState(turn=3, phase="main1", active="P0", priority="P0", stack_size=1),
         players=(PlayerState(id="P0", life=20, hand=3, library=30, graveyard=0),
                  PlayerState(id="P1", life=20, hand=3, library=30, graveyard=0)),
-        entities=(make_entity("S1", "spell", zone="stack"), *entities),
+        entities=(make_entity("S1", "spell", zone="stack", x_paid=source_x_paid), *entities),
         refs=Refs(targets=targets, source="S1", x=x),
     )
     return make_record(
@@ -127,6 +130,13 @@ class TestQualify:
         text = BOLT + " | SubAbility$ SV1 [SEG] SV1: DB$ Draw | NumCards$ 1"
         assert _qualify(record, text) is not None
 
+    def test_a_hit_creature_moved_where_no_zone_outcome_names_is_not_copied(self):
+        """Its outcome is unknown, never "stayed": the rule cannot be checked."""
+        onto_stack = Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
+                           params={"from_zone": "battlefield", "to_zone": "stack"})
+        record = _record([_damage("E1", 3), onto_stack], [_creature("E1", 5)])
+        assert _qualify(record) is None
+
     def test_a_second_effect_on_the_hit_creature_is_not_copied(self):
         tapped = Event(type=EventType.TAPPED, subjects=("E1",), params={})
         record = _record([_damage("E1", 3), tapped], [_creature("E1", 5)])
@@ -140,11 +150,91 @@ class TestQualify:
         assert _qualify(record, keywords_of=source_deathtouch) is None
 
     def test_an_indestructible_or_enchanted_creature_is_not_copied(self):
-        record = _record([_damage("E1", 3)], [_creature("E1", 2)])
-        assert _qualify(record, keywords_of=lambda e: {"indestructible"}) is None
+        """Each on a record that qualifies without the one difference."""
+        survivor = _record([_damage("E1", 3)], [_creature("E1", 5)])
+        assert _qualify(survivor) is not None
+        assert _qualify(survivor, keywords_of=lambda e: (
+            {"indestructible"} if e.id == "E1" else set())) is None
         aura = make_entity("A1", "aura", attached_to="E1")
         record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2), aura])
+        assert _qualify(_record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)]))
         assert _qualify(record) is None
+
+    @pytest.mark.parametrize("keyword", sorted(SOURCE_EXCLUSIONS))
+    def test_a_source_whose_keyword_changes_what_damage_does_is_not_copied(self, keyword):
+        """Deathtouch, wither, infect and lifelink each change what the hit
+        does or what else happens beside it."""
+        record = _record([_damage("E1", 3)], [_creature("E1", 5)])
+        assert _qualify(record) is not None
+        assert _qualify(record, keywords_of=lambda e: (
+            {keyword} if e.id == "S1" else set())) is None
+
+    def test_a_shield_counter_on_the_hit_creature_is_not_copied(self):
+        """The counter is spent instead of the damage, so no lethality rule holds."""
+        shielded = _creature("E1", 5, counters={"SHIELD": 1})
+        assert _qualify(_record([_damage("E1", 3)], [shielded])) is None
+
+    def test_a_hit_that_is_no_creature_is_not_copied(self):
+        walker = make_entity("E1", "E1", controller="P1", types=("planeswalker",))
+        assert _qualify(_record([_damage("E1", 3)], [walker])) is None
+
+    def test_a_cost_half_is_not_copied(self):
+        from effects.domain.records import ActivationPayload, Costs, Moment
+
+        effect = _record([_damage("E1", 3)], [_creature("E1", 5)])
+        cost = replace(effect, moment=Moment.ACTIVATION,
+                       payload=ActivationPayload(costs=Costs(), events=()))
+        assert _qualify(cost) is None
+
+    @pytest.mark.parametrize("text", [
+        BOLT + " | SubAbility$ SV1 [SEG] SV1: DB$ DealDamage | NumDmg$ 1 | Defined$ Remembered",
+        BOLT + " | DamageSource$ Targeted",
+        BOLT + " | DividedAsYouChoose$ 3",
+    ])
+    def test_a_chain_of_two_hits_or_a_blocked_parameter_is_not_copied(self, text):
+        record = _record([_damage("E1", 3)], [_creature("E1", 5)])
+        assert _qualify(record, text) is None
+
+    def test_a_death_a_shield_or_a_replacement_may_turn_is_not_copied(self):
+        """P3a #14: a regeneration shield (a floating effect from a Regenerate
+        line affecting the hit creature) or a replacement of a move or a
+        destruction on the board (an exile-instead) changes what the death
+        does, which the copies' labels would not show."""
+        from effects.domain.state_snapshot import CardLine, CommandZoneObject
+
+        regen_key = ProvenanceKey("cardsfolder/r/regenerate.txt", 0, "spell", 0)
+        rip_key = ProvenanceKey("cardsfolder/r/rest_in_peace.txt", 0, "replacement", 0)
+
+        class Lines:
+            def line_or_none(self, key):
+                text = {regen_key: "SP$ Regenerate | ValidTgts$ Creature",
+                        rip_key: "Event$ Moved | Destination$ Graveyard | ReplaceWith$ Exile"}
+                return _line(text[key]) if key in text else None
+
+        record = _record([_damage("E1", 3)], [_creature("E1", 5)])
+        assert qualify(record, _line(BOLT), derive_targets(record), _no_keywords,
+                       lines=Lines()) is not None
+        shield = CommandZoneObject(id="E50", source_lines=(regen_key,), affected=("E1",))
+        shielded = replace(record, state=replace(record.state, global_=replace(
+            record.state.global_, floating_effects=(shield,))))
+        assert qualify(shielded, _line(BOLT), derive_targets(shielded), _no_keywords,
+                       lines=Lines()) is None
+        rip = make_entity("R1", "rest in peace", types=("enchantment",), lines=(
+            CardLine(keys=(rip_key,), kind="replacement", granted=False),))
+        exiling = replace(record, state=replace(
+            record.state, entities=(*record.state.entities, rip)))
+        assert qualify(exiling, _line(BOLT), derive_targets(exiling), _no_keywords,
+                       lines=Lines()) is None
+
+    def test_an_aura_no_longer_on_the_battlefield_is_no_attachment(self):
+        """A last-known copy (no zone) of an Aura or a phased-out one attaches
+        nothing the rules see."""
+        record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
+        for gone in ({"zone": None, "id": "L7"}, {"designations": ("phased_out",)}):
+            aura = make_entity("A1", "aura", attached_to="E1", **gone)
+            with_aura = replace(record, state=replace(
+                record.state, entities=(*record.state.entities, aura)))
+            assert _qualify(with_aura) is not None, gone
 
     def test_a_player_hit_by_the_same_amount_comes_along(self):
         life = Event(type=EventType.LIFE_CHANGE, subjects=("P1",), params={"delta": -3})
@@ -161,6 +251,19 @@ class TestQualify:
         qualified = _qualify(record, SHRINK)
         effect = qualified.effect
         assert (effect.kind, effect.amount, effect.symmetric) == ("shrink", 2, True)
+
+    def test_no_fork_intervention_directed_fork_or_synthetic_record_is_copied(self):
+        """Only natural records are copy material, as for the other two
+        derivations (``protection_copies.qualifies``, the damage grid)."""
+        from effects.domain.records import DirectedTag
+
+        record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
+        assert _qualify(record) is not None
+        directed = DirectedTag(variant="v", operation="script_edit")
+        for flags in ({"fork": True}, {"fork": True, "interventional": True},
+                      {"fork": True, "directed": directed, "aimed_at": ("702.2b",)},
+                      {"synthetic": True}):
+            assert _qualify(replace(record, **flags)) is None, flags
 
 
 class TestCopies:
@@ -191,14 +294,28 @@ class TestCopies:
         assert copy.record.record_id == "r.0-0.1~cf0"
         assert record.state.entity("E1").pt.base == (2, 2)
 
-    def test_a_paid_x_is_edited_in_the_references_not_the_text(self):
-        record = _record([_damage("E1", 4), _died("E1")], [_creature("E1", 4)], x=4)
+    def test_a_paid_x_is_edited_in_the_references_and_on_the_source_not_the_text(self):
+        record = _record([_damage("E1", 4), _died("E1")], [_creature("E1", 4)], x=4,
+                         source_x_paid=4)
         text = BOLT.replace("NumDmg$ 3", "NumDmg$ X")
         qualified = _qualify(record, text)
-        copy = counterfactual(record, qualified, derive_targets(record), _line(text), text,
-                              random.Random(3), 0)
-        assert copy.edit.key is None and copy.edit.text is None
-        assert copy.targets["E1"].fields["damage_taken"] == copy.record.state.refs.x
+        for seed in range(6):
+            copy = counterfactual(record, qualified, derive_targets(record), _line(text), text,
+                                  random.Random(seed), 0)
+            assert copy.edit.key is None and copy.edit.text is None
+            x = copy.record.state.refs.x
+            assert copy.targets["E1"].fields["damage_taken"] == x
+            # Both inputs the model reads the paid X through move together.
+            assert copy.record.state.entity("S1").x_paid == x
+
+    def test_an_x_the_source_did_not_pay_leaves_the_source_alone(self):
+        """``refs.x`` read from an ``SVar:X`` the chain names: the source paid
+        no X, so its ``x_paid`` stays absent."""
+        record = _record([_damage("E1", 4), _died("E1")], [_creature("E1", 4)], x=4)
+        text = BOLT.replace("NumDmg$ 3", "NumDmg$ X")
+        copy = counterfactual(record, _qualify(record, text), derive_targets(record),
+                              _line(text), text, random.Random(3), 0)
+        assert copy.record.state.entity("S1").x_paid is None
 
     def test_a_player_s_life_follows_the_amount(self):
         life = Event(type=EventType.LIFE_CHANGE, subjects=("P1",), params={"delta": -3})
@@ -273,8 +390,8 @@ class TestThePinnedOutput:
             copy.record, record_id=record.record_id, ability=record.ability,
             state=replace(state, entities=record.state.entities, refs=record.state.refs),
         ) == record
-        assert [replace(entity, pt=None, damage=0) for entity in state.entities] == [
-            replace(entity, pt=None, damage=0) for entity in record.state.entities
+        assert [replace(entity, pt=None, damage=0, x_paid=None) for entity in state.entities] == [
+            replace(entity, pt=None, damage=0, x_paid=None) for entity in record.state.entities
         ]
         assert replace(state.refs, x=None) == replace(record.state.refs, x=None)
         if copy.edit.key is None:
@@ -286,6 +403,8 @@ class TestThePinnedOutput:
             copy.record.record_id,
             None if copy.edit.key is None else copy.edit.key.script_file,
             state.refs.x,
+            tuple((entity.id, entity.x_paid) for entity in state.entities
+                  if entity.x_paid is not None),
             tuple((entity.id, entity.pt.base, entity.damage)
                   for entity in state.entities if entity.pt is not None),
             copy.edit.text, copy.edit.script,
@@ -345,7 +464,7 @@ class TestThePinnedOutput:
     def test_a_paid_x_with_a_player_hit(self):
         text = BOLT.replace("NumDmg$ 3", "NumDmg$ X")
         life = Event(type=EventType.LIFE_CHANGE, subjects=("P1",), params={"delta": -4})
-        record = _record([_damage("E1", 4), life], [_creature("E1", 6)], x=4)
+        record = _record([_damage("E1", 4), life], [_creature("E1", 6)], x=4, source_x_paid=4)
         got = self._copies(record, text, _line(text), seed=31)
         assert got == PINNED_X
 
@@ -389,45 +508,45 @@ def _life(amount: int) -> list:
 _SPANS = ((0, 27, "effect"), (27, 57, "target-spec"))
 
 PINNED_SWEEP = [
-    ("r.0-0.1~cf0", _cf(5), None, (("E1", (2, 1), 0), ("E2", (1, 1), 1), ("E3", (2, 12), 0)),
+    ("r.0-0.1~cf0", _cf(5), None, (), (("E1", (2, 1), 0), ("E2", (1, 1), 1), ("E3", (2, 12), 0)),
      *_sweep(5), _SPANS,
      (("E1", True, _hit("damage", 5, dies=True)), ("E2", True, _hit("damage", 5, dies=True)),
       ("E3", True, _hit("damage", 5, dies=False)), ("P0", True, _life(5)),
       ("P1", True, _life(5)))),
-    ("r.0-0.1~cf1", _cf(5), None, (("E1", (2, 2), 0), ("E2", (1, 5), 0), ("E3", (2, 12), 0)),
+    ("r.0-0.1~cf1", _cf(5), None, (), (("E1", (2, 2), 0), ("E2", (1, 5), 0), ("E3", (2, 12), 0)),
      *_sweep(5), _SPANS,
      (("E1", True, _hit("damage", 5, dies=True)), ("E2", True, _hit("damage", 5, dies=False)),
       ("E3", True, _hit("damage", 5, dies=False)), ("P0", True, _life(5)),
       ("P1", True, _life(5)))),
-    ("r.0-0.1~cf2", _cf(6), None, (("E1", (2, 4), 0), ("E2", (1, 1), 1), ("E3", (2, 12), 0)),
+    ("r.0-0.1~cf2", _cf(6), None, (), (("E1", (2, 4), 0), ("E2", (1, 1), 1), ("E3", (2, 12), 0)),
      *_sweep(6), _SPANS,
      (("E1", True, _hit("damage", 6, dies=True)), ("E2", True, _hit("damage", 6, dies=True)),
       ("E3", True, _hit("damage", 6, dies=False)), ("P0", True, _life(6)),
       ("P1", True, _life(6)))),
 ]
 PINNED_WEAKEN = [
-    ("r.0-0.1~cf0", _cf(4), None, (("E1", (2, 3), 0), ("E2", (2, 2), 0)), *_weaken(4), (),
+    ("r.0-0.1~cf0", _cf(4), None, (), (("E1", (2, 3), 0), ("E2", (2, 2), 0)), *_weaken(4), (),
      (("E1", True, _hit("shrink", 4, dies=True)), ("E2", True, _hit("shrink", 4, dies=True)))),
-    ("r.0-0.1~cf1", _cf(7), None, (("E1", (2, 3), 0), ("E2", (2, 3), 0)), *_weaken(7), (),
+    ("r.0-0.1~cf1", _cf(7), None, (), (("E1", (2, 3), 0), ("E2", (2, 3), 0)), *_weaken(7), (),
      (("E1", True, _hit("shrink", 7, dies=True)), ("E2", True, _hit("shrink", 7, dies=True)))),
-    ("r.0-0.1~cf2", _cf(2), None, (("E1", (2, 1), 0), ("E2", (2, 6), 0)), *_weaken(2), (),
+    ("r.0-0.1~cf2", _cf(2), None, (), (("E1", (2, 1), 0), ("E2", (2, 6), 0)), *_weaken(2), (),
      (("E1", True, _hit("shrink", 2, dies=True)),
       ("E2", True, _hit("shrink", 2, dies=False)))),
 ]
 PINNED_SHRINK = [
-    ("r.0-0.1~cf0", _cf(8), None, (("E1", (2, 5), 0),), *_shrink(8), (),
+    ("r.0-0.1~cf0", _cf(8), None, (), (("E1", (2, 5), 0),), *_shrink(8), (),
      (("E1", True, _hit("shrink", 8, dies=True, symmetric=True)),)),
-    ("r.0-0.1~cf1", _cf(3), None, (("E1", (2, 1), 0),), *_shrink(3), (),
+    ("r.0-0.1~cf1", _cf(3), None, (), (("E1", (2, 1), 0),), *_shrink(3), (),
      (("E1", True, _hit("shrink", 3, dies=True, symmetric=True)),)),
-    ("r.0-0.1~cf2", _cf(6), None, (("E1", (2, 2), 0),), *_shrink(6), (),
+    ("r.0-0.1~cf2", _cf(6), None, (), (("E1", (2, 2), 0),), *_shrink(6), (),
      (("E1", True, _hit("shrink", 6, dies=True, symmetric=True)),)),
 ]
 PINNED_X = [
-    ("r.0-0.1~cf0", None, 1, (("E1", (2, 2), 0),), None, None, (),
+    ("r.0-0.1~cf0", None, 1, (("S1", 1),), (("E1", (2, 2), 0),), None, None, (),
      (("E1", True, _hit("damage", 1, dies=False)), ("P1", True, _life(1)))),
-    ("r.0-0.1~cf1", None, 7, (("E1", (2, 1), 0),), None, None, (),
+    ("r.0-0.1~cf1", None, 7, (("S1", 7),), (("E1", (2, 1), 0),), None, None, (),
      (("E1", True, _hit("damage", 7, dies=True)), ("P1", True, _life(7)))),
-    ("r.0-0.1~cf2", None, 3, (("E1", (2, 4), 0),), None, None, (),
+    ("r.0-0.1~cf2", None, 3, (("S1", 3),), (("E1", (2, 4), 0),), None, None, (),
      (("E1", True, _hit("damage", 3, dies=False)), ("P1", True, _life(3)))),
 ]
 
@@ -454,7 +573,7 @@ class TestStepWiring:
 
         preparer = SimpleNamespace(
             config=SimpleNamespace(lethality_copies=3),
-            _keywords=SimpleNamespace(keywords_of=_no_keywords),
+            _keywords=SimpleNamespace(keywords_of=_no_keywords), sidecars=None,
         )
         lethal_bolt = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
         contradicted = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 9)])

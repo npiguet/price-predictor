@@ -157,14 +157,7 @@
       ],
       "forge_notes": "Variant one_instance moves Cayth, Famed Mechanist to B's battlefield; its granted fabricate applies only to its controller's creatures.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "Each fabricate instance of an entering permanent is evaluated and fires as its own trigger.",
-        "near_miss": "A fabricate trigger evaluated and not fired; the detector does not count instances per event, and misses an instance another permanent's effect grants, which reads off that effect's line.",
-        "params": {
-          "keyword": "Fabricate"
-        },
-        "needs": []
+        "none": "How many times one event triggers an ability is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     }
   ]

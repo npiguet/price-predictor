@@ -155,12 +155,13 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A damage-dealing resolution puts -1/-1 counters on a creature, as damage from a source with wither (or infect) does, instead of marking damage.",
-        "near_miss": "A DealDamage resolution that puts no -1/-1 counter: its damage is marked.",
+        "outcome": "Damage from a wither source is dealt as -1/-1 counters.",
+        "near_miss": "A wither source's damage resolution putting no -1/-1 counter.",
         "params": {
           "event": "counter_change",
           "counter_type": "-1/-1",
-          "api": "DealDamage"
+          "api": "DealDamage",
+          "source_keyword": "Wither"
         },
         "needs": []
       }
@@ -238,16 +239,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A damage-dealing resolution puts -1/-1 counters on a creature, as damage from a source with wither (or infect) does, instead of marking damage.",
-        "near_miss": "A DealDamage resolution that puts no -1/-1 counter: its damage is marked.",
-        "params": {
-          "event": "counter_change",
-          "counter_type": "-1/-1",
-          "api": "DealDamage"
-        },
-        "needs": []
+        "same_as": "702.80b-1",
+        "reason": "A wither spell's damage on the stack is dealt as -1/-1 counters like any wither source's."
       }
     }
   ]

@@ -54,12 +54,18 @@ class EventType(StrEnum):
     TYPE_CHANGE = "type_change"
     COLOR_CHANGE = "color_change"
     TEXT_CHANGE = "text_change"
+    #: A permanent's name changed with no face change or copy effect
+    #: (an ``Animate``'s ``Name$``, a ``SetName$`` static).
+    NAME_CHANGE = "name_change"
     ABILITY_CHANGE = "ability_change"
     CONTROL_CHANGE = "control_change"
     OWNERSHIP_CHANGE = "ownership_change"
     ATTACHED = "attached"
     UNATTACHED = "unattached"
     FACE_CHANGE = "face_change"
+    #: A permanent's mana cost changed with no face change or copy effect
+    #: (a perpetual ``ManaCost$``, an ``Incorporate$``).
+    MANA_COST_CHANGE = "mana_cost_change"
     TAPPED = "tapped"
     UNTAPPED = "untapped"
     STATE_FLAG_CHANGE = "state_flag_change"
@@ -129,7 +135,9 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
     EventType.PERMANENT_COPIED: ("copy_source", "count"),
     EventType.CARD_MADE: ("card_name", "to_zone", "count"),
     EventType.LIFE_CHANGE: ("delta",),
-    EventType.DAMAGE_DEALT: ("amount", "combat", "source", "excess"),
+    # damage_type: on damage to a creature only, how it was dealt
+    # (``normal``, ``m1m1_counters``, ``deathtouch``, ``loyalty_loss``).
+    EventType.DAMAGE_DEALT: ("amount", "combat", "source", "excess", "damage_type"),
     # Forge prevents by replacement, so this and the `rewrite` record for the
     # same replacement are two views of one engine event, not two confirming
     # signals.
@@ -148,7 +156,12 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
     EventType.LIBRARY_REORDERED: ("count",),
     EventType.COUNTER_CHANGE: ("counter_type", "delta"),
     EventType.PT_CHANGE: ("power_delta", "toughness_delta", "set_pt"),
-    EventType.KEYWORD_CHANGE: ("keywords", "removed"),
+    # hidden: a change of Forge's hidden keywords, whose ``keywords`` are
+    # Forge's own text (``CARDNAME can't block.``).
+    EventType.KEYWORD_CHANGE: ("keywords", "removed", "hidden"),
+    EventType.NAME_CHANGE: ("name",),
+    # mana_cost as an entity's ``mana_cost`` spells it, absent for no cost.
+    EventType.MANA_COST_CHANGE: ("mana_cost", "mana_value"),
     EventType.TYPE_CHANGE: ("types_added", "types_removed", "overwrite"),
     EventType.COLOR_CHANGE: ("colors", "colors_removed", "overwrite"),
     EventType.ABILITY_CHANGE: ("abilities", "removed"),
@@ -301,3 +314,22 @@ class Event:
             duration=data.get("duration"),
             attributed_to=data.get("attributed_to"),
         )
+
+
+#: The run-parameter modes (an event's provenance ``mode``) whose ``delta``
+#: is a loss. A trigger's or replacement's map carries the amount as a
+#: magnitude and names the direction by its mode (``LifeReduced 3``), while a
+#: bus event carries the signed change and no mode.
+LOSS_MODES: dict[EventType, frozenset[str]] = {
+    EventType.LIFE_CHANGE: frozenset({"LifeLost", "PayLife", "LifeReduced"}),
+    EventType.COUNTER_CHANGE: frozenset({"RemoveCounter", "CounterRemoved", "CounterRemovedOnce"}),
+}
+
+
+def signed_delta(event: Event, default: float = 0) -> float:
+    """An event's ``delta`` as the signed change it is: negative under a
+    loss mode (:data:`LOSS_MODES`) whatever sign the amount was written with."""
+    delta = float(event.params.get("delta", default))
+    if event.params.get("mode") in LOSS_MODES.get(event.type, ()):
+        return -abs(delta)
+    return delta

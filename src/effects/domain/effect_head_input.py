@@ -36,7 +36,7 @@ from functools import lru_cache
 from types import MappingProxyType
 from typing import Protocol
 
-from effects.domain.event_schema import EventType
+from effects.domain.event_schema import Event, EventType, signed_delta
 from effects.domain.forge_vocabularies import KEYWORD_COUNTERS, NAMED_COUNTERS, SUBTYPES
 from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
 from effects.domain.keyword_names import normalize_keyword, overlay_keyword
@@ -422,12 +422,14 @@ _PLAYABILITY_SUBKINDS: tuple[str, ...] = tuple(
 )
 
 
-def _event_amount(params: Mapping) -> float:
-    """The amount a pending event carries: its ``amount``, else its ``delta``."""
+def _event_amount(event: Event) -> float:
+    """The amount a pending event carries: its ``amount``, else its ``delta``
+    signed by its mode (``event_schema.signed_delta``: a trigger's ``LifeLost 3``
+    is -3, its ``LifeGained 3`` +3)."""
     for name in ("amount", "delta"):
-        value = params.get(name)
+        value = event.params.get(name)
         if isinstance(value, int | float) and not isinstance(value, bool):
-            return float(value)
+            return float(value) if name == "amount" else signed_delta(event)
     return 0.0
 
 
@@ -447,7 +449,7 @@ def global_features(record: EffectRecord) -> tuple[float, ...]:
     out += _one_hot(g.day_night or "neither", DAY_NIGHT)
     pending = state.pending_event
     out += _one_hot(pending.type.value if pending else None, EVENT_TYPES)
-    _push_scalar(out, _event_amount(pending.params) if pending else 0)
+    _push_scalar(out, _event_amount(pending) if pending else 0)
     out += _one_hot(record.kind.value, _RECORD_KINDS)
     out += _one_hot(
         record.moment.value if record.moment else None, _MOMENTS,
@@ -479,7 +481,7 @@ def act_features(record: EffectRecord) -> tuple[float, ...]:
     _push_scalar(out, refs.x if refs.x is not None else 0)
     out.append(1.0 if refs.x is not None else 0.0)
     _push_scalar(out, len(refs.modes))
-    _push_scalar(out, len(refs.targets))
+    _push_scalar(out, len(refs.as_cast))
     _push_scalar(out, len(refs.choices))
     _push_random_results(out, refs.random)
     return tuple(out)
@@ -531,7 +533,7 @@ def player_features(player: PlayerState, record: EffectRecord) -> tuple[float, .
     out.append(0.0 if player.id == record.actor_player else 1.0)
     out.append(1.0 if player.id == g.active else 0.0)
     out.append(1.0 if player.id == g.priority else 0.0)
-    out.append(1.0 if player.id in record.state.refs.targets else 0.0)
+    out.append(1.0 if player.id in record.state.refs.as_cast else 0.0)
     out += thermometer(player.life)
     return tuple(out)
 
@@ -669,7 +671,7 @@ def _push_relation_to_act(out, entity: EntityState, record: EffectRecord, masked
     state = record.state
     g = state.global_
     out.append(1.0 if entity.controller == record.actor_player else 0.0)
-    out.append(1.0 if entity.id in state.refs.targets else 0.0)
+    out.append(1.0 if state.refs.targets_entity(entity) else 0.0)
     out.append(1.0 if entity.id == state.refs.source else 0.0)
     out.append(1.0 if entity.controller == g.active else 0.0)
     out.append(1.0 if entity.controller == g.priority else 0.0)
@@ -1139,7 +1141,7 @@ class _SlotRelations:
             self.link(self._end(found.from_), self._end(found.to), found.type, index)
         if record.has_act_line:
             refs = state.refs
-            for index, target in enumerate(refs.targets):
+            for index, target in enumerate(refs.as_cast):
                 self.link(ACT_SLOT, self.subjects.get(target), "targets", index)
             if refs.source is not None:
                 self.link(self.subjects.get(refs.source), ACT_SLOT, "source_of")

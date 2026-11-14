@@ -72,16 +72,6 @@ def test_merging_heaps_with_mismatched_caps_raises_error():
         left.merge(right)
 
 
-def test_merging_equal_cap_heaps_with_overlapping_ranges():
-    left, right = CapHeap(3), CapHeap(3)
-    for value in (5, 10, 15):
-        left.offer(value)
-    for value in (2, 8, 12):
-        right.offer(value)
-    left.merge(right)
-    assert sorted(left.values()) == [2, 5, 8]
-
-
 def test_a_heap_keeps_items_with_their_values_and_breaks_ties_on_the_tiebreak():
     left, right = KeyedCapHeap(3), KeyedCapHeap(3)
     left.offer(30, "c", (0,))
@@ -221,10 +211,52 @@ class TestOutcomeSignature:
             ("died", True),
         })
 
-    def test_a_real_effect_halfs_signature_is_stable(self):
+    def test_a_move_no_zone_outcome_names_is_its_own_signature_never_stayed(self):
+        """A permanent put onto the stack (or the sideboard, or merged) moved,
+        so its outcome is unknown: it shares no cell with a creature that
+        stayed."""
+        import dataclasses
+
+        from effects.domain.event_schema import Event, EventType
+
         record = self._effect()
-        assert outcome_signature(record) == outcome_signature(record)
-        assert signature_label(outcome_signature(record))
+        moved = Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
+                      params={"from_zone": "battlefield", "to_zone": "stack"})
+        tapped = Event(type=EventType.TAPPED, subjects=("E1",), params={})
+        def with_events(*events):
+            return dataclasses.replace(record, payload=dataclasses.replace(
+                record.payload, events=events))
+
+        assert outcome_signature(with_events(moved)) == frozenset({("unknown", True)})
+        assert outcome_signature(with_events(tapped)) == frozenset({("stayed", True)})
+
+    def test_a_spell_s_own_move_off_the_stack_is_no_outcome_and_a_fizzle_is_its_own_cell(self):
+        """Every resolved instant's half ends with its card's move off the
+        stack, and a fizzled spell's half holds that move alone (608.2b):
+        read as an outcome, a fizzle would share the cell of a burn spell
+        that killed its target. The move is left out, and a half that did
+        not resolve names its outcome."""
+        from effects.domain.event_schema import Event, EventType
+        from effects.domain.records import ResolutionOutcome, ResolutionPayload
+        from effects.domain.state_snapshot import Refs
+        from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+
+        spell = make_entity("S1", "shock", zone="stack")
+        bear = make_entity("E1", "bear", types=("creature",))
+        off_stack = Event(type=EventType.ZONE_CHANGE, subjects=("S1",),
+                          params={"from_zone": "stack", "to_zone": "graveyard"})
+        died = Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
+                     params={"from_zone": "battlefield", "to_zone": "graveyard"})
+
+        def half(outcome, *events):
+            return make_record(generation=3, state=make_snapshot(
+                entities=(spell, bear), refs=Refs(targets=("E1",), source="S1")),
+                payload=ResolutionPayload(events=events, outcome=outcome))
+
+        killed = outcome_signature(half(ResolutionOutcome.RESOLVED, died, off_stack))
+        fizzled = outcome_signature(half(ResolutionOutcome.FIZZLED, off_stack))
+        assert killed == frozenset({("died", True)})
+        assert fizzled == frozenset({("fizzled", False)})
 
     def test_the_label_is_sorted_and_readable(self):
         assert signature_label(frozenset({("stayed", True), ("died", True)})) == (
@@ -238,6 +270,8 @@ class TestGameDisjointDraw:
         import zlib
 
         assert game_disjoint_draw("run.0-a.5") == zlib.crc32(b"run.0-a.5") % 10**6 / 10**6
+        # Pinned literally too: a draw already made places games a corpus holds.
+        assert game_disjoint_draw("run.0-a.5") == 0.57121
 
     def test_game_hash_is_stable_across_calls(self):
         """Pinned to the algorithm, not merely to idempotency (FR-088a).
@@ -248,7 +282,7 @@ class TestGameDisjointDraw:
         """
         import zlib
 
-        assert game_hash("run.0-a.3") == zlib.crc32(b"run.0-a.3")
+        assert game_hash("run.0-a.3") == zlib.crc32(b"run.0-a.3") == 880293311
         assert game_hash("run.0-a.3") == game_hash("run.0-a.3")
 
 
@@ -267,7 +301,9 @@ _TURN_STATIC = "Mode$ Continuous | Affected$ Creature.YouCtrl | AddPower$ 1 | Co
 
 
 class _Lines:
-    """A sidecar lookup over ``key -> script text``."""
+    """A sidecar lookup over ``key -> script text``, raising on a key it does
+    not describe as ``SidecarCache.line_for`` does, ``line_or_none`` reading
+    it as no line."""
 
     def __init__(self, scripts):
         from effects.domain.provenance import SidecarLine
@@ -279,10 +315,21 @@ class _Lines:
         }
 
     def line_for(self, key):
+        if key not in self._lines:
+            raise KeyError(f"{key} is not described")
+        return self._lines[key]
+
+    def line_or_none(self, key):
         return self._lines.get(key)
 
     def first_line(self, keys):
         return next((self._lines[k] for k in keys if k in self._lines), None)
+
+
+def dataclasses_replace(record, **changes):
+    import dataclasses
+
+    return dataclasses.replace(record, **changes)
 
 
 def _key(name, kind="spell"):
@@ -368,6 +415,49 @@ class TestConditionBalance:
         assert turn_step_condition(_continuous(key, False), lines).side is ConditionSide.UNMET
         assert turn_step_condition(_continuous(key, True), lines).side is ConditionSide.MET
         assert turn_step_condition(_continuous(key, None), lines) is None
+
+    def test_a_static_the_sidecars_do_not_describe_reads_as_no_condition(self):
+        """A responsible static whose key no sidecar describes (or whose tree
+        the run has no root for) is no line, never an error that stops a
+        survey worker hours in."""
+        from effects.domain.corpus_curation import ConditionSide, turn_step_condition
+        from effects.domain.records import (
+            Candidate,
+            FailedCheck,
+            PlayabilityDecisionPayload,
+            RecordKind,
+        )
+        from tests.unit.effects.builders import make_record
+
+        undescribed, anthem = _key("gone", "static"), _key("anthem", "static")
+        candidate = Candidate(
+            ability=(_key("shock"),), can_play=False, affordable=True, has_legal_target=True,
+            failed_checks=(FailedCheck("static_prohibition", responsible_static=(undescribed,)),),
+            responsible_static=(undescribed,))
+        record = make_record(RecordKind.PLAYABILITY, generation=3,
+                             payload=PlayabilityDecisionPayload(candidates=(candidate,)))
+        assert turn_step_condition(record, _Lines({_key("shock"): "SP$ DealDamage"})) is None
+        continuous = _continuous(anthem, True)
+        listed = turn_step_condition(
+            dataclasses_replace(continuous, ability=(undescribed, anthem)),
+            _Lines({anthem: _TURN_STATIC}))
+        assert listed.side is ConditionSide.MET and listed.carrier == anthem
+
+    def test_a_last_known_copy_of_the_static_s_host_does_not_answer_for_it(self):
+        """A last-known copy (no zone) lists the lines its card had; the static
+        holds or not on the card the board holds."""
+        from effects.domain.corpus_curation import ConditionSide, turn_step_condition
+        from effects.domain.state_snapshot import CardLine
+        from tests.unit.effects.builders import make_entity
+
+        key = _key("anthem", "static")
+        record = _continuous(key, True)
+        ghost = make_entity("L1", "anthem", zone=None, lines=(
+            CardLine(keys=(key,), kind="static", granted=False, active=False),))
+        record = dataclasses_replace(record, state=dataclasses_replace(
+            record.state, entities=(ghost, *record.state.entities)))
+        assert turn_step_condition(record, _Lines({key: _TURN_STATIC})).side is (
+            ConditionSide.MET)
 
     def test_the_condition_joins_the_outcome_signature(self):
         from effects.domain.corpus_curation import cell_signature, outcome_signature

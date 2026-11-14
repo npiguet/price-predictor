@@ -83,12 +83,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An activated ability candidate passes the casting-speed check (legal at sorcery timing in the controller's main phase).",
-        "near_miss": "A candidate that failed the casting-speed check.",
+        "outcome": "A class candidate passes its casting-speed check (sorcery timing).",
+        "near_miss": "A class candidate that fails it.",
         "params": {
           "bit": "failed_check",
           "check": "casting_speed",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Class"
         },
         "needs": [
           "failed_checks"
@@ -151,15 +152,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A play-land candidate is legal because a static grants an additional land play.",
-        "near_miss": "A land play candidate that is not legal for lack of land plays.",
-        "params": {
-          "bit": "can_play",
-          "fires_when": true
-        },
-        "needs": []
+        "none": "Could not express: the candidate's own condition (a special action ending an effect, who controls an Aura against the creature it enchants, an instant-only action, a Class's level) is read by no verdict_bit filter; a Class's level is no designation the snapshot writes."
       }
     },
     {
@@ -227,15 +220,7 @@
       ],
       "forge_notes": "The part of 716.2b about a permanent that stops being a Class keeping its level is not illustrated: no Forge card removes the Class type from a Class.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "An activated-ability candidate is legal because its conditions on the permanent's state are met.",
-        "near_miss": "The same candidate illegal because the permanent's state does not meet them.",
-        "params": {
-          "bit": "can_play",
-          "fires_when": true
-        },
-        "needs": []
+        "none": "Could not express: the candidate's own condition (a special action ending an effect, who controls an Aura against the creature it enchants, an instant-only action, a Class's level) is read by no verdict_bit filter; a Class's level is no designation the snapshot writes."
       }
     },
     {
@@ -305,11 +290,12 @@
       "detector": {
         "family": "trigger_mode",
         "record_kind": "trigger",
-        "outcome": "A trigger not gated by any level or state is evaluated and fires whenever its event occurs.",
-        "near_miss": "A trigger of this mode evaluated and not fired.",
+        "outcome": "A Class's trigger printed above its level bars fires on its event whatever the level.",
+        "near_miss": "The same trigger evaluated and not fired.",
         "params": {
           "mode": "ChangesZone",
-          "destination": "Battlefield"
+          "destination": "Battlefield",
+          "source_subtype": "Class"
         },
         "needs": []
       }
@@ -376,15 +362,7 @@
       ],
       "forge_notes": "Forge needs the Class level to be set directly in the setup.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A resolution's effect half puts level counters on a permanent; a Class's level is a designation and never changes through level counters.",
-        "near_miss": "Not counted: no api singles out level-counter effects, so only the fires side is tagged.",
-        "params": {
-          "event": "counter_change",
-          "counter_type": "level"
-        },
-        "needs": []
+        "none": "Could not express: a Class's level is no counter and no designation the snapshot writes, so no record contrasts it with level counters."
       }
     }
   ]

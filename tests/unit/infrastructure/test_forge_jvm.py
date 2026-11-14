@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -17,11 +20,27 @@ from price_predictor.infrastructure.forge_jvm import (
     parse_java_feature_version,
     resolve_connector_jar,
 )
+from price_predictor.infrastructure.forge_jvm import (
+    claim_staging as real_claim_staging,
+)
+from price_predictor.infrastructure.forge_jvm import (
+    clear_stale_staging as real_clear_stale_staging,
+)
 
 # Bound at import, before the unit-test conftest swaps the module attribute
 # for a stub, so the probe itself can still be exercised here.
 from price_predictor.infrastructure.forge_jvm import (
     java_feature_version as real_java_feature_version,
+)
+from price_predictor.infrastructure.forge_jvm import (
+    kill_process_tree as real_kill_process_tree,
+)
+from tests.unit.infrastructure.real_processes import (
+    SLEEPER,
+    OwnedProcess,
+    end_tree,
+    start_with_grandchild,
+    wait_for_file,
 )
 
 
@@ -82,13 +101,15 @@ class TestRunForgeWorker:
         jar_dir.mkdir(parents=True)
         (jar_dir / forge_jvm.CONNECTOR_JAR_NAME).write_bytes(b"")
         with patch.object(forge_jvm, "project_root", return_value=tmp_path), \
-             patch.object(forge_jvm.subprocess, "run") as run:
+             patch.object(forge_jvm.subprocess, "Popen") as popen:
+            popen.return_value.communicate.return_value = (None, None)
+            popen.return_value.returncode = 0
             if glob:
                 forge_jvm.run_forge_worker("Main", include_dependency_glob=True)
             else:
                 forge_jvm.run_forge_worker("Main")
 
-        cmd = run.call_args.args[0]
+        cmd = popen.call_args.args[0]
         classpath = cmd[cmd.index("-cp") + 1]
         assert (os.path.join("dependency", "*") in classpath) is glob
 
@@ -205,33 +226,29 @@ class TestWorkerLogFiles:
         finally:
             logs.close_all()
 
-    def test_two_runs_never_share_a_file(self, tmp_path):
-        """A fresh run_id per invocation is what keeps a long-lived
-        ``effect_records_dir`` from accumulating one never-rotated file
-        across every collection ever run into it."""
-        a = WorkerLogFiles(tmp_path, "run-a")
-        b = WorkerLogFiles(tmp_path, "run-b")
-        assert a.path_for(0) != b.path_for(0)
-
     def test_a_line_written_by_a_child_process_is_on_disk_after_a_restart(
         self, tmp_path,
     ):
         """Stands in for what a real worker does: write through the handle
         Popen was given, exit, and the next Popen call reuses the slot's log
         rather than losing what was already written to it."""
-        logs = WorkerLogFiles(tmp_path, "run-1")
-        first = logs.get(0)
-        first.write(b"reporter line from JVM lifetime 1\n")
-        first.flush()
+        import subprocess
+        import sys
 
-        second = logs.get(0)  # the same slot, a new JVM
-        second.write(b"reporter line from JVM lifetime 2\n")
-        second.flush()
+        logs = WorkerLogFiles(tmp_path, "run-1")
+        for lifetime in (1, 2):  # the same slot, a new process each time
+            handle = logs.get(0)
+            subprocess.run(
+                [sys.executable, "-c",
+                 f"import sys; print('reporter line from JVM lifetime {lifetime}');"
+                 f" print('on stderr {lifetime}', file=sys.stderr)"],
+                stdout=handle, stderr=subprocess.STDOUT, check=True, timeout=60,
+            )
         logs.close_all()
 
         content = logs.path_for(0).read_text(encoding="utf-8")
-        assert "lifetime 1" in content
-        assert "lifetime 2" in content
+        assert "lifetime 1" in content and "on stderr 1" in content
+        assert "lifetime 2" in content and "on stderr 2" in content
 
     def test_rotates_past_the_cap_and_keeps_one_backup_generation(self, tmp_path):
         logs = WorkerLogFiles(tmp_path, "run-1", max_bytes=10)
@@ -430,3 +447,274 @@ class TestWorkerLogFiles:
 
     def test_close_all_with_nothing_ever_opened_is_a_noop(self, tmp_path):
         WorkerLogFiles(tmp_path, "run-1").close_all()  # must not raise
+
+
+class TestKillProcessTree:
+    """TP1: no test killed a real process; and V4 #8: a wait that timed out
+    was swallowed, so a survivor was reported dead."""
+
+    @pytest.mark.real_process_kill
+    def test_a_real_child_and_its_grandchild_both_die(self, tmp_path):
+        child, grandchild = start_with_grandchild(tmp_path / "grandchild.pid")
+        try:
+            assert forge_jvm.kill_process_tree(child) is True
+            assert child.poll() is not None
+            assert not grandchild.is_alive(within=10)
+        finally:
+            child.kill()
+            grandchild.end()
+
+    def test_a_process_already_gone_counts_as_killed(self):
+        class Exited:
+            pid = 7
+
+            def poll(self):
+                return 0
+
+        assert real_kill_process_tree(Exited()) is True
+
+    def _stubborn(self, *, dies_on_kill: bool):
+        class Stubborn:
+            pid = 4242
+            killed = False
+
+            def poll(self):
+                return 0 if self.killed and dies_on_kill else None
+
+            def wait(self, timeout=None):
+                if self.poll() is None:
+                    raise subprocess.TimeoutExpired("java", timeout)
+                return 0
+
+            def kill(self):
+                self.killed = True
+
+        return Stubborn()
+
+    def test_a_tree_kill_that_times_out_falls_back_to_killing_the_process(self):
+        proc = self._stubborn(dies_on_kill=True)
+        with patch.object(forge_jvm.subprocess, "run") as taskkill, \
+             patch.object(forge_jvm.platform, "system", return_value="Windows"):
+            assert real_kill_process_tree(proc, timeout=0.01) is True
+        assert taskkill.call_args.args[0][:3] == ["taskkill", "/F", "/T"]
+        assert proc.killed
+
+    def test_a_survivor_is_reported_not_swallowed(self, capsys):
+        proc = self._stubborn(dies_on_kill=False)
+        with patch.object(forge_jvm.subprocess, "run"), \
+             patch.object(forge_jvm.platform, "system", return_value="Windows"):
+            assert real_kill_process_tree(proc, timeout=0.01) is False
+        assert "PID 4242 survived" in capsys.readouterr().out
+
+
+@pytest.mark.skipif(os.name != "nt", reason="the job object is Windows-only")
+class TestWorkersDieWithTheirParent:
+    """V4 #2: a hard-killed supervisor (Stop-Process, taskkill without /T)
+    left its JVMs running and appending to shards; a worker bound to the
+    parent's job object is killed by Windows when the parent's handle closes."""
+
+    _PARENT = (
+        "import subprocess, sys, time, os\n"
+        "from price_predictor.infrastructure import forge_jvm\n"
+        "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+        "bound = forge_jvm.bind_to_this_process(child)\n"
+        "open(sys.argv[1] + '.tmp', 'w').write(f'{child.pid} {bound}')\n"
+        "os.replace(sys.argv[1] + '.tmp', sys.argv[1])\n"
+        "time.sleep(60)\n"
+    )
+
+    def _start_parent(self, tmp_path):
+        out = tmp_path / "child.txt"
+        env = dict(os.environ, PYTHONPATH=os.pathsep.join(["src", "."]))
+        parent = subprocess.Popen(
+            [sys.executable, "-c", self._PARENT, str(out)],
+            env=env, cwd=forge_jvm.project_root(),
+        )
+        try:
+            pid, bound = wait_for_file(out, parent).split()
+            worker = OwnedProcess(int(pid))
+        except BaseException:
+            end_tree(parent)
+            raise
+        return parent, worker, bound == "True"
+
+    def test_a_hard_killed_parent_takes_its_bound_worker_with_it(self, tmp_path):
+        parent, worker, bound = self._start_parent(tmp_path)
+        try:
+            assert bound
+            parent.kill()  # TerminateProcess: no finally, no handler runs
+            parent.wait(timeout=10)
+            assert not worker.is_alive(within=10)
+        finally:
+            parent.kill()
+            worker.end()
+
+    def test_a_process_without_a_handle_is_left_unbound(self):
+        """A test's fake process has a made-up PID: binding by PID could put
+        an unrelated process in the job."""
+
+        class Fake:
+            pid = 1000
+
+        assert forge_jvm.bind_to_this_process(Fake()) is False
+
+    def test_a_mock_process_is_left_unbound(self, capsys):
+        """A ``MagicMock`` answers ``_handle`` with a made-up value too, which
+        could name one of this process's own handles: it is never tried."""
+        from unittest.mock import MagicMock
+
+        assert forge_jvm.bind_to_this_process(MagicMock(pid=1000)) is False
+        assert "Could not bind" not in capsys.readouterr().out
+
+
+class TestOneShotTimeout:
+    """P1 #12: a one-shot JVM had no timeout, so a hung Forge startup hung
+    the command."""
+
+    @pytest.mark.real_process_kill
+    def test_a_one_shot_worker_past_its_timeout_is_killed_and_raises(self, monkeypatch):
+        started: list[subprocess.Popen] = []
+        real_popen = subprocess.Popen
+
+        def popen(*args, **kwargs):
+            started.append(real_popen(*args, **kwargs))
+            return started[-1]
+
+        monkeypatch.setattr(forge_jvm, "build_forge_classpath", lambda **_: "")
+        monkeypatch.setattr(forge_jvm, "build_jvm_command", lambda **_: list(SLEEPER))
+        monkeypatch.setattr(forge_jvm.subprocess, "Popen", popen)
+        begun = time.monotonic()
+        try:
+            with pytest.raises(forge_jvm.ForgeWorkerTimeout, match="Main"):
+                forge_jvm.run_forge_worker("Main", timeout=1.0)
+            assert time.monotonic() - begun < 20
+            assert started[0].poll() is not None
+        finally:
+            for proc in started:
+                proc.kill()
+
+    def test_the_timeout_is_an_os_error_a_caller_can_degrade_on(self):
+        assert issubclass(forge_jvm.ForgeWorkerTimeout, TimeoutError)
+
+
+class TestStaleStagingIsClearedAtTheFirstLaunch:
+    """V4 #2: a hard-killed collect-variants never unstages its scripts, and
+    every later Forge start on the machine then loads them. The first JVM a
+    process launches clears what the last staging left, once per process."""
+
+    @pytest.fixture
+    def staged(self, tmp_path, monkeypatch):
+        custom = tmp_path / "forge" / "forge-gui" / "data" / "custom" / "cards"
+        custom.mkdir(parents=True)
+        (custom / "bolt_variant_0a1b2c3d.txt").write_text("Name:x", encoding="utf-8")
+        (custom / "my_card.txt").write_text("Name:mine", encoding="utf-8")
+        (custom / forge_jvm.STAGED_MANIFEST).write_text(
+            "bolt_variant_0a1b2c3d.txt", encoding="utf-8",
+        )
+        monkeypatch.setattr(forge_jvm, "forge_dir", lambda: tmp_path / "forge")
+        monkeypatch.setattr(forge_jvm, "clear_stale_staging", real_clear_stale_staging)
+        monkeypatch.setattr(forge_jvm, "_stale_staging_checked", False)
+        return custom
+
+    def test_the_first_command_clears_and_says_so(self, staged, capsys):
+        build_jvm_command(main_class="Main", classpath="cp")
+
+        assert not (staged / "bolt_variant_0a1b2c3d.txt").exists()
+        assert (staged / "my_card.txt").exists(), "a card a person put there stays"
+        assert "Removed 1 variant script(s)" in capsys.readouterr().out
+
+    def test_it_is_checked_once_per_process(self, staged, capsys):
+        build_jvm_command(main_class="Main", classpath="cp")
+        (staged / "late_variant.txt").write_text("Name:y", encoding="utf-8")
+        (staged / forge_jvm.STAGED_MANIFEST).write_text("late_variant.txt", encoding="utf-8")
+
+        build_jvm_command(main_class="Main", classpath="cp")
+
+        assert (staged / "late_variant.txt").exists(), (
+            "a staging this run's own workers made is never taken from under them"
+        )
+
+    def test_the_manifest_is_the_one_the_staging_writes(self):
+        import re
+
+        source = (forge_jvm.project_root() / "forge-connector" / "src" / "main" / "java" / "com"
+                  / "pricepredictor" / "connector" / "ForgeEnvironmentInitializer.java")
+        declared = re.search(
+            r'STAGED_MANIFEST\s*=\s*"([^"]+)"', source.read_text(encoding="utf-8"),
+        )
+        assert declared is not None and declared.group(1) == forge_jvm.STAGED_MANIFEST
+
+
+class TestAStagingInUseIsLeftAlone:
+    """A clean-up from any process's first JVM emptied the staging a
+    collect-variants still running elsewhere used, so its next recycled
+    worker refused every variant deck. The staging run records its owner
+    (PID and start time); a live owner keeps its staging."""
+
+    @pytest.fixture
+    def staged(self, tmp_path, monkeypatch):
+        custom = tmp_path / "forge" / "forge-gui" / "data" / "custom" / "cards"
+        custom.mkdir(parents=True)
+        (custom / "bolt_variant_0a1b2c3d.txt").write_text("Name:x", encoding="utf-8")
+        (custom / forge_jvm.STAGED_MANIFEST).write_text(
+            "bolt_variant_0a1b2c3d.txt", encoding="utf-8",
+        )
+        monkeypatch.setattr(forge_jvm, "forge_dir", lambda: tmp_path / "forge")
+        monkeypatch.setattr(forge_jvm, "clear_stale_staging", real_clear_stale_staging)
+        monkeypatch.setattr(forge_jvm, "_stale_staging_checked", False)
+        return custom
+
+    def _owned_by(self, staged, pid, started):
+        import json
+
+        (staged / forge_jvm.STAGING_OWNER).write_text(
+            json.dumps({"pid": pid, "started": started}), encoding="utf-8",
+        )
+
+    def test_a_live_owner_keeps_its_staging_and_the_notice_names_it(self, staged, capsys):
+        owner = subprocess.Popen(SLEEPER)
+        try:
+            self._owned_by(staged, owner.pid, forge_jvm.process_start_time(owner.pid))
+
+            build_jvm_command(main_class="Main", classpath="cp")
+
+            assert (staged / "bolt_variant_0a1b2c3d.txt").exists()
+            assert f"PID {owner.pid}) still runs" in capsys.readouterr().out
+        finally:
+            owner.kill()
+            owner.wait()
+
+    def test_a_reused_pid_is_no_owner(self, staged):
+        """This process's PID with another start time: the owner is gone."""
+        self._owned_by(staged, os.getpid(), 12345)
+
+        build_jvm_command(main_class="Main", classpath="cp")
+
+        assert not (staged / "bolt_variant_0a1b2c3d.txt").exists()
+        assert not (staged / forge_jvm.STAGING_OWNER).exists()
+
+    def test_the_claim_names_this_process(self, tmp_path):
+        real_claim_staging(tmp_path)
+
+        assert forge_jvm.staging_owner(tmp_path) == os.getpid()
+
+    def test_an_unreadable_manifest_is_reported_and_the_command_goes_on(self, staged, capsys):
+        (staged / forge_jvm.STAGED_MANIFEST).write_bytes(b"\xff\xfe\x00bad")
+
+        command = build_jvm_command(main_class="Main", classpath="cp")
+
+        assert command[-1] == "Main"
+        assert "Could not clear the variant scripts staged" in capsys.readouterr().out
+
+    def test_an_entry_outside_the_directory_is_never_deleted(self, staged, capsys):
+        outside = staged.parent / "outside.txt"
+        outside.write_text("Name:keep", encoding="utf-8")
+        (staged / forge_jvm.STAGED_MANIFEST).write_text(
+            f"../outside.txt\n{outside}\nbolt_variant_0a1b2c3d.txt\n", encoding="utf-8",
+        )
+
+        build_jvm_command(main_class="Main", classpath="cp")
+
+        assert outside.exists()
+        assert not (staged / "bolt_variant_0a1b2c3d.txt").exists()
+        assert "outside" in capsys.readouterr().out

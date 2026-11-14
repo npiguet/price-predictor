@@ -67,12 +67,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A spell candidate passes the cost check: every cost it carries, an additional cost such as a discard included, can be paid.",
-        "near_miss": "A candidate that fails the cost check because one of its costs cannot be paid.",
+        "outcome": "A Jump-start candidate passes its cost check.",
+        "near_miss": "A Jump-start candidate that fails it.",
         "params": {
           "bit": "failed_check",
           "check": "cost",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Jump-start"
         },
         "needs": [
           "failed_checks"
@@ -165,12 +166,13 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A spell that resolves or is countered after being cast under an exile-on-leaving rule moves from the stack to exile instead of the graveyard.",
-        "near_miss": "Not counted: without api only the fires side is tagged (the near miss would be such a spell leaving the stack for its owner's graveyard).",
+        "outcome": "A spell whose card prints jump-start moves from the stack to exile as the keyword says.",
+        "near_miss": "A spell whose card prints jump-start leaves the stack elsewhere.",
         "params": {
           "event": "zone_change",
           "from_zone": "stack",
-          "to_zone": "exile"
+          "to_zone": "exile",
+          "source_keyword": "Jump-start"
         },
         "needs": []
       }

@@ -158,14 +158,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "sba_zone_move",
-        "record_kind": "resolution",
-        "outcome": "A creature dealt damage that reaches its toughness is destroyed in the state-based check.",
-        "near_miss": "A creature dealt damage short of its toughness stays on the battlefield.",
-        "params": {
-          "check": "lethal_damage"
-        },
-        "needs": []
+        "same_as": "704.5g-1",
+        "reason": "The record shows a creature with lethal damage marked put into the graveyard in the state-based check, 704.5g's fact."
       }
     },
     {

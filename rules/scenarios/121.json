@@ -163,16 +163,8 @@
       ],
       "forge_notes": "Possessed Portal is an 8-mana artifact placed directly on the battlefield in the portal variant. Its end-step trigger is not reached in this scenario.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "turn_action",
-        "outcome": "In the draw step the active player draws a card as a turn-based action: the draw turn_action record holds a card_drawn event.",
-        "near_miss": "No near miss is counted: outcome_event counts one only with an api or keyword. A draw step whose draw is skipped writes no card_drawn.",
-        "params": {
-          "event": "card_drawn"
-        },
-        "needs": [
-          "turn_action"
-        ]
+        "same_as": "504.1-1",
+        "reason": "The record shows the draw step's turn-based draw, 504.1's fact."
       }
     },
     {
@@ -347,15 +339,7 @@
       ],
       "forge_notes": "The Forge replacement event is DrawCards with Number$ GE2, which sees the instruction's card count before the individual draws.",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A card_drawn event is replaced by a replacement effect before the draws are made.",
-        "near_miss": "A card_drawn event meets a replacement effect and is not replaced.",
-        "params": {
-          "event": "card_drawn",
-          "result": "replaced"
-        },
-        "needs": []
+        "none": "The order within a sequence of draws, and the action that would follow a replaced draw, are in no rewrite record, which shows one draw meeting one effect."
       }
     },
     {
@@ -760,15 +744,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A Draw resolution that attempts a draw from an empty library is followed by that player losing the game in the state-based check (player_lost event).",
-        "near_miss": "A Draw resolution after which no player loses: every draw found a card.",
-        "params": {
-          "event": "player_lost",
-          "api": "Draw"
-        },
-        "needs": []
+        "same_as": "704.5b-1",
+        "reason": "A player who drew from an empty library losing at the next state-based check is 704.5b's fact; the game end is filed in the game-end record, where 704.5b's declaration reads it."
       }
     },
     {
@@ -926,15 +903,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A card_drawn event is replaced by a draw replacement effect.",
-        "near_miss": "A card_drawn event meets a draw replacement and is not replaced.",
-        "params": {
-          "event": "card_drawn",
-          "result": "replaced"
-        },
-        "needs": []
+        "same_as": "614.11-1",
+        "reason": "Both state that a draw replacement applies even with no card to draw; the record shows the same replaced draw."
       }
     },
     {
@@ -1011,15 +981,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A card_drawn event is replaced by a draw replacement effect.",
-        "near_miss": "A card_drawn event meets a draw replacement and is not replaced.",
-        "params": {
-          "event": "card_drawn",
-          "result": "replaced"
-        },
-        "needs": []
+        "none": "The order within a sequence of draws, and the action that would follow a replaced draw, are in no rewrite record, which shows one draw meeting one effect."
       }
     },
     {
@@ -1087,15 +1049,7 @@
       ],
       "forge_notes": "Jace's Forge script uses RememberDrawn$ True without AllReplaced, which is the behaviour this scenario depends on; the base variant is where Forge may deviate.",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A card_drawn event is replaced by a draw replacement effect.",
-        "near_miss": "A card_drawn event meets a draw replacement and is not replaced.",
-        "params": {
-          "event": "card_drawn",
-          "result": "replaced"
-        },
-        "needs": []
+        "none": "The order within a sequence of draws, and the action that would follow a replaced draw, are in no rewrite record, which shows one draw meeting one effect."
       }
     },
     {
@@ -1186,15 +1140,7 @@
       ],
       "forge_notes": "A holds both spells but has one Mountain, so only the spell named in the variant is cast.",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "Damage meets a prevention effect that carries a replacing ability, such as drawing cards, and is replaced: the damage is prevented and the ability's effect follows.",
-        "near_miss": "Damage meets such a prevention effect and is not replaced (the damage can't be prevented, or an optional effect is declined).",
-        "params": {
-          "event": "damage_dealt",
-          "result": "replaced"
-        },
-        "needs": []
+        "none": "The order within a sequence of draws a prevention produces, and the action that would follow a replaced draw, are in no rewrite record, which shows one draw meeting one effect."
       }
     },
     {

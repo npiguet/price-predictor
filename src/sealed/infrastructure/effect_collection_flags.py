@@ -63,7 +63,7 @@ DROPPED_EVENTS_SUFFIX = ".dropped-events.tsv"
 
 def add_cap_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "--mana-cap", type=int, default=EFFECT_MANA_CAP,
+        "--mana-cap", type=non_negative_int, default=EFFECT_MANA_CAP,
         help=(
             "Records per unique mana ability and mana produced, per game "
             "(default: %(default)s): repeat taps observe a board that barely moved"
@@ -94,12 +94,12 @@ def add_cap_flags(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--interventions-per-game", type=int,
+        "--interventions-per-game", type=non_negative_int,
         default=EFFECT_INTERVENTIONS_PER_GAME,
         help="Interventional resolutions per game (default: %(default)s)",
     )
     parser.add_argument(
-        "--probes-per-game", type=int, default=EFFECT_PROBES_PER_GAME,
+        "--probes-per-game", type=non_negative_int, default=EFFECT_PROBES_PER_GAME,
         help=(
             "Damage-step probe forks per game (default: %(default)s); a budget "
             "spent only on keywords --probe-keywords names"
@@ -154,6 +154,15 @@ def positive_int(text: str) -> int:
     return value
 
 
+def non_negative_int(text: str) -> int:
+    """An integer of at least 0, for a per-game budget: a negative one is no
+    budget the worker can spend."""
+    value = int(text)
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"must be at least 0, got {value}")
+    return value
+
+
 def probe_keyword_list(text: str) -> str:
     """``--probe-keywords``: each keyword spelled as the JVM compares it
     (``KeywordEdit.normalize``: lower case, spaces as ``_``), blanks dropped.
@@ -193,7 +202,8 @@ def add_directed_fork_flags(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--directed-forks-per-game", type=int, default=EFFECT_DIRECTED_FORKS_PER_GAME,
+        "--directed-forks-per-game", type=non_negative_int,
+        default=EFFECT_DIRECTED_FORKS_PER_GAME,
         help=(
             "Directed forks per game, kept or discarded, a budget beside the "
             "other forks' (default: %(default)s)"
@@ -224,7 +234,14 @@ def directed_fork_properties(args: argparse.Namespace) -> dict[str, str]:
     }
 
 
-_DETECTOR_RANK = {"missing": 0, "none": 1, "declared": 2}
+_DETECTOR_RANK = {"missing": 0, "none": 1, "untaggable": 2, "same_as": 3, "declared": 4}
+
+#: The scenarios whose declaration names an event its record kind never
+#: lists (the effects package's ``DetectorIndex.untaggable``, read off its
+#: emittable-events table): no record of theirs can be tagged.
+#: ``test_directed_fork_flags.py`` pins this set to that index over the real
+#: catalogue.
+UNTAGGABLE_SCENARIOS = frozenset({"104.4c-1", "701.8c-2"})
 
 
 def rule_readiness(rules_dir: Path = DEFAULT_RULES_DIR) -> dict[str, tuple[str, bool]]:
@@ -233,9 +250,13 @@ def rule_readiness(rules_dir: Path = DEFAULT_RULES_DIR) -> dict[str, tuple[str, 
     operation.
 
     The detector state is ``"declared"`` when some scenario listing the rule
-    declares a detector family, else ``"none"`` when one declares
-    ``{"none": reason}``, else ``"missing"``. The base variant, the first,
-    makes nothing, and an unclassifiable variant's operation is an object.
+    declares a detector family, else ``"same_as"`` when one declares the
+    same fact as another scenario (``{"same_as": id, "reason": ...}``, its
+    rule counted under that scenario's), else ``"untaggable"`` when one
+    declares a family no record can show (:data:`UNTAGGABLE_SCENARIOS`), else
+    ``"none"`` when one declares ``{"none": reason}``, else ``"missing"``.
+    The base variant, the first, makes nothing, and an unclassifiable
+    variant's operation is an object.
 
     Read here rather than through ``effects.infrastructure.rules_catalogue_io``,
     which this package may not import; ``test_directed_fork_flags.py`` pins the
@@ -251,6 +272,10 @@ def rule_readiness(rules_dir: Path = DEFAULT_RULES_DIR) -> dict[str, tuple[str, 
                 state = "missing"
             elif "none" in declaration:
                 state = "none"
+            elif "same_as" in declaration:
+                state = "same_as"
+            elif scenario.get("id") in UNTAGGABLE_SCENARIOS:
+                state = "untaggable"
             else:
                 state = "declared"
             classified = any(
@@ -293,7 +318,8 @@ def directed_fork_error(
     ``collect-variants``, never of ``collect-coverage``, whose
     ``--directed-fork-rules`` is a label only.
 
-    A listed rule needs a detector declared in its scenarios (not ``none``),
+    A listed rule needs a detector declared in its scenarios (not ``none``,
+    not ``same_as``, not one only for an event its record never lists),
     a contrasting variant classified into a fork operation, and a board
     precondition registered in ``forge-connector``, which one run of
     ``DirectedRulesMain`` lists. The JVM is asked once the catalogue's checks
@@ -316,6 +342,17 @@ def directed_fork_error(
             return (
                 f"--directed-fork-rules: {rule} declares its detector none, so "
                 "no record of its fork could be tagged"
+            )
+        if detector == "untaggable":
+            return (
+                f"--directed-fork-rules: {rule} declares a detector only for an event "
+                "its record kind never lists, so no record of its fork could be tagged"
+            )
+        if detector == "same_as":
+            return (
+                f"--directed-fork-rules: {rule} states the same fact as another "
+                "scenario (same_as) and is counted under that scenario's rule, so "
+                "no record of its fork would be tagged for it: aim at that rule"
             )
         if not forkable:
             return (

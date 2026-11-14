@@ -17,7 +17,8 @@ distinct provenance key, which is why ``--limit`` exists.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import logging
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,7 +26,10 @@ from effects.application.corpus_validation.envelope_checks import (
     ActingLines,
     Duplicates,
     GameBoundaries,
+    GameEnds,
+    KindPresence,
     Links,
+    LossyForks,
     MirrorTurns,
     Modes,
     ProbeForks,
@@ -43,7 +47,9 @@ from effects.application.corpus_validation.event_checks import (
     resolution_events,
 )
 from effects.application.corpus_validation.findings import (
+    EXAMPLES,
     Check,
+    Finding,
     Findings,
     Thresholds,
 )
@@ -56,6 +62,8 @@ from effects.application.corpus_validation.payload_checks import (
 from effects.application.corpus_validation.presence import FieldPresence
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,16 +82,98 @@ def validate_directory(
 ) -> DirectoryReport:
     """Every invariant over the first ``limit`` records under ``root`` (0
     reading all), the shards listed once; raises ``NoShardsError`` on a
-    directory holding none."""
-    from effects.infrastructure.shard_io import read_window, require_shards
+    directory holding none.
+
+    A shard whose read a damaged member or an undecodable line ends is a
+    failed finding naming it and the line, its records before the damage
+    measured; the other shards are read on (V5 #20). What the read met
+    without stopping, values outside the wire's closed lists and damaged last
+    members (``shard_io.DecodeTally``), is reported as watched figures.
+    """
+    from effects.infrastructure.shard_io import require_shards, reset_decode_tally
 
     shards = require_shards(root)
     presence = FieldPresence()
+    damage = ShardDamage()
+    reset_decode_tally()
     findings = validate_corpus(
-        read_window(root, limit, presence.observe, shards=shards),
-        thresholds, sidecars, presence,
+        damage.read(root, shards, limit, presence.observe), thresholds, sidecars, presence,
+        playability_rate=playability_rate_of(root),
     )
+    findings.extend(damage.findings())
     return DirectoryReport(len(shards), findings)
+
+
+class ShardDamage:
+    """The shards a damaged member or an undecodable line cut short, and the
+    read's decode tally, as findings."""
+
+    def __init__(self) -> None:
+        self.read_shards = 0
+        self.cut: list[str] = []
+
+    def read(self, root: Path, shards, limit: int, observe) -> Iterator[EffectRecord]:
+        """Every record of ``shards`` up to ``limit``, a shard's damage noted
+        and its read ended, the next shard read on."""
+        from effects.infrastructure.shard_io import SHARD_DAMAGE, read_window
+
+        seen = 0
+        for shard in shards:
+            self.read_shards += 1
+            try:
+                for record in read_window(root, limit - seen if limit else 0, observe,
+                                          shards=(shard,)):
+                    yield record
+                    seen += 1
+            except SHARD_DAMAGE as error:
+                logger.error("%s", error)
+                self.cut.append(str(error))
+            if limit and seen >= limit:
+                return
+
+    def findings(self) -> list[Finding]:
+        from effects.infrastructure.shard_io import take_decode_tally
+
+        found = [Finding(
+            name="every shard line decodes",
+            ok=not self.cut,
+            measured=(f"{self.read_shards - len(self.cut)}/{self.read_shards} shards read "
+                      f"whole; {len(self.cut)} ended at a line or member that does not "
+                      "decode, their records before it measured"),
+            detail=tuple(self.cut[:EXAMPLES]),
+        )]
+        tally = take_decode_tally()
+        found.append(Finding.watch(
+            f"values outside the wire's closed lists: {sum(tally.off_list.values())}",
+            "read as written and counted (shard_io.DecodeTally)",
+            tuple(f"{member} {value}: {count}"
+                  for (member, value), count in sorted(tally.off_list.items())),
+        ))
+        found.append(Finding.watch(
+            f"shards whose damaged last gzip member ended the read: "
+            f"{len(tally.damaged_tails)}",
+            "their records before it read",
+            tuple(tally.damaged_tails[:EXAMPLES]),
+        ))
+        return found
+
+
+def playability_rate_of(root: Path) -> float | None:
+    """The ``--playability-rate`` the run under ``root`` collected at, from
+    its ``run.json`` (each collector's invocation records its resolved
+    ``caps``): the smallest any invocation recorded; None without a
+    manifest or a recorded rate."""
+    import json
+
+    try:
+        document = json.loads((Path(root) / "run.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    rates = [entry["caps"]["playability_rate"]
+             for entry in document.get("invocations") or ()
+             if isinstance(entry, dict) and isinstance(entry.get("caps"), dict)
+             and isinstance(entry["caps"].get("playability_rate"), (int, float))]
+    return min(rates) if rates else None
 
 
 def validate_corpus(
@@ -91,6 +181,8 @@ def validate_corpus(
     thresholds: Thresholds = Thresholds(),
     sidecars: SidecarLookup | None = None,
     presence: FieldPresence | None = None,
+    *,
+    playability_rate: float | None = None,
 ) -> Findings:
     """Every invariant, measured over one pass of ``records``.
 
@@ -99,7 +191,7 @@ def validate_corpus(
     ``shard_io.read_window`` fills from the raw lines (FR-033, root § 8.13),
     since a parsed record cannot say whether a field was on the wire.
     """
-    checks = _checks(sidecars)
+    checks = _checks(sidecars, playability_rate)
     for record in records:
         for check in checks:
             check.add(record)
@@ -111,12 +203,15 @@ def validate_corpus(
     return findings
 
 
-def _checks(sidecars: SidecarLookup | None) -> tuple[Check, ...]:
+def _checks(sidecars: SidecarLookup | None,
+            playability_rate: float | None = None) -> tuple[Check, ...]:
     """Every invariant, in the order the report prints them."""
     record_ids = RecordIds()
     return (
         record_ids,
         GameBoundaries(),
+        GameEnds(),
+        KindPresence(playability_rate),
         Links(),
         ActingLines(),
         KeyJoins(sidecars),
@@ -143,6 +238,7 @@ def _checks(sidecars: SidecarLookup | None) -> tuple[Check, ...]:
         CauseBearing(),
         MirrorTurns(record_ids),
         ProbeForks(),
+        LossyForks(),
         EmptyMana(),
         EventTypes(),
     )

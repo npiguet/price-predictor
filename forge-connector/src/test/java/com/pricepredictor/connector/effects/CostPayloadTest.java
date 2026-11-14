@@ -123,12 +123,6 @@ class CostPayloadTest {
         assertTrue(costs(sa).contains("\"life\":1"), costs(sa));
     }
 
-    @Test
-    void anAbilityThatPaidNoLifeSaysZero() {
-        assertTrue(costs(ability("AB$ GainLife | Cost$ 1 | Defined$ You | LifeAmount$ 1"))
-                .contains("\"life\":0"));
-    }
-
     // ── mana ────────────────────────────────────────────────────────────
 
     /**

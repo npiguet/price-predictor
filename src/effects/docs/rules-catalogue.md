@@ -12,12 +12,18 @@ Rules to respect when editing `rules/`, a detector family or rule tagging, and w
 - An `operation` is one of the `ForkOperation`s of `domain/fork_operation.py`, pinned against the Java enum both ways.
 - A detector's parameters name a rule's general condition (a check, a `Mode$`, a keyword, a verdict bit, an `Event$`), never a card. A declaration copied from a scenario's specifics tags only a small share of what its family finds; `scripts/rule_breadth.py` flags those for review.
 - A declaration whose `needs` the record's generation lacks makes the rule not countable, not zero.
+- `DetectorIndex.of` checks every declaration when it is built. An unregistered family, a parameter the family does not declare, or a value outside its closed list (`domain/rule_detectors/declared_values.py`, pinned to `../forge`) raises `DeclarationError` naming the scenario, so a misspelt value is refused rather than matching nothing.
+- A declaration asking its record kind for an event the collector never writes there is untaggable (`domain/rule_detectors/emittable_events.py`, which lists the event types each record kind carries by the connector source that builds them). It tags nothing and `rule-counts` lists it. When a collector source gains an event, add it to that file.
+- No two scenarios of different rules share one declaration. A scenario stating another's observable fact declares `{"same_as": id or [ids], "reason": …}` and is counted under the named scenarios' rules; what a record cannot show declares `none`.
+- On a degraded worker's record and on a forced resolution, a missing hook-derived event reads as unknown: `outcome_event` gives neither an absence's `fires` side nor a near miss.
+- The game-end marker is tagged by no declaration.
+- A rewrite's `buffered_events` are a place of their own, never the rewrite's events a family reads. `rewrite_event` reads no record whose incoming event is unknown.
 - `combat_keyword_effect` covers the combat keywords outside gate 2's table and leaves that table alone.
 
 ## Commands to run after a change
 
 - `scripts/rules_catalogue.py validate` checks the declarations.
-- `scripts/rules_catalogue.py directed-rules --counts` writes `rules/directed-fork-rules.txt` and `rules/coverage-wording-cards.txt`.
+- `scripts/rules_catalogue.py directed-rules --counts` writes `rules/directed-fork-rules.txt`, `rules/coverage-wording-cards.txt` and `rules/directed-fork-counts.json`, the counts the list is decided from, so `test_rules_catalogue.py` can regenerate the list from checked-in files.
 - `scripts/rules_catalogue.py gen3-fields` recomputes the learnable rules after a map rerun.
 - `scripts/rule_entity_audit.py` measures, per rule and output, how often the outputs are supervised at each role's entities.
 
@@ -36,5 +42,6 @@ Rules to respect when editing `rules/`, a detector family or rule tagging, and w
 ## `rule-counts`
 
 - Writes `rule -> polarity -> source -> records` to `--output` (default `output/effects/rule-counts.json`), with the rules declared without a detector, the uncountable ones, the review list and the per-rule `carriers`.
-- A rule no record tags is omitted, so absent does not mean "not countable".
+- A rule with a taggable declaration that no record tags is listed under `declared_zero`. The file also lists `untaggable` (per scenario, why no record can show it) and `same_as`. Only a rule with no declaration is left out silently.
+- A gen-3 game whose shard holds no game-end marker counts toward no rule, review entry or carrier; `cut_games` says how many were left out.
 - It reads gen-2 or gen-3 shards, never mixed. The file's `generation` is what the steered variant round checks.

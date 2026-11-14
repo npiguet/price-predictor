@@ -1962,9 +1962,9 @@ how a card is scripted. About 90 need setup state that a starting-state file may
 as a designation or a turn's history. About 75 name a suspected Forge departure from the rules, such
 as connive 0 firing the "connives" trigger. `rules/FINDINGS.md` lists ten to test first.
 
-### Collection keeps four known limits, in mana counting, fork speed and two constant fields
+### Collection keeps eight known limits, in mana counting, fork speed, two constant fields, one kind of cast, two rules the records cannot count and the rules without a detector
 
-**Four limits of collection were found and left in place.**
+**Eight limits of collection were found and left in place.**
 - The untapped mana production counts a mana ability with a mana cost of its own, such as a filter
   land's, without checking that its {1} can be paid.
 - The affordability check that decides whether a decision candidate's mana cost can be paid counts
@@ -1976,6 +1976,44 @@ as connive 0 firing the "connives" trigger. `rules/FINDINGS.md` lists ten to tes
 - `field-coverage` found two snapshot fields constant on the audit shards. A player's rad counters
   come only from Fallout cards, which sealed pools do not hold, and unlimited land plays are rare.
   Both are checked again after the coverage round.
+- A spell that may be cast at instant speed for an extra cost is listed as one decision candidate,
+  at its printed timing. Rout can be cast as though it had flash for {2} more. At instant speed
+  its candidate fails the timing check, although the cast with the extra cost is legal. The
+  records never show that cast as a legal play.
+- About 150 rule scenarios have no detector although a record field holds what decides them. A
+  detector is the declaration that says which records show a rule firing and which show it not
+  firing. For these scenarios no detector parameter reads the field. `rule-counts` therefore
+  reports no examples for their rules, and neither a rule test nor a directed fork can be aimed at
+  them. The largest groups need a condition on a decision candidate, such as why a target or a
+  cost is illegal, a parameter of an event, a qualifier on a trigger, or the kind of replacement
+  that applied. Each scenario states what is missing in its declaration, in a reason that starts
+  with "Could not express".
+- A permanent exiled by its finality counter is recorded without the name of what exiled it. A
+  finality counter reads "if this permanent would be put into a graveyard from the battlefield,
+  exile it instead" (rule 122.1h). Cards that return a creature from a graveyard for one more use
+  put it on that creature. When a replacement effect changes an event, collection writes a rewrite
+  record, and that record names the replacing effect by the card and the script line it is
+  printed on. A finality counter's replacement is printed on no card: Forge builds it while the
+  game runs, from the counter. The rewrite record of such a death therefore names no ability and
+  no line. The counter on the permanent, in the record's snapshot, is the only sign of what
+  exiled it, and no detector parameter reads a counter to tell which replacement applied. Rule
+  122.1h therefore has no detector. `rule-counts` reports no examples for it, and it is not on
+  the list of rules that directed forks are aimed at. A directed fork is a copy of a game with
+  one edit made to its board, played on so that a rule is recorded both firing and not firing.
+  The records of such a death still hold the counter and the exile.
+- Two parts of rule 601.2c, which governs how targets are chosen as a spell is cast, cannot be
+  counted. The first part lets one object be chosen once for each instance of the word "target".
+  Spiteful Blow reads "destroy target creature and target land", and Dryad Arbor, a land that is
+  also a creature, can be named for both. The second part makes a player obey an effect that says
+  a certain permanent must be targeted. Standard Bearer forces an opponent's spell to target it
+  if able. Both parts are decided while the targets are chosen. Collection records that moment
+  as a decision record, which lists the objects each candidate play may legally target. The list
+  is one set for the whole spell, the union over its targeting clauses, and it holds no chosen
+  target. It therefore cannot show one object chosen for two clauses. Forge checks Standard
+  Bearer's requirement against the targets once they are chosen and does not narrow the list, so
+  the list shows a Grizzly Bears beside Standard Bearer as a legal target. The scenarios of both
+  parts have no detector. A third part of the rule, that one instance of "target" cannot name
+  the same object twice, has one.
 
 ### The deviance floor is 0.04 nats, where gen-2's output fields turn noisy
 
@@ -2043,5 +2081,11 @@ line gives every field's card-disjoint explained deviance, and each run's "Const
   written before it, and measure its step time and peak memory on a fixed shard.
 - **Train with the hard mask on rule-drawn records first**, and move to the soft mask only if a
   comparison shows the hard mask costs the other outputs.
+- **Give the detectors the parameters the scenarios without a detector need, and list a cast at
+  instant speed for an extra cost as a candidate of its own**, in a later generation. Both are
+  limits collection keeps for now.
+- **Name a replacement that no card prints on its rewrite record, and record the targets chosen
+  for each targeting clause of a cast**, in a later generation. The first makes the finality
+  counter's rule countable, the second the two uncounted parts of rule 601.2c.
 - **Draw more of the records a weak output field needs, in gen-4** ([gen-4 record](XXXX-XX-XX-effect-model-gen4-design.md)),
   starting from the fields gen-3's model leaves weak.

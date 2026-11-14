@@ -98,12 +98,13 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
-        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
+        "outcome": "A permanent with hexproof is outside the legal targets of a spell or ability its opponent controls.",
+        "near_miss": "A permanent with hexproof is among the legal targets of a spell or ability its own controller controls.",
         "params": {
           "list": "legal_targets",
           "fires_when": "outside",
-          "universe": "battlefield_and_players"
+          "restriction": "hexproof",
+          "judged": "permanent"
         },
         "needs": []
       }
@@ -177,18 +178,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "resolution_outcome",
-        "record_kind": "resolution",
-        "outcome": "A targeted spell or ability fizzles because its only target became illegal before resolution.",
-        "near_miss": "A targeted spell or ability resolves with its target still legal.",
-        "params": {
-          "outcome": "fizzled",
-          "near": [
-            "resolved"
-          ],
-          "targeted": true
-        },
-        "needs": []
+        "none": "Could not express: what made the target illegal (hexproof gained in response, spliced text, a copy's kept target) is read by no resolution_outcome parameter."
       }
     },
     {
@@ -260,16 +250,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "legality_membership",
-        "record_kind": "playability",
-        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
-        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
-        "params": {
-          "list": "legal_targets",
-          "fires_when": "outside",
-          "universe": "battlefield_and_players"
-        },
-        "needs": []
+        "none": "A player's keywords are in no snapshot field (PlayerState carries none), so a player's hexproof cannot be read off the record."
       }
     },
     {
@@ -347,12 +328,12 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
-        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
+        "outcome": "A permanent with hexproof from a quality the candidate's source has is outside the legal targets of its opponent's spell or ability.",
+        "near_miss": "A permanent with hexproof from a quality the candidate's source lacks is among its legal targets.",
         "params": {
           "list": "legal_targets",
           "fires_when": "outside",
-          "universe": "battlefield_and_players"
+          "restriction": "hexproof_from"
         },
         "needs": []
       }
@@ -424,12 +405,12 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A spell or ability's candidate lists, among its legal targets, an entity or player that a restriction or permission makes targetable.",
-        "near_miss": "An entity or player that the candidate's targeting restriction excludes from its legal targets.",
+        "outcome": "A permanent whose hexproof from a quality applies to the candidate is among its legal targets nonetheless (an effect lets it be targeted as though it had no hexproof, or it lost hexproof).",
+        "near_miss": "A permanent whose hexproof from a quality applies is outside the candidate's legal targets.",
         "params": {
           "list": "legal_targets",
           "fires_when": "inside",
-          "universe": "battlefield_and_players"
+          "restriction": "hexproof_from"
         },
         "needs": []
       }
@@ -506,12 +487,12 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A spell or ability's candidate lists, among its legal targets, an entity or player that a restriction or permission makes targetable.",
-        "near_miss": "An entity or player that the candidate's targeting restriction excludes from its legal targets.",
+        "outcome": "A permanent whose hexproof from a quality applies to the candidate is among its legal targets nonetheless (an effect lets it be targeted as though it had no hexproof, or it lost hexproof).",
+        "near_miss": "A permanent whose hexproof from a quality applies is outside the candidate's legal targets.",
         "params": {
           "list": "legal_targets",
           "fires_when": "inside",
-          "universe": "battlefield_and_players"
+          "restriction": "hexproof_from"
         },
         "needs": []
       }
@@ -593,16 +574,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "legality_membership",
-        "record_kind": "playability",
-        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
-        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
-        "params": {
-          "list": "legal_targets",
-          "fires_when": "outside",
-          "universe": "battlefield_and_players"
-        },
-        "needs": []
+        "same_as": "702.11d-1",
+        "reason": "Hexproof from two qualities is two hexproof-from abilities, each judged as 702.11d judges one: the record shows 702.11d's fact."
       }
     },
     {
@@ -669,16 +642,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "legality_membership",
-        "record_kind": "playability",
-        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
-        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
-        "params": {
-          "list": "legal_targets",
-          "fires_when": "outside",
-          "universe": "battlefield_and_players"
-        },
-        "needs": []
+        "same_as": "702.11d-1",
+        "reason": "Hexproof from each quality of a characteristic is one hexproof-from ability per quality: the record shows 702.11d's fact."
       }
     }
   ]

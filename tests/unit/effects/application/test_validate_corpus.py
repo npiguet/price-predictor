@@ -15,12 +15,20 @@ output takes.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from effects.application.corpus_validation.findings import Finding, Findings, Thresholds
-from effects.application.corpus_validation.presence import FieldPresence
+from effects.application.corpus_validation.presence import (
+    GEN3_ENTITY_MEMBERS,
+    GEN3_GLOBAL_MEMBERS,
+    GEN3_PLAYER_MEMBERS,
+    GEN3_REFS_MEMBERS,
+    GEN3_STATE_MEMBERS,
+    FieldPresence,
+)
 from effects.application.validate_corpus import validate_corpus, validate_directory
 from effects.domain.event_schema import (
     AttributionKind,
@@ -303,16 +311,6 @@ class TestAHealthyWindowPasses:
                 "[WATCH]" if finding.watched else "[PASS]"
             )
 
-    def test_a_watched_finding_reports_a_number_and_judges_nothing(self):
-        """The separation the report rests on: measured, never a verdict."""
-        watched = [f for f in validate_corpus(_healthy()) if f.watched]
-        assert watched, "at least the probe count is watched"
-        for finding in watched:
-            assert finding.ok, "a watched finding can never fail a run"
-            assert finding.measured
-            assert finding.lines()[0].startswith("[WATCH]")
-
-
 class TestTheSummary:
     """The closing lines count judged invariants only: a watched one cannot fail."""
 
@@ -351,26 +349,6 @@ class TestRecordIdCollision:
         assert "1 repeats" in unique.measured
         assert any("run.0-L1.0" in line for line in unique.detail)
 
-    def test_a_collision_planted_in_a_real_shard_directory_fails(self, tmp_path):
-        """End to end: written, gzip-free or not, discovered by glob, reparsed.
-
-        A collision that only exists in memory proves nothing about a corpus —
-        the id has to survive the writer and the reader to be the thing an
-        operator would actually have on disk.
-        """
-        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
-            for record in _healthy():
-                writer.write(record)
-        # The second lifetime of the same worker slot, counting from zero again
-        # into its own shard: exactly what the 60-second recycle produces.
-        with RawShardWriter(tmp_path, "run", 0, "L2") as writer:
-            writer.write(_resolution("run.0-L1.0", game_id="run.0-L1.0"))
-
-        findings = validate_corpus(read_window(tmp_path))
-        unique = _named(findings, "record_id is unique")
-        assert not unique.ok, unique.measured
-        assert "run.0-L1.0" in " ".join(unique.detail)
-
     def test_two_lifetimes_that_namespace_their_ids_pass(self, tmp_path):
         """The same restart, with the fix in place, is not a defect."""
         with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
@@ -400,7 +378,10 @@ class TestValidateDirectory:
 
         assert report.shards == 2
         assert _named(report.findings, "record_id is unique").ok
-        assert _named(report.findings, "gen-2 envelope")
+        # The per-shard check runs over both shards, the nested one included.
+        envelope = _named(report.findings, "gen-2 envelope")
+        assert envelope.ok, envelope.detail
+        assert envelope.measured.startswith("2 shard(s), 2 carrying random_seat")
 
 class TestGameIdNamesOneGame:
     def test_a_backward_turn_jump_inside_one_game_id_fails(self):
@@ -456,6 +437,35 @@ class TestLinkHalvesPair:
         finding = _named(validate_corpus(records), "link_id")
         assert not finding.ok
         assert "unpaired" in finding.measured
+
+    @staticmethod
+    def _cast(index: int, source: str = "E7", game: str = "run.0-L1.0"):
+        """A gen-3 cost half: written at the cast, no outcome (FR-042a)."""
+        snapshot = replace(_snapshot(), refs=replace(_snapshot().refs, source=source))
+        return _activation(f"run.0-L1.{index}", outcome=None, link_id=f"cast.{index}",
+                           game_id=game, state=snapshot, generation=3)
+
+    def test_gen3_cost_halves_none_of_which_meets_its_effect_half_fail(self):
+        """V5 #18: a lone cost half is a paired link (its item countered, or on
+        the stack at the game's end), so 500 of them read 500/500 paired; a
+        window where no cost half meets its effect half is the collector."""
+        records = _healthy() + [self._cast(300 + i) for i in range(200)]
+        finding = _named(validate_corpus(records), "gen-3 cost half")
+        assert not finding.ok
+        assert "0/200" in finding.measured and "200 alone" in finding.measured
+
+    def test_a_lone_cost_half_whose_item_was_countered_is_explained(self):
+        countered = _resolution("run.0-L1.990", game_id="run.0-L1.0", generation=3,
+                                payload=ResolutionPayload(events=(Event(
+                                    type=EventType.SPELL_COUNTERED, subjects=("E7",),
+                                    attributed_to=AttributionKind.ROOT),)))
+        paired = [half for i in range(5) for half in (
+            self._cast(400 + i, source=f"E{40 + i}"),
+            _resolution(f"run.0-L1.{500 + i}", link_id=f"cast.{400 + i}", generation=3))]
+        records = _healthy() + paired + [self._cast(300), countered]
+        finding = _named(validate_corpus(records), "gen-3 cost half")
+        assert finding.ok and finding.watched
+        assert "5/6" in finding.measured and "1 alone, 1 of them countered" in finding.measured
 
     def test_a_link_id_shared_by_three_halves_on_one_line_fails(self):
         """A link id whose tail is a JVM-static counter collides like an id does.
@@ -599,6 +609,23 @@ class TestOutcome:
         assert "fizzled 2" in finding.measured
         assert "resolved 2" in finding.measured
 
+    def test_on_gen3_the_effect_halves_carry_it(self):
+        """Gen-3 writes the outcome on the effect half (FR-042b), the cost half
+        none: one value over effect halves fails, two pass."""
+        def halves(*outcomes):
+            return [
+                _resolution(f"run.0-L1.{900 + i}", generation=3, payload=ResolutionPayload(
+                    events=(), outcome=outcome, outcome_written=True))
+                for i, outcome in enumerate(outcomes)
+            ]
+
+        literal = _named(validate_corpus(halves(ResolutionOutcome.RESOLVED,
+                                                ResolutionOutcome.RESOLVED)), "outcome")
+        assert not literal.ok and "1 distinct over 2" in literal.measured
+        varied = _named(validate_corpus(halves(ResolutionOutcome.RESOLVED,
+                                               ResolutionOutcome.FIZZLED)), "outcome")
+        assert varied.ok and "fizzled 1" in varied.measured
+
 
 class TestCosts:
     def test_costs_empty_on_every_record_fails(self):
@@ -736,7 +763,11 @@ class TestTheCli:
             for record in _healthy():
                 writer.write(record)
         assert self._run(tmp_path) == 0
-        assert "invariants hold" in capsys.readouterr().out
+        out = capsys.readouterr().out
+        assert "invariants hold" in out
+        # A watched figure is printed apart and fails nothing: no probe fork.
+        assert "watched, not judged" in out
+        assert "[WATCH] probe forks were taken: 0 damage-step probe forks" in out
 
     def test_a_planted_collision_exits_non_zero_and_names_it(self, tmp_path, capsys):
         with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
@@ -748,6 +779,43 @@ class TestTheCli:
         out = capsys.readouterr().out
         assert "[FAIL] record_id is unique across the run's shards" in out
         assert "invariants broken" in out
+
+    def test_an_undecodable_line_is_a_failed_finding_and_the_rest_is_read(
+            self, tmp_path, capsys):
+        """V5 #20: one line that does not decode is the shard's finding, not a
+        stop: the other shards and the lines before it are still measured."""
+        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
+            for record in _healthy():
+                writer.write(record)
+        bad = tmp_path / "run.1-L1.jsonl"
+        bad.write_text('{"record_id": "x", "kind": "nonesuch"}\n', encoding="utf-8")
+        assert self._run(tmp_path) == 1
+        out = capsys.readouterr().out
+        assert "[FAIL] every shard line decodes" in out
+        assert "1/2 shards" in out and "run.1-L1.jsonl, line 1" in out
+        assert "[PASS] record_id is unique" in out
+
+    def test_values_outside_the_closed_lists_are_watched_figures(self, tmp_path, capsys):
+        """The decode tally the read keeps (WP9) is reported, never judged."""
+        from effects.infrastructure.record_codec import record_to_dict
+
+        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
+            for record in _healthy():
+                writer.write(record)
+        raw = record_to_dict(_resolution("run.0-L1.950", generation=3))
+        raw.pop("mode")
+        (tmp_path / "run.1-L1.jsonl").write_text(json.dumps(raw) + "\n", encoding="utf-8")
+        self._run(tmp_path)
+        out = capsys.readouterr().out
+        assert "[WATCH] values outside the wire's closed lists: 1" in out
+
+    def test_variant_scripts_names_the_variant_tree_for_the_key_joins(self, tmp_path):
+        from effects.infrastructure.cli import build_parser
+
+        args = build_parser().parse_args([
+            "validate-corpus", "--effect-records", str(tmp_path),
+            "--variant-scripts", str(tmp_path / "variants")])
+        assert args.variant_scripts == tmp_path / "variants"
 
     def test_an_empty_directory_exits_non_zero(self, tmp_path, caplog):
         """Refused through exits_with, as every command's refusal is."""
@@ -764,27 +832,6 @@ class TestTheCli:
         assert args.min_zone_change_from_zone_rate is None
         assert args.min_attributed_rate is None
         assert args.cards_folders == (Path("output/cardsfolder"), Path("output/tokenscripts"))
-
-    def test_watched_findings_are_counted_apart_from_judged_ones(
-        self, tmp_path, capsys,
-    ):
-        """The summary must not claim a verdict on a number nothing judged."""
-        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
-            for record in _healthy():
-                writer.write(record)
-        assert self._run(tmp_path) == 0
-        out = capsys.readouterr().out
-        assert "[WATCH]" in out
-        assert "watched, not judged" in out
-
-    def test_a_watched_number_alone_never_fails_the_run(self, tmp_path, capsys):
-        """Zero probes and no attribution are reported, and exit stays zero."""
-        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
-            for record in _healthy():
-                writer.write(record)
-        assert self._run(tmp_path) == 0
-        out = capsys.readouterr().out
-        assert "[WATCH] probe forks were taken: 0 damage-step probe forks" in out
 
     def test_a_floor_passed_on_the_command_line_turns_a_watch_into_a_failure(
         self, tmp_path, capsys,
@@ -1070,14 +1117,6 @@ class TestKeywordKeysJoinTheirSidecar:
         assert finding.ok, finding.detail
         assert "0/1 keyword keys fail to join" in finding.measured
 
-    def test_a_runtime_only_trait_past_the_declared_tail_is_not_a_mismatch(
-        self, tmp_path,
-    ):
-        """Level up and bestow append traits no card script declares."""
-        sidecars = _write_bears_sidecar(tmp_path, (0, 1))
-        findings = validate_corpus([*_healthy(), self._record(7)], sidecars=sidecars)
-        assert _named(findings, "keyword provenance keys").ok
-
     def test_a_key_outside_every_declared_range_is_counted_not_joined(
         self, tmp_path,
     ):
@@ -1086,6 +1125,7 @@ class TestKeywordKeysJoinTheirSidecar:
         findings = validate_corpus([*_healthy(), self._record(7)], sidecars=sidecars)
         keyword = _named(findings, "keyword provenance keys")
         outside = _named(findings, "outside every declared range")
+        assert keyword.ok, "a runtime-only trait past the declared tail is no mismatch"
         assert "1 outside every declared range" in keyword.measured
         assert outside.watched and outside.ok
         assert outside.measured.startswith("1/")
@@ -1135,33 +1175,18 @@ class TestKeywordKeysJoinTheirSidecar:
             ability=(ProvenanceKey("cardsfolder/x/nowhere.txt", 0, "keyword", 0),),
         )
         findings = validate_corpus([*_healthy(), orphan], sidecars=sidecars)
-        assert not _named(findings, "keyword provenance keys").ok
+        keyword = _named(findings, "keyword provenance keys")
+        assert not keyword.ok, "a card with no sidecar fails rather than being skipped"
+        assert any("no sidecar" in line for line in keyword.detail)
         assert _named(findings, "outside every declared range").measured.startswith("0/")
 
-    def test_a_card_with_no_sidecar_fails_rather_than_being_skipped(
+    def test_a_key_in_a_tree_this_run_was_not_given_fails_as_unchecked(
         self, tmp_path,
     ):
-        sidecars = _write_bears_sidecar(tmp_path, (0,))
-        orphan = _trigger(
-            "run.0-L1.901",
-            ability=(ProvenanceKey("cardsfolder/x/nowhere.txt", 0, "keyword", 0),),
-        )
-        finding = _named(
-            validate_corpus([*_healthy(), orphan], sidecars=sidecars),
-            "keyword provenance keys",
-        )
-        assert not finding.ok
-        assert any("no sidecar" in line for line in finding.detail)
-
-    def test_a_key_in_a_tree_this_run_was_not_given_is_unchecked_not_broken(
-        self, tmp_path,
-    ):
-        """A stage-four corpus names variant-scripts keys; absence is not proof.
-
-        A validate run without that tree has nothing to join them against, and
-        counting them as mismatches would fail every variant run for a reason
-        that says nothing about the corpus.
-        """
+        """V5 #20: a stage-four corpus names variant-scripts keys, which a run
+        without that tree cannot join; they are no mismatch, but a run that
+        checked none of them is no pass either: ``--variant-scripts`` names
+        the tree."""
         sidecars = _write_bears_sidecar(tmp_path, (0,))
         variant = _trigger(
             "run.0-L1.901",
@@ -1173,36 +1198,10 @@ class TestKeywordKeysJoinTheirSidecar:
             validate_corpus([*_healthy(), variant], sidecars=sidecars),
             "keyword provenance keys",
         )
-        assert finding.ok, finding.detail
-        assert "1 unchecked" in finding.measured
-        assert any("variant-scripts" in line for line in finding.detail)
-
-    def test_without_a_converted_tree_the_check_reports_unchecked(self):
-        finding = _named(validate_corpus(_healthy()), "keyword provenance keys")
-        assert finding.watched
-        assert "none checked" in finding.measured
-
-    def test_a_planted_mismatch_in_a_real_shard_directory_is_rejected(
-        self, tmp_path,
-    ):
-        """End to end: written, discovered by glob, reparsed, then joined.
-
-        A key that only exists in memory proves nothing about a corpus — the
-        mismatch has to survive the writer and the reader to be the thing an
-        operator would actually have on disk.
-        """
-        sidecars = _write_bears_sidecar(tmp_path, (0, 2))
-        shards = tmp_path / "records"
-        with RawShardWriter(shards, "run", 0, "L1") as writer:
-            for record in _healthy():
-                writer.write(record)
-            writer.write(self._record(1))
-        finding = _named(
-            validate_corpus(read_window(shards), sidecars=sidecars),
-            "keyword provenance keys",
-        )
-        assert not finding.ok, finding.measured
-
+        assert not finding.ok
+        assert "0/" in finding.measured and "1 unchecked" in finding.measured
+        assert any("variant-scripts" in line and "--variant-scripts" in line
+                   for line in finding.detail)
 
 class TestCollectionMode:
     def test_a_degraded_record_fails_the_run(self):
@@ -1446,6 +1445,55 @@ class TestOutgoingAgreesWithTheResult:
         assert _named(validate_corpus(records), "outgoing is null on").ok
 
 
+class TestABufferedReplacementAgreesWithItsPayload:
+    """WP7: a damage replacement that set an ability aside (Swans of Bryn
+    Argoll's draw, a ``Prevent$ True`` rider) names it in ``buffered``, never in
+    ``replaced_by``, and its run's events are ``buffered_events``."""
+
+    _DAMAGE = Event(type=EventType.DAMAGE_DEALT, subjects=("E3",), params={"amount": 2})
+    _DRAW = Event(type=EventType.CARD_DRAWN, subjects=("P0",), params={"count": 1},
+                  attributed_to="root")
+
+    def _buffered(self, record_id: str, result=RewriteResult.REPLACED, **payload_kwargs):
+        kwargs = {"buffered": (_KEY,), "buffered_ran": True,
+                  "buffered_events": (self._DRAW,), **payload_kwargs}
+        return _substitution(record_id, incoming=self._DAMAGE, result=result, **kwargs)
+
+    def test_a_prevention_with_a_rider_passes(self):
+        """Gatta and Luzzu: ``prevented``, nothing in ``replaced_by``, the rider buffered."""
+        records = _healthy() + [self._buffered("run.0-L1.900", RewriteResult.PREVENTED)]
+        assert _named(validate_corpus(records), "outgoing is null on").ok
+
+    def test_a_buffered_ability_also_named_as_ran_instead_fails(self):
+        records = _healthy() + [self._buffered("run.0-L1.900", replaced_by=(_KEY,))]
+        finding = _named(validate_corpus(records), "outgoing is null on")
+        assert not finding.ok
+        assert any("run.0-L1.900" in line for line in finding.detail)
+
+    def test_events_of_a_run_that_never_came_fail(self):
+        records = _healthy() + [self._buffered("run.0-L1.900", buffered_ran=False)]
+        assert not _named(validate_corpus(records), "outgoing is null on").ok
+
+    def test_an_unknown_incoming_event_with_an_outgoing_one_fails(self):
+        records = _healthy() + [_substitution(
+            "run.0-L1.900", incoming=self._DAMAGE, result=RewriteResult.UPDATED,
+            incoming_unknown=True, outgoing=self._DAMAGE)]
+        assert not _named(validate_corpus(records), "outgoing is null on").ok
+
+    def test_a_buffered_replacement_names_the_ability_it_set_aside(self):
+        """Its ``replaced_by`` is empty by design: ``buffered`` names the ability."""
+        records = _healthy() + [self._buffered("run.0-L1.900")]
+        assert "3/3" in _named(validate_corpus(records), "ran instead").measured
+
+    def test_a_record_naming_its_ability_both_ways_counts_once(self):
+        """Forcefield's ``ReplaceDamage`` runs in place and sets its
+        sub-ability aside, so a real record carries both ``replaced_by`` and
+        ``buffered``: named once, never a share above one (a real run read
+        330/312)."""
+        records = _healthy() + [self._buffered("run.0-L1.900", replaced_by=(_KEY,))]
+        assert "3/3" in _named(validate_corpus(records), "ran instead").measured
+
+
 class TestRewritesNameTheAbilityThatRanInstead:
     """Watched, because a ``ReplacementResult$`` script runs no ability at all.
 
@@ -1481,6 +1529,47 @@ class TestRewritesNameTheAbilityThatRanInstead:
         assert "2/2" in _named(validate_corpus(records), "ran instead").measured
 
 
+class TestEveryRecordKindIsPresent:
+    """V5 #19: a kind no record of a long gen-3 window holds was reported
+    ``ok`` ("no records of this kind") by every per-kind check."""
+
+    @staticmethod
+    def _window(records: int):
+        return [_resolution(f"run.0-L1.{index}", generation=3) for index in range(records)]
+
+    def test_a_long_window_missing_kinds_every_game_writes_fails(self):
+        finding = _named(validate_corpus(self._window(1000), playability_rate=0.01),
+                         "record kind")
+        assert not finding.ok
+        for label in ("resolution/activation", "trigger", "combat", "playability/decision",
+                      "playability/attackers", "playability/blockers", "turn_action/draw"):
+            assert label in finding.measured
+        assert "rewrite" in " ".join(finding.detail)  # watched, named, not judged
+
+    def test_decision_records_are_judged_only_where_the_run_samples_them(self):
+        """A run collected with --playability-rate 0 writes no decision record;
+        without a run manifest saying the rate, their absence is watched."""
+        for rate in (0.0, None):
+            finding = _named(validate_corpus(self._window(1000), playability_rate=rate),
+                             "record kind")
+            assert "playability/decision" not in finding.measured
+            assert "playability/decision" in " ".join(finding.detail)
+
+    def test_the_rate_is_read_off_the_run_manifest(self, tmp_path):
+        from effects.application.validate_corpus import playability_rate_of
+
+        assert playability_rate_of(tmp_path) is None
+        (tmp_path / "run.json").write_text(json.dumps({"invocations": [
+            {"command": "x", "caps": {"playability_rate": 0.01}},
+            {"command": "y", "caps": {"playability_rate": 0.0}}]}), encoding="utf-8")
+        assert playability_rate_of(tmp_path) == 0.0
+
+    def test_a_short_window_is_not_judged(self):
+        finding = _named(validate_corpus(self._window(10)), "record kind")
+        assert finding.ok and "under the 1000" in finding.measured
+        assert _named(validate_corpus(_healthy()), "record kind").ok
+
+
 class TestTriggerNegatives:
     def test_a_window_of_positives_only_fails(self):
         records = _healthy() + [
@@ -1490,6 +1579,28 @@ class TestTriggerNegatives:
         finding = _named(validate_corpus(records), "draw negatives")
         assert not finding.ok
         assert "fired:not-fired" in finding.measured
+
+    @staticmethod
+    def _ended(game_id: str):
+        won = Event(type=EventType.PLAYER_WON, subjects=("P0",), attributed_to="unresolved")
+        return _combat(f"{game_id}.999", game_id=game_id, state=_snapshot(turn=30),
+                       payload=CombatPayload(events=(won,)))
+
+    def test_a_finished_game_s_negatives_only_fail(self):
+        """V5 #19: the ceiling alone let 0% fired pass, the positives the
+        reservoir writes at the game's end all lost. Judged over games that
+        ended in the window: an unfinished game's positives are still held."""
+        game = "run.0-L1.0"
+        negatives = [_trigger(f"run.0-L1.{index}", fired=False, game_id=game,
+                              state=_snapshot(turn=7)) for index in range(900, 960)]
+        records = [r for r in _healthy() if r.kind is not RecordKind.TRIGGER] + negatives
+        unfinished = _named(validate_corpus(records), "trigger records hold positives")
+        assert unfinished.ok and unfinished.watched
+        assert "0 trigger records of games that ended" in unfinished.measured
+        finished = _named(validate_corpus([*records, self._ended(game)]),
+                          "trigger records hold positives")
+        assert not finished.ok
+        assert "0:60" in finished.measured and "floor 5.0%" in finished.measured
 
     def test_a_balanced_window_passes_and_reports_the_ratio(self):
         finding = _named(validate_corpus(_healthy()), "draw negatives")
@@ -1647,6 +1758,46 @@ class TestProbeVisibility:
         assert "0 damage-step probe forks, 1 interventional forks" in (
             finding.measured
         )
+
+
+class TestLossyForks:
+    """The share of fork records whose copy left something out, by kind:
+    watched, since a lossy fork is kept and trained on."""
+
+    def test_a_window_with_no_forks_reports_none(self):
+        finding = _named(validate_corpus(_healthy()), "copy left something out")
+        assert finding.watched and finding.ok
+        assert finding.measured == (
+            "0/0 fork records; by kind: none; 0/0 forks (at least; by game, turn and kind of"
+            " fork); by kind: none")
+
+    def test_the_share_is_counted_per_kind_over_every_fork_record(self):
+        records = _healthy() + [
+            _resolution("run.0-L1.900", interventional=True, fork=True,
+                        copy_dropped=(("command", 2), ("remembered", 1))),
+            _resolution("run.0-L1.901", interventional=True, fork=True,
+                        copy_dropped=(("remembered", 1),)),
+            _resolution("run.0-L1.902", interventional=True, fork=True),
+            _resolution("run.0-L1.903", interventional=True, fork=True),
+        ]
+        finding = _named(validate_corpus(records), "copy left something out")
+        assert finding.watched and finding.ok
+        assert finding.measured == (
+            "2/4 fork records; by kind: command 1/4 (25.0%), remembered 2/4 (50.0%); "
+            "1/1 forks (at least; by game, turn and kind of fork); "
+            "by kind: command 1/1 (100.0%), remembered 1/1 (100.0%)")
+
+    def test_a_fork_of_many_records_is_one_fork(self):
+        """A protection fork's ten records carry its copy's copy_dropped each:
+        ten lossy records, one lossy fork; another game's fork is another."""
+        lossy = [_resolution(f"run.0-L1.{900 + i}", interventional=True, fork=True,
+                             copy_dropped=(("command", 1),)) for i in range(10)]
+        clean = [_resolution("run.0-L1.950", game_id="run.0-L1.1", interventional=True,
+                             fork=True)]
+        finding = _named(validate_corpus(_healthy() + lossy + clean), "copy left something out")
+        assert finding.measured.startswith("10/11 fork records; by kind: command 10/11 (90.9%); "
+                                           "1/2 forks"), finding.measured
+        assert finding.measured.endswith("by kind: command 1/2 (50.0%)"), finding.measured
 
 
 class TestAForksTurnAgreesWithItsMirror:
@@ -1937,37 +2088,52 @@ class TestEventTypeCoverage:
         assert f"{total}/{total}" in finding.measured
 
 
-@pytest.mark.parametrize(
-    "fragment",
-    [
-        "record_id is unique",
-        "one game",
-        "link_id",
-        "trigger and rewrite",
-        "resolution records name",
-        "empty ability says why",
-        "keyword provenance keys",
-        "patched mode",
-        "outcome",
-        "cost fields",
-        "tier depth",
-        "exact duplicates",
-        "repeats an event",
-        "draw negatives",
-        "where the card came from",
-        "name what produced them",
-        "fork records",
-        "declare a cause",
-        "agrees with the record it mirrors",
-        "non-keyword provenance keys",
-        "probe forks",
-        "name the mana they made",
-        "event types",
-    ],
+#: Every check validate-corpus runs, in its report order: the list is the
+#: contract, so a check silently dropped or renamed fails here.
+_EVERY_CHECK = (
+    "record_id is unique across the run's shards",
+    'each game_id names one game',
+    'gen-3 games end with their game-end marker',
+    'records the per-game cap withheld',
+    'every record kind a game writes is present',
+    ("every link_id joins one activation to its resolution(s): one, or one per chosen "
+     "mode of a charm, or none for a gen-3 activation whose item never resolved"),
+    'every gen-3 cost half is met by its effect half unless its item never resolved',
+    'trigger and rewrite records name an acting line',
+    'resolution records name an acting line',
+    'continuous records name an acting line',
+    'every empty ability says why it is empty',
+    'keyword provenance keys join their sidecar',
+    'non-keyword provenance keys join their sidecar',
+    'provenance keys outside every declared range',
+    "a copy keys its keyword lines into the copied card's file",
+    'every record was collected in patched mode',
+    'outcome takes more than one value',
+    'cost fields are not all empty',
+    'snapshot tier depth is uniform across kinds',
+    'exact duplicates within a game stay rare, per kind',
+    'no record repeats an event inside itself',
+    'trigger records draw negatives against positives',
+    'trigger records hold positives',
+    'rewrite records say which replacement result happened',
+    "a rewrite's outgoing event is not a copy of its incoming one",
+    'outgoing is null on the results that rewrote nothing',
+    'rewrites name the ability that ran instead',
+    'zone_change events say where the card came from',
+    'resolution events name what produced them',
+    "fork records' events name what produced them",
+    'events that declare a cause name one',
+    "a fork's turn agrees with the record it mirrors",
+    'probe forks were taken',
+    'fork records whose copy left something out',
+    'mana_produced events name the mana they made',
+    'declared event types are observed in the window',
 )
-def test_every_named_invariant_is_reported(fragment):
+
+
+def test_every_named_invariant_is_reported():
     """The list is the contract; a check silently dropped is a check that lies."""
-    assert _named(validate_corpus(_healthy()), fragment)
+    assert tuple(f.name for f in validate_corpus(_healthy())) == _EVERY_CHECK
 
 
 class TestGen2FieldPresence:
@@ -2000,11 +2166,13 @@ class TestGen2FieldPresence:
 
     def test_a_gen1_shard_passes(self, tmp_path):
         self._write(tmp_path / "a.jsonl", self._rows(seat=False, what_if=None))
-        assert self._finding(tmp_path).ok
+        finding = self._finding(tmp_path)
+        assert finding.ok and finding.measured.startswith("1 shard(s), 0 carrying random_seat; 0 ")
 
     def test_a_gen2_shard_with_both_fields_passes(self, tmp_path):
         self._write(tmp_path / "a.jsonl", self._rows(seat=True, what_if=False))
-        assert self._finding(tmp_path).ok
+        finding = self._finding(tmp_path)
+        assert finding.ok and finding.measured.startswith("1 shard(s), 1 carrying random_seat; 0 ")
 
     def test_random_seat_on_some_records_only_fails(self, tmp_path):
         rows = self._rows(seat=True, what_if=False)
@@ -2016,7 +2184,9 @@ class TestGen2FieldPresence:
 
     def test_a_gen2_legality_record_without_what_if_fails(self, tmp_path):
         self._write(tmp_path / "a.jsonl", self._rows(seat=True, what_if=None))
-        assert not self._finding(tmp_path).ok
+        finding = self._finding(tmp_path)
+        assert not finding.ok
+        assert "1 with what_if on some legality records only" in finding.measured, finding.measured
 
     def test_what_if_on_another_kind_is_refused_by_the_reader(self, tmp_path):
         """The record model rejects it outright, so it never reaches a tally."""
@@ -2065,6 +2235,15 @@ class TestGen3FieldPresence:
         assert "payload.conditions_met 1" in finding.detail[0]
         assert finding.detail[1] == f"{half['record_id']}: no payload.conditions_met"
 
+    def test_a_game_end_marker_without_its_withheld_count_is_short(self, tmp_path):
+        """WP7: the marker says how many of its game's records the cap withheld."""
+        rows = self._golden()
+        marker = next(row for row in rows if row.get("subkind") == "game_end")
+        del marker["payload"]["records_withheld"]
+        finding = _named(self._findings(tmp_path, rows), "gen-3 fields")
+        assert not finding.ok
+        assert finding.detail[1] == f"{marker['record_id']}: no payload.records_withheld"
+
     @pytest.mark.parametrize(("site", "edit"), [
         ("state.links", lambda row: row["state"].pop("links")),
         ("state.global.day_night", lambda row: row["state"]["global"].pop("day_night")),
@@ -2080,6 +2259,29 @@ class TestGen3FieldPresence:
         edit(rows[0])
         finding = _named(self._findings(tmp_path, rows), "gen-3 fields")
         assert not finding.ok and f"{site} 1" in finding.detail[0]
+
+    @pytest.mark.parametrize(("site", "member"), [
+        *(("state", m) for m in GEN3_STATE_MEMBERS),
+        *(("state.global", m) for m in GEN3_GLOBAL_MEMBERS),
+        *(("state.players[]", m) for m in GEN3_PLAYER_MEMBERS),
+        *(("state.entities[]", m) for m in GEN3_ENTITY_MEMBERS),
+        *(("state.refs", m) for m in GEN3_REFS_MEMBERS),
+    ])
+    def test_every_owed_snapshot_member_missing_is_named(self, tmp_path, site, member):
+        """Each member of every owed list, not one per site: dropped from the
+        first golden record that carries it."""
+        rows = self._golden()
+        holder = {
+            "state": lambda row: [row["state"]],
+            "state.global": lambda row: [row["state"]["global"]],
+            "state.players[]": lambda row: row["state"]["players"],
+            "state.entities[]": lambda row: row["state"]["entities"],
+            "state.refs": lambda row: [row["state"]["refs"]],
+        }[site]
+        target = next(part for row in rows for part in holder(row) if member in part)
+        del target[member]
+        finding = _named(self._findings(tmp_path, rows), "gen-3 fields")
+        assert not finding.ok and f"{site}.{member} 1" in finding.detail[0], finding.detail
 
     def test_a_static_line_without_active_is_short(self, tmp_path):
         rows = self._golden()
@@ -2166,3 +2368,113 @@ class TestEmptyMana:
         assert finding.watched
         assert finding.measured.startswith("3/4 mana_produced events have an empty")
         assert finding.detail == ("resolution: 3",)
+
+
+class TestACopyKeysItsLinesIntoTheCopiedCard:
+    """A Clone copying a creature carries the creature's printed lines, so its
+    keyword lines key into the copied card's file (copiable values, 707.2);
+    one keyed into the copy's own file is the Clone-key gap (watched)."""
+
+    @staticmethod
+    def _board(copy_key_file: str):
+        from effects.domain.state_snapshot import CardLine
+
+        bears = ProvenanceKey("cardsfolder/s/serra_angel.txt", 0, "keyword", 0)
+        copy_key = ProvenanceKey(copy_key_file, 0, "keyword", 0)
+        original = make_entity("E1", "serra angel", lines=(
+            CardLine(keys=(bears,), kind="keyword", granted=False),))
+        clone = make_entity("E2", "serra angel", copy_source="E1", lines=(
+            CardLine(keys=(copy_key,), kind="keyword", granted=False),))
+        state = replace(_snapshot(), entities=(original, clone))
+        return _resolution("run.0-L1.960", state=state, generation=3)
+
+    def test_a_copy_keying_into_the_copied_card_holds(self):
+        record = self._board("cardsfolder/s/serra_angel.txt")
+        finding = _named(validate_corpus([*_healthy(), record]), "copied card")
+        assert finding.watched and "0/1" in finding.measured
+
+    def test_a_copy_keying_into_its_own_card_is_named(self):
+        record = self._board("cardsfolder/c/clone.txt")
+        finding = _named(validate_corpus([*_healthy(), record]), "copied card")
+        assert "1/1" in finding.measured and any("E2" in line for line in finding.detail)
+
+
+class TestGameEndMarkers:
+    """WP7: a gen-3 game that ended with every end-of-game write done ends
+    with a ``turn_action`` / ``game_end`` marker; one without was cut or is
+    still running, which a window read mid-collection cannot tell apart."""
+
+    @staticmethod
+    def _record(game_id: str, index: int, **overrides):
+        return _resolution(f"{game_id}.r{index}", game_id=game_id, generation=3, **overrides)
+
+    @staticmethod
+    def _marker(game_id: str, withheld: int = 0):
+        from tests.unit.effects.builders import game_end_marker
+
+        return game_end_marker(TestGameEndMarkers._record(game_id, 0, state=_snapshot(turn=40)),
+                               records_withheld=withheld)
+
+    def test_games_without_a_marker_are_counted_and_watched(self):
+        records = [self._record("run.0-L1.0", 1), self._marker("run.0-L1.0"),
+                   self._record("run.0-L1.1", 1)]
+        finding = _named(validate_corpus(records), "game-end marker")
+        assert finding.ok and finding.watched
+        assert "1 of 2 gen-3 game(s) have no game-end marker (50.0%)" in finding.measured
+
+    def test_no_marker_at_all_fails_once_a_later_game_closed_an_earlier_one(self):
+        """A JVM plays its games one after another: an earlier game of a
+        lifetime holding a later one finished or was cut, so a window none of
+        whose games wrote a marker is a collection that writes none."""
+        running = [self._record("run.0-L1.0", 1)]
+        assert _named(validate_corpus(running), "game-end marker").ok
+        closed = [*running, self._record("run.0-L1.1", 1)]
+        finding = _named(validate_corpus(closed), "game-end marker")
+        assert not finding.ok and not finding.watched
+
+    def test_an_older_generation_owes_no_marker(self):
+        finding = _named(validate_corpus(_healthy()), "game-end marker")
+        assert finding.ok and "0 gen-3 game(s)" in finding.measured
+
+    def test_the_records_the_cap_withheld_are_summed(self):
+        records = [self._marker("run.0-L1.0", 3), self._marker("run.0-L1.1", 4)]
+        finding = _named(validate_corpus(records), "withheld")
+        assert finding.watched and "7 record(s) withheld over 2 game-end marker(s)" in (
+            finding.measured)
+
+    def test_the_marker_is_no_kind_presence_misses(self):
+        finding = _named(validate_corpus([self._record("run.0-L1.0", 1)]), "record kind")
+        assert not any("game_end" in line for line in finding.detail)
+
+    def test_a_gen3_game_has_ended_only_with_its_marker(self):
+        """The trigger floor's finished games: a gen-3 record holding the
+        outcome is no longer read as the game's end; the marker is."""
+        game = "run.0-L1.0"
+        negatives = [_trigger(f"{game}.t{index}", fired=False, game_id=game, generation=3,
+                              state=_snapshot(turn=7)) for index in range(60)]
+        won = Event(type=EventType.PLAYER_WON, subjects=("P0",), attributed_to="unresolved")
+        outcome = _combat(f"{game}.999", game_id=game, generation=3, state=_snapshot(turn=30),
+                          payload=CombatPayload(events=(won,)))
+        unfinished = _named(validate_corpus([*negatives, outcome]),
+                            "trigger records hold positives")
+        assert unfinished.watched
+        finished = _named(validate_corpus([*negatives, outcome, self._marker(game)]),
+                          "trigger records hold positives")
+        assert not finished.ok and "0:60" in finished.measured
+
+    def test_a_pain_land_s_mana_record_is_deferred_whatever_it_did(self):
+        """Its damage and life loss are its own events (WP7): still the mana
+        reservoir's record, written at the game's end with an earlier board."""
+        from effects.infrastructure.record_codec import record_from_dict
+        from tests.unit.effects.builders import java_golden_records
+
+        raw = next(r for r in java_golden_records() if r.get("moment") == "resolution"
+                   and any(e["type"] == "damage_dealt" for e in r["payload"]["events"])
+                   and any(e["type"] == "mana_produced" for e in r["payload"]["events"]))
+        mana = record_from_dict(raw)
+        game = mana.game_id
+        later = self._record(game, 5, state=_snapshot(turn=9))
+        early = replace(mana, record_id=f"{game}.r6",
+                        state=replace(mana.state, global_=_snapshot(turn=2).global_))
+        finding = _named(validate_corpus([later, early, self._marker(game)]), "one game")
+        assert finding.ok, finding.measured

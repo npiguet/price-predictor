@@ -99,15 +99,7 @@
       ],
       "forge_notes": "Doom Blade's Forge script has no NoRegen parameter, unlike Terror, so regeneration works against it.",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A destruction event meets a regeneration-shield replacement and is replaced by regeneration.",
-        "near_miss": "A destruction event meets a replacement effect whose handler does not replace it, so the permanent is destroyed.",
-        "params": {
-          "event": "destroyed",
-          "result": "replaced"
-        },
-        "needs": []
+        "none": "A rewrite record shows one effect meeting one event; when the effect was created, how long it lasts, or what the replaced event would have set off is in no field."
       }
     },
     {
@@ -173,15 +165,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A destruction event meets a replacement effect (regeneration shield) that already existed when it was proposed, and is replaced.",
-        "near_miss": "A destruction event meets a replacement effect whose handler does not replace it, so the permanent is destroyed.",
-        "params": {
-          "event": "destroyed",
-          "result": "replaced"
-        },
-        "needs": []
+        "none": "A rewrite record shows one effect meeting one event; when the effect was created, how long it lasts, or what the replaced event would have set off is in no field."
       }
     },
     {
@@ -251,15 +235,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A damage event's amount is modified by a replacement effect, each such effect applying at most once.",
-        "near_miss": "A damage event meets a replacement effect whose handler does not modify its amount.",
-        "params": {
-          "event": "damage_dealt",
-          "result": "updated"
-        },
-        "needs": []
+        "none": "Could not express: how many replacement effects applied to one event, and that each applied once, is in no rewrite record, which shows one effect meeting the event."
       }
     },
     {
@@ -325,16 +301,7 @@
       ],
       "forge_notes": "Leyline of the Void is put on the battlefield by the setup; its opening-hand clause is not used.",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A zone change to the graveyard is replaced by a replacement effect, so the original move never happens.",
-        "near_miss": "A zone change to the graveyard meets a replacement effect whose handler does not replace it, so the original move happens.",
-        "params": {
-          "event": "zone_change",
-          "result": "replaced",
-          "to_zone": "graveyard"
-        },
-        "needs": []
+        "none": "That abilities which would have triggered on the replaced event do not trigger is in no rewrite record; the triggers never evaluated write nothing."
       }
     },
     {
@@ -610,15 +577,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A destruction event is replaced by regeneration, which removes damage, taps the permanent and removes it from combat.",
-        "near_miss": "A destruction event meets a replacement effect whose handler does not replace it, so the permanent is destroyed and nothing removes its damage or takes it out of combat.",
-        "params": {
-          "event": "destroyed",
-          "result": "replaced"
-        },
-        "needs": []
+        "same_as": "701.8c-1",
+        "reason": "Regeneration is the destruction replacement 701.8c names; the record shows the replaced destruction."
       }
     },
     {
@@ -691,14 +651,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A trigger on damage done is evaluated and fires for damage dealt to a permanent, whether or not the permanent is then destroyed or regenerates.",
-        "near_miss": "A damage-done trigger is evaluated against an event it does not match and does not fire.",
-        "params": {
-          "mode": "DamageDone"
-        },
-        "needs": []
+        "none": "Could not express: that the damaged permanent regenerated is read by no trigger_mode parameter."
       }
     },
     {
@@ -997,19 +950,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "Each of several skip effects replaces one occurrence of the phase or step beginning.",
-        "near_miss": "A phase, step or turn beginning meets the effect and is not replaced, so it begins.",
-        "params": {
-          "event": "state_flag_change",
-          "mode": "BeginPhase",
-          "result": [
-            "replaced",
-            "skipped"
-          ]
-        },
-        "needs": []
+        "none": "How many times one event is replaced is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     },
     {
@@ -1303,15 +1244,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A card draw is replaced by a draw replacement effect, which is completed before the next draw.",
-        "near_miss": "A card draw event meets a draw replacement whose handler does not replace it (an optional replacement declined), so the card is drawn.",
-        "params": {
-          "event": "card_drawn",
-          "result": "replaced"
-        },
-        "needs": []
+        "none": "The order within a sequence of draws, and the action that would follow a replaced draw, are in no rewrite record, which shows one draw meeting one effect."
       }
     },
     {
@@ -1387,15 +1320,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A card draw is replaced by a draw replacement effect, so the draw never happens and its follow-up is not performed on the replacing card.",
-        "near_miss": "A card draw event meets a draw replacement whose handler does not replace it (an optional replacement declined), so the draw and its follow-up happen.",
-        "params": {
-          "event": "card_drawn",
-          "result": "replaced"
-        },
-        "needs": []
+        "none": "The order within a sequence of draws, and the action that would follow a replaced draw, are in no rewrite record, which shows one draw meeting one effect."
       }
     },
     {
@@ -2119,18 +2044,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A candidate is not playable because its cost includes an event a static ability says can't happen.",
-        "near_miss": "A candidate a static ability restricts passes the cost check: the static does not stop any event its cost includes.",
-        "params": {
-          "bit": "failed_check",
-          "check": "cost",
-          "responsible_static": true
-        },
-        "needs": [
-          "failed_checks"
-        ]
+        "none": "Could not express: which event of the cost cannot happen is read by no verdict_bit filter."
       }
     },
     {

@@ -9,23 +9,29 @@ unconditional.
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from effects.domain.collection_caps import CollectionCaps
 from effects.infrastructure.collector_connector import CollectorSupervisor
+from price_predictor.infrastructure.forge_jvm import WorkerStopSettings
 from tests.unit.sealed.conftest import FakeProcess
 
 #: The one deck every round here plays: a decks-only round refuses none.
 _DECKS = [["Plains"]]
 
 
-def _supervisor(tmp_path, *, workers: int = 1, run_id: str = "run") -> CollectorSupervisor:
+#: A test's fake workers neither read a stop file nor print a startup line:
+#: a short timeout and start allowance keep a stop from waiting ten minutes.
+_QUICK_STOP = WorkerStopSettings(timeout=1, recycle_seconds=3600)
+
+
+def _supervisor(tmp_path, *, workers: int = 1, run_id: str = "run",
+                stop: WorkerStopSettings = _QUICK_STOP) -> CollectorSupervisor:
     return CollectorSupervisor(
         worker_count=workers, effect_records=tmp_path, run_id=run_id,
-        caps=CollectionCaps(),
+        caps=CollectionCaps(), stop=stop,
     )
 
 
@@ -50,16 +56,19 @@ class TestCollectorSupervisorWorkerLogs:
         assert log_file.closed is False
         supervisor.stop()
 
-    def test_the_log_file_lives_under_the_records_directory_named_by_run_and_worker(
+    def test_the_log_file_lives_under_the_run_s_logs_named_by_run_and_worker(
         self, tmp_path,
     ):
+        """V4 #20: the artifact layout puts every worker log under the run
+        directory's ``logs/``, never beside the shards."""
         records = tmp_path / "records"
         supervisor = _supervisor(records, run_id="run-xyz")
         _rigged(supervisor)
 
         supervisor.start_worker(2, tmp_path / "decks.txt")
 
-        assert (records / "run-xyz.2.log").exists()
+        assert (records / "logs" / "run-xyz.2.log").exists()
+        assert not list(records.glob("*.log"))
         supervisor.stop()
 
     def test_a_respawned_slot_reuses_the_same_log_file(self, tmp_path):
@@ -97,16 +106,6 @@ class TestCollectorSupervisorWorkerLogs:
 
         assert log_file.closed
 
-    def test_records_only_mode_is_unaffected_by_the_log_file(self, tmp_path):
-        """The pre-existing records-only guard (output_file=None) must not be
-        disturbed by adding a log destination."""
-        supervisor = _supervisor(tmp_path)
-        fake_connector = _rigged(supervisor)
-
-        supervisor.start_worker(0, tmp_path / "decks.txt")
-
-        assert fake_connector.start.call_args.args[0] is None
-        supervisor.stop()
 
 
 class TestPlayRound:
@@ -132,16 +131,24 @@ class TestPlayRound:
         assert stop(500) is True
         assert stop(501) is True
 
-    def test_progress_is_counted_from_a_file_not_a_directory(self, tmp_path):
+    def test_each_round_counts_its_own_progress_file_under_logs(self, tmp_path):
+        """V4 #8: a worker the kill could not end appends to the progress
+        file it was started with; a second round sharing that file counted
+        the survivor's matches as its own. V4 #20: the file is under ``logs/``."""
         supervisor = self._supervisor(tmp_path)
         with patch(
             "effects.infrastructure.collector_connector.ForgeWorkerPool"
         ) as pool:
             supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=10)
+            first = pool.call_args.kwargs["output_path"]
+            first.write_text("a survivor's match\n", encoding="utf-8")
+            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=10)
+            second = pool.call_args.kwargs["output_path"]
 
-        output_path = pool.call_args.kwargs["output_path"]
-        assert output_path.is_file() or not output_path.exists()
-        assert output_path != Path(tmp_path)
+        assert first.parent == second.parent == tmp_path / "logs"
+        assert first != second
+        assert second.read_text(encoding="utf-8") == ""
+        assert first.read_text(encoding="utf-8") == "a survivor's match\n"
 
     def test_the_decks_file_reaches_the_worker_on_both_sides(self, tmp_path):
         """Through the spawn the round hands its pool, the round's own file."""
@@ -155,9 +162,17 @@ class TestPlayRound:
             pool.call_args.kwargs["spawn_worker"](0)
 
         kwargs = connector.start.call_args.kwargs
+        assert connector.start.call_args.args[0] is None, "records-only: no output file"
         assert kwargs["side_a_decks_path"] == decks
         assert kwargs["side_b_decks_path"] == decks
         assert kwargs["decks_only"] is True
+        assert kwargs["run_id"] == "run"
+        assert kwargs["worker_index"] == 0
+        assert kwargs["best_of"] == 1
+        assert kwargs["effect_records_dir"] == tmp_path
+        assert kwargs["collection_caps"] == CollectionCaps().as_system_properties()
+        assert kwargs["variant_scripts"] is None
+        assert kwargs["progress_file"] == supervisor.progress_path
 
     def test_the_progress_file_reaches_the_worker_without_becoming_output_file(
         self, tmp_path,
@@ -255,9 +270,261 @@ class TestTheRoundShutsTheRealPoolDown:
         supervisor = self._played_round(tmp_path)
         supervisor.stop()
 
-        with patch.object(ForgeWorkerPool, "run", autospec=True):
+        with patch.object(ForgeWorkerPool, "run", autospec=True) as run:
             supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=1)
         supervisor.stop()
+
+        assert run.call_count == 1
+        assert supervisor.rounds == 2
+
+
+class TestTheRoundReportsItsWorkerLogs:
+    """V4 #3 / P1 #3: worker failure lines went to the logs and nowhere else;
+    nothing read them, so a run losing its matches reported success."""
+
+    def _round_logging(self, tmp_path, lines_by_slot, *, workers=2, survivors=()):
+        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+
+        supervisor = _supervisor(tmp_path, workers=workers)
+
+        def _fake_run(pool):
+            for slot, lines in lines_by_slot.items():
+                path = supervisor._worker_logs.path_for(slot)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with open(path, "ab") as handle:
+                    handle.write("".join(f"{line}\n" for line in lines).encode("utf-8"))
+            # A worker the pool killed that is still running at the round's end.
+            pool._kill_attempted.extend(
+                MagicMock(pid=pid, poll=MagicMock(return_value=None)) for pid in survivors
+            )
+
+        with patch.object(ForgeWorkerPool, "run", _fake_run):
+            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=1)
+        return supervisor
+
+    def test_a_round_s_failure_lines_are_reported_by_kind(self, tmp_path, caplog):
+        supervisor = self._round_logging(tmp_path, {
+            0: ["Worker: 10 matches generated", "Error generating match: boom"],
+            1: ["Error generating match: deck cannot be materialized: 1 of 40"],
+        })
+
+        assert supervisor.worker_failures.as_dict() == {"match_error": 1, "unresolved_deck": 1}
+        assert "Round 1 worker logs: 1 match_error, 1 unresolved_deck" in caplog.text
+
+    def test_a_later_round_reports_only_its_own_lines(self, tmp_path, caplog):
+        import logging
+
+        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+
+        supervisor = self._round_logging(tmp_path, {0: ["Error generating match: a"]})
+        with patch.object(ForgeWorkerPool, "run", autospec=True), caplog.at_level(logging.INFO):
+            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=1)
+
+        assert "Round 2 worker logs: no failure lines" in caplog.text
+        assert supervisor.worker_failures.as_dict() == {"match_error": 1}
+
+    def test_a_worker_that_outlived_the_kill_is_reported(self, tmp_path, caplog):
+        supervisor = self._round_logging(tmp_path, {}, survivors=[4242])
+
+        assert supervisor.survivors == [4242]
+        assert "outlived the kill (PID 4242)" in caplog.text
+
+    def test_the_run_s_totals_reach_its_manifest(self, tmp_path):
+        """V4 #3, #4: the run id, the resolved caps and the failures land in
+        the running command's entry of ``run.json``."""
+        import json
+
+        from price_predictor.infrastructure.run_manifest import run_recorded
+
+        def body():
+            supervisor = self._round_logging(tmp_path, {
+                1: ["Error generating match: a", "Error generating match: b"],
+            })
+            supervisor.stop()
+            return 0
+
+        run_recorded(tmp_path, body, command="python -m effects collect-coverage")
+
+        entry = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))["invocations"][0]
+        assert entry["run_id"] == "run"
+        assert entry["caps"]["max_records_per_game"] == CollectionCaps().max_records_per_game
+        assert entry["caps"]["aimed_at"] is None
+        assert entry["rounds"] == 1
+        assert entry["worker_failures"] == {"match_error": 2}
+        assert entry["worker_failure_examples"] == {"match_error": "Error generating match: a"}
+        assert entry["worker_survivors"] == []
+        assert (entry["stop_timeout"], entry["recycle_seconds"]) == (1, 3600)
+        assert entry["worker_stops"] == {
+            "stopped": 0, "recycled": 0, "killed": 0, "ended_otherwise": 0, "crashed": 0,
+            "killed_starting": 0, "survived": 0,
+        }
+        assert entry["hook_failures"] == {"connector": {}, "forge": {}}
+        assert entry["fork_refusals"] == {}
+
+    def test_the_hook_failure_report_reaches_the_round_report_and_the_manifest(
+        self, tmp_path, caplog,
+    ):
+        """WP7: the worker prints its hook-failure counts and nothing read them."""
+        report = ("effect-record hook failures so far, listener calls that threw and lost "
+                  "their records: {RESOLVE=3}; contained by Forge, per slot: {resolve=3}")
+        supervisor = self._round_logging(tmp_path, {0: [report]})
+
+        assert "Effect-record hook failures over the run: 3 RESOLVE; contained by Forge: " \
+               "3 resolve" in caplog.text
+        assert not supervisor.worker_failures, "a count, not a failure line"
+
+    def test_the_fork_refusal_tally_reaches_the_round_report_and_the_manifest(
+        self, tmp_path, caplog,
+    ):
+        """WP5: the worker prints how many forks declined, by kind and reason,
+        and nothing read it. Refusals are expected: no failure line, no
+        warning, nothing a failure threshold counts."""
+        import json
+        import logging
+
+        from price_predictor.infrastructure.run_manifest import run_recorded
+
+        tally = "Effect records: fork refusals so far, expected and no failure: {{{body}}}"
+        found = {}
+
+        def body():
+            with caplog.at_level(logging.INFO):
+                found["supervisor"] = self._round_logging(tmp_path, {
+                    0: [tally.format(body="directed dies=1"),
+                        tally.format(body="directed dies=2, probe no combat=1")],
+                    1: [tally.format(body="probe no combat=4")],
+                })
+            return 0
+
+        run_recorded(tmp_path, body, command="python -m effects collect-coverage")
+
+        entry = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))["invocations"][0]
+        assert entry["fork_refusals"] == {"directed dies": 2, "probe no combat": 5}
+        assert entry["worker_failures"] == {}
+        assert not found["supervisor"].worker_failures
+        refusal_lines = [r for r in caplog.records if "Fork refusals over the run" in r.message]
+        assert [r.getMessage() for r in refusal_lines] == [
+            "Fork refusals over the run (expected, no failure): "
+            "2 directed dies, 5 probe no combat"]
+        assert refusal_lines[0].levelno == logging.INFO
+
+
+class TestTheWorkersStopAtAGameEnd:
+    """V4 #1 / P1 #1: a round's end killed every worker mid-game."""
+
+    def test_each_worker_gets_its_stop_file_and_recycle_time(self, tmp_path):
+        supervisor = _supervisor(tmp_path / "records", run_id="r1",
+                                 stop=WorkerStopSettings(recycle_seconds=900))
+        connector = _rigged(supervisor)
+
+        supervisor.start_worker(2, tmp_path / "decks.txt")
+
+        kwargs = connector.start.call_args.kwargs
+        assert kwargs["stop_file"] == tmp_path / "records" / "logs" / "r1.2.stop"
+        assert kwargs["recycle_seconds"] == 900
+        supervisor.stop()
+
+    def test_the_round_s_pool_runs_the_protocol_on_the_same_files(self, tmp_path):
+        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+
+        supervisor = _supervisor(tmp_path, run_id="r1")
+        pools = []
+        with patch.object(ForgeWorkerPool, "run", lambda pool: pools.append(pool)):
+            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=1)
+
+        graceful = pools[0]._graceful
+        assert graceful is not None
+        assert graceful.stop_file_for(0) == tmp_path / "logs" / "r1.0.stop"
+        assert graceful.log_path_for(0) == supervisor._worker_logs.path_for(0)
+        assert graceful.settings == _QUICK_STOP
+
+    def test_cut_games_are_reported_by_round_and_kept_in_the_manifest(self, tmp_path, caplog):
+        import json
+
+        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+        from price_predictor.infrastructure.run_manifest import run_recorded
+
+        def body():
+            supervisor = _supervisor(tmp_path)
+            supervisor.count_cut_games(4)
+            with patch.object(ForgeWorkerPool, "run", autospec=True):
+                supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage",
+                                      matches=1)
+            supervisor.count_cut_games(1)
+            with patch.object(ForgeWorkerPool, "run", autospec=True):
+                supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage",
+                                      matches=1)
+            supervisor.count_cut_games(0)
+            return 0
+
+        run_recorded(tmp_path, body, command="python -m effects collect-coverage")
+
+        entry = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))["invocations"][0]
+        assert entry["cut_games"] == {"before_rounds": 4, "by_round": [1, 0], "total": 5}
+        assert "Round 1: 1 cut game(s) (no game-end marker) left out of the counts" in caplog.text
+
+    def test_a_round_ends_once_every_worker_has_finished_its_game(self, tmp_path):
+        """Real child processes standing in for the Java worker: once the
+        progress file reaches the budget each finishes its game and stops,
+        so when ``play_round`` returns every worker has ended, every game the
+        progress file counts was finished, and the round's shards are final."""
+        import subprocess
+        import sys
+
+        from price_predictor.infrastructure.forge_jvm import stop_line_of
+        from tests.unit.infrastructure import stand_in_worker
+
+        supervisor = _supervisor(tmp_path, workers=2, stop=WorkerStopSettings(
+            timeout=20, recycle_seconds=3600))
+        started: list[subprocess.Popen] = []
+
+        def start(output_file, **kwargs):
+            properties = {
+                "worker.stop.file": kwargs["stop_file"],
+                "worker.recycle.seconds": kwargs["recycle_seconds"],
+                "sealed.progress.file": kwargs["progress_file"],
+                "standin.game.seconds": 0.2,
+            }
+            started.append(subprocess.Popen(
+                [sys.executable, "-u", stand_in_worker.__file__,
+                 *(f"-D{key}={value}" for key, value in properties.items())],
+                stdout=kwargs["log_file"], stderr=subprocess.STDOUT,
+            ))
+            return started[-1]
+
+        supervisor._connector = MagicMock()
+        supervisor._connector.start.side_effect = start
+        try:
+            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=4)
+            supervisor.stop()
+
+            assert [proc.poll() for proc in started] == [0, 0]
+            assert (supervisor.stops.stopped, supervisor.stops.killed) == (2, 0)
+            logs = "".join(supervisor._worker_logs.path_for(slot).read_text(encoding="utf-8")
+                           for slot in range(2))
+            stopped = [stop_line_of(line) for line in logs.splitlines() if stop_line_of(line)]
+            played = len(supervisor.progress_path.read_text(encoding="utf-8").splitlines())
+            assert sum(int(line.group("matches")) for line in stopped) == played
+            # Past the budget only what the 2 s budget poll lets through, and
+            # each worker's last game, finished.
+            assert played >= 4
+        finally:
+            for proc in started:
+                if proc.poll() is None:
+                    proc.kill()
+                proc.wait(timeout=10)
+
+
+class TestTheDecksFileIsTheRunsOwn:
+    """V4 #20: the decks file the workers read sits under the run's
+    ``decks/``, named by the run id, so two runs never share one."""
+
+    def test_the_decks_path_is_under_decks_and_names_the_run(self, tmp_path):
+        supervisor = _supervisor(tmp_path, run_id="run-123")
+
+        assert supervisor.decks_path("coverage") == (
+            tmp_path / "decks" / "coverage-decks.run-123.txt"
+        )
 
 
 class TestInterruptIsVisibleToTheCaller:
@@ -333,3 +600,65 @@ class TestACtrlCBetweenRoundsIsNotLost:
         finally:
             for sig, handler in saved.items():
                 signal.signal(sig, handler)
+
+
+class TestTheSupervisorRecordsWhatItIsTold:
+    """P1 #11: the application's facts about a run (the cards Forge cannot
+    resolve) reach the running command's run.json entry through the supervisor."""
+
+    def test_record_writes_into_the_running_command_s_entry(self, tmp_path):
+        import json
+
+        from price_predictor.infrastructure.run_manifest import run_recorded
+
+        def body():
+            _supervisor(tmp_path).record(unresolved_cards=3, unresolved_share=0.25)
+            return 0
+
+        run_recorded(tmp_path, body, command="python -m effects collect-coverage")
+
+        entry = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))["invocations"][0]
+        assert (entry["unresolved_cards"], entry["unresolved_share"]) == (3, 0.25)
+
+
+class TestTheCapsReachTheJavaCommandLine:
+    """TP1: the cap flag to ``-D`` property chain was tested in links with the
+    joints untested. Here the whole chain: a collector's argv, the config the
+    CLI builds from it, the supervisor that config's caps go to, and the
+    command line the real launcher builds for a worker."""
+
+    def test_every_flagged_cap_is_a_property_on_the_worker_s_command(self, tmp_path):
+        from effects.application.collect_coverage import CollectCoverageConfig
+        from effects.infrastructure.cli import build_parser, collector_config
+
+        args = build_parser().parse_args([
+            "collect-coverage", "--exclude-cards", str(tmp_path / "h.txt"),
+            "--effect-records", str(tmp_path / "records"),
+            "--mana-cap", "7", "--playability-rate", "0.5", "--probes-per-game", "4",
+            "--probe-keywords", "wither", "--max-records-per-game", "300",
+            "--count-dropped-events", "--directed-fork-rules", "704.5f",
+        ])
+        config = collector_config(CollectCoverageConfig, args)
+        supervisor = CollectorSupervisor(
+            worker_count=1, effect_records=config.effect_records, run_id="run",
+            caps=config.caps, stop=_QUICK_STOP,
+        )
+        with patch("sealed.infrastructure.match_worker_connector.build_forge_classpath",
+                   return_value="cp"), patch("subprocess.Popen") as popen:
+            popen.return_value = MagicMock()
+            supervisor.start_worker(0, tmp_path / "decks.txt")
+        supervisor.stop()
+
+        properties = dict(arg[2:].split("=", 1) for arg in popen.call_args[0][0]
+                          if arg.startswith("-Deffect."))
+        assert {key: properties[key] for key in (
+            "effect.mana.cap", "effect.playability.rate", "effect.probes.per.game",
+            "effect.probe.keywords", "effect.max.records.per.game",
+            "effect.count.dropped.events", "effect.aimed.at", "effect.directed.fork.rules",
+        )} == {
+            "effect.mana.cap": "7", "effect.playability.rate": "0.5",
+            "effect.probes.per.game": "4", "effect.probe.keywords": "wither",
+            "effect.max.records.per.game": "300", "effect.count.dropped.events": "true",
+            "effect.aimed.at": "704.5f", "effect.directed.fork.rules": "",
+        }
+        assert set(properties) >= set(config.caps.as_system_properties())

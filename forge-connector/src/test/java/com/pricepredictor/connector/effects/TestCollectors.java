@@ -61,7 +61,7 @@ final class TestCollectors {
         Game game = TestCards.game();
         RecordShardWriter writer = ShardRun.writer(dir);
         return Channels.of(
-                game, context(writer, ShardRun.GAME_ID), CollectionCaps.defaults(), 1L,
+                game, context(writer, ShardRun.GAME_ID), TestCaps.unprobed(), 1L,
                 bracket(game, writer, ShardRun.GAME_ID));
     }
 

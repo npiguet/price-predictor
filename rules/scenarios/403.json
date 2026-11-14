@@ -147,15 +147,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A card outside the battlefield is not a legal target: a targeting spell's candidate has no legal target.",
-        "near_miss": "A candidate with a legal target.",
-        "params": {
-          "bit": "has_legal_target",
-          "fires_when": false
-        },
-        "needs": []
+        "none": "Could not express: why no target is legal (the spell itself, a card off the battlefield, one object named twice) is read by no verdict_bit filter."
       }
     },
     {
@@ -257,17 +249,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A permanent is exiled and returned to the battlefield by a resolution, re-entering as a new object.",
-        "near_miss": "A ChangeZone resolution that does not return an exiled permanent to the battlefield.",
-        "params": {
-          "event": "zone_change",
-          "from_zone": "exile",
-          "to_zone": "battlefield",
-          "api": "ChangeZone"
-        },
-        "needs": []
+        "same_as": "400.7-1",
+        "reason": "Both state that an object changing zones becomes a new object; the record shows the same return."
       }
     }
   ]

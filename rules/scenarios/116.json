@@ -98,10 +98,11 @@
         "family": "verdict_bit",
         "record_kind": "playability",
         "outcome": "A land-play candidate's timing is true: its player has priority with an empty stack in a main phase of their own turn.",
-        "near_miss": "A land-play candidate's timing is false: the stack is not empty, it is not a main phase, or it is not the player's turn.",
+        "near_miss": "A land-play candidate whose timing is false.",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "land_play": true
         },
         "needs": [
           "timing"
@@ -197,11 +198,12 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A turn-face-up candidate's timing is true whenever its controller has priority, including with a spell on the stack.",
-        "near_miss": "A turn-face-up candidate's timing is false.",
+        "outcome": "A turn-face-up (morph) candidate's timing is true whenever its controller has priority, including with a spell on the stack.",
+        "near_miss": "A morph candidate whose timing is false.",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Morph"
         },
         "needs": [
           "timing"
@@ -285,15 +287,7 @@
       ],
       "forge_notes": "Forge may implement the Licid's {R} revert as a stack-using ability or only at certain timings (RevertCost$ on Animate); check whether it is a no-stack action before using this as a ground-truth case. The other branch of 116.2c, stopping a delayed triggered ability from triggering, has no simple Forge card.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A special action that ends a continuous effect is a playable candidate whenever its controller has priority and can pay its cost.",
-        "near_miss": "Such a candidate is not playable: its cost cannot be paid or its player may not take it now.",
-        "params": {
-          "bit": "can_play",
-          "fires_when": true
-        },
-        "needs": []
+        "none": "Could not express: the candidate's own condition (a special action ending an effect, who controls an Aura against the creature it enchants, an instant-only action, a Class's level) is read by no verdict_bit filter; a Class's level is no designation the snapshot writes."
       }
     },
     {
@@ -457,11 +451,15 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A discard-as-a-special-action candidate's timing is true whenever its owner could cast an instant, including with a spell on the stack.",
-        "near_miss": "Such a candidate's timing is false.",
+        "outcome": "Discarding a card as a special action at instant speed (Circling Vultures) has its timing true whenever its owner could cast an instant.",
+        "near_miss": "Such a candidate whose timing is false.",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "script_param": {
+            "InstantSpeed": "True",
+            "ST": "Discard"
+          }
         },
         "needs": [
           "timing"
@@ -551,11 +549,12 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A suspend candidate's timing is true when its card could begin to be cast: a sorcery-speed card in a main phase of its owner's turn with an empty stack.",
-        "near_miss": "A suspend candidate's timing is false: wrong step, a non-empty stack, or another player's turn.",
+        "outcome": "A suspend candidate's timing is true when its card could begin to be cast.",
+        "near_miss": "A suspend candidate whose timing is false.",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Suspend"
         },
         "needs": [
           "timing"
@@ -653,10 +652,11 @@
         "family": "verdict_bit",
         "record_kind": "playability",
         "outcome": "A companion-to-hand candidate's timing is true: a main phase of its owner's turn with an empty stack.",
-        "near_miss": "A companion-to-hand candidate's timing is false: wrong step, a non-empty stack, or another player's turn.",
+        "near_miss": "A companion candidate whose timing is false.",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Companion"
         },
         "needs": [
           "timing"
@@ -747,11 +747,12 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A foretell candidate's timing is true whenever its owner has priority during their own turn, including with a spell on the stack.",
-        "near_miss": "A foretell candidate's timing is false: it is another player's turn.",
+        "outcome": "A foretell candidate's timing is true whenever its owner has priority during their own turn.",
+        "near_miss": "A foretell candidate whose timing is false.",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Foretell"
         },
         "needs": [
           "timing"
@@ -830,17 +831,8 @@
       ],
       "forge_notes": "Rule 702.170a limits plotting to the owner's main phase with an empty stack, stricter than 116.2k's 'during their own turn'; no variant here relies on the difference (an upkeep plot is left out).",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A plot candidate's timing is true: its owner's own turn, with priority and an empty stack.",
-        "near_miss": "A plot candidate's timing is false: a non-empty stack or another player's turn.",
-        "params": {
-          "bit": "timing",
-          "fires_when": true
-        },
-        "needs": [
-          "timing"
-        ]
+        "same_as": "702.170a-1",
+        "reason": "Both state when the plot special action may be taken. The Comprehensive Rules disagree with themselves: 116.2k says any time its owner has priority during their own turn with an empty stack, 702.170a during their main phase; Forge follows 702.170a (only as a sorcery), so the record shows 702.170a's timing."
       }
     },
     {
@@ -927,17 +919,7 @@
       ],
       "forge_notes": "Room cards are listed by their first-door Name line; the second door is named Locker Room. The Room-unlocked state must be settable in the initial state.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "An unlock-door candidate's timing is true: a main phase of its controller's turn with an empty stack.",
-        "near_miss": "An unlock-door candidate's timing is false: wrong step, a non-empty stack, or another player's turn.",
-        "params": {
-          "bit": "timing",
-          "fires_when": true
-        },
-        "needs": [
-          "timing"
-        ]
+        "none": "Unlocking a door is a special action the engine grants a Room; no script line names it, so no filter picks its candidate apart from the Room's casts."
       }
     },
     {

@@ -10,8 +10,13 @@ Rules to respect when changing or diagnosing interventions, damage-step probes, 
 
 - Every fork is score-checked against the live game before any perturbation. A copy that already disagrees is measuring the copier.
 - Both games are scored from one seeded random stream of the check's own (`Forks.score`). Before the second main phase the evaluator has the AI declare the coming combat in a copy, drawing from Forge's global `MyRandom`, so an exact copy scored from that stream simulated a different combat.
-- The score weighs only part of the board, so every copy is also audited against the live game's snapshot by entity and field, lists compared as multisets. Differences are printed as `fork fidelity:` lines. The audit is a report: it keeps the fork.
+- The score weighs only part of the board, so every copy is also audited against the live game's snapshot by entity and field, lists compared as multisets. Differences are printed as `fork fidelity:` lines. The audit is a report: it keeps the fork. What the copier left out is also stamped on every record of the fork as `copy_dropped`, which decides nothing either.
 - A discarded fork still counts against its budget. Otherwise a systematically failing copy retries until the game ends.
+- A fork must leave the live game untouched. Every fork reads the live game's counters, random stream identity, players and stack before and after (`Forks.LiveMarks`); a difference is counted as `fork <kind> moved the live game`. `ForkIsolationTest` plays seeded matches with forks off and with all four kinds on and compares the live records byte for byte.
+- A fork draws from a random stream of its own (`Forks.isolated`), never from Forge's global `MyRandom`, which the live game draws from.
+- A copy, a score check, a fork body or a fork's writer that throws is a failure, counted under `fork <kind> copy`, `score check`, `body` or `write` in the worker's hook-failure line.
+- A fork that declines for an expected reason throws a `ForkRefusal`, counted by kind and reason and printed on a line of its own. A refusal is never a failure and counts toward no failure threshold or exit code.
+- No fork of any kind is taken at a phase event published while the stack resolves (`GameRecording.forksAt`): an effect ending the turn or the combat phase publishes the steps it moves to from inside its resolution.
 - At most two forks may target one real resolution. This is a fixed constant no flag can raise.
 - The score check fails at the beginning-of-combat phase event, because the evaluator reads a combat Forge has not built yet. No scheduler takes a fork there (`Forks.scoreCheckable`).
 - The real-versus-fork difference is computed at evaluation time and never becomes a training target.
@@ -21,8 +26,14 @@ Rules to respect when changing or diagnosing interventions, damage-step probes, 
 - An intervention forks the game and forces an ability the AI never casts. It writes the effect half alone: there was no real activation, so there is no cost half to link to.
 - The ability goes on the fork's stack directly, not through `ComputerUtil.handlePlayingSpellAbility`. The cost is usually the reason the record is missing, and routing through cost payment succeeds only on free plays; a first attempt that way produced nothing but land drops.
 - The candidate is chosen at a phase boundary, never inside the AI's own evaluation of its candidates. Forking there copies a game mid-decision and re-enters the rules engine underneath it.
-- The scheduler forces nothing at the untap boundary, where nobody can act.
-- A line whose text branches on whose turn it is (`ConditionPlayerTurn$`, `ConditionOpponentTurn$`) is forced twice a game at most: once on its holder's own turn and once at a boundary of another player's turn, where it shows its other branch. `InterventionScheduler` offers those first at each boundary, because the other forced resolutions otherwise spend the whole per-game budget at the game's first boundary.
+- The budget (`--interventions-per-game`) is spread over the game's turns, not spent where the game starts (`InterventionScheduler.spreadOverTheGame`, drawn from the game's seed alone against `TYPICAL_GAME_TURNS` = 20, a constant with no flag). A game shorter than typical may end with budget unspent.
+- A line is forced only where its own timing lets its holder play it (`InterventionScheduler.playableNow`): a sorcery-speed line in a main phase of its holder's turn with the stack empty, an instant-speed one at any boundary that gives priority, never at untap or cleanup.
+- A line without the modes or targets its resolution needs on the live board spends no fork and is not marked forced, so a removal spell held over an empty board is forced once a target arrives. A charm's modes are drawn only among the modes whose targets exist.
+- Each line is forced once a game per pass. A line is its printed line's provenance key, without its holder, so a mirror whose players hold the same lines forces each once and may leave budget unspent.
+- A line whose text branches on whose turn it is (`ConditionPlayerTurn$`, `ConditionOpponentTurn$`) is forced twice a game at most: once on its holder's own turn and once at a boundary of another player's turn, where it shows its other branch. `InterventionScheduler` offers those first at each boundary that draws a line.
+- A line restarting the game (Karn Liberated's) is never forced: Forge's restart resets the JVM-wide trigger id counter.
+- A forced resolution hears the same clause and outcome hooks a live one does (`Forks.ForkHooks`), and `ForcedAndLiveHalvesTest` checks that a play resolved live and forced on the same board gives effect halves that agree member for member apart from the fork members.
+- A forced resolution that began to resolve is written whatever it did, as a live one is. One that never began to resolve writes nothing and is the refusal `intervention never resolved`.
 
 ## Damage-step probes
 
@@ -30,6 +41,7 @@ Rules to respect when changing or diagnosing interventions, damage-step probes, 
 - The keyword comes off through the layer system, not the printed list, so a printed, equipped and until-end-of-turn keyword all go the way the rules would take them.
 - The branch is held rather than written. It mirrors the real combat record, and that record has no id until the step the probe forked ahead of has finished; `BusBracketCollector.onCombatRecord` hands the id over. Reconstructing the pairing from board state would break on two identical-looking combats in one turn.
 - A probe's payload names both the keyword and the carrier. The keyword alone is ambiguous on a board with two tramplers, and an evaluator reproducing the perturbation model-side would strip the wrong creature.
+- A creature is probed once per keyword however many spellings it carries (trample and trample over planeswalkers), every spelling stripped. First strike is never probed at the regular step, where it deals nothing with or without it. A step's stale branches are dropped before anything else.
 - `--probe-keywords` is the runtime switch, deliberately separate from the build decision gate 2 drives.
 
 ## Protection forks
@@ -49,7 +61,10 @@ Rules to respect when changing or diagnosing interventions, damage-step probes, 
 - The copy carries the turn's pending state (delayed triggers, end-of-turn and leaves-the-battlefield commands, controller timestamps) through the `GameCopier` patch. A command whose closure holds a reference the copy cannot map is left out rather than carried with a live reference into the real game.
 - The edit is applied before the fork's collectors start listening: the edits are silent to the rules but still publish bus events.
 - The budget, the rule's one fork per game and the lifetime tally are all spent when the fork is taken, before the score check.
-- `mirror_of` is set only when a live record was still open at the fork point, which a phase boundary has already closed.
+- A directed fork's records carry no `mirror_of`: a phase boundary closes every live record first.
+- Every edit ends with the static check and a fresh last-known battlefield (`BoardEdit.settle`).
+- An edit can refuse: `replace_card` on a permanent it cannot carry over faithfully, a `keyword` edit the card cannot have, a removal of a keyword it does not carry. A refused edit spends the fork and is counted in the refusal tally, never as a failure.
+- A fork played on stops in a cleanup step only when the engine will not take it again (514.3a).
 - Untap-step `turn_action` records and directed forks are taken at the untap boundary as anywhere.
 
 ## Registering a directed rule
@@ -57,5 +72,7 @@ Rules to respect when changing or diagnosing interventions, damage-step probes, 
 - A rule is registered in `FE/directed/DirectedRules.java` as a `DirectedRule`, and each rule is a class of its own in `FE/directed/rules/`, its precondition a hand-written read of the live board at a named phase boundary.
 - `DirectedRulesContractTest` checks every registration against `rules/scenarios/*.json`. `RegisteredRulesTest` builds each scenario's base on a `TestBoard`: the precondition must bind there and not on a board missing the base, and the edited copy must differ from the live board by the variant's one fact.
 - A precondition only finds the board where the rule can happen. It cannot force the live game's or the fork's decisions, so a precondition on a spell in hand holds only as long as the AI has not yet cast it.
-- The supervisor's startup check (`directed_fork_error` in `sealed/infrastructure/effect_collection_flags.py`) requires, for each listed rule, a declared detector, a contrasting variant classified into an operation, and a registration.
-- `sealed` may not import `effects`, so that check reads `rules/scenarios/` itself. `tests/unit/sealed/infrastructure/test_directed_fork_flags.py` pins it against `rules_catalogue_io` over the real catalogue.
+- A precondition binds only boards where the variant's edit stays true for the fork's turn: a sole permanent for a removal, no land left to play for a "one land short" variant, a spell castable at this boundary, a replaced permanent whose replacing card survives what the edit carries. The registry contract is `specs/025-ability-effect-model-gen3/contracts/catalogue-extensions.md` § Directed-rule registry.
+- `RegisteredRulesTest` also puts each rule's edited copy through the state-based check its first priority makes, which must leave the board, every life total and every player as they were. `DirectedForkPlayedForwardTest` plays one rule per operation family forward and finds the variant's point in the fork's records.
+- The supervisor's startup check (`directed_fork_error` in `sealed/infrastructure/effect_collection_flags.py`) requires, for each listed rule, a declared detector that is not `none`, not `same_as` and not untaggable, a contrasting variant classified into an operation, and a registration.
+- `sealed` may not import `effects`, so that check reads `rules/scenarios/` itself. `tests/unit/sealed/infrastructure/test_directed_fork_flags.py` pins it against `rules_catalogue_io` over the real catalogue and runs it over the whole real `rules/directed-fork-rules.txt`, which must pass with no rule refused.

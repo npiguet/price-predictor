@@ -170,6 +170,25 @@ class NoDetector:
 
 
 @dataclass(frozen=True, slots=True)
+class SameAs:
+    """A scenario stating the same observable fact as another (D4): 702.17b's
+    shadow-blocks-shadow beside 702.28b, a second instance of a keyword that
+    changes nothing beside the keyword's own scenario.
+
+    It declares no detector of its own. Its rules are counted once, under the
+    scenarios ``scenarios`` names, whose detectors tag the records: one, or
+    several where the scenario states their union (117.1a's "a noninstant
+    spell" beside each card type's own rule); the catalogue's uniqueness test
+    exempts it, and ``rule-counts`` reports it under the scenarios it points
+    at. ``reason`` says what fact they share. Written ``{"same_as": id or
+    [ids], "reason": ...}``.
+    """
+
+    scenarios: tuple[str, ...]
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
 class Departure:
     """A recorded disagreement between a scenario and what Forge does (FR-005)."""
 
@@ -265,7 +284,7 @@ class Scenario:
     rules: tuple[str, ...]
     record_kind: str
     variants: tuple[ScenarioVariant, ...]
-    detector: DetectorDeclaration | NoDetector | None = None
+    detector: DetectorDeclaration | NoDetector | SameAs | None = None
     departure: Departure | None = None
     #: Every card the scenario names, as Forge's ``Name:`` line spells it.
     cards: tuple[str, ...] = ()

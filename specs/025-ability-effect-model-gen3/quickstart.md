@@ -26,8 +26,8 @@ Check: `validate` passes with every scenario declaring a detector or `none` and 
 variant classified. The printed table and `output/effects/rule-counts.json` agree. Review the listed
 records against Forge, starting with `rules/FINDINGS.md`'s suspected departures, and record outcomes
 on the scenarios. The counts decide which rules to enable for directed forks and coverage rounds:
-`directed-rules` writes `rules/directed-fork-rules.txt` and `rules/coverage-wording-cards.txt` from
-them; record that choice in the gen-3 record.
+`directed-rules` writes `rules/directed-fork-rules.txt`, `rules/coverage-wording-cards.txt` and
+the part of the counts they are decided from, `rules/directed-fork-counts.json`, from them; record that choice in the gen-3 record.
 
 ## Stage 2 — the relation-aware trunk (story 4, no gen-3 data)
 
@@ -82,7 +82,18 @@ $rules = (Get-Content rules/directed-fork-rules.txt | Where-Object { $_.Trim() -
 ```
 
 Before the first long run, the fork fidelity audit (T181): collect for 20 minutes into a scratch run
-directory, stop the run, and count the console's `fork fidelity:` lines by field.
+directory, stop the run, and count the `fork fidelity:` lines by field in its `logs/` worker logs
+(the run's end prints their total as `fork_fidelity`). Then run `validate-corpus` on the scratch
+run: its watched line "fork records whose copy left something out" gives the share of fork records
+carrying each `copy_dropped` kind, and the share of forks (fork records grouped by game, game turn
+and kind of fork; the wire names no fork, so the count is a lower bound). The workers' hook-failure line counts the forks whose copy, score
+check, body or writer threw, as `fork <kind> copy`, `fork <kind> score check`, `fork <kind> body` and
+`fork <kind> write`, and the forks that changed the live game, as `fork <kind> moved the live game`;
+the refusal line (`Effect records: fork refusals so far, expected and no failure: {…}`) counts the
+forks that declined, by kind and reason, and wrote nothing. None of these discards a record. The
+audit reads a fork's copy as it was taken, before any perturbation: it cannot tell what a fork did
+after that, and it never sees a fork that wrote nothing, which only the refusal line and the
+failure counts account for.
 
 ```powershell
 .venv\Scripts\python.exe -u -m sealed match-outcomes --workers 6 --effect-records <scratch run dir> --random-seat-share 0.25 --random-seat-probability 0.5 --interventions-per-game 4 --probes-per-game 4 --directed-fork-rules $rules --count-dropped-events
@@ -101,6 +112,36 @@ python -u -m effects collect-variants --round steered --rule-counts <counts> --e
 
 The steered round runs last, on counts of everything collected before it (FR-058c). Every
 collecting command takes the same three decision-sampling rates (FR-059a).
+
+Each collecting command's run directory is its `--effect-records`: worker logs under `logs/`,
+their failure lines printed as the run goes (after each round on a collector, at each status line
+on `match-outcomes`) and kept in `run.json`. A `collect-coverage` run in a new run
+directory passes each earlier run's directory as `--count-from`, so their coverage counts. An
+interrupted `collect-variants` restarts into the same directory with the same `--seed` and
+`--continues <run id>`, the run id its `run.json` records.
+
+A collector's round end lets every worker finish the game it is playing (at most
+`--stop-timeout`, 600 s, before a kill), and workers recycle themselves at a game end
+(`--recycle-seconds`, 600 s, at least 300), so a run's games are cut only by a crash, a kill
+past the timeout, a game outlasting its worker's recycle time by `--stop-timeout`, or a second
+Ctrl-C. Each round's report and `run.json` say how the workers ended (`worker_stops`) and how
+many cut games the counts left out (`cut_games`). Before launching a collection, know that:
+
+- The connector must be rebuilt (`mvn install -DskipTests` in `forge-connector/`) before a gen-3
+  collection: shards written by a connector built before the game-end marker hold no marker, so
+  `build-corpus` refuses them ("every game cut") and `validate-corpus` fails them.
+- To stop a run by hand, press Ctrl-C once: it reaches the supervisor alone, which asks every
+  worker to finish its game and waits up to `--stop-timeout`. A second Ctrl-C kills the workers
+  at once, cutting their games. Creating a worker's stop file by hand does not stop the run: the
+  pool starts a fresh worker in its place.
+- Every round starts a fresh pool, so the workers start Forge anew each round; a round ends up
+  to `--stop-timeout` after its match budget is reached, and never waits for a worker still
+  starting Forge (it is killed, with no game to cut).
+- Under `match-outcomes`' best of N, a worker that recycles itself mid-match abandons the match
+  in flight: it writes no outcome or cards-played row, and the games it finished keep their
+  records and markers.
+- A kill loses the game in progress only: every finished game is on disk whole, its marker
+  included, before the next one starts.
 
 ## Stage 6 — curate and freeze (story 6, story 8)
 

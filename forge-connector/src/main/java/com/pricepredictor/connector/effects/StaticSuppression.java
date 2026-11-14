@@ -61,6 +61,11 @@ final class StaticSuppression {
         return new StaticSuppression((long) stat.getId(), stat.getTimestamp());
     }
 
+    /** The board without the static of this layer-table id, its control change kept. */
+    static StaticSuppression ofId(long staticId) {
+        return new StaticSuppression(staticId, Long.MIN_VALUE);
+    }
+
     /** Whether a static is suppressed: a {@code continuous} record's board. */
     boolean active() {
         return staticId != null;
@@ -83,6 +88,88 @@ final class StaticSuppression {
 
     Iterable<KeywordInterface> keywords(Card card) {
         return staticId == null ? card.getKeywords() : card.getKeywordsWithout(staticId);
+    }
+
+    /**
+     * The card's hidden extrinsic keywords as Forge spells them ("CARDNAME
+     * can't block."), in timestamp order, the suppressed static's left out.
+     * Forge keeps them apart from its keyword list: a resolved {@code KW$
+     * HIDDEN} grant and a static's {@code AddHiddenKeyword$}.
+     */
+    java.util.List<String> hiddenKeywords(Card card) {
+        java.util.List<String> hidden = new java.util.ArrayList<>();
+        Table<?, ?, ?> table = ForgeFields.hiddenExtrinsicKeywords(card);
+        if (table == null) {
+            return hidden;
+        }
+        for (Table.Cell<?, ?, ?> cell : table.cellSet()) {
+            if (cell.getColumnKey() instanceof Long column && wrote(column)) {
+                continue;
+            }
+            if (cell.getValue() instanceof Iterable<?> keywords) {
+                for (Object keyword : keywords) {
+                    hidden.add(String.valueOf(keyword));
+                }
+            }
+        }
+        return hidden;
+    }
+
+    /**
+     * The card's name on this board: without the suppressed static's name
+     * change (layer 3, a {@code SetName$}, Volrath's Shapeshifter's text),
+     * the other changes still applied in order.
+     */
+    String name(Card card) {
+        Table<?, ?, ?> names = PatchHooks.CHANGED_NAMES.read(card) instanceof Table<?, ?, ?> table
+                ? table : null;
+        if (staticId == null || names == null || !names.containsColumn(staticId)) {
+            return card.getName();
+        }
+        String name = card.getCurrentState().getName();
+        for (Table.Cell<?, ?, ?> cell : names.cellSet()) {
+            if (!(cell.getColumnKey() instanceof Long column && wrote(column))
+                    && cell.getValue() instanceof Card.CardChangedName change
+                    && change.isOverwrite()) {
+                name = change.newName();
+            }
+        }
+        return name;
+    }
+
+    /**
+     * The card's mana cost on this board: without the suppressed static's
+     * change ({@code ManaCost$}, {@code Incorporate$}), else Forge's own.
+     */
+    forge.card.mana.ManaCost manaCost(Card card) {
+        Table<?, ?, ?> changes = ForgeFields.changedCardManaCost(card);
+        if (staticId == null || changes == null || !changes.containsColumn(staticId)) {
+            return card.getManaCost();
+        }
+        forge.card.mana.ManaCost cost = card.getOriginalManaCost();
+        for (Table.Cell<?, ?, ?> cell : changes.cellSet()) {
+            if (cell.getColumnKey() instanceof Long column && wrote(column)) {
+                continue;
+            }
+            java.util.Map.Entry<forge.card.mana.ManaCost, Boolean> change =
+                    ForgeFields.manaCostChange(cell.getValue());
+            if (change == null) {
+                return card.getManaCost();
+            }
+            cost = change.getValue() ? forge.card.mana.ManaCost.combine(cost, change.getKey())
+                    : change.getKey();
+        }
+        return cost;
+    }
+
+    /** The card's mana value on this board: Forge's own unless the static changed its cost. */
+    int manaValue(Card card) {
+        Table<?, ?, ?> changes = ForgeFields.changedCardManaCost(card);
+        if (staticId == null || changes == null || !changes.containsColumn(staticId)) {
+            return card.getCMC();
+        }
+        forge.card.mana.ManaCost cost = manaCost(card);
+        return cost == null ? 0 : cost.getCMC();
     }
 
     /** Whether the card is a creature on this board: whether it has power and toughness. */

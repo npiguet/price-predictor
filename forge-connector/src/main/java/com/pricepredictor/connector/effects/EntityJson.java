@@ -55,8 +55,17 @@ final class EntityJson {
      *             {@code mutate_component} or {@code last_known}; null for an
      *             entity of the tiers
      */
-    record Beyond(String id, String zone, Integer rank, String role) {
+    record Beyond(String id, String zone, Integer rank, String role, boolean zoneless) {
         static final Beyond NONE = new Beyond(null, null, null, null);
+
+        Beyond(String id, String zone, Integer rank, String role) {
+            this(id, zone, rank, role, false);
+        }
+
+        /** A card as it last existed, which no zone holds: zone and rank null. */
+        static Beyond lastKnown(String id, String role) {
+            return new Beyond(id, null, null, role, true);
+        }
     }
 
     /** One entity, written as {@code beyond} says. */
@@ -66,8 +75,9 @@ final class EntityJson {
         SpellAbility cast = CardLines.castSpellOf(card, onStack);
         return Json.object()
                 .value("id", beyond.id() != null ? beyond.id() : Refs.of(card))
-                .value("name", card.getName())
-                .value("zone", beyond.zone() != null ? beyond.zone() : zoneName(card))
+                .value("name", board.name(card))
+                .value("zone", beyond.zoneless() ? null
+                        : beyond.zone() != null ? beyond.zone() : zoneName(card))
                 .value("owner", CardFacts.ownerOf(card))
                 .value("controller", Refs.ofNullable(board.controller(card)))
                 .value("face", faceOf(card))
@@ -78,8 +88,8 @@ final class EntityJson {
                 .raw("subtypes", typeNamesJson(type.getSubtypes()))
                 .raw("supertypes", typeNamesJson(type.getSupertypes()))
                 .raw("colors", Json.stringArray(CardSpelling.colorLetters(board.colors(card))))
-                .value("mana_value", card.getCMC())
-                .raw("mana_cost", CardFacts.manaCostJson(card))
+                .value("mana_value", board.manaValue(card))
+                .raw("mana_cost", CardFacts.manaCostJson(board.manaCost(card)))
                 .raw("base_pt", basePtJson(card, board))
                 .raw("pt_boosts", ptBoostsJson(card, board))
                 .value("printed_loyalty", CardFacts.printedLoyalty(card))
@@ -97,7 +107,7 @@ final class EntityJson {
                 .raw("chosen", CardFacts.chosenJson(card))
                 .raw("costs_paid", CardFacts.costsPaidJson(card, cast))
                 .raw("history", CardFacts.historyJson(game, card))
-                .value("order_rank", beyond.rank() != null
+                .value("order_rank", beyond.zoneless() ? null : beyond.rank() != null
                         ? beyond.rank() : CardFacts.orderRank(game, card))
                 .raw("granted_temporary", grantedTemporaryJson(card, board))
                 .raw("lines", CardLines.render(game, card, board))
@@ -193,6 +203,7 @@ final class EntityJson {
         return Json.object()
                 .raw("keywords", Json.stringArray(CardSpelling.keywordNames(board.keywords(card))))
                 .raw("abilities", ProvenanceKey.toJsonArray(grantedTemporaryAbilities(card, board)))
+                .raw("hidden_keywords", Json.stringArray(board.hiddenKeywords(card)))
                 .render();
     }
 
@@ -223,10 +234,27 @@ final class EntityJson {
         return state == null || state == CardStateName.Original ? 0 : 1;
     }
 
-    /** What this permanent is copying, or null when it is itself. */
+    /**
+     * What this card is a copy of, or null when it is itself: the permanent
+     * or spell a copy was made from ({@code getCopiedPermanent}), else the
+     * card a copy effect (a Clone's) copied, its latest clone state's
+     * origin, as the {@code copy_of} link names them. Not {@code
+     * getCloner()}, which is the copy effect's host: the Clone itself.
+     */
     private static String copySourceOf(Card card) {
         Card copied = card.getCopiedPermanent();
-        return copied != null ? Refs.of(copied) : Refs.ofNullable(card.getCloner());
+        if (copied != null && copied.getId() != card.getId()) {
+            return Refs.of(copied);
+        }
+        if (card.isCloned() && card.getCloneStates()
+                instanceof java.util.NavigableMap<Long, forge.game.card.CardCloneStates> states
+                && !states.isEmpty()) {
+            Card origin = states.lastEntry().getValue().getOrigin();
+            if (origin != null && origin.getId() != card.getId()) {
+                return Refs.of(origin);
+            }
+        }
+        return null;
     }
 
     /**

@@ -65,6 +65,7 @@ from price_predictor.infrastructure.cli_run_manifest import (
     dispatch,
     tag_subcommands,
 )
+from price_predictor.infrastructure.forge_jvm import MAX_WORKERS, worker_count
 from sealed.infrastructure.effect_collection_flags import (
     add_cap_flags,
     add_directed_fork_flags,
@@ -412,8 +413,16 @@ def _collect_coverage_parser(subparsers) -> None:
     _add_holdout_flags(parser)
     add_config_flags(parser, CollectCoverageConfig, only=(
         "wording_cards", "min_text_games", "target_records", "no_progress_rounds",
-        "decks_per_round", "workers", "seed",
+        "decks_per_round", "workers", "stop_timeout", "recycle_seconds", "seed",
     ))
+    parser.add_argument(
+        "--count-from", type=Path, action="append", default=None, metavar="DIR",
+        help=(
+            "An earlier run's records directory whose coverage counts toward "
+            "satisfaction; read once at the start and never written. "
+            "Repeatable; refused when it overlaps --effect-records or another"
+        ),
+    )
     parser.add_argument(
         "--directed-fork-rules", type=rule_list, default=(),
         help=(
@@ -447,7 +456,18 @@ def _collect_variants_parser(subparsers) -> None:
     # to be the one build-corpus is given.
     _add_cards_folder(parser)
     _add_holdout_flags(parser)
-    add_config_flags(parser, CollectVariantsConfig, only=("decks_per_round", "workers"))
+    add_config_flags(parser, CollectVariantsConfig, only=(
+        "decks_per_round", "workers", "stop_timeout", "recycle_seconds",
+    ))
+    parser.add_argument(
+        "--continues", action="append", default=None, metavar="RUN_ID",
+        help=(
+            "The run id of an interrupted collect-variants run into the same "
+            "--effect-records (its run.json's invocations name it): its shards' "
+            "games count before the first round, so no finished variant is "
+            "played again. Pass the same --seed. Repeatable; untargeted round only"
+        ),
+    )
     add_cap_flags(parser)
     # Directed forks run here as on match-outcomes, startup check included
     # (collect_variants.run); the rules also aim every record.
@@ -555,15 +575,44 @@ def steered_round_error(args: argparse.Namespace) -> str | None:
     return None
 
 
+def continues_error(config: Any) -> str | None:
+    """Why ``collect-variants --continues`` cannot resume, or None (V4 #6).
+
+    Only the untargeted round resumes: a steered run's iterations aim at the
+    counts of the corpus as it stands, so it starts again from fresh
+    ``rule-counts``. A run id naming no shard under ``--effect-records`` is a
+    typo or another directory, and would resume nothing.
+    """
+    from effects.domain.variant_rounds import VariantRound
+    from effects.infrastructure.shard_io import iter_shards
+
+    continues = getattr(config, "continues", ())
+    if not continues:
+        return None
+    if config.round is VariantRound.STEERED:
+        return (
+            "--continues resumes the untargeted round only; rerun rule-counts "
+            "and start a new steered run"
+        )
+    names = [shard.name for shard in iter_shards(config.effect_records)]
+    for run_id in continues:
+        if not any(name.startswith(f"{run_id}.") for name in names):
+            return f"--continues {run_id}: no shard of that run under {config.effect_records}"
+    return None
+
+
 def _check_workers_can_start(command: str, config: Any) -> None:
     """The connector JAR, ``java`` and the list files the run reads, checked
-    before any worker starts (python R2)."""
+    before any worker starts (python R2), so a missing one exits 1 naming it
+    rather than in a traceback (V4 #9)."""
     import price_predictor.infrastructure.forge_jvm as forge_jvm
 
     holdout = config.deck_holdout
     try:
         forge_jvm.check_worker_prerequisites(files={
             "--exclude-cards": holdout.exclude_cards, "--only-cards": holdout.only_cards,
+            "--split-from": holdout.split_from,
+            "--wording-cards": getattr(config, "wording_cards", None),
         })
     except FileNotFoundError as exc:
         raise CollectorRefusal(f"{command}: {exc}") from exc
@@ -594,6 +643,9 @@ def _collector_runner(command: str, config_type: type, module: str) -> Callable:
             config = collector_config(config_type, args)
         except ValueError as exc:
             raise CollectorRefusal(f"{command}: {exc}") from exc
+        error = continues_error(config)
+        if error is not None:
+            raise CollectorRefusal(f"{command}: {error}")
         _check_workers_can_start(command, config)
         print(announce_probe_state(args.probe_keywords, args.probes_per_game))
         return importlib.import_module(module).run(config)
@@ -736,6 +788,13 @@ def _field_coverage_parser(subparsers) -> None:
 
 #: Every reader's "nothing to read"; named, as its module is not imported here.
 _NO_SHARDS = "effects.infrastructure.shard_io.NoShardsError"
+#: A shard damaged before its last gzip member, or a line that does not
+#: decode: the read cannot go on, and the message names shard and line or
+#: byte. Raised in a pool or prefetch worker too, which hands it over whole.
+_SHARD_REFUSED: dict[str, int] = {
+    "effects.infrastructure.shard_io.CorruptShardError": 1,
+    "effects.infrastructure.shard_io.RecordDecodeError": 1,
+}
 
 
 # ── rule-counts ─────────────────────────────────────────────────────────
@@ -770,12 +829,13 @@ def _rule_counts_parser(subparsers) -> None:
         help="Scenarios and their detector declarations (default: %(default)s)",
     )
     parser.add_argument(
-        "--workers", type=int, default=None,
-        help="Parallel shard readers; unset uses the CPU count",
+        "--workers", type=worker_count, default=MAX_WORKERS,
+        help=f"Parallel shard readers, 1 to {MAX_WORKERS} (default: %(default)s)",
     )
 
 
-@exits_with({_NO_SHARDS: 1, MixedGenerationsError: 1, UnacceptedGenerationError: 1})
+@exits_with({_NO_SHARDS: 1, MixedGenerationsError: 1, UnacceptedGenerationError: 1,
+             **_SHARD_REFUSED})
 def run_rule_counts(args: argparse.Namespace) -> int:
     from effects.application.rule_counts import RuleCountsConfig
     from effects.application.rule_counts import run as rule_counts
@@ -788,13 +848,19 @@ def run_rule_counts(args: argparse.Namespace) -> int:
     ))
 
 
-@exits_with({_NO_SHARDS: 1})
+@exits_with({_NO_SHARDS: 1, UnacceptedGenerationError: 1, **_SHARD_REFUSED})
 def run_field_coverage(args: argparse.Namespace) -> int:
     from effects.application.field_coverage import field_coverage, report_lines
-    from effects.infrastructure.shard_io import read_shard, require_shards
+    from effects.infrastructure.shard_io import (
+        read_shard,
+        require_shards,
+        reset_decode_tally,
+        take_decode_tally,
+    )
 
     root = args.effect_records
     shards = require_shards(root)
+    reset_decode_tally()
     coverage = field_coverage(
         record for shard in shards for record in read_shard(shard.path(root))
     )
@@ -803,6 +869,8 @@ def run_field_coverage(args: argparse.Namespace) -> int:
         return 1
     print(f"{len(coverage)} fields over {root}\n")
     for line in report_lines(coverage, all_fields=args.all):
+        print(line)
+    for line in take_decode_tally().report_lines():
         print(line)
     return 0
 
@@ -829,9 +897,15 @@ def _validate_corpus_parser(subparsers) -> None:
     )
     add_config_flags(parser, Thresholds)
     _add_cards_folder(parser)
+    parser.add_argument(
+        "--variant-scripts", type=_optional_path, default=DEFAULT_VARIANT_SCRIPTS,
+        help=("The perturbed-script tree whose keys a collect-variants corpus names; "
+              "a key in a tree not given fails the keyword-join check as unchecked "
+              "(default: %(default)s)"),
+    )
 
 
-@exits_with({_NO_SHARDS: 1})
+@exits_with({_NO_SHARDS: 1, UnacceptedGenerationError: 1})
 def run_validate_corpus(args: argparse.Namespace) -> int:
     """Every invariant prints its measurement whether it passed or not: the
     number is what tells an operator whether a fix worked or merely moved."""
@@ -860,7 +934,9 @@ def _sidecars_for_validation(args: argparse.Namespace):
     """
     from effects.infrastructure.converted_trees import SourceTrees
 
-    trees = SourceTrees.of(path for path in args.cards_folders if path.is_dir())
+    variants = getattr(args, "variant_scripts", None)
+    trees = SourceTrees.of((path for path in args.cards_folders if path.is_dir()),
+                           variants if variants is not None and variants.is_dir() else None)
     return trees.sidecar_cache() if trees.cards_folders else None
 
 
@@ -897,6 +973,7 @@ def _train_effect_model_parser(subparsers) -> None:
     ValidationGameInTrainingError: 1,
     MixedGenerationsError: 1,
     UnacceptedGenerationError: 1,
+    **_SHARD_REFUSED,
     SurfaceMismatchError: 2,
     EmptyHoldoutError: 2,
     # A resume under other settings (contracts/cli.md).
@@ -1010,6 +1087,7 @@ def _baseline_checkpoint(value: str):
     _LAYOUT_REFUSED: 1,
     MixedGenerationsError: 1,
     UnacceptedGenerationError: 1,
+    **_SHARD_REFUSED,
 })
 def run_evaluate_effect_model(args: argparse.Namespace) -> int:
     from effects.application.evaluate_effect_model import run as evaluate
@@ -1084,8 +1162,15 @@ def _collection_inputs(args: argparse.Namespace) -> list[Path | None]:
     )
     return [
         args.exclude_cards, args.split_from, corpus_list, getattr(args, "only_cards", None),
-        getattr(args, "wording_cards", None),
+        getattr(args, "wording_cards", None), *(getattr(args, "count_from", None) or ()),
     ]
+
+
+def _steered_catalogue(args: argparse.Namespace) -> Path | None:
+    """The rules catalogue a steered variant round reads; None for the untargeted."""
+    from effects.domain.variant_rounds import VariantRound
+
+    return CollectVariantsConfig.rules_dir if args.round is VariantRound.STEERED else None
 
 
 def _vocab_output(args: argparse.Namespace) -> Path:
@@ -1139,10 +1224,14 @@ RUN_MANIFESTS: ManifestTable = {
     ),
     "holdout-cards": Writes("out", file=True, inputs=("cards_folders", "printings_path")),
     "validate-corpus": READ_ONLY,
-    # The variant scripts it writes go to --variant-scripts, beside the shards.
+    # It reads and extends --variant-scripts, an inputs-kind tree shared by
+    # every variant run (a variant is reused by its digest).
     "collect-variants": Writes(
         _collection_dir,
-        inputs=("forge_cards_path", "rule_counts", "cards_folders", _collection_inputs),
+        inputs=(
+            "forge_cards_path", "variant_scripts", "rule_counts", _steered_catalogue,
+            "cards_folders", _collection_inputs,
+        ),
     ),
     "train-effect-model": Writes(
         _model_output,

@@ -144,18 +144,8 @@
       ],
       "forge_notes": "A pre-built cloaked permanent may not carry the Ward:2 that cloaking normally adds; reach the state by cloaking the card during the scenario if Forge's setup loses it.",
       "detector": {
-        "family": "resolution_outcome",
-        "record_kind": "resolution",
-        "outcome": "A targeted spell or ability leaves the stack countered, as when a ward trigger's cost is not paid.",
-        "near_miss": "A targeted spell or ability resolves.",
-        "params": {
-          "outcome": "countered",
-          "near": [
-            "resolved"
-          ],
-          "targeted": true
-        },
-        "needs": []
+        "same_as": "702.21a-1",
+        "reason": "A cloaked permanent's ward countering a spell is ward's fact."
       }
     },
     {
@@ -629,12 +619,15 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A SetState resolution changes no permanent's face: the permanent it would turn face up stays face down.",
-        "near_miss": "A SetState resolution that emits a face_change.",
+        "outcome": "A turn-face-up instruction leaves the permanent face down (a cloaked or manifested instant or sorcery).",
+        "near_miss": "A turn-face-up instruction turns the permanent face up.",
         "params": {
           "event": "face_change",
           "api": "SetState",
-          "absent": true
+          "absent": true,
+          "script_param": {
+            "Mode": "TurnFaceUp"
+          }
         },
         "needs": [
           "face_change"

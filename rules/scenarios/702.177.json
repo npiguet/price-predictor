@@ -64,12 +64,15 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A candidate activated ability limited to one activation passes the activation-limit check while it has not yet been activated.",
-        "near_miss": "An ability limited to one activation that was already activated fails the activation-limit check and is not playable.",
+        "outcome": "A exhaust candidate passes its activation-limit check.",
+        "near_miss": "A exhaust candidate that fails it (already activated).",
         "params": {
           "bit": "failed_check",
           "check": "activation_limit",
-          "fires_when": true
+          "fires_when": true,
+          "script_param": {
+            "Exhaust": "True"
+          }
         },
         "needs": [
           "failed_checks"
@@ -141,18 +144,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "An already-used activate-only-once ability passes the activation-limit check because an effect lets it be activated again while no such ability has been activated this turn.",
-        "near_miss": "The permitting effect's condition is unmet (such an ability was already activated this turn), so the already-used ability fails the activation-limit check.",
-        "params": {
-          "bit": "failed_check",
-          "check": "activation_limit",
-          "fires_when": true
-        },
-        "needs": [
-          "failed_checks"
-        ]
+        "none": "Could not express: an effect allowing an exhaust ability again is read by no filter."
       }
     }
   ]

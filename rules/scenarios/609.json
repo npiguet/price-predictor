@@ -486,15 +486,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A damage event meets a prevention shield set for its source and is prevented, whatever kind of damage it is.",
-        "near_miss": "A damage event meets a replacement or prevention effect and is not prevented (not replaced, replaced or updated).",
-        "params": {
-          "event": "damage_dealt",
-          "result": "prevented"
-        },
-        "needs": []
+        "none": "Could not express: the prevention's kind (a chosen source's shield, a rule-changing effect, protection from everything or from a player) is compared by no rewrite_event parameter; protection's quality is not read on a rewrite."
       }
     },
     {
@@ -564,15 +556,7 @@
       ],
       "forge_notes": "The shield tracks the chosen card by identity; whether Forge keeps it across the spell becoming a permanent should be checked.",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A damage event meets a prevention shield set for its source and is prevented, including damage from the permanent a chosen permanent spell became.",
-        "near_miss": "A damage event meets a replacement or prevention effect and is not prevented (not replaced, replaced or updated).",
-        "params": {
-          "event": "damage_dealt",
-          "result": "prevented"
-        },
-        "needs": []
+        "none": "Could not express: the prevention's kind (a chosen source's shield, a rule-changing effect, protection from everything or from a player) is compared by no rewrite_event parameter; protection's quality is not read on a rewrite."
       }
     },
     {
@@ -704,15 +688,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A damage event is modified in place by a damage replacement keyed to a property of its source, whatever zone the source is in.",
-        "near_miss": "A damage event meets a replacement or prevention effect with another result (prevented, not replaced, replaced).",
-        "params": {
-          "event": "damage_dealt",
-          "result": "updated"
-        },
-        "needs": []
+        "none": "Could not express: what the replacement does to the damage (doubles it, heals instead, keyed to a source off the battlefield) shows only in comparing the incoming and outgoing amounts or the source's zone, which no rewrite_event parameter compares."
       }
     }
   ]

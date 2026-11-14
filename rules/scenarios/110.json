@@ -312,14 +312,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "continuous_contribution",
-        "record_kind": "continuous",
-        "outcome": "A static ability's continuous effect modifies a permanent's power and toughness, so its characteristics are its printed ones as modified by that effect.",
-        "near_miss": "A static ability applies to the board and contributes no power/toughness change to any permanent, which keeps its printed values.",
-        "params": {
-          "field": "pt"
-        },
-        "needs": []
+        "same_as": "604.2-1",
+        "reason": "The record shows a static's power and toughness contribution applying while its source is on the battlefield, 604.2's fact."
       }
     },
     {

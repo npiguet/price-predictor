@@ -13,6 +13,7 @@ Rules to respect when touching provenance sidecars, the tokenizer, the vocabular
 - `script_file` includes its tree: `cardsfolder` is letter-keyed, `tokenscripts` and `variant-scripts` are flat, and one filename occurs in more than one.
 - `option` is a charm mode's 0-based position in its root's `Choices$`, written only when set.
 - A line can carry several keys, where it merged several traits.
+- Where a keyword prints one line per trait it generates (a saga's chapter lines, haunt's two lines), a generated trait joins its own line alone. Sidecars written before 2026-11-14 gave every such line every generated trait, so chapter II and III records read chapter I's text: re-run `convert` on such a tree.
 - `prose_offset` says where a line's prose starts after its `kind[n]: ` prefix. Do not cut at the first `": "`: a continuation line of a multi-line description has no prefix and can hold a `{T}: ` of its own. A sidecar written before the field existed is read by that cut, which is right for every line it holds.
 - Role spans (`cost`, `effect`, `trigger-condition`, `target-spec`) are offsets into the prose after `prose_offset`.
 - Row *i* of the ability cache corresponds to `lines[i]`.

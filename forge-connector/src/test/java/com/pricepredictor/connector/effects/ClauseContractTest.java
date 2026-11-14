@@ -70,73 +70,26 @@ class ClauseContractTest {
     // ── the argument order, pinned ──────────────────────────────────────
 
     /**
-     * Two real, distinguishable arguments in, and each one read off its own
-     * position: the clause names the event, {@code threw=false} lets it
-     * through. A handler that read {@code args[1]} for the clause would find
-     * a {@code Boolean} where it expected a {@code SpellAbility}, bail out on
-     * the {@code instanceof} check, and this record would carry no event at
-     * all.
-     */
-    @Test
-    void theHandlerReadsEachArgumentOffItsOwnPosition() throws Throwable {
-        SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-
-        String effectHalf = resolveClause(sa, ClauseRun.RAN).get(1);
-
-        assertTrue(effectHalf.contains("\"type\":\"turn_added\""), effectHalf);
-        assertTrue(effectHalf.contains("\"count\":1"), effectHalf);
-    }
-
-    /**
-     * {@code threw=true} is the other half of the same position: a clause
-     * that threw writes no event, so this is what tells the two Boolean
-     * values apart rather than one of them agreeing with a default.
-     */
-    @Test
-    void aClauseThatThrewWritesNoEvent() throws Throwable {
-        SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-
-        String effectHalf = resolveClause(sa, ClauseRun.THREW).get(1);
-
-        assertTrue(effectHalf.contains("\"moment\":\"resolution\""), effectHalf);
-        assertFalse(effectHalf.contains("\"type\":\"turn_added\""), effectHalf);
-    }
-
-    /**
-     * A clause whose own effect did not run — its condition failed, or its
-     * unless cost decided against it — writes no event (A3): only {@code
-     * RAN} lets the event through.
+     * Only a clause whose own effect ran writes its event (A3): every other
+     * {@code ClauseRun} (its condition failed, its unless cost decided
+     * against it, it threw) writes the effect half with no event of the
+     * clause's. Over every constant Forge declares, so the one that writes is
+     * told apart from the ones that do not, and a constant Forge adds lands
+     * on the not-ran side unless the router says otherwise.
      */
     @ParameterizedTest
-    @EnumSource(value = ClauseRun.class, names = {"CONDITIONS_UNMET", "UNLESS_COST_DECIDED"})
-    void aClauseThatDidNotRunWritesNoEvent(ClauseRun run) throws Throwable {
+    @EnumSource(ClauseRun.class)
+    void onlyAClauseThatRanWritesItsEvent(ClauseRun run) throws Throwable {
         SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
 
         String effectHalf = resolveClause(sa, run).get(1);
 
-        assertFalse(effectHalf.contains("\"type\":\"turn_added\""), run + ": " + effectHalf);
-    }
-
-    /**
-     * The direct demonstration: called with the two arguments where the
-     * <em>other</em> method's shape would put them, {@code onClauseResolved}
-     * finds a {@code Boolean} at {@code args[0]} and writes nothing, rather
-     * than misreading it as a clause.
-     */
-    @Test
-    void aSwappedCallWritesNoEvent() throws Throwable {
-        SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
-            InvocationHandler handler = collector.clauses().clauseHandler();
-            bracket.beginBracket(sa);
-            handler.invoke(null, clauseMethod("onClauseResolved"),
-                    new Object[]{Boolean.FALSE, sa});
-            bracket.endBracket(sa.getId(), false);
-            bracket.onNextAction();
-        });
-
-        String effectHalf = records.get(1);
-        assertFalse(effectHalf.contains("\"type\":\"turn_added\""), effectHalf);
+        assertTrue(effectHalf.contains("\"moment\":\"resolution\""), run + ": " + effectHalf);
+        assertEquals(run == ClauseRun.RAN, effectHalf.contains("\"type\":\"turn_added\""),
+                run + ": " + effectHalf);
+        if (run == ClauseRun.RAN) {
+            assertTrue(effectHalf.contains("\"count\":1"), effectHalf);
+        }
     }
 
     // ── the mechanism: nested memos do not cross ─────────────────────────

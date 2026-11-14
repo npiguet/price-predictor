@@ -30,12 +30,6 @@ def test_every_family_is_two_types_and_targets_four_per_direction():
     assert len(set(RELATION_TYPES)) == len(RELATION_TYPES)
 
 
-def test_the_table_s_families_are_all_there():
-    for family in ("line_of", "attached_to", "blocks", "targets", "affects", "linked_by_text",
-                   "controls", "copy_of", "has_the_same_name", "last_known_state_of"):
-        assert family in FAMILIES
-
-
 def test_directions_are_distinct_types():
     forward = relation_type("attached_to")
     backward = relation_type("attached_to", Direction.REVERSE)

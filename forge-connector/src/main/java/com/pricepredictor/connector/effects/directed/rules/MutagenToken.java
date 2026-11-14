@@ -25,6 +25,10 @@ import java.util.Optional;
  * untapped permanent that makes mana, the last mana it has for the {1}. It
  * binds the token and that mana source.
  *
+ * <p>The active player cannot add a land to its mana this turn
+ * ({@link Boards#noLandToPlay}): it holds no land, or its land drop is
+ * used, so the turn's land drop cannot undo the mana the variant takes.
+ *
  * <p>Variant {@code no_mana} ({@code remove_permanent}): the mana source is not
  * on the battlefield, as A has two Islands, both spent, instead of three, so
  * the token's ability cannot be activated.
@@ -49,6 +53,9 @@ public final class MutagenToken {
             return Optional.empty();
         }
         Player active = Boards.active(live);
+        if (!Boards.noLandToPlay(active)) {
+            return Optional.empty();
+        }
         Optional<Card> token = active.getCardsIn(ZoneType.Battlefield).stream()
                 .filter(card -> !card.isTapped() && isMutagen(card))
                 .findFirst();

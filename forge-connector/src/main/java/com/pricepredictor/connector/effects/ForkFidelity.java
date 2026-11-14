@@ -81,7 +81,7 @@ final class ForkFidelity {
         List<String> found;
         try {
             found = differences(live, fork);
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | StackOverflowError e) {
             System.err.println("Effect records: fork fidelity audit failed (" + e + ")");
             return;
         }

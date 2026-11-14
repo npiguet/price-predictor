@@ -64,16 +64,8 @@
       ],
       "forge_notes": "Variant phases_in needs a phased-out permanent in the starting state; Forge represents it as a permanent with phasedOut set.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "turn_action",
-        "outcome": "In a player's untap step the turn-based phasing action phases permanents in or out: the turn_action record holds phased events.",
-        "near_miss": "No near miss is declared: an untap record with no phased event is not tagged.",
-        "params": {
-          "event": "phased"
-        },
-        "needs": [
-          "turn_action"
-        ]
+        "same_as": "702.26a-1",
+        "reason": "The record shows the untap step's phasing, 702.26a's fact; redundant instances phase alike."
       }
     },
     {
@@ -137,17 +129,8 @@
       ],
       "forge_notes": "The day/night state and B's cast count of the previous turn are starting history fixed by the notes, not setup fields.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "turn_action",
-        "outcome": "At the untap step the day/night check makes it night: the turn_action record holds a day_night_changed event with to night.",
-        "near_miss": "No near miss is declared: a check that changes nothing leaves no event.",
-        "params": {
-          "event": "day_night_changed",
-          "to": "night"
-        },
-        "needs": [
-          "turn_action"
-        ]
+        "same_as": "731.2a-1",
+        "reason": "All three state that day becomes night in the untap step after a turn whose active player cast no spells."
       }
     },
     {
@@ -209,17 +192,8 @@
       ],
       "forge_notes": "In the one_spell variant the second Grizzly Bears is in B's hand.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "turn_action",
-        "outcome": "At the untap step the day/night check makes it day: the turn_action record holds a day_night_changed event with to day.",
-        "near_miss": "No near miss is declared: a check that changes nothing leaves no event.",
-        "params": {
-          "event": "day_night_changed",
-          "to": "day"
-        },
-        "needs": [
-          "turn_action"
-        ]
+        "same_as": "731.2b-1",
+        "reason": "All three state that night becomes day in the untap step after a turn whose active player cast two or more spells."
       }
     },
     {
@@ -301,16 +275,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "turn_action",
-        "outcome": "In the active player's untap step their tapped permanents untap together: the turn_action record holds untapped events.",
-        "near_miss": "No near miss is declared: a permanent an effect keeps tapped leaves no event.",
-        "params": {
-          "event": "untapped"
-        },
-        "needs": [
-          "turn_action"
-        ]
+        "same_as": "703.4c-1",
+        "reason": "The active player's permanents untapping in the untap step is 703.4c's fact."
       }
     },
     {

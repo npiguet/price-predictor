@@ -45,7 +45,7 @@ def _zone_change_effect(gen2_records, gen2_sidecars):
                  and (e.params or {}).get("to_zone")]
         if line is not None and line.script_api_type and moves:
             return record, line.script_api_type, moves[0].params["to_zone"]
-    pytest.skip("no effect half in the fixture moves a card")
+    pytest.fail("no effect half in the fixture moves a card")
 
 
 def _index(*declared):
@@ -63,7 +63,7 @@ def test_a_move_to_another_zone_is_in_the_pool_and_not_tagged(gen2_records, gen2
         ("1.2-1", declaration("outcome_event", "resolution", event="zone_change", api=api,
                               to_zone=elsewhere)),
         ("1.3-1", declaration("outcome_event", "resolution", event="zone_change",
-                              api=api + "Elsewhere")))
+                              api="Mill" if api != "Mill" else "Draw")))
     found = breadth_counts(record, index, gen2_sidecars)
     assert found[("1.1-1", POOL)] == found[("1.1-1", TAGGED)] == 1
     assert found[("1.2-1", POOL)] == 1 and found[("1.2-1", TAGGED)] == 0
@@ -79,7 +79,7 @@ def test_a_declaration_needing_a_gen3_field_is_skipped_on_gen2(gen2_records, gen
 
 def test_rows_carry_every_declared_scenario_and_what_it_dropped():
     index = _index(
-        ("1.1-1", declaration("outcome_event", "resolution", event="zone_change", api="X",
+        ("1.1-1", declaration("outcome_event", "resolution", event="zone_change", api="Draw",
                               to_zone="exile")),
         ("1.2-1", declaration("sba_zone_move", "resolution", check="toughness_zero")))
     rows = {row.scenario: row for row in breadth_rows(
@@ -94,3 +94,33 @@ def test_a_small_share_of_a_large_pool_is_flagged_and_nothing_else():
             BreadthRow("c-1", ("c",), ("api",), 50, 0),     # a small pool
             BreadthRow("d-1", ("d",), (), 1000, 3)]         # nothing dropped
     assert [row.scenario for row in flagged_rows(rows, min_pool=200, max_share=0.01)] == ["a-1"]
+
+
+def test_the_game_end_marker_counts_in_no_pool():
+    """As ``tag_record`` reads it (WP7): no detector reads the marker."""
+    from effects.domain.records import TurnActionPayload, TurnActionSubkind
+    from effects.domain.rule_catalogue import Polarity
+    from effects.domain.rule_detectors import FamilyMatch
+    from tests.unit.effects.builders import make_record
+
+    class _Everything:
+        id = "everything"
+        params = general = frozenset()
+
+        def needs(self, params):
+            return frozenset()
+
+        def match(self, record, lines, params):
+            return FamilyMatch(Polarity.FIRES, True)
+
+    family = _Everything()
+    entry = (scenario("t-1", ("100.1",), "turn_action", declaration(family.id, "turn_action")),
+             declaration(family.id, "turn_action"), family)
+    index = DetectorIndex({"turn_action": (entry,)}, frozenset({"100.1"}))
+    draw = make_record(RecordKind.TURN_ACTION, subkind=TurnActionSubkind.DRAW,
+                       ability=None, payload=TurnActionPayload(), generation=3)
+    marker = make_record(RecordKind.TURN_ACTION, subkind=TurnActionSubkind.GAME_END,
+                         ability=None, payload=TurnActionPayload(records_withheld=0),
+                         generation=3)
+    assert breadth_counts(draw, index) == Counter({("t-1", POOL): 1, ("t-1", TAGGED): 1})
+    assert breadth_counts(marker, index) == Counter()

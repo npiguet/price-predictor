@@ -31,6 +31,13 @@ import java.util.Optional;
  * <p>Variant {@code two-creatures} ({@code add_permanent}): the opponent also
  * controls Craw Wurm, a vanilla creature, so the spell has two different
  * creatures to target and can be cast.
+ *
+ * <p>The point needs no seat's choice: the collector reads the spell's
+ * verdict at each of the fork's priority stops itself
+ * ({@code PriorityCandidates}), whether or not a seat casts it. It is written
+ * only as the decision sample keeps the candidate ({@code --playability-rate}
+ * and {@code --plain-candidate-rate}), so most such forks write no record
+ * of it.
  */
 public final class DistinctTargets {
 

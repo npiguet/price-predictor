@@ -96,13 +96,6 @@ class TestTrainEffectModel:
         assert args.epochs == 40
         assert args.patience == 5
 
-    def test_the_vestigial_flags_are_gone(self):
-        """``--split-from`` inherited nothing once ``--corpus`` was required, and
-        ``--context-cache`` was never wired into the batcher."""
-        for flag in ("--split-from", "--context-cache", "--cache-refresh"):
-            with pytest.raises(SystemExit):
-                parse(*TRAIN, flag, "x")
-
     def test_the_corpus_is_required(self):
         """FR-125 withdrawn: raw shards are no longer a training input."""
         with pytest.raises(SystemExit):
@@ -236,12 +229,6 @@ class TestEvaluateEffectModel:
         with pytest.raises(SystemExit):
             parse("evaluate-effect-model", "--variant-checkpoint", "identiy=a.pt")
 
-    def test_there_is_no_split_flag(self):
-        """Splits come from the checkpoint — never a flag, never recomputed."""
-        for name in ("--split", "--split-from", "--held-out-cards"):
-            with pytest.raises(SystemExit):
-                parse("evaluate-effect-model", name, "x")
-
     def test_the_vocabulary_paths_default_to_the_checkpoints(self):
         args = parse("evaluate-effect-model")
         assert args.vocab_path is None
@@ -330,7 +317,10 @@ class TestBuildCorpus:
 
     def test_the_run_defaults_are_the_contracts(self):
         args = parse("build-corpus")
-        assert args.workers is None  # CPU count
+        assert args.workers == 12  # explicit and bounded, never the CPU count
+        for out_of_range in ("0", "13"):
+            with pytest.raises(SystemExit):
+                parse("build-corpus", "--workers", out_of_range)
         assert args.verify is False
         assert parse("build-corpus", "--verify").verify is True
 

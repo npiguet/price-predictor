@@ -19,10 +19,15 @@ Parameters:
 
 - ``outcome`` (required): the outcome on the ``fires`` side;
 - ``near``: the outcomes of the near miss, ``["resolved"]`` by default;
+- ``keyword``: the record acts through this keyword's line (ward's
+  trigger, the half that counters or resolves);
+- ``source_keyword``: the stack object's card prints this keyword (a gift
+  spell): the countered object's card on a countering half;
 - ``targeted``: true to count only stack objects that had a target, so a
-  fizzle rule's near miss is a targeted spell that resolved. On a gen-3 effect
-  half the targets read at resolution have lost the illegal ones, so a
-  fizzled half counts as targeted by definition.
+  fizzle rule's near miss is a targeted spell that resolved. The targets are
+  read as cast (``Refs.as_cast``: ``targets_at_cast``, else ``targets``); a
+  fizzled half of a record without ``targets_at_cast``, whose ``targets`` lost
+  the illegal ones, counts as targeted by definition.
 
 The condition entities are the stack object (``refs.source``, or the
 countered object) and its targets, whose legality a fizzle reads; the outcome
@@ -48,6 +53,12 @@ from effects.domain.records import (
 )
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors import declared_values as dv
+from effects.domain.rule_detectors.acting_line import (
+    acting_line,
+    card_has_keyword,
+    is_keyword_line,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,8 +79,8 @@ def _observed(record: EffectRecord, countered_asked: bool) -> _Observed | None:
         outcome = getattr(record.payload, "outcome", None)
         if outcome is None:
             return None
-        return _Observed(outcome, tuple(dict.fromkeys((*source, *refs.targets))), source,
-                         bool(refs.targets))
+        return _Observed(outcome, tuple(dict.fromkeys((*source, *refs.as_cast))), source,
+                         bool(refs.as_cast))
     payload = record.payload
     if not isinstance(payload, ResolutionPayload):
         return None
@@ -81,19 +92,41 @@ def _observed(record: EffectRecord, countered_asked: bool) -> _Observed | None:
             return _Observed(ResolutionOutcome.COUNTERED, countered, countered, True)
     if payload.outcome is None:
         return None
-    targeted = bool(refs.targets) or payload.outcome is ResolutionOutcome.FIZZLED
-    return _Observed(payload.outcome, tuple(dict.fromkeys((*source, *refs.targets))), source,
+    # The targets as cast (V5 #25); a fizzled half with no targets_at_cast
+    # (an older record) had a target by definition.
+    targeted = bool(refs.as_cast) or (
+        refs.targets_at_cast is None and payload.outcome is ResolutionOutcome.FIZZLED)
+    return _Observed(payload.outcome, tuple(dict.fromkeys((*source, *refs.as_cast))), source,
                      targeted)
+
+
+def _prints(record: EffectRecord, lines: SidecarLookup | None, observed: _Observed,
+            keyword: str) -> bool:
+    """Whether the stack object's card prints ``keyword``: the countered
+    object's on a countering half, the acting line's card otherwise."""
+    if observed.outcome is ResolutionOutcome.COUNTERED and observed.outcome_entities != (
+            (record.state.refs.source,) if record.state.refs.source else ()):
+        return any(entity is not None and card_has_keyword(entity.line_keys, lines, keyword)
+                   for entity in map(record.state.entity, observed.outcome_entities))
+    return card_has_keyword(record.ability or (), lines, keyword)
 
 
 @dataclass(frozen=True, slots=True)
 class ResolutionOutcomeFamily:
     id: str = "resolution_outcome"
-    params: frozenset[str] = frozenset({"outcome", "near", "targeted"})
+    params: frozenset[str] = frozenset({"outcome", "near", "targeted", "source_keyword",
+                                        "keyword"})
     general: frozenset[str] = frozenset({"outcome", "near"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         return frozenset()
+
+    def validate(self, params: Mapping[str, Any]) -> None:
+        ResolutionOutcome(params["outcome"])
+        for near in params.get("near", ["resolved"]):
+            ResolutionOutcome(near)
+        dv.check(self.id, params, {"targeted": dv.boolean, "source_keyword": dv.keyword,
+                                   "keyword": dv.keyword})
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
@@ -101,6 +134,12 @@ class ResolutionOutcomeFamily:
         near = {ResolutionOutcome(o) for o in params.get("near", ["resolved"])}
         observed = _observed(record, ResolutionOutcome.COUNTERED in near | {fires})
         if observed is None or (params.get("targeted") and not observed.targeted):
+            return None
+        keyword = params.get("source_keyword")
+        if keyword is not None and not _prints(record, lines, observed, keyword):
+            return None
+        if "keyword" in params and not is_keyword_line(acting_line(record, lines),
+                                                       params["keyword"]):
             return None
         if observed.outcome is fires:
             return FamilyMatch(Polarity.FIRES, True, observed.condition,

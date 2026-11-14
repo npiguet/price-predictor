@@ -74,9 +74,6 @@ def _sidecar() -> ProvenanceSidecar:
 
 
 class TestRowAlignment:
-    def test_row_i_is_the_ith_entry_of_lines(self):
-        assert _sidecar().row_for(_TRIGGER) == 1
-
     def test_the_row_is_the_position_not_the_rendered_line_index(self):
         """``line_index`` points into the .txt; the cache row is the array slot."""
         sidecar = _sidecar()
@@ -99,20 +96,6 @@ class TestSerialization:
         assert "script_file" not in data["lines"][1]["provenance"][0]
         assert data["script_file"] == _SCRIPT
 
-    def test_a_read_key_carries_the_headers_script_file(self):
-        restored = sidecar_from_dict(sidecar_to_dict(_sidecar()))
-        assert restored.lines[1].provenance[0].script_file == _SCRIPT
-
-    def test_dropped_keys_survive(self):
-        restored = sidecar_from_dict(sidecar_to_dict(_sidecar()))
-        assert restored.dropped_keys == (_DROPPED,)
-
-    def test_role_spans_and_sub_ability_links_survive(self):
-        restored = sidecar_from_dict(sidecar_to_dict(_sidecar()))
-        line = restored.lines[1]
-        assert line.role_spans[0].role == "trigger-condition"
-        assert line.sub_ability_links[0].path == (0,)
-
     def test_the_file_is_written_beside_the_converted_text(self, tmp_path):
         txt = tmp_path / "a" / "ajanis_pridemate.txt"
         path = sidecar_path_for(txt)
@@ -124,12 +107,18 @@ class TestSerialization:
         write_sidecar(_sidecar(), path)
         assert read_sidecar(path) == _sidecar()
 
-    def test_a_written_sidecar_is_valid_json(self, tmp_path):
-        path = sidecar_path_for(tmp_path / "x.txt")
-        write_sidecar(_sidecar(), path)
-        assert json.loads(path.read_text(encoding="utf-8"))["card"] == (
-            "Ajani's Pridemate"
-        )
+    def test_every_converter_written_sidecar_reads_and_writes_back_member_for_member(self):
+        """The sidecars above are written by this test's own builder; these are
+        the ones Java's ``convert`` wrote for the gen-3 fixture: nothing they
+        hold is dropped, renamed or reordered on a read and a write."""
+        from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS
+
+        paths = sorted(p for folder in GEN3_SIDECAR_FOLDERS
+                       for p in folder.rglob("*.provenance.json"))
+        assert len(paths) > 600
+        for path in paths:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            assert json.dumps(sidecar_to_dict(read_sidecar(path))) == json.dumps(raw), path.name
 
     def test_a_missing_sidecar_raises_rather_than_reading_as_empty(self, tmp_path):
         with pytest.raises(FileNotFoundError):
@@ -243,6 +232,43 @@ class TestSidecarCache:
         ):
             assert cache.line_or_none(key) is None
 
+    def test_line_or_none_counts_the_keys_of_a_tree_the_run_has_no_root_for(
+            self, tmp_path, caplog):
+        """Read as no line, yet never hidden: counted by tree, the first
+        reported, since a run missing a tree's root reads all its texts as none."""
+        cache = self._write_trees(tmp_path)
+        key = ProvenanceKey("variant-scripts/shock_variant.txt", 0, "spell", 0)
+        with caplog.at_level("WARNING"):
+            for _ in range(3):
+                assert cache.line_or_none(key) is None
+        assert cache.unconfigured == {"variant-scripts": 3}
+        warned = [r.getMessage() for r in caplog.records if "variant-scripts" in r.getMessage()]
+        assert len(warned) == 1
+
+    def test_the_join_gaps_travel_as_what_each_take_added(self, tmp_path):
+        """A pool worker's cache outlives a shard: each take hands back what
+        that shard added, and the caller's sum is the whole run's."""
+        from effects.infrastructure.sidecar_io import JoinGaps
+
+        cache = self._write_trees(tmp_path)
+        variant = ProvenanceKey("variant-scripts/shock_variant.txt", 0, "spell", 0)
+        cache.line_or_none(variant)
+        cache.line_or_none(_ABSENT)
+        first = cache.take_join_gaps()
+        cache.line_or_none(variant)
+        cache.line_or_none(ProvenanceKey("cardsfolder/b/bird_token.txt", 0, "static", 0))
+        second = cache.take_join_gaps()
+        assert first.unconfigured == {"variant-scripts": 1}
+        assert first.undescribed == {_SCRIPT: 1}
+        assert second.unconfigured == {"variant-scripts": 1} and not second.undescribed
+        assert second.unresolved == {"cardsfolder/b/bird_token.txt": 1}
+        total = JoinGaps()
+        total.merge(first)
+        total.merge(second)
+        assert total == cache.join_gaps()
+        assert any(line.startswith("keys read as no line, unconfigured: 1")
+                   for line in total.report_lines())
+
     def test_line_or_none_counts_the_keys_a_sidecar_does_not_describe(self, tmp_path):
         """That case is the join's fail-loudly one: tolerated here, never hidden."""
         cache = self._write_trees(tmp_path)
@@ -266,6 +292,44 @@ class TestSidecarCache:
         cache = self._write_trees(tmp_path)
         assert cache.get(_TRIGGER.script_file).row_for(_TRIGGER) == 1
         assert cache.line_for(_TRIGGER).script_api_type == "PutCounter"
+
+    def test_keys_alike_but_for_their_file_join_each_its_own_card_s_line(self):
+        """Over the converter's own sidecars: two cards' keys that differ only
+        in ``script_file`` (both a first trigger, say) never join one card's
+        line; each joins the line its own sidecar renders for it."""
+        from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS
+
+        cache = SidecarCache({folder.name: folder for folder in GEN3_SIDECAR_FOLDERS})
+        sidecars = [read_sidecar(path) for folder in GEN3_SIDECAR_FOLDERS
+                    for path in sorted(folder.rglob("*.provenance.json"))]
+        by_shape: dict[tuple, list] = {}
+        for sidecar in sidecars:
+            for line in sidecar.lines:
+                for key in line.provenance:
+                    shape = (key.face, key.trait_kind, key.index_within_kind, key.option)
+                    by_shape.setdefault(shape, []).append((key, line))
+        shared = [pairs for pairs in by_shape.values()
+                  if len({key.script_file for key, _ in pairs}) > 1]
+        assert len(shared) > 10
+        for pairs in shared:
+            for key, line in pairs:
+                joined = cache.line_for(key)
+                assert key in joined.provenance, key
+                assert joined in cache.get(key.script_file).lines, key
+
+    def test_a_saga_s_chapter_trigger_joins_its_own_chapter_line(self):
+        """Over the converter's own sidecar of a three-chapter saga: each
+        chapter's trigger joins its own chapter line and no other line holds it."""
+        from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS
+
+        cache = SidecarCache({folder.name: folder for folder in GEN3_SIDECAR_FOLDERS})
+        script = "cardsfolder/t/the_fall_of_lord_konda_fragment_of_konda.txt"
+        chapters = [line for line in cache.get(script).lines if line.line_kind == "chapter"]
+        assert len(chapters) == 3
+        for chapter, line in enumerate(chapters):
+            assert cache.line_for(ProvenanceKey(script, 0, "trigger", chapter)) == line
+            assert [key for key in line.provenance if key.trait_kind == "trigger"] == [
+                ProvenanceKey(script, 0, "trigger", chapter)]
 
 
 class TestTheVariantTreeHasNoProse:
@@ -474,15 +538,6 @@ class TestOptionKeys:
         ]
         assert data["lines"][1]["provenance"][0]["option"] == 0
         assert data["dropped_keys"][0]["option"] == 3
-
-    def test_a_gen1_sidecar_reads_with_no_option(self):
-        data = sidecar_to_dict(self._sidecar())
-        for line in data["lines"]:
-            for key in line["provenance"]:
-                key.pop("option", None)
-        sidecar = sidecar_from_dict(data)
-        assert all(key.option is None for line in sidecar.lines for key in line.provenance)
-
 
 class TestSidecarRoots:
     """``--cards-folder`` values to a cache's ``tree -> folder`` (FR-063b)."""

@@ -28,7 +28,7 @@ class WorkerLoopTest {
      * Plays a script of outcomes, a {@code null} entry throwing, then throws
      * forever. Counts its calls so a test can assert the loop did not stop early.
      */
-    private static final class Script implements WorkerLoop.Attempt {
+    private static class Script implements WorkerLoop.Attempt {
         private final WorkerLoop.Outcome[] script;
         int calls = 0;
 
@@ -104,5 +104,47 @@ class WorkerLoopTest {
         assertEquals("Worker: 2 things done" + System.lineSeparator()
                         + "Worker: 4 things done" + System.lineSeparator(),
                 progressBytes.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void aStopAskedBetweenAttemptsEndsTheLoopWithoutAFailure() {
+        java.util.concurrent.atomic.AtomicLong now = new java.util.concurrent.atomic.AtomicLong();
+        WorkerStop recycle = new WorkerStop(null, 5, now::get);
+        Script script = new Script(COMPLETED, COMPLETED, COMPLETED) {
+            @Override
+            public WorkerLoop.Outcome run() {
+                now.addAndGet(2_000_000_000L);
+                return super.run();
+            }
+        };
+
+        WorkerLoop.Ending ending = WorkerLoop.run(script, 3, progress, recycle);
+
+        assertEquals(3, ending.completed(), "stopped once five seconds had passed, before a fourth");
+        assertEquals("recycling after 5 s", ending.stopped());
+    }
+
+    @Test
+    void aStopAskedAtAGameEndInsideAnAttemptEndsTheLoop() {
+        WorkerLoop.Ending ending = WorkerLoop.run(
+                () -> {
+                    throw new WorkerStop.Requested("stop file x");
+                }, 3, progress, WorkerStop.NEVER);
+
+        assertEquals(new WorkerLoop.Ending(0, "stop file x"), ending);
+        assertEquals("", progressBytes.toString(StandardCharsets.UTF_8), "no failure line");
+    }
+
+    @Test
+    void aWorkerThatGivesUpThrowsItsExitRatherThanEndingTheJvm() {
+        ToolMain.Exit exit = assertThrows(ToolMain.Exit.class,
+                () -> WorkerLoop.runUntilBroken(new Script(), progress));
+
+        assertEquals(ExitCode.FAILURE, exit.code());
+    }
+
+    @Test
+    void aBadConfigurationIsAnExitWithItsCode() {
+        assertEquals(ExitCode.BAD_CONFIG, ToolMain.badConfig("a problem").code());
     }
 }

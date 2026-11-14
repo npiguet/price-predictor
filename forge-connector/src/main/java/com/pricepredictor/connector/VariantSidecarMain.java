@@ -23,6 +23,11 @@ import java.nio.file.Path;
 public class VariantSidecarMain {
 
     public static void main(String[] args) {
+        ToolMain.guard(() -> work(args));
+    }
+
+    /** The worker itself; an exit it requests ends the process through {@link ToolMain#guard}. */
+    static void work(String[] args) {
         String variantsPath = ToolMain.args(args, "--variants-path")
                 .get("--variants-path", "output/effects/variant-scripts/");
 

@@ -22,7 +22,14 @@ public enum TurnActionSubkind implements WireNamed {
     /** Day becoming night or night day (CR 502.2). */
     DAY_NIGHT("day_night"),
     /** A lore counter on each of the active player's Sagas (CR 714.3b). */
-    LORE_COUNTER("lore_counter");
+    LORE_COUNTER("lore_counter"),
+    /**
+     * The game's end marker: the last record a game writes, after every
+     * end-of-game flush, and only for a game that ended (D2). Its payload's
+     * {@code events} is empty and {@code records_withheld} counts the records
+     * {@code --max-records-per-game} kept out of the shard.
+     */
+    GAME_END("game_end");
 
     private final String wireName;
 

@@ -31,7 +31,7 @@ def test_a_real_combat_with_a_qualifying_carrier_fires(by_kind, gen2_sidecars):
     probe = next(r for r in by_kind("combat") if r.payload.probed_keyword == "trample")
     real = next((r for r in by_kind("combat") if r.record_id == probe.mirror_of), None)
     if real is None:
-        pytest.skip("the probe's real combat is not in the fixture")
+        pytest.fail("the probe's real combat is not in the fixture")
     found = FAMILY.match(real, gen2_sidecars, {"keyword": "trample"})
     assert found.polarity is Polarity.FIRES and probe.payload.probed_entity in found.condition
     # Trample's outcome is the defending player's life, never the carrier.
@@ -42,7 +42,7 @@ def test_the_carrier_edited_out_of_combat_shows_nothing(by_kind, gen2_sidecars):
     probe = next(r for r in by_kind("combat") if r.payload.probed_keyword == "trample")
     real = next((r for r in by_kind("combat") if r.record_id == probe.mirror_of), None)
     if real is None:
-        pytest.skip("the probe's real combat is not in the fixture")
+        pytest.fail("the probe's real combat is not in the fixture")
     carrier = probe.payload.probed_entity
     state = replace(real.state, entities=tuple(
         replace(e, combat=None) if e.id == carrier else e for e in real.state.entities))
@@ -52,7 +52,7 @@ def test_the_carrier_edited_out_of_combat_shows_nothing(by_kind, gen2_sidecars):
 
 def test_a_keyword_outside_gate_two_s_table_is_refused(by_kind):
     with pytest.raises(ValueError, match="not a damage-step keyword"):
-        FAMILY.match(by_kind("combat")[0], None, {"keyword": "flying"})
+        FAMILY.validate({"keyword": "flying"})
 
 
 

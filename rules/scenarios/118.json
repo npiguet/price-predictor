@@ -93,11 +93,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A candidate whose cost cannot be paid fails the cost check (for example a tap cost of an already tapped permanent).",
-        "near_miss": "A candidate whose cost check passes.",
+        "outcome": "An ability with {T} in its cost fails its cost check while its permanent is tapped.",
+        "near_miss": "An ability of a tapped permanent whose cost check passes.",
         "params": {
           "bit": "failed_check",
-          "check": "cost"
+          "check": "cost",
+          "cost_symbol": "T",
+          "source_tapped": true
         },
         "needs": [
           "failed_checks"
@@ -287,17 +289,7 @@
       ],
       "forge_notes": "Suspending Ancestral Vision is a special action, not casting, so it is not the thing under test.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A candidate spell with an unpayable cost fails the cost check.",
-        "near_miss": "A candidate spell whose cost check passes.",
-        "params": {
-          "bit": "failed_check",
-          "check": "cost"
-        },
-        "needs": [
-          "failed_checks"
-        ]
+        "none": "Could not express: what makes the cost unpayable (one object paying two costs, no mana cost, a free-cast permission) is read by no verdict_bit filter."
       }
     },
     {
@@ -366,17 +358,7 @@
       ],
       "forge_notes": "Depends on Forge applying Sphere of Resistance's RaiseCost to a MayPlayWithoutManaCost cast.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A candidate with an unpayable cost fails the cost check even after cost increases.",
-        "near_miss": "A candidate whose cost check passes, for example because a permission lets it be cast for free.",
-        "params": {
-          "bit": "failed_check",
-          "check": "cost"
-        },
-        "needs": [
-          "failed_checks"
-        ]
+        "none": "Could not express: what makes the cost unpayable (one object paying two costs, no mana cost, a free-cast permission) is read by no verdict_bit filter."
       }
     },
     {
@@ -983,17 +965,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "An activated-ability candidate whose sacrifice cost has no remaining permanent to sacrifice fails the cost check.",
-        "near_miss": "A candidate whose cost check passes.",
-        "params": {
-          "bit": "failed_check",
-          "check": "cost"
-        },
-        "needs": [
-          "failed_checks"
-        ]
+        "none": "Could not express: what makes the cost unpayable (one object paying two costs, no mana cost, a free-cast permission) is read by no verdict_bit filter."
       }
     },
     {
@@ -1058,11 +1030,13 @@
       "detector": {
         "family": "rewrite_event",
         "record_kind": "rewrite",
-        "outcome": "A replacement effect replaces a permanent's move to the graveyard (a sacrificed permanent exiled instead): the action is performed in its modified form.",
-        "near_miss": "A move to the graveyard that a replacement effect was checked against and did not replace.",
+        "outcome": "A replacement effect modifies the move a cost's action makes (a creature sacrificed as a cost is exiled instead of put into the graveyard), and the cost still counts as paid.",
+        "near_miss": "A cost's move to a graveyard meets a replacement effect that does not replace it.",
         "params": {
           "event": "zone_change",
-          "to_zone": "graveyard"
+          "from_zone": "battlefield",
+          "to_zone": "graveyard",
+          "caused_with_empty_stack": true
         },
         "needs": []
       }

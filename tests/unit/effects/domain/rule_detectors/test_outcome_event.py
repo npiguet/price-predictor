@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from effects.domain.event_schema import Event, EventType
-from effects.domain.records import ResolutionPayload
+from effects.domain.records import CollectionMode, ResolutionPayload
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors.acting_line import acting_line, acting_root_params
 from effects.domain.rule_detectors.outcome_event import (
@@ -43,6 +43,42 @@ def test_the_same_resolution_edited_to_create_nothing_is_the_near_miss_of_its_ap
     found = FAMILY.match(edited, gen2_sidecars, {"event": "token_created", "api": api})
     assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
     assert FAMILY.match(edited, gen2_sidecars, {"event": "token_created"}) is None
+
+
+@pytest.mark.parametrize("hookless", [{"mode": CollectionMode.DEGRADED}])
+def test_a_hookless_record_without_a_hook_event_shows_no_side(by_kind, gen2_sidecars, hookless):
+    """V5 #15: a degraded worker hears no hook, so a missing ``token_created``
+    (an outcome-hook event) may have happened: neither the near miss nor an
+    ``absent`` declaration's ``fires`` side is read; the event present still fires."""
+    record = _token_maker(by_kind, gen2_sidecars)
+    api = acting_api(record, gen2_sidecars)
+    emptied = replace(record, payload=ResolutionPayload(events=tuple(
+        e for e in record.payload.events if e.type is not EventType.TOKEN_CREATED)))
+    assert emptied.mode is CollectionMode.PATCHED
+    for params in ({"event": "token_created", "api": api},
+                   {"event": "token_created", "api": api, "absent": True}):
+        assert FAMILY.match(emptied, gen2_sidecars, params) is not None
+        assert FAMILY.match(replace(emptied, **hookless), gen2_sidecars, params) is None
+    found = FAMILY.match(replace(record, **hookless), gen2_sidecars,
+                         {"event": "token_created", "api": api})
+    assert found.polarity is Polarity.FIRES
+    # A bus event's absence stays readable on a hookless record.
+    bus = FAMILY.match(replace(emptied, **hookless), gen2_sidecars,
+                       {"event": "zone_change", "api": api, "to_zone": "exile"})
+    assert bus is not None
+
+
+def test_a_forced_resolution_without_a_hook_event_is_a_near_miss(by_kind, gen2_sidecars):
+    """A patched worker's forced resolution hears the clause and outcome
+    hooks (``ForkHooks``), so its missing ``token_created`` did not happen,
+    as on a live record."""
+    record = _token_maker(by_kind, gen2_sidecars)
+    api = acting_api(record, gen2_sidecars)
+    kept = tuple(e for e in record.payload.events if e.type is not EventType.TOKEN_CREATED)
+    forced = replace(record, interventional=True, fork=True, link_id=None,
+                     payload=ResolutionPayload(events=kept))
+    found = FAMILY.match(forced, gen2_sidecars, {"event": "token_created", "api": api})
+    assert found is not None and found.polarity is Polarity.DOES_NOT_FIRE
 
 
 def test_another_api_shows_nothing(by_kind, gen2_sidecars):
@@ -82,9 +118,9 @@ class TestEventParameters:
 
     def test_a_parameter_the_event_does_not_carry_is_refused(self, gen2_records):
         with pytest.raises(ValueError, match="no parameter"):
-            FAMILY.match(gen2_records[0], None, {"event": "zone_change", "counter_type": "x"})
+            FAMILY.validate({"event": "zone_change", "counter_type": "x"})
         with pytest.raises(ValueError, match="no parameter"):
-            FAMILY.match(gen2_records[0], None, {"event": "zone_change", "cause": "E1"})
+            FAMILY.validate({"event": "zone_change", "cause": "E1"})
 
 
 class TestAbsent:
@@ -103,7 +139,7 @@ class TestAbsent:
 
     def test_absent_needs_an_api(self, gen2_records):
         with pytest.raises(ValueError, match="needs api"):
-            FAMILY.match(gen2_records[0], None, {"event": "token_created", "absent": True})
+            FAMILY.validate({"event": "token_created", "absent": True})
 
 
 class TestTokenKinds:
@@ -120,7 +156,7 @@ class TestTokenKinds:
 
     def test_token_kind_reads_token_created_only(self, gen2_records):
         with pytest.raises(ValueError, match="token_kind"):
-            FAMILY.match(gen2_records[0], None, {"event": "zone_change", "token_kind": "Food"})
+            FAMILY.validate({"event": "zone_change", "token_kind": "Food"})
 
     def test_an_ability_of_a_predefined_token_shows_by_its_source(self, gen2_records):
         record, kind = next(
@@ -213,7 +249,7 @@ class TestScriptParam:
     def test_a_malformed_parameter_is_refused(self, by_kind, gen2_sidecars):
         record, _, _, event = self._with_param(by_kind, gen2_sidecars)
         with pytest.raises(ValueError, match="script_param"):
-            FAMILY.match(record, gen2_sidecars, {"event": event, "script_param": ["a"]})
+            FAMILY.validate({"event": event, "script_param": ["a"]})
 
 
 def _in_combat(record, subject):
@@ -272,7 +308,7 @@ class TestQualifiers:
 
     def test_a_qualifier_and_absent_are_refused_together(self, gen2_records):
         with pytest.raises(ValueError, match="qualifier"):
-            FAMILY.match(gen2_records[0], None, {"event": "zone_change", "api": "Draw",
+            FAMILY.validate({"event": "zone_change", "api": "Draw",
                                                  "absent": True, "subject_is_token": True})
 
 
@@ -281,6 +317,12 @@ def test_a_combat_records_events_show_too(by_kind):
         e.type is EventType.DAMAGE_DEALT for e in r.payload.events))
     assert FAMILY.match(record, None, {"event": "damage_dealt"}).polarity is Polarity.FIRES
     assert FAMILY.match(record, None, {"event": "damage_dealt", "api": "DealDamage"}) is None
+    # The same combat played in a damage-step probe: its events show alike.
+    probe = replace(record, fork=True, mirror_of=record.record_id,
+                    payload=replace(record.payload, probed_keyword="trample",
+                                    probed_entity=record.payload.attackers[0]))
+    assert probe.is_probe
+    assert FAMILY.match(probe, None, {"event": "damage_dealt"}).polarity is Polarity.FIRES
 
 
 class TestT036Shapes:
@@ -308,7 +350,7 @@ class TestT036Shapes:
                         and event.params.get("from_zone") == "battlefield"
                         and len(record.payload.events) >= 2):
                     return record, event
-        pytest.skip("no effect half in the fixture moves its own source")
+        pytest.fail("no effect half in the fixture moves its own source")
 
     def test_a_move_of_the_source_itself_is_what_subject_is_source_reads(self, by_kind):
         record, event = self._self_move(by_kind)
@@ -331,7 +373,7 @@ class TestT036Shapes:
         declared["with_event"] = {**declared["with_event"], "to_zone": "nowhere"}
         assert FAMILY.match(record, None, declared).polarity is Polarity.DOES_NOT_FIRE
         with pytest.raises(ValueError, match="no parameter"):
-            FAMILY.match(record, None, {"event": other.type.value,
+            FAMILY.validate({"event": other.type.value,
                                         "with_event": {"event": "zone_change", "amount": 1}})
 
 

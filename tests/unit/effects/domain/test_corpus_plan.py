@@ -101,12 +101,24 @@ class TestLegalityCells:
 def test_a_held_out_game_the_cap_declined_is_dropped_never_validated():
     strata = GameStrata(
         card_disjoint=frozenset({"g1"}), game_disjoint=frozenset({"g2", "g3"}),
-        held_out=frozenset({"g1", "g3"}),
+        held_out=frozenset({"g1", "g3"}), surveyed=frozenset({"g1", "g2", "g3", "g4"}),
     )
     assert strata.stratum_of("g1") is Stratum.CARD_DISJOINT
     assert strata.stratum_of("g2") is Stratum.GAME_DISJOINT
     assert strata.stratum_of("g3") is Stratum.DROPPED_HELD_OUT
     assert strata.stratum_of("g4") is Stratum.TRAINING
+
+
+def test_a_game_the_survey_never_saw_is_dropped_never_trained():
+    """A game first read by the write pass (its shard grew between the
+    passes) was never placed: it may name a held-out card, so it trains
+    nowhere and is counted."""
+    strata = GameStrata(
+        card_disjoint=frozenset(), game_disjoint=frozenset(), held_out=frozenset(),
+        surveyed=frozenset({"g1"}),
+    )
+    assert strata.stratum_of("g1") is Stratum.TRAINING
+    assert strata.stratum_of("g2") is Stratum.DROPPED_UNSURVEYED
 
 
 def _keys(n: int) -> tuple[ProvenanceKey, ...]:
@@ -167,6 +179,33 @@ def test_the_selection_plan_is_pinned_level_by_level_and_in_order():
     assert [(klass, list(rows.items())) for klass, rows in plan.families.items()] == (
         PINNED_FAMILIES)
     assert (plan.targets, plan.shortfall, plan.available) == PINNED_TOTALS
+
+
+def test_each_text_s_planned_copies_are_what_its_records_are_written():
+    """``text_planned``, which the rule budgets' text cap counts, is the
+    natural copies the plans give every record of the text in the class,
+    over every cell: ``shock`` supplies two."""
+    supply = TrainingSupply(heap_cap=6)
+    records = []
+    value = 0
+    for cell, key, count in _SUPPLY:
+        for _ in range(count):
+            value = (value * 37 + 11) % 1000
+            keys = () if key is None else _keys(key)
+            supply.add(cell, keys, value)
+            records.append((cell, keys, value))
+    plan = plan_selection(
+        members_of(supply, _TEXTS), mix={EFFECT: 0.4, COMBAT: 0.2, LEGALITY: 0.3, REWRITE: 0.1},
+        ceiling=60, text_cap=6, reuse_cap=2,
+    )
+    written: dict[str, Counter] = {}
+    for cell, keys, value in records:
+        text = _TEXTS.get(keys)
+        copies = plan.copies(cell, keys, value)
+        if text is not None and copies:
+            written.setdefault(str(cell.klass), Counter())[text] += copies
+    assert plan.text_planned == {klass: dict(texts) for klass, texts in written.items()}
+    assert plan.text_planned[EFFECT]["shock"] == 8
 
 
 def _file(n: int) -> str:

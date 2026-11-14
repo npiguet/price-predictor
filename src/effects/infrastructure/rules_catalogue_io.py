@@ -24,6 +24,7 @@ from effects.domain.rule_catalogue import (
     NoDetector,
     Polarity,
     RuleMapEntry,
+    SameAs,
     Scenario,
     ScenarioCatalogue,
     ScenarioVariant,
@@ -35,11 +36,16 @@ from effects.domain.rule_catalogue import (
 DEFAULT_RULES_DIR = Path("rules")
 
 
-def _detector(data: Mapping[str, Any] | None) -> DetectorDeclaration | NoDetector | None:
+def _detector(data: Mapping[str, Any] | None
+              ) -> DetectorDeclaration | NoDetector | SameAs | None:
     if data is None:
         return None
     if "none" in data:
         return NoDetector(str(data["none"]))
+    if "same_as" in data:
+        named = data["same_as"]
+        return SameAs(tuple(named) if isinstance(named, list) else (str(named),),
+                      str(data.get("reason") or ""))
     return DetectorDeclaration.from_json(data)
 
 
@@ -79,21 +85,41 @@ def _scenario(unit: str, data: Mapping[str, Any]) -> Scenario:
 
 
 def load_scenarios(rules_dir: Path = DEFAULT_RULES_DIR) -> ScenarioCatalogue:
-    """Every scenario under ``rules_dir/scenarios``, in unit-file then file order."""
+    """Every scenario under ``rules_dir/scenarios``, in unit-file then file order.
+
+    Raises ValueError on a scenario id declared twice, naming both files:
+    tags, the review list and the budgets are keyed by it.
+    """
     scenarios: list[Scenario] = []
+    declared_in: dict[str, str] = {}
     for path in sorted(Path(rules_dir, "scenarios").glob("*.json")):
         doc = json.loads(path.read_text(encoding="utf-8"))
         unit = doc.get("unit") or path.stem
-        scenarios.extend(_scenario(unit, s) for s in doc.get("scenarios") or ())
+        for raw in doc.get("scenarios") or ():
+            scenario = _scenario(unit, raw)
+            if scenario.id in declared_in:
+                raise ValueError(
+                    f"scenario {scenario.id} is declared twice: in "
+                    f"{declared_in[scenario.id]} and in {path.name}")
+            declared_in[scenario.id] = path.name
+            scenarios.append(scenario)
     return ScenarioCatalogue(tuple(scenarios))
 
 
 def _heads_lines(rules_dir: Path) -> list[dict[str, Any]]:
+    """Every heads line; raises ValueError on a rule id given two lines."""
     lines: list[dict[str, Any]] = []
+    seen: dict[str, str] = {}
     for path in sorted(Path(rules_dir, "heads").glob("*.jsonl")):
         for text in path.read_text(encoding="utf-8").splitlines():
             if text.strip():
-                lines.append(json.loads(text))
+                line = json.loads(text)
+                rule = line.get("id")
+                if rule in seen:
+                    raise ValueError(
+                        f"rule {rule} has a heads line twice: in {seen[rule]} and in {path.name}")
+                seen[rule] = path.name
+                lines.append(line)
     return lines
 
 

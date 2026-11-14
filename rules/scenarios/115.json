@@ -364,15 +364,7 @@
       ],
       "forge_notes": "In the second variant the stack object is placed on the stack in setup as {\"card\": \"Lightning Bolt\", \"controller\": \"A\", \"targets\": [\"Grizzly Bears\"]}.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A candidate that targets spells has no legal target when no other spell is on the stack: a spell is never a legal target for itself.",
-        "near_miss": "A spell-targeting candidate has a legal target: another spell is on the stack.",
-        "params": {
-          "bit": "has_legal_target",
-          "fires_when": false
-        },
-        "needs": []
+        "none": "Could not express: why no target is legal (the spell itself, a card off the battlefield, one object named twice) is read by no verdict_bit filter."
       }
     },
     {
@@ -546,15 +538,7 @@
       ],
       "forge_notes": "In the already-target variant Llanowar Elves stays on B's battlefield as in the base setup.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A change-targets ability resolves and the targets of the spell it acts on differ afterwards.",
-        "near_miss": "A change-targets ability resolves and the spell keeps the targets it had.",
-        "params": {
-          "event": "targets_changed",
-          "api": "ChangeTargets"
-        },
-        "needs": []
+        "none": "Could not express: targets_changed records the targets after the change; which instruction allowed it (one target, any, new targets), a swap, a division kept or a mode's targets is compared by no parameter."
       }
     },
     {
@@ -641,15 +625,7 @@
       ],
       "forge_notes": "Toils of Night and Day is an Arcane instant, the only kind of spell Sideswipe can target.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A change-targets ability resolves and the targets of the spell it acts on differ afterwards.",
-        "near_miss": "A change-targets ability resolves and the spell keeps the targets it had.",
-        "params": {
-          "event": "targets_changed",
-          "api": "ChangeTargets"
-        },
-        "needs": []
+        "none": "Could not express: targets_changed records the targets after the change; which instruction allowed it (one target, any, new targets), a swap, a division kept or a mode's targets is compared by no parameter."
       }
     },
     {
@@ -731,15 +707,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A change-targets ability resolves and the targets of the spell it acts on differ afterwards.",
-        "near_miss": "A change-targets ability resolves and the spell keeps the targets it had.",
-        "params": {
-          "event": "targets_changed",
-          "api": "ChangeTargets"
-        },
-        "needs": []
+        "none": "Could not express: targets_changed records the targets after the change; which instruction allowed it (one target, any, new targets), a swap, a division kept or a mode's targets is compared by no parameter."
       }
     },
     {
@@ -814,15 +782,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A change-targets ability resolves and the targets of the spell it acts on differ afterwards.",
-        "near_miss": "A change-targets ability resolves and the spell keeps the targets it had.",
-        "params": {
-          "event": "targets_changed",
-          "api": "ChangeTargets"
-        },
-        "needs": []
+        "none": "Could not express: targets_changed records the targets after the change; which instruction allowed it (one target, any, new targets), a swap, a division kept or a mode's targets is compared by no parameter."
       }
     },
     {
@@ -907,15 +867,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A change-targets ability resolves and the targets of the spell it acts on differ afterwards.",
-        "near_miss": "A change-targets ability resolves and the spell keeps the targets it had.",
-        "params": {
-          "event": "targets_changed",
-          "api": "ChangeTargets"
-        },
-        "needs": []
+        "none": "Could not express: targets_changed records the targets after the change; which instruction allowed it (one target, any, new targets), a swap, a division kept or a mode's targets is compared by no parameter."
       }
     },
     {
@@ -996,15 +948,7 @@
       ],
       "forge_notes": "Rakdos Charm's chosen Smash mode targets Artifact; its Exile mode targets Player.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A change-targets ability resolves and the targets of the spell it acts on differ afterwards.",
-        "near_miss": "A change-targets ability resolves and the spell keeps the targets it had.",
-        "params": {
-          "event": "targets_changed",
-          "api": "ChangeTargets"
-        },
-        "needs": []
+        "none": "Could not express: targets_changed records the targets after the change; which instruction allowed it (one target, any, new targets), a swap, a division kept or a mode's targets is compared by no parameter."
       }
     },
     {

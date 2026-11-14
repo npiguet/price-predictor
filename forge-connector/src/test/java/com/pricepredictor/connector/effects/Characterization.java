@@ -117,6 +117,12 @@ final class Characterization {
         try {
             if (Boolean.getBoolean(UPDATE_PROPERTY)) {
                 Files.createDirectories(DIR);
+                if (Files.exists(path)) {
+                    String before = Files.readString(path, StandardCharsets.UTF_8);
+                    if (!before.equals(actual)) {
+                        System.out.println(changedMembers(name, before, actual));
+                    }
+                }
                 Files.writeString(path, actual, StandardCharsets.UTF_8);
             }
             if (!Files.exists(path)) {
@@ -129,6 +135,135 @@ final class Characterization {
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
+        }
+    }
+
+    /**
+     * The gzip members of a shard's bytes, each decompressed to its text: the
+     * blocks the writer flushed, in order. A cut member throws.
+     */
+    static List<String> gzipMembers(byte[] shard) {
+        List<String> members = new java.util.ArrayList<>();
+        int at = 0;
+        while (at < shard.length) {
+            // RecordShardWriter's members carry java.util.zip's fixed ten-byte
+            // header (no name, no extra field) and an eight-byte trailer.
+            if (shard.length - at < 18 || (shard[at] & 0xff) != 0x1f || (shard[at + 1] & 0xff) != 0x8b
+                    || shard[at + 3] != 0) {
+                fail("no plain gzip member header at offset " + at);
+            }
+            java.util.zip.Inflater inflater = new java.util.zip.Inflater(true);
+            inflater.setInput(shard, at + 10, shard.length - at - 10);
+            java.io.ByteArrayOutputStream text = new java.io.ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            try {
+                while (!inflater.finished()) {
+                    int n = inflater.inflate(buffer);
+                    if (n == 0 && (inflater.needsInput() || inflater.needsDictionary())) {
+                        fail("a cut gzip member at offset " + at);
+                    }
+                    text.write(buffer, 0, n);
+                }
+            } catch (java.util.zip.DataFormatException e) {
+                fail("a corrupt gzip member at offset " + at + ": " + e.getMessage());
+            }
+            at = shard.length - inflater.getRemaining() + 8;
+            inflater.end();
+            members.add(text.toString(StandardCharsets.UTF_8));
+        }
+        return members;
+    }
+
+    /**
+     * A whole shard against two expected files: {@code <name>.txt}, each
+     * member's records with their timestamps fixed under a {@code # member
+     * <n>} line, compared byte for byte (the reviewable one); and
+     * {@code <name>.jsonl.gz}, the same members gzipped one member a block as
+     * {@link RecordShardWriter} writes them, for readers of the real format
+     * (Python's shard reader), checked to hold exactly those members.
+     */
+    static void assertShardMatches(String name, List<String> members) {
+        List<String> fixed = new java.util.ArrayList<>();
+        StringBuilder text = new StringBuilder();
+        for (int i = 0; i < members.size(); i++) {
+            String member = recordLines(members.get(i).lines().toList());
+            fixed.add(member);
+            text.append("# member ").append(i + 1).append('\n').append(member);
+        }
+        assertMatches(name + ".txt", text.toString());
+        Path gzip = DIR.resolve(name + ".jsonl.gz");
+        try {
+            if (Boolean.getBoolean(UPDATE_PROPERTY)) {
+                java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+                for (String member : fixed) {
+                    try (java.util.zip.GZIPOutputStream out =
+                                 new java.util.zip.GZIPOutputStream(bytes)) {
+                        out.write(member.getBytes(StandardCharsets.UTF_8));
+                    }
+                }
+                Files.write(gzip, bytes.toByteArray());
+            }
+            if (!Files.exists(gzip)) {
+                fail("no expected file " + gzip.toAbsolutePath()
+                        + "; run with -D" + UPDATE_PROPERTY + "=true to capture it");
+            }
+            List<String> expected = gzipMembers(Files.readAllBytes(gzip));
+            if (!expected.equals(fixed)) {
+                fail(name + ".jsonl.gz holds other members than the shard written: "
+                        + describeMismatch(name, String.join("# member\n", expected),
+                        String.join("# member\n", fixed)));
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /**
+     * What a regeneration changed, member by member: for each line that
+     * differs, the JSON paths whose values differ (a line that is no JSON
+     * object is named whole), so a rewritten expected file can be reviewed
+     * without reading 20 KB lines side by side.
+     */
+    static String changedMembers(String name, String before, String after) {
+        List<String> old = before.lines().toList();
+        List<String> now = after.lines().toList();
+        StringBuilder report = new StringBuilder("characterization: " + name + " rewritten, "
+                + old.size() + " -> " + now.size() + " lines");
+        for (int i = 0; i < Math.max(old.size(), now.size()); i++) {
+            String was = i < old.size() ? old.get(i) : null;
+            String is = i < now.size() ? now.get(i) : null;
+            if (java.util.Objects.equals(was, is)) {
+                continue;
+            }
+            List<String> paths = new java.util.ArrayList<>();
+            try {
+                diffPaths("", was == null ? null : RecordLines.parse(was),
+                        is == null ? null : RecordLines.parse(is), paths);
+            } catch (AssertionError notJson) {
+                paths.add("<whole line>");
+            }
+            report.append("\n  line ").append(i + 1).append(": ").append(String.join(", ", paths));
+        }
+        return report.toString();
+    }
+
+    private static void diffPaths(String at, Object was, Object is, List<String> paths) {
+        if (java.util.Objects.equals(was, is)) {
+            return;
+        }
+        if (was instanceof java.util.Map<?, ?> a && is instanceof java.util.Map<?, ?> b) {
+            java.util.Set<Object> keys = new java.util.LinkedHashSet<>(a.keySet());
+            keys.addAll(b.keySet());
+            for (Object key : keys) {
+                diffPaths(at.isEmpty() ? String.valueOf(key) : at + "." + key,
+                        a.get(key), b.get(key), paths);
+            }
+        } else if (was instanceof List<?> a && is instanceof List<?> b && a.size() == b.size()) {
+            for (int i = 0; i < a.size(); i++) {
+                diffPaths(at + "[" + i + "]", a.get(i), b.get(i), paths);
+            }
+        } else {
+            paths.add(at.isEmpty() ? "<record>" : at);
         }
     }
 

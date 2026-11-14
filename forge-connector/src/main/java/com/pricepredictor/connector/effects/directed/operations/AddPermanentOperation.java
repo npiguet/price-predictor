@@ -29,7 +29,9 @@ import java.util.Objects;
  * @param controller the fork's player whose battlefield it is put on
  * @param tapped     whether it is tapped
  * @param sick       whether it is summoning-sick (came under its controller's
- *                   control this turn)
+ *                   control this turn); one that is not has been on the
+ *                   battlefield, under that controller, since before this
+ *                   turn, so it did not enter this turn either
  * @param counters   the counters it has, by kind; empty for none
  */
 public record AddPermanentOperation(
@@ -59,6 +61,10 @@ public record AddPermanentOperation(
         put(fork, card, controller, null);
         card.setTapped(tapped);
         card.setSickness(sick);
+        if (!sick) {
+            // Here since an earlier turn: it did not enter this one.
+            card.setTurnInZone(Math.max(0, fork.getPhaseHandler().getTurn() - 1));
+        }
         Multiset<CounterType> table = HashMultiset.create();
         counters.forEach(table::setCount);
         card.setCounters(table);

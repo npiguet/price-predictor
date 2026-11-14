@@ -9,7 +9,11 @@ import pytest
 from effects.domain.records import RewriteResult
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors.acting_line import acting_line
-from effects.domain.rule_detectors.rewrite_event import FAMILY, is_prevention_line
+from effects.domain.rule_detectors.rewrite_event import (
+    FAMILY,
+    caused_with_empty_stack,
+    is_prevention_line,
+)
 
 
 def _entering(by_kind):
@@ -50,7 +54,7 @@ def test_the_mode_and_any_incoming_parameter_narrow_the_event(by_kind):
         assert found.polarity is Polarity.FIRES, declared
     assert FAMILY.match(record, None, {"event": "zone_change", "mode": "BeginPhase"}) is None
     with pytest.raises(ValueError, match="no parameter"):
-        FAMILY.match(record, None, {"event": "zone_change", "counter_type": "P1P1"})
+        FAMILY.validate({"event": "zone_change", "counter_type": "P1P1"})
 
 
 def test_a_result_list_names_every_fires_result(by_kind):
@@ -161,3 +165,74 @@ class TestSubjectQualifiers:
         assert FAMILY.match(merged, None, declared).polarity is Polarity.FIRES
         assert FAMILY.needs(declared) == {"links"}
         assert FAMILY.needs(self._declared(record)) == frozenset()
+
+
+def test_a_record_whose_incoming_event_is_unknown_shows_no_side(by_kind):
+    """WP7: ``incoming`` then holds the event as it left; what came in, and
+    whether the replacement edited it, are unknown, so no side is read."""
+    record = _entering(by_kind)
+    params = {"event": "zone_change", "result": "updated"}
+    assert FAMILY.match(record, None, params) is not None
+    unknown = replace(record, payload=replace(record.payload, incoming_unknown=True,
+                                              outgoing=None))
+    assert FAMILY.match(unknown, None, params) is None
+
+
+class TestPaidAsCost:
+    """118.11 (WP6): ``caused_with_empty_stack`` reads an incoming event naming a cause
+    while the stack is empty. Forge pays an activated ability's costs before
+    it puts the ability on the stack, so a cost paid then is read; so is any
+    other event a cause made off the stack, and a cost paid while the stack
+    held something is on neither side."""
+
+    PARAMS = {"event": "zone_change", "from_zone": "battlefield", "to_zone": "graveyard",
+              "caused_with_empty_stack": True}
+
+    @staticmethod
+    def _sacrificed(by_kind, *, cause="E2", stack_size=0, result=RewriteResult.REPLACED):
+        record = next(r for r in by_kind("rewrite")
+                      if r.payload.incoming.type.value == "zone_change")
+        incoming = replace(record.payload.incoming, params={
+            "mode": "Moved", "from_zone": "battlefield", "to_zone": "graveyard",
+            **({"cause": cause} if cause else {})})
+        state = replace(record.state, global_=replace(record.state.global_,
+                                                      stack_size=stack_size))
+        return replace(record, state=state, payload=replace(
+            record.payload, incoming=incoming, outgoing=None, result=result))
+
+    def test_a_cost_s_move_a_replacement_changed_fires(self, by_kind):
+        found = FAMILY.match(self._sacrificed(by_kind), None, self.PARAMS)
+        assert found.polarity is Polarity.FIRES and found.observed
+
+    def test_a_cost_s_move_left_alone_is_the_near_miss(self, by_kind):
+        record = self._sacrificed(by_kind, result=RewriteResult.NOT_REPLACED)
+        assert FAMILY.match(record, None, self.PARAMS).polarity is Polarity.DOES_NOT_FIRE
+
+    def test_a_move_while_the_stack_holds_something_shows_no_side(self, by_kind):
+        assert FAMILY.match(self._sacrificed(by_kind, stack_size=1), None, self.PARAMS) is None
+
+    def test_a_move_nothing_caused_shows_no_side(self, by_kind):
+        """A state-based death names no cause."""
+        assert FAMILY.match(self._sacrificed(by_kind, cause=None), None, self.PARAMS) is None
+        declared = {key: value for key, value in self.PARAMS.items()
+                    if key != "caused_with_empty_stack"}
+        assert FAMILY.match(self._sacrificed(by_kind, cause=None), None, declared) is not None
+
+    def test_any_event_a_cause_made_off_the_stack_is_read_not_a_cost_s_alone(self, by_kind):
+        """A land played names its cause with the stack empty, as a cost's
+        move does: the parameter reads it, and only the zones keep it out."""
+        record = self._sacrificed(by_kind)
+        land = replace(record, payload=replace(record.payload, incoming=replace(
+            record.payload.incoming, params={"mode": "Moved", "from_zone": "hand",
+                                             "to_zone": "battlefield", "cause": "E2"})))
+        assert caused_with_empty_stack(land, land.payload.incoming)
+        assert FAMILY.match(land, None, self.PARAMS) is None
+        assert FAMILY.match(land, None, {"event": "zone_change",
+                                         "caused_with_empty_stack": True}) is not None
+
+    def test_it_is_declared_true_or_left_out(self):
+        FAMILY.validate(self.PARAMS)
+        with pytest.raises(ValueError, match="caused_with_empty_stack"):
+            FAMILY.validate({**self.PARAMS, "caused_with_empty_stack": False})
+        with pytest.raises(ValueError, match="boolean"):
+            FAMILY.validate({**self.PARAMS, "caused_with_empty_stack": "yes"})

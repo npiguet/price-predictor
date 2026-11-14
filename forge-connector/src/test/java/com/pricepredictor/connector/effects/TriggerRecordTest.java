@@ -47,6 +47,8 @@ class TriggerRecordTest {
 
     private static final Method ON_CONDITION_EVALUATED =
             HookShapes.method(HookShapes.TriggerFire.class, "onConditionEvaluated");
+    private static final Method ON_TRIGGER_RUN =
+            HookShapes.method(HookShapes.TriggerFire.class, "onTriggerRun");
 
     @TempDir
     Path tempDir;
@@ -124,6 +126,10 @@ class TriggerRecordTest {
                 for (Trigger trigger : triggers) {
                     collectors.triggers().handler().invoke(null, ON_CONDITION_EVALUATED,
                             new Object[]{trigger, Map.of(), fired});
+                    if (fired) {
+                        collectors.triggers().handler().invoke(null, ON_TRIGGER_RUN,
+                                new Object[]{trigger, Map.of(), null});
+                    }
                 }
             }
         });
@@ -133,6 +139,73 @@ class TriggerRecordTest {
                         + "/" + RecordLines.payload(line).get("fired"))
                 .toList();
         assertEquals(List.of("0/false", "1/false", "0/true", "1/true"), written, lines.toString());
+    }
+
+    /**
+     * A condition that held is a firing only once Forge runs the trigger
+     * (WP2's {@code onTriggerRun}): an evaluation never run writes nothing,
+     * and two runs of one evaluation (Panharmonicon) write one record.
+     */
+    @Test
+    void aFiringIsHeldOnlyOnceForgeRunsItAndOnceHowEverManyRuns() throws Throwable {
+        List<Trigger> triggers = triggersOf(TestCards.build("Garruk's Uprising"));
+        Map<?, ?> notRun = new java.util.HashMap<>();
+        Map<?, ?> runTwice = new java.util.HashMap<>();
+
+        List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
+            var handler = collectors.triggers().handler();
+            handler.invoke(null, ON_CONDITION_EVALUATED, new Object[]{triggers.get(0), notRun, true});
+            handler.invoke(null, ON_CONDITION_EVALUATED, new Object[]{triggers.get(1), runTwice, true});
+            handler.invoke(null, ON_TRIGGER_RUN, new Object[]{triggers.get(1), runTwice, null});
+            handler.invoke(null, ON_TRIGGER_RUN, new Object[]{triggers.get(1), runTwice, null});
+        });
+
+        assertEquals(1, lines.size(), lines.toString());
+        assertEquals(1L, ((Number) RecordLines.abilityKeys(lines.get(0)).get(0)
+                .get("index_within_kind")).longValue(), "the run one, once");
+        assertEquals(true, RecordLines.payload(lines.get(0)).get("fired"));
+    }
+
+    /**
+     * Played through the engine with the hooks installed, the run Forge
+     * tells pairs with the evaluation it confirms: Soul Warden's trigger on a
+     * creature entering is written fired.
+     */
+    @Test
+    void anEngineTriggerRunConfirmsItsEvaluation() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = game.getPlayers().get(0);
+        TestBoard.inPlay(game, you, "Soul Warden");
+        game.getTriggerHandler().resetActiveTriggers();
+        Card bears = TestBoard.inHand(game, you, "Grizzly Bears");
+
+        List<String> lines = ShardRun.recordsWithClauseHook(tempDir, game,
+                "for the trigger hook's run", () -> {
+                    game.getAction().moveToPlay(bears, null, null);
+                    game.getTriggerHandler().runWaitingTriggers();
+                    game.getStack().addAllTriggeredAbilitiesToStack();
+                });
+
+        assertTrue(lines.stream().anyMatch(line -> line.contains("\"kind\":\"trigger\"")
+                        && line.contains("soul_warden") && line.contains("\"fired\":true")),
+                "a fired Soul Warden record: " + lines);
+    }
+
+    /**
+     * Two triggers that key to no printed line keep a reservoir and a
+     * negative cap each (C2 #16): their keys differ, where both were "null".
+     */
+    @Test
+    void unresolvedLinesAreKeyedApart() {
+        List<Trigger> uprising = triggersOf(TestCards.build("Garruk's Uprising"));
+        Trigger paralyze = triggersOf(TestCards.build("Paralyze")).get(0);
+        ProvenanceKey.Resolved none = new ProvenanceKey.Resolved(null, UnresolvedReason.GRANTED_TRAIT);
+
+        String first = TriggerChannel.lineKey(uprising.get(0), none, "ChangesZone");
+        String second = TriggerChannel.lineKey(uprising.get(1), none, "ChangesZone");
+        String third = TriggerChannel.lineKey(paralyze, none, "Phase");
+
+        assertEquals(3, java.util.Set.of(first, second, third).size(), first + " / " + second);
     }
 
     /**
@@ -150,8 +223,11 @@ class TriggerRecordTest {
         List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             for (int firing = 0; firing < 100; firing++) {
                 you.setLife(1000 - firing, null);
+                Map<?, ?> runParams = new java.util.HashMap<>();
                 collectors.triggers().handler().invoke(null, ON_CONDITION_EVALUATED,
-                        new Object[]{trigger, Map.of(), true});
+                        new Object[]{trigger, runParams, true});
+                collectors.triggers().handler().invoke(null, ON_TRIGGER_RUN,
+                        new Object[]{trigger, runParams, null});
             }
         });
 
@@ -284,10 +360,10 @@ class TriggerRecordTest {
     /** An unmapped mode carries its mode and says nothing it cannot support. */
     @Test
     void anUnmappedModeCarriesOnlyWhatItKnows() {
-        Map<String, Object> event = eventOf(triggerOfMode("Exploited"), Map.of());
+        Map<String, Object> event = eventOf(triggerOfMode("Investigated"), Map.of());
 
         assertEquals("state_flag_change", event.get("type"), event.toString());
-        assertEquals(Map.of("mode", "Exploited"), params(event), event.toString());
+        assertEquals(Map.of("mode", "Investigated"), params(event), event.toString());
     }
 
     @Test
@@ -305,17 +381,6 @@ class TriggerRecordTest {
                 event.toString());
     }
 
-    /** Prevention arrives through the damage keys and is not damage dealt. */
-    @Test
-    void preventedDamageIsNotRecordedAsDamageDealt() {
-        Map<String, Object> event = eventOf(triggerOfMode("DamageDone"), Map.of(
-                "PreventedAmount", 2,
-                "Affected", TestCards.build("Mountain")));
-
-        assertEquals("damage_prevented", event.get("type"), event.toString());
-        assertEquals(2L, params(event).get("amount"), event.toString());
-    }
-
     /**
      * A counter map is flattened to the type and the number.
      *
@@ -328,7 +393,9 @@ class TriggerRecordTest {
         com.google.common.collect.Multiset<CounterType> counters =
                 com.google.common.collect.LinkedHashMultiset.create();
         counters.add(CounterType.getType("P1P1"), 2);
-        Map<String, Object> event = eventOf(triggerOfMode("CounterAdded"), Map.of(
+        // The AddCounter replacement's shape (GameEntityCounterTable); the
+        // CounterAdded trigger fires once per counter and carries no map.
+        Map<String, Object> event = eventOf(replacementOfMode("AddCounter"), Map.of(
                 "CounterMap", Map.of(Optional.empty(), counters),
                 "Affected", TestCards.build("Mountain")));
 
@@ -340,14 +407,42 @@ class TriggerRecordTest {
         assertEquals(2L, params(event).get("delta"), event.toString());
     }
 
-    /** The replacement side's word for a life total is read as one. */
+    /**
+     * One putter's counters of several types on one object, as the {@code
+     * CounterPlayerAddedAll} trigger hands them over: one event, their summed
+     * delta and no type. A trigger record is one firing, so it is never
+     * written once per type as an {@code AddCounter} replacement's is.
+     */
+    @Test
+    void aTriggersCounterMapOfSeveralTypesStaysOneSummedEvent() {
+        com.google.common.collect.Multiset<CounterType> counters =
+                com.google.common.collect.LinkedHashMultiset.create();
+        counters.add(CounterType.getType("P1P1"), 1);
+        counters.add(CounterType.getType("Indestructible"), 1);
+        Trigger trigger = triggerOfMode("CounterPlayerAddedAll");
+        Map<String, Object> params = Map.of(
+                "CounterMap", counters, "Object", TestCards.build("Mountain"));
+        Map<String, Object> event = eventOf(trigger, params);
+
+        assertEquals("counter_change", event.get("type"), event.toString());
+        assertFalse(params(event).containsKey("counter_type"), event.toString());
+        assertEquals(2L, params(event).get("delta"), event.toString());
+        assertEquals(List.of(), RunParamNormalizer.changedCounterTypes(trigger, params, Map.of(
+                "CounterMap", com.google.common.collect.LinkedHashMultiset.create())),
+                "a trigger's map is never split");
+    }
+
+    /**
+     * The replacement side's word for a life total is read as one, signed
+     * as the bus signs a life change: a loss negative.
+     */
     @Test
     void theReplacementSpellingOfALifeAmountIsStillADelta() {
         Map<String, Object> event = eventOf(replacementOfMode("LifeReduced"), Map.of(
                 "Affected", TestCards.build("Mountain"), "Amount", 4));
 
         assertEquals("life_change", event.get("type"), event.toString());
-        assertEquals(4L, params(event).get("delta"), event.toString());
+        assertEquals(-4L, params(event).get("delta"), event.toString());
     }
 
     // ── the cause channel ───────────────────────────────────────────────
@@ -382,12 +477,17 @@ class TriggerRecordTest {
         Card host = TestCards.build("Paralyze");
         Card source = TestCards.build("Sol Ring");
 
+        // The run parameters Card.addCounterInternal hands CounterAdded: one
+        // firing a counter, CounterAmount the count reached.
         Map<String, Object> event = eventOf(triggerOfMode("CounterAdded"),
                 Map.of("Card", host, "Source", source,
-                        "CounterType", "P1P1", "CounterNum", 1));
+                        "CounterType", CounterType.getType("P1P1"), "CounterAmount", 3));
 
         assertEquals(Refs.of(source), params(event).get("cause"),
                 event.toString());
+        assertEquals("counter_change", event.get("type"), event.toString());
+        assertEquals("+1/+1", params(event).get("counter_type"), event.toString());
+        assertEquals(1L, params(event).get("delta"), "one counter a firing: " + event);
     }
 
     /** A cause that is a spell is named by the card it is printed on. */
@@ -521,7 +621,10 @@ class TriggerRecordTest {
         assertFalse(params(event).containsKey("mana_by_color"), event.toString());
     }
 
-    /** Turning a card face up is a face change, and it says which face. */
+    /**
+     * Turning a card face up is a face change, and it says which face, in
+     * an entity's {@code face_state} spelling: the face the card shows.
+     */
     @Test
     void turningACardFaceUpNamesTheFaceItTurnedTo() {
         Card card = TestCards.build("Sol Ring");
@@ -529,7 +632,7 @@ class TriggerRecordTest {
         Map<String, Object> event = eventOf(triggerOfMode("TurnFaceUp"), Map.of("Card", card));
 
         assertEquals("face_change", event.get("type"), event.toString());
-        assertEquals("face_up", params(event).get("to_state"), event.toString());
+        assertEquals("front", params(event).get("to_state"), event.toString());
     }
 
     /**

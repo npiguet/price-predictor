@@ -105,6 +105,22 @@ class RecordShardWriterTest {
     }
 
     @Test
+    void aGameEndWritesTheBlockInFlight() throws IOException {
+        // A kill early in the next game, which runs no shutdown hook, would
+        // otherwise lose the finished game's last records and its marker.
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        writer.write("{\"game_id\":\"run.0-l1.0\",\"a\":1}");
+        writer.writeUncapped("{\"game_id\":\"run.0-l1.0\",\"marker\":true}");
+
+        writer.endGame("run.0-l1.0");
+
+        assertEquals(2, ShardRun.readShard(writer.path()).size());
+        writer.endGame("run.0-l1.1");
+        writer.close();
+        assertEquals(2, ShardRun.readShard(writer.path()).size(), "an empty block adds no member");
+    }
+
+    @Test
     void aWriterThatWritesNothingCreatesNoFile() {
         // Many collector tests read "no shard on disk" as "nothing was
         // recorded"; that reading holds only while the file is created by the

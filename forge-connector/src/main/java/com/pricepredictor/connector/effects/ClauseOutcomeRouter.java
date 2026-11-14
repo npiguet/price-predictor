@@ -24,8 +24,9 @@ import java.util.function.Function;
  * mode begins; the outcome hook carries what an effect computed and would
  * otherwise discard — a coin flip, a vote, a token made. Both file through
  * {@link BusBracketCollector#recordClauseEvent}, because only the bracket
- * collector of this same game knows which resolution is open, and both drop
- * what a fork's resolution reports on the same JVM-static hooks.
+ * collector of this same game knows which resolution is open, and both hand
+ * what a fork reports on the same JVM-static hooks to the forced resolution
+ * or probe running on their thread ({@link Forks#forkHooks}), if any.
  */
 final class ClauseOutcomeRouter {
 
@@ -135,6 +136,15 @@ final class ClauseOutcomeRouter {
                 : observations.pop();
         if (!live.owns(clause)) {
             Forks.forkHooks().clauseResolved(clause, run);
+            // The clause's events too, as the live bracket files them: built
+            // only for a fork listening, which a fork played on is not (its
+            // own recording's router files them).
+            if ((run == null || "RAN".equals(run)) && Forks.forkHooksListening()) {
+                EffectEvent event = observed.finish();
+                if (event != null) {
+                    Forks.forkHooks().clauseEvent(clause, event);
+                }
+            }
             return;
         }
         FloatingEffects.of(live.game()).clauseResolved(live.game(), clause);
@@ -221,9 +231,15 @@ final class ClauseOutcomeRouter {
      *
      * <p>The event's subjects are exactly what the effect names under
      * {@code "subjects"}, and an outcome that names none has none. The acting
-     * ability's host is never a default: a coin flip or a token made is not
-     * something done to the card whose ability did it, and Detain's host is
-     * the spell that cast the restriction, not one of the cards it landed on.
+     * ability's host is never a default: a token made is not something done
+     * to the card whose ability did it, and Detain's host is the spell that
+     * cast the restriction, not one of the cards it landed on. A coin flip
+     * names the player who flipped, as dice name their roller.
+     *
+     * <p>Filed as any event is ({@link BusBracketCollector#recordClauseEvent}):
+     * a coin a cost flips (cumulative upkeep's {@code CostFlipCoin}) is the
+     * resolution's that asks for it while it resolves, and otherwise the
+     * payment's, which reaches no record and is counted as dropped.
      * Which params entries are not generic parameters is
      * {@link #outcomeEvent}'s to say.
      *
@@ -255,13 +271,17 @@ final class ClauseOutcomeRouter {
                     : live.ownsNullAbilityOutcome();
             if (liveGame) {
                 bracket.recordClauseEvent(event);
+            } else {
+                // A forced resolution's or a probe's, which hears it through
+                // the fork hooks; nobody's when no such fork is listening.
+                Forks.forkHooks().outcome(ability, event);
             }
         });
     }
 
     /**
      * The event an outcome's params describe: every entry a generic
-     * parameter, except three.
+     * parameter, except five.
      *
      * <ul>
      *   <li>{@code "subjects"}, carrying the raw Card/Player list of who the
@@ -278,6 +298,11 @@ final class ClauseOutcomeRouter {
      *   and the trigger-derived {@code damage_prevented}) renders one, and a
      *   display name here would silently fail a join against those refs and
      *   collide two sources sharing a name.
+     *   <li>{@code "from_zone"} ({@code card_revealed}) and {@code "to_zone"}
+     *   ({@code card_made}), Forge's {@code ZoneType} names, are spelled as
+     *   every other zone of a record is ({@link CardSpelling#zoneName}),
+     *   lower-cased; the placeholder Forge writes for no zone ({@code "?"},
+     *   {@code "null"}) writes no parameter.
      *   <li>{@code "sample"} ({@code token_created} only), one token standing
      *   for its batch, becomes {@code token_script_id} and
      *   {@code characteristics}, rendered by {@link SnapshotBuilder}'s own
@@ -288,22 +313,59 @@ final class ClauseOutcomeRouter {
      */
     private static EffectEvent outcomeEvent(EventType type, Map<?, ?> params) {
         EffectEvent event = new EffectEvent(type);
-        for (Map.Entry<?, ?> entry : params.entrySet()) {
-            String key = String.valueOf(entry.getKey());
+        // In key order: Forge builds most outcomes' params with Map.of, whose
+        // iteration order changes from one JVM to the next, and the event's
+        // parameters are written in the order they are put.
+        Map<String, Object> ordered = new TreeMap<>();
+        params.forEach((key, value) -> ordered.put(String.valueOf(key), value));
+        for (Map.Entry<String, Object> entry : ordered.entrySet()) {
+            String key = entry.getKey();
             Object value = entry.getValue();
             switch (key) {
                 case "subjects" -> addOutcomeSubjects(event, value);
                 case "source" -> event.param("source", outcomeRefOf(value));
+                case "from_zone", "to_zone" -> event.param(key, outcomeZoneOf(value));
                 case "sample" -> {
                     if (value instanceof Card token) {
                         event.param("token_script_id", CardSpelling.tokenScriptIdOf(token));
                         event.param("characteristics", tokenCharacteristics(token));
                     }
                 }
-                default -> event.param(key, value);
+                default -> event.param(key, inKeyOrder(value));
             }
         }
         return event;
+    }
+
+    /**
+     * {@code value} with every map inside it in key order and every set in
+     * the order of its members' spelling, lists kept as they are: a nested
+     * map Forge built with {@code Map.of} (a die's {@code natural} and
+     * {@code final}) iterates in an order that changes from one JVM to the
+     * next, and is written in the order it iterates.
+     */
+    static Object inKeyOrder(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> ordered = new TreeMap<>();
+            map.forEach((key, member) -> ordered.put(String.valueOf(key), inKeyOrder(member)));
+            return ordered;
+        }
+        if (value instanceof java.util.Set<?> set) {
+            java.util.List<Object> members = new java.util.ArrayList<>();
+            for (Object member : set) {
+                members.add(inKeyOrder(member));
+            }
+            members.sort(java.util.Comparator.comparing(String::valueOf));
+            return members;
+        }
+        if (value instanceof java.util.List<?> list) {
+            java.util.List<Object> members = new java.util.ArrayList<>(list.size());
+            for (Object member : list) {
+                members.add(inKeyOrder(member));
+            }
+            return members;
+        }
+        return value;
     }
 
     /**
@@ -343,6 +405,14 @@ final class ClauseOutcomeRouter {
         }
         traits.put("counters", counters);
         return traits;
+    }
+
+    /** A zone an outcome names, as a record spells it, or null for none. */
+    private static String outcomeZoneOf(Object value) {
+        if (value instanceof String named && ("?".equals(named) || "null".equals(named))) {
+            return null;
+        }
+        return CardSpelling.zoneName(value);
     }
 
     /**

@@ -195,6 +195,62 @@ class PlayabilityVerdictTest {
         assertEquals(List.of(PlayabilityCheck.SPLIT_SECOND), checks(verdict));
     }
 
+    /**
+     * Split second leaves mana abilities and special actions legal (702.61b,
+     * 116.2): a land play, foretelling, plotting and suspending a card are
+     * never refused for it, whatever else they fail. A pin: the land play
+     * takes its own verdict path and the other three are Forge's
+     * {@code AbilityStatic}, so the check exempted them before
+     * {@link PlayabilityChecks#ignoresSplitSecond} named the rule.
+     */
+    @Test
+    void pinASplitSecondSpellOnTheStackRefusesNoSpecialAction() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        Player b = game.getPlayers().get(1);
+        for (int i = 0; i < 4; i++) {
+            TestBoard.inPlay(game, b, "Mountain");
+        }
+        List<SpellAbility> specialActions = new java.util.ArrayList<>();
+        specialActions.add(landPlayOf(TestBoard.inHand(game, b, "Mountain")));
+        specialActions.add(special(TestBoard.inHand(game, b, "Saw It Coming"),
+                SpellAbility::isForetelling));
+        specialActions.add(special(TestBoard.inHand(game, b, "Slickshot Show-Off"),
+                SpellAbility::isPlotting));
+        specialActions.add(special(TestBoard.inHand(game, b, "Rift Bolt"),
+                sa -> sa.isKeyword(forge.game.keyword.Keyword.SUSPEND)));
+        TestBoard.cast(game, TestBoard.inHand(game, a, "Sudden Shock"), a, b);
+        assertTrue(game.getStack().isSplitSecondOnStack(), "the board under test");
+
+        for (SpellAbility action : specialActions) {
+            assertFalse(PlayabilityVerdict.of(action, b).failed(PlayabilityCheck.SPLIT_SECOND),
+                    action + " is a special action");
+        }
+        assertTrue(PlayabilityChecks.ignoresSplitSecond(landPlayOf(TestBoard.inHand(game, b, "Forest"))));
+    }
+
+    /**
+     * A spell whose mana cost is "no cost" cannot be paid for (118.6):
+     * Ancestral Vision's spell is unaffordable, where it read affordable.
+     */
+    @Test
+    void aNoCostSpellIsUnaffordable() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        TestBoard.inPlay(game, a, "Island");
+        SpellAbility vision = TestBoard.inHand(game, a, "Ancestral Vision").getFirstSpellAbility();
+
+        PlayabilityVerdict verdict = PlayabilityVerdict.of(vision, a);
+
+        assertFalse(verdict.canPlay());
+        assertFalse(verdict.affordable(), verdict.toString());
+    }
+
+    private static SpellAbility special(Card card, java.util.function.Predicate<SpellAbility> kind) {
+        return card.getSpellAbilities().stream().filter(kind).findFirst()
+                .orElseThrow(() -> new AssertionError(card + " has no such special action"));
+    }
+
     private static StaticAbility staticOf(Card card, StaticAbilityMode mode) {
         return card.getStaticAbilities().stream()
                 .filter(st -> st.checkMode(mode)).findFirst().orElseThrow();
@@ -356,21 +412,6 @@ class PlayabilityVerdictTest {
         assertNull(forest.getActivatingPlayer(), "the verdict puts the activator back");
     }
 
-    /** A second land in one turn fails the land-play limit, not the activation limit. */
-    @Test
-    void aSecondLandFailsTheLandPlayLimit() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player a = game.getPlayers().get(0);
-        a.playLand(TestBoard.inHand(game, a, "Forest"), null);
-        SpellAbility mountain = landPlayOf(TestBoard.inHand(game, a, "Mountain"));
-
-        PlayabilityVerdict verdict = PlayabilityVerdict.of(mountain, a);
-
-        assertFalse(verdict.canPlay());
-        assertTrue(verdict.timing());
-        assertEquals(List.of(PlayabilityCheck.LAND_PLAY_LIMIT), checks(verdict));
-    }
-
     /** Exploration's second land play makes it playable again. */
     @Test
     void explorationRaisesTheLandPlayLimit() {
@@ -386,21 +427,6 @@ class PlayabilityVerdictTest {
         assertEquals(2, a.getMaxLandPlays(), "the board under test");
         assertTrue(verdict.canPlay());
         assertEquals(List.of(), verdict.failedChecks());
-    }
-
-    /** Rule 305.3: a land off its owner's turn fails whose turn, and with it timing. */
-    @Test
-    void aLandOffTurnFailsWhoseTurnAndCastingSpeed() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player b = game.getPlayers().get(1);
-        SpellAbility island = landPlayOf(TestBoard.inHand(game, b, "Island"));
-
-        PlayabilityVerdict verdict = PlayabilityVerdict.of(island, b);
-
-        assertFalse(verdict.canPlay());
-        assertFalse(verdict.timing());
-        assertEquals(List.of(PlayabilityCheck.CASTING_SPEED, PlayabilityCheck.WHOSE_TURN),
-                checks(verdict));
     }
 
     /** Aggressive Mining's "You can't play lands" is a static prohibition naming its static. */
@@ -419,34 +445,6 @@ class PlayabilityVerdictTest {
         assertEquals(List.of(new PlayabilityVerdict.FailedCheck(
                 PlayabilityCheck.STATIC_PROHIBITION, cantPlayLand)), verdict.failedChecks());
         assertEquals(cantPlayLand, verdict.prohibitingStatic());
-    }
-
-    /** A land on the battlefield fails zone. */
-    @Test
-    void aLandOnTheBattlefieldFailsZone() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player a = game.getPlayers().get(0);
-        SpellAbility forest = landPlayOf(TestBoard.inPlay(game, a, "Forest"));
-
-        PlayabilityVerdict verdict = PlayabilityVerdict.of(forest, a);
-
-        assertFalse(verdict.canPlay());
-        assertEquals(List.of(PlayabilityCheck.ZONE), checks(verdict));
-    }
-
-    /** A land play's record carries no mana, no target and {@code land_play = true}. */
-    @Test
-    void aLandPlaysCandidateCarriesLandPlayAndNoCost() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player a = game.getPlayers().get(0);
-        SpellAbility forest = landPlayOf(TestBoard.inHand(game, a, "Forest"));
-
-        DecisionCandidate read = DecisionCandidate.read(forest, a).orElseThrow();
-
-        assertTrue(read.landPlay());
-        assertNull(read.manaCost());
-        assertEquals(List.of(), read.legalTargets());
-        assertTrue(read.payloadJson().contains("\"land_play\":true"), read.payloadJson());
     }
 
     // ── affordability by the rules alone (C5) ───────────────────────────

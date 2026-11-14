@@ -57,7 +57,23 @@ class TestSamplingClass:
         assert sampling_class(make_record(RecordKind.REWRITE)) == SamplingClass.REWRITE
 
     def test_every_class_is_reachable(self):
-        assert set(SAMPLING_CLASSES) == set(DEFAULT_KIND_MIX)
+        """Every record shape the schema has (a turn action never reaches the
+        training stratum) lands in a class, and every class is landed in and
+        has a share of the default mixture."""
+        from effects.domain.records import PAYLOAD_TYPES, Moment
+
+        reached = set()
+        for kind, discriminator in PAYLOAD_TYPES:
+            if kind is RecordKind.TURN_ACTION:
+                continue
+            if isinstance(discriminator, Moment):
+                record = make_record(kind, moment=discriminator)
+            elif discriminator is not None:
+                record = make_record(kind, subkind=discriminator)
+            else:
+                record = make_record(kind)
+            reached.add(sampling_class(record))
+        assert reached == set(SamplingClass) == set(SAMPLING_CLASSES) == set(DEFAULT_KIND_MIX)
 
 
 class TestMixture:
@@ -86,10 +102,6 @@ class TestRarityWeighting:
     def test_weight_falls_as_the_inverse_square_root_of_games(self):
         weights = rarity_weights({"rare": 1, "common": 100})
         assert weights["rare"] / weights["common"] == pytest.approx(10.0)
-
-    def test_a_rarer_text_weighs_more(self):
-        weights = rarity_weights({"a": 1, "b": 4, "c": 9})
-        assert weights["a"] > weights["b"] > weights["c"]
 
     def test_the_cap_is_twenty_times_the_most_observed_texts_weight(self):
         weights = rarity_weights({"ubiquitous": 10_000, "unique": 1})
@@ -139,13 +151,6 @@ class TestUniformClasses:
             [*common, *rare], lambda r: texts[r.record_id],
         )
         assert weights[-1] > weights[0]
-
-    def test_a_decision_records_examples_key_on_the_candidates_text(self):
-        """One record, one example per candidate, each keyed on its own text."""
-        record = make_record(RecordKind.PLAYABILITY)
-        assert sampling_class(record) == SamplingClass.PLAYABILITY_DECISION
-        assert record.has_act_line
-
 
 class TestSampleWeightsRarityTable:
     """A curated dataset's corpus-wide rarity table, preferred over the

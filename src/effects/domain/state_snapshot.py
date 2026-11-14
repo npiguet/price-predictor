@@ -259,6 +259,10 @@ class GrantedTemporary:
 
     keywords: tuple[str, ...] = ()
     abilities: tuple[ProvenanceKey, ...] = ()
+    #: Gen-3: Forge's hidden keywords on the card as Forge writes them
+    #: (``CARDNAME can't block.``), in timestamp order; None on a record
+    #: written before the member existed.
+    hidden_keywords: tuple[str, ...] | None = None
 
 
 def normalize_counter_type(raw: str) -> str:
@@ -596,8 +600,16 @@ class EntityState:
         return "creature" in self.types
 
     @property
+    def phased_out(self) -> bool:
+        """Whether the permanent is phased out: an entity of the board with the
+        designation, treated as though it does not exist (702.26b)."""
+        return "phased_out" in self.designations
+
+    @property
     def on_battlefield(self) -> bool:
-        return self.zone == Zone.BATTLEFIELD
+        """Whether the card is a permanent the rules see: on the battlefield
+        and not phased out, which no rule, attack, block or effect reaches."""
+        return self.zone == Zone.BATTLEFIELD and not self.phased_out
 
     def with_total_toughness(self, toughness: int) -> EntityState:
         """This entity at total toughness ``toughness`` with no marked damage.
@@ -643,7 +655,17 @@ class EntityState:
 class Refs:
     """What the acting ability points at, and what was chosen for it."""
 
+    #: Every target the acting item's chain holds, root first; on an effect
+    #: half, its links' targets left after Forge's illegal-target check.
     targets: tuple[str, ...] = ()
+    #: Gen-3, a resolution's effect half: the same links' targets before that
+    #: check (608.2b), a target gone since as ``L<id>``; ``()`` for none, None
+    #: where unknown (no hook, another refs block, an older record).
+    targets_at_cast: tuple[str, ...] | None = None
+    #: Gen-3: the refs of ``targets`` and ``targets_at_cast`` that name a
+    #: spell or an ability on the stack, by its host card; None on a record
+    #: written before the member existed.
+    targets_on_stack: tuple[str, ...] | None = None
     source: str | None = None
     modes: tuple[str, ...] = ()
     x: int | None = None
@@ -652,6 +674,25 @@ class Refs:
     #: Gen-3, a resolution's effect half only: the dice it rolled and the
     #: coins it flipped. None on every other refs block.
     random: RandomResults | None = None
+
+    @property
+    def as_cast(self) -> tuple[str, ...]:
+        """The targets the acting item was cast or put on the stack with:
+        ``targets_at_cast``, else ``targets`` where that is unknown. An
+        effect half's ``targets`` leave out what became illegal, so reading
+        them would hand a model the fizzle it is asked to predict; on a record
+        with no ``targets_at_cast`` (a worker without the resolution hook, a
+        record collected before the member, every block but an effect half's)
+        the fallback still leaks it."""
+        return self.targets_at_cast if self.targets_at_cast is not None else self.targets
+
+    def targets_entity(self, entity: EntityState) -> bool:
+        """Whether the acting item targets this card itself, as cast: a ref
+        :attr:`targets_on_stack` names is the spell or ability on the stack,
+        so a permanent whose ability is targeted is not itself targeted."""
+        if entity.id not in self.as_cast:
+            return False
+        return entity.id not in (self.targets_on_stack or ()) or entity.zone == Zone.STACK
 
 
 @dataclass(frozen=True, slots=True)

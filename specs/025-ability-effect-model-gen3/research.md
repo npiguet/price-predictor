@@ -367,7 +367,9 @@ Decision T1).
 1. a pending-delayed-trigger accessor on `TriggerHandler` (FR-024, the `pending on` relation, and
    Decision D3);
 2. a state-based-loop begin/end signal around the loop in `PhaseHandler.checkStateBasedEffects`
-   (`:1168-1177`) (Decision C2);
+   (`:1168-1177`) (Decision C2), and around each check Forge makes where no player gets priority
+   (the cleanup step's, CR 514.3a; an effect ending the turn or the combat phase, CR 721.1a and
+   721.2a), each signalled as a loop of one pass;
 3. a priority-settled signal in `mainLoopStep`, after the state-based loop and before the priority
    holder chooses (Decision C3).
 
@@ -375,6 +377,25 @@ Each joins `PatchHooks.REQUIRED`; an unpatched Forge still runs and stamps recor
 
 **Rationale**: none of the three can be observed through public API or existing hooks (survey §2 of
 the collection side). The user's standing rule allows new commits on the branch.
+
+#### C1a. What the hooks hand the connector
+
+**Decision**: the branch's listeners and accessors carry the following. Each listener method is a
+`void` default method or a same-name overload with appended arguments, so a connector proxy that
+does not know it answers with nothing and keeps working. "Consumed" says whether a collector reads
+it.
+
+| Hook | Method and arguments | What it says | Consumed |
+|---|---|---|---|
+| replacement | `onReplacement(effect, before, after, result, replacedBy, buffered)` | Forge makes the six-argument call; the five-argument one is its default. `replacedBy` is the ability that ran in the event's place during the replacement. A damage replacement's buffered ability (a `ReplaceWith$` ability other than `ReplaceDamage`, `ReplaceSplitDamage` or `ReplaceEffect`, the sub-ability of one of those three, a `Prevent$ True` rider) has not run then: it is `buffered`, never `replacedBy`. `before` is null when the run parameters could not be copied. | yes, a null `before` read as an unknown incoming event |
+| replacement | `onBufferedAbilityStarting(effect, ability, runParams)`, `onBufferedAbilityFinished(effect, ability, runParams)` | A buffered ability runs once every replacement of its damage event has applied, if the summed amount is above zero; `effect` and `ability` are what `onReplacement` named; every event between the two is the ability's | yes |
+| trigger | `onTriggerRun(trigger, runParams, ability)` | The trigger runs: told before its ability goes on the stack, or, for a static trigger, just before its ability is played, after an optional one is accepted. Once per run (Panharmonicon: twice). `trigger` and `runParams` are the objects `onConditionEvaluated` was handed. A trigger evaluated as firing and never told did not fire. A trigger on the stack has fired whatever its optional choice at resolution. | yes |
+| resolution | `onResolutionStarting(sa, fizzled, targetsAtCast)` | Forge makes the three-argument call; the two-argument one is its default. `targetsAtCast` lists each chain link's targets, root first, before the illegal-target check removes any; null when they could not be copied | yes |
+| state-based loop | `onStateBasedLoopBegin(game)`, `onStateBasedLoopEnd(game)` | Around the loop at priority, and around each check made where no player gets priority, as a loop of one pass: the cleanup step's, an effect ending the turn (one check), an effect ending the combat phase (two checks, the effect's and the phase end's) | yes |
+| outcome | `coin_flipped` | Names its flipper as `subjects`; also sent for coins a cost flips (`CostFlipCoin`); not sent when no coin was flipped | yes |
+| accessor | `StaticAbilityCantAttackBlock.cantBlockStatic(blocker)` | The `Mode$ CantBlock` static that stops a creature blocking at all (Pacifism), or null | yes |
+| accessor | `Card.getKeywordsWithout(staticId)` | Leaves out that static's can't-have keywords too, which Forge files by (timestamp, static id) | yes |
+| failures | `EffectRecordHook.failureCounts()` | Every failure each slot contained, listener and Forge-side argument builds alike, by slot name; cumulative over the JVM's life | yes |
 
 #### C2. The held effect half spans the whole state-based loop
 
@@ -572,17 +593,20 @@ attaches the new controller, so the seat would otherwise play as the plain AI. D
 the match source would shift later games' seats. Spec correction S1(2): interventional forks resolve
 the stack and stop; they do not play the turn on.
 
-Forge's AI decisions in a fork still draw from the shared `MyRandom`, as interventions already do.
+Forge's AI decisions in a fork draw from a random stream of the fork's own (`Forks.isolated` puts a
+fresh stream in `MyRandom` for the whole fork and the live game's back after it), as every fork's
+do: a draw a fork took from the live game's stream would be one the live game no longer takes.
 
 #### D5. `mirror_of` on a directed-fork record
 
-**Decision**: a directed-fork record carries `mirror_of` only when a live record was open at the fork
-point. A fork taken at a phase boundary usually has none, because the live turn's records are written
-after the fork ends. Directed-fork records are paired with the live turn by `game_id`, turn and
+**Decision**: a directed-fork record carries no `mirror_of` (it is `null`). A directed fork is taken
+at a phase boundary, and a phase boundary closes every live record before the fork, so no live
+record is open to mirror. Directed-fork records are paired with the live turn by `game_id`, turn and
 `directed`.
 
-**Rationale**: FR-009a says "where one exists". Holding the fork's records to the live turn's end for
-a join would add a held-record queue for a field no consumer reads.
+**Rationale**: FR-009a says "where one exists", and at a phase boundary none does. Holding the
+fork's records to the live turn's end for a join would add a held-record queue for a field no
+consumer reads.
 
 ### Model
 

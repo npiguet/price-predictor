@@ -19,6 +19,11 @@ import java.nio.file.Path;
 public class ValidationWorkerMain {
 
     public static void main(String[] args) {
+        ToolMain.guard(() -> work(args));
+    }
+
+    /** The worker itself; an exit it requests ends the process through {@link ToolMain#guard}. */
+    static void work(String[] args) {
         String matchesFileProp = WorkerProperties.require("matches.file");
         int bestOf = WorkerProperties.bestOf("best.of", 3);
 

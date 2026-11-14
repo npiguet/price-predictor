@@ -160,15 +160,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A rampage trigger resolves and its bonus is applied once, fixed by the blockers when it resolves.",
-        "near_miss": "A rampage trigger resolves with no blockers beyond the first and gives no bonus.",
-        "params": {
-          "event": "pt_change",
-          "keyword": "Rampage"
-        },
-        "needs": []
+        "none": "Could not express: when the rampage bonus was calculated is read by no parameter."
       }
     }
   ]

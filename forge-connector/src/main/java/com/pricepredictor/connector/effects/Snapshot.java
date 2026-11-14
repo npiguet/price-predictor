@@ -52,6 +52,17 @@ record Snapshot(
     }
 
     /**
+     * The same board about to handle another event: a board depends on its
+     * pending event only through the event's subjects and its last-known
+     * card, so this is the board read with {@code pending} wherever those
+     * are the read one's.
+     */
+    Snapshot withPendingEvent(EffectEvent pending) {
+        return new Snapshot(global, players, entities, links, refs,
+                pending == null ? "null" : pending.toJson(), libraries);
+    }
+
+    /**
      * The same board with the library cards {@code events} name added to its
      * entities, each where it sat when the board was captured: a card the
      * record's own effect drew, milled, revealed or searched out is read in

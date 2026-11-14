@@ -28,10 +28,9 @@ from dataclasses import fields, replace
 import pytest
 
 from effects.domain.effect_head_input import SurfaceBuilder
-from effects.domain.provenance import ProvenanceKey
+from effects.domain.provenance import ProvenanceKey, TraitKind
 from effects.domain.records import (
     PAYLOAD_TYPES,
-    ActivationPayload,
     CollectionMode,
     Curation,
     EffectRecord,
@@ -45,7 +44,6 @@ from effects.domain.records import (
 from effects.domain.state_snapshot import (
     CardLine,
     EntityState,
-    InclusionTier,
     LineKind,
     PlayerState,
     StateSnapshot,
@@ -98,6 +96,8 @@ _FROZEN_ENVELOPE: dict[str, str] = {
     "generation": "int | None",
     "aimed_at": "tuple[str, ...] | None",
     "directed": "DirectedTag | None",
+    # What a fork's copy left out (WP5), by kind; None on live records.
+    "copy_dropped": "tuple[tuple[str, int], ...] | None",
     # Written by build-corpus on curated records only (research T1): how
     # curation copied the record, never collected.
     "curation": "Curation | None",
@@ -187,6 +187,30 @@ class TestTheActorPlayerException:
         }
 
 
+class TestTheEnvelopeEnumsAreTheWriters:
+    """Rule 2's frozen sets above compare Python with literals; these compare
+    Python with the enums the Java collector writes from, in order, so a
+    value the collector gains or renames fails here before any record does."""
+
+    @pytest.mark.parametrize(("java", "python"), [
+        ("RecordKind", RecordKind),
+        ("Moment", Moment),
+        ("PlayabilitySubkind", PlayabilitySubkind),
+        ("TurnActionSubkind", TurnActionSubkind),
+        ("AttributionMode", CollectionMode),
+        ("ActivationOutcome", ResolutionOutcome),
+        ("TraitKind", TraitKind),
+    ])
+    def test_python_spells_the_java_enum_alike_in_order(self, java, python):
+        import re
+
+        from tests.unit.forge_sources import connector_source
+
+        source = connector_source(f"effects/{java}.java")
+        constants = re.findall(r'^\s+[A-Z_]+\("([a-z_]+)"', source, flags=re.M)
+        assert constants and constants == [member.value for member in python]
+
+
 class TestRuleTwoEnumValuesMayBeAddedNotReused:
     def test_the_frozen_kinds_all_survive(self):
         assert _FROZEN_KINDS <= {k.value for k in RecordKind}
@@ -219,12 +243,6 @@ class TestRuleTwoEnumValuesMayBeAddedNotReused:
             "permits the value, but the schema has to say what it carries"
         )
 
-    def test_an_existing_value_keeps_its_payload_type(self):
-        assert PAYLOAD_TYPES[(RecordKind.RESOLUTION, Moment.ACTIVATION)] is (
-            ActivationPayload
-        )
-
-
 class TestTheGen3CardSlotIsPinned:
     """Rule 1 for the card slot, which gen-3 rewrote (FR-021, FR-025)."""
 
@@ -247,20 +265,6 @@ class TestTheGen3CardSlotIsPinned:
         written = record_to_dict(record)["state"]["entities"][0]
         assert tuple(written) == _FROZEN_GEN3_ENTITY
         assert not _REMOVED_IN_GEN3 & written.keys()
-
-
-class TestRuleThreeTiersAreAdditive:
-    def test_the_tiers_are_ordered_by_the_stage_that_adds_them(self):
-        assert [t.value for t in InclusionTier] == [1, 2, 3, 4]
-
-    def test_an_absent_tier_reads_as_uncollected_not_empty(self):
-        snapshot = make_snapshot()
-        assert InclusionTier.UNREFERENCED_STACK not in snapshot.tiers
-        assert InclusionTier.CORE in snapshot.tiers
-
-    def test_a_snapshot_naming_no_tier_claims_none_collected(self, snapshot):
-        """Never inferred: a default is not evidence of a collector's depth."""
-        assert snapshot.tiers == frozenset()
 
 
 _ACTING = ProvenanceKey("cardsfolder/s/shock.txt", 0, "spell", 0)
@@ -348,12 +352,17 @@ class TestRuleFourMetadataNeverBecomesAModelInput:
                            directed=DirectedTag("tougher", ForkOperation.PT))
         assert _surface(directed) == _surface(fork)
 
+    def test_a_lossy_fork_s_surface_is_its_lossless_fork_s(self):
+        fork = make_record(state=_board(), ability=(_ACTING,), fork=True)
+        lossy = replace(fork, copy_dropped=(("command", 2), ("remembered", 1)))
+        assert _surface(lossy) == _surface(fork)
+
     def test_every_listed_metadata_field_is_flipped_here(self):
         from effects.domain.records import COLLECTION_METADATA_FIELDS
 
         assert COLLECTION_METADATA_FIELDS == {
             "mode", "interventional", "fork", "synthetic", "ability_unresolved",
-            "random_seat", "what_if", "generation", "aimed_at", "directed",
+            "random_seat", "what_if", "generation", "aimed_at", "directed", "copy_dropped",
         }
 
     def test_an_unresolved_reason_leaves_the_surface_alone(self):

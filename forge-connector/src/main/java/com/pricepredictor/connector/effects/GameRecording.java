@@ -149,7 +149,8 @@ public final class GameRecording implements AutoCloseable {
                         game, new InterventionFork(game, forkContext, budget, seed),
                         caps.interventionsPerGame() > 0
                                 ? new ProtectionFork(game, budget, playForward, seed) : null,
-                        decks.steered()))
+                        decks.steered(),
+                        InterventionScheduler.spreadOverTheGame(seed, caps.interventionsPerGame())))
                 : Optional.empty();
         this.probes = forking
                 ? Optional.of(new ProbeScheduler(
@@ -167,7 +168,7 @@ public final class GameRecording implements AutoCloseable {
         this.directed = directing
                 ? Optional.of(new DirectedForkScheduler(
                         game, caps, directedRules, budget, tally, seed,
-                        new DirectedFork(game, playForward, bracket::heldRecordId,
+                        new DirectedFork(game, playForward,
                                 () -> game.getPhaseHandler().getPlayerTurn())::take))
                 : Optional.empty();
     }
@@ -264,6 +265,9 @@ public final class GameRecording implements AutoCloseable {
      * would unrecorded; the bracket still records off the bus.
      */
     public void open() {
+        // A subscriber that throws loses the events it was handling, which
+        // the bus swallows: counted, for this game's and every fork's.
+        HookFailures.watchSubscribers();
         game.subscribeToEvents(bracket);
         if (!fork) {
             // A fork's collectors are handed the live hooks' callbacks
@@ -290,6 +294,7 @@ public final class GameRecording implements AutoCloseable {
      */
     @Override
     public void close() {
+        boolean flushed = false;
         try {
             if (fork) {
                 // A fork played on stops where no event closes its last
@@ -298,11 +303,45 @@ public final class GameRecording implements AutoCloseable {
                 bracket.stopPlaying();
             }
             patched.close();
+            flushed = true;
         } finally {
             appendDroppedEvents();
             if (!fork) {
-                envelope.endGame();
+                try {
+                    // Last of the game's records, and only for a game that
+                    // ended with all of them written: one that threw
+                    // mid-match, or whose flush threw, gets none (D2).
+                    if (flushed && game.isGameOver()) {
+                        writeMarker(envelope.gameId(), () -> GameEndMarker.write(game, envelope));
+                    }
+                } finally {
+                    envelope.endGame();
+                }
             }
+        }
+    }
+
+    /** The first marker that could not be written, printed once per worker. */
+    private static final OnceWarning MARKER_UNWRITTEN = new OnceWarning();
+
+    /**
+     * Write a game's marker, or count the failure and go on: the game then
+     * has no marker and reads as cut, and the match and its later games are
+     * played on. The failure is counted in {@link HookFailures} as
+     * {@code "game-end marker"} and its first one printed.
+     *
+     * @return whether the marker was written
+     */
+    static boolean writeMarker(String gameId, Runnable write) {
+        try {
+            write.run();
+            return true;
+        } catch (RuntimeException failure) {
+            HookFailures.countContained("game-end marker");
+            MARKER_UNWRITTEN.raise(() -> "Effect records: the game-end marker of game " + gameId
+                    + " could not be written, so the game reads as cut (later failures are"
+                    + " counted, not printed): " + failure);
+            return false;
         }
     }
 
@@ -355,6 +394,7 @@ public final class GameRecording implements AutoCloseable {
         @Subscribe
         public void onPhase(GameEventTurnPhase event) {
             boolean collecting = collectsTheBoard(event.phase());
+            boolean forking = forksAt(game);
             eachGuarded(
                     new BoundaryStep("continuous", () -> {
                         if (collecting) {
@@ -362,7 +402,7 @@ public final class GameRecording implements AutoCloseable {
                         }
                     }),
                     new BoundaryStep("interventions", () -> interventions.ifPresent(scheduler -> {
-                        if (collecting) {
+                        if (collecting && forking) {
                             scheduler.collect(event.phase());
                         }
                     })),
@@ -370,12 +410,19 @@ public final class GameRecording implements AutoCloseable {
                     // phase event fires ahead of it, which is the only moment
                     // a probe can fork from a board where nothing has been
                     // dealt yet.
-                    new BoundaryStep("probes", () -> probes.ifPresent(ProbeScheduler::collect)),
+                    new BoundaryStep("probes", () -> probes.ifPresent(probe -> {
+                        if (forking) {
+                            probe.collect();
+                        }
+                    })),
                     // Last: a directed fork plays the turn on, and the
                     // boundary's other collection reads the live board before
                     // any fork is taken.
-                    new BoundaryStep("directed forks", () -> directed.ifPresent(
-                            scheduler -> scheduler.collect(event.phase()))));
+                    new BoundaryStep("directed forks", () -> directed.ifPresent(scheduler -> {
+                        if (forking) {
+                            scheduler.collect(event.phase());
+                        }
+                    })));
         }
     }
 
@@ -394,6 +441,17 @@ public final class GameRecording implements AutoCloseable {
         return phase != PhaseType.UNTAP;
     }
 
+    /**
+     * Whether a fork may be taken at a phase event now: not while the stack
+     * resolves. An effect that ends the turn or the combat phase fires the
+     * phase events of the steps it moves to from inside its own resolution,
+     * and a copy taken there is a game mid-resolution, which no fork is
+     * built to play on.
+     */
+    static boolean forksAt(Game game) {
+        return !game.getStack().isResolving();
+    }
+
     /** One named step of a phase boundary's collection. */
     record BoundaryStep(String name, Runnable body) {
     }
@@ -410,6 +468,7 @@ public final class GameRecording implements AutoCloseable {
             try {
                 step.body().run();
             } catch (RuntimeException failure) {
+                HookFailures.countContained("boundary step " + step.name());
                 BOUNDARY_STEP_FAILED.computeIfAbsent(step.name(), name -> new OnceWarning())
                         .raise(() -> "Effect records: the phase boundary's " + step.name()
                                 + " step threw, and lost its records at that boundary"

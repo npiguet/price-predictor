@@ -33,7 +33,10 @@ from effects.domain.records import (
     RecordKind,
     ResolutionPayload,
     TriggerPayload,
+    TurnActionPayload,
+    TurnActionSubkind,
     UnresolvedReason,
+    is_game_end,
 )
 
 #: Envelope fields that say when a record was written rather than what it says,
@@ -79,18 +82,21 @@ def _is_deferred_mana_record(record: EffectRecord) -> bool:
 
     Its snapshot is from when the mana ability was activated, so it lands
     after later turns and would read as a backward turn jump. Recognised by
-    the payload (a ``mana_produced``, and otherwise only the ``tapped`` events
-    of the permanents its cost tapped, FR-042c) rather than the acting card;
-    nothing defers an activation half, so a jump on one is still a game
-    boundary.
+    the payload rather than the acting card: a ``mana_produced`` in an effect
+    half that resolved no stack item (a gen-3 ``outcome`` written null, which
+    only a mana record and the rescue record write), whatever else the mana
+    ability's payment and sub-abilities did (a pain land's damage, WP7);
+    before gen-3's outcome, a ``mana_produced`` and otherwise only the
+    ``tapped`` events of the permanents its cost tapped (FR-042c). Nothing
+    defers an activation half, so a jump on one is still a game boundary.
     """
     payload = record.payload
-    return (
-        record.moment is Moment.RESOLUTION
-        and isinstance(payload, ResolutionPayload)
-        and any(event.type is EventType.MANA_PRODUCED for event in payload.events)
-        and all(event.type in _MANA_RECORD_EVENTS for event in payload.events)
-    )
+    if not (record.moment is Moment.RESOLUTION and isinstance(payload, ResolutionPayload)
+            and any(event.type is EventType.MANA_PRODUCED for event in payload.events)):
+        return False
+    if payload.outcome_written:
+        return payload.outcome is None
+    return all(event.type in _MANA_RECORD_EVENTS for event in payload.events)
 
 
 def _is_deferred_trigger_record(record: EffectRecord) -> bool:
@@ -206,6 +212,127 @@ class GameBoundaries:
         )
 
 
+class KindPresence:
+    """V5 #19: whether a gen-3 window holds every record kind a game writes.
+    Each per-kind check reads an absent kind as holding, so a collector that
+    stopped writing one kind passed every check."""
+
+    #: Kinds every game writes: two cost-and-effect resolutions, a trigger
+    #: evaluated, a combat, sampled decision candidates, a declaration's
+    #: attackers and blockers, a draw step.
+    EXPECTED = ("resolution/activation", "resolution/resolution", "trigger", "combat",
+                "playability/decision", "playability/attackers", "playability/blockers",
+                "turn_action/draw")
+
+    def __init__(self, playability_rate: float | None = None) -> None:
+        self.labels: Counter[str] = Counter()
+        self.gen3 = 0
+        #: The run's ``--playability-rate`` from its manifest; decision records
+        #: are judged only where it is known and above 0.
+        self.playability_rate = playability_rate
+
+    def add(self, record: EffectRecord) -> None:
+        if record.generation != 3:
+            return
+        self.gen3 += 1
+        label = _kind_label(record)
+        if record.kind is RecordKind.TURN_ACTION and record.subkind is not None:
+            label = f"{record.kind.value}/{record.subkind.value}"
+        self.labels[label] += 1
+
+    def findings(self, limits: Thresholds) -> Iterator[Finding]:
+        expected = [label for label in self.EXPECTED if label != "playability/decision"
+                    or (self.playability_rate is not None and self.playability_rate > 0)]
+        missing = [label for label in expected if not self.labels[label]]
+        judged = self.gen3 >= limits.min_presence_records
+        # The game-end marker has a check of its own (GameEnds).
+        others = sorted(set(_all_labels()) - set(expected) - set(self.labels) - {_GAME_END})
+        if not missing:
+            measured = f"every kind a game writes is present over {self.gen3} gen-3 records"
+        else:
+            measured = (f"{self.gen3} gen-3 records hold no {', '.join(missing)}"
+                        + ("" if judged else f" (under the {limits.min_presence_records} "
+                           "records this is judged at)"))
+        yield Finding(
+            name="every record kind a game writes is present",
+            ok=not (missing and judged),
+            measured=measured,
+            detail=(f"watched, absent: {', '.join(others)}",) if others else (),
+        )
+
+
+_GAME_END = f"{RecordKind.TURN_ACTION.value}/{TurnActionSubkind.GAME_END.value}"
+
+
+class GameEnds:
+    """WP7: which gen-3 games ended with their ``turn_action`` / ``game_end``
+    marker, and what the per-game cap withheld from them.
+
+    A game without one was cut (a killed worker, a game or an end-of-game
+    write that threw) or is still running, which a window read
+    mid-collection cannot tell apart: watched, as cut games are expected
+    beside a kill backstop. A JVM lifetime plays its games one after another
+    (the ``game_id``'s last segment counts them), so a game a later game of
+    its lifetime follows has stopped; a window holding such a game and no
+    marker at all is a collection that writes none, and fails.
+    """
+
+    def __init__(self) -> None:
+        self.games: set[str] = set()
+        self.ended: set[str] = set()
+        self.withheld = 0
+        self.markers = 0
+
+    def add(self, record: EffectRecord) -> None:
+        if record.generation != 3:
+            return
+        self.games.add(record.game_id)
+        if is_game_end(record):
+            self.ended.add(record.game_id)
+            self.markers += 1
+            payload = record.payload
+            if isinstance(payload, TurnActionPayload) and payload.records_withheld:
+                self.withheld += payload.records_withheld
+
+    def _closed(self) -> set[str]:
+        """Games a later game of their JVM lifetime follows."""
+        latest: dict[str, int] = {}
+        counted: dict[str, tuple[str, int]] = {}
+        for game in self.games:
+            lifetime, _, counter = game.rpartition(".")
+            if lifetime and counter.isdigit():
+                counted[game] = (lifetime, int(counter))
+                latest[lifetime] = max(latest.get(lifetime, -1), int(counter))
+        return {game for game, (lifetime, counter) in counted.items()
+                if counter < latest[lifetime]}
+
+    def findings(self, limits: Thresholds) -> Iterator[Finding]:
+        name = "gen-3 games end with their game-end marker"
+        games, without = len(self.games), self.games - self.ended
+        share = len(without) / games if games else 0.0
+        measured = (f"{len(without)} of {games} gen-3 game(s) have no game-end marker "
+                    f"({share:.1%}): cut, or still running at the window's end")
+        closed = self._closed()
+        if games and not self.ended and closed:
+            yield Finding(name=name, ok=False, measured=measured, detail=(
+                f"{len(closed)} game(s) a later game of their JVM lifetime follows ended "
+                "or were cut, and no game of the window wrote a marker: the collection "
+                "writes none (a connector built before the marker?)",))
+        else:
+            yield Finding.watch(name, measured)
+        yield Finding.watch(
+            "records the per-game cap withheld",
+            f"{self.withheld} record(s) withheld over {self.markers} game-end marker(s)")
+
+
+def _all_labels() -> tuple[str, ...]:
+    """Every kind label a gen-3 window can hold, turn actions by subkind."""
+    from effects.domain.records import TurnActionSubkind
+
+    labels = [label for label in _labels_of(*RecordKind) if not label.startswith("turn_action")]
+    return (*labels, *(f"{RecordKind.TURN_ACTION.value}/{s.value}" for s in TurnActionSubkind))
+
+
 class _LinkHalf(NamedTuple):
     """One record carrying a ``link_id``: which half it is, and what it acts through."""
 
@@ -244,13 +371,23 @@ class Links:
     def __init__(self) -> None:
         #: link_id -> every half carrying it.
         self.links: dict[str, list[_LinkHalf]] = defaultdict(list)
+        #: link_id -> ``(game_id, source)`` of each gen-3 cost half.
+        self.casts: dict[str, tuple[str, str | None]] = {}
+        #: ``(game_id, subject)`` of every ``spell_countered`` an effect half holds.
+        self.countered: set[tuple[str, str]] = set()
 
     def add(self, record: EffectRecord) -> None:
+        if record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION:
+            self.countered.update(
+                (record.game_id, subject) for event in record.payload.listed_events()
+                if event.type is EventType.SPELL_COUNTERED for subject in event.subjects)
         if record.link_id is not None:
+            at_cast = (isinstance(record.payload, ActivationPayload)
+                       and record.payload.outcome is None)
             self.links[record.link_id].append(_LinkHalf(
-                record.moment, tuple(record.ability or ()),
-                isinstance(record.payload, ActivationPayload) and record.payload.outcome is None,
-            ))
+                record.moment, tuple(record.ability or ()), at_cast))
+            if at_cast:
+                self.casts[record.link_id] = (record.game_id, record.state.refs.source)
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
         unpaired = Share()
@@ -275,6 +412,26 @@ class Links:
                 for size, count in sorted(sizes.items())
             ),
         )
+        yield self._casts_met(limits)
+
+    def _casts_met(self, limits: Thresholds) -> Finding:
+        """V5 #18: a gen-3 cost half standing alone pairs (its item was
+        countered, or still on the stack at the game's end), so the pairing
+        check cannot see a collector writing no effect half at all. Judged
+        only at the degenerate end: at least ``min_cost_evidence`` cost halves
+        and not one met by its effect half; the share alone is watched."""
+        alone = [link for link in self.casts if len(self.links[link]) == 1]
+        countered = sum(1 for link in alone if self.casts[link] in self.countered)
+        met = len(self.casts) - len(alone)
+        degenerate = len(self.casts) >= limits.min_cost_evidence and met == 0
+        measured = (f"{met}/{len(self.casts)} gen-3 cost halves met by an effect half; "
+                    f"{len(alone)} alone, {countered} of them countered by a "
+                    "spell_countered in their game")
+        name = "every gen-3 cost half is met by its effect half unless its item never resolved"
+        if degenerate:
+            return Finding(name=name, ok=False, measured=measured + (
+                f" (none met over {len(self.casts)}: the collector writes no effect half)"))
+        return Finding.watch(name, measured)
 
 
 @dataclass(slots=True)
@@ -555,4 +712,66 @@ class ProbeForks:
                 "zero probes means --probe-keywords was empty; that flag, not "
                 "--probes-per-game, is what turns the path on",
             ),
+        )
+
+
+class LossyForks:
+    """What share of the fork records came from a copy that left something
+    out (``copy_dropped``), by kind, and what share of the forks. Watched: a
+    lossy fork is kept and trained on, so the share is what the fork fidelity
+    audit reads.
+
+    Every record of a fork carries its copy's ``copy_dropped``, so a
+    protection fork's ten records count ten times among the records. The
+    wire names no fork, so the forks are counted as groups of records alike
+    in game, game turn and kind of fork (a probe also by the record it
+    mirrors, a directed fork by its variant and operation): two forks of one
+    kind taken in one turn of one game, and an intervention and a protection
+    fork there (no flag tells the two apart), count once, so the fork count
+    is a lower bound and both figures are reported.
+    """
+
+    def __init__(self) -> None:
+        self.forks = 0
+        self.lossy = 0
+        self.by_kind: Counter[str] = Counter()
+        self.groups: dict[tuple, set[str]] = {}
+
+    @staticmethod
+    def group_of(record: EffectRecord) -> tuple:
+        """The fork a record belongs to, as near as the wire says."""
+        if record.directed is not None:
+            kind: tuple = ("directed", record.directed.variant, record.directed.operation.value)
+        elif record.interventional:
+            kind = ("interventional",)
+        else:
+            kind = ("probe", record.mirror_of)
+        return (record.game_id, record.state.global_.turn, *kind)
+
+    def add(self, record: EffectRecord) -> None:
+        if not record.fork:
+            return
+        self.forks += 1
+        dropped = self.groups.setdefault(self.group_of(record), set())
+        if record.copy_dropped:
+            self.lossy += 1
+            for kind, _count in record.copy_dropped:
+                self.by_kind[kind] += 1
+                dropped.add(kind)
+
+    def findings(self, limits: Thresholds) -> Iterator[Finding]:
+        shown = ", ".join(
+            f"{kind} {count}/{self.forks} ({count / self.forks:.1%})"
+            for kind, count in sorted(self.by_kind.items())) or "none"
+        forks = len(self.groups)
+        by_fork: Counter[str] = Counter(kind for kinds in self.groups.values() for kind in kinds)
+        lossy_forks = sum(1 for kinds in self.groups.values() if kinds)
+        shown_forks = ", ".join(
+            f"{kind} {count}/{forks} ({count / forks:.1%})"
+            for kind, count in sorted(by_fork.items())) or "none"
+        yield Finding.watch(
+            name="fork records whose copy left something out",
+            measured=(f"{self.lossy}/{self.forks} fork records; by kind: {shown}; "
+                      f"{lossy_forks}/{forks} forks (at least; by game, turn and kind of fork); "
+                      f"by kind: {shown_forks}"),
         )

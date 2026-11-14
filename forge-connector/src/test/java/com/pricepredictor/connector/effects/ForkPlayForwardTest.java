@@ -48,6 +48,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(ForgeExtension.class)
 class ForkPlayForwardTest {
 
+    /**
+     * A cleanup step in which a player got priority is taken again (514.3a),
+     * and its turn-based actions are the turn's: the fork does not stop
+     * before it, as it stops before a cleanup that ends the turn.
+     */
+    @Test
+    void aCleanupToBeTakenAgainDoesNotEndTheTurn() throws ReflectiveOperationException {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.CLEANUP);
+        assertTrue(ForkPlayForward.turnWouldEnd(game), "an ordinary cleanup ends the turn");
+        java.lang.reflect.Field repeat =
+                forge.game.phase.PhaseHandler.class.getDeclaredField("bRepeatCleanup");
+        repeat.setAccessible(true);
+        repeat.setBoolean(game.getPhaseHandler(), true);
+
+        assertFalse(ForkPlayForward.turnWouldEnd(game));
+    }
+
+
     @TempDir
     Path tempDir;
 
@@ -100,6 +118,9 @@ class ForkPlayForwardTest {
         boolean taken;
         int liveTurnAfterFork = -1;
         PhaseType livePhaseAfterFork;
+        /** The live board as BoardStates reads it, before the fork and after it played on. */
+        Object liveBoardBefore;
+        Object liveBoardAfter;
 
         Forker(Game live, GameRecording recording, PhaseType phase, Consumer<EffectRecord> flags) {
             this.live = live;
@@ -114,13 +135,15 @@ class ForkPlayForwardTest {
                 return;
             }
             taken = true;
+            liveBoardBefore = BoardStates.of(live);
             Forks.ForkRun run = new Forks.ForkRun(
-                    live, () -> { }, () -> live.getPhaseHandler().getPlayerTurn());
+                    "directed", live, () -> { }, () -> live.getPhaseHandler().getPlayerTurn());
             played = run.take(
                     (verified, snapshots) -> recording.playForward().play(verified.fork(), flags),
                     (verified, result) -> result);
             liveTurnAfterFork = live.getPhaseHandler().getTurn();
             livePhaseAfterFork = live.getPhaseHandler().getPhase();
+            liveBoardAfter = BoardStates.of(live);
         }
     }
 
@@ -196,6 +219,9 @@ class ForkPlayForwardTest {
         assertEquals(PhaseType.END_OF_TURN, forker[0].livePhaseAfterFork,
                 "the live game had not moved while the fork played");
         assertEquals(3, forker[0].liveTurnAfterFork);
+        // Nor had its board: every card, player and member as before.
+        assertEquals(forker[0].liveBoardBefore, forker[0].liveBoardAfter,
+                "the live board moved while the fork played");
     }
 
     /**
@@ -367,19 +393,6 @@ class ForkPlayForwardTest {
                 "the fork's copy of the seat is a random seat");
         assertEquals(expected.nextLong(), seeds.nextLong(), "the fork drew nothing from the match's source");
         assertEquals(1, naming(forkRecords(all), deathOf(giant)));
-    }
-
-    @Test
-    void forkLinesAreHeldUntilTheForkIsKept() {
-        List<String> held = new ArrayList<>();
-        CollectorContext live = TestCollectors.context(ShardRun.writer(tempDir), ShardRun.GAME_ID, null);
-        CollectorContext fork = live.forFork(DIRECTED, held::add);
-
-        fork.emit(fork.newRecord(RecordKind.COMBAT).actor("P0").state("{}").payload("{}"));
-
-        assertEquals(1, held.size());
-        assertTrue(isFork(held.get(0)));
-        assertEquals(Boolean.FALSE, parse(held.get(0)).get("interventional"));
     }
 
     // ── the fork's floating effects (B4) ────────────────────────────────

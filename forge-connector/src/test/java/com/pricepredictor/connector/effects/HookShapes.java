@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import forge.game.Game;
 import forge.game.GameEntity;
+import forge.game.GameObject;
 import forge.game.ability.AbilityKey;
 import forge.game.ability.ClauseRun;
 import forge.game.card.Card;
@@ -48,6 +49,8 @@ final class HookShapes {
     /** {@code TriggerHandler.EffectRecordTriggerListener}. */
     interface TriggerFire {
         void onConditionEvaluated(Trigger trigger, Map<AbilityKey, Object> runParams, boolean fired);
+
+        void onTriggerRun(Trigger trigger, Map<AbilityKey, Object> runParams, SpellAbility ability);
     }
 
     /** {@code CombatLegalityObserver.EffectRecordCombatListener}. */
@@ -64,8 +67,39 @@ final class HookShapes {
         void onManaProduced(SpellAbility ability, Player player, String produced);
     }
 
-    /** {@code ReplacementHandler.EffectRecordListener}. */
+    /**
+     * {@code ReplacementHandler.EffectRecordListener}: Forge calls the
+     * six-argument {@code onReplacement}, whose last argument is the ability
+     * a damage replacement buffered. Forge's interface also declares the
+     * five-argument call as a default it delegates to, restated here because
+     * tests call a handler with it, the way an older jar's engine does.
+     */
     interface Replacement {
+        void onReplacing(ReplacementEffect effect, Map<AbilityKey, Object> runParams);
+
+        void onReplacement(ReplacementEffect effect, Map<AbilityKey, Object> before,
+                Map<AbilityKey, Object> after, ReplacementResult result,
+                SpellAbility replacedBy, SpellAbility buffered);
+
+        default void onReplacement(ReplacementEffect effect, Map<AbilityKey, Object> before,
+                Map<AbilityKey, Object> after, ReplacementResult result,
+                SpellAbility replacedBy) {
+            onReplacement(effect, before, after, result, replacedBy, null);
+        }
+
+        void onBufferedAbilityStarting(ReplacementEffect effect, SpellAbility ability,
+                Map<AbilityKey, Object> runParams);
+
+        void onBufferedAbilityFinished(ReplacementEffect effect, SpellAbility ability,
+                Map<AbilityKey, Object> runParams);
+    }
+
+    /**
+     * The same listener before it named the buffered ability: the call a jar
+     * without the buffered argument makes. The handler reads the buffered
+     * ability past the fifth argument, so the shorter call still reaches it.
+     */
+    interface FiveArgumentReplacement {
         void onReplacing(ReplacementEffect effect, Map<AbilityKey, Object> runParams);
 
         void onReplacement(ReplacementEffect effect, Map<AbilityKey, Object> before,
@@ -109,8 +143,17 @@ final class HookShapes {
         void onCastStarting(SpellAbility sa);
     }
 
-    /** {@code MagicStack.EffectRecordResolutionListener}. */
+    /**
+     * {@code MagicStack.EffectRecordResolutionListener}: Forge calls the
+     * three-argument {@code onResolutionStarting}, whose last argument is
+     * each chain link's targets as cast.
+     */
     interface Resolution {
+        void onResolutionStarting(SpellAbility sa, boolean fizzled, List<List<GameObject>> targetsAtCast);
+    }
+
+    /** The same listener before it handed over the targets as cast. */
+    interface OlderResolution {
         void onResolutionStarting(SpellAbility sa, boolean fizzled);
     }
 
@@ -142,12 +185,12 @@ final class HookShapes {
                 new Declared(PatchHooks.COMBAT_LISTENER, CombatLegality.class, List.of()),
                 new Declared(PatchHooks.MANA_LISTENER, Mana.class, List.of()),
                 new Declared(PatchHooks.REPLACEMENT_LISTENER, Replacement.class,
-                        List.of(OlderReplacement.class)),
+                        List.of(FiveArgumentReplacement.class, OlderReplacement.class)),
                 new Declared(PatchHooks.CONFIRM_LISTENER, Confirm.class, List.of()),
                 new Declared(PatchHooks.STATE_BASED_LOOP_LISTENER, StateBasedLoop.class, List.of()),
                 new Declared(PatchHooks.PRIORITY_SETTLED_LISTENER, PrioritySettled.class, List.of()),
                 new Declared(PatchHooks.CAST_LISTENER, Cast.class, List.of()),
-                new Declared(PatchHooks.RESOLUTION_LISTENER, Resolution.class, List.of()),
+                new Declared(PatchHooks.RESOLUTION_LISTENER, Resolution.class, List.of(OlderResolution.class)),
                 new Declared(PatchHooks.PAYMENT_LISTENER, Payment.class, List.of()));
     }
 

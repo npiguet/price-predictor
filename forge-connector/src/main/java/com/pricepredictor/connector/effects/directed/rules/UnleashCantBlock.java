@@ -24,7 +24,9 @@ import java.util.Optional;
  * <p>The base board, read at a boundary: the declare-blockers step begins,
  * before blockers are declared, and a defending player of an attacker
  * controls an untapped creature with unleash and a +1/+1 counter, so that
- * creature cannot block. It binds the attacker and that creature.
+ * creature cannot block, and it would survive its +1/+1 counters taken away
+ * (its toughness without them above its marked damage). It binds the
+ * attacker and that creature.
  *
  * <p>Variant {@code no_counter} ({@code counters}): the creature has no
  * +1/+1 counter, so it may block.
@@ -55,7 +57,8 @@ public final class UnleashCantBlock {
                 continue;
             }
             for (Card creature : Boards.untappedCreatures(defender)) {
-                if (creature.hasKeyword(Keyword.UNLEASH) && creature.getCounters(CounterEnumType.P1P1) > 0) {
+                if (creature.hasKeyword(Keyword.UNLEASH) && creature.getCounters(CounterEnumType.P1P1) > 0
+                        && survivesWithoutItsCounters(creature)) {
                     return Optional.of(Binding.empty()
                             .with("attacker", attacker)
                             .with("blocker", creature));
@@ -63,5 +66,12 @@ public final class UnleashCantBlock {
             }
         }
         return Optional.empty();
+    }
+
+    /** Whether the creature, its +1/+1 counters taken away, is not put into a graveyard by the next check. */
+    static boolean survivesWithoutItsCounters(Card creature) {
+        int toughness = creature.getNetToughness() - creature.getCounters(CounterEnumType.P1P1);
+        int damage = creature.getDamage();
+        return toughness > 0 && damage < toughness && !(damage > 0 && creature.hasBeenDealtDeathtouchDamage());
     }
 }

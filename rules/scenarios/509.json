@@ -69,11 +69,12 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A creature the defending player controls is listed as forbidden from blocking the anchored attacker (a tapped creature among them), so it is not a legal blocker.",
-        "near_miss": "A creature the defending player controls is listed among the legal blockers of the anchored attacker.",
+        "outcome": "A creature the defending player controls is forbidden from blocking the anchored attacker because it is tapped (a blocker must be untapped).",
+        "near_miss": "An untapped creature among the anchored attacker's legal blockers.",
         "params": {
           "list": "legal_blockers",
-          "fires_when": "outside"
+          "fires_when": "outside",
+          "restriction": "tapped"
         },
         "needs": []
       }
@@ -139,16 +140,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "legality_membership",
-        "record_kind": "playability",
-        "outcome": "A creature the defending player controls is listed as forbidden from blocking the anchored attacker by a static ability, such as an evasion keyword's or a 'can block only creatures with flying' restriction, so it is not a legal blocker.",
-        "near_miss": "A creature the defending player controls is listed among the legal blockers of the anchored attacker.",
-        "params": {
-          "list": "legal_blockers",
-          "fires_when": "outside",
-          "responsible_static": true
-        },
-        "needs": []
+        "same_as": "702.9b-1",
+        "reason": "A creature without flying or reach forbidden from blocking a flier is 702.9b's fact."
       }
     },
     {
@@ -735,14 +728,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A trigger that fires on a creature becoming blocked (Mode$ AttackerBlocked), which the declaration of blockers causes and which waits to be put on the stack before a player gets priority.",
-        "near_miss": "A becomes-blocked trigger evaluated against a declaration of blockers that does not fire.",
-        "params": {
-          "mode": "AttackerBlocked"
-        },
-        "needs": []
+        "same_as": "509.1i-1",
+        "reason": "A block trigger firing when blockers are declared is 509.1i's fact; its stack order is in no record."
       }
     },
     {
@@ -988,14 +975,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A 'becomes blocked' trigger fires once when an attacker becomes blocked, however many creatures block it.",
-        "near_miss": "A 'becomes blocked' trigger is evaluated against a block and does not fire, because the blocked attacker is not the creature it watches or a condition of it is unmet.",
-        "params": {
-          "mode": "AttackerBlocked"
-        },
-        "needs": []
+        "none": "How many times one event triggers an ability is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     },
     {
@@ -1151,14 +1131,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A trigger on blocking a number of creatures fires when the blocker blocks that many creatures at the declaration.",
-        "near_miss": "The trigger is evaluated and does not fire because the blocker blocks fewer creatures.",
-        "params": {
-          "mode": "Blocks"
-        },
-        "needs": []
+        "none": "Could not express: the number of creatures the trigger asks for is read by no trigger_mode parameter."
       }
     },
     {
@@ -1224,14 +1197,7 @@
       ],
       "forge_notes": "Seifer's goad trigger fires because A attacks B; goad does not restrict blocking.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A trigger on becoming blocked by a number of creatures fires when that many block the attacker.",
-        "near_miss": "The trigger is evaluated and does not fire because fewer creatures block.",
-        "params": {
-          "mode": "AttackerBlocked"
-        },
-        "needs": []
+        "none": "Could not express: the number of blockers the trigger asks for is read by no trigger_mode parameter."
       }
     },
     {
@@ -1304,14 +1270,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A trigger conditioned on the blocking creature's characteristic fires when the creature has it at the point it blocks.",
-        "near_miss": "A 'blocks or becomes blocked by a creature' trigger is evaluated against a blocker-attacker pair and does not fire, because a characteristic it asks of the blocker or the attacker (a colour, a type) is not there at the declaration.",
-        "params": {
-          "mode": "AttackerBlockedByCreature"
-        },
-        "needs": []
+        "none": "Could not express: when the trigger's characteristic condition was checked is read by no parameter."
       }
     },
     {
