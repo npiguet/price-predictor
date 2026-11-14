@@ -134,6 +134,13 @@ class RandomSeatControllerTest {
 
         assertEquals(1, game.getStack().size(), "the spell is on the stack");
         assertTrue(a.getCardsIn(ZoneType.Hand).isEmpty(), "and no longer in hand");
+        // Cast as the engine casts: its mana paid, and it resolves.
+        assertTrue(a.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(card -> card.getName().equals("Forest")).allMatch(Card::isTapped),
+                "the two Forests paid for it");
+        game.getStack().resolveStack();
+        assertTrue(a.getCardsIn(ZoneType.Battlefield).stream()
+                .anyMatch(card -> card.getName().equals("Grizzly Bears")), "the bears resolved");
     }
 
     /**
@@ -554,6 +561,9 @@ class RandomSeatControllerTest {
         try (GameRecording recording = new GameRecording(
                 game, writer, "run.0-l1.0", TestCaps.unprobed(), 1L,
                 Refs.of(a))) {
+            // Every collector live, so "no record" is the seat's doing and not
+            // a recording that never listened.
+            recording.open();
             seat.attach(game, recording.priorityCandidates(), recording.fruitlessActivations());
             for (int draw = 0; draw < draws; draw++) {
                 Combat combat = new Combat(a);
@@ -604,6 +614,9 @@ class RandomSeatControllerTest {
         try (GameRecording recording = new GameRecording(
                 game, writer, "run.0-l1.0", TestCaps.unprobed(), 1L,
                 Refs.of(a))) {
+            // Every collector live, so "no record" is the seat's doing and not
+            // a recording that never listened.
+            recording.open();
             seat.attach(game, recording.priorityCandidates(), recording.fruitlessActivations());
             for (int draw = 0; draw < 100; draw++) {
                 Combat combat = new Combat(b);
