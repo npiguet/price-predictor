@@ -117,6 +117,12 @@ final class Characterization {
         try {
             if (Boolean.getBoolean(UPDATE_PROPERTY)) {
                 Files.createDirectories(DIR);
+                if (Files.exists(path)) {
+                    String before = Files.readString(path, StandardCharsets.UTF_8);
+                    if (!before.equals(actual)) {
+                        System.out.println(changedMembers(name, before, actual));
+                    }
+                }
                 Files.writeString(path, actual, StandardCharsets.UTF_8);
             }
             if (!Files.exists(path)) {
@@ -209,6 +215,55 @@ final class Characterization {
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
+        }
+    }
+
+    /**
+     * What a regeneration changed, member by member: for each line that
+     * differs, the JSON paths whose values differ (a line that is no JSON
+     * object is named whole), so a rewritten expected file can be reviewed
+     * without reading 20 KB lines side by side.
+     */
+    static String changedMembers(String name, String before, String after) {
+        List<String> old = before.lines().toList();
+        List<String> now = after.lines().toList();
+        StringBuilder report = new StringBuilder("characterization: " + name + " rewritten, "
+                + old.size() + " -> " + now.size() + " lines");
+        for (int i = 0; i < Math.max(old.size(), now.size()); i++) {
+            String was = i < old.size() ? old.get(i) : null;
+            String is = i < now.size() ? now.get(i) : null;
+            if (java.util.Objects.equals(was, is)) {
+                continue;
+            }
+            List<String> paths = new java.util.ArrayList<>();
+            try {
+                diffPaths("", was == null ? null : RecordLines.parse(was),
+                        is == null ? null : RecordLines.parse(is), paths);
+            } catch (AssertionError notJson) {
+                paths.add("<whole line>");
+            }
+            report.append("\n  line ").append(i + 1).append(": ").append(String.join(", ", paths));
+        }
+        return report.toString();
+    }
+
+    private static void diffPaths(String at, Object was, Object is, List<String> paths) {
+        if (java.util.Objects.equals(was, is)) {
+            return;
+        }
+        if (was instanceof java.util.Map<?, ?> a && is instanceof java.util.Map<?, ?> b) {
+            java.util.Set<Object> keys = new java.util.LinkedHashSet<>(a.keySet());
+            keys.addAll(b.keySet());
+            for (Object key : keys) {
+                diffPaths(at.isEmpty() ? String.valueOf(key) : at + "." + key,
+                        a.get(key), b.get(key), paths);
+            }
+        } else if (was instanceof List<?> a && is instanceof List<?> b && a.size() == b.size()) {
+            for (int i = 0; i < a.size(); i++) {
+                diffPaths(at + "[" + i + "]", a.get(i), b.get(i), paths);
+            }
+        } else {
+            paths.add(at.isEmpty() ? "<record>" : at);
         }
     }
 
