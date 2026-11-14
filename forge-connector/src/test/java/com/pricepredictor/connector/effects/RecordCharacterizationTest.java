@@ -256,6 +256,32 @@ class RecordCharacterizationTest {
     }
 
     /**
+     * Captain Marvel's power-up (a +1/+1 and an indestructible counter at
+     * once) under Hardened Scales and Doubling Season, played on the hooked
+     * path: the scales' record is the +1/+1 counters' alone, and the
+     * season's is two, one per type it doubled.
+     */
+    @Test
+    void counterRewriteRecordsOverSeveralTypes() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Player you = board.you;
+        board.battlefield("Hardened Scales", you);
+        board.battlefield("Doubling Season", you);
+        Card marvel = board.battlefield("Captain Marvel, Earth's Protector", you);
+
+        List<String> records = ShardRun.recordsWithClauseHook(
+                tempDir, board.game, "for rewrite records over a counter map", () -> {
+                    SpellAbility powerUp = board.ability(marvel, ApiType.PutCounter);
+                    powerUp.setActivatingPlayer(you);
+                    board.castAndResolve(powerUp);
+                });
+
+        Characterization.assertMatches("record-rewrite-counter-types.jsonl",
+                Characterization.recordLines(records.stream()
+                        .filter(line -> line.contains("\"kind\":\"rewrite\"")).toList()));
+    }
+
+    /**
      * A pain land tapped for coloured mana, played on the hooked path: its
      * mana record holds the tap, the mana, and the damage its sub-ability
      * dealt its controller.
