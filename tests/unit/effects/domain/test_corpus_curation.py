@@ -270,6 +270,8 @@ class TestGameDisjointDraw:
         import zlib
 
         assert game_disjoint_draw("run.0-a.5") == zlib.crc32(b"run.0-a.5") % 10**6 / 10**6
+        # Pinned literally too: a draw already made places games a corpus holds.
+        assert game_disjoint_draw("run.0-a.5") == 0.57121
 
     def test_game_hash_is_stable_across_calls(self):
         """Pinned to the algorithm, not merely to idempotency (FR-088a).
@@ -280,7 +282,7 @@ class TestGameDisjointDraw:
         """
         import zlib
 
-        assert game_hash("run.0-a.3") == zlib.crc32(b"run.0-a.3")
+        assert game_hash("run.0-a.3") == zlib.crc32(b"run.0-a.3") == 880293311
         assert game_hash("run.0-a.3") == game_hash("run.0-a.3")
 
 

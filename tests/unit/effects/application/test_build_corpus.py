@@ -1014,6 +1014,12 @@ def test_the_manifest_records_per_stratum_counts_and_unique_texts(default_build)
     manifest = default_build.load()
     assert manifest.per_stratum["training"] > 0
     assert manifest.unique_texts["training"] > 0
+    # The counts are what each stratum's directory holds, not merely positive.
+    for stratum, directory in (("training", default_build.training_dir),
+                               ("card-disjoint", default_build.card_disjoint_dir),
+                               ("game-disjoint", default_build.game_disjoint_dir)):
+        written = {r.record_id for r in read_records(directory)}
+        assert manifest.per_stratum[stratum] == len(written), stratum
     assert "card-disjoint" in manifest.per_stratum
     assert "game-disjoint" in manifest.per_stratum
     assert manifest.unique_texts["card-disjoint"] > 0

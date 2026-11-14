@@ -370,6 +370,12 @@ def test_the_deviance_sample_is_capped_by_a_seeded_draw() -> None:
         assert len(frozen.deviance_samples[GD][half]) == 7
     assert frozen.deviance_samples == _freeze(halves, records, tags,
                                               deviance_cap=7).deviance_samples
+    # A draw, not the first seven read: the halves' records in read order.
+    for half in ("selection", "reporting"):
+        drawn = [sample.record_id for sample in frozen.deviance_samples[GD][half]]
+        in_order = [r.record_id for r in records if r.game_id in halves[GD][half]]
+        assert set(drawn) <= set(in_order)
+        assert drawn != in_order[:7] and sorted(drawn) != sorted(in_order[:7])
 
 
 # ── probes, grids, deviance ─────────────────────────────────────────────
