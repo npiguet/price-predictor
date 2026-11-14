@@ -18,7 +18,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -158,7 +157,7 @@ class InterventionSchedulerTest {
         List<String> forced = new ArrayList<>();
         int[] draws = {0};
         InterventionScheduler scheduler = new InterventionScheduler(
-                board.game(), board.recording(forced, 10), null, false, () -> draws[0]++ == 1);
+                board.game(), board.recording(forced, 10), null, false, (turn, phase) -> draws[0]++ == 1);
 
         scheduler.collect();
         assertEquals(List.of(), forced);
@@ -167,18 +166,118 @@ class InterventionSchedulerTest {
         assertEquals(2, draws[0]);
     }
 
-    /** The worker's gate passes about one boundary in twenty, the same boundaries for one seed. */
+    /** The worker's gate draws the same turns for one seed, and from the game's seed alone. */
     @Test
-    void theWorkersGatePassesAboutOneBoundaryInTwenty() {
-        BooleanSupplier gate = InterventionScheduler.drawnPerBoundary(7L);
-        BooleanSupplier again = InterventionScheduler.drawnPerBoundary(7L);
-        int passed = 0;
-        for (int boundary = 0; boundary < 4000; boundary++) {
-            boolean drawn = gate.getAsBoolean();
-            assertEquals(drawn, again.getAsBoolean(), "the draws depend on the game's seed alone");
-            passed += drawn ? 1 : 0;
+    void theWorkersGateDependsOnTheGamesSeedAlone() {
+        for (long seed = 0; seed < 50; seed++) {
+            InterventionScheduler.Gate gate = InterventionScheduler.spreadOverTheGame(seed, 2);
+            InterventionScheduler.Gate again = InterventionScheduler.spreadOverTheGame(seed, 2);
+            for (int turn = 1; turn <= 40; turn++) {
+                boolean open = gate.open(turn, PhaseType.END_OF_TURN);
+                assertEquals(open, again.open(turn, PhaseType.END_OF_TURN), "seed " + seed + " turn " + turn);
+                if (open) {
+                    gate.forced();
+                    again.forced();
+                }
+            }
         }
-        assertTrue(passed > 150 && passed < 250, passed + " of 4000");
+    }
+
+    /**
+     * The budget is spread over a typical game: of games forcing at every
+     * turn the gate opens, about half have drawn their first intervention
+     * by the typical game's middle and all their budget by its end, and a
+     * game shorter than typical may end with some unspent.
+     */
+    @Test
+    void theWorkersGateSpreadsTheBudgetOverATypicalGame() {
+        int typical = InterventionScheduler.TYPICAL_GAME_TURNS;
+        int games = 2000;
+        int spentByTheEnd = 0;
+        int firstByTheMiddle = 0;
+        int spentByAFifth = 0;
+        for (long seed = 0; seed < games; seed++) {
+            InterventionScheduler.Gate gate = InterventionScheduler.spreadOverTheGame(seed, 2);
+            int forced = 0;
+            for (int turn = 1; turn <= typical; turn++) {
+                if (gate.open(turn, PhaseType.END_OF_TURN)) {
+                    gate.forced();
+                    forced++;
+                    if (forced == 1 && turn <= typical / 2) {
+                        firstByTheMiddle++;
+                    }
+                }
+                if (turn == typical / 5 && forced == 2) {
+                    spentByAFifth++;
+                }
+            }
+            spentByTheEnd += forced == 2 ? 1 : 0;
+        }
+        assertEquals(games, spentByTheEnd, "the whole budget by the typical game's last turn");
+        assertTrue(firstByTheMiddle > games * 0.3 && firstByTheMiddle < games * 0.85, firstByTheMiddle + "");
+        assertTrue(spentByAFifth < games * 0.1, spentByAFifth + " spent within the first fifth");
+    }
+
+    /**
+     * The step an intervention opens at is drawn with it: over many games
+     * the first opening falls at every step that gives priority, and never
+     * before the turn's upkeep.
+     */
+    @Test
+    void anInterventionOpensAtAStepDrawnWithIt() {
+        Set<PhaseType> opened = new HashSet<>();
+        for (long seed = 0; seed < 500; seed++) {
+            InterventionScheduler.Gate gate = InterventionScheduler.spreadOverTheGame(seed, 1);
+            turns:
+            for (int turn = 1; turn <= 40; turn++) {
+                for (PhaseType phase : PhaseType.values()) {
+                    if (gate.open(turn, phase)) {
+                        opened.add(phase);
+                        break turns;
+                    }
+                }
+            }
+        }
+        assertEquals(Set.copyOf(InterventionScheduler.OPENING_STEPS), opened);
+    }
+
+    /** An intervention drawn and not forced is carried to the next boundary, never drawn twice. */
+    @Test
+    void aDrawnInterventionIsCarriedUntilALineIsForced() {
+        InterventionScheduler.Gate gate = InterventionScheduler.spreadOverTheGame(3L, 1);
+        int turn = 1;
+        while (!gate.open(turn, PhaseType.END_OF_TURN)) {
+            turn++;
+        }
+        assertTrue(gate.open(turn + 1, PhaseType.UPKEEP), "carried to the next turn");
+        assertTrue(gate.open(turn + 5, PhaseType.UPKEEP), "and on");
+        gate.forced();
+        for (int later = turn + 5; later < turn + 40; later++) {
+            assertFalse(gate.open(later, PhaseType.END_OF_TURN), "a budget of one, spent");
+        }
+    }
+
+    /**
+     * A line its timing forbids at this boundary is passed over and not
+     * marked: a sorcery at the opponent's turn or outside a main phase, any
+     * line at the cleanup step; an instant at the opponent's upkeep is forced.
+     */
+    @Test
+    void aLineIsForcedOnlyWhereItsTimingLetsItsHolderPlayIt() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.UPKEEP);
+        Player active = game.getPlayers().get(0);
+        Player other = game.getPlayers().get(1);
+        SpellAbility lavaAxe = TestBoard.inHand(game, active, "Lava Axe").getFirstSpellAbility();
+        SpellAbility bolt = TestBoard.inHand(game, other, "Lightning Bolt").getFirstSpellAbility();
+
+        assertFalse(InterventionScheduler.playableNow(lavaAxe, active), "a sorcery in the upkeep");
+        assertTrue(InterventionScheduler.playableNow(bolt, other), "an instant in the opponent's upkeep");
+        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, active, 2);
+        assertTrue(InterventionScheduler.playableNow(lavaAxe, active), "a sorcery in its holder's main phase");
+        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, other, 2);
+        assertFalse(InterventionScheduler.playableNow(lavaAxe, active), "a sorcery in the opponent's main phase");
+        game.getPhaseHandler().devModeSet(PhaseType.CLEANUP, other, 2);
+        assertFalse(InterventionScheduler.playableNow(bolt, other), "no priority in the cleanup step");
     }
 
     /**

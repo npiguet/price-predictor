@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
-import forge.game.event.GameEventTurnPhase;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import java.io.IOException;
@@ -30,20 +29,30 @@ import org.junit.jupiter.api.io.TempDir;
 class ScheduledInterventionsTest {
 
     /**
-     * Boundaries published per stretch: at one in twenty, the gate passes
-     * at about ten of them, so a line that can be forced is.
+     * Boundaries published per stretch, each of a game turn of its own: the
+     * worker's gate draws once a turn and spends what is left of the budget
+     * one turn at a time past a typical game's length, so a line that can
+     * be forced is.
      */
-    private static final int BOUNDARIES = 200;
+    private static final int BOUNDARIES = 40;
 
     @TempDir
     Path tempDir;
 
-    /** Publish {@code count} boundaries of the step the game is in. */
+    /**
+     * Publish {@code count} boundaries of the step the game is in, the same
+     * player's, each in the next game turn ({@code devModeSet} publishes the
+     * step's phase event); the turn number put back after, so a board read
+     * before and after differs only by what a fork did to it.
+     */
     private static void boundaries(Game game, int count) {
+        int turn = game.getPhaseHandler().getTurn();
         for (int i = 0; i < count; i++) {
-            game.fireEvent(new GameEventTurnPhase(
-                    game.getPhaseHandler().getPlayerTurn(), game.getPhaseHandler().getPhase(), ""));
+            game.getPhaseHandler().devModeSet(game.getPhaseHandler().getPhase(),
+                    game.getPhaseHandler().getPlayerTurn(), game.getPhaseHandler().getTurn() + 1);
         }
+        forge.game.phase.PhaseHandler phases = game.getPhaseHandler();
+        phases.devModeSet(phases.getPhase(), phases.getPlayerTurn(), turn);
     }
 
     /**

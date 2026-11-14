@@ -78,7 +78,8 @@ stratum.
 - Never withheld by `--max-records-per-game`.
 
 What `--max-records-per-game` (the cap) bounds: the records of a game written as it is played, its
-forks' included. Past the cap the shard still takes the game's end-of-game records, each bounded
+forks' included, so a game whose forks wrote records reaches the cap sooner and withholds the live
+records past it. Past the cap the shard still takes the game's end-of-game records, each bounded
 on its own:
 
 | Passes the cap | At most, per game |
@@ -404,6 +405,15 @@ position a card left a library from, and a search of another player's library.
   `face_change`, `destroyed`, `sacrificed`, `regenerated`) that repeats, line for line, the last
   transition a record holds for the same subjects is written once; the same transition after
   another of those subjects is written again (a creature flickered twice, a permanent tapped twice).
+- Interventional resolutions are spread over a game's turns: each game turn draws once, from the
+  game's seed, whether it takes one of `--interventions-per-game`, with chance
+  `left / (20 - turn + 1)` (at least the whole of it from game turn 20 on; `left` is the budget
+  neither forced nor drawn yet), and the step of upkeep to end of turn it opens at; one not forced
+  is carried to the next boundary with a line to force. The 20 is a constant
+  (`InterventionScheduler.TYPICAL_GAME_TURNS`), not a flag.
+- A line is forced only at a boundary where its own timing lets its holder play it: a sorcery-speed
+  line in a main phase of its holder's turn with the stack empty, an instant-speed line at any
+  step that gives priority. Each printed line is forced once a game per pass, whoever holds it.
 - A forced (interventional) resolution reads its board when its resolution starts, as a live one.
 - A forced resolution's effect half and a damage-step probe's combat record hold the events a live
   record takes from the engine hooks rather than the bus, filed by the same rules: the events a

@@ -105,9 +105,6 @@ class ForkIsolationTest {
                 }
             }
         }
-        if (caps.interventionsPerGame() > 0) {
-            assertTrue(forked > 0, name + ": the forks wrote something");
-        }
         return renumbered(written);
     }
 

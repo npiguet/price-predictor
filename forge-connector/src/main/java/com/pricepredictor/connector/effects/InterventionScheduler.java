@@ -13,7 +13,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
-import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 
 /**
@@ -35,11 +34,16 @@ import java.util.function.Predicate;
  * {@code --interventions-per-game} defaults low and why nothing happens at all
  * when it is zero.
  *
- * <p>Spread over the game rather than spent where it starts: a boundary forces
- * a line only when it draws one, with probability {@link #PROBABILITY} from
- * the game's own generator, and then exactly one line. Forced greedily from
- * the game's first boundary on, every budget went on the opening hand over an
- * empty board.
+ * <p>Spread over the game rather than spent where it starts ({@link
+ * #spreadOverTheGame}): each game turn draws, once, whether it takes one of the
+ * budget's interventions, with a chance that spreads what is left of the
+ * budget over the turns left until a typical game's end ({@link
+ * #TYPICAL_GAME_TURNS}); a drawn intervention not yet forced is carried to
+ * the next boundary that has a line to force. A boundary forces one line at
+ * most, and only a line its own timing rules let its holder play there
+ * ({@link #playableNow}): a sorcery-speed line in a main phase of its holder's
+ * turn with the stack empty, an instant-speed one at any boundary that gives
+ * priority.
  */
 final class InterventionScheduler {
 
@@ -71,28 +75,119 @@ final class InterventionScheduler {
     }
 
     /**
-     * The chance a boundary forces a line: about one boundary in twenty, so
-     * a budget of a few forks lasts into the game's middle turns, past the
-     * empty boards of its first.
+     * Whether a boundary may force a line: asked once per boundary with the
+     * game's turn, and told when a line was forced there.
      */
-    static final double PROBABILITY = 0.05;
+    interface Gate {
+        /** Whether this boundary, {@code phase} of game turn {@code turn}, may force a line. */
+        boolean open(int turn, PhaseType phase);
+
+        /** A line was forced at the boundary the gate last opened. */
+        default void forced() {
+        }
+    }
+
+    /**
+     * The game turns a typical game lasts, counting each player's turn: what
+     * the budget is spread over. A game that lasts longer forces what is
+     * left one turn at a time from this turn on; a shorter one may end with
+     * some of it unspent.
+     */
+    static final int TYPICAL_GAME_TURNS = 20;
 
     /** Kept apart from the other streams the same game seed seeds. */
     private static final long SEED_SALT = 0x2545F4914F6CDD1DL;
 
     /** A gate every boundary passes, for a caller that forces at each one. */
-    static final BooleanSupplier EVERY_BOUNDARY = () -> true;
+    static final Gate EVERY_BOUNDARY = (turn, phase) -> true;
 
-    /** The game's draw against {@link #PROBABILITY}, from a generator seeded by the game's seed. */
-    static BooleanSupplier drawnPerBoundary(long seed) {
-        Random random = new Random(GameRecording.scramble(seed ^ SEED_SALT));
-        return () -> random.nextDouble() < PROBABILITY;
+    /**
+     * The steps an intervention drawn for a turn may open at, in turn order:
+     * those that give priority and where a fork's score check can pass. One
+     * is drawn with the intervention, and the gate opens from that step on,
+     * so instant-speed lines are forced across the turn rather than all at
+     * its first step.
+     */
+    static final List<PhaseType> OPENING_STEPS = List.of(
+            PhaseType.UPKEEP, PhaseType.DRAW, PhaseType.MAIN1,
+            PhaseType.COMBAT_DECLARE_ATTACKERS, PhaseType.COMBAT_DECLARE_BLOCKERS,
+            PhaseType.COMBAT_DAMAGE, PhaseType.COMBAT_END, PhaseType.MAIN2, PhaseType.END_OF_TURN);
+
+    /**
+     * The worker's gate: the game's {@code budget} spread over its turns,
+     * from a generator seeded by the game's seed alone, never the live game's
+     * random stream.
+     *
+     * <p>Each game turn draws once, at its first boundary (or, for a turn
+     * with no boundary asked, at the next), whether it takes an
+     * intervention: with chance {@code left / (TYPICAL_GAME_TURNS - turn +
+     * 1)}, at least the whole of it from the typical game's last turn on,
+     * where {@code left} is the budget neither forced nor already drawn; and
+     * for one drawn, the step of {@link #OPENING_STEPS} it opens at. An
+     * intervention drawn and not yet forced opens every boundary from that
+     * step on until one forces a line, so a step or a turn whose boundaries
+     * offer nothing to force carries it forward rather than losing it.
+     */
+    static Gate spreadOverTheGame(long seed, int budget) {
+        return new SpreadGate(new Random(GameRecording.scramble(seed ^ SEED_SALT)), budget);
     }
+
+    /** {@link #spreadOverTheGame}'s gate. */
+    static final class SpreadGate implements Gate {
+        private final Random random;
+        private final int budget;
+        /** The last game turn drawn for. */
+        private int drawnThrough;
+        /** Interventions drawn and not yet forced: each its turn and the step it opens at. */
+        private final java.util.ArrayDeque<int[]> pending = new java.util.ArrayDeque<>();
+        private int forced;
+
+        SpreadGate(Random random, int budget) {
+            this.random = random;
+            this.budget = budget;
+        }
+
+        @Override
+        public boolean open(int turn, PhaseType phase) {
+            while (drawnThrough < turn) {
+                drawnThrough++;
+                draw(drawnThrough);
+            }
+            int[] first = pending.peekFirst();
+            return first != null && (turn > first[0]
+                    || phase != null && phase.ordinal() >= OPENING_STEPS.get(first[1]).ordinal());
+        }
+
+        private void draw(int turn) {
+            int left = budget - forced - pending.size();
+            double chance = left <= 0 ? 0.0
+                    : Math.min(1.0, left / (double) Math.max(1, TYPICAL_GAME_TURNS - turn + 1));
+            // Both drawn whatever the chance, so a turn's draws depend on the
+            // seed and the turn alone.
+            boolean drawn = random.nextDouble() < chance;
+            int step = random.nextInt(OPENING_STEPS.size());
+            if (drawn) {
+                pending.addLast(new int[] {turn, step});
+            }
+        }
+
+        @Override
+        public void forced() {
+            pending.pollFirst();
+            forced++;
+        }
+    }
+
+    /**
+     * Told of each line forced and its holder, as the scheduler forces it,
+     * for a test that plays real matches; null in a worker.
+     */
+    static volatile java.util.function.BiConsumer<SpellAbility, Player> forcedWatch;
 
     private final Game game;
     private final Forcing forks;
     /** Whether a boundary forces a line: asked once per boundary. */
-    private final BooleanSupplier gate;
+    private final Gate gate;
     /** Grants the rare protections, or null when the run takes none. */
     private final ProtectionFork protection;
     /**
@@ -114,10 +209,10 @@ final class InterventionScheduler {
      * @param protection grants the rare protections, or null for none
      * @param steered    whether either deck of the game carries a rule
      * @param gate       whether a boundary forces a line, asked once per
-     *                   boundary ({@link #drawnPerBoundary} in a worker)
+     *                   boundary ({@link #spreadOverTheGame} in a worker)
      */
     InterventionScheduler(Game game, Forcing forks, ProtectionFork protection, boolean steered,
-                          BooleanSupplier gate) {
+                          Gate gate) {
         this.game = game;
         this.forks = forks;
         this.protection = protection;
@@ -169,7 +264,8 @@ final class InterventionScheduler {
     void collect() {
         Player active = game.getPhaseHandler() == null
                 ? null : game.getPhaseHandler().getPlayerTurn();
-        if (active == null || !gate.getAsBoolean()) {
+        if (active == null
+                || !gate.open(game.getPhaseHandler().getTurn(), game.getPhaseHandler().getPhase())) {
             return;
         }
         if (steered && forceVariants(active) == Pass.DONE) {
@@ -216,14 +312,16 @@ final class InterventionScheduler {
 
     /**
      * Force the first line {@code holder} holds in the {@link #FORCED_ZONES}
-     * that {@code wanted} accepts, {@code seen} does not hold yet, and that
-     * has the choices its resolution needs, for {@code holder}.
+     * that {@code wanted} accepts, {@code seen} does not hold yet, that its
+     * timing lets {@code holder} play at this boundary, and that has the
+     * choices its resolution needs, for {@code holder}.
      */
     private Pass force(Player holder, Set<String> seen, Predicate<SpellAbility> wanted) {
         for (ZoneType zone : FORCED_ZONES) {
             for (Card card : holder.getCardsIn(zone)) {
                 for (SpellAbility candidate : forcedFrom(card, zone)) {
-                    if (!worthIntervening(candidate, seen) || !wanted.test(candidate)) {
+                    if (!worthIntervening(candidate, seen) || !wanted.test(candidate)
+                            || !playableNow(candidate, holder)) {
                         continue;
                     }
                     if (!forks.mayIntervene(candidate.getId())) {
@@ -234,6 +332,11 @@ final class InterventionScheduler {
                         continue;
                     }
                     seen.add(lineKey(candidate));
+                    gate.forced();
+                    java.util.function.BiConsumer<SpellAbility, Player> watch = forcedWatch;
+                    if (watch != null) {
+                        watch.accept(candidate, holder);
+                    }
                     forks.intervene(candidate, candidate.getId(), holder);
                     return Pass.DONE;
                 }
@@ -243,10 +346,42 @@ final class InterventionScheduler {
     }
 
     /**
+     * Whether {@code holder} could play {@code candidate} at this boundary by
+     * its own timing: a sorcery-speed line (a sorcery, a creature, a
+     * planeswalker's loyalty ability, an ability restricted to sorcery speed)
+     * only in a main phase of {@code holder}'s turn with the stack empty, an
+     * instant-speed one (an instant, flash, an activated ability) wherever
+     * the step gives priority, which the untap and cleanup steps do not
+     * ({@code SpellAbility.canCastTiming}, read without changing anything).
+     * A line whose timing cannot be read is not forced.
+     */
+    static boolean playableNow(SpellAbility candidate, Player holder) {
+        if (holder == null || holder.getGame() == null || holder.getGame().getPhaseHandler() == null) {
+            return false;
+        }
+        PhaseType phase = holder.getGame().getPhaseHandler().getPhase();
+        if (phase == null || phase == PhaseType.UNTAP || phase == PhaseType.CLEANUP) {
+            return false;
+        }
+        try {
+            return candidate.canCastTiming(candidate.getHostCard(), holder);
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /**
      * The line a candidate is, for forcing each once a game: its printed
      * line's provenance key, so two lines of one card with the same effect
      * API are two lines and a card redrawn is the same one; for a line that
      * keys to none, its API, its host's name and its text.
+     *
+     * <p>Without its holder or controller: the key is what keeps a game from
+     * spending its budget on a second observation of one printed line, and
+     * the same line held by the other player, or a second copy of the card,
+     * resolves the same text on a board of the same game. A mirror match
+     * whose players hold the same lines therefore forces each once, and may
+     * leave budget unspent, which takes no fork.
      */
     static String lineKey(SpellAbility candidate) {
         ProvenanceKey.Resolved resolved;
