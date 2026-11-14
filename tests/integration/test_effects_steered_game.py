@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from effects.application.collect_variants import LOADABLE_FILE, generate_variants
+from effects.domain.records import is_game_end
 from effects.infrastructure.deck_file import write_deck_file
 from effects.infrastructure.one_shot_workers import write_variant_sidecars
 from effects.infrastructure.shard_io import read_records
@@ -108,3 +109,12 @@ def test_a_steered_games_records_carry_its_decks_rules(tmp_path: Path) -> None:
     assert {record.aimed_at for record in records} == {("702.19b", "704.5f")}
     names = {entity.name for record in records for entity in record.state.entities}
     assert variant in names, f"the variant never reached a record; saw {sorted(names)}"
+    # The finished game's marker is stamped as the game's records are: the
+    # decks' rules, the run's mode, the board the game ended on.
+    markers = [record for record in records if is_game_end(record)]
+    assert markers, "the finished game wrote no game-end marker"
+    for marker in markers:
+        assert marker.aimed_at == ("702.19b", "704.5f"), marker.aimed_at
+        assert marker.mode is records[0].mode, marker.record_id
+        assert marker.state is not None and marker.state.players, marker.record_id
+        assert variant in {entity.name for entity in marker.state.entities}

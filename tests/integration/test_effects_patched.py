@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from effects.domain.records import is_game_end
 from effects.infrastructure.shard_io import read_records
 from price_predictor.infrastructure.forge_jvm import kill_process_tree
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
@@ -75,7 +76,13 @@ def _require_patched(
 
 
 def test_a_patched_checkout_stamps_every_record_patched(tmp_path: Path) -> None:
-    records = _require_patched(tmp_path / "records")
+    """The game-end marker included: collected until a game has ended, so
+    the marker a finished game writes last is among the records, and it
+    decodes with the run's mode, no ``aimed_at`` (a plain worker aims at no
+    rule) and the board the game ended on."""
+    records = _require_patched(
+        tmp_path / "records", until=lambda so_far: any(map(is_game_end, so_far)),
+    )
     if not records:
         pytest.skip("worker produced no records within the collection window")
     modes = {record.mode.value for record in records}
@@ -85,6 +92,17 @@ def test_a_patched_checkout_stamps_every_record_patched(tmp_path: Path) -> None:
             "its effect-record-hooks branch and rebuild to exercise this test"
         )
     assert modes == {"patched"}
+    markers = [record for record in records if is_game_end(record)]
+    assert markers, "no game ended within the collection window"
+    for marker in markers:
+        assert marker.mode.value == "patched", marker.record_id
+        assert marker.generation == 3, marker.record_id
+        assert marker.aimed_at is None, marker.aimed_at
+        assert marker.state is not None and marker.state.players, marker.record_id
+        assert marker.payload.records_withheld == 0, marker.record_id
+        assert marker.payload.events == (), marker.record_id
+        game = [record for record in records if record.game_id == marker.game_id]
+        assert game[-1] is marker, f"{marker.game_id} wrote records after its marker"
 
 
 def test_a_patched_checkout_reaches_the_four_unlocked_kinds(
