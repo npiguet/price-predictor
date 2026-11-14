@@ -34,17 +34,12 @@ final class DirectedFork {
 
     private final Game game;
     private final ForkPlayForward playForward;
-    /** The id of a live record still open at the fork point, or null (D5). */
-    private final Supplier<String> openRecordId;
     /** The live player the copy's score is checked from, read after the copy. */
     private final Supplier<Player> perspective;
 
-    DirectedFork(
-            Game game, ForkPlayForward playForward, Supplier<String> openRecordId,
-            Supplier<Player> perspective) {
+    DirectedFork(Game game, ForkPlayForward playForward, Supplier<Player> perspective) {
         this.game = game;
         this.playForward = playForward;
-        this.openRecordId = openRecordId;
         this.perspective = perspective;
     }
 
@@ -57,8 +52,7 @@ final class DirectedFork {
      */
     boolean take(DirectedRule rule, String variant, Application application, Binding binding) {
         Consumer<EffectRecord> flags = flags(
-                rule.rule(), new DirectedTag(variant, application.operation()),
-                openRecordId.get());
+                rule.rule(), new DirectedTag(variant, application.operation()));
         Forks.ForkRun run = new Forks.ForkRun("directed", game, () -> { }, perspective);
         ForkPlayForward.Played played = run.take((verified, snapshots) -> {
             Game fork = verified.fork();
@@ -71,18 +65,12 @@ final class DirectedFork {
     /**
      * The flags every record of a directed fork carries (FR-009a, D5): the one
      * rule it was taken for as {@code aimed_at}, narrower than a run's list; a
-     * non-interventional fork; the variant and operation applied; and
-     * {@code mirror_of} only when a live record was open at the fork point.
-     * A fork taken at a phase boundary usually has none, because the live
-     * turn's records are written after the fork ends; the records are paired
-     * with the live turn by {@code game_id}, turn and {@code directed}.
+     * non-interventional fork; and the variant and operation applied. No
+     * {@code mirror_of}: a fork is taken at a phase boundary, which closes
+     * every live record first, so none is open to mirror; the records are
+     * paired with the live turn by {@code game_id}, turn and {@code directed}.
      */
-    static Consumer<EffectRecord> flags(String rule, DirectedTag tag, String mirrorOf) {
-        return record -> {
-            record.fork(true).interventional(false).aimedAt(List.of(rule)).directed(tag);
-            if (mirrorOf != null) {
-                record.mirrorOf(mirrorOf);
-            }
-        };
+    static Consumer<EffectRecord> flags(String rule, DirectedTag tag) {
+        return record -> record.fork(true).interventional(false).aimedAt(List.of(rule)).directed(tag);
     }
 }

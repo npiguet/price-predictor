@@ -167,7 +167,7 @@ public final class GameRecording implements AutoCloseable {
         this.directed = directing
                 ? Optional.of(new DirectedForkScheduler(
                         game, caps, directedRules, budget, tally, seed,
-                        new DirectedFork(game, playForward, bracket::heldRecordId,
+                        new DirectedFork(game, playForward,
                                 () -> game.getPhaseHandler().getPlayerTurn())::take))
                 : Optional.empty();
     }

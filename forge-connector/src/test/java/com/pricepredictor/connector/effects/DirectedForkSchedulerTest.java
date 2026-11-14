@@ -257,7 +257,7 @@ class DirectedForkSchedulerTest {
         boolean budgetLeft;
         try (GameRecording recording = new GameRecording(game, writer, ShardRun.GAME_ID, caps, 7L, null)) {
             recording.open();
-            DirectedFork fork = new DirectedFork(game, recording.playForward(), () -> null, perspective);
+            DirectedFork fork = new DirectedFork(game, recording.playForward(), perspective);
             DirectedForkScheduler scheduler = new DirectedForkScheduler(
                     game, caps, DirectedRules.of(rule), budget, tally, 7L,
                     (r, variant, application, binding) -> kept[0] = fork.take(r, variant, application, binding));
