@@ -15,6 +15,7 @@ centaur courser
 changeling hero
 clone
 cloudpiercer
+colossal dreadmaw
 concerted effort
 cosi's trickster
 counterspell
@@ -38,8 +39,10 @@ exalted angel
 exchange of words
 felidar sovereign
 fiery temper
+flame rift
 fleshwrither
 forest
+furtive homunculus
 geological appraiser
 giant growth
 give
@@ -59,10 +62,13 @@ ichor rats
 invasion of zendikar
 island
 ixidron
+jace beleren
 karn liberated
+kellan joins up
 leyline of punishment
 lich's mirror
 lightning bolt
+llanowar elves
 merfolk branchwalker
 midnight scavengers
 mountain
@@ -81,6 +87,7 @@ reverse engineer
 runeclaw bear
 savannah lions
 seal of fire
+secrets of the golden city
 shock
 short sword
 song of the dryads
@@ -94,6 +101,7 @@ steel golem
 stifle
 swamp
 swords to plowshares
+thrasta, tempest's roar
 toothy, imaginary friend
 tormenting voice
 tree of perdition

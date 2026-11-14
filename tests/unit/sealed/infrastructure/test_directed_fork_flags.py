@@ -59,8 +59,8 @@ def rules_dir(tmp_path: Path) -> Path:
         _scenario(["1.5"], operation={"unclassifiable": "a timing"}),
         _scenario(["1.5"], detector={"none": "unread"}, operation="tap"),
         _scenario(["1.6"], detector={"same_as": "1.1-1", "reason": "the same fact"}),
-        # 104.4a-1 reads game_drawn, which no resolution record lists.
-        {**_scenario(["1.7"]), "id": "104.4a-1"},
+        # 104.4c-1 reads game_drawn, which no resolution record lists.
+        {**_scenario(["1.7"]), "id": "104.4c-1"},
     ]
     root = tmp_path / "rules"
     (root / "scenarios").mkdir(parents=True)
@@ -296,4 +296,4 @@ def test_the_startup_check_passes_over_the_whole_list():
         if error is not None:
             refused[rule] = error
     assert refused == {}
-    assert len(listed) == len(set(listed)) == 64
+    assert len(listed) == len(set(listed)) == 69

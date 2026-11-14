@@ -177,6 +177,30 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
         return diesOf(toughness, permanent.getDamage(), permanent.hasBeenDealtDeathtouchDamage());
     }
 
+    /**
+     * The power {@code cardName} put in {@code permanent}'s place has once
+     * the edit is made, read off the live permanent as
+     * {@link #replacementDies} reads toughness: the replacing card's printed
+     * power, or the last power a resolved effect set on the permanent, plus
+     * the permanent's power boosts and counters. 0 for a replacing card that
+     * is no creature.
+     *
+     * @throws IllegalArgumentException when the card database has no {@code cardName}
+     */
+    public static int replacementPower(Card permanent, String cardName) {
+        CardRules rules = NewCards.rules(cardName);
+        if (!rules.getType().isCreature()) {
+            return 0;
+        }
+        int power = rules.getMainPart().getIntPower();
+        for (Pair<Integer, Integer> set : permanent.getPTIterable()) {
+            if (set.getLeft() != null) {
+                power = set.getLeft();
+            }
+        }
+        return power + permanent.getTempPowerBoost() + permanent.getPowerBonusFromCounters();
+    }
+
     /** Refuse a permanent whose state belongs to its own text or face; see the class comment. */
     private static void refuseWhatCannotBeCarried(Card old) {
         if (old.isFaceDown()) {

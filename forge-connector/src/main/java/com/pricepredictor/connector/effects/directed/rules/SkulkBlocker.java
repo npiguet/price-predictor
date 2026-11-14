@@ -1,0 +1,91 @@
+package com.pricepredictor.connector.effects.directed.rules;
+
+import com.pricepredictor.connector.effects.directed.Application;
+import com.pricepredictor.connector.effects.directed.Binding;
+import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.operations.ReplaceCardOperation;
+import forge.game.Game;
+import forge.game.card.Card;
+import forge.game.combat.Combat;
+import forge.game.combat.CombatUtil;
+import forge.game.keyword.Keyword;
+import forge.game.phase.PhaseType;
+import forge.game.player.Player;
+
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * 702.118b, a creature with skulk can't be blocked by creatures with greater
+ * power, on scenario {@code 702.118b-1}: Furtive Homunculus (2/1, skulk)
+ * attacks, and B's Centaur Courser (power 3) is not among its legal blockers.
+ *
+ * <p>The base board, read at a boundary: the declare-blockers step begins,
+ * before blockers are declared, with an attacker that has skulk and power 2
+ * or more, and its defending player controls an untapped creature with
+ * greater power that skulk alone keeps from blocking it. The engine's own
+ * question before the declaration writes the blockers record that judges it,
+ * whatever the defending player then blocks with. It binds the attacker and
+ * that creature.
+ *
+ * <p>Variant {@code lesser_power} ({@code replace_card}): the creature is
+ * Llanowar Elves, whose power 1, with what the creature's boosts and counters
+ * add to it, is less than the attacker's, so it may block. The precondition
+ * binds only a creature whose Elves stays below the attacker's power and
+ * survives what it carries, and only an attacker with none of the other
+ * evasions that would keep a 1/1 Elf from blocking it.
+ */
+public final class SkulkBlocker {
+
+    public static final String RULE = "702.118b";
+    static final String SCENARIO = "702.118b-1";
+    static final String LESSER_POWER = "lesser_power";
+    static final String ELVES = "Llanowar Elves";
+
+    private SkulkBlocker() {
+    }
+
+    public static DirectedRule rule() {
+        return DirectedRule.of(RULE, SCENARIO, SkulkBlocker::bind, LESSER_POWER,
+                new Application(ForkOperation.REPLACE_CARD,
+                        fork -> new ReplaceCardOperation(fork.card("blocker"), ELVES)));
+    }
+
+    /**
+     * The attacker's keywords besides skulk that keep a creature without
+     * flying, reach or a colour from blocking it. Read in a method: a static
+     * field of Forge's enum would load it with the registry.
+     */
+    private static List<Keyword> otherEvasions() {
+        return List.of(Keyword.FLYING, Keyword.FEAR, Keyword.INTIMIDATE, Keyword.SHADOW,
+                Keyword.HORSEMANSHIP, Keyword.LANDWALK);
+    }
+
+    static Optional<Binding> bind(Game live) {
+        Combat combat = live.getCombat();
+        if (!Boards.at(live, PhaseType.COMBAT_DECLARE_BLOCKERS) || combat == null) {
+            return Optional.empty();
+        }
+        for (Card attacker : combat.getAttackers()) {
+            int power = attacker.getNetPower();
+            if (!attacker.hasKeyword(Keyword.SKULK) || power < 2
+                    || otherEvasions().stream().anyMatch(attacker::hasKeyword)) {
+                continue;
+            }
+            Player defender = combat.getDefenderPlayerByAttacker(attacker);
+            if (defender == null) {
+                continue;
+            }
+            for (Card creature : Boards.untappedCreatures(defender)) {
+                if (creature.getNetPower() > power && CombatUtil.canBlock(creature)
+                        && !CombatUtil.canBlock(attacker, creature)
+                        && ReplaceCardOperation.replacementPower(creature, ELVES) < power
+                        && Boards.replacementSurvives(creature, ELVES)) {
+                    return Optional.of(Binding.empty().with("attacker", attacker).with("blocker", creature));
+                }
+            }
+        }
+        return Optional.empty();
+    }
+}

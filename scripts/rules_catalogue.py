@@ -914,8 +914,10 @@ ALWAYS_DIRECTED = {
                "below the 68 per polarity a rule test needs (the user's decision of 2026-11-06)",
 }
 #: Left out whatever their counts, each for its reason: no detector can tell
-#: their fork from its live game, so a directed fork of theirs would add no
-#: record of the side it is for (the user's decision of 2026-11-06, T096).
+#: their fork from its live game, no fork of their board can be taken or kept,
+#: or no sealed pool makes their point happen, so a directed fork of theirs
+#: would add no record of the side it is for (the user's decisions of
+#: 2026-11-06, T096, and 2026-11-14).
 NOT_DIRECTED = {
     "104.2a": "the AI never concedes, the only forkable variant (add Platinum Angel) stops "
               "any other loss, and the lacking polarity is no event",
@@ -935,20 +937,30 @@ NOT_DIRECTED = {
     "122.1h": "the rewrite record names no replacing effect for a replacement Forge builds at "
               "runtime from the finality counter, so its scenario declares no detector (the "
               "user's decision of 2026-11-14)",
-}
-#: Left out of this collection only: they qualified on the recount after the T030
-#: detectors (2026-11-06), when the list of 70 was fixed for production; by the user's
-#: rule, more than five newcomers wait for a later collection rather than delay this one
-#: by a registration each.
-DEFERRED_DIRECTED = {
-    **dict.fromkeys((
-        "104.4a", "104.4c", "115.7a", "701.10c", "701.11c", "701.40c", "701.40d",
-        "702.19c", "702.19e", "702.19f", "702.131a", "702.170c", "712.4c", "712.16",
-    ), "qualified after the production list was fixed; to be registered for a later "
-       "collection"),
-    "702.118b": "qualified when the 2026-11-13 review's catalogue revision gave 702.118b-1 a "
-                "detector gen-2 records show, after the production list was fixed; to be "
-                "registered for a later collection",
+    "104.4c": "no record shows the draw: Forge's GameDrawn ends the game naming no loser and "
+              "no winner and no record kind lists game_drawn, so 104.4c-1's declaration is "
+              "untaggable; the effect half's conditions_met says whether the GameDrawn "
+              "clause's condition held, but no detector family reads it",
+    "115.7a": "its point is a target-changing spell or ability resolving, cast by a player "
+              "at a spell on the stack after the boundary (every boundary a fork is taken at "
+              "has the stack empty), so no precondition knows the spell or the other legal "
+              "target its variant replaces",
+    **dict.fromkeys(("701.10c", "701.11c"),
+                    "its scenario declares no detector: no detector parameter reads whether "
+                    "the power doubled or tripled was negative"),
+    "712.4c": "its scenario declares no detector: no detector parameter reads why a "
+              "transform instruction did nothing",
+    **dict.fromkeys(("701.40c", "701.40d"),
+                    "its variant puts another card in the manifested permanent's place, and "
+                    "replace_card refuses every face-down permanent, so every fork would be "
+                    "refused"),
+    **dict.fromkeys(("702.19e", "702.19f"),
+                    "its base is an attacker whose planeswalker left combat, which Forge keeps "
+                    "attacking a placeholder card (<Nothing>, 506.4c) its game copier cannot "
+                    "map, so every fork of that board throws at the copy"),
+    "712.16": "no sealed pool makes it happen: no set with draft boosters holds both a card "
+              "turning a permanent face down (Ixidron and Vesuvan Shapeshifter in Time "
+              "Spiral, Illithid Harvester, the morph sets) and a double-faced card",
 }
 FIRES, DOES_NOT_FIRE = "fires", "does_not_fire"
 
@@ -1015,11 +1027,10 @@ def forkable_variants(scenarios, lacking):
 def directed_rules(counts, by_rule):
     """The rules FR-014b enables, in unit order: ``rule -> {counts, lacking,
     variants, by_counts}``; ``by_counts`` is False for a rule listed only as
-    one of ``ALWAYS_DIRECTED``. A rule of ``NOT_DIRECTED`` or ``DEFERRED_DIRECTED`` is
-    never listed."""
+    one of ``ALWAYS_DIRECTED``. A rule of ``NOT_DIRECTED`` is never listed."""
     out = {}
     for rule, scenarios in by_rule.items():
-        if rule in NOT_DIRECTED or rule in DEFERRED_DIRECTED:
+        if rule in NOT_DIRECTED:
             continue
         found = rule_counts(counts, rule, scenarios)
         lacking = lacking_polarities(*found) if found is not None else set()
@@ -1110,7 +1121,7 @@ def cmd_directed_rules(args):
     one_sided = sum(DOES_NOT_FIRE in row["lacking"] for row in chosen.values())
     for rule, reason in ALWAYS_DIRECTED.items():
         print(f"always listed {rule}: {reason}")
-    for rule, reason in {**NOT_DIRECTED, **DEFERRED_DIRECTED}.items():
+    for rule, reason in NOT_DIRECTED.items():
         print(f"left out {rule}: {reason}")
     print(f"{len(chosen)} rules ({rare} rare, {one_sided} one-sided, "
           f"{sum(not row['by_counts'] for row in chosen.values())} always), {len(cards)} wording "

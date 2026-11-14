@@ -744,12 +744,15 @@ and that the reporting half never enters the control score.
   into an operation after the rerun of FR-003, except the rules of `NOT_DIRECTED`: 104.2a, 500.11,
   701.12d and 702.62d, whose forks no detector can tell from their live games; 121.4, 122.1g,
   703.4m and 701.42c, which restate 704.5b, 704.5v, 510.2 and 701.42b, listed in their place;
-  505.5, 614.10a, 701.24f and 702.105b, whose fact the record cannot show; and 122.1h, whose
+  505.5, 614.10a, 701.24f and 702.105b, whose fact the record cannot show; 122.1h, whose
   rewrite record names no replacing effect for the replacement Forge builds at runtime from the
-  finality counter; and except the rules of `DEFERRED_DIRECTED`, which qualified only after the
-  list was fixed for the production collection and wait for a later one (`directed-rules` names
-  each with its reason). The list is checked in as `rules/directed-fork-rules.txt`, one rule id
-  per line, 64 rules in unit order, and is what the full collection passes to
+  finality counter; 104.4c, whose GameDrawn draw no record shows; 701.10c, 701.11c and 712.4c,
+  whose scenarios declare no detector; 701.40c and 701.40d, whose variant replaces a face-down
+  permanent, which `replace_card` refuses; 702.19e and 702.19f, whose base board, an attacker whose
+  planeswalker left combat, Forge's game copier cannot copy; 115.7a, whose point needs a spell cast
+  after the boundary; and 712.16, whose point no sealed pool holds the cards for (`directed-rules`
+  names each with its reason). The list is checked in as `rules/directed-fork-rules.txt`, one rule
+  id per line, 69 rules in unit order, and is what the full collection passes to
   `--directed-fork-rules`; `directed-rules` over the gen-2 counts writes it unchanged. Every
   listed rule passes the startup check (FR-014).
 

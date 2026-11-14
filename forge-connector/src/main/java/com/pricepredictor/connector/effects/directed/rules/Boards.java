@@ -5,6 +5,7 @@ import forge.game.Game;
 import forge.game.ability.AbilityFactory;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
+import forge.game.combat.Combat;
 import forge.game.cost.Cost;
 import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;
@@ -165,6 +166,49 @@ final class Boards {
                 .map(replacement -> script(card, replacement.getParam("ReplaceWith")))
                 .filter(replacing -> ApiType.ChangeZone.name().equals(api(replacing)))
                 .findFirst();
+    }
+
+    /** Forge's spelling of trample over planeswalkers, a trample instance with a detail. */
+    static final String TRAMPLE_OVER_PLANESWALKERS = "Trample:Planeswalker";
+
+    /** Whether the card has trample over planeswalkers ({@link #TRAMPLE_OVER_PLANESWALKERS}). */
+    static boolean tramplesOverPlaneswalkers(Card card) {
+        return card.hasKeyword(TRAMPLE_OVER_PLANESWALKERS);
+    }
+
+    /**
+     * Whether every instance of trample over planeswalkers the card has is
+     * its own text's, as {@link #ownKeywordOnly} reads a keyword: none is
+     * granted by a static ability or a resolved effect.
+     */
+    static boolean ownTrampleOverPlaneswalkersOnly(Card card) {
+        for (KeywordsChange change : card.getChangedCardKeywords().values()) {
+            if (change.getKeywords().stream()
+                    .anyMatch(granted -> TRAMPLE_OVER_PLANESWALKERS.equals(granted.getOriginal()))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The attackers of the live combat that deal their combat damage in the
+     * regular damage step and none blocks: neither first strike nor double
+     * strike, power above 0, and no blocker declared against them.
+     */
+    static List<Card> unblockedRegularStrikers(Combat combat) {
+        return combat.getAttackers().stream()
+                .filter(attacker -> !attacker.hasFirstStrike() && !attacker.hasDoubleStrike())
+                .filter(attacker -> attacker.getNetCombatDamage() > 0)
+                .filter(attacker -> !combat.isBlocked(attacker) && combat.getBlockers(attacker).isEmpty())
+                .toList();
+    }
+
+    /** The planeswalker on the battlefield {@code attacker} attacks, or empty when it attacks none. */
+    static Optional<Card> attackedPlaneswalker(Combat combat, Card attacker) {
+        return combat.getDefenderByAttacker(attacker) instanceof Card defender
+                && defender.isPlaneswalker() && defender.isInPlay()
+                ? Optional.of(defender) : Optional.empty();
     }
 
     /** The creatures {@code player} controls that are untapped. */

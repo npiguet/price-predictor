@@ -23,7 +23,7 @@ RULES = Path(__file__).parents[5] / "rules"
 #: an event no collector writes on the kind they ask.
 UNTAGGABLE = {
     # game_drawn: no collector writes it
-    "104.4a-1", "104.4c-1",
+    "104.4c-1",
     # removed_from_combat on a combat record: a clause hook's alone
     "701.8c-2",
 }

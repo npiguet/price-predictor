@@ -2344,6 +2344,275 @@ class RegisteredRulesTest {
         assertOnlyChanged(twin, board.subject, library.get(0));
     }
 
+    // ── 104.4a, a draw when every player loses at once: life ────────────
+
+    /** Your Plague Spitter as your upkeep begins, you at {@code yours} life and the opponent at {@code theirs}. */
+    private static Board spitterBoard(int yours, int theirs) {
+        Board board = new Board(PhaseType.UPKEEP);
+        board.subject = board.card(board.you, "Plague Spitter");
+        board.you.setLife(yours, null);
+        board.opponent.setLife(theirs, null);
+        return board;
+    }
+
+    @Test
+    void simultaneousLossBindsAnUpkeepTriggerTakingEveryPlayersLastLife() {
+        Board board = spitterBoard(1, 1);
+        Binding binding = SimultaneousLoss.bind(board.game).orElseThrow();
+        assertEquals(board.subject, binding.card("permanent"));
+        assertEquals(board.opponent, binding.player("opponent"));
+    }
+
+    @Test
+    void simultaneousLossBindsNothingWhenAPlayerWouldStayInTheGame() {
+        assertTrue(SimultaneousLoss.bind(spitterBoard(1, 2).game).isEmpty());
+        assertTrue(SimultaneousLoss.bind(spitterBoard(2, 1).game).isEmpty());
+    }
+
+    @Test
+    void simultaneousLossBindsNothingForTheOtherPlayersTrigger() {
+        Board board = new Board(PhaseType.UPKEEP);
+        board.card(board.opponent, "Plague Spitter");
+        board.you.setLife(1, null);
+        board.opponent.setLife(1, null);
+        assertTrue(SimultaneousLoss.bind(board.game).isEmpty());
+    }
+
+    /** Stormfist Crusader's chain draws, then takes 1 life from each player. */
+    @Test
+    void simultaneousLossReadsTheLifeLossBelowADraw() {
+        Board board = new Board(PhaseType.UPKEEP);
+        board.card(board.you, "Stormfist Crusader");
+        board.you.setLife(1, null);
+        board.opponent.setLife(1, null);
+        assertTrue(SimultaneousLoss.bind(board.game).isPresent());
+    }
+
+    @Test
+    void simultaneousLossForksTheOpponentOneLifeAbove() {
+        Twin twin = spitterBoard(1, 1).twin(SimultaneousLoss.rule());
+        assertEquals(Set.of("P1.life"), twin.changes());
+        assertEquals(2, twin.fork().player("opponent").getLife());
+    }
+
+    // ── 702.19c, trample over planeswalkers: replace_card ───────────────
+
+    /** Your {@code attacker} attacks B's Jace Beleren of {@code loyalty} unblocked; the damage step begins. */
+    private static Board planeswalkerBoard(String attacker, int loyalty) {
+        Board board = new Board(PhaseType.COMBAT_DAMAGE);
+        board.subject = board.card(board.you, attacker);
+        board.other = board.card(board.opponent, "Jace Beleren");
+        board.other.setCounters(CounterEnumType.LOYALTY, loyalty);
+        Combat combat = new Combat(board.you);
+        combat.addAttacker(board.subject, board.other);
+        combat.setBlocked(board.subject, false);
+        board.game.getPhaseHandler().setCombat(combat);
+        return board;
+    }
+
+    @Test
+    void trampleOverPlaneswalkersBindsAnUnblockedAttackerAboveTheLoyalty() {
+        Board board = planeswalkerBoard("Thrasta, Tempest's Roar", 3);
+        assertEquals(board.subject, TrampleOverPlaneswalkers.bind(board.game).orElseThrow().card("attacker"));
+    }
+
+    @Test
+    void trampleOverPlaneswalkersBindsNothingWithoutTheKeyword() {
+        assertTrue(TrampleOverPlaneswalkers.bind(planeswalkerBoard("Craw Wurm", 3).game).isEmpty());
+    }
+
+    /** Thrasta's 7 tops a loyalty of 6, the Dreadmaw's 6 does not: the fork's attack would have no excess. */
+    @Test
+    void trampleOverPlaneswalkersBindsNothingWhenTheDreadmawWouldHaveNoExcess() {
+        assertTrue(TrampleOverPlaneswalkers.bind(planeswalkerBoard("Thrasta, Tempest's Roar", 6).game).isEmpty());
+    }
+
+    @Test
+    void trampleOverPlaneswalkersBindsNothingOnABlockedAttacker() {
+        Board board = planeswalkerBoard("Thrasta, Tempest's Roar", 3);
+        Card bears = board.card(board.opponent, "Grizzly Bears");
+        board.game.getCombat().addBlocker(board.subject, bears);
+        board.game.getCombat().setBlocked(board.subject, true);
+        assertTrue(TrampleOverPlaneswalkers.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void trampleOverPlaneswalkersForksAColossalDreadmawAttackingTheSamePlaneswalker() {
+        Board board = planeswalkerBoard("Thrasta, Tempest's Roar", 3);
+        Twin twin = board.twin(TrampleOverPlaneswalkers.rule());
+        Card dreadmaw = twin.forkGame().getCardsIn(ZoneType.Battlefield).stream()
+                .filter(card -> card.getName().equals(TrampleOverPlaneswalkers.DREADMAW)).findFirst().orElseThrow();
+        // Thrasta's own hexproof static, which affects Thrasta alone, goes
+        // with it; a Dreadmaw is no legend.
+        String thrastaLink = "-link {from={entity=" + id(dreadmaw) + ", key={face=0, trait_kind=static";
+        Set<String> identity = Set.of("name", "colors", "subtypes", "supertypes", "mana_value", "mana_cost",
+                "base_pt", "lines", "granted_temporary");
+        for (String change : changes(renamed(twin.real(), id(board.subject), id(dreadmaw)), twin.forked())) {
+            assertTrue(change.startsWith(thrastaLink) && change.endsWith("to=" + id(dreadmaw) + ", type=affects}")
+                            || change.startsWith(id(dreadmaw) + ".")
+                            && identity.contains(change.substring(change.indexOf('.') + 1)),
+                    "replacing changed " + change);
+        }
+        assertTrue(dreadmaw.hasKeyword(Keyword.TRAMPLE));
+        assertFalse(Boards.tramplesOverPlaneswalkers(dreadmaw));
+        assertEquals(twin.forkGame().getCombat().getDefenderByAttacker(dreadmaw).getId(), board.other.getId());
+    }
+
+    // ── 702.118b, skulk: replace_card ───────────────────────────────────
+
+    /** Furtive Homunculus attacks B, who controls {@code blocker}; no blocker declared yet. */
+    private static Board skulkBoard(String blocker) {
+        Board board = new Board(PhaseType.COMBAT_DECLARE_BLOCKERS);
+        board.other = board.card(board.you, "Furtive Homunculus");
+        board.subject = board.card(board.opponent, blocker);
+        Combat combat = new Combat(board.you);
+        combat.addAttacker(board.other, board.opponent);
+        board.game.getPhaseHandler().setCombat(combat);
+        return board;
+    }
+
+    @Test
+    void skulkBlockerBindsTheAttackerAndTheCreatureWithGreaterPower() {
+        Board board = skulkBoard("Centaur Courser");
+        Binding binding = SkulkBlocker.bind(board.game).orElseThrow();
+        assertEquals(board.other, binding.card("attacker"));
+        assertEquals(board.subject, binding.card("blocker"));
+    }
+
+    @Test
+    void skulkBlockerBindsNothingWhenTheCreatureMayBlock() {
+        assertTrue(SkulkBlocker.bind(skulkBoard("Grizzly Bears").game).isEmpty());
+    }
+
+    /** A +1/+1 counter the Elves would carry leaves them at the attacker's power 2, not below it. */
+    @Test
+    void skulkBlockerBindsNothingWhenTheElvesWouldNotStayBelowTheAttacker() {
+        Board board = skulkBoard("Centaur Courser");
+        board.subject.setCounters(CounterEnumType.P1P1, 1);
+        assertTrue(SkulkBlocker.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void skulkBlockerForksLlanowarElvesAmongTheLegalBlockers() {
+        Board board = skulkBoard("Centaur Courser");
+        Twin twin = board.twin(SkulkBlocker.rule());
+        Card elves = twin.forkGame().getCardsIn(ZoneType.Battlefield).stream()
+                .filter(card -> card.getName().equals(SkulkBlocker.ELVES)).findFirst().orElseThrow();
+        // The Elves' mana ability adds to what B can make untapped.
+        Set<String> identity = Set.of("name", "colors", "subtypes", "mana_value", "mana_cost",
+                "base_pt", "lines", "granted_temporary");
+        for (String change : changes(renamed(twin.real(), id(board.subject), id(elves)), twin.forked())) {
+            assertTrue(change.equals("P1.untapped_production") || change.startsWith(id(elves) + ".")
+                            && identity.contains(change.substring(change.indexOf('.') + 1)),
+                    "replacing changed " + change);
+        }
+        assertTrue(CombatUtil.canBlock(twin.fork().card("attacker"), elves));
+        assertFalse(CombatUtil.canBlock(board.other, board.subject), "the live Courser still cannot block");
+    }
+
+    // ── 702.131a, ascend: remove_permanent ──────────────────────────────
+
+    /** Nine Islands and Grizzly Bears of yours, Secrets of the Golden City in your hand, then {@code inHand}. */
+    private static Board ascendBoard(String... inHand) {
+        Board board = new Board(PhaseType.MAIN1);
+        for (int i = 0; i < 9; i++) {
+            board.card(board.you, "Island");
+        }
+        board.subject = board.card(board.you, "Grizzly Bears");
+        board.other = TestBoard.inHand(board.game, board.you, "Secrets of the Golden City");
+        for (String name : inHand) {
+            TestBoard.inHand(board.game, board.you, name);
+        }
+        return board;
+    }
+
+    @Test
+    void ascendBlessingBindsTheBearsAtTenPermanents() {
+        Board board = ascendBoard();
+        Binding binding = AscendBlessing.bind(board.game).orElseThrow();
+        assertEquals(board.subject, binding.card("permanent"));
+        assertEquals(board.other, binding.card("spell"));
+    }
+
+    @Test
+    void ascendBlessingBindsNothingAtElevenPermanents() {
+        Board board = ascendBoard();
+        board.card(board.you, "Island");
+        assertTrue(AscendBlessing.bind(board.game).isEmpty());
+    }
+
+    /** A land to play or a creature to cast would bring the fork's nine back to ten before the spell. */
+    @Test
+    void ascendBlessingBindsNothingWhenAPermanentOfItsOwnCouldMakeTen() {
+        assertTrue(AscendBlessing.bind(ascendBoard("Island").game).isEmpty());
+        assertTrue(AscendBlessing.bind(ascendBoard("Hill Giant").game).isEmpty());
+    }
+
+    /** With every permanent an untapped land, only one beyond the spell's three goes. */
+    @Test
+    void ascendBlessingTakesAnUntappedLandOnlyBeyondTheSpellsCost() {
+        Board board = ascendBoard();
+        board.card(board.you, "Island");
+        board.subject.getGame().getAction().exile(board.subject, null, null);
+        Card land = AscendBlessing.bind(board.game).orElseThrow().card("permanent");
+        assertTrue(land.isLand());
+    }
+
+    @Test
+    void ascendBlessingForksNinePermanents() {
+        Board board = ascendBoard();
+        Twin twin = board.twin(AscendBlessing.rule());
+        assertOnlyRemoved(twin, board.subject, "permanent");
+        assertEquals(9, twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Battlefield).size());
+    }
+
+    // ── 702.170c, a card becoming plotted: move_card ────────────────────
+
+    /** A Forest, a Plains and an Island of yours, Kellan Joins Up in your hand, then {@code inHand}. */
+    private static Board kellanBoard(String... inHand) {
+        Board board = new Board(PhaseType.MAIN1);
+        for (String land : List.of("Forest", "Plains", "Island")) {
+            board.card(board.you, land);
+        }
+        board.other = TestBoard.inHand(board.game, board.you, PlottedFromHand.KELLAN);
+        for (String name : inHand) {
+            Card card = TestBoard.inHand(board.game, board.you, name);
+            if (board.subject == null) {
+                board.subject = card;
+            }
+        }
+        return board;
+    }
+
+    @Test
+    void plottedFromHandBindsTheOneCardTheTriggerCouldExile() {
+        Board board = kellanBoard("Grizzly Bears", "Hill Giant", "Forest");
+        Binding binding = PlottedFromHand.bind(board.game).orElseThrow();
+        assertEquals(board.subject, binding.card("card"));
+        assertEquals(board.other, binding.card("spell"));
+    }
+
+    @Test
+    void plottedFromHandBindsNothingWithTwoCardsTheTriggerCouldExile() {
+        assertTrue(PlottedFromHand.bind(kellanBoard("Grizzly Bears", "Shock").game).isEmpty());
+    }
+
+    @Test
+    void plottedFromHandBindsNothingWithoutTheLandsForKellan() {
+        Board board = kellanBoard("Grizzly Bears");
+        board.you.getLandsInPlay().forEach(land -> land.setTapped(true));
+        assertTrue(PlottedFromHand.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void plottedFromHandForksAHillGiantInTheCardsPlace() {
+        Board board = kellanBoard("Grizzly Bears");
+        Twin twin = board.twin(PlottedFromHand.rule());
+        Card giant = twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Hand).stream()
+                .filter(card -> card.getName().equals(PlottedFromHand.HILL_GIANT)).findFirst().orElseThrow();
+        assertOnlyChanged(twin, board.subject, giant);
+    }
+
     // ── what makes a variant come undone (review C4, V3 #9-10) ──────────
 
     /**
