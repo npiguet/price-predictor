@@ -15,7 +15,6 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -77,14 +76,46 @@ class PatchHooksTest {
     }
 
     /**
-     * The read-only sub-ability hook answers null outside a resolution.
+     * The sibling {@code ../forge} checkout this suite runs against is the
+     * patched one ({@code effect-record-hooks}), with every hook.
      *
-     * <p>True on a stock checkout because the method does not exist, and true
-     * on a patched one because no sub-ability is resolving on this thread —
-     * the test asserts the caller-visible behaviour that holds either way.
+     * <p>Unconditional: every test that needs a hook skips on a checkout
+     * without it (the degradation a worker makes), so on a stock or stale
+     * checkout about sixty tests and every golden comparison would skip and
+     * the suite would still read green. This one fails instead, naming what
+     * is missing.
      */
     @Test
-    void theSubAbilityHookReadsNullOutsideAResolution() {
+    void theSiblingForgeCheckoutIsThePatchedOne() {
+        assertEquals(AttributionMode.PATCHED, AttributionMode.detect(),
+                "../forge lacks the effect-record hooks: " + PatchHooks.report());
+        assertEquals(List.of(), PatchHooks.missing(), PatchHooks.report());
+    }
+
+    /**
+     * The sub-ability pointer is put back once a resolution is over: a
+     * Lightning Bolt resolves through the hooks, its damage read the pointer
+     * while it resolved (its event names the root), and the pointer reads
+     * null afterwards.
+     */
+    @Test
+    void theSubAbilityHookReadsNullOnceAResolutionIsOver(@org.junit.jupiter.api.io.TempDir
+                                                        java.nio.file.Path dir) throws Throwable {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        forge.game.player.Player you = game.getPlayers().get(0);
+        forge.game.player.Player opponent = game.getPlayers().get(1);
+
+        List<String> records = ShardRun.recordsWithClauseHook(dir, game, "", () -> {
+            TestBoard.cast(game, TestBoard.inHand(game, you, "Lightning Bolt"), you, opponent);
+            game.getStack().resolveStack();
+            // The next step closes the held half.
+            TestBoard.nextStep(game);
+        });
+
+        String half = RecordLines.only(records, "resolution", "cardsfolder/l/lightning_bolt.txt");
+        assertEquals(List.of("root"), RecordLines.events(half).stream()
+                .filter(event -> "damage_dealt".equals(event.get("type")))
+                .map(event -> event.get("attributed_to")).toList(), half);
         assertNull(PatchHooks.currentSubAbility());
     }
 
@@ -202,21 +233,15 @@ class PatchHooksTest {
     }
 
     /**
-     * The listener methods Forge declares that no collector consumes yet,
-     * by setter. Each is a notification the engine already makes and the
-     * connector's proxy answers with nothing; it moves into its stand-in and
-     * its hook's callbacks when a collector reads it.
-     */
-    private static final Map<PatchHooks.Hook, Set<String>> NOT_CONSUMED_YET = Map.of();
-
-    /**
      * Every method Forge's listener declares is restated by the stand-in or
-     * one of its older shapes, or is listed as not consumed yet.
+     * one of its older shapes, and so dispatched by its hook to a collector
+     * ({@link #eachListenerHookDeclaresItsStandInsCallbacks}).
      *
      * <p>The other direction from {@link #eachStandInIsForgesOwnDeclaration}:
-     * a notification Forge adds reaches the connector's proxy and is answered
-     * with nothing, silently, until a collector reads it. Listing it here is
-     * what says so. Skipped on a checkout without the setter.
+     * a notification Forge adds reaches the connector's proxy and would be
+     * answered with nothing, silently. No allow-list: such a method fails
+     * here until a collector reads it. Skipped on a checkout without the
+     * setter, which {@link #theSiblingForgeCheckoutIsThePatchedOne} fails.
      */
     @ParameterizedTest(name = "{0}")
     @MethodSource("com.pricepredictor.connector.effects.HookShapes#declared")
@@ -226,16 +251,15 @@ class PatchHooksTest {
         Class<?> declared = setter.get().getParameterTypes()[0];
         List<Class<?>> accepted = new ArrayList<>(List.of(standIn.shape()));
         accepted.addAll(standIn.older());
-        Set<String> notConsumed = NOT_CONSUMED_YET.getOrDefault(standIn.setter(), Set.of());
 
         for (Method theirs : declared.getMethods()) {
             boolean restated = accepted.stream().anyMatch(shape -> Arrays.stream(shape.getMethods()).anyMatch(
                     ours -> ours.getName().equals(theirs.getName())
                             && Arrays.equals(ours.getParameterTypes(), theirs.getParameterTypes())));
-            assertTrue(restated || notConsumed.contains(theirs.getName()),
+            assertTrue(restated,
                     declared.getName() + " declares " + theirs.getName()
                             + Arrays.toString(theirs.getParameterTypes())
-                            + ", which neither " + accepted + " restates nor NOT_CONSUMED_YET lists");
+                            + ", which no collector reads: " + accepted + " restates none of it");
         }
     }
 
