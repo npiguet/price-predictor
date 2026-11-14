@@ -325,7 +325,7 @@ def _member_follows(path: Path, after: int) -> bool:
     return False
 
 
-def _gzip_numbered_lines(path: Path) -> Iterator[tuple[int, str]]:
+def _gzip_numbered_lines(path: Path, *, tally: bool = True) -> Iterator[tuple[int, str]]:
     """Each newline-terminated line of a gzip file of concatenated members,
     with its 1-based line number, terminator stripped.
 
@@ -335,7 +335,9 @@ def _gzip_numbered_lines(path: Path) -> Iterator[tuple[int, str]]:
     member follows it (a damaged tail: the lines it completed are kept);
     with one after it, it raises :class:`CorruptShardError` naming the byte
     it starts at, since every later member would be lost unsaid. A line that
-    is no UTF-8 raises :class:`RecordDecodeError`.
+    is no UTF-8 raises :class:`RecordDecodeError`. ``tally`` false notes a
+    damaged tail neither in the tally nor in the log: a read beside the one
+    that reports the shard (:func:`ended_games`).
     """
     number = 0
     pending = b""
@@ -364,9 +366,10 @@ def _gzip_numbered_lines(path: Path) -> Iterator[tuple[int, str]]:
                         raise CorruptShardError(
                             f"{where}; a member follows it, so the shard is read no "
                             f"further, past line {number}") from exc
-                    logger.warning("%s; it is the shard's last, so its read ends there, "
-                                   "past line %d", where, number)
-                    _TALLY.damaged_tails.append(f"{path}, byte {member_start}")
+                    if tally:
+                        logger.warning("%s; it is the shard's last, so its read ends "
+                                       "there, past line %d", where, number)
+                        _TALLY.damaged_tails.append(f"{path}, byte {member_start}")
                     return
                 rest = decoder.unused_data if decoder.eof else b""
                 consumed += len(data) - len(rest)
@@ -394,11 +397,12 @@ def _plain_numbered_lines(path: Path) -> Iterator[tuple[int, str]]:
         raise RecordDecodeError.at(path, number + 1, exc) from exc
 
 
-def _numbered_lines(path: Path) -> Iterator[tuple[int, str]]:
+def _numbered_lines(path: Path, *, tally: bool = True) -> Iterator[tuple[int, str]]:
     """Every complete, non-blank line of a shard with its 1-based number in
-    the file, blank lines counted."""
+    the file, blank lines counted; ``tally`` as :func:`_gzip_numbered_lines`."""
     path = Path(path)
-    lines = _gzip_numbered_lines(path) if path.suffix == ".gz" else _plain_numbered_lines(path)
+    lines = (_gzip_numbered_lines(path, tally=tally) if path.suffix == ".gz"
+             else _plain_numbered_lines(path))
     for number, line in lines:
         if line.strip():
             yield number, line
@@ -599,9 +603,11 @@ def ended_games(path: Path) -> frozenset[str]:
     """The games of one shard that wrote their game-end marker
     (``turn_action`` / ``game_end``, WP7): a gen-3 game of the shard missing
     from them was cut. Reads each line's head, parsing only a turn action's
-    or a line whose head is in another shape."""
+    or a line whose head is in another shape. A damaged last member ends the
+    read as it ends every read, but goes unreported here: the read of the
+    shard's records reports it, once."""
     ended: set[str] = set()
-    for number, line in _numbered_lines(path):
+    for number, line in _numbered_lines(path, tally=False):
         head = peek_envelope(line)
         if head is None:
             data = _decode(path, number, line, _parse_object)

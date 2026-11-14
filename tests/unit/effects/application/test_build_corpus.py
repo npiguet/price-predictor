@@ -672,6 +672,70 @@ def test_records_a_shard_gains_between_the_passes_are_written_nowhere(
     assert "run.0-a.jsonl.gz" in caplog.text and "changed size since the survey" in caplog.text
 
 
+def test_records_appended_after_the_survey_to_a_shard_holding_a_cut_game_are_written_nowhere(
+    tmp_path, a_corpus, monkeypatch,
+):
+    """A shard holding an ended game and a cut one gains records between the
+    passes, the cut game's last ones and its marker among them: the survey
+    read the cut game as cut, so the write pass drops what the survey read of
+    it as cut and the rest, never surveyed, as unsurveyed; none is written,
+    and the ended game is."""
+    import gzip
+
+    from effects.application import build_corpus as module
+    from tests.unit.effects.builders import game_end_marker
+
+    shard = a_corpus.records / "full-strength" / "run.0-mixed.jsonl.gz"
+    ended = [_resolution(f"g-ended.{n}", "g-ended", ability=(_SHOCK_KEY,)) for n in range(2)]
+    cut = [_resolution(f"g-cut.{n}", "g-cut", ability=(_SHOCK_KEY,)) for n in range(2)]
+    write_shard(shard, [*ended, game_end_marker(ended[-1]), *cut])
+    late = [_resolution("g-cut.late", "g-cut", ability=(_SHOCK_KEY,))]
+    late.append(game_end_marker(late[-1]))
+    decide = module._decide_or_refuse
+
+    def decide_then_grow(*args, **kwargs):
+        decided = decide(*args, **kwargs)
+        with open(shard, "ab") as handle:
+            handle.write(gzip.compress(b"".join(_line(record) for record in late)))
+        return decided
+
+    monkeypatch.setattr(module, "_decide_or_refuse", decide_then_grow)
+    store = a_corpus.build(tmp_path / "curated")
+    manifest = store.load()
+    written = {r.record_id for r in _written(store)}
+    assert manifest.cut_games == 1
+    assert manifest.per_stratum[Stratum.DROPPED_CUT] == 2
+    assert manifest.per_stratum[Stratum.DROPPED_UNSURVEYED] == 2
+    assert not {r.record_id for r in [*cut, *late]} & written
+    assert "g-ended" in {r.game_id for r in _written(store)} | {
+        *manifest.card_disjoint_games, *manifest.game_disjoint_games}
+
+
+def test_a_damaged_last_member_after_a_marker_is_named_once_and_changes_nothing(
+    tmp_path, a_corpus, caplog,
+):
+    """The survey reads a shard's markers, then its records: the damaged
+    last member is one shard's one damaged tail, and the write pass, reading
+    the same bytes, finds the same tally."""
+    import gzip
+
+    from tests.unit.effects.builders import game_end_marker
+
+    ended = [_resolution(f"g-d.{n}", "g-d", ability=(_SHOCK_KEY,)) for n in range(2)]
+    after = [_resolution(f"g-e.{n}", "g-e", ability=(_SHOCK_KEY,)) for n in range(2)]
+    good = gzip.compress(b"".join(_line(r) for r in [*ended, game_end_marker(ended[-1])]))
+    bad = bytearray(gzip.compress(b"".join(_line(r) for r in after)))
+    bad[len(bad) // 2] ^= 0xFF
+    (a_corpus.records / "full-strength" / "run.0-damaged.jsonl.gz").write_bytes(good + bytes(bad))
+
+    with caplog.at_level(logging.WARNING):
+        manifest = a_corpus.build(tmp_path / "curated").load()
+
+    assert len(manifest.damaged_tails) == 1
+    assert manifest.damaged_tails[0].startswith("full-strength/run.0-damaged.jsonl.gz")
+    assert "changed between the passes" not in caplog.text
+
+
 def test_the_manifest_records_how_its_records_were_collected_and_read(
     tmp_path, a_corpus, caplog,
 ):
