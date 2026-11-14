@@ -8,7 +8,11 @@ import uuid
 from collections.abc import Mapping
 from pathlib import Path
 
-from price_predictor.domain.worker_failures import WorkerFailure, render_hook_failures
+from price_predictor.domain.worker_failures import (
+    WorkerFailure,
+    render_fork_refusals,
+    render_hook_failures,
+)
 from price_predictor.infrastructure.append_only import has_shard_record
 from price_predictor.infrastructure.forge_jvm import (
     ForgeWorkerPool,
@@ -198,6 +202,10 @@ class MatchOutcomeSupervisor:
         hooks = self._log_report.hook_failures()
         if any(hooks.values()):
             print(f"Effect-record hook failures over the run: {render_hook_failures(hooks)}")
+        refusals = self._log_report.fork_refusals()
+        if refusals:
+            print("Fork refusals over the run (expected, no failure): "
+                  f"{render_fork_refusals(refusals)}")
         survivors = self._pool.survivors
         stops = self._pool.stops
         print(f"Workers: {stops.render()}, {len(survivors)} outlived the kill")

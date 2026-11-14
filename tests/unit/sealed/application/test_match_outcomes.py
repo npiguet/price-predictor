@@ -581,6 +581,39 @@ class TestTheRunReportsWhatItsWorkersLogged:
         assert (entry["stop_timeout"], entry["recycle_seconds"]) == (600, 600)
         assert entry["worker_stops"]["survived"] == 0
         assert entry["hook_failures"] == {"connector": {}, "forge": {}}
+        assert entry["fork_refusals"] == {}
+
+    def test_the_fork_refusal_tally_is_printed_and_kept_and_is_no_failure(
+        self, tmp_path, capsys,
+    ):
+        """WP5: the worker prints how many forks declined, by kind and reason;
+        expected, so they are counted apart from every failure line and leave
+        the run's verdict alone."""
+        import json
+
+        from price_predictor.infrastructure.run_manifest import run_recorded
+
+        tally = "Effect records: fork refusals so far, expected and no failure: {{{body}}}"
+        found = {}
+
+        def body():
+            found["supervisor"] = self._run(tmp_path, matches=1, record_lines=2, log_lines=[
+                tally.format(body="directed dies=1"),
+                tally.format(body="directed dies=3, intervention no choices=2"),
+            ])
+            return 0
+
+        run_recorded(tmp_path / "records", body, command="python -m sealed match-outcomes")
+
+        supervisor = found["supervisor"]
+        assert not supervisor.worker_failures
+        assert supervisor.collected_nothing is False
+        assert ("Fork refusals over the run (expected, no failure): "
+                "3 directed dies, 2 intervention no choices") in capsys.readouterr().out
+        entry = json.loads(
+            (tmp_path / "records" / "run.json").read_text(encoding="utf-8"))["invocations"][0]
+        assert entry["fork_refusals"] == {"directed dies": 3, "intervention no choices": 2}
+        assert entry["worker_failures"] == {}
 
     def test_with_effect_records_each_worker_gets_the_stop_protocol(self, tmp_path):
         from unittest.mock import MagicMock

@@ -5,6 +5,7 @@ run that played fewer of them."""
 from __future__ import annotations
 
 import functools
+import re
 from pathlib import Path
 
 import pytest
@@ -268,3 +269,74 @@ class TestHookFailureCounts:
         assert render_hook_failures(document) == (
             "3 RESOLVE, 1 subscriber X.y; contained by Forge: 4 s")
         assert render_hook_failures(hook_failure_document([])) == "no hook failures"
+
+
+class TestForkRefusalCounts:
+    """The worker prints, at a match end where it changed, how many forks
+    declined for an expected reason (``ForkRefusals``): a running map per JVM
+    lifetime that the supervisor did not read (WP5). Refusals are no
+    failures: they are counted apart from every failure line."""
+
+    LINE = "Effect records: fork refusals so far, expected and no failure: {{{body}}}"
+    START = "Effect records: C:/out/run.0-{life}.jsonl.gz [mode=patched]"
+
+    def test_the_line_is_spelled_as_the_worker_prints_it(self):
+        from price_predictor.domain.worker_failures import FORK_REFUSALS_LINE, JVM_START_LINE
+        from tests.unit.forge_sources import connector_source
+
+        main = connector_source("MatchWorkerMain.java")
+        literal = re.search(r'static final String REFUSALS_LINE = "([^"]*)";', main)
+        assert literal is not None, "MatchWorkerMain names the line's start in REFUSALS_LINE"
+        assert "System.err.println(REFUSALS_LINE + refusals);" in main
+        assert "ForkRefusals.counts()" in main
+        # A Java map in key order: ``{a b=1, c d=2}`` (TreeMap.toString).
+        refusals = connector_source("effects/ForkRefusals.java")
+        assert "Map<String, Long> counts = new TreeMap<>();" in refusals
+        assert 'kind + " " + reason' in refusals
+
+        line = literal.group(1) + "{directed no counterpart=2, intervention no choices=1}"
+        found = FORK_REFUSALS_LINE.search(line)
+        assert found is not None
+        assert found.group("refusals") == "directed no counterpart=2, intervention no choices=1"
+        assert not JVM_START_LINE.search(line), "a refusal line starts no lifetime"
+
+    def test_the_line_is_no_failure(self):
+        line = self.LINE.format(body="directed dies=3, probe no combat=1")
+        assert classify(line) is None
+
+    def test_a_lifetime_s_latest_tally_stands_and_lifetimes_add_up(self):
+        from price_predictor.domain.worker_failures import (
+            ForkRefusalCounts,
+            fork_refusal_document,
+        )
+
+        slot = ForkRefusalCounts()
+        for line in (
+            self.START.format(life="a"),
+            self.LINE.format(body="directed dies=1"),
+            self.LINE.format(body="directed dies=2, intervention no choices=1"),
+            self.START.format(life="b"),
+            self.LINE.format(body="directed dies=4"),
+            "Worker: 3 matches generated",
+        ):
+            slot.add_line(line)
+
+        assert fork_refusal_document([slot]) == {
+            "directed dies": 6, "intervention no choices": 1,
+        }
+
+    def test_slots_add_up_in_name_order_and_render_on_one_line(self):
+        from price_predictor.domain.worker_failures import (
+            ForkRefusalCounts,
+            fork_refusal_document,
+            render_fork_refusals,
+        )
+
+        first, second = ForkRefusalCounts(), ForkRefusalCounts()
+        first.add_line(self.LINE.format(body="probe no combat=2"))
+        second.add_line(self.LINE.format(body="directed dies=1, probe no combat=1"))
+        document = fork_refusal_document([first, second])
+
+        assert list(document.items()) == [("directed dies", 1), ("probe no combat", 3)]
+        assert render_fork_refusals(document) == "1 directed dies, 3 probe no combat"
+        assert render_fork_refusals(fork_refusal_document([])) == "no fork refusals"

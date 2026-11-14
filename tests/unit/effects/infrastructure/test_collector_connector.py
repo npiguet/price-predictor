@@ -359,6 +359,7 @@ class TestTheRoundReportsItsWorkerLogs:
             "killed_starting": 0, "survived": 0,
         }
         assert entry["hook_failures"] == {"connector": {}, "forge": {}}
+        assert entry["fork_refusals"] == {}
 
     def test_the_hook_failure_report_reaches_the_round_report_and_the_manifest(
         self, tmp_path, caplog,
@@ -371,6 +372,41 @@ class TestTheRoundReportsItsWorkerLogs:
         assert "Effect-record hook failures over the run: 3 RESOLVE; contained by Forge: " \
                "3 resolve" in caplog.text
         assert not supervisor.worker_failures, "a count, not a failure line"
+
+    def test_the_fork_refusal_tally_reaches_the_round_report_and_the_manifest(
+        self, tmp_path, caplog,
+    ):
+        """WP5: the worker prints how many forks declined, by kind and reason,
+        and nothing read it. Refusals are expected: no failure line, no
+        warning, nothing a failure threshold counts."""
+        import json
+        import logging
+
+        from price_predictor.infrastructure.run_manifest import run_recorded
+
+        tally = "Effect records: fork refusals so far, expected and no failure: {{{body}}}"
+        found = {}
+
+        def body():
+            with caplog.at_level(logging.INFO):
+                found["supervisor"] = self._round_logging(tmp_path, {
+                    0: [tally.format(body="directed dies=1"),
+                        tally.format(body="directed dies=2, probe no combat=1")],
+                    1: [tally.format(body="probe no combat=4")],
+                })
+            return 0
+
+        run_recorded(tmp_path, body, command="python -m effects collect-coverage")
+
+        entry = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))["invocations"][0]
+        assert entry["fork_refusals"] == {"directed dies": 2, "probe no combat": 5}
+        assert entry["worker_failures"] == {}
+        assert not found["supervisor"].worker_failures
+        refusal_lines = [r for r in caplog.records if "Fork refusals over the run" in r.message]
+        assert [r.getMessage() for r in refusal_lines] == [
+            "Fork refusals over the run (expected, no failure): "
+            "2 directed dies, 5 probe no combat"]
+        assert refusal_lines[0].levelno == logging.INFO
 
 
 class TestTheWorkersStopAtAGameEnd:

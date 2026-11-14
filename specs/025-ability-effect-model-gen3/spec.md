@@ -1168,7 +1168,8 @@ and that the reporting half never enters the control score.
   round and in `run.json` (`cut_games`). The worker-log scan MUST count a random-seat match error
   (`Error generating match: [random-seat match] `) apart from other match errors and an unwritten
   game-end marker as a kind of its own, and MUST record the latest counts of the workers'
-  hook-failure report (`hook_failures`); `match-outcomes` MUST count every match played to its end
+  hook-failure report (`hook_failures`) and of their fork refusal tally (`fork_refusals`), the
+  refusals counting toward no failure kind, threshold or exit code; `match-outcomes` MUST count every match played to its end
   (random-seat ones, which write no outcome row, included) and its random-seat match errors when
   deciding that a run collected nothing.
 - **FR-059**: The game-disjoint stratum MUST keep only games between two Forge AIs; the card-disjoint

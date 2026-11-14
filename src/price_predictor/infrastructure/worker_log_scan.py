@@ -8,8 +8,9 @@ the new one. Rotated twice between scans, the generation read so far is gone
 (the second rotation replaced its ``.1``): the loss is counted as
 ``log_unread``, and the ``.1`` there now, never read, is read whole.
 
-The same reading follows each slot's hook-failure report, a count each
-worker JVM prints and no failure line (``HookFailureCounts``).
+The same reading follows each slot's hook-failure report and fork refusal
+tally, counts each worker JVM prints and no failure lines
+(``HookFailureCounts``, ``ForkRefusalCounts``).
 """
 
 from __future__ import annotations
@@ -20,9 +21,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from price_predictor.domain.worker_failures import (
+    ForkRefusalCounts,
     HookFailureCounts,
     WorkerFailure,
     WorkerFailures,
+    fork_refusal_document,
     hook_failure_document,
 )
 
@@ -38,6 +41,8 @@ class WorkerLogScan:
         self._read: dict[Path, tuple[int, int]] = {}
         #: Per log path: the hook-failure counts its worker JVMs printed.
         self._hooks: dict[Path, HookFailureCounts] = {}
+        #: Per log path: the fork refusal tallies its worker JVMs printed.
+        self._refusals: dict[Path, ForkRefusalCounts] = {}
 
     def scan(self, paths: Iterable[Path]) -> WorkerFailures:
         """The failure lines ``paths`` gained since the last scan."""
@@ -51,8 +56,16 @@ class WorkerLogScan:
         (``worker_failures.hook_failure_document``)."""
         return hook_failure_document(list(self._hooks.values()))
 
+    def fork_refusals(self) -> dict[str, int]:
+        """The fork refusals every log read so far reports, summed
+        (``worker_failures.fork_refusal_document``)."""
+        return fork_refusal_document(list(self._refusals.values()))
+
     def _scan_one(self, path: Path, failures: WorkerFailures) -> None:
-        hooks = self._hooks.setdefault(path, HookFailureCounts())
+        hooks = _Tallies(
+            self._hooks.setdefault(path, HookFailureCounts()),
+            self._refusals.setdefault(path, ForkRefusalCounts()),
+        )
         try:
             identity = os.stat(path).st_ino
         except OSError:
@@ -105,20 +118,40 @@ class WorkerLogReport:
         every worker JVM of the run."""
         return self._scan.hook_failures()
 
+    def fork_refusals(self) -> dict[str, int]:
+        """The latest fork refusal tallies the workers printed, summed over
+        every worker JVM of the run: expected, never a failure."""
+        return self._scan.fork_refusals()
+
     def manifest_fields(self) -> dict:
         """The totals as ``run.json`` records them."""
         return {
             "worker_failures": self.totals.as_dict(),
             "worker_failure_examples": dict(self.totals.examples),
             "hook_failures": self.hook_failures(),
+            "fork_refusals": self.fork_refusals(),
         }
 
 
+class _Tallies:
+    """The counts a worker JVM prints beside its failure lines, followed
+    line by line: the hook-failure report and the fork refusal tally."""
+
+    def __init__(self, hooks: HookFailureCounts, refusals: ForkRefusalCounts) -> None:
+        self._hooks = hooks
+        self._refusals = refusals
+
+    def add_line(self, line: str) -> None:
+        self._hooks.add_line(line)
+        self._refusals.add_line(line)
+
+
 def _read_lines(
-    path: Path, offset: int, failures: WorkerFailures, hooks: HookFailureCounts,
+    path: Path, offset: int, failures: WorkerFailures, hooks: _Tallies,
 ) -> int:
     """Count the failure lines of ``path`` from ``offset`` to its last complete
-    line, and follow its hook-failure reports; the offset just past that line."""
+    line, and follow its hook-failure reports and fork refusal tallies; the
+    offset just past that line."""
     try:
         with open(path, "rb") as handle:
             handle.seek(offset)

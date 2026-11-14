@@ -272,3 +272,55 @@ def render_hook_failures(document: dict[str, dict[str, int]]) -> str:
     parts = [f"{n} {hook}" for hook, n in document["connector"].items()]
     contained = ", ".join(f"{n} {slot}" for slot, n in document["forge"].items())
     return ", ".join(parts) + (f"; contained by Forge: {contained}" if contained else "")
+
+
+# ── the fork refusal tally ──────────────────────────────────────────────
+
+#: The tally a worker prints at every match end where it changed
+#: (``MatchWorkerMain.HookFailureReport``, from ``ForkRefusals``): the forks
+#: that declined for an expected reason, ``<kind> <reason>=n`` in name order,
+#: running totals of that JVM. Expected, not a failure: no pattern above
+#: reads it and it counts toward no failure threshold.
+FORK_REFUSALS_LINE = re.compile(
+    r"Effect records: fork refusals so far, expected and no failure: \{(?P<refusals>[^{}]*)\}"
+)
+
+
+@dataclass
+class ForkRefusalCounts:
+    """The fork refusal tallies one slot's worker JVMs printed: each
+    lifetime's latest tally, summed, as :class:`HookFailureCounts` reads the
+    hook-failure report."""
+
+    #: Summed over the lifetimes already over.
+    ended: Counter[str] = field(default_factory=Counter)
+    #: The running lifetime's latest tally.
+    latest: Counter[str] = field(default_factory=Counter)
+
+    def add_line(self, line: str) -> None:
+        if JVM_START_LINE.search(line):
+            self.ended.update(self.latest)
+            self.latest = Counter()
+        found = FORK_REFUSALS_LINE.search(line)
+        if found is not None:
+            self.latest = _java_map(found.group("refusals"))
+
+    def totals(self) -> Counter[str]:
+        """The refusals by kind and reason, over every lifetime."""
+        return self.ended + self.latest
+
+
+def fork_refusal_document(slots: list[ForkRefusalCounts]) -> dict[str, int]:
+    """Every slot's fork refusals summed, as ``run.json`` records them:
+    ``{"<kind> <reason>": forks}``, in name order."""
+    refusals: Counter[str] = Counter()
+    for slot in slots:
+        refusals.update(slot.totals())
+    return dict(sorted(refusals.items()))
+
+
+def render_fork_refusals(document: dict[str, int]) -> str:
+    """One line: each kind and reason's count, in name order."""
+    if not document:
+        return "no fork refusals"
+    return ", ".join(f"{n} {key}" for key, n in document.items())

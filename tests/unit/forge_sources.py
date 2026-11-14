@@ -21,6 +21,9 @@ FORGE_GAME = FORGE / "forge-game" / "src" / "main" / "java" / "forge" / "game"
 FORGE_AI = FORGE / "forge-ai" / "src" / "main" / "java" / "forge" / "ai"
 #: Forge's resources: card scripts, token scripts.
 FORGE_RES = FORGE / "forge-gui" / "res"
+#: This repository's connector sources, package root ``com.pricepredictor.connector``.
+CONNECTOR = (Path(__file__).resolve().parents[2] / "forge-connector" / "src" / "main"
+             / "java" / "com" / "pricepredictor" / "connector")
 
 
 def no_forge_checkout() -> bool:
@@ -38,3 +41,12 @@ def forge_source(path: Path) -> Path:
         pytest.fail(f"the Forge checkout at {FORGE} holds no {path}: "
                     "the test reads the wrong place")
     return path
+
+
+def connector_source(relative: str) -> str:
+    """The text of ``relative``, a file under :data:`CONNECTOR`: part of this
+    repository, so a missing file fails the calling test, never skips it."""
+    path = CONNECTOR / relative
+    if not path.is_file():
+        pytest.fail(f"the connector holds no {path}: the test reads the wrong place")
+    return path.read_text(encoding="utf-8")

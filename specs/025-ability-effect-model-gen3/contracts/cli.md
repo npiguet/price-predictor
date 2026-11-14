@@ -160,10 +160,11 @@ included). The workers honour the stop protocol (§ Match worker stop protocol, 
 `--stop-timeout` and `--recycle-seconds`, both refused without `--effect-records`, exit 2). At
 every status line and at the end the supervisor scans what the logs gained for failure lines
 (`price_predictor.domain.worker_failures`, as on the collectors) and prints them by kind; at the
-end it prints the run's totals, the hook-failure counts and how the workers ended, and records in
+end it prints the run's totals, the hook-failure counts, the fork refusals and how the workers
+ended, and records in
 its `run.json` entry `run_id`, `matches` (outcome rows), `matches_played` (progress lines),
-`worker_failures`, `worker_failure_examples`, `hook_failures`, `worker_survivors`, `worker_stops`,
-`stop_timeout` and `recycle_seconds`. A run that played matches (outcome rows, progress lines or
+`worker_failures`, `worker_failure_examples`, `hook_failures`, `fork_refusals`, `worker_survivors`,
+`worker_stops`, `stop_timeout` and `recycle_seconds`. A run that played matches (outcome rows, progress lines or
 random-seat match errors, so a run of random-seat matches alone counts) and wrote no effect
 record exits 1. `match-outcomes.txt` and `cards-played.txt` stay at `output/sealed/`.
 
@@ -214,7 +215,7 @@ After each round the collector scans the round's additions to the worker logs fo
 error, worker gave up, hook, emitter, boundary step, unwritten game-end marker, withheld
 records, fork score mismatch, fork fidelity, staging, JVM error and the rest, each found
 anywhere in a line, since a worker's stdout and stderr interleave mid-line), prints them by kind,
-prints the workers' hook-failure counts and how the round's workers ended (§ Match worker stop
+prints the workers' hook-failure counts and fork refusals and how the round's workers ended (§ Match worker stop
 protocol), and names any worker the kill could not end and still running. A log rotated twice
 between two scans counts as `log_unread`. After counting a round's shards it prints how many
 gen-3 games they hold without a game-end marker: a cut game credits no coverage card, held-out
@@ -223,7 +224,7 @@ reads each shard; a damaged shard's game past the damage counts as cut; the card
 showed still count as shown). The running command's entry in `run.json`'s `invocations` records
 `run_id` (the supervisor's), `caps` (every `CollectionCaps` field, resolved), `stop_timeout`,
 `recycle_seconds`, `rounds`, `worker_failures` (kind to line count), `worker_failure_examples`
-(kind to its first line), `hook_failures`, `worker_stops`, `worker_survivors` (PIDs) and
+(kind to its first line), `hook_failures`, `fork_refusals`, `worker_stops`, `worker_survivors` (PIDs) and
 `cut_games` (`{"before_rounds": n, "by_round": [n, …], "total": n}`, the games the counts left
 out, the shards read before the first round apart). The castability consult and the sidecar
 pass are one-shot JVMs killed after `max(3600, 600 + 0.1 × scripts handed over)` seconds: the
@@ -366,11 +367,14 @@ which the worker prints at a match end whenever it changed, on a line of its own
 The supervisor's log scan reads these: `Error generating match: [random-seat match] ` is the
 failure kind `random_seat_match_error`, counted apart from `match_error`; the marker line is
 `game_end_marker_unwritten`; a fork's first-failure line is `fork_failed` and its live-game line
-`fork_moved_live_game`. The refusal tally is not read. The failure report is a running count per worker JVM, not a failure
-line: the scan keeps each JVM lifetime's latest report (a lifetime starts at its
-`Effect records: <shard> [mode=…]` line), sums them over lifetimes and slots, prints them in the
-round report (collectors) or at the run's end (`match-outcomes`), and records them in `run.json`
-as `hook_failures`: `{"connector": {hook: calls}, "forge": {slot: calls}}`.
+`fork_moved_live_game`. The failure report and the refusal tally are running counts per worker
+JVM, not failure lines: the scan keeps each JVM lifetime's latest report and tally (a lifetime
+starts at its `Effect records: <shard> [mode=…]` line), sums them over lifetimes and slots, prints
+them in the round report (collectors) or at the run's end (`match-outcomes`) — the refusals as
+`Fork refusals over the run (expected, no failure): <n> <kind> <reason>, …`, at info level — and
+records them in `run.json` as `hook_failures`: `{"connector": {hook: calls}, "forge": {slot:
+calls}}` and `fork_refusals`: `{"<kind> <reason>": forks}`, keys in name order. Refusals count
+toward no failure kind, no failure threshold and no exit code.
 
 ## `python -m effects collect-variants` (existing)
 

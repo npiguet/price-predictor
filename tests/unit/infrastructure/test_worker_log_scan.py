@@ -112,3 +112,37 @@ def test_the_report_s_totals_reach_the_manifest_fields(tmp_path):
     assert report.manifest_fields()["hook_failures"] == {
         "connector": {"RESOLVE": 2}, "forge": {"resolve": 2},
     }
+
+
+_REFUSALS = "Effect records: fork refusals so far, expected and no failure: {{directed dies={n}}}\n"
+
+
+def test_the_fork_refusal_tally_is_followed_across_scans_lifetimes_and_slots(tmp_path):
+    """A running map each worker JVM prints at a match end (WP5) and nothing
+    read: each lifetime's latest tally, summed over lifetimes and slots, and
+    no failure line."""
+    first, second = tmp_path / "run.0.log", tmp_path / "run.1.log"
+    _append(first, "Effect records: x/run.0-a.jsonl.gz [mode=patched]\n" + _REFUSALS.format(n=1))
+    _append(second, _REFUSALS.format(n=4))
+    scan = WorkerLogScan()
+
+    assert not scan.scan([first, second])
+    _append(first, _REFUSALS.format(n=2) + "Effect records: x/run.0-b.jsonl.gz [mode=patched]\n"
+            + _REFUSALS.format(n=3))
+    assert not scan.scan([first, second])
+
+    assert scan.fork_refusals() == {"directed dies": 9}
+
+
+def test_the_fork_refusals_reach_the_manifest_fields(tmp_path):
+    from price_predictor.infrastructure.forge_jvm import WorkerLogFiles
+    from price_predictor.infrastructure.worker_log_scan import WorkerLogReport
+
+    logs = WorkerLogFiles(tmp_path, "run")
+    _append(logs.path_for(0), _REFUSALS.format(n=2))
+    report = WorkerLogReport(logs, 1)
+    report.scan()
+
+    fields = report.manifest_fields()
+    assert fields["fork_refusals"] == {"directed dies": 2}
+    assert fields["worker_failures"] == {}
