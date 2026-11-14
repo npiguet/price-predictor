@@ -33,7 +33,6 @@ import com.pricepredictor.connector.effects.directed.rules.PartnerWithSearch;
 import com.pricepredictor.connector.effects.directed.rules.PlottedFromHand;
 import com.pricepredictor.connector.effects.directed.rules.PoisonLoss;
 import com.pricepredictor.connector.effects.directed.rules.Prototype;
-import com.pricepredictor.connector.effects.directed.rules.ReplacedSacrificeCost;
 import com.pricepredictor.connector.effects.directed.rules.SeveralExplore;
 import com.pricepredictor.connector.effects.directed.rules.SharedKeywords;
 import com.pricepredictor.connector.effects.directed.rules.SimultaneousDamage;
@@ -84,7 +83,6 @@ public final class DirectedRules {
             PoisonLoss.rule(),
             SimultaneousLoss.rule(),
             MutagenToken.rule(),
-            ReplacedSacrificeCost.rule(),
             OptionalSearch.rule(),
             CantGainLifeExchange.rule(),
             StunCounter.rule(),

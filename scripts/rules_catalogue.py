@@ -970,6 +970,10 @@ NOT_DIRECTED = {
     "400.6": "its lacking side is a zone change that meets a replacement and is not replaced: "
              "Forge's hooks fire only for a replacement that applies, so no board edit writes "
              "that rewrite record; its variant, no Rest in Peace, writes no rewrite at all",
+    "118.11": "its lacking side is a cost's move to a graveyard that meets a replacement and is "
+              "not replaced: Forge's hooks fire only for a replacement that applies, so no board "
+              "edit writes that rewrite record; its variant, Rest in Peace added, writes the fires "
+              "side, which the counts already hold (the user's decision of 2026-11-15)",
     "704.7": "its lacking side is a game loss that meets a replacement and is not replaced: "
              "Forge's hooks fire only for a replacement that applies, so no board edit writes "
              "that rewrite record; its variant, no Lich's Mirror, writes no rewrite at all",

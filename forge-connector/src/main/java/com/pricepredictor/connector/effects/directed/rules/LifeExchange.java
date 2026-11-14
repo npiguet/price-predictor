@@ -5,7 +5,8 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
-import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
+import com.pricepredictor.connector.effects.directed.operations.BoardEdit;
+import com.pricepredictor.connector.effects.directed.operations.LifeOperation;
 import forge.game.Game;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
@@ -23,30 +24,31 @@ import java.util.Optional;
  * <p>The base board, read at a boundary: a main phase of the active player
  * begins, it controls an untapped permanent, under its control since the turn
  * began, with an activated ability that exchanges a target opponent's life
- * total with the permanent's toughness, and an opponent who can gain life has
- * less life than that toughness, so the exchange would raise it. It binds the
- * active player, the permanent and that opponent.
+ * total with the permanent's toughness, and an opponent who can lose life has
+ * no more life than that toughness, so the exchange would not lower it and
+ * Forge's AI does not make it. It binds the active player, the permanent and
+ * that opponent.
  *
- * <p>Variant {@code cannot_gain_life} ({@code add_permanent}): Everlasting
- * Torment (players can't gain life) is on the battlefield under the
- * opponent's control, so no part of the exchange happens. The fork forces
- * the activation at that opponent (FR-010b), which Forge's AI does not make
- * when the exchange gives the opponent nothing.
+ * <p>Variant {@code opponent_above} ({@code life}): the opponent's life is
+ * above the toughness, the scenario's 20 where that is above it, so the
+ * exchange lowers it and sets the toughness: the exchange happens, the side
+ * of the rule the counts lack. The fork forces the activation at that
+ * opponent (FR-010b).
  */
 public final class LifeExchange {
 
     public static final String RULE = "701.12g";
     static final String SCENARIO = "701.12g-1";
-    static final String CANNOT_GAIN_LIFE = "cannot_gain_life";
-    static final String TORMENT = "Everlasting Torment";
+    static final String OPPONENT_ABOVE = "opponent_above";
+    /** The life total the scenario's variant gives the opponent. */
+    static final int SCENARIO_LIFE = 20;
 
     private LifeExchange() {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, LifeExchange::bind, CANNOT_GAIN_LIFE,
-                new Application(ForkOperation.ADD_PERMANENT,
-                        fork -> AddPermanentOperation.of(TORMENT, fork.player("opponent"), false))
+        return DirectedRule.of(RULE, SCENARIO, LifeExchange::bind, OPPONENT_ABOVE,
+                new Application(ForkOperation.LIFE, LifeExchange::opponentAbove)
                         .forcing(ForcedPlay.activate("player", "permanent",
                                 ForcedPlay.Line.api("ExchangeLifeVariant")).targeting("opponent")));
     }
@@ -61,7 +63,7 @@ public final class LifeExchange {
                 continue;
             }
             for (Player opponent : active.getOpponents()) {
-                if (opponent.canGainLife() && opponent.getLife() < permanent.getNetToughness()) {
+                if (opponent.canLoseLife() && opponent.getLife() <= permanent.getNetToughness()) {
                     return Optional.of(Binding.empty()
                             .with("player", active)
                             .with("permanent", permanent)
@@ -83,5 +85,10 @@ public final class LifeExchange {
             }
         }
         return false;
+    }
+
+    private static BoardEdit opponentAbove(Binding fork) {
+        int toughness = fork.card("permanent").getNetToughness();
+        return new LifeOperation(fork.player("opponent"), Math.max(SCENARIO_LIFE, toughness + 1));
     }
 }

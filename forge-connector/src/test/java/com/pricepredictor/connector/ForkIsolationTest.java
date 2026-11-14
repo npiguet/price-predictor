@@ -3,8 +3,8 @@ package com.pricepredictor.connector;
 import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 import com.pricepredictor.connector.effects.TestCaps;
-import com.pricepredictor.connector.effects.directed.rules.ReplacedSacrificeCost;
 import com.pricepredictor.connector.effects.directed.rules.SimultaneousDamage;
+import com.pricepredictor.connector.effects.directed.rules.ToughnessZero;
 import forge.deck.Deck;
 import forge.game.Match;
 import forge.util.MyRandom;
@@ -32,7 +32,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * protection and directed forks) writes the same live records, byte for
  * byte. A fork that drew from the live game's random stream, took one of its
  * timestamps or ids, or changed its board shows here as a live record that
- * differs, from the first record it touched on.
+ * differs, from the first record it touched on. The directed forks include
+ * ones whose variant forces a play (FR-010b): 704.5f's Disfigure or Last Gasp
+ * cast at the bound creature, by a plain AI seat and by a random seat.
  */
 @ExtendWith(ForgeExtension.class)
 class ForkIsolationTest {
@@ -61,25 +63,45 @@ class ForkIsolationTest {
         return deck("Mountain", 16, "Lightning Bolt", 24);
     }
 
-    /**
-     * Creatures, first and double strikers, burn, tokens, an aura, a fog, a
-     * sacrifice outlet: what forks reach, a directed fork forcing a play
-     * (118.11, a Siege-Gang Commander made to sacrifice a Goblin) among them.
-     */
+    /** Creatures, first and double strikers, burn, tokens, an aura, a fog: what forks reach. */
     private static Deck boros() {
         return deck("Mountain", 9, "Plains", 8, "Pacifism", 2, "Serra Angel", 2, "Arc Trail", 2,
-                "Siege-Gang Commander", 2, "Youthful Knight", 2, "Lightning Bolt", 2, "Boros Charm", 2, "Fireball", 1,
-                "Shock", 1, "Raise the Alarm", 1, "Prodigal Pyromancer", 1, "Holy Day", 1,
+                "Shock", 2, "Youthful Knight", 2, "Lightning Bolt", 2, "Boros Charm", 2, "Fireball", 1,
+                "Healing Salve", 1, "Raise the Alarm", 1, "Prodigal Pyromancer", 1, "Holy Day", 1,
                 "Fencing Ace", 2, "Mogg Fanatic", 1, "Hill Giant", 1);
     }
 
+    /**
+     * Small creatures and -N/-N spells (Disfigure, Last Gasp): the board
+     * 704.5f binds, whose variant forces the spell's cast at the creature it
+     * no longer kills.
+     */
+    private static Deck rakdos() {
+        return deck("Swamp", 10, "Mountain", 7, "Disfigure", 4, "Last Gasp", 4, "Shock", 2,
+                "Drudge Skeletons", 3, "Hill Giant", 3, "Mogg Fanatic", 2, "Gravedigger", 2,
+                "Raging Goblin", 3);
+    }
+
     private static CollectionCaps off() {
-        return TestCaps.caps().interventions(0).probes(0).build();
+        return off(TestCaps.caps());
+    }
+
+    private static CollectionCaps off(TestCaps caps) {
+        return caps.interventions(0).probes(0).build();
     }
 
     private static CollectionCaps allForks() {
-        return TestCaps.caps().interventions(2).probes(4).probeKeywords("first_strike", "double_strike")
-                .directed(2, 1.0, SimultaneousDamage.RULE, ReplacedSacrificeCost.RULE).build();
+        return allForks(TestCaps.caps());
+    }
+
+    private static CollectionCaps allForks(TestCaps caps) {
+        return caps.interventions(2).probes(4).probeKeywords("first_strike", "double_strike")
+                .directed(2, 1.0, SimultaneousDamage.RULE, ToughnessZero.RULE).build();
+    }
+
+    /** Every match a random seat's, its decisions drawn at random half the time. */
+    private static TestCaps randomSeat() {
+        return TestCaps.caps().randomSeat(1.0, 0.5);
     }
 
     /** The live records one seeded match writes, in order. */
@@ -178,8 +200,14 @@ class ForkIsolationTest {
     }
 
     private void assertForksLeaveTheLiveGame(String name, Deck a, Deck b, long seed) throws IOException {
-        List<String> off = liveRecords(name + "-off", a, b, seed, off());
-        List<String> on = liveRecords(name + "-on", a, b, seed, allForks());
+        assertForksLeaveTheLiveGame(name, a, b, seed, off(), allForks());
+    }
+
+    private void assertForksLeaveTheLiveGame(String name, Deck a, Deck b, long seed,
+                                             CollectionCaps withoutForks, CollectionCaps withForks)
+            throws IOException {
+        List<String> off = liveRecords(name + "-off", a, b, seed, withoutForks);
+        List<String> on = liveRecords(name + "-on", a, b, seed, withForks);
         assertTrue(off.size() > 10, name + ": the match was played");
         for (int i = 0; i < Math.min(off.size(), on.size()); i++) {
             assertEquals(off.get(i), on.get(i), name + ": live record #" + i);
@@ -203,9 +231,49 @@ class ForkIsolationTest {
         assertTrue(forkRecords.stream().anyMatch(r -> r.contains("\"interventional\":false")
                 && !r.contains("\"mirror_of\":null")), "probes");
         assertTrue(forkRecords.stream().anyMatch(r -> r.contains("\"directed\":{")), "directed forks");
-        assertTrue(forkRecords.stream().anyMatch(r -> r.contains("\"aimed_at\":[\"118.11\"]")),
-                "a directed fork whose variant forces a play");
         assertTrue(forkRecords.stream().anyMatch(r -> r.contains("\"interventional\":true")
                 && !r.contains("\"kind\":\"resolution\"")), "protection forks, which write every kind");
+    }
+
+    /**
+     * Whether a 704.5f fork's records hold a -N/-N spell's resolution whose
+     * actor is the random seat ({@code random_seat} true) or a plain AI seat:
+     * a kept 704.5f fork is one whose forced cast was made, a refused one
+     * writing nothing.
+     */
+    private boolean forcedCastRecorded(boolean byTheRandomSeat) {
+        return forkRecords.stream().anyMatch(r -> r.contains("\"aimed_at\":[\"704.5f\"]")
+                && r.contains("\"kind\":\"resolution\"")
+                && (r.contains("cardsfolder/d/disfigure.txt") || r.contains("cardsfolder/l/last_gasp.txt"))
+                && r.contains("\"random_seat\":" + byTheRandomSeat));
+    }
+
+    /**
+     * 704.5f's directed fork forces the -N/-N spell's cast (FR-010b) through
+     * a forcing seat that exists in the copy only: in a mirror of two plain
+     * AI seats, the live records stay as they were.
+     */
+    @Test
+    void forksForcingAPlayLeaveTheLiveRecordsAsTheyWere() throws IOException {
+        for (long seed : new long[] {21, 22, 23}) {
+            assertForksLeaveTheLiveGame("forced" + seed, rakdos(), rakdos(), seed);
+        }
+        assertTrue(forcedCastRecorded(false), "a plain AI seat's forced cast");
+    }
+
+    /**
+     * The same, the forced cast made by a random seat, which consults the
+     * forced play before drawing its own (ForcedPlaySeat). Every match has a
+     * random seat, on either side; only the Rakdos deck holds -N/-N spells,
+     * so a 704.5f fork's -N/-N resolution by the random seat is the Rakdos
+     * seat's, which held the forced cast.
+     */
+    @Test
+    void forksForcingARandomSeatsPlayLeaveTheLiveRecordsAsTheyWere() throws IOException {
+        for (long seed : new long[] {31, 32, 33, 34, 35, 36, 37, 38}) {
+            assertForksLeaveTheLiveGame("random" + seed, boros(), rakdos(), seed,
+                    off(randomSeat()), allForks(randomSeat()));
+        }
+        assertTrue(forcedCastRecorded(true), "a random seat's forced cast");
     }
 }

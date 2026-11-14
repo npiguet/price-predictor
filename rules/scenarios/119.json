@@ -559,8 +559,7 @@
             {
               "card": "Tree of Redemption",
               "summoning_sick": false
-            },
-            "Leyline of Punishment"
+            }
           ],
           "B": []
         },
@@ -568,7 +567,7 @@
         "graveyard": {},
         "library": {},
         "exile": {},
-        "notes": "Tree of Redemption is a 0/13. Leyline of Punishment: players can't gain life."
+        "notes": "Tree of Redemption is a 0/13. In the leyline variant Leyline of Punishment (players can't gain life) is added to A's battlefield."
       },
       "decisions": [
         "A activates Tree of Redemption ({T}: exchange A's life total with its toughness).",
@@ -576,24 +575,17 @@
       ],
       "variants": [
         {
-          "label": "base",
-          "polarity": "fires",
-          "delta": "",
-          "expected": "The exchange would raise A's life total from 5 to 13, so it does not happen: A's life total stays 5 and Tree of Redemption's toughness stays 13."
-        },
-        {
-          "label": "exchange-lowers",
-          "polarity": "does_not_fire",
-          "delta": "A's life total is 20.",
-          "expected": "The exchange would lower A's life total, so it happens: A's life total becomes 13 and Tree of Redemption's toughness becomes 20.",
-          "operation": "life"
-        },
-        {
           "label": "no-leyline",
-          "polarity": "other",
-          "delta": "Leyline of Punishment is not on the battlefield (A's life total is 5 as in the base).",
-          "expected": "The exchange happens: A's life total becomes 13 and Tree of Redemption's toughness becomes 5.",
-          "operation": "remove_permanent"
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "The exchange happens: A's life total becomes 13 and Tree of Redemption's toughness becomes 5."
+        },
+        {
+          "label": "leyline",
+          "polarity": "fires",
+          "delta": "Leyline of Punishment is on the battlefield under A's control.",
+          "expected": "The exchange would raise A's life total from 5 to 13, so it does not happen: A's life total stays 5 and Tree of Redemption's toughness stays 13.",
+          "operation": "add_permanent"
         }
       ],
       "cards": [

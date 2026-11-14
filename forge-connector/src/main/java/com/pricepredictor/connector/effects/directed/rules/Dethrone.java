@@ -28,9 +28,9 @@ import java.util.Set;
  *
  * <p>The base board, read at a boundary: the declare-attackers step begins,
  * before attackers are declared, the active player controls an untapped
- * creature with dethrone that can attack this turn, and an opponent has the
- * most life or is tied for it, while every other player has 2 life or more
- * and more than the active player's creatures could deal this turn
+ * creature with dethrone that can attack this turn, and an opponent has more
+ * life than any other player, while the most any other player has is more
+ * than the active player's creatures could deal this turn
  * ({@link #attackReach}), so the variant's cut leaves the opponent out of
  * reach of a lethal attack the base board did not offer. The reach is an
  * upper bound only where nothing can grow the attack once attackers are
@@ -40,29 +40,25 @@ import java.util.Set;
  * on a permanent, or an instant-speed pump or damage spell it has the lands
  * for ({@link #canGrowTheAttack}). It binds the creature and that opponent.
  *
- * <p>Variant {@code less-life} ({@code life}): the opponent has one life less
- * than the most any other player has, so attacking it does not trigger
- * dethrone. The other players having 2 or more keeps the opponent alive, and
- * having more than the attack's reach keeps the attack from killing it.
- *
- * <p>The fork keeps the not-fired evaluations of the triggers the creature hosts
- * whatever the trigger-negative sampler's balance says (FR-010c): a fork's
- * recording is fresh, so the sampler holds no earlier firing of the mode
- * for a negative to repay. The fork forces the creature's attack on that
- * opponent (FR-010b), added to its seat's own declaration.
+ * <p>Variant {@code tied} ({@code life}): the opponent's life is cut to the
+ * most any other player has, so it is tied for the most life and attacking it
+ * triggers dethrone: the rare side of the rule, which the counts lack. The
+ * most being more than the attack's reach keeps the attack from killing it.
+ * The fork forces the creature's attack on that opponent (FR-010b), added to
+ * its seat's own declaration.
  */
 public final class Dethrone {
 
     public static final String RULE = "702.105a";
     static final String SCENARIO = "702.105a-1";
-    static final String LESS_LIFE = "less-life";
+    static final String TIED = "tied";
 
     private Dethrone() {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, Dethrone::bind, LESS_LIFE,
-                new Application(ForkOperation.LIFE, Dethrone::lessLife).keepingNegativesOf("attacker")
+        return DirectedRule.of(RULE, SCENARIO, Dethrone::bind, TIED,
+                new Application(ForkOperation.LIFE, Dethrone::tied)
                         .forcing(ForcedPlay.attack("player", "attacker", "opponent")));
     }
 
@@ -83,7 +79,7 @@ public final class Dethrone {
         int reach = attackReach(active);
         for (Player opponent : active.getOpponents()) {
             int most = Boards.mostLifeBesides(opponent);
-            if (opponent.getLife() >= most && most >= 2 && most - 1 > reach) {
+            if (opponent.getLife() > most && most > reach) {
                 return Optional.of(Binding.empty()
                         .with("player", active)
                         .with("attacker", attacker.get())
@@ -152,8 +148,8 @@ public final class Dethrone {
         return false;
     }
 
-    private static BoardEdit lessLife(Binding fork) {
+    private static BoardEdit tied(Binding fork) {
         Player opponent = fork.player("opponent");
-        return new LifeOperation(opponent, Boards.mostLifeBesides(opponent) - 1);
+        return new LifeOperation(opponent, Boards.mostLifeBesides(opponent));
     }
 }

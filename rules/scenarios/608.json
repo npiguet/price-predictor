@@ -1134,7 +1134,7 @@
             {
               "card": "History of Benalia",
               "counters": {
-                "LORE": 2
+                "LORE": 1
               }
             }
           ],
@@ -1156,16 +1156,16 @@
       ],
       "variants": [
         {
-          "label": "base",
-          "polarity": "fires",
-          "delta": "",
-          "expected": "Chapter III (the final chapter) resolves; Narci's trigger fires: B loses 3 life (B at 17) and A gains 3 life (A at 23). History of Benalia is sacrificed by the state-based check and moves to A's graveyard; Narci's sacrifice trigger fires and A draws Plains."
-        },
-        {
           "label": "not-final-chapter",
           "polarity": "does_not_fire",
-          "delta": "History of Benalia starts with 1 lore counter instead of 2.",
-          "expected": "Chapter II resolves: A creates a 2/2 white Knight token with vigilance. Narci's trigger does not fire; life totals stay 20 and 20; History of Benalia stays on the battlefield with 2 lore counters; A draws nothing.",
+          "delta": "",
+          "expected": "Chapter II resolves: A creates a 2/2 white Knight token with vigilance. Narci's trigger does not fire; life totals stay 20 and 20; History of Benalia stays on the battlefield with 2 lore counters; A draws nothing."
+        },
+        {
+          "label": "final-chapter",
+          "polarity": "fires",
+          "delta": "History of Benalia starts with 2 lore counters instead of 1.",
+          "expected": "Chapter III (the final chapter) resolves; Narci's trigger fires: B loses 3 life (B at 17) and A gains 3 life (A at 23). History of Benalia is sacrificed by the state-based check and moves to A's graveyard; Narci's sacrifice trigger fires and A draws Plains.",
           "operation": "counters",
           "script_edit": {
             "card": "History of Benalia",
@@ -1173,9 +1173,9 @@
               "K:Chapter:3:DBToken,DBToken,DBPump"
             ],
             "add": [
-              "K:Chapter:4:DBToken,DBToken,DBToken,DBPump"
+              "K:Chapter:2:DBToken,DBPump"
             ],
-            "note": "the lore count stays below the final chapter: the final chapter moves up rather than the counters down"
+            "note": "the lore count reaches the final chapter: the final chapter moves down rather than the counters up"
           }
         }
       ],

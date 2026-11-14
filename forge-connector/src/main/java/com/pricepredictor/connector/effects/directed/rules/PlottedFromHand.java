@@ -22,16 +22,17 @@ import java.util.Optional;
  *
  * <p>The base board, read at a boundary: a main phase of the active
  * player's turn begins with the stack empty, and the active player holds
- * Kellan Joins Up, has the untapped lands for it, and holds exactly one other
- * nonland card of mana value 3 or less, the one card the enters trigger could
- * exile; and it cannot cast both, having fewer permanents that make mana now
- * ({@link Boards#manaSources}) than their two mana values: one that could
- * would cast that card beside Kellan, the AI playing the card first, and the
- * trigger would find nothing to exile on either side. It binds that card.
+ * Kellan Joins Up, has the untapped lands for it, and holds no other nonland
+ * card of mana value 3 or less, so the enters trigger would find nothing to
+ * exile, but holds another nonland card, of mana value 4 or more; and it
+ * could not cast Kellan beside a card of Grizzly Bears' mana value, having
+ * fewer permanents that make mana now ({@link Boards#manaSources}) than the
+ * two mana values: one that could would cast the Bears beside Kellan, and the
+ * trigger would find nothing to exile. It binds the first such card.
  *
- * <p>Variant {@code card_too_expensive} ({@code move_card}): the card is Hill
- * Giant, of mana value 4, so the trigger finds no card to exile and nothing
- * becomes plotted.
+ * <p>Variant {@code small_card_in_hand} ({@code move_card}): Grizzly Bears, of
+ * mana value 2, is in that card's place, so the trigger exiles it and it
+ * becomes plotted: the side of the rule the counts lack.
  *
  * <p>It also binds the active player; the fork forces the cast of Kellan
  * Joins Up first (FR-010b), before the AI could cast the other card.
@@ -40,18 +41,20 @@ public final class PlottedFromHand {
 
     public static final String RULE = "702.170c";
     static final String SCENARIO = "702.170c-1";
-    static final String CARD_TOO_EXPENSIVE = "card_too_expensive";
+    static final String SMALL_CARD_IN_HAND = "small_card_in_hand";
     static final String KELLAN = "Kellan Joins Up";
-    static final String HILL_GIANT = "Hill Giant";
+    static final String BEARS = "Grizzly Bears";
+    /** Grizzly Bears' mana value. */
+    static final int BEARS_MANA_VALUE = 2;
     static final int MOST_MANA_VALUE = 3;
 
     private PlottedFromHand() {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, PlottedFromHand::bind, CARD_TOO_EXPENSIVE,
+        return DirectedRule.of(RULE, SCENARIO, PlottedFromHand::bind, SMALL_CARD_IN_HAND,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.replace(fork.card("card"), HILL_GIANT))
+                        fork -> MoveCardOperation.replace(fork.card("card"), BEARS))
                         .forcing(ForcedPlay.cast("player", "spell")));
     }
 
@@ -66,14 +69,12 @@ public final class PlottedFromHand {
         if (kellan.isEmpty()) {
             return Optional.empty();
         }
-        List<Card> exilable = hand.stream()
-                .filter(card -> card != kellan.get() && !card.isLand() && card.getCMC() <= MOST_MANA_VALUE)
-                .toList();
-        if (exilable.size() != 1
-                || Boards.manaSources(active).size() >= kellan.get().getCMC() + exilable.get(0).getCMC()) {
+        List<Card> others = hand.stream().filter(card -> card != kellan.get() && !card.isLand()).toList();
+        if (others.isEmpty() || others.stream().anyMatch(card -> card.getCMC() <= MOST_MANA_VALUE)
+                || Boards.manaSources(active).size() >= kellan.get().getCMC() + BEARS_MANA_VALUE) {
             return Optional.empty();
         }
         return Optional.of(Binding.empty().with("player", active)
-                .with("card", exilable.get(0)).with("spell", kellan.get()));
+                .with("card", others.get(0)).with("spell", kellan.get()));
     }
 }

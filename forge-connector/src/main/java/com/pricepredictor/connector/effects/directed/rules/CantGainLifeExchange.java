@@ -5,8 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
-import com.pricepredictor.connector.effects.directed.operations.BoardEdit;
-import com.pricepredictor.connector.effects.directed.operations.LifeOperation;
+import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
 import forge.game.Game;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
@@ -23,30 +22,32 @@ import java.util.Optional;
  * would raise A's life, does not happen.
  *
  * <p>The base board, read at a boundary: a main phase of the active player
- * begins, it cannot gain life, and it controls an untapped permanent, under
- * its control since the turn began, with an activated ability that exchanges
- * its own life total with the permanent's toughness, which is above its life.
- * It binds the permanent and the player.
+ * begins, it can gain life, and it controls an untapped permanent, under its
+ * control since the turn began, with an activated ability that exchanges its
+ * own life total with the permanent's toughness, which is above its life, so
+ * the exchange would raise it and happens. It binds the permanent and the
+ * player.
  *
- * <p>Variant {@code exchange-lowers} ({@code life}): the player's life total
- * is above the toughness, the scenario's 20 where that is above it, so the
- * exchange would lower it and happens. The fork forces the activation
- * (FR-010b), which Forge's AI makes only to raise its life.
+ * <p>Variant {@code leyline} ({@code add_permanent}): Leyline of Punishment
+ * (players can't gain life) is on the battlefield under the player's
+ * control, so the exchange, which would raise its life, does not happen: the
+ * side of the rule the counts lack. The fork forces the activation (FR-010b),
+ * which Forge's AI does not make when the exchange gives it nothing.
  */
 public final class CantGainLifeExchange {
 
     public static final String RULE = "119.7";
     static final String SCENARIO = "119.7-1";
-    static final String EXCHANGE_LOWERS = "exchange-lowers";
-    /** The life total the scenario's variant gives the player. */
-    static final int SCENARIO_LIFE = 20;
+    static final String LEYLINE = "leyline";
+    static final String LEYLINE_OF_PUNISHMENT = "Leyline of Punishment";
 
     private CantGainLifeExchange() {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, CantGainLifeExchange::bind, EXCHANGE_LOWERS,
-                new Application(ForkOperation.LIFE, CantGainLifeExchange::exchangeLowers)
+        return DirectedRule.of(RULE, SCENARIO, CantGainLifeExchange::bind, LEYLINE,
+                new Application(ForkOperation.ADD_PERMANENT,
+                        fork -> AddPermanentOperation.of(LEYLINE_OF_PUNISHMENT, fork.player("player"), false))
                         .forcing(ForcedPlay.activate("player", "permanent",
                                 ForcedPlay.Line.api("ExchangeLifeVariant"))));
     }
@@ -56,7 +57,7 @@ public final class CantGainLifeExchange {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        if (active.canGainLife()) {
+        if (!active.canGainLife()) {
             return Optional.empty();
         }
         return active.getCardsIn(ZoneType.Battlefield).stream()
@@ -78,10 +79,5 @@ public final class CantGainLifeExchange {
             }
         }
         return false;
-    }
-
-    private static BoardEdit exchangeLowers(Binding fork) {
-        int toughness = fork.card("permanent").getNetToughness();
-        return new LifeOperation(fork.player("player"), Math.max(SCENARIO_LIFE, toughness + 1));
     }
 }

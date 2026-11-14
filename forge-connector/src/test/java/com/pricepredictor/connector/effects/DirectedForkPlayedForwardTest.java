@@ -584,34 +584,50 @@ class DirectedForkPlayedForwardTest {
         return found;
     }
 
+    /** The fired trigger records among {@code records} whose trigger's host is {@code host}. */
+    private static List<String> fired(List<String> records, Card host) {
+        List<String> found = new ArrayList<>();
+        for (String record : records) {
+            Map<String, Object> parsed = parse(record);
+            Object source = RecordLines.asMap(RecordLines.asMap(parsed.get("state")).get("refs")).get("source");
+            if ("trigger".equals(parsed.get("kind")) && ref(host).equals(source)
+                    && Boolean.TRUE.equals(RecordLines.payload(record).get("fired"))) {
+                found.add(record);
+            }
+        }
+        return found;
+    }
+
     /**
-     * 608.2p: Narci, Fable Singer beside History of Benalia at two lore
-     * counters as the first main phase begins. The live final chapter fires
-     * Narci; the fork's Saga has one counter, so chapter II resolves and
-     * Narci's trigger is evaluated and does not fire, a negative the fork
-     * keeps although its sampler holds no firing to repay.
+     * 608.2p, inverted: Narci, Fable Singer beside History of Benalia at one
+     * lore counter as the first main phase begins. The live chapter II leaves
+     * Narci unfired; the fork's Saga has two counters, so the final chapter
+     * resolves and Narci's trigger fires. Its evaluations against the fork's
+     * other resolutions, which do not fire, the fork keeps although its
+     * sampler holds no firing to repay (FR-010c).
      */
     @Test
-    void aNonFinalChapterLeavesTheResolutionTriggerUnfired() throws Throwable {
+    void theFinalChapterFiresTheResolutionTrigger() throws Throwable {
         Card[] narci = new Card[1];
         List<String> fork = keptFork(() -> {
             Game game = bare(PhaseType.MAIN1);
             Player active = game.getPlayers().get(0);
             narci[0] = permanent(game, active, "Narci, Fable Singer");
-            permanent(game, active, "History of Benalia").setCounters(CounterEnumType.LORE, 2);
+            permanent(game, active, "History of Benalia").setCounters(CounterEnumType.LORE, 1);
             return new Setup(game, narci[0]);
-        }, PhaseType.MAIN1, "608.2p", "not-final-chapter");
+        }, PhaseType.MAIN1, "608.2p", "final-chapter");
 
+        assertFalse(fired(fork, narci[0]).isEmpty(), "Narci's trigger fires in the fork");
         assertFalse(notFired(fork, narci[0]).isEmpty(), "Narci's trigger evaluated and not fired, kept");
     }
 
     /**
      * 702.105a: Enraged Revolutionary (A at 15 life) as the declare-attackers
-     * step begins, B at 20; the fork's B has 14 and the Revolutionary is
-     * made to attack B (FR-010b), so dethrone is evaluated and does not fire.
+     * step begins, B at 20; the fork's B has 15, tied with A, and the
+     * Revolutionary is made to attack B (FR-010b), so dethrone fires.
      */
     @Test
-    void attackingThePlayerWithLessLifeLeavesDethroneUnfired() throws Throwable {
+    void attackingThePlayerTiedForTheMostLifeFiresDethrone() throws Throwable {
         Card[] revolutionary = new Card[1];
         List<String> fork = keptFork(() -> {
             Game game = bare(PhaseType.MAIN1);
@@ -619,9 +635,9 @@ class DirectedForkPlayedForwardTest {
             revolutionary[0] = permanent(game, active, "Enraged Revolutionary");
             active.setLife(15, null);
             return new Setup(game, revolutionary[0]);
-        }, null, "702.105a", "less-life");
+        }, null, "702.105a", "tied");
 
-        assertFalse(notFired(fork, revolutionary[0]).isEmpty(), "dethrone evaluated and not fired, kept");
+        assertFalse(fired(fork, revolutionary[0]).isEmpty(), "dethrone fires in the fork");
     }
 
     /** The subjects of every event of {@code record} of {@code type}. */
@@ -941,26 +957,6 @@ class DirectedForkPlayedForwardTest {
     }
 
     /**
-     * {@code add_permanent}, 118.11, inverted: Goblin Bombardment and Grizzly
-     * Bears, no replacement. The fork adds Rest in Peace and forces the
-     * activation, the Bears its sacrifice: the cost's move to the graveyard
-     * is replaced, a rewrite record written with the stack empty.
-     */
-    @Test
-    void aSacrificeRestInPeaceReplacesIsStillPaid() throws Throwable {
-        Game game = bare(PhaseType.MAIN1);
-        Player active = game.getPlayers().get(0);
-        Card bombardment = permanent(game, active, "Goblin Bombardment");
-        Card bears = permanent(game, active, "Grizzly Bears");
-
-        List<String> fork = forkOf(game, PhaseType.MAIN1, "118.11", "replaced_sacrifice");
-
-        assertTrue(fork.stream().anyMatch(record -> "rewrite".equals(parse(record).get("kind"))
-                        && record.contains(ref(bears))), "the sacrifice of the Bears is rewritten in the fork");
-        assertFalse(resolutionsOf(fork, bombardment).isEmpty(), "the ability resolves");
-    }
-
-    /**
      * {@code add_permanent}, 111.10v, inverted: a Mutagen token beside
      * Crustacean Commando, A's one Island tapped. The fork adds an untapped
      * Island and forces the token's activation, which puts its counter.
@@ -985,38 +981,18 @@ class DirectedForkPlayedForwardTest {
     }
 
     /**
-     * {@code life}, 119.7: Tree of Redemption under Leyline of Punishment,
-     * A at 5 life. The fork's A has 20 and is made to activate the Tree: the
-     * exchange lowers A's life and happens.
+     * {@code add_permanent}, 119.7, inverted: Tree of Redemption, A at 5
+     * life. The fork adds Leyline of Punishment and A is made to activate
+     * the Tree: the exchange, which would raise A's life, does not happen.
      */
     @Test
-    void anExchangeThatLowersTheLifeHappens() throws Throwable {
+    void anExchangeAPlayerWhoCannotGainLifeWouldGainFromChangesNothing() throws Throwable {
         Game game = bare(PhaseType.MAIN1);
         Player active = game.getPlayers().get(0);
         Card tree = permanent(game, active, "Tree of Redemption");
-        permanent(game, active, "Leyline of Punishment");
         active.setLife(5, null);
 
-        List<String> fork = forkOf(game, PhaseType.MAIN1, "119.7", "exchange-lowers");
-
-        assertTrue(resolutionsOf(fork, tree).stream()
-                .anyMatch(record -> RecordLines.eventTypes(record).contains("life_change")),
-                "the exchange changes the life of A in the fork");
-    }
-
-    /**
-     * {@code add_permanent}, 701.12g: Tree of Perdition, B at 7. The fork
-     * adds Everlasting Torment under B and forces the activation at B: no
-     * part of the exchange happens.
-     */
-    @Test
-    void anExchangeNobodyMayGainFromChangesNothing() throws Throwable {
-        Game game = bare(PhaseType.MAIN1);
-        Player active = game.getPlayers().get(0);
-        Card tree = permanent(game, active, "Tree of Perdition");
-        game.getPlayers().get(1).setLife(7, null);
-
-        List<String> fork = forkOf(game, PhaseType.MAIN1, "701.12g", "cannot_gain_life");
+        List<String> fork = forkOf(game, PhaseType.MAIN1, "119.7", "leyline");
 
         List<String> resolved = resolutionsOf(fork, tree);
         assertFalse(resolved.isEmpty(), "the exchange resolves in the fork");
@@ -1025,24 +1001,40 @@ class DirectedForkPlayedForwardTest {
     }
 
     /**
-     * {@code remove_permanent}, 701.39a: Cached Defenses over three Forests,
-     * Grizzly Bears A's only creature. The fork's A controls none and is made
-     * to cast it: the bolster puts no counter.
+     * {@code life}, 701.12g: Tree of Perdition, B at 7. The fork's B has 20
+     * and A is made to activate the Tree at B: the exchange lowers B's life.
      */
     @Test
-    void aBolsterWithNoCreaturePutsNoCounter() throws Throwable {
+    void anExchangeThatLowersTheOpponentsLifeHappens() throws Throwable {
+        Game game = bare(PhaseType.MAIN1);
+        Player active = game.getPlayers().get(0);
+        Card tree = permanent(game, active, "Tree of Perdition");
+        game.getPlayers().get(1).setLife(7, null);
+
+        List<String> fork = forkOf(game, PhaseType.MAIN1, "701.12g", "opponent_above");
+
+        assertTrue(resolutionsOf(fork, tree).stream()
+                        .anyMatch(record -> RecordLines.eventTypes(record).contains("life_change")),
+                "the exchange changes the life of B in the fork");
+    }
+
+    /**
+     * {@code add_permanent}, 701.39a, inverted: Cached Defenses over three
+     * Forests, A controlling no creature. The fork adds Grizzly Bears and A
+     * is made to cast it: the bolster puts its counters on the Bears.
+     */
+    @Test
+    void aBolsterWithACreaturePutsItsCounters() throws Throwable {
         Game game = bare(PhaseType.MAIN1);
         Player active = game.getPlayers().get(0);
         lands(game, active, "Forest", 3);
-        permanent(game, active, "Grizzly Bears");
         Card defenses = TestBoard.inHand(game, active, "Cached Defenses");
 
-        List<String> fork = forkOf(game, PhaseType.MAIN1, "701.39a", "no_creature");
+        List<String> fork = forkOf(game, PhaseType.MAIN1, "701.39a", "has_creature");
 
-        List<String> resolved = resolutionsOf(fork, defenses);
-        assertFalse(resolved.isEmpty(), "Cached Defenses resolves in the fork");
-        assertTrue(resolved.stream().noneMatch(record -> RecordLines.eventTypes(record).contains("counter_change")),
-                "and puts no counter");
+        assertTrue(resolutionsOf(fork, defenses).stream()
+                        .anyMatch(record -> RecordLines.eventTypes(record).contains("counter_change")),
+                "Cached Defenses puts its counters in the fork");
     }
 
     /**
@@ -1151,21 +1143,23 @@ class DirectedForkPlayedForwardTest {
     }
 
     /**
-     * {@code move_card}, 701.12e and 702.65a: Arcanum Wings on Grizzly Bears,
-     * Holy Strength in hand. The fork's hand holds another card, and its A is
-     * made to activate the swap: nothing is exchanged or attached.
+     * {@code move_card}, 701.12e and 702.65a, inverted: Arcanum Wings on
+     * Grizzly Bears, no Aura in hand. The fork's hand holds Holy Strength in
+     * the hand's card's place, and its A is made to activate the swap: Holy
+     * Strength moves from the hand and is attached to the Bears.
      */
     @Test
-    void aSwapWithNoAuraInHandExchangesNothing() throws Throwable {
+    void aSwapWithAnAuraInHandExchangesAndAttaches() throws Throwable {
         for (String rule : List.of("701.12e", "702.65a")) {
-            Game game = wingsBoard("Holy Strength");
+            Game game = wingsBoard(rule.equals("701.12e") ? "Giant Growth" : "Grizzly Bears");
 
-            List<String> fork = forkOf(game, PhaseType.MAIN1, rule, "no_aura_in_hand");
+            List<String> fork = forkOf(game, PhaseType.MAIN1, rule, "aura_in_hand");
 
             List<String> swapped = swaps(game, fork);
-            assertFalse(swapped.isEmpty(), rule + ": the swap resolves in the fork");
-            assertTrue(swapped.stream().noneMatch(record -> RecordLines.eventTypes(record).contains("attached")),
-                    rule + ": and attaches nothing");
+            assertTrue(swapped.stream().anyMatch(record -> RecordLines.eventTypes(record).contains("attached")),
+                    rule + ": the swap attaches Holy Strength in the fork");
+            assertTrue(swapped.stream().anyMatch(record -> RecordLines.eventTypes(record).contains("zone_change")),
+                    rule + ": and moves it from the hand");
         }
     }
 
@@ -1285,42 +1279,50 @@ class DirectedForkPlayedForwardTest {
     }
 
     /**
-     * {@code replace_card}, 702.103e: Hopeful Eidolon over four Plains,
-     * Grizzly Bears the one creature of A. The fork's is Centaur Courser and
-     * A is made to cast the Eidolon bestowed, its target drawn: it attaches.
+     * {@code replace_card}, 702.103e, inverted: Hopeful Eidolon over four
+     * Plains, Grizzly Bears the battlefield's one creature. The fork's is
+     * Skulking Ghost and A is made to cast the Eidolon bestowed, its target
+     * drawn, the Ghost: the Ghost is sacrificed as it becomes the target, and
+     * the Eidolon resolves as a creature, attached to nothing.
      */
     @Test
-    void aBestowedEidolonAttaches() throws Throwable {
+    void aBestowedEidolonWhoseTargetIsSacrificedEntersAsACreature() throws Throwable {
         Game game = bare(PhaseType.MAIN1);
         Player active = game.getPlayers().get(0);
         lands(game, active, "Plains", 4);
         permanent(game, active, "Grizzly Bears");
         Card eidolon = TestBoard.inHand(game, active, "Hopeful Eidolon");
 
-        List<String> fork = forkOf(game, PhaseType.MAIN1, "702.103e", "target-survives");
+        List<String> fork = forkOf(game, PhaseType.MAIN1, "702.103e", "skulking_ghost");
 
-        assertTrue(resolutionsOf(fork, eidolon).stream()
-                        .anyMatch(record -> RecordLines.eventTypes(record).contains("attached")),
-                "the bestowed Eidolon attaches in the fork");
+        List<String> resolved = resolutionsOf(fork, eidolon);
+        assertTrue(resolved.stream().anyMatch(record -> RecordLines.eventTypes(record).contains("zone_change")),
+                "the Eidolon enters in the fork");
+        assertTrue(resolved.stream().noneMatch(record -> RecordLines.eventTypes(record).contains("attached")),
+                "attached to nothing");
     }
 
     /**
-     * {@code move_card}, 702.170c: Kellan Joins Up over a Forest, a Plains
-     * and an Island, Grizzly Bears the hand's other card. The fork's is Hill
-     * Giant and A is made to cast Kellan first: its trigger exiles nothing.
+     * {@code move_card}, 702.170c, inverted: Kellan Joins Up over a Forest, a
+     * Plains and an Island, Hill Giant the hand's other card. The fork's is
+     * Grizzly Bears and A is made to cast Kellan: its trigger exiles the
+     * Bears, which become plotted.
      */
     @Test
-    void kellanFindsNothingToPlot() throws Throwable {
+    void kellanPlotsTheBears() throws Throwable {
         Game game = bare(PhaseType.MAIN1);
         Player active = game.getPlayers().get(0);
         for (String land : List.of("Forest", "Plains", "Island")) {
             permanent(game, active, land);
         }
         Card kellan = TestBoard.inHand(game, active, "Kellan Joins Up");
-        TestBoard.inHand(game, active, "Grizzly Bears");
+        TestBoard.inHand(game, active, "Hill Giant");
 
-        List<String> fork = forkOf(game, PhaseType.MAIN1, "702.170c", "card_too_expensive");
+        List<String> fork = forkOf(game, PhaseType.MAIN1, "702.170c", "small_card_in_hand");
 
-        assertFalse(resolutionsOf(fork, kellan).isEmpty(), "Kellan is cast in the fork");
+        assertTrue(resolutionsOf(fork, kellan).stream().anyMatch(record -> events(record).stream()
+                        .anyMatch(event -> "zone_change".equals(event.get("type"))
+                                && "exile".equalsIgnoreCase(String.valueOf(params(event).get("to_zone"))))),
+                "Kellan's trigger exiles a card in the fork");
     }
 }

@@ -402,6 +402,87 @@
       }
     },
     {
+      "id": "702.103e-2",
+      "rules": [
+        "702.103e"
+      ],
+      "title": "A bestowed Aura spell whose target is sacrificed on becoming its target resolves as a creature spell",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Hopeful Eidolon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Grizzly Bears is the only creature on the battlefield. In the skulking_ghost variant Skulking Ghost (2/1, flying; when it becomes the target of a spell or ability, sacrifice it) is in its place."
+      },
+      "decisions": [
+        "A casts Hopeful Eidolon bestowed (paying {3}{W}), targeting the only creature on the battlefield, tapping all four Plains.",
+        "Both players pass on each object on the stack; each resolves."
+      ],
+      "variants": [
+        {
+          "label": "target-stays",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Hopeful Eidolon resolves as a bestowed Aura attached to Grizzly Bears, which is 3/3 with lifelink."
+        },
+        {
+          "label": "skulking_ghost",
+          "polarity": "fires",
+          "delta": "Skulking Ghost is on the battlefield under A's control instead of Grizzly Bears.",
+          "expected": "Skulking Ghost's trigger goes on the stack above the Aura spell and resolves first: A sacrifices the Ghost. Hopeful Eidolon's target is gone, so it ceases to be bestowed, resolves as a creature spell and enters the battlefield as a 1/1 lifelink Enchantment Creature attached to nothing.",
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "PT:2/2"
+            ],
+            "add": [
+              "PT:2/1",
+              "K:Flying",
+              "T:Mode$ BecomesTarget | ValidTarget$ Card.Self | TriggerZones$ Battlefield | Execute$ TrigSac | TriggerDescription$ When CARDNAME becomes the target of a spell or ability, sacrifice it.",
+              "SVar:TrigSac:DB$ Sacrifice"
+            ],
+            "note": "Skulking Ghost replaces Grizzly Bears; the Bears take its body and its sacrifice trigger"
+          }
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Hopeful Eidolon",
+        "Grizzly Bears",
+        "Skulking Ghost"
+      ],
+      "forge_notes": "MagicStack's fizzle check unanimates a bestowed spell whose target is illegal and resolves it as a creature spell.",
+      "detector": {
+        "same_as": "702.103e-1",
+        "reason": "A bestowed Aura spell resolving as a creature because its target became illegal is 702.103e-1's fact."
+      }
+    },
+    {
       "id": "702.103f-1",
       "rules": [
         "702.103f"

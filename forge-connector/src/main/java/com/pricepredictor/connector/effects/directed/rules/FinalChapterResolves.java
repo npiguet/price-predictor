@@ -25,33 +25,36 @@ import java.util.Optional;
  * <p>The base board, read at a boundary: the precombat main phase begins
  * (before its lore counters are added), the active player controls a
  * permanent whose trigger watches the final chapter ability of a Saga resolve
- * (Narci), and a Saga whose next lore counter reaches its final chapter. It
- * binds the Saga and the watching permanent.
+ * (Narci), and a Saga with at least one lore counter whose next lore counter
+ * reaches the chapter before its final one, so the chapter that resolves is
+ * not the final one and the trigger does not fire. It binds the Saga and the
+ * watching permanent.
  *
- * <p>Variant {@code not-final-chapter} ({@code counters}): the Saga has one
- * lore counter fewer, so the chapter that resolves is not the final one and
- * the trigger does not fire.
+ * <p>Variant {@code final-chapter} ({@code counters}): the Saga has one lore
+ * counter more, so the main phase's lore counter reaches its final chapter,
+ * which resolves, and the trigger fires: the side of the rule the counts lack.
  *
- * <p>The fork keeps the not-fired evaluations of the triggers the watching permanent hosts
- * whatever the trigger-negative sampler's balance says (FR-010c): a fork's
- * recording is fresh, so the sampler holds no earlier firing of the mode
- * for a negative to repay.
+ * <p>The fork also keeps the not-fired evaluations of the triggers the
+ * watching permanent hosts whatever the trigger-negative sampler's balance
+ * says (FR-010c): a fork's recording is fresh, so the sampler holds no
+ * earlier firing of the mode for a negative to repay, and the watcher's
+ * evaluations against the fork's other resolutions are the near misses.
  */
 public final class FinalChapterResolves {
 
     public static final String RULE = "608.2p";
     static final String SCENARIO = "608.2p-1";
-    static final String NOT_FINAL_CHAPTER = "not-final-chapter";
+    static final String FINAL_CHAPTER = "final-chapter";
     static final CounterEnumType LORE = CounterEnumType.LORE;
 
     private FinalChapterResolves() {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, FinalChapterResolves::bind, NOT_FINAL_CHAPTER,
+        return DirectedRule.of(RULE, SCENARIO, FinalChapterResolves::bind, FINAL_CHAPTER,
                 new Application(ForkOperation.COUNTERS, fork -> {
                     Card saga = fork.card("saga");
-                    return new CountersOperation(saga, LORE, saga.getCounters(LORE) - 1);
+                    return new CountersOperation(saga, LORE, saga.getCounters(LORE) + 1);
                 }).keepingNegativesOf("watcher"));
     }
 
@@ -69,7 +72,7 @@ public final class FinalChapterResolves {
         return active.getCardsIn(ZoneType.Battlefield).stream()
                 .filter(card -> card.isSaga() && card.hasChapter())
                 .filter(card -> card.getCounters(LORE) >= 1
-                        && card.getCounters(LORE) == card.getFinalChapterNr() - 1)
+                        && card.getCounters(LORE) == card.getFinalChapterNr() - 2)
                 .findFirst()
                 .map(saga -> Binding.empty().with("saga", saga).with("watcher", watcher.get()));
     }

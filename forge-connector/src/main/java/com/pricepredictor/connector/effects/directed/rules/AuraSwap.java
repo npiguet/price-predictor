@@ -24,34 +24,66 @@ import java.util.Optional;
  * from its hand enters attached to the Bears.
  *
  * <p>The base board, read at a boundary: a main phase of the active player
- * begins, it controls an attached Aura with Aura swap whose cost it has the
- * lands for, and its hand holds exactly one Aura card, which can enchant what
- * the attached Aura enchants. It binds the active player, that card and the
- * attached Aura.
+ * begins, it controls an Aura with Aura swap whose cost it has the lands for,
+ * attached to a creature without protection, and its hand holds cards but no
+ * Aura card, so the swap has nothing to exchange with ({@link #withoutAura}).
+ * It binds the active player, the hand's first card and the attached Aura.
  *
- * <p>Variant {@code no_aura_in_hand} ({@code move_card}): a Giant Growth is in
- * that card's place in the hand, so there is nothing to exchange with and the
- * attached Aura stays where it is. The fork forces the swap ({@link #swap}).
+ * <p>Variant {@code aura_in_hand} ({@code move_card}): a Holy Strength (enchant
+ * creature) is in that card's place in the hand, so the swap exchanges it for
+ * the attached Aura and attaches it where that one was: the side of the rule
+ * the counts lack. The fork forces the swap ({@link #swap}).
  */
 public final class AuraSwap {
 
     public static final String RULE = "701.12e";
     static final String SCENARIO = "701.12e-1";
-    static final String NO_AURA_IN_HAND = "no_aura_in_hand";
-    static final String GIANT_GROWTH = "Giant Growth";
+    static final String AURA_IN_HAND = "aura_in_hand";
+    static final String HOLY_STRENGTH = "Holy Strength";
 
     private AuraSwap() {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, AuraSwap::bind, NO_AURA_IN_HAND,
-                new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.replace(fork.card("card"), GIANT_GROWTH))
-                        .forcing(swap()));
+        return DirectedRule.of(RULE, SCENARIO, AuraSwap::bind, AURA_IN_HAND, auraInHand());
     }
 
     static Optional<Binding> bind(Game live) {
-        return find(live, true);
+        return withoutAura(live);
+    }
+
+    /**
+     * Holy Strength in the place of the hand's card the board binds, the swap
+     * forced: the variant 701.12e and 702.65a share.
+     */
+    static Application auraInHand() {
+        return new Application(ForkOperation.MOVE_CARD,
+                fork -> MoveCardOperation.replace(fork.card("card"), HOLY_STRENGTH))
+                .forcing(swap());
+    }
+
+    /**
+     * The board 701.12e and 702.65a share, read at the start of the active
+     * player's main phase: an Aura with Aura swap whose cost it has the lands
+     * for, attached to a creature without protection (which Holy Strength,
+     * enchant creature, can then enchant), and a hand of cards none of which
+     * is an Aura. It binds the player, the hand's first card and the Aura.
+     */
+    static Optional<Binding> withoutAura(Game live) {
+        if (!Boards.atMainPhase(live)) {
+            return Optional.empty();
+        }
+        Player active = Boards.active(live);
+        List<Card> hand = List.copyOf(active.getCardsIn(ZoneType.Hand));
+        if (hand.isEmpty() || hand.stream().anyMatch(Card::isAura)) {
+            return Optional.empty();
+        }
+        return active.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(aura -> aura.isAura() && swappable(aura, active)
+                        && aura.getEntityAttachedTo() instanceof Card host && host.isCreature()
+                        && !host.hasKeyword(Keyword.PROTECTION))
+                .findFirst()
+                .map(aura -> Binding.empty().with("player", active).with("card", hand.get(0)).with("aura", aura));
     }
 
     /**
@@ -67,8 +99,8 @@ public final class AuraSwap {
      * The one Aura card in the active player's hand and an attached Aura it
      * could exchange with, read at the start of its main phase: an Aura with
      * Aura swap whose cost it has the lands for, whose host the hand's Aura
-     * can enchant ({@code fits}) or cannot. The board 701.12e, 702.65a and
-     * 702.65b share.
+     * can enchant ({@code fits}) or cannot. 702.65b's board, with
+     * {@code fits} false.
      */
     static Optional<Binding> find(Game live, boolean fits) {
         if (!Boards.atMainPhase(live)) {

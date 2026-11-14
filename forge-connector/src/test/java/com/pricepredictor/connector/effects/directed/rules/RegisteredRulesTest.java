@@ -147,7 +147,7 @@ class RegisteredRulesTest {
         assertEquals(0, twin.fork().card("permanent").getCounters(CounterEnumType.STUN));
     }
 
-    // ── 701.12g, a life exchange: add_permanent ─────────────────────────
+    // ── 701.12g, a life exchange: life ──────────────────────────────────
 
     private static Board treeBoard(int opponentLife) {
         Board board = new Board(PhaseType.MAIN1);
@@ -157,32 +157,34 @@ class RegisteredRulesTest {
     }
 
     @Test
-    void lifeExchangeBindsTheTreeAndAnOpponentItWouldRaise() {
-        Board board = treeBoard(7);
-        Binding binding = LifeExchange.bind(board.game).orElseThrow();
-        assertEquals(board.subject, binding.card("permanent"));
-        assertEquals(board.opponent, binding.player("opponent"));
+    void lifeExchangeBindsTheTreeAndAnOpponentItWouldNotLower() {
+        for (int life : List.of(7, 13)) {
+            Board board = treeBoard(life);
+            Binding binding = LifeExchange.bind(board.game).orElseThrow();
+            assertEquals(board.subject, binding.card("permanent"));
+            assertEquals(board.opponent, binding.player("opponent"));
+        }
     }
 
     @Test
-    void lifeExchangeBindsNothingWhenTheExchangeWouldLowerTheLife() {
+    void lifeExchangeBindsNothingWhenTheExchangeWouldAlreadyLowerTheLife() {
         assertTrue(LifeExchange.bind(treeBoard(20).game).isEmpty());
     }
 
+    /** Under Platinum Emperion (its controller's life total can't change) the exchange does not happen. */
     @Test
-    void lifeExchangeForksEverlastingTormentUnderTheOpponent() {
+    void lifeExchangeBindsNothingWhenTheOpponentCannotLoseLife() {
+        Board board = treeBoard(7);
+        board.card(board.opponent, "Platinum Emperion");
+        assertTrue(LifeExchange.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void lifeExchangeForksTheOpponentAboveTheToughness() {
         Board board = treeBoard(7);
         Twin twin = board.twin(LifeExchange.rule());
-        Player opponent = twin.fork().player("opponent");
-        Card torment = opponent.getCardsIn(ZoneType.Battlefield).stream()
-                .filter(card -> card.getName().equals(LifeExchange.TORMENT)).findFirst().orElseThrow();
-        String added = id(torment);
-        assertTrue(twin.changes().contains("+" + added), twin.changes().toString());
-        for (String change : twin.changes()) {
-            assertTrue(change.equals("+" + added) || change.startsWith("+link ") && change.contains("=" + added),
-                    "adding changed " + change + "; all: " + twin.changes());
-        }
-        assertFalse(opponent.canGainLife());
+        assertEquals(Set.of("P1.life"), twin.changes());
+        assertEquals(20, twin.fork().player("opponent").getLife());
     }
 
     // ── 702.13b, intimidate: colour_type ────────────────────────────────
@@ -270,22 +272,22 @@ class RegisteredRulesTest {
     }
 
     @Test
-    void dethroneBindsTheCreatureAndTheOpponentWithTheMostLife() {
-        for (int life : List.of(20, 15)) {
-            Board board = dethroneBoard(life);
-            Binding binding = Dethrone.bind(board.game).orElseThrow();
-            assertEquals(board.subject, binding.card("attacker"));
-            assertEquals(board.opponent, binding.player("opponent"));
-        }
+    void dethroneBindsTheCreatureAndTheOpponentWithMoreLifeThanAnyOther() {
+        Board board = dethroneBoard(20);
+        Binding binding = Dethrone.bind(board.game).orElseThrow();
+        assertEquals(board.subject, binding.card("attacker"));
+        assertEquals(board.opponent, binding.player("opponent"));
     }
 
+    /** Tied already, the fork's cut would change nothing; with less life, dethrone would not fire. */
     @Test
-    void dethroneBindsNothingAgainstAnOpponentWithLessLife() {
-        assertTrue(Dethrone.bind(dethroneBoard(14).game).isEmpty());
+    void dethroneBindsNothingAgainstAnOpponentWithNoMoreLifeThanAnother() {
+        assertTrue(Dethrone.bind(dethroneBoard(15).game).isEmpty(), "tied");
+        assertTrue(Dethrone.bind(dethroneBoard(14).game).isEmpty(), "less");
     }
 
     /**
-     * You at 8 life beside Enraged Revolutionary (2 power, 1 more from its
+     * You at 7 life beside Enraged Revolutionary (2 power, 1 more from its
      * dethrone counter) and a 2-power double striker: counted once the
      * reach is 5, below the 7 the cut opponent keeps, but the double striker
      * deals its 2 twice, and 7 is lethal.
@@ -293,7 +295,7 @@ class RegisteredRulesTest {
     @Test
     void dethroneCountsADoubleStrikersDamageTwice() {
         Board board = dethroneBoard(20);
-        board.you.setLife(8, null);
+        board.you.setLife(7, null);
         board.card(board.you, "Mirran Crusader");
         assertEquals(7, Dethrone.attackReach(board.you));
         assertTrue(Dethrone.bind(board.game).isEmpty(), "the cut opponent is in the attack's reach");
@@ -311,11 +313,11 @@ class RegisteredRulesTest {
     }
 
     @Test
-    void dethroneForksTheOpponentOneLifeBelow() {
+    void dethroneForksTheOpponentTiedForTheMostLife() {
         Board board = dethroneBoard(20);
         Twin twin = board.twin(Dethrone.rule());
         assertEquals(Set.of("P1.life"), twin.changes());
-        assertEquals(14, twin.fork().player("opponent").getLife());
+        assertEquals(15, twin.fork().player("opponent").getLife());
     }
 
     // ── 702.127a, aftermath: move_card ──────────────────────────────────
@@ -514,58 +516,6 @@ class RegisteredRulesTest {
         }
     }
 
-    // ── 118.11, a replaced sacrifice cost: add_permanent, inverted ──────
-
-    private static Board bombardmentBoard(boolean restInPeace) {
-        Board board = new Board(PhaseType.MAIN1);
-        board.other = board.card(board.you, "Goblin Bombardment");
-        board.subject = board.card(board.you, "Grizzly Bears");
-        if (restInPeace) {
-            board.card(board.you, "Rest in Peace");
-        }
-        return board;
-    }
-
-    @Test
-    void replacedSacrificeCostBindsACreatureToSacrificeAndTheOutlet() {
-        Board board = bombardmentBoard(false);
-        Binding binding = ReplacedSacrificeCost.bind(board.game).orElseThrow();
-        assertEquals(board.subject, binding.card("creature"));
-        assertEquals(board.other, binding.card("permanent"));
-        assertEquals(board.you, binding.player("player"));
-    }
-
-    @Test
-    void replacedSacrificeCostBindsNothingWhenTheSacrificeIsAlreadyReplaced() {
-        assertTrue(ReplacedSacrificeCost.bind(bombardmentBoard(true).game).isEmpty());
-    }
-
-    @Test
-    void replacedSacrificeCostBindsNothingWithNoCreatureToSacrifice() {
-        Board board = new Board(PhaseType.MAIN1);
-        board.card(board.you, "Goblin Bombardment");
-        assertTrue(ReplacedSacrificeCost.bind(board.game).isEmpty());
-    }
-
-    /** An outlet whose cost may take the outlet itself (Mogg Raider sacrifices a Goblin, itself among them). */
-    @Test
-    void replacedSacrificeCostBindsAnOutletThatMaySacrificeItself() {
-        Board board = new Board(PhaseType.MAIN1);
-        Card raider = board.card(board.you, "Mogg Raider");
-        Binding binding = ReplacedSacrificeCost.bind(board.game).orElseThrow();
-        assertEquals(raider, binding.card("creature"));
-        assertEquals(raider, binding.card("permanent"));
-    }
-
-    @Test
-    void replacedSacrificeCostForksRestInPeace() {
-        Board board = bombardmentBoard(false);
-        Twin twin = board.twin(ReplacedSacrificeCost.rule());
-        assertOnlyAdded(twin, twin.fork().player("player"), ReplacedSacrificeCost.REST_IN_PEACE);
-        assertTrue(twin.forkGame().getCardsIn(ZoneType.Battlefield).stream()
-                .anyMatch(replacer -> Boards.replacesGraveyardMoveOf(replacer, twin.fork().card("creature"))));
-    }
-
     // ── 118.12b, an optional search: move_card ──────────────────────────
 
     /** Elfhame Sanctuary as A's upkeep begins, over A's library listed top card first. */
@@ -609,7 +559,7 @@ class RegisteredRulesTest {
         }
     }
 
-    // ── 119.7, an exchange a can't-gain-life effect stops: life ─────────
+    // ── 119.7, an exchange a can't-gain-life effect stops: add_permanent
 
     private static Board redemptionBoard(boolean leyline) {
         Board board = new Board(PhaseType.MAIN1);
@@ -623,22 +573,30 @@ class RegisteredRulesTest {
 
     @Test
     void cantGainLifeExchangeBindsTheTreeAndItsController() {
-        Board board = redemptionBoard(true);
+        Board board = redemptionBoard(false);
         Binding binding = CantGainLifeExchange.bind(board.game).orElseThrow();
         assertEquals(board.subject, binding.card("permanent"));
         assertEquals(board.you, binding.player("player"));
     }
 
     @Test
-    void cantGainLifeExchangeBindsNothingWhenThePlayerCanGainLife() {
-        assertTrue(CantGainLifeExchange.bind(redemptionBoard(false).game).isEmpty());
+    void cantGainLifeExchangeBindsNothingWhenThePlayerCannotGainLife() {
+        assertTrue(CantGainLifeExchange.bind(redemptionBoard(true).game).isEmpty());
     }
 
     @Test
-    void cantGainLifeExchangeForksALifeTotalAboveTheToughness() {
-        Twin twin = redemptionBoard(true).twin(CantGainLifeExchange.rule());
-        assertEquals(Set.of("P0.life"), twin.changes());
-        assertEquals(20, twin.fork().player("player").getLife());
+    void cantGainLifeExchangeBindsNothingWhenTheExchangeWouldLowerTheLife() {
+        Board board = redemptionBoard(false);
+        board.you.setLife(13, null);
+        assertTrue(CantGainLifeExchange.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void cantGainLifeExchangeForksLeylineOfPunishment() {
+        Board board = redemptionBoard(false);
+        Twin twin = board.twin(CantGainLifeExchange.rule());
+        assertOnlyAdded(twin, twin.fork().player("player"), CantGainLifeExchange.LEYLINE_OF_PUNISHMENT);
+        assertFalse(twin.fork().player("player").canGainLife());
     }
 
     // ── 704.5b (121.4), a draw step's draw from an empty library: move_card
@@ -809,23 +767,23 @@ class RegisteredRulesTest {
     }
 
     @Test
-    void finalChapterResolvesBindsTheSagaOneCounterShortOfItsLastChapter() {
-        Board board = benaliaBoard(2);
+    void finalChapterResolvesBindsTheSagaTwoCountersShortOfItsLastChapter() {
+        Board board = benaliaBoard(1);
         assertEquals(board.subject, FinalChapterResolves.bind(board.game).orElseThrow().card("saga"));
     }
 
     @Test
-    void finalChapterResolvesBindsNothingTwoCountersShort() {
-        assertTrue(FinalChapterResolves.bind(benaliaBoard(1).game).isEmpty());
+    void finalChapterResolvesBindsNothingWhenTheNextCounterReachesTheLastChapter() {
+        assertTrue(FinalChapterResolves.bind(benaliaBoard(2).game).isEmpty());
     }
 
     @Test
-    void finalChapterResolvesForksTheSagaWithACounterFewer() {
-        Board board = benaliaBoard(2);
+    void finalChapterResolvesForksTheSagaWithACounterMore() {
+        Board board = benaliaBoard(1);
         Twin twin = board.twin(FinalChapterResolves.rule());
         String saga = id(board.subject);
         assertEquals(Set.of(saga + ".counters"), twin.changes());
-        assertEquals(1, twin.fork().card("saga").getCounters(CounterEnumType.LORE));
+        assertEquals(2, twin.fork().card("saga").getCounters(CounterEnumType.LORE));
     }
 
     // ── 614.17d, a permanent that can't enter: add_permanent ────────────
@@ -884,29 +842,42 @@ class RegisteredRulesTest {
     }
 
     @Test
-    void auraSwapBindsTheAuraInHandAndTheAttachedAura() {
-        Board board = auraSwapBoard("Holy Strength");
+    void auraSwapBindsTheHandsCardAndTheAttachedAura() {
+        Board board = auraSwapBoard("Giant Growth");
         Binding binding = AuraSwap.bind(board.game).orElseThrow();
         assertEquals(board.subject, binding.card("card"));
         assertEquals(board.other, binding.card("aura"));
     }
 
     @Test
-    void auraSwapBindsNothingWithTwoAurasInHand() {
-        assertTrue(AuraSwap.bind(auraSwapBoard("Holy Strength", "Pacifism").game).isEmpty());
+    void auraSwapBindsNothingWithAnAuraInHand() {
+        assertTrue(AuraSwap.bind(auraSwapBoard("Giant Growth", "Wild Growth").game).isEmpty());
     }
 
     @Test
-    void auraSwapBindsNothingForAnAuraThatCannotEnchantTheHost() {
-        assertTrue(AuraSwap.bind(auraSwapBoard("Wild Growth").game).isEmpty());
+    void auraSwapBindsNothingWithAnEmptyHand() {
+        assertTrue(AuraSwap.bind(auraSwapBoard().game).isEmpty());
+    }
+
+    /** Holy Strength is white: Black Knight, with protection from white, could not take it. */
+    @Test
+    void auraSwapBindsNothingOnAHostWithProtection() {
+        Board board = new Board(PhaseType.MAIN1);
+        Card knight = board.card(board.you, "Black Knight");
+        board.card(board.you, "Arcanum Wings").attachToEntity(knight, null);
+        for (int i = 0; i < 3; i++) {
+            board.card(board.you, "Island");
+        }
+        TestBoard.inHand(board.game, board.you, "Giant Growth");
+        assertTrue(AuraSwap.bind(board.game).isEmpty());
     }
 
     @Test
-    void auraSwapForksAGiantGrowthInTheAurasPlace() {
-        Board board = auraSwapBoard("Holy Strength");
+    void auraSwapForksAHolyStrengthInTheCardsPlace() {
+        Board board = auraSwapBoard("Giant Growth");
         Twin twin = board.twin(AuraSwap.rule());
         List<Card> hand = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Hand));
-        assertEquals(List.of(AuraSwap.GIANT_GROWTH), hand.stream().map(Card::getName).toList());
+        assertEquals(List.of(AuraSwap.HOLY_STRENGTH), hand.stream().map(Card::getName).toList());
         assertOnlySwapped(twin, board.subject, hand.get(0));
     }
 
@@ -954,7 +925,7 @@ class RegisteredRulesTest {
         assertEquals(1, twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library).size());
     }
 
-    // ── 701.39a, bolster: remove_permanent ──────────────────────────────
+    // ── 701.39a, bolster: add_permanent ─────────────────────────────────
 
     /** A's Cached Defenses over three Forests, beside A's {@code creatures}; the first is the subject. */
     private static Board bolsterBoard(String... creatures) {
@@ -974,20 +945,22 @@ class RegisteredRulesTest {
     }
 
     @Test
-    void bolsterBindsTheOnlyCreatureOfTheBolsteringPlayer() {
-        Board board = bolsterBoard("Grizzly Bears");
-        assertEquals(board.subject, Bolster.bind(board.game).orElseThrow().card("creature"));
+    void bolsterBindsTheBolsteringCardOfAPlayerWithNoCreature() {
+        Board board = bolsterBoard();
+        Card defenses = board.you.getCardsIn(ZoneType.Hand).get(0);
+        assertEquals(defenses, Bolster.bind(board.game).orElseThrow().card("card"));
     }
 
     @Test
-    void bolsterBindsNothingWithTwoCreatures() {
-        assertTrue(Bolster.bind(bolsterBoard("Grizzly Bears", "Wall of Wood").game).isEmpty());
+    void bolsterBindsNothingWhenThePlayerControlsACreature() {
+        assertTrue(Bolster.bind(bolsterBoard("Grizzly Bears").game).isEmpty());
     }
 
     @Test
-    void bolsterForksTheBoardWithoutTheCreature() {
-        Board board = bolsterBoard("Grizzly Bears");
-        assertOnlyRemoved(board.twin(Bolster.rule()), board.subject, "creature");
+    void bolsterForksGrizzlyBearsUnderThePlayer() {
+        Board board = bolsterBoard();
+        Twin twin = board.twin(Bolster.rule());
+        assertOnlyAdded(twin, twin.fork().player("player"), Bolster.BEARS);
     }
 
     // ── 701.42a-b, meld: replace_card ───────────────────────────────────
@@ -1291,24 +1264,24 @@ class RegisteredRulesTest {
     // ── 702.65a, Aura swap's exchange: move_card ────────────────────────
 
     @Test
-    void auraSwapExchangeBindsTheAuraInHandAndTheAttachedAura() {
-        Board board = auraSwapBoard("Holy Strength");
+    void auraSwapExchangeBindsTheHandsCardAndTheAttachedAura() {
+        Board board = auraSwapBoard("Grizzly Bears");
         Binding binding = AuraSwapExchange.rule().precondition(board.game).orElseThrow();
         assertEquals(board.subject, binding.card("card"));
         assertEquals(board.other, binding.card("aura"));
     }
 
     @Test
-    void auraSwapExchangeBindsNothingForAnAuraThatCannotEnchantTheHost() {
-        assertTrue(AuraSwapExchange.rule().precondition(auraSwapBoard("Wild Growth").game).isEmpty());
+    void auraSwapExchangeBindsNothingWithAnAuraInHand() {
+        assertTrue(AuraSwapExchange.rule().precondition(auraSwapBoard("Holy Strength").game).isEmpty());
     }
 
     @Test
-    void auraSwapExchangeForksGrizzlyBearsInTheAurasPlace() {
-        Board board = auraSwapBoard("Holy Strength");
+    void auraSwapExchangeForksAHolyStrengthInTheCardsPlace() {
+        Board board = auraSwapBoard("Grizzly Bears");
         Twin twin = board.twin(AuraSwapExchange.rule());
         List<Card> hand = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Hand));
-        assertEquals(List.of(AuraSwapExchange.BEARS), hand.stream().map(Card::getName).toList());
+        assertEquals(List.of(AuraSwap.HOLY_STRENGTH), hand.stream().map(Card::getName).toList());
         assertOnlySwapped(twin, board.subject, hand.get(0));
     }
 
@@ -1443,7 +1416,7 @@ class RegisteredRulesTest {
 
     // ── 702.103e, a bestowed Aura whose target is gone: replace_card ────
 
-    /** A's Hopeful Eidolon in hand over four Plains and its one creature {@code creature}. */
+    /** A's Hopeful Eidolon in hand over four Plains and its creature {@code creature}, the battlefield's one. */
     private static Board eidolonBoard(String creature) {
         Board board = new Board(PhaseType.MAIN1);
         for (int i = 0; i < 4; i++) {
@@ -1455,20 +1428,30 @@ class RegisteredRulesTest {
     }
 
     @Test
-    void bestowIllegalTargetBindsTheOneCreatureTheAuraWouldEnchant() {
+    void bestowIllegalTargetBindsTheOneCreatureTheAuraCouldEnchant() {
         Board board = eidolonBoard("Grizzly Bears");
         assertEquals(board.subject, BestowIllegalTarget.bind(board.game).orElseThrow().card("creature"));
     }
 
     @Test
-    void bestowIllegalTargetBindsNothingForACreatureAShockLeavesAlive() {
-        assertTrue(BestowIllegalTarget.bind(eidolonBoard("Centaur Courser").game).isEmpty());
+    void bestowIllegalTargetBindsNothingWithASecondCreatureToTarget() {
+        Board board = eidolonBoard("Grizzly Bears");
+        board.card(board.opponent, "Hill Giant");
+        assertTrue(BestowIllegalTarget.bind(board.game).isEmpty());
+    }
+
+    /** One damage on the Bears would kill the 2/1 Ghost in their place at the fork's first check. */
+    @Test
+    void bestowIllegalTargetBindsNothingWhenTheGhostWouldNotSurvive() {
+        Board board = eidolonBoard("Grizzly Bears");
+        board.subject.setDamage(1);
+        assertTrue(BestowIllegalTarget.bind(board.game).isEmpty());
     }
 
     @Test
-    void bestowIllegalTargetForksACentaurCourserInTheCreaturesPlace() {
+    void bestowIllegalTargetForksASkulkingGhostInTheCreaturesPlace() {
         Board board = eidolonBoard("Grizzly Bears");
-        assertOnlyReplaced(board.twin(BestowIllegalTarget.rule()), board.subject, BestowIllegalTarget.COURSER);
+        assertOnlyReplaced(board.twin(BestowIllegalTarget.rule()), board.subject, BestowIllegalTarget.GHOST);
     }
 
     // ── 702.124j, partner with's search: move_card ──────────────────────
@@ -2231,39 +2214,43 @@ class RegisteredRulesTest {
     }
 
     @Test
-    void plottedFromHandBindsTheOneCardTheTriggerCouldExile() {
-        Board board = kellanBoard("Grizzly Bears", "Hill Giant", "Forest");
+    void plottedFromHandBindsACardTooExpensiveForTheTrigger() {
+        Board board = kellanBoard("Hill Giant", "Serra Angel", "Forest");
         Binding binding = PlottedFromHand.bind(board.game).orElseThrow();
         assertEquals(board.subject, binding.card("card"));
         assertEquals(board.other, binding.card("spell"));
     }
 
     @Test
-    void plottedFromHandBindsNothingWithTwoCardsTheTriggerCouldExile() {
-        assertTrue(PlottedFromHand.bind(kellanBoard("Grizzly Bears", "Shock").game).isEmpty());
+    void plottedFromHandBindsNothingWithACardTheTriggerCouldExile() {
+        assertTrue(PlottedFromHand.bind(kellanBoard("Hill Giant", "Shock").game).isEmpty());
+    }
+
+    @Test
+    void plottedFromHandBindsNothingWithOnlyLandsBesideKellan() {
+        assertTrue(PlottedFromHand.bind(kellanBoard("Forest").game).isEmpty());
     }
 
     @Test
     void plottedFromHandBindsNothingWithoutTheLandsForKellan() {
-        Board board = kellanBoard("Grizzly Bears");
+        Board board = kellanBoard("Hill Giant");
         board.you.getLandsInPlay().forEach(land -> land.setTapped(true));
         assertTrue(PlottedFromHand.bind(board.game).isEmpty());
     }
 
     @Test
     void plottedFromHandBindsNothingAtAnotherBoundary() {
-        assertTrue(PlottedFromHand.bind(kellanBoard(PhaseType.COMBAT_DECLARE_ATTACKERS, "Grizzly Bears").game)
+        assertTrue(PlottedFromHand.bind(kellanBoard(PhaseType.COMBAT_DECLARE_ATTACKERS, "Hill Giant").game)
                 .isEmpty());
     }
 
     /**
-     * Five lands cast Kellan and the Bears both: the AI casts the Bears
-     * first, and Kellan's trigger finds nothing to exile on either side.
-     * Four leave one of them uncast.
+     * Five lands would cast Kellan and the fork's Bears both, and Kellan's
+     * trigger could find nothing to exile. Four leave one of them uncast.
      */
     @Test
     void plottedFromHandBindsNothingWhenBothCanBeCast() {
-        Board board = kellanBoard("Grizzly Bears");
+        Board board = kellanBoard("Hill Giant");
         board.card(board.you, "Forest");
         assertTrue(PlottedFromHand.bind(board.game).isPresent(), "four lands");
         board.card(board.you, "Forest");
@@ -2271,12 +2258,12 @@ class RegisteredRulesTest {
     }
 
     @Test
-    void plottedFromHandForksAHillGiantInTheCardsPlace() {
-        Board board = kellanBoard("Grizzly Bears");
+    void plottedFromHandForksAGrizzlyBearsInTheCardsPlace() {
+        Board board = kellanBoard("Hill Giant");
         Twin twin = board.twin(PlottedFromHand.rule());
-        Card giant = twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Hand).stream()
-                .filter(card -> card.getName().equals(PlottedFromHand.HILL_GIANT)).findFirst().orElseThrow();
-        assertOnlyChanged(twin, board.subject, giant);
+        Card bears = twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Hand).stream()
+                .filter(card -> card.getName().equals(PlottedFromHand.BEARS)).findFirst().orElseThrow();
+        assertOnlyChanged(twin, board.subject, bears);
     }
 
     // ── what makes a variant come undone (review C4, V3 #9-10) ──────────
@@ -2415,31 +2402,16 @@ class RegisteredRulesTest {
     }
 
     /**
-     * C4 #7: Leyline of the Void exiles only opponents' cards, so its
-     * controller's sacrifice is not yet replaced and the inverted variant
-     * binds; an opponent's Leyline already replaces it.
-     */
-    @Test
-    void replacedSacrificeCostBindsWhenTheReplacementSparesTheSacrifice() {
-        Board board = bombardmentBoard(false);
-        board.card(board.you, "Leyline of the Void");
-        assertTrue(ReplacedSacrificeCost.bind(board.game).isPresent());
-        Board opposing = bombardmentBoard(false);
-        opposing.card(opposing.opponent, "Leyline of the Void");
-        assertTrue(ReplacedSacrificeCost.bind(opposing.game).isEmpty());
-    }
-
-    /**
-     * C4 #8: the defender cut to one life under the most anyone else has
-     * must not be left in reach of the attack the fork's point is.
+     * C4 #8: the defender cut to the most anyone else has must not be left
+     * in reach of the attack the fork's point is.
      */
     @Test
     void dethroneBindsNothingWhenTheCutWouldLeaveTheDefenderInReach() {
-        Board board = dethroneBoard(4);
-        board.you.setLife(4, null);
+        Board board = dethroneBoard(20);
+        board.you.setLife(3, null);
         assertTrue(Dethrone.bind(board.game).isEmpty(), "3 life against Enraged Revolutionary's 2 power and its dethrone counter");
         Board safe = dethroneBoard(20);
-        safe.you.setLife(20, null);
+        safe.you.setLife(4, null);
         assertTrue(Dethrone.bind(safe.game).isPresent());
     }
 

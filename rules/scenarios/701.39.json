@@ -107,8 +107,7 @@
           "A": [
             "Forest",
             "Forest",
-            "Forest",
-            "Grizzly Bears"
+            "Forest"
           ],
           "B": [
             "Savannah Lions"
@@ -122,7 +121,7 @@
         "graveyard": {},
         "library": {},
         "exile": {},
-        "notes": "Both libraries are non-empty and irrelevant. B's Savannah Lions (2/1) has lower toughness than A's Grizzly Bears (2/2)."
+        "notes": "Both libraries are non-empty and irrelevant. A controls no creature; B controls Savannah Lions (2/1). In the has_creature variant A also controls Grizzly Bears (2/2)."
       },
       "decisions": [
         "A casts Cached Defenses, tapping all three Forests.",
@@ -131,17 +130,17 @@
       ],
       "variants": [
         {
-          "label": "has_creature",
-          "polarity": "fires",
-          "delta": "",
-          "expected": "Grizzly Bears gets three +1/+1 counters and is a 5/5. Savannah Lions gets no counters and stays 2/1. Cached Defenses is in A's graveyard."
-        },
-        {
           "label": "no_creature",
           "polarity": "does_not_fire",
-          "delta": "A controls no creature (Grizzly Bears is not on the battlefield).",
-          "expected": "Cached Defenses resolves and no counters are put on anything: Savannah Lions stays 2/1 with no counters. Cached Defenses is in A's graveyard.",
-          "operation": "remove_permanent"
+          "delta": "",
+          "expected": "Cached Defenses resolves and no counters are put on anything: Savannah Lions stays 2/1 with no counters. Cached Defenses is in A's graveyard."
+        },
+        {
+          "label": "has_creature",
+          "polarity": "fires",
+          "delta": "A controls Grizzly Bears.",
+          "expected": "Grizzly Bears gets three +1/+1 counters and is a 5/5. Savannah Lions gets no counters and stays 2/1. Cached Defenses is in A's graveyard.",
+          "operation": "add_permanent"
         }
       ],
       "cards": [

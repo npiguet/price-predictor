@@ -442,7 +442,7 @@
         },
         "hand": {
           "A": [
-            "Holy Strength"
+            "Giant Growth"
           ]
         },
         "graveyard": {},
@@ -456,16 +456,16 @@
       ],
       "variants": [
         {
-          "label": "aura_in_hand",
-          "polarity": "fires",
-          "delta": "",
-          "expected": "Arcanum Wings returns to A's hand and Holy Strength enters the battlefield attached to Grizzly Bears. Grizzly Bears is 3/4 without flying."
-        },
-        {
           "label": "no_aura_in_hand",
           "polarity": "does_not_fire",
-          "delta": "A's hand holds Giant Growth instead of Holy Strength.",
-          "expected": "No exchange occurs. Arcanum Wings stays attached to Grizzly Bears, which is 2/2 with flying.",
+          "delta": "",
+          "expected": "No exchange occurs. Arcanum Wings stays attached to Grizzly Bears, which is 2/2 with flying."
+        },
+        {
+          "label": "aura_in_hand",
+          "polarity": "fires",
+          "delta": "A's hand holds Holy Strength instead of Giant Growth.",
+          "expected": "Arcanum Wings returns to A's hand and Holy Strength enters the battlefield attached to Grizzly Bears. Grizzly Bears is 3/4 without flying.",
           "operation": "move_card"
         }
       ],

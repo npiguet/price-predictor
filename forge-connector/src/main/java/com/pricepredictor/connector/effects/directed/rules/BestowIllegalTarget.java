@@ -17,43 +17,42 @@ import java.util.Optional;
 
 /**
  * 702.103e, a bestowed Aura spell whose target became illegal resolves as a
- * creature spell, on scenario {@code 702.103e-1}: Hopeful Eidolon is cast
- * bestowed on Grizzly Bears, Shock kills the Bears in response, and the
- * Eidolon enters as a creature.
+ * creature spell, on scenario {@code 702.103e-2}: Hopeful Eidolon is cast
+ * bestowed on Skulking Ghost, which is sacrificed as it becomes the target,
+ * and the Eidolon enters as a creature.
  *
  * <p>The base board, read at a boundary: a main phase of the active player
  * begins, it holds a card with bestow whose bestow cost it has the lands for,
- * and it controls exactly one creature, the one the Aura would enchant, with
- * toughness less than 3, small enough for a Shock to kill. It binds that
- * creature. A directed fork is taken at a phase boundary, where the stack is
- * empty, so the base is the board before the bestow cast rather than the
- * spell on the stack.
+ * and exactly one creature is on the battlefield, under either player's
+ * control, so the bestowed spell can target that creature alone; a Skulking
+ * Ghost put in its place survives the fork's first state-based check
+ * ({@link Boards#replacementSurvives}). It binds the active player, the card
+ * and that creature. A directed fork is taken at a phase boundary, where the
+ * stack is empty, so the base is the board before the bestow cast; the
+ * scenario's 702.103e-1, a Shock in response, is no fork's play.
  *
- * <p>Variant {@code target-survives} ({@code replace_card}): Centaur Courser
- * (3/3) is in that creature's place, so the damage that would have made the
- * target illegal leaves it alive and the Aura attaches to it.
- *
- * <p>It also binds the active player and the card with bestow, whose
- * bestowed cast the fork forces, its target drawn (FR-010b): the creature
- * the edit replaced has gone, and the card in its place has a new id. The
- * scenario's fires side, the target gone in response, is no forced play.
+ * <p>Variant {@code skulking_ghost} ({@code replace_card}): Skulking Ghost
+ * (when it becomes the target of a spell or ability, sacrifice it) is in that
+ * creature's place. The fork forces the card's bestowed cast (FR-010b), its
+ * target drawn, which is the Ghost, the one creature: the Ghost's trigger
+ * resolves first and sacrifices it, so the Aura spell's target is illegal and
+ * it resolves as a creature spell, the side of the rule the counts lack. The
+ * card in the creature's place has a new id, so no role names it.
  */
 public final class BestowIllegalTarget {
 
     public static final String RULE = "702.103e";
-    static final String SCENARIO = "702.103e-1";
-    static final String TARGET_SURVIVES = "target-survives";
-    static final String COURSER = "Centaur Courser";
-    /** Centaur Courser's toughness: a creature with less is the one it outlives a Shock in place of. */
-    private static final int COURSER_TOUGHNESS = 3;
+    static final String SCENARIO = "702.103e-2";
+    static final String SKULKING_GHOST = "skulking_ghost";
+    static final String GHOST = "Skulking Ghost";
 
     private BestowIllegalTarget() {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, BestowIllegalTarget::bind, TARGET_SURVIVES,
+        return DirectedRule.of(RULE, SCENARIO, BestowIllegalTarget::bind, SKULKING_GHOST,
                 new Application(ForkOperation.REPLACE_CARD,
-                        fork -> new ReplaceCardOperation(fork.card("creature"), COURSER))
+                        fork -> new ReplaceCardOperation(fork.card("creature"), GHOST))
                         .forcing(ForcedPlay.cast("player", "card")
                                 .playing(new ForcedPlay.Line("bestow", ability -> ability.isSpell() && ability.isBestow()))));
     }
@@ -63,8 +62,8 @@ public final class BestowIllegalTarget {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        List<Card> creatures = List.copyOf(active.getCreaturesInPlay());
-        if (creatures.size() != 1 || creatures.get(0).getNetToughness() >= COURSER_TOUGHNESS) {
+        List<Card> creatures = live.getCardsIn(ZoneType.Battlefield).stream().filter(Card::isCreature).toList();
+        if (creatures.size() != 1 || !Boards.replacementSurvives(creatures.get(0), GHOST)) {
             return Optional.empty();
         }
         return active.getCardsIn(ZoneType.Hand).stream()

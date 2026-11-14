@@ -203,7 +203,7 @@
         "hand": {
           "A": [
             "Kellan Joins Up",
-            "Grizzly Bears"
+            "Hill Giant"
           ]
         },
         "graveyard": {},
@@ -213,20 +213,20 @@
       },
       "decisions": [
         "A casts Kellan Joins Up, tapping Forest, Plains and Island.",
-        "Both players pass; Kellan Joins Up resolves. Its enters trigger goes on the stack and A chooses to exile Grizzly Bears from hand; both players pass and it resolves."
+        "Both players pass; Kellan Joins Up resolves. Its enters trigger goes on the stack; A exiles a nonland card of mana value 3 or less from hand if it holds one; both players pass and it resolves."
       ],
       "variants": [
         {
-          "label": "small_card_in_hand",
-          "polarity": "fires",
-          "delta": "",
-          "expected": "Grizzly Bears (mana value 2) moves from A's hand to exile and becomes plotted."
-        },
-        {
           "label": "card_too_expensive",
           "polarity": "does_not_fire",
-          "delta": "Hill Giant (mana value 4) is in A's hand instead of Grizzly Bears.",
-          "expected": "The enters trigger resolves but A has no legal card to exile. Hill Giant stays in A's hand and nothing is plotted.",
+          "delta": "",
+          "expected": "The enters trigger resolves but A has no legal card to exile. Hill Giant stays in A's hand and nothing is plotted."
+        },
+        {
+          "label": "small_card_in_hand",
+          "polarity": "fires",
+          "delta": "Grizzly Bears (mana value 2) is in A's hand instead of Hill Giant.",
+          "expected": "Grizzly Bears (mana value 2) moves from A's hand to exile and becomes plotted.",
           "operation": "move_card"
         }
       ],

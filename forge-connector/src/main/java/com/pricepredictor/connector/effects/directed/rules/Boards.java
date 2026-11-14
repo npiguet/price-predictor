@@ -14,8 +14,6 @@ import forge.game.keyword.KeywordWithCostInterface;
 import forge.game.keyword.KeywordsChange;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
-import forge.game.replacement.ReplacementEffect;
-import forge.game.replacement.ReplacementType;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
 import forge.game.trigger.TriggerType;
@@ -103,69 +101,6 @@ final class Boards {
             }
         }
         return true;
-    }
-
-    /**
-     * The replacement effects of {@code replacer} that act on a card's move
-     * to a graveyard (Rest in Peace, Leyline of the Void, Darksteel
-     * Colossus's own): {@code Moved} into a destination listing
-     * {@code Graveyard}, with something to do instead, and active while
-     * {@code replacer} is on the battlefield (no {@code ActiveZones}, or one
-     * listing it). The one reading of a graveyard replacement every rule
-     * shares.
-     */
-    static List<ReplacementEffect> graveyardMoveReplacements(Card replacer) {
-        List<ReplacementEffect> found = new ArrayList<>();
-        for (ReplacementEffect replacement : replacer.getReplacementEffects()) {
-            String zones = replacement.getParam("ActiveZones");
-            if (replacement.getMode() == ReplacementType.Moved
-                    && lists(replacement.getParam("Destination"), "Graveyard")
-                    && replacement.hasParam("ReplaceWith")
-                    && (zones == null || lists(zones, "Battlefield"))) {
-                found.add(replacement);
-            }
-        }
-        return found;
-    }
-
-    /** Whether {@code replacement} watches its own card alone ({@code ValidCard$ Card.Self}). */
-    static boolean ownCardOnly(ReplacementEffect replacement) {
-        return replacement.getParamOrDefault("ValidCard", "Card").startsWith("Card.Self");
-    }
-
-    /** Whether one of {@code replacer}'s graveyard replacements acts on other cards' moves. */
-    static boolean replacesOthersGraveyardMoves(Card replacer) {
-        return graveyardMoveReplacements(replacer).stream().anyMatch(replacement -> !ownCardOnly(replacement));
-    }
-
-    /**
-     * Whether one of {@code replacer}'s graveyard replacements would act on
-     * {@code moved} going to a graveyard: {@code moved} matches its
-     * {@code ValidCard} as Forge reads it from {@code replacer}'s side
-     * (Leyline of the Void acts on its controller's opponents' cards alone).
-     */
-    static boolean replacesGraveyardMoveOf(Card replacer, Card moved) {
-        for (ReplacementEffect replacement : graveyardMoveReplacements(replacer)) {
-            if (ownCardOnly(replacement) ? moved == replacer
-                    : moved.isValid(replacement.getParamOrDefault("ValidCard", "Card").split(","),
-                            replacer.getController(), replacer, replacement)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * The parameters of the ability that moves the card elsewhere instead of
-     * its own going to a graveyard, when one of its own replacements does
-     * (Darksteel Colossus, Gravebane Zombie).
-     */
-    static Optional<Map<String, String>> ownGraveyardReplacement(Card card) {
-        return graveyardMoveReplacements(card).stream()
-                .filter(Boards::ownCardOnly)
-                .map(replacement -> script(card, replacement.getParam("ReplaceWith")))
-                .filter(replacing -> ApiType.ChangeZone.name().equals(api(replacing)))
-                .findFirst();
     }
 
     /** Forge's spelling of trample over planeswalkers, a trample instance with a detail. */
