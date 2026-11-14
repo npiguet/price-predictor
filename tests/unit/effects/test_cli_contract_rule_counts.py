@@ -188,3 +188,16 @@ def test_the_counts_file_names_its_records_generation(tmp_path):
     assert _run(tmp_path, records) == 0
     document = json.loads((tmp_path / "counts.json").read_text(encoding="utf-8"))
     assert document["generation"] == "gen-2"
+
+
+def test_cut_games_are_left_out_and_reported(tmp_path, capsys):
+    """contracts/cli.md: a gen-3 game whose shard holds no game-end marker is
+    counted toward no rule, and the file and the report say how many."""
+    records = tmp_path / "records"
+    records.mkdir()
+    shutil.copyfile(FIXTURES / "gen3-records.jsonl.gz", records / "gen3.jsonl.gz")
+    assert _run(tmp_path, records) == 0
+    document = json.loads((tmp_path / "counts.json").read_text(encoding="utf-8"))
+    assert document["cut_games"] == 58
+    assert document["rules"] == {}
+    assert "58 gen-3 game(s) without a game-end marker (cut) left out" in capsys.readouterr().out

@@ -22,11 +22,15 @@ sidecar. A card entity with no printed line names no script file and carries
 nothing.
 
 Shards are read once each, in parallel; a game never spans shards (a shard is
-one worker JVM's lifetime), so whether a game has a random seat is decided at
-the end of its shard. Each worker builds the detector index and its sidecar
-cache once. Prior art: the ``build-corpus`` survey (``corpus_survey``'s
-``_ShardSurveyor``), which reads shards the same way; it is not reused whole
-because its read context is built around the corpus's holdout and caps.
+one worker JVM's lifetime), so whether a game has a random seat, and whether a
+gen-3 game ended (its game-end marker read), is decided at the end of its
+shard. A gen-3 game without a marker was cut and ``build-corpus`` drops it
+whole: its records are read but tag, review and carry nothing, and the counts
+say how many such games were left out (``cut_games``). Each worker builds the
+detector index and its sidecar cache once. Prior art: the ``build-corpus``
+survey (``corpus_survey``'s ``_ShardSurveyor``), which reads shards the same
+way; it is not reused whole because its read context is built around the
+corpus's holdout and caps.
 """
 
 from __future__ import annotations
@@ -39,6 +43,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from effects.application.parallel_map import run_parallel
+from effects.domain.game_ends import GameEnds
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import ProvenanceKey, SidecarLookup
 from effects.domain.records import EffectRecord, acting_keys
@@ -80,6 +85,8 @@ class RuleCounts:
     #: Shards a damaged member or line ended early, under ``salvage`` alone:
     #: each one's message, its records before the damage counted.
     damaged: list = field(default_factory=list)
+    #: Gen-3 games without a game-end marker, left out of every count.
+    cut_games: int = 0
 
     def to_json(self, standing: CatalogueStanding | Mapping[str, str] | None = None) -> dict:
         """The counts file; ``standing`` a bare ``rule -> reason`` map of the
@@ -93,6 +100,7 @@ class RuleCounts:
         return {
             "generation": self.generation,
             "records": self.records,
+            "cut_games": self.cut_games,
             "rules": by_rule,
             "declared_zero": sorted(standing.declared - set(by_rule) - not_countable,
                                     key=rule_order),
@@ -235,26 +243,35 @@ def _sidecar_keyword_keys(
 
 
 def count_shard(built, shard: Path, *, salvage: bool = False) -> RuleCounts:
-    """One shard's counts. Tags are held per game until the shard ends, when
-    each game's source is known. ``salvage`` counts a damaged shard up to the
-    damage and names it in ``damaged`` (a collection run must not stop on
-    one); otherwise the damage raises, located."""
+    """One shard's counts. Tags, review entries and carriers are held per game
+    until the shard ends, when each game's source is known and a cut gen-3
+    game (no game-end marker) is left out. ``salvage`` counts a damaged shard
+    up to the damage and names it in ``damaged`` (a collection run must not
+    stop on one); otherwise the damage raises, located."""
     from effects.infrastructure.shard_io import SHARD_DAMAGE, read_shard, take_decode_tally
 
     index, sidecars, keywords = built
     out = RuleCounts()
     seat_games: set[str] = set()
-    pending: list[tuple[str, bool, object]] = []
+    ends = GameEnds()
+    pending: list[_Pending] = []
     try:
-        _count_records(read_shard(shard), out, index, sidecars, keywords, seat_games, pending)
+        _count_records(read_shard(shard), out, index, sidecars, keywords, seat_games, pending,
+                       ends)
     except SHARD_DAMAGE as exc:
         if not salvage:
             raise
         logger.warning("%s; its records before the damage are counted", exc)
         out.damaged.append(str(exc))
-    for game_id, aimed, tags in pending:
-        source = RuleSource.of(aimed=aimed, random_seat_game=game_id in seat_games)
-        for tag in tags:
+    cut = ends.cut
+    out.cut_games = len(cut)
+    for found in pending:
+        if found.game_id in cut:
+            continue
+        out.review |= found.review
+        out.carriers.update(found.carried)
+        source = RuleSource.of(aimed=found.aimed, random_seat_game=found.game_id in seat_games)
+        for tag in found.tags:
             out.counts[(tag.rule, str(tag.polarity), str(source))] += 1
     out.decode = take_decode_tally()
     take_gaps = getattr(sidecars, "take_join_gaps", None)
@@ -263,23 +280,35 @@ def count_shard(built, shard: Path, *, salvage: bool = False) -> RuleCounts:
     return out
 
 
+@dataclass(frozen=True)
+class _Pending:
+    """What one record adds, held until its game is known to have ended."""
+
+    game_id: str
+    aimed: bool
+    tags: tuple
+    review: frozenset
+    carried: frozenset
+
+
 def _count_records(records, out: RuleCounts, index, sidecars, keywords,
-                   seat_games: set[str], pending: list) -> None:
+                   seat_games: set[str], pending: list, ends: GameEnds) -> None:
     for record in records:
         out.records += 1
+        ends.note(record)
         if record.random_seat:
             seat_games.add(record.game_id)
         result = tag_record(record, index, sidecars)
         out.not_countable |= result.not_countable
-        out.review |= {(record.record_id, tag.scenario) for tag in result.review}
-        if result.tags:
-            pending.append((record.game_id, record.aimed_at is not None, result.tags))
-        carried = {
+        review = frozenset((record.record_id, tag.scenario) for tag in result.review)
+        carried = frozenset(
             (tag.rule, script_file, key)
             for tag in result.tags
             for script_file, key in tag_carriers(record, tag, keywords, sidecars)
-        }
-        out.carriers.update(carried)
+        )
+        if result.tags or review:
+            pending.append(_Pending(record.game_id, record.aimed_at is not None,
+                                    tuple(result.tags), review, carried))
 
 
 def none_rules(catalogue) -> dict[str, str]:
@@ -383,5 +412,8 @@ def run(config: RuleCountsConfig) -> int:
         print(line)
     for line in [*counts.decode.report_lines(), *counts.joins.report_lines()]:
         print(line)
+    if counts.cut_games:
+        print(f"{counts.cut_games} gen-3 game(s) without a game-end marker (cut) left "
+              "out of every count, as build-corpus drops them")
     print(f"{counts.records} records; counts written to {config.output}")
     return 0

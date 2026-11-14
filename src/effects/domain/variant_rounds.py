@@ -85,6 +85,8 @@ class VariantShardGames:
     #: What ended a shard's read early (a damaged member or line), each its
     #: read's message; the records before the damage are counted.
     damaged: list[str] = field(default_factory=list)
+    #: Gen-3 games without a game-end marker, left out of ``games``.
+    cut_games: int = 0
 
     def add(self, record: EffectRecord) -> None:
         """Count one record: its acting key, or its decision candidate's key,
@@ -106,6 +108,16 @@ class VariantShardGames:
         self.seen |= other.seen
         self.records += other.records
         self.damaged += other.damaged
+        self.cut_games += other.cut_games
+
+    def drop_games(self, cut: frozenset[str]) -> None:
+        """Leave the cut games out of every variant's games: build-corpus
+        drops a game its shard holds no game-end marker for. What their
+        snapshots showed stays shown."""
+        for games in self.games.values():
+            games -= cut
+        self.games = {script: games for script, games in self.games.items() if games}
+        self.cut_games += len(cut)
 
 
 def credit_games(

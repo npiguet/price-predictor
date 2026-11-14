@@ -211,11 +211,18 @@ _CARRIER_CATALOGUE = (
 )
 
 
-def _gen3_counts(tmp_path, workers=1, copies=1):
+def _gen3_document(tmp_path, workers=1, copies=1, *, ended=True):
+    """The counts file over ``copies`` copies of the gen-3 fixture, each game
+    ended by its game-end marker unless ``ended`` is False."""
+    from tests.unit.effects.builders import copy_gen3_fixture
+
     records = tmp_path / "records"
-    records.mkdir(parents=True)
     for copy in range(copies):
-        shutil.copyfile(GEN3, records / f"{copy}-{GEN3.name}")
+        (records / str(copy)).mkdir(parents=True)
+        if ended:
+            copy_gen3_fixture(records / str(copy))
+        else:
+            shutil.copyfile(GEN3, records / str(copy) / GEN3.name)
     config = RuleCountsConfig(
         records_dir=records, output=tmp_path / "rule-counts.json",
         rules_dir=_rules_dir(tmp_path, *_CARRIER_CATALOGUE),
@@ -223,7 +230,29 @@ def _gen3_counts(tmp_path, workers=1, copies=1):
                        "tokenscripts": GEN3_SIDECARS / "tokenscripts"},
         workers=workers)
     counts, standing = count(config)
-    return counts.to_json(standing)["carriers"]
+    return counts.to_json(standing)
+
+
+def _gen3_counts(tmp_path, workers=1, copies=1):
+    return _gen3_document(tmp_path, workers, copies)["carriers"]
+
+
+def test_a_cut_game_is_left_out_of_every_count_and_counted(tmp_path):
+    """The fixture as it stands predates the game-end marker, so every game
+    in it reads as cut: build-corpus drops each, so no record of them may
+    count toward a rule (WP7, P1 #1)."""
+    ended = _gen3_document(tmp_path / "ended")
+    cut = _gen3_document(tmp_path / "cut", ended=False)
+
+    assert ended["cut_games"] == 0 and ended["rules"]
+    assert cut["cut_games"] == 58
+    assert cut["rules"] == {} and cut["carriers"] == {} and cut["review"] == []
+    assert cut["records"] == ended["records"] - 58, "every record is still read"
+
+
+def test_a_gen2_game_is_never_cut(tmp_path, gen2_dir):
+    counts, standing = count(_config(tmp_path, gen2_dir))
+    assert counts.cut_games == 0 and counts.counts
 
 
 def _carrier(carriers, rule, script_file):

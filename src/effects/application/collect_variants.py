@@ -35,6 +35,7 @@ from effects.application.parallel_map import run_parallel
 from effects.domain import default_paths
 from effects.domain.card_names import fold_card_name
 from effects.domain.coverage import DeckCandidate, is_complete, retire_stalled
+from effects.domain.game_ends import GameEnds
 from effects.domain.rule_outcomes import (
     CARD_TYPES,
     CONDITIONS,
@@ -422,6 +423,7 @@ def _collect(config: CollectVariantsConfig) -> int:
             )
             counter.seed(units)
             record_damaged_shards(supervisor, counter.damaged)
+            supervisor.count_cut_games(counter.cut_games)
             play_variant_rounds(units, candidates, supervisor, counter, config)
         return finish(config, units, counter, interrupted=supervisor.interrupted)
     finally:
@@ -578,15 +580,19 @@ def _keep_unheld(
 
 def count_variant_shard(shard: Path) -> VariantShardGames:
     """One shard's variant games: every record read once, a damaged shard's
-    up to the damage, which it names."""
+    up to the damage, which it names, and a gen-3 game without a game-end
+    marker (cut; build-corpus drops it) left out."""
     from effects.infrastructure.shard_io import SHARD_DAMAGE, read_shard
 
     found = VariantShardGames()
+    ends = GameEnds()
     try:
         for record in read_shard(shard):
             found.add(record)
+            ends.note(record)
     except SHARD_DAMAGE as exc:
         found.damaged.append(str(exc))
+    found.drop_games(ends.cut)
     return found
 
 
@@ -597,7 +603,7 @@ class VariantGameCounter:
     A shard is named ``{run_id}.{worker}-{lifetime}``, so another run writing
     to the same directory never counts here unless named in ``continues``; and
     a shard is final once its round's workers are stopped, so no later round
-    reopens one.
+    reopens one. A cut game (no game-end marker) counts toward no variant.
     """
 
     def __init__(
@@ -616,6 +622,9 @@ class VariantGameCounter:
         #: Every damaged shard read so far, as its read's message: counted up
         #: to the damage, once, like any other shard.
         self.damaged: list[str] = []
+        #: Cut games left out: over every count so far, and in the last one.
+        self.cut_games = 0
+        self.last_cut = 0
 
     def fresh_shards(self) -> list[Path]:
         """This run's shards not yet counted."""
@@ -637,6 +646,8 @@ class VariantGameCounter:
         ):
             found.merge(part)
         self._counted.update(shards)
+        self.last_cut = found.cut_games
+        self.cut_games += found.cut_games
         for message in found.damaged:
             logger.warning("%s; its records before the damage are counted, and the "
                            "shard is not read again", message)
@@ -728,6 +739,7 @@ def play_variant_rounds(
         )
         shown = counter.update(units)
         record_damaged_shards(supervisor, counter.damaged)
+        supervisor.count_cut_games(counter.last_cut)
         retired = retire_stalled(
             units, previous, no_progress_rounds=config.no_progress_rounds,
             decked=written & shown, written=written,

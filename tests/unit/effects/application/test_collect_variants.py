@@ -694,6 +694,44 @@ class TestTheUntargetedRound:
         ))
         assert found.games == {self.BOLT: {"g7"}}
 
+    def test_a_cut_game_gives_its_variant_no_game(self, tmp_path):
+        """WP7 / P1 #1: a gen-3 game without its game-end marker is one
+        build-corpus drops; it must not finish a variant's games."""
+        from effects.application.collect_variants import count_variant_shard
+        from effects.infrastructure.shard_io import write_shard
+        from tests.unit.effects.builders import with_game_end_markers
+
+        ended = with_game_end_markers([_variant_record(self.BOLT, "g1", 0, generation=3)])
+        cut = [_variant_record(self.BOLT, "g2", 0, generation=3),
+               _variant_record(self.SHOCK, "g2", 1, generation=3)]
+        shard = tmp_path / f"{_RUN}.0-a.jsonl.gz"
+        write_shard(shard, ended + cut)
+
+        found = count_variant_shard(shard)
+
+        assert found.games == {self.BOLT: {"g1"}}
+        assert found.cut_games == 1
+        assert found.records == 4, "every record is still read"
+
+    def test_the_round_reports_its_cut_games(self, tmp_path, monkeypatch, fake_supervisor):
+        from tests.unit.effects.builders import with_game_end_markers
+
+        records = with_game_end_markers([
+            _variant_record(self.BOLT, "g1", 0, generation=3),
+            _variant_record(self.BOLT, "g2", 0, generation=3),
+            _variant_record(self.SHOCK, "g3", 0, generation=3),
+            _variant_record(self.SHOCK, "g4", 0, generation=3),
+        ])
+        cut = _variant_record(self.SHOCK, "g5", 0, generation=3)
+        collect_variants, config = self._fixture(
+            tmp_path, monkeypatch, fake_supervisor, [*records, cut],
+        )
+
+        assert collect_variants.run(config) == 0
+        assert [call.args for call in fake_supervisor.count_cut_games.call_args_list] == [
+            (0,), (1,),
+        ]
+
     def test_another_run_s_shard_never_counts(
         self, tmp_path, monkeypatch, fake_supervisor,
     ):

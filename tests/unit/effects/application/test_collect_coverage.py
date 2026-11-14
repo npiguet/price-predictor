@@ -29,6 +29,7 @@ from effects.domain.records import (
     ResolutionPayload,
 )
 from tests.unit.effects.builders import (
+    copy_gen3_fixture,
     fresh_interpreter_env,
     held_out_cards,
     make_entity,
@@ -363,7 +364,7 @@ class TestARoundEndsInItsReport:
         (cards / "aa.txt").write_text(
             "name: aa\nmana cost: {G}\ntypes: creature\n", encoding="utf-8",
         )
-        (tmp_path / "records").mkdir()
+        (tmp_path / "records").mkdir(exist_ok=True)
         return CollectCoverageConfig(
             effect_records=tmp_path / "records",
             cards_folders=(cards,),
@@ -402,6 +403,39 @@ class TestARoundEndsInItsReport:
         assert any("Residues:" in record.getMessage() for record in caplog.records), (
             "the run ended without printing the two residues FR-051 requires"
         )
+
+    @pytest.mark.parametrize("ended", [True, False])
+    def test_a_round_whose_last_game_was_cut_credits_nothing_and_says_so(
+        self, tmp_path, caplog, ended,
+    ):
+        """WP7 / P1 #1: a worker killed mid-game leaves a game without its
+        game-end marker, which build-corpus drops whole; counted, it would
+        satisfy the card with records the corpus never holds. The round
+        report and the run's manifest name the cut game."""
+        import json
+
+        from price_predictor.infrastructure.run_manifest import run_recorded
+
+        def pool_run(pool):
+            # Kept by build-corpus's refusal rule only when its line converts.
+            _convert_acting_line(tmp_path / "cardsfolder")
+            record = _record([make_entity("E1", "aa")], source="E1")
+            run_id = pool._spawn_worker.func.__self__.run_id
+            write_plain_shard(tmp_path / "records", "r1", [record], run_id=run_id,
+                              ended=ended)
+
+        code = run_recorded(
+            tmp_path / "records", lambda: self._run(tmp_path, caplog, pool_run),
+            command="python -m effects collect-coverage",
+        )
+
+        entry = json.loads(
+            (tmp_path / "records" / "run.json").read_text(encoding="utf-8"))["invocations"][0]
+        short = 0 if ended else 1
+        assert f"{short} castable cards short of 1 records" in caplog.text
+        assert entry["cut_games"] == {"before_rounds": 0, "by_round": [short], "total": short}
+        assert f"Round 1: {short} cut game(s) (no game-end marker)" in caplog.text
+        assert code == 0, "the cut game's records are still records the run wrote"
 
     def test_a_run_that_wrote_no_record_fails_and_says_where_to_look(self, tmp_path, caplog):
         """V4 #3: every match failing (a broken deck, a dead worker) played its
@@ -617,16 +651,23 @@ class TestIncrementalCounting:
         assert coverage["alpha"].records == 3
 
     def _damaged(self, directory: Path, cards: list[str], *, member_after: bool) -> Path:
-        """A gzip shard of one member per card, the second member's header
-        broken; with ``member_after`` a member follows the broken one."""
+        """A gzip shard of one member per line, each card's record a game of
+        its own ended by its marker, the second game's record's header
+        broken; with ``member_after`` a member follows the broken one. The
+        first game ended before the damage; the second's marker is past it."""
         import gzip
+        from dataclasses import replace
 
-        plain = self._shard(directory / "plain", "x", cards)
+        plain = write_plain_shard(directory / "plain", "x", [
+            replace(_record([make_entity(f"E-{card}", card)], source=f"E-{card}"),
+                    game_id=f"a.0-x.{index}", record_id=f"a.0-x.r{index}")
+            for index, card in enumerate(cards)
+        ], run_id="a")
         members = [gzip.compress((line + "\n").encode("utf-8"))
                    for line in plain.read_text(encoding="utf-8").splitlines() if line]
-        members[1] = b"XX" + members[1][2:]
+        members[2] = b"XX" + members[2][2:]
         if not member_after:
-            members = members[:2]
+            members = members[:3]
         path = directory / "a.0-z.jsonl.gz"
         path.write_bytes(b"".join(members))
         plain.unlink()
@@ -887,18 +928,28 @@ class TestHeldOutTextUnit:
         )
         assert carriers == {held: frozenset({"alpha"})}
 
-    def test_a_shard_counts_distinct_games_per_text(self):
+    def test_a_shard_counts_distinct_games_per_text(self, tmp_path):
         """Counted as build-corpus counts a held-out text's games (FR-053):
         from resolution records only, so a text whose triggers fire but never
         resolve is not satisfied."""
         from effects.application.collect_coverage import count_text_shard
 
+        shard = copy_gen3_fixture(tmp_path)
         resolutions, everything = _texts_by_game(_GEN3_SHARD)
         assert resolutions and everything != resolutions
-        counted = count_text_shard(
-            _GEN3_SHARD, roots=_GEN3_ROOTS, held_out=_holding(everything),
-        )
+        counted = count_text_shard(shard, roots=_GEN3_ROOTS, held_out=_holding(everything))
         assert counted.games == resolutions
+        assert counted.cut_games == 0
+
+    def test_a_cut_game_counts_toward_no_text(self, tmp_path):
+        """The fixture as it stands holds no game-end marker: every game reads
+        as cut (WP7), and build-corpus would drop each."""
+        from effects.application.collect_coverage import count_text_shard
+
+        resolutions, everything = _texts_by_game(_GEN3_SHARD)
+        counted = count_text_shard(_GEN3_SHARD, roots=_GEN3_ROOTS, held_out=_holding(everything))
+        assert counted.games == {}
+        assert counted.cut_games >= len(set().union(*resolutions.values())) > 0
 
     def test_a_game_goes_to_the_first_acting_text_held_out_by_its_unit(
         self, tmp_path,
@@ -917,8 +968,7 @@ class TestHeldOutTextUnit:
         from effects.domain.coverage import TextCoverage
         from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
         from effects.domain.text_holdout import HoldoutUnit
-        from effects.infrastructure.shard_io import write_shard
-        from tests.unit.effects.builders import make_record, write_sidecar
+        from tests.unit.effects.builders import make_record, write_ended_shard, write_sidecar
 
         damage, draw = "SP$ DealDamage | NumDmg$ 2", "SP$ Draw | NumCards$ 1"
         keys = []
@@ -932,7 +982,7 @@ class TestHeldOutTextUnit:
             )
             keys.append(key)
         shard = tmp_path / "records" / "run.0-a.jsonl.gz"
-        write_shard(shard, [make_record(
+        write_ended_shard(shard, [make_record(
             generation=3, ability=tuple(keys), payload=ResolutionPayload(
                 events=(Event(type=EventType.CARD_DRAWN, subjects=("P0",)),),
             ),
@@ -953,7 +1003,8 @@ class TestHeldOutTextUnit:
 
         from effects.application.collect_coverage import count_text_shard
         from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
-        from effects.infrastructure.shard_io import read_shard, write_shard
+        from effects.infrastructure.shard_io import read_shard
+        from tests.unit.effects.builders import write_ended_shard
 
         effects = [
             record for record in read_shard(_GEN3_SHARD)
@@ -963,8 +1014,8 @@ class TestHeldOutTextUnit:
             MAX_EVENTS_PER_RECORD + 1
         )
         clean, flooded = tmp_path / "clean.jsonl.gz", tmp_path / "flooded.jsonl.gz"
-        write_shard(clean, effects)
-        write_shard(flooded, [
+        write_ended_shard(clean, effects)
+        write_ended_shard(flooded, [
             replace(record, payload=replace(record.payload, events=flood))
             for record in effects
         ])
@@ -1426,7 +1477,7 @@ class TestOnlyGenThreeRecordsCount:
 
         assert count_shard(shard).credits == {}
 
-    def test_a_gen_two_record_counts_toward_no_held_out_text(self):
+    def test_a_gen_two_record_counts_toward_no_held_out_text(self, tmp_path):
         from dataclasses import replace
 
         from effects.application.collect_coverage import count_text_shard
@@ -1434,7 +1485,8 @@ class TestOnlyGenThreeRecordsCount:
 
         _, everything = _texts_by_game(_GEN3_SHARD)
         held_out = _holding(everything)
-        assert count_text_shard(_GEN3_SHARD, roots=_GEN3_ROOTS, held_out=held_out).games
+        ended = copy_gen3_fixture(tmp_path)
+        assert count_text_shard(ended, roots=_GEN3_ROOTS, held_out=held_out).games
         demoted = [replace(record, generation=None) for record in read_shard(_GEN3_SHARD)]
         import tempfile
 

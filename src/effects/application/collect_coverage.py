@@ -53,6 +53,7 @@ from effects.domain.coverage import (
     retire_stalled,
     text_deck_weights,
 )
+from effects.domain.game_ends import GameEnds
 from effects.domain.provenance import SidecarLookup, SourceTree, split_script_file
 from effects.domain.record_quality import quality_defect, record_refusal
 from effects.domain.records import EffectRecord, RecordKind, acting_keys
@@ -169,6 +170,8 @@ class ShardCoverage:
     #: What ended the shard's read early (a damaged member or line), its
     #: records before the damage counted; None for a whole shard.
     damaged: str | None = None
+    #: Gen-3 games without a game-end marker, whose records credit nothing.
+    cut_games: int = 0
 
 
 def _card_of_script(sidecars: SidecarLookup | None) -> CardOfScript | None:
@@ -204,47 +207,62 @@ def count_shard(shard: Path, *, roots: Mapping[str, Path] | None = None) -> Shar
 
     Only the records build-corpus keeps count (python D1): gen-3, no
     ``turn_action`` (a draw or an untap is no record of the card), none it
-    refuses. Under ``roots`` an entity counts as the converted card its
-    printed script is (python D6), and a static's host through its script
-    (python D5).
+    refuses, and none of a game its shard holds no game-end marker for (a
+    cut game, which build-corpus drops whole; credits are held per game
+    until the shard is read). Under ``roots`` an entity counts as the
+    converted card its printed script is (python D6), and a static's host
+    through its script (python D5). The cards shown are every game's, a cut
+    one's too: its games showed them.
     """
     from effects.infrastructure.converted_trees import process_sidecars
     from effects.infrastructure.shard_io import SHARD_DAMAGE, read_shard
 
     sidecars = process_sidecars(roots) if roots else None
     card_of = _card_of_script(sidecars)
-    counts: Counter[str] = Counter()
+    by_game: dict[str, Counter[str]] = defaultdict(Counter)
     seen: set[str] = set()
+    ends = GameEnds()
     records = 0
     damaged = None
     try:
         for record in read_shard(shard):
             records += 1
+            ends.note(record)
             if record.generation != COUNTED_GENERATION:
                 continue
             seen.update(fold_card_name(name) for name in cards_shown(record, card_of))
             if not _kept(record, sidecars):
                 continue
             for name in qualifying_cards(record, card_of):
-                counts[fold_card_name(name)] += 1
+                by_game[record.game_id][fold_card_name(name)] += 1
     except SHARD_DAMAGE as exc:
         damaged = str(exc)
-    return ShardCoverage(counts, frozenset(seen), records, damaged)
+    cut = ends.cut
+    counts: Counter[str] = Counter()
+    for game, credits in by_game.items():
+        if game not in cut:
+            counts.update(credits)
+    return ShardCoverage(counts, frozenset(seen), records, damaged, len(cut))
 
 
 class _ShardCounter:
     """Counts each shard once across a whole run, not once per round.
 
-    Sound because a shard is final once counted: a round's workers are all
-    killed before ``play_round`` returns (a worker spawned while the pool
-    shuts down is killed by the pool too), and a shard's name carries its JVM
-    lifetime, so no later round reopens it. A worker the kill could not end
-    is the exception: the supervisor names it, and its shard is counted as it
-    stood when read.
+    Sound because a shard is final once counted: a round's workers have all
+    ended before ``play_round`` returns (each finished its game when asked to
+    stop, or was killed past the stop timeout; a worker spawned while the
+    pool shuts down is killed by the pool too), and a shard's name carries
+    its JVM lifetime, so no later round reopens it. A worker the kill could
+    not end is the exception: the supervisor names it, and its shard is
+    counted as it stood when read, its game in progress cut.
     """
 
     def __init__(self, progress_every: int = PROGRESS_EVERY_SHARDS) -> None:
         self._counted: set[Path] = set()
+        #: Gen-3 games without a game-end marker the counts left out: over
+        #: the whole run, and in the last ``update``.
+        self.cut_games = 0
+        self.last_cut = 0
         #: Every damaged shard read so far, as its read's message: counted up
         #: to the damage, once, like any other shard.
         self.damaged: list[str] = []
@@ -276,17 +294,20 @@ class _ShardCounter:
             shard for shard in iter_shards(records_dir)
             if shard not in self._counted
         ]
+        self.last_cut = 0
         for shard, part in zip(fresh, run_parallel(
             fresh, count, workers=workers, label="Counted",
             progress_every=self._progress_every,
         ), strict=True):
             apply(part)
             self._records[shard] = part.records
+            self.last_cut += part.cut_games
             if part.damaged is not None:
                 logger.warning("%s; its %d records before the damage are counted, and "
                                "the shard is not read again", part.damaged, part.records)
                 self.damaged.append(part.damaged)
         self._counted.update(fresh)
+        self.cut_games += self.last_cut
         return len(fresh)
 
 
@@ -501,6 +522,7 @@ def play_rounds(
         read = rounds.count_new_shards()
         logger.info("Counted %d new shard(s) from round %d", read, round_number)
         record_damaged_shards(supervisor, rounds.counter.damaged)
+        supervisor.count_cut_games(rounds.counter.last_cut)
         # Charged to what the round's games showed: a worker draws its decks
         # with replacement, so some written decks are never played.
         retired = retire_stalled(
@@ -532,6 +554,7 @@ def _play_to_completion(
         if rounds.unresolved.pool:
             supervisor.record(**rounds.unresolved.fields())
         record_damaged_shards(supervisor, rounds.counter.damaged)
+        supervisor.count_cut_games(rounds.counter.cut_games)
         played = play_rounds(rounds, supervisor, config)
     logger.info("%s", rounds.report())
     # Residues print either way, but an interrupted run did not finish.
@@ -744,6 +767,8 @@ class TextShardCoverage:
     records: int = 0
     #: As :attr:`ShardCoverage.damaged`.
     damaged: str | None = None
+    #: As :attr:`ShardCoverage.cut_games`.
+    cut_games: int = 0
 
 
 def count_text_shard(
@@ -755,8 +780,10 @@ def count_text_shard(
     gen-3 resolution records its refusal rule keeps, through
     :meth:`HeldOutCards.text_acted_through`. A random-seat game counts: it
     goes to the card-disjoint stratum like any game naming a held-out card
-    (FR-059). The cards shown are read off the same resolution records, whose
-    snapshots hold every hand, graveyard and permanent. Top-level so a
+    (FR-059). A game its shard holds no game-end marker for is cut and
+    counts toward no text, as build-corpus drops it. The cards shown are read
+    off the same resolution records, whose snapshots hold every hand,
+    graveyard and permanent. Top-level so a
     process pool can pickle it; each process resolves keys through its own
     :func:`~effects.infrastructure.converted_trees.process_sidecars`, because a
     sidecar cache does not pickle.
@@ -771,14 +798,17 @@ def count_text_shard(
     records = 0
 
     def every_record(head) -> bool:
-        """Count every record; parse only the resolutions."""
+        """Count every record; parse only the resolutions and the turn
+        actions, among which the game-end markers."""
         nonlocal records
         records += 1
-        return head.kind == RecordKind.RESOLUTION.value
+        return head.kind in (RecordKind.RESOLUTION.value, RecordKind.TURN_ACTION.value)
 
+    ends = GameEnds()
     damaged = None
     try:
         for record in iter_shard_matching(shard, where=every_record):
+            ends.note(record)
             if record.kind is not RecordKind.RESOLUTION:
                 continue
             if record.generation != COUNTED_GENERATION:
@@ -791,7 +821,9 @@ def count_text_shard(
                 games[text].add(record.game_id)
     except SHARD_DAMAGE as exc:
         damaged = str(exc)
-    return TextShardCoverage(dict(games), frozenset(seen), records, damaged)
+    cut = ends.cut
+    kept = {text: ids - cut for text, ids in games.items() if ids - cut}
+    return TextShardCoverage(kept, frozenset(seen), records, damaged, len(cut))
 
 
 class TextCoverageCounter(_ShardCounter):

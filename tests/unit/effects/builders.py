@@ -338,11 +338,14 @@ class RawShardWriter:
 
 def write_plain_shard(
     directory, lifetime: str, records, *, run_id: str = "run", worker: int = 0,
+    ended: bool = True,
 ) -> Path:
     """A plain ``{run_id}.{worker}-{lifetime}.jsonl`` raw shard holding
-    ``records``, written through :class:`RawShardWriter`."""
+    ``records``, written through :class:`RawShardWriter`: each gen-3 game
+    ended by its game-end marker, as a worker that finished it writes it,
+    unless ``ended`` is False (a worker killed mid-game)."""
     with RawShardWriter(directory, run_id, worker, lifetime, compressed=False) as shard:
-        for record in records:
+        for record in with_game_end_markers(records) if ended else records:
             shard.write(record)
     return shard.path
 
