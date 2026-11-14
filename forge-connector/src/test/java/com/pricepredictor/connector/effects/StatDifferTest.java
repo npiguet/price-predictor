@@ -210,6 +210,49 @@ class StatDifferTest {
         assertTrue(differ.diff(bears).isEmpty());
     }
 
+    /**
+     * A forgotten card is a new object: its next reading is a first reading
+     * and reports nothing, however it changed while forgotten; one not
+     * forgotten reports the change.
+     */
+    @Test
+    void aForgottenCardsNextReadingIsAFirstReading() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(0), "Grizzly Bears");
+        Card other = TestBoard.inPlay(game, game.getPlayers().get(0), "Hill Giant");
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        differ.prime(other);
+
+        differ.forget(bears.getId());
+        for (Card card : java.util.List.of(bears, other)) {
+            card.addPTBoost(2, 2, game.getNextTimestamp(), 0);
+        }
+
+        assertTrue(differ.diff(bears).isEmpty(), "forgotten: a first reading");
+        assertTrue(!differ.diff(other).isEmpty(), "remembered: the pump is a change");
+        assertTrue(differ.diff(other).isEmpty(), "and is reported once");
+    }
+
+    /**
+     * A rebaseline returns what changed since the last reading, unreported
+     * so far, and measures from the new reading on: the same change is not
+     * reported again.
+     */
+    @Test
+    void aRebaselineReturnsTheSwallowedChangesAndMeasuresFromThere() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(0), "Grizzly Bears");
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        bears.addPTBoost(1, 1, game.getNextTimestamp(), 0);
+
+        java.util.List<EffectEvent> swallowed = differ.rebaseline(java.util.List.of(bears));
+
+        assertTrue(!swallowed.isEmpty(), "the pump the snapshot already shows");
+        assertTrue(differ.diff(bears).isEmpty(), "measured from the rebaseline");
+    }
+
     /** A control change names the new controller (TC2 #9). */
     @Test
     void aControlChangeNamesTheNewController() {
