@@ -63,6 +63,14 @@ LINES = {
     ),
     WorkerFailure.FORK_CHECK_FAILED: "Effect records: fork score check failed (NPE); discarding",
     WorkerFailure.FORK_FIDELITY: "Effect records: fork fidelity: 2 difference(s), phase MAIN1",
+    WorkerFailure.FORK_FAILED: (
+        "Effect records: fork intervention body threw, and is discarded (later failures are "
+        "counted, not printed): java.lang.IllegalStateException: x"
+    ),
+    WorkerFailure.FORK_MOVED_LIVE_GAME: (
+        "Effect records: fork probe moved the live game; before the fork: timestamp 10; "
+        "after: timestamp 15 (later ones are counted, not printed)"
+    ),
     WorkerFailure.STAGING_FAILED: "Could not stage custom cards from x: denied; variant cards",
     WorkerFailure.VARIANT_NAMES_UNREADABLE: "Could not read variant names from x: gone",
     WorkerFailure.DROPPED_EVENTS_UNWRITABLE: "cannot append dropped-event counts to x: full",
@@ -160,6 +168,7 @@ def test_a_failure_line_behind_interleaved_output_is_still_found(kind):
     "Effect records: C:/out/run.0-ab.jsonl.gz [mode=patched]",
     "[Forge] random seat failed to play Shock",
     "Effect records: dropping a probe branch taken on turn 3 that would mirror x",
+    "Effect records: fork refusals so far, expected and no failure: {intervention no choices=2}",
 ])
 def test_routine_worker_output_is_no_failure(line):
     assert classify(line) is None

@@ -59,6 +59,13 @@ class WorkerFailure(StrEnum):
     FORK_CHECK_FAILED = "fork_check_failed"
     #: The fork fidelity audit found differences, or could not run.
     FORK_FIDELITY = "fork_fidelity"
+    #: A fork's copy, body or writer threw, the fork discarded (the first
+    #: failure of each kind of fork and step; later ones are counted in the
+    #: hook-failure report under ``fork <kind> copy|body|write``).
+    FORK_FAILED = "fork_failed"
+    #: A fork changed the live game it was taken from (printed once per
+    #: kind; counted under ``fork <kind> moved the live game``).
+    FORK_MOVED_LIVE_GAME = "fork_moved_live_game"
     #: Variant scripts could not be staged; variant cards will not load.
     STAGING_FAILED = "staging_failed"
     #: Variant names could not be read; variant records keyed as card scripts.
@@ -118,6 +125,10 @@ FAILURE_PATTERNS: tuple[FailurePattern, ...] = (
              "Effect records: fork score check failed ("),
     _pattern(WorkerFailure.FORK_FIDELITY, r"Effect records: fork fidelity",
              "Effect records: fork fidelity"),
+    _pattern(WorkerFailure.FORK_FAILED, r"Effect records: fork \S+ (copy|body|write) threw",
+             " threw, and is discarded (later failures"),
+    _pattern(WorkerFailure.FORK_MOVED_LIVE_GAME, r"Effect records: fork \S+ moved the live game",
+             " moved the live game"),
     _pattern(WorkerFailure.STAGING_FAILED, r"Could not stage custom cards ",
              "Could not stage custom cards from "),
     _pattern(WorkerFailure.VARIANT_NAMES_UNREADABLE, r"Could not read variant names ",
