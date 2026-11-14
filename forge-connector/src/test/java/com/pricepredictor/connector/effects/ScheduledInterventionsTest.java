@@ -111,6 +111,34 @@ class ScheduledInterventionsTest {
     }
 
     /**
+     * The fork's copy of a forced line is that line: Chainflinger's second
+     * damage ability, forced, is written under its own key and deals its own
+     * two damage, not the first's one (C3 #5: the copier's mapper checks the
+     * counterpart is alike, its API and script line, since WP1).
+     */
+    @Test
+    void aForcedLineIsWrittenUnderItsOwnKeyAndDoesWhatItSays() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        forge.game.card.Card flinger = TestBoard.inPlay(game, game.getPlayers().get(0), "Chainflinger");
+        forge.game.spellability.SpellAbility second = flinger.getSpellAbilities().stream()
+                .filter(ability -> "2".equals(ability.getParam("NumDmg"))).findFirst().orElseThrow();
+        CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(1).probes(0).build();
+
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
+                tempDir, game, caps, 1L, second, "to force a line through the hooks");
+
+        List<String> records = fork.records();
+        assertEquals(1, records.size(), records.toString());
+        assertEquals(parse("{\"ability\":"
+                        + ProvenanceKey.toJsonArray(ProvenanceResolver.resolve(second).keys()) + "}").get("ability"),
+                parse(records.get(0)).get("ability"), records.get(0));
+        List<Map<String, Object>> damage = RecordLines.events(records.get(0)).stream()
+                .filter(event -> EventType.DAMAGE_DEALT.wireName().equals(event.get("type"))).toList();
+        assertEquals(1, damage.size(), records.get(0));
+        assertEquals(2, ((Number) ((Map<?, ?>) damage.get(0).get("params")).get("amount")).intValue());
+    }
+
+    /**
      * No fork is taken at a phase event published while the stack resolves,
      * as an effect ending the turn publishes the steps it moves to; the
      * line is forced at the next boundary that draws one.
