@@ -112,12 +112,26 @@ interrupted `collect-variants` restarts into the same directory with the same `-
 
 A collector's round end lets every worker finish the game it is playing (at most
 `--stop-timeout`, 600 s, before a kill), and workers recycle themselves at a game end
-(`--recycle-seconds`, 600 s), so a run's games are cut only by a crash, a kill past the timeout
-or Ctrl-C. A console Ctrl-C reaches every worker JVM, which closes its shard and exits at once,
-its game cut; the supervisor waits for none of them, and a worker still running is asked to
-stop and given `--stop-timeout`, a second Ctrl-C killing it at once. Each round's report and
-`run.json` say how the workers ended (`worker_stops`) and how many cut games the counts left out
-(`cut_games`).
+(`--recycle-seconds`, 600 s, at least 300), so a run's games are cut only by a crash, a kill
+past the timeout, a game outlasting its worker's recycle time by `--stop-timeout`, or a second
+Ctrl-C. Each round's report and `run.json` say how the workers ended (`worker_stops`) and how
+many cut games the counts left out (`cut_games`). Before launching a collection, know that:
+
+- The connector must be rebuilt (`mvn install -DskipTests` in `forge-connector/`) before a gen-3
+  collection: shards written by a connector built before the game-end marker hold no marker, so
+  `build-corpus` refuses them ("every game cut") and `validate-corpus` fails them.
+- To stop a run by hand, press Ctrl-C once: it reaches the supervisor alone, which asks every
+  worker to finish its game and waits up to `--stop-timeout`. A second Ctrl-C kills the workers
+  at once, cutting their games. Creating a worker's stop file by hand does not stop the run: the
+  pool starts a fresh worker in its place.
+- Every round starts a fresh pool, so the workers start Forge anew each round; a round ends up
+  to `--stop-timeout` after its match budget is reached, and never waits for a worker still
+  starting Forge (it is killed, with no game to cut).
+- Under `match-outcomes`' best of N, a worker that recycles itself mid-match abandons the match
+  in flight: it writes no outcome or cards-played row, and the games it finished keep their
+  records and markers.
+- A kill loses the game in progress only: every finished game is on disk whole, its marker
+  included, before the next one starts.
 
 ## Stage 6 — curate and freeze (story 6, story 8)
 

@@ -1132,19 +1132,22 @@ and that the reporting half never enters the control score.
   verdict, which only ranks a card and never drops one.
 - **FR-058i**: Every collecting command whose workers write effect records (`collect-coverage`,
   `collect-variants`, `match-outcomes --effect-records`) MUST stop its match workers through the
-  stop protocol (contracts/cli.md § Match worker stop protocol): a round's end, the run's end and
-  Ctrl-C ask each worker to stop at its game's end and wait for it, killing (`taskkill /F /T`) only
-  a worker still running `--stop-timeout` seconds after the request (default 600, 1 to 3600), or,
-  for one still starting Forge, `FORGE_INIT_SECONDS` (600) after its start when that is later; a
-  second interrupt kills at once. A worker MUST recycle itself at the first game end after
-  `--recycle-seconds` of its JVM's life (default 600, 60 to 86400) and be restarted; one still
-  running `--recycle-seconds` + `--stop-timeout` seconds after its start MUST be killed. Exit 0
-  with the stop line is a normal end, never a failure; exit 0 without it, or any other code, is a
-  crash. A round MUST be counted only after every worker of its pool has ended or been killed,
-  and the command MUST NOT exit before. `run.json` MUST record the resolved `stop_timeout` and
-  `recycle_seconds` and how the workers ended (`worker_stops`). `match-outcomes` without
-  `--effect-records` keeps no worker log, MUST refuse either flag (exit 2) and kills its workers
-  as before.
+  stop protocol (contracts/cli.md § Match worker stop protocol). Its match workers MUST run in
+  process groups of their own, so a console Ctrl-C reaches the supervisor alone. A round's end,
+  the run's end and a first Ctrl-C ask each worker to stop at its game's end and wait for it,
+  killing (`taskkill /F /T`) only a worker still running `--stop-timeout` seconds after the
+  request (default 600, 1 to 3600); a worker whose log holds no startup line yet (still starting
+  Forge) MUST be killed at once, its stop file created first, and counted as `killed_starting`; a
+  second Ctrl-C kills at once. A worker MUST recycle itself at the first game end after
+  `--recycle-seconds` of its JVM's life (default 600, 300 to 86400) and be restarted, unless the
+  round's stop condition already holds; one still running `--recycle-seconds` + `--stop-timeout`
+  seconds after its start MUST be killed, its game cut and said so. Exit 0 with the stop line is a
+  normal end, never a failure; exit 0 without it, or any other code, is a crash; a worker that
+  recycled itself having played no game failed to start. A round MUST be counted only after every
+  worker of its pool has ended or been killed, and the command MUST NOT exit before. `run.json`
+  MUST record the resolved `stop_timeout` and `recycle_seconds` and how the workers ended
+  (`worker_stops`). `match-outcomes` without `--effect-records` keeps no worker log, MUST refuse
+  either flag (exit 2) and kills its workers as before, which the console Ctrl-C reaches.
 - **FR-058j**: The collectors' coverage and variant counters MUST credit no unit from a gen-3 game
   whose shard holds no game-end marker, reading the markers in the pass that already reads each
   shard (a damaged shard's game past the damage counts as cut), and MUST report the cut games each

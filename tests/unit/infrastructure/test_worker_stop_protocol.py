@@ -13,6 +13,8 @@ are pinned to the Java sources below.
 from __future__ import annotations
 
 import functools
+import json
+import os
 import re
 import signal
 import subprocess
@@ -35,6 +37,7 @@ from price_predictor.infrastructure.forge_jvm import (
     stop_line_of,
 )
 from tests.unit.infrastructure import stand_in_worker as stand_in
+from tests.unit.infrastructure.real_processes import end_tree, wait_for_file
 
 STAND_IN = Path(stand_in.__file__)
 
@@ -140,6 +143,7 @@ class _Run:
         proc = subprocess.Popen(
             [sys.executable, "-u", str(STAND_IN), *(f"-D{k}={v}" for k, v in properties.items())],
             stdout=self.logs.get(slot), stderr=subprocess.STDOUT,
+            **forge_jvm.graceful_popen_options(),
         )
         self.started.append(proc)
         return proc
@@ -197,7 +201,7 @@ def runs():
 
 
 def _settings(**overrides) -> WorkerStopSettings:
-    values = {"timeout": 20.0, "recycle_seconds": 3600, "init_seconds": 20.0}
+    values = {"timeout": 20.0, "recycle_seconds": 3600}
     return WorkerStopSettings(**{**values, **overrides})
 
 
@@ -233,6 +237,14 @@ class TestAGracefulStop:
         assert run.pool.stops.stopped == 2
         assert run.pool.survivors == []
 
+    def test_no_stop_file_is_left_once_the_run_has_ended(self, tmp_path, runs):
+        run = runs(tmp_path, settings=_settings(), target=2, game_seconds=0.1)
+
+        run.run()
+
+        assert run.pool.stops.stopped == 2
+        assert not any(run.logs.stop_path_for(slot).exists() for slot in range(2))
+
     def test_each_worker_s_stop_file_is_deleted_before_it_starts(self, tmp_path, runs):
         """A stop file left by the last round's stop would stop the next
         round's worker before its first match."""
@@ -259,7 +271,7 @@ class TestTheTimeout:
         stops = run.pool.stops
         assert (stops.stopped, stops.killed) == (0, 2)
         assert stop_line_of(run.log()) is None
-        assert "did not stop within 0s of the request; its game is cut" in capsys.readouterr().out
+        assert "did not stop within 0.5s of the request; its game is cut" in capsys.readouterr().out
 
     def test_a_second_interrupt_kills_at_once(self, tmp_path, runs):
         run = runs(tmp_path, settings=_settings(timeout=60), behaviour="ignore")
@@ -284,7 +296,9 @@ class TestTheTimeout:
         run.run(after=3.5)
 
         out = capsys.readouterr().out
-        assert "its game has not ended 0s past its 1s recycle time" in out
+        assert "Killing worker 0 (PID " in out
+        assert "its game has not ended 0.5s past its 1s recycle time; the game it was " \
+               "playing is cut" in out
         assert len(run.started) >= 2, "the killed worker was restarted"
         assert run.pool.stops.killed >= 2
 
@@ -314,6 +328,35 @@ class TestRecycling:
         with pytest.raises(WorkerStartError, match="--recycle-seconds"):
             run.run()
 
+    def test_a_worker_whose_first_best_of_n_match_spans_its_recycle_time_started(
+        self, tmp_path, runs, capsys,
+    ):
+        """Best of three: the recycle time comes in the first match, which
+        the worker abandons at a game end having finished no match. It
+        played games, so it started: no failed start, no WorkerStartError."""
+        run = runs(tmp_path, workers=1, settings=_settings(recycle_seconds=1),
+                   games_per_match=3, game_seconds=0.4, max_failed_starts=2)
+
+        run.run(after=3.5)
+
+        assert run.pool.stops.recycled >= 2
+        assert run.games() == 0, "no match was finished"
+        assert "(0 matches, 3 games)" in capsys.readouterr().out
+
+    def test_no_worker_is_respawned_once_the_round_s_target_is_reached(self, tmp_path, runs):
+        """A worker that recycles itself after the round reached its budget,
+        before the supervisor polls it, is not replaced: the new one would
+        only start Forge to be stopped."""
+        run = runs(tmp_path, workers=1, settings=_settings(recycle_seconds=1), target=1,
+                   game_seconds=0.3)
+        run.pool.STOP_POLL_INTERVAL = 30
+
+        elapsed = run.run(seconds=20)
+
+        assert elapsed < 10
+        assert len(run.started) == 1
+        assert run.pool.stops.recycled == 1
+
 
 class TestACrash:
     def test_a_worker_that_fails_is_restarted(self, tmp_path, runs):
@@ -338,51 +381,72 @@ class TestACrash:
 
 
 class TestCtrlC:
-    def test_workers_the_console_interrupt_ended_are_not_waited_for(
+    def test_a_first_ctrl_c_asks_every_worker_to_stop_at_its_game_s_end(
         self, tmp_path, runs, killed_process_trees,
     ):
-        """A console Ctrl-C reaches every JVM, whose shutdown hook closes its
-        shard: the pool waits out no stop timeout for a worker already gone."""
-        die = tmp_path / "ctrl-c"
-        run = runs(tmp_path, settings=_settings(timeout=60), die_file=die, game_seconds=5)
+        """The console's Ctrl-C reaches the supervisor alone (the workers run
+        in groups of their own): its handler asks each worker to stop, and
+        each ends at its game's end, a stop, never a crash or a kill."""
+        run = runs(tmp_path, settings=_settings(timeout=60), game_seconds=1.0)
 
-        def ctrl_c():
-            die.touch()
-            time.sleep(0.2)
-            run.pool._handle_signal(signal.SIGINT, None)
-
-        elapsed = run.run(after=0.5, action=ctrl_c)
+        elapsed = run.run(after=0.5, action=lambda: run.pool._handle_signal(signal.SIGINT, None))
 
         assert elapsed < 10
         assert run.pool.interrupted
         assert killed_process_trees == []
-        assert all(proc.poll() == 130 for proc in run.started)
-        assert run.pool.stops.killed == 0
+        stops = run.pool.stops
+        assert (stops.stopped, stops.ended_otherwise, stops.crashed, stops.killed) == (2, 0, 0, 0)
+        assert all(proc.poll() == 0 for proc in run.started)
+
+    def test_a_worker_that_dies_after_the_request_ended_otherwise(self, tmp_path, runs):
+        """A worker asked to stop that ends with no stop line (a crash in its
+        last game) is told from one the pool killed and one that crashed
+        unasked."""
+        die = tmp_path / "dies"
+        run = runs(tmp_path, workers=1, settings=_settings(timeout=60), die_file=die,
+                   game_seconds=5)
+
+        def stop_then_crash():
+            run.pool.request_shutdown()
+            time.sleep(0.3)
+            die.touch()
+
+        run.run(after=0.5, action=stop_then_crash)
+
+        stops = run.pool.stops
+        assert (stops.ended_otherwise, stops.crashed, stops.killed) == (1, 0, 0)
 
 
 class TestAStopDuringForgeStart:
-    def test_waits_for_the_start_rather_than_killing_the_worker(
-        self, tmp_path, runs, killed_process_trees,
+    @pytest.mark.real_process_kill
+    def test_a_worker_still_starting_forge_is_killed_at_once_and_cuts_no_game(
+        self, tmp_path, runs, capsys,
     ):
-        """The worker reads a request only once Forge is initialised; the
-        stop timeout counted from the request would kill it mid-start."""
-        run = runs(tmp_path, settings=_settings(timeout=0.2), init_seconds=1.5)
+        """It has played nothing: waiting for its start would only delay the
+        round's end. Its stop file is created first, so one that finished
+        starting meanwhile stops before its first match."""
+        run = runs(tmp_path, settings=_settings(timeout=60), init_seconds=60)
 
         elapsed = run.run(after=0.3)
 
-        assert elapsed >= 1.4
-        assert killed_process_trees == []
-        assert run.pool.stops.stopped == 2
-        assert "; 0 matches generated in this JVM" in run.log()
-
-    def test_but_not_for_ever(self, tmp_path, runs):
-        run = runs(tmp_path, settings=_settings(timeout=0.2, init_seconds=1.0),
-                   init_seconds=60)
-
-        elapsed = run.run(after=0.2)
-
         assert elapsed < 10
-        assert run.pool.stops.killed == 2
+        stops = run.pool.stops
+        assert (stops.killed_starting, stops.killed, stops.stopped) == (2, 0, 0)
+        assert "still starting Forge, no game to cut" in capsys.readouterr().out
+
+    @pytest.mark.real_process_kill
+    def test_a_stop_asked_while_a_respawn_starts_returns_at_once(self, tmp_path, runs):
+        """The worker recycles itself and its slot's new worker is still
+        starting Forge when the round ends: the round's end does not wait
+        for that start, and no game is cut."""
+        run = runs(tmp_path, workers=1, settings=_settings(timeout=600, recycle_seconds=1),
+                   init_seconds=3.0, game_seconds=0.3)
+
+        elapsed = run.run(after=3.9)
+
+        assert elapsed < 6, "the round waited for a Forge start"
+        stops = run.pool.stops
+        assert (stops.recycled, stops.killed_starting, stops.killed) == (1, 1, 0)
 
 
 def test_without_the_protocol_the_pool_kills_as_before(tmp_path, killed_process_trees):
@@ -421,3 +485,32 @@ def test_the_stop_properties_name_the_slot_s_stop_file_beside_its_log(tmp_path):
     assert re.fullmatch(r"run-1\.3\.stop", Path(graceful.stop_file_for(3)).name)
     assert forge_jvm.DEFAULT_STOP_TIMEOUT == 600
     assert forge_jvm.DEFAULT_RECYCLE_SECONDS == 600
+
+
+HARNESS = Path(__file__).with_name("ctrl_c_harness.py")
+
+
+@pytest.mark.real_process_kill
+@pytest.mark.skipif(os.name != "nt", reason="CTRL_C_EVENT and process groups are Windows'")
+def test_a_console_ctrl_c_reaches_no_worker_started_under_the_protocol(tmp_path):
+    """A real CTRL_C_EVENT, sent in a console of its own (never the test
+    runner's): the stand-in started with the protocol's Popen options keeps
+    running, while the same stand-in started without them exits 130, as a
+    JVM does. So the supervisor's handler alone decides how workers end."""
+    flags = forge_jvm.graceful_popen_options()["creationflags"]
+    result = tmp_path / "result.json"
+    child = [sys.executable, "-u", str(STAND_IN), "-Dstandin.game.seconds=60"]
+    hidden = subprocess.STARTUPINFO()
+    hidden.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    hidden.wShowWindow = 0  # SW_HIDE
+    harness = subprocess.Popen(
+        [sys.executable, str(HARNESS), str(result), str(flags), json.dumps(child)],
+        creationflags=subprocess.CREATE_NEW_CONSOLE, startupinfo=hidden,
+    )
+    try:
+        report = json.loads(wait_for_file(result, harness, seconds=90))
+    finally:
+        end_tree(harness)
+    assert report["grouped_ready"] and report["plain_ready"], report
+    assert report["plain"] == 130, f"the console's Ctrl-C was sent: {report}"
+    assert report["grouped"] is None, f"and reached no worker of its own group: {report}"

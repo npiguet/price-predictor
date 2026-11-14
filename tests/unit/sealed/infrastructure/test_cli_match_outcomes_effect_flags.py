@@ -366,14 +366,28 @@ class TestTheWorkerStopFlags:
             "--recycle-seconds", "900",
         ) == WorkerStopSettings(timeout=45, recycle_seconds=900)
 
-    @pytest.mark.parametrize("argv", [
-        ("--stop-timeout", "0"), ("--stop-timeout", "3601"),
-        ("--recycle-seconds", "59"), ("--recycle-seconds", "86401"),
+    @pytest.mark.parametrize(("argv", "bound"), [
+        (("--stop-timeout", "0"), "between 1 and 3600 seconds, got 0"),
+        (("--stop-timeout", "3601"), "between 1 and 3600 seconds, got 3601"),
+        (("--recycle-seconds", "299"), "between 300 and 86400 seconds, got 299"),
+        (("--recycle-seconds", "86401"), "between 300 and 86400 seconds, got 86401"),
     ])
-    def test_a_value_out_of_bounds_is_a_usage_error(self, argv):
+    def test_a_value_out_of_bounds_is_a_usage_error_naming_the_bound(
+        self, argv, bound, capsys,
+    ):
+        """The bound's own message: an unknown flag would exit 2 too."""
         with pytest.raises(SystemExit) as exit_info:
             parse("match-outcomes", "--effect-records", "records", *argv)
         assert exit_info.value.code == 2
+        assert f"{argv[0]}: must be {bound}" in capsys.readouterr().err
+
+    @pytest.mark.parametrize(("flag", "value"), [
+        ("--stop-timeout", 1), ("--stop-timeout", 3600),
+        ("--recycle-seconds", 300), ("--recycle-seconds", 86400),
+    ])
+    def test_the_bounds_are_inclusive(self, flag, value):
+        args = parse("match-outcomes", "--effect-records", "records", flag, str(value))
+        assert getattr(args, flag[2:].replace("-", "_")) == value
 
     @pytest.mark.parametrize("flag", ["--stop-timeout", "--recycle-seconds"])
     def test_without_effect_records_they_are_refused(self, monkeypatch, capsys, flag):

@@ -24,10 +24,9 @@ from effects.domain.split import HoldoutRule
 from price_predictor.infrastructure.forge_jvm import (
     DEFAULT_RECYCLE_SECONDS,
     DEFAULT_STOP_TIMEOUT,
-    MAX_RECYCLE_SECONDS,
-    MAX_STOP_TIMEOUT,
     MAX_WORKERS,
-    MIN_RECYCLE_SECONDS,
+    RECYCLE_SECONDS_HELP,
+    STOP_TIMEOUT_HELP,
     WorkerStopSettings,
     recycle_seconds,
     stop_timeout,
@@ -123,22 +122,11 @@ class CollectorConfig:
     })
     stop_timeout: int = field(default=DEFAULT_STOP_TIMEOUT, metadata={
         "type": stop_timeout,
-        "help": (
-            "Seconds a worker asked to stop (a round's end, Ctrl-C) may take to "
-            f"finish its game before it is killed, 1 to {MAX_STOP_TIMEOUT} "
-            "(default: %(default)s). A game has no time bound; a worker killed "
-            "mid-game cuts it, and build-corpus drops a cut game whole"
-        ),
+        "help": STOP_TIMEOUT_HELP,
     })
     recycle_seconds: int = field(default=DEFAULT_RECYCLE_SECONDS, metadata={
         "type": recycle_seconds,
-        "help": (
-            "Seconds of its JVM's life after which a worker stops itself at its "
-            "next game end and a fresh one starts, bounding what Forge "
-            f"accumulates in a long-lived JVM, {MIN_RECYCLE_SECONDS} to "
-            f"{MAX_RECYCLE_SECONDS} (default: %(default)s); a worker still "
-            "playing --stop-timeout seconds past it is killed"
-        ),
+        "help": RECYCLE_SECONDS_HELP,
     })
     #: Every record a collector writes is aimed (FR-009a): at the run's
     #: ``--directed-fork-rules``, and at no rule, ``[]``, where it names none.

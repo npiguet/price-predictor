@@ -198,7 +198,7 @@ and 1 when units remain that no deck could hold.
 | `--decks-per-round`, `--target-records`, `--no-progress-rounds`, `--min-text-games`, `--variant-games`, `--steer-floor`, `--steer-variants`, `--steer-iterations` | at least 1 | 2 (usage) |
 | `--steer-min-gain`, and on every collecting command `--mana-cap`, `--interventions-per-game`, `--probes-per-game`, `--directed-forks-per-game` | at least 0 | 2 (usage) |
 | `--stop-timeout` (default 600) | 1 to 3600 | 2 (usage) |
-| `--recycle-seconds` (default 600) | 60 to 86400 | 2 (usage) |
+| `--recycle-seconds` (default 600) | 300 to 86400 | 2 (usage) |
 
 A missing `--exclude-cards`, `--only-cards`, `--split-from` or `--wording-cards` file exits 1
 naming it, before any worker starts.
@@ -273,30 +273,45 @@ What the supervisor does (`ForgeWorkerPool` under a `GracefulStop`, `price_predi
 | Flag | Default | Bound | Meaning |
 |---|---|---|---|
 | `--stop-timeout SECONDS` | 600 | 1 to 3600 (exit 2) | how long a worker asked to stop may take to end its game before it is killed |
-| `--recycle-seconds SECONDS` | 600 | 60 to 86400 (exit 2) | `worker.recycle.seconds` |
+| `--recycle-seconds SECONDS` | 600 | 300 to 86400 (exit 2) | `worker.recycle.seconds`; counted from the JVM's start, before Forge is initialised, so the floor outlasts twelve Forge starts at once: a lower value stops every worker before its first match |
 
+- Each worker runs in a process group of its own (`CREATE_NEW_PROCESS_GROUP` on Windows, a
+  session of its own elsewhere): a console Ctrl-C reaches the supervisor alone, never a worker
+  JVM. A first Ctrl-C stops the workers as a run's end does; a second kills every worker still
+  finishing its game at once, its game cut. The job object still ends the workers when the
+  supervisor dies.
 - Each worker gets its own stop file, `logs/<run id>.<slot>.stop` in the run directory, deleted
-  before each worker of the slot is spawned, and `worker.recycle.seconds`.
-- To stop the workers (a round's end, the run's end, a shutdown, Ctrl-C) the supervisor creates
-  every running worker's stop file and waits for each to exit. A worker still running past its
-  deadline is killed (`taskkill /F /T`): the deadline is the request plus `--stop-timeout`, or,
-  for a worker whose log holds no startup line since its spawn (still starting Forge), its spawn
-  plus 600 s (`FORGE_INIT_SECONDS`) when that is later. A worker already gone (a console Ctrl-C
-  reaches every JVM, whose shutdown hook closes its shard) is not waited for. A second interrupt
-  kills every worker still finishing its game at once.
+  before each worker of the slot is spawned and, once the pool's run has ended with every worker
+  ended, deleted for every slot (kept while a worker the kill could not end survives), and
+  `worker.recycle.seconds`. A stop file created by hand stops that slot's worker at its game's end
+  and the pool starts a fresh one: a run is stopped by hand with Ctrl-C, once.
+- To stop the workers (a round's end, the run's end, a shutdown, a first Ctrl-C) the supervisor
+  creates every running worker's stop file, then kills at once each worker whose log holds no
+  startup line since its spawn (still starting Forge, no game to cut, counted as
+  `killed_starting`; one that prints the line meanwhile finds its stop file before its first
+  match), and waits for each other worker to exit, killing (`taskkill /F /T`) one still running
+  `--stop-timeout` seconds after the request.
 - A worker that exits 0 with the stop line while the run continues recycled itself and is
-  restarted at once; one that did so having generated no match failed to start (its recycle time
-  is shorter than a Forge start) and counts toward the failed-start rule. A worker still running
-  `--recycle-seconds` + `--stop-timeout` seconds after its start is killed, checked at every status
-  line, and restarted.
+  restarted at once, unless the run's stop condition (a round's match budget) already holds, when
+  no worker is restarted. One that recycled itself having played no game (the stop line's
+  `<g>` is 0) failed to start (its recycle time is shorter than a Forge start) and counts toward
+  the failed-start rule; one that played games and finished no match (its first best-of-N match
+  spans its recycle time) did not fail. A worker still running `--recycle-seconds` +
+  `--stop-timeout` seconds after its start is killed, checked at every status line, and
+  restarted: a game has no time bound, so this cuts a game that is merely long. The supervisor
+  prints `Killing worker <slot> (PID <pid>), <age>s old: its game has not ended <timeout> past its
+  <recycle> recycle time; the game it was playing is cut (no game-end marker: build-corpus drops
+  it)`, the worker counts in `worker_stops.killed`, and its game, having no marker, among the
+  round's `cut_games`.
 - Exit 0 with the stop line is a normal end, never a failure line or a crash. Exit 0 without it,
   or any other code, is a crash: the worker is restarted as before.
 - The pool returns, and a round is counted, only once every worker has exited or been killed;
   the supervisor never exits before (the job object would kill the workers).
 - The workers' ends are counted by how: `stopped` (asked, stop line), `recycled` (unasked, stop
-  line), `killed` (by the timeout or the recycle backstop), `ended_otherwise` (asked, no stop
-  line: a crash in the last game, a Ctrl-C), `crashed` (unasked, no stop line), and `survived`
-  (the kill could not end it). The round report prints them; `run.json`'s entry records them as
+  line), `killed` (mid-game, by the timeout, the recycle backstop or a second Ctrl-C: a game cut
+  each), `killed_starting` (at a stop, still starting Forge: no game cut), `ended_otherwise`
+  (asked, no stop line: a crash in the last game), `crashed` (unasked, no stop line), and
+  `survived` (the kill could not end it). The round report prints them; `run.json`'s entry records them as
   `worker_stops`, beside the resolved `stop_timeout` and `recycle_seconds`.
 - What a kill still loses: the game in progress, and nothing before it. The worker writes its
   block in flight at every game end, right after the game-end marker, so every finished game is
@@ -312,9 +327,11 @@ What the supervisor does (`ForgeWorkerPool` under a `GracefulStop`, `price_predi
 
 A round of a collector ends this way: once the round's progress file counts `--decks-per-round`
 matches (polled every 2 s), every worker is asked to stop and finishes the game it is playing (a
-best-of-one match, which writes its progress line), so the round plays at most one game per
-worker more than the polling lets through, and ends at most one game's length (bounded by
-`--stop-timeout`) after its budget. A best-of-N match stopped after a game (match-outcomes) is
+best-of-one match, which writes its progress line), a worker still starting Forge is killed at
+once, and no worker is restarted, so the round plays at most one game per worker more than the
+polling lets through, and ends at most one game's length (bounded by `--stop-timeout`) after its
+budget, never waiting for a Forge start. Every round starts a fresh pool, so its workers start
+Forge anew. A best-of-N match stopped after a game (match-outcomes) is
 abandoned: it writes no outcome row and no progress line, while its finished games keep their
 records and markers.
 

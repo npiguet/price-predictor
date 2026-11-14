@@ -410,3 +410,35 @@ class TestTheStopProtocolProperties:
             MatchWorkerConnector().start(tmp_path / "o.txt", run_id=RUN_ID, best_of=BEST_OF)
         cmd = mock_popen.call_args[0][0]
         assert not any(arg.startswith("-Dworker.") for arg in cmd)
+
+
+class TestAWorkerUnderTheStopProtocolHasAProcessGroupOfItsOwn:
+    """The console's Ctrl-C must reach the supervisor alone, which asks each
+    worker to stop at its game's end; a worker in the console's group would
+    close its shard at once, its game cut (FR-058i)."""
+
+    def test_a_worker_given_a_stop_file_starts_in_a_new_process_group(
+        self, tmp_path, stub_classpath,
+    ):
+        import os
+        import subprocess
+
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock()
+            MatchWorkerConnector().start(
+                None, run_id=RUN_ID, best_of=BEST_OF, effect_records_dir=tmp_path,
+                stop_file=tmp_path / "run.0.stop", recycle_seconds=600,
+            )
+        options = mock_popen.call_args.kwargs
+        if os.name == "nt":
+            assert options["creationflags"] & subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            assert options["start_new_session"] is True
+
+    def test_one_without_keeps_the_console_s_group(self, tmp_path, stub_classpath):
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock()
+            MatchWorkerConnector().start(tmp_path / "o.txt", run_id=RUN_ID, best_of=BEST_OF)
+        options = mock_popen.call_args.kwargs
+        assert "creationflags" not in options
+        assert options["start_new_session"] is True

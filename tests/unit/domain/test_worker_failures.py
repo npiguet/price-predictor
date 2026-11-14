@@ -99,6 +99,16 @@ def test_each_pattern_s_fragment_is_printed_by_the_connector(failure):
     assert failure.source_fragment in sources
 
 
+@pytest.mark.parametrize("line", [
+    "# A fatal error has been detected by the Java Runtime Environment:",
+    "# There is insufficient memory for the Java Runtime Environment to continue.",
+])
+def test_the_jvm_s_fatal_error_banners_are_jvm_errors(line):
+    """A JVM that crashed in native code (an access violation) prints the
+    fatal-error banner and an hs_err file, and no exception line."""
+    assert classify(line) is WorkerFailure.JVM_ERROR
+
+
 def test_failures_are_counted_by_kind_with_the_first_line_as_example():
     failures = WorkerFailures()
     for line in ("Error generating match: a", "Worker: 10 matches generated",

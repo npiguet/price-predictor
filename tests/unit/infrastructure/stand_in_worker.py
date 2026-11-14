@@ -19,9 +19,15 @@ Test-only properties (``standin.*``) shape it:
   stop; ``exit0-without-line`` stops when asked but exits 0 printing nothing;
 - ``standin.crash.after.games``: exit 1, as an uncaught failure, after that
   many games;
-- ``standin.die.file``: once this file exists, exit 130 at once, as a JVM a
-  console Ctrl-C reached does (its shutdown hook closes the shard; no stop
-  line).
+- ``standin.die.file``: once this file exists, exit 130 at once, as a JVM
+  ends that crashed or was killed mid-game (no stop line);
+- ``standin.ready.file``: a file it creates once its Ctrl-C handler is in
+  place, before "Forge" initialises.
+
+A console Ctrl-C (``CTRL_C_EVENT``, SIGINT) that reaches it ends it at once
+with 130, as it ends a JVM (its shutdown hook closes the shard, no stop line);
+under the stop protocol the supervisor starts it in a process group of its
+own, which no console Ctrl-C reaches.
 
 ``sealed.progress.file`` gets a line per finished match, as the worker's
 progress writer appends one.
@@ -31,6 +37,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import signal
 import sys
 import time
 from pathlib import Path
@@ -97,7 +104,10 @@ def _append_line(path: Path, line: str) -> None:
 
 def main(argv: list[str]) -> int:
     started = time.monotonic()
+    signal.signal(signal.SIGINT, lambda *_: os._exit(130))
     props = _properties(argv)
+    if "standin.ready.file" in props:
+        Path(props["standin.ready.file"]).write_text("ready", encoding="utf-8")
     stop_file = Path(props[STOP_FILE]) if STOP_FILE in props else None
     recycle = None
     if RECYCLE_SECONDS in props:

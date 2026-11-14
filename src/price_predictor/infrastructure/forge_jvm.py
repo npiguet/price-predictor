@@ -800,16 +800,18 @@ STOPPED_LINE = re.compile(
 STARTUP_LINE = "Graceful stop: at a game end, when "
 
 #: Seconds a pool waits, after asking a worker to stop, before it kills it.
-#: A game has no time bound of its own: Forge AI games run seconds to a few
-#: minutes (gen-2 sealed games 2 s at the median and 256 s at the 99.9th
-#: percentile over 300,000 best-of-one matches; a gen-3 game, recording,
-#: several times that), and before the stop protocol the 60 s kill-recycle
-#: let no JVM live much past ``workers × 60`` s, ten to twelve minutes at
-#: the usual 10 to 12 workers, so no game longer than that was ever
-#: finished. Ten minutes keeps that bound on a game that does not end and
-#: lets every game that does end finish. Too short a value costs a cut game
-#: per worker it kills: its records stay without their end-of-game ones and
-#: without a game-end marker, so ``build-corpus`` drops the game whole.
+#: A game has no time bound of its own. Unrecorded sealed best-of-one
+#: matches, 974,000 of them on the NAS, last 4 s at the median, 116 s at the
+#: 99th percentile, 343 s at the 99.9th and 561 s at the 99.99th, and 63
+#: lasted 600 s or more; gen-3 recorded games are unmeasured and slower, the
+#: recording running beside the game. Before the stop protocol the 60 s
+#: kill-recycle let no JVM live much past ``workers × 60`` s, ten to twelve
+#: minutes at the usual 10 to 12 workers, so no game longer than that was
+#: ever finished. Ten minutes keeps that bound on a game that does not end
+#: and lets nearly every game that does end finish. Too short a value costs
+#: a cut game per worker it kills: its records stay without their
+#: end-of-game ones and without a game-end marker, so ``build-corpus`` drops
+#: the game whole.
 DEFAULT_STOP_TIMEOUT = 600
 MAX_STOP_TIMEOUT = 3600
 #: Seconds of its JVM's life after which a worker stops itself at its next
@@ -822,15 +824,13 @@ MAX_STOP_TIMEOUT = 3600
 #: game before it goes. A game that does not end is killed once its worker is
 #: ``recycle + stop timeout`` old.
 DEFAULT_RECYCLE_SECONDS = 600
-#: Below a minute a worker would spend most of its life starting Forge.
-MIN_RECYCLE_SECONDS = 60
+#: The recycle time counts from the JVM's start, before Forge is initialised,
+#: and twelve JVMs starting Forge at once take minutes: below five minutes a
+#: worker could reach its recycle time before its first match and stop
+#: there, every slot failing to start until the run ends with
+#: :class:`WorkerStartError`.
+MIN_RECYCLE_SECONDS = 300
 MAX_RECYCLE_SECONDS = 86400
-#: Seconds from its spawn a worker asked to stop while still starting Forge
-#: is given before it is killed: the worker reads the request only once
-#: Forge is initialised (tens of seconds alone, minutes beside eleven other
-#: starting JVMs), and a kill mid-start can leave a variant script half
-#: staged in Forge's custom-cards directory.
-FORGE_INIT_SECONDS = 600
 
 #: How much of a slot's log is read back for a worker's stop line: the line
 #: is the last its worker prints, with at most the hook-failure report and a
@@ -838,6 +838,11 @@ FORGE_INIT_SECONDS = 600
 _LOG_TAIL_BYTES = 64 * 1024
 #: How much of a lifetime's first output is searched for its startup line.
 _LOG_HEAD_BYTES = 1024 * 1024
+
+
+def _seconds(value: float) -> str:
+    """A duration as a report prints it: ``600s``, ``0.5s``."""
+    return f"{value:g}s"
 
 
 def stop_timeout(text: str) -> float:
@@ -867,6 +872,28 @@ def recycle_seconds(text: str) -> int:
     return value
 
 
+#: ``--stop-timeout``'s help, on every command that has the flag.
+STOP_TIMEOUT_HELP = (
+    "Seconds a match worker asked to stop (a round's end, the run's end, a "
+    "first Ctrl-C) may take to finish its game before it is killed, 1 to "
+    f"{MAX_STOP_TIMEOUT} (default: {DEFAULT_STOP_TIMEOUT}). A game has no time "
+    "bound: a worker killed mid-game cuts it, and build-corpus drops a cut game "
+    "whole. Ctrl-C reaches the supervisor alone: a first asks every worker to "
+    "stop at its game's end, a second kills them at once, cutting their games"
+)
+#: ``--recycle-seconds``' help, on every command that has the flag.
+RECYCLE_SECONDS_HELP = (
+    "Seconds of its JVM's life after which a match worker stops itself at its "
+    "next game end and a fresh one starts, bounding what Forge accumulates in a "
+    f"long-lived JVM, {MIN_RECYCLE_SECONDS} to {MAX_RECYCLE_SECONDS} (default: "
+    f"{DEFAULT_RECYCLE_SECONDS}); counted from the JVM's start, so it must "
+    "outlast a Forge start beside eleven others; a worker still playing "
+    "--stop-timeout seconds past it is killed and its game cut. Under best of N "
+    "a recycle abandons the match in flight: no outcome row, its finished games "
+    "keep their records"
+)
+
+
 def add_worker_stop_flags(parser, *, only_with: str | None = None) -> None:
     """``--stop-timeout`` and ``--recycle-seconds``, on every command whose
     match workers honour the stop protocol. ``only_with`` names the flag
@@ -877,25 +904,12 @@ def add_worker_stop_flags(parser, *, only_with: str | None = None) -> None:
     parser.add_argument(
         "--stop-timeout", type=stop_timeout,
         default=None if unset else DEFAULT_STOP_TIMEOUT,
-        help=(
-            "Seconds a match worker asked to stop (a round's end, the run's "
-            "end, Ctrl-C) may take to finish its game before it is killed, "
-            f"1 to {MAX_STOP_TIMEOUT} (default: {DEFAULT_STOP_TIMEOUT}). A "
-            "game has no time bound: a worker killed mid-game cuts it, and "
-            "build-corpus drops a cut game whole" + applies
-        ),
+        help=STOP_TIMEOUT_HELP + applies,
     )
     parser.add_argument(
         "--recycle-seconds", type=recycle_seconds,
         default=None if unset else DEFAULT_RECYCLE_SECONDS,
-        help=(
-            "Seconds of its JVM's life after which a match worker stops itself "
-            "at its next game end and a fresh one starts, bounding what Forge "
-            f"accumulates in a long-lived JVM, {MIN_RECYCLE_SECONDS} to "
-            f"{MAX_RECYCLE_SECONDS} (default: {DEFAULT_RECYCLE_SECONDS}); a "
-            "worker still playing --stop-timeout seconds past it is killed"
-            + applies
-        ),
+        help=RECYCLE_SECONDS_HELP + applies,
     )
 
 
@@ -907,8 +921,6 @@ class WorkerStopSettings:
     timeout: float = DEFAULT_STOP_TIMEOUT
     #: Its JVM's age, in seconds, at which a worker stops itself at a game end.
     recycle_seconds: int = DEFAULT_RECYCLE_SECONDS
-    #: Seconds from its spawn a worker still starting Forge is given.
-    init_seconds: float = FORGE_INIT_SECONDS
 
     def manifest_fields(self) -> dict:
         """The resolved values as ``run.json`` records them."""
@@ -932,18 +944,33 @@ class GracefulStop:
         }
 
 
+def graceful_popen_options() -> dict:
+    """The ``subprocess.Popen`` options that start a worker under the stop
+    protocol in a process group of its own, so the console's Ctrl-C reaches
+    the supervisor alone and the supervisor's handler decides (a first asks
+    every worker to stop at its game's end, a second kills them): on Windows
+    ``CREATE_NEW_PROCESS_GROUP``, which also disables Ctrl-C in the group; on
+    POSIX a session of its own. The job object (:func:`bind_to_this_process`)
+    still ends the workers if the supervisor dies."""
+    if os.name == "nt":
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
 @dataclasses.dataclass
 class WorkerStops:
     """How a pool's workers ended, by how.
 
     ``stopped``: asked to stop, ended at a game end with the stop line.
     ``recycled``: ended themselves at their recycle time, with the stop line.
-    ``killed``: the pool killed them (past the stop timeout, past their
-    recycle time by more than it, or, without the protocol, every recycle and
-    shutdown). ``ended_otherwise``: asked, and ended without the stop line (a
-    crash in the last game, a Ctrl-C that reached the JVM). ``crashed``:
-    ended unasked without the stop line. A survivor never ends: see
-    :attr:`ForgeWorkerPool.survivors`.
+    ``killed``: the pool killed them mid-game (past the stop timeout, past
+    their recycle time by more than it, a second Ctrl-C, or, without the
+    protocol, every recycle and shutdown): a game cut each, under the
+    protocol. ``killed_starting``: under the protocol, killed at a stop while
+    still starting Forge (no startup line in their log yet): no game cut.
+    ``ended_otherwise``: asked, and ended without the stop line (a crash in
+    the last game). ``crashed``: ended unasked without the stop line. A
+    survivor never ends: see :attr:`ForgeWorkerPool.survivors`.
     """
 
     stopped: int = 0
@@ -951,6 +978,7 @@ class WorkerStops:
     killed: int = 0
     ended_otherwise: int = 0
     crashed: int = 0
+    killed_starting: int = 0
 
     def add(self, other: WorkerStops) -> None:
         for spec in dataclasses.fields(self):
@@ -963,7 +991,8 @@ class WorkerStops:
     def render(self) -> str:
         return (
             f"{self.stopped} stopped at a game end, {self.recycled} recycled "
-            f"themselves, {self.killed} killed, {self.ended_otherwise} ended "
+            f"themselves, {self.killed} killed mid-game, {self.killed_starting} "
+            f"killed while starting Forge, {self.ended_otherwise} ended "
             f"otherwise when asked, {self.crashed} crashed"
         )
 
@@ -1022,13 +1051,17 @@ class ForgeWorkerPool:
     - With ``graceful`` (:class:`GracefulStop`, the match workers' stop
       protocol, ``contracts/cli.md`` § Match worker stop protocol), each
       worker stops itself at the first game end past its recycle time,
-      printing the stop line and exiting 0, and the pool starts a fresh one;
-      a worker ``recycle + timeout`` seconds old, its game not ending, is
-      killed. To stop the run (its target reached, a shutdown, Ctrl-C) the
+      printing the stop line and exiting 0, and the pool starts a fresh one,
+      unless the run's stop condition already holds; a worker ``recycle +
+      timeout`` seconds old, its game not ending, is killed and its game
+      cut. To stop the run (its target reached, a shutdown, a first Ctrl-C,
+      which reaches the supervisor alone: :func:`graceful_popen_options`) the
       pool creates every running worker's stop file and waits for each to
-      finish its game, killing one only past the timeout; ``run`` returns
-      once every worker has ended or been killed, since a supervisor that
-      exits takes its workers with it (:func:`bind_to_this_process`).
+      finish its game, killing one only past the timeout, and kills at once
+      one still starting Forge, which has no game to cut; a second Ctrl-C
+      kills every worker still finishing its game. ``run`` returns once every
+      worker has ended or been killed, since a supervisor that exits takes
+      its workers with it (:func:`bind_to_this_process`).
     - Without, the pool kills the longest-running worker every status
       interval (:meth:`_kill_oldest_worker`) and kills every worker at the
       end, mid-game.
@@ -1038,7 +1071,7 @@ class ForgeWorkerPool:
 
     A failed start (``spawn_worker`` raising, a worker exiting within
     ``quick_exit_seconds`` of its start without the pool having killed it, or
-    one recycling itself before it played a match) is retried after a backoff
+    one recycling itself before it played a game) is retried after a backoff
     that doubles from ``restart_backoff``; the first retry is immediate, as
     after an ordinary crash. Once every slot has failed ``max_failed_starts``
     starts in a row, ``run`` ends with :class:`WorkerStartError`: a missing
@@ -1125,6 +1158,8 @@ class ForgeWorkerPool:
         )
         #: Processes the pool killed itself: their exit is no failure.
         self._killed: set[subprocess.Popen] = set()
+        #: Of those, the ones killed at a stop while still starting Forge.
+        self._killed_starting: set[subprocess.Popen] = set()
         self._failed_starts: dict[int, int] = {}
         self._start_failure: str | None = None
         #: Every worker the pool has killed or tried to, in order: each is
@@ -1199,6 +1234,7 @@ class ForgeWorkerPool:
             self._terminate_all()
             for t in monitor_threads:
                 t.join(timeout=10)
+            self._remove_stop_files()
 
         if self._start_failure is not None:
             raise WorkerStartError(
@@ -1207,6 +1243,20 @@ class ForgeWorkerPool:
                 f"{self._start_failure}"
             )
         print("Done.")
+
+    def _remove_stop_files(self) -> None:
+        """Under the protocol, once every worker has ended: delete each slot's
+        stop file, which the run's end created and nothing reads any more.
+        Kept while a worker the kill could not end survives, which may still
+        read its own."""
+        if self._graceful is None or self.survivors:
+            return
+        for slot in range(self._worker_count):
+            stop_file = Path(self._graceful.stop_file_for(slot))
+            try:
+                stop_file.unlink(missing_ok=True)
+            except OSError as exc:
+                print(f"Could not delete worker {slot}'s stop file {stop_file}: {exc}")
 
     def output_line_count(self) -> int:
         """Count lines in the output file (= number of completed matches)."""
@@ -1230,7 +1280,13 @@ class ForgeWorkerPool:
         hundreds of JVMs over a run, so nothing a worker counts from zero may
         be namespaced by the slot alone.
         """
+        first = True
         while not self._shutdown_event.is_set():
+            if not first and self._stop_condition_holds():
+                # A worker respawned now would only start Forge to be stopped.
+                self._shutdown_event.set()
+                return
+            first = False
             mark = self._prepare_slot(worker_id)
             try:
                 proc = self._spawn_worker(worker_id)
@@ -1253,7 +1309,7 @@ class ForgeWorkerPool:
             # worker spawned while the pool shuts down is killed here, or it
             # outlives the run. It is still starting Forge: no game is cut.
             if self._shutdown_event.is_set():
-                self._kill(proc)
+                self._kill(proc, starting=self._graceful is not None)
 
             try:
                 proc.wait()
@@ -1261,11 +1317,12 @@ class ForgeWorkerPool:
                 print(f"Monitor error for worker {worker_id}: {exc}")
 
             lifetime = time.monotonic() - started
-            ending, matches = self._ending(proc)
+            ending, matches, games = self._ending(proc)
             # A worker that recycled itself played until its recycle time,
-            # however short: it failed to start only if it finished no match.
+            # however short: it failed to start only if it played no game (a
+            # best-of-N match spanning the recycle time finishes no match).
             failed = (
-                matches == 0 if ending == "recycled"
+                games == 0 if ending == "recycled"
                 else self._failed_start(proc, lifetime=lifetime)
             )
             with self._processes_lock:
@@ -1281,6 +1338,7 @@ class ForgeWorkerPool:
                     ]
                 self._start_times.pop(proc, None)
                 self._killed.discard(proc)
+                self._killed_starting.discard(proc)
                 self._slots.pop(proc, None)
                 self._log_marks.pop(proc, None)
                 self._deadlines.pop(proc, None)
@@ -1293,7 +1351,7 @@ class ForgeWorkerPool:
             if ending == "recycled":
                 print(
                     f"Worker {worker_id} recycled itself at a game end after "
-                    f"{lifetime:.0f}s ({matches} matches), restarting..."
+                    f"{lifetime:.0f}s ({matches} matches, {games} games), restarting..."
                 )
             else:
                 print(f"Worker {worker_id} exited (code {proc.returncode}), restarting...")
@@ -1301,7 +1359,7 @@ class ForgeWorkerPool:
                 self._note_failed_start(
                     worker_id,
                     f"worker recycled itself {lifetime:.0f}s after starting without "
-                    "finishing a match (is --recycle-seconds shorter than a Forge start?)"
+                    "playing a game (is --recycle-seconds shorter than a Forge start?)"
                     if ending == "recycled" else
                     f"worker exited (code {proc.returncode}) {lifetime:.0f}s "
                     "after starting",
@@ -1324,26 +1382,29 @@ class ForgeWorkerPool:
             print(f"Could not delete worker {worker_id}'s stop file {stop_file}: {exc}")
         return _LogMark.of(Path(self._graceful.log_path_for(worker_id)))
 
-    def _ending(self, proc: subprocess.Popen) -> tuple[str, int | None]:
+    def _ending(self, proc: subprocess.Popen) -> tuple[str, int | None, int | None]:
         """How an ended worker ended (a :class:`WorkerStops` field) and, for
-        one that printed the stop line, the matches its JVM generated.
+        one that printed the stop line, the matches its JVM finished and the
+        games it played.
 
         Exit 0 with the stop line since its spawn is a stop at a game end:
         ``stopped`` when the pool asked, ``recycled`` when it did not. Exit 0
-        without the line, or any other code, is no stop: ``killed`` when the
-        pool killed it, ``ended_otherwise`` when the pool had asked, else
-        ``crashed``."""
+        without the line, or any other code, is no stop: ``killed_starting``
+        or ``killed`` when the pool killed it, ``ended_otherwise`` when the
+        pool had asked, else ``crashed``."""
         with self._processes_lock:
             asked = proc in self._deadlines
             killed = proc in self._killed
+            starting = proc in self._killed_starting
             mark = self._log_marks.get(proc)
         if getattr(proc, "returncode", None) == 0 and mark is not None:
             line = stop_line_of(mark.written_since(tail=_LOG_TAIL_BYTES))
             if line is not None:
-                return ("stopped" if asked else "recycled"), int(line.group("matches"))
+                return (("stopped" if asked else "recycled"), int(line.group("matches")),
+                        int(line.group("games")))
         if killed:
-            return "killed", None
-        return ("ended_otherwise" if asked else "crashed"), None
+            return ("killed_starting" if starting else "killed"), None, None
+        return ("ended_otherwise" if asked else "crashed"), None, None
 
     def _failed_start(self, proc: subprocess.Popen, *, lifetime: float) -> bool:
         """Whether a worker that exited after ``lifetime`` seconds failed to
@@ -1372,6 +1433,16 @@ class ForgeWorkerPool:
                 self._restart_backoff * 2 ** (failures - 2), self.MAX_RESTART_BACKOFF,
             )
             self._shutdown_event.wait(timeout=delay)
+
+    def _stop_condition_holds(self) -> bool:
+        """Whether the run's stop condition holds now; False without one, or
+        when asking it raises (the supervisor loop meets the same raise)."""
+        if self._should_stop is None:
+            return False
+        try:
+            return bool(self._should_stop(self.output_line_count()))
+        except Exception:  # noqa: BLE001 — the supervisor loop reports it
+            return False
 
     #: How often the stop condition is polled, in seconds. Far shorter than the
     #: status interval: a run with a small target would otherwise overshoot it by
@@ -1514,21 +1585,26 @@ class ForgeWorkerPool:
         """Kill every worker still running ``recycle + timeout`` seconds after
         its start: its recycle time asked it to stop at its game's end, and
         that game has not ended within the stop timeout. The backstop the
-        kill-based recycle was, for a game that does not end."""
+        kill-based recycle was, for a game that does not end. A game has no
+        time bound, so this cuts a game that is merely long: the line says
+        so, the worker counts as ``killed`` and its game, without a marker,
+        among the round's cut games."""
         settings = self._graceful.settings
         limit = settings.recycle_seconds + settings.timeout
         now = time.monotonic()
         with self._processes_lock:
             overdue = [
-                (proc, now - started) for proc, started in self._start_times.items()
+                (proc, self._slots.get(proc, -1), now - started)
+                for proc, started in self._start_times.items()
                 if proc.poll() is None and now - started > limit
                 and proc not in self._deadlines
             ]
-        for proc, age in overdue:
+        for proc, slot, age in overdue:
             print(
-                f"Killing worker PID {proc.pid}, {age:.0f}s old: its game has "
-                f"not ended {settings.timeout:.0f}s past its "
-                f"{settings.recycle_seconds}s recycle time"
+                f"Killing worker {slot} (PID {proc.pid}), {age:.0f}s old: its game "
+                f"has not ended {_seconds(settings.timeout)} past its "
+                f"{_seconds(settings.recycle_seconds)} recycle time; the game it "
+                "was playing is cut (no game-end marker: build-corpus drops it)"
             )
             self._kill(proc)
 
@@ -1546,13 +1622,14 @@ class ForgeWorkerPool:
 
     def _stop_all(self, procs: list[subprocess.Popen]) -> None:
         """Ask every running worker of ``procs`` to stop at its game's end,
-        then wait until each has ended, killing one past its deadline:
-        ``timeout`` seconds from the request, or, for a worker whose log
-        shows it still starting Forge (no startup line yet), its spawn plus
-        ``init_seconds`` when that is later. A worker that has already ended
-        (Ctrl-C reaches every JVM of the console) is not waited for; one
-        asked before keeps its deadline, so a second call waits out no
-        timeout twice; a second interrupt kills at once."""
+        then wait until each has ended, killing one ``timeout`` seconds after
+        the request. A worker whose log shows it still starting Forge (no
+        startup line since its spawn) is killed at once, counted as
+        ``killed_starting``: its stop file is created first, so one that
+        prints its startup line meanwhile stops before its first match, and
+        none has a game to cut. One that has already ended is not waited
+        for; one asked before keeps its deadline, so a second call waits out
+        no timeout twice; a second interrupt kills at once."""
         settings = self._graceful.settings
         now = time.monotonic()
         asked: list[tuple[subprocess.Popen, int]] = []
@@ -1560,14 +1637,7 @@ class ForgeWorkerPool:
             for proc in procs:
                 if proc.poll() is not None or proc in self._deadlines:
                     continue
-                deadline = now + settings.timeout
-                mark = self._log_marks.get(proc)
-                started = self._start_times.get(proc, now)
-                if mark is None or STARTUP_LINE not in mark.written_since(
-                    head=_LOG_HEAD_BYTES,
-                ):
-                    deadline = max(deadline, started + settings.init_seconds)
-                self._deadlines[proc] = deadline
+                self._deadlines[proc] = now + settings.timeout
                 asked.append((proc, self._slots.get(proc, -1)))
         for proc, slot in asked:
             stop_file = Path(self._graceful.stop_file_for(slot))
@@ -1578,11 +1648,19 @@ class ForgeWorkerPool:
                 print(f"Could not ask worker PID {proc.pid} to stop ({stop_file}: {exc}); "
                       "killing it")
                 self._kill(proc)
-        if asked:
+        starting = []
+        for proc, slot in asked:
+            with self._processes_lock:
+                mark = self._log_marks.get(proc)
+            if mark is None or STARTUP_LINE not in mark.written_since(head=_LOG_HEAD_BYTES):
+                starting.append(proc)
+                print(f"Killing worker {slot} (PID {proc.pid}): still starting Forge, "
+                      "no game to cut")
+                self._kill(proc, starting=True)
+        if len(asked) > len(starting):
             print(
-                f"Asked {len(asked)} worker(s) to stop at their game's end; each is "
-                f"killed {settings.timeout:.0f}s after the request (a worker still "
-                f"starting Forge, {settings.init_seconds:.0f}s after its start)"
+                f"Asked {len(asked) - len(starting)} worker(s) to stop at their game's "
+                f"end; each is killed {_seconds(settings.timeout)} after the request"
             )
         while True:
             with self._processes_lock:
@@ -1601,27 +1679,32 @@ class ForgeWorkerPool:
                 elif now >= deadline:
                     print(
                         f"Killing worker PID {proc.pid}: it did not stop within "
-                        f"{settings.timeout:.0f}s of the request; its game is cut"
+                        f"{_seconds(settings.timeout)} of the request; its game is cut"
                     )
                     self._kill(proc)
             self._hurry.wait(timeout=self.STOP_POLL_SECONDS)
 
-    def _kill(self, proc: subprocess.Popen) -> None:
+    def _kill(self, proc: subprocess.Popen, *, starting: bool = False) -> None:
         """Kill one worker's tree, once: a second call for the same worker
         (the loop's shutdown, then ``run``'s ``finally``) does nothing, so a
         survivor's timed-out kill is not waited out twice. The single kill
-        path of the pool."""
+        path of the pool. ``starting``: a worker still starting Forge, whose
+        kill cuts no game (``killed_starting``)."""
         with self._processes_lock:
             if any(proc is attempted for attempted in self._kill_attempted):
                 return
             self._kill_attempted.append(proc)
             self._killed.add(proc)
+            if starting:
+                self._killed_starting.add(proc)
         kill_process_tree(proc)
 
     def _handle_signal(self, signum, frame) -> None:
         """Signal handler: set shutdown event to stop workers. A signal while
         the pool already shuts down kills every worker still finishing its
-        game."""
+        game. Under the protocol the workers run in process groups of their
+        own (:func:`graceful_popen_options`), so a console Ctrl-C reaches
+        this handler alone and the workers end only as it decides."""
         if self._shutdown_event.is_set():
             self._hurry.set()
         self._interrupted = True

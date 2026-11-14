@@ -66,7 +66,7 @@ checkpoint are not inside it: they go to `output/<module>/<gen>/cache/<run>/` an
 |---|---|---|
 | `run.json` | by the command itself: at start, completed at the end | the run manifest below |
 | `console.log` | throughout | the command's stdout and stderr, unbuffered (`python -u … 2>&1 \| tee console.log`), its first line the command |
-| `logs/` | throughout | every other log: Forge worker logs, per-process logs, supervisor logs, and the scratch counters a supervisor reads its workers' progress from |
+| `logs/` | throughout | every other log: Forge worker logs, per-process logs, supervisor logs, and the scratch counters a supervisor reads its workers' progress from; a collecting supervisor's per-slot stop files (`<run id>.<slot>.stop`) live here while its workers run and are deleted when its pool ends (kept only beside a worker that outlived the kill) |
 | the artifacts | — | whatever the run produces, in the layout its command defines; inputs the run's own workers read while it runs (a collector's decks files) go in a subdirectory of their own, such as `decks/` |
 
 `run.json` is one JSON object, read and edited by scripts as well as by hand:

@@ -24,7 +24,7 @@ _DECKS = [["Plains"]]
 
 #: A test's fake workers neither read a stop file nor print a startup line:
 #: a short timeout and start allowance keep a stop from waiting ten minutes.
-_QUICK_STOP = WorkerStopSettings(timeout=1, recycle_seconds=3600, init_seconds=1)
+_QUICK_STOP = WorkerStopSettings(timeout=1, recycle_seconds=3600)
 
 
 def _supervisor(tmp_path, *, workers: int = 1, run_id: str = "run",
@@ -356,7 +356,7 @@ class TestTheRoundReportsItsWorkerLogs:
         assert (entry["stop_timeout"], entry["recycle_seconds"]) == (1, 3600)
         assert entry["worker_stops"] == {
             "stopped": 0, "recycled": 0, "killed": 0, "ended_otherwise": 0, "crashed": 0,
-            "survived": 0,
+            "killed_starting": 0, "survived": 0,
         }
         assert entry["hook_failures"] == {"connector": {}, "forge": {}}
 
@@ -439,7 +439,7 @@ class TestTheWorkersStopAtAGameEnd:
         from tests.unit.infrastructure import stand_in_worker
 
         supervisor = _supervisor(tmp_path, workers=2, stop=WorkerStopSettings(
-            timeout=20, recycle_seconds=3600, init_seconds=20))
+            timeout=20, recycle_seconds=3600))
         started: list[subprocess.Popen] = []
 
         def start(output_file, **kwargs):

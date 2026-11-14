@@ -12,6 +12,7 @@ from price_predictor.infrastructure.forge_jvm import (
     STOP_FILE_PROPERTY,
     build_forge_classpath,
     build_jvm_command,
+    graceful_popen_options,
 )
 
 # Default weight of the file-sampled side-B method relative to the 4 Forge
@@ -187,6 +188,9 @@ class MatchWorkerConnector:
         )
 
         stdio = log_file if log_file is not None else subprocess.DEVNULL
-        return subprocess.Popen(
-            cmd, stdout=stdio, stderr=stdio, start_new_session=True,
-        )
+        # A worker under the stop protocol runs in a process group of its own,
+        # so the console's Ctrl-C reaches the supervisor alone, which asks it
+        # to stop at its game's end; one without keeps the console's signal.
+        group = (graceful_popen_options() if stop_file is not None
+                 else {"start_new_session": True})
+        return subprocess.Popen(cmd, stdout=stdio, stderr=stdio, **group)

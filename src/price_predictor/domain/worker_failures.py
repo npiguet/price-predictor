@@ -67,7 +67,8 @@ class WorkerFailure(StrEnum):
     DROPPED_EVENTS_UNWRITABLE = "dropped_events_unwritable"
     #: The stack's primary ability cannot be read; special actions misfiled.
     STACK_UNREADABLE = "stack_unreadable"
-    #: The JVM itself: an uncaught exception, out of memory.
+    #: The JVM itself: an uncaught exception, out of memory, a native crash's
+    #: fatal-error banner.
     JVM_ERROR = "jvm_error"
     #: A log generation rotated away before it was scanned; never a line.
     LOG_UNREAD = "log_unread"
@@ -127,7 +128,8 @@ FAILURE_PATTERNS: tuple[FailurePattern, ...] = (
              r"effect records: MagicStack\.primaryAbility cannot be read",
              "effect records: MagicStack.primaryAbility cannot be read ("),
     _pattern(WorkerFailure.JVM_ERROR,
-             r"(Exception in thread |java\.lang\.OutOfMemoryError|# There is insufficient memory)",
+             r"(Exception in thread |java\.lang\.OutOfMemoryError|# There is insufficient memory"
+             r"|# A fatal error has been detected by the Java Runtime Environment)",
              None),
 )
 
