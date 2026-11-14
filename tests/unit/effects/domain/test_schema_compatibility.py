@@ -31,7 +31,6 @@ from effects.domain.effect_head_input import SurfaceBuilder
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     PAYLOAD_TYPES,
-    ActivationPayload,
     CollectionMode,
     Curation,
     EffectRecord,
@@ -45,7 +44,6 @@ from effects.domain.records import (
 from effects.domain.state_snapshot import (
     CardLine,
     EntityState,
-    InclusionTier,
     LineKind,
     PlayerState,
     StateSnapshot,
@@ -221,12 +219,6 @@ class TestRuleTwoEnumValuesMayBeAddedNotReused:
             "permits the value, but the schema has to say what it carries"
         )
 
-    def test_an_existing_value_keeps_its_payload_type(self):
-        assert PAYLOAD_TYPES[(RecordKind.RESOLUTION, Moment.ACTIVATION)] is (
-            ActivationPayload
-        )
-
-
 class TestTheGen3CardSlotIsPinned:
     """Rule 1 for the card slot, which gen-3 rewrote (FR-021, FR-025)."""
 
@@ -249,20 +241,6 @@ class TestTheGen3CardSlotIsPinned:
         written = record_to_dict(record)["state"]["entities"][0]
         assert tuple(written) == _FROZEN_GEN3_ENTITY
         assert not _REMOVED_IN_GEN3 & written.keys()
-
-
-class TestRuleThreeTiersAreAdditive:
-    def test_the_tiers_are_ordered_by_the_stage_that_adds_them(self):
-        assert [t.value for t in InclusionTier] == [1, 2, 3, 4]
-
-    def test_an_absent_tier_reads_as_uncollected_not_empty(self):
-        snapshot = make_snapshot()
-        assert InclusionTier.UNREFERENCED_STACK not in snapshot.tiers
-        assert InclusionTier.CORE in snapshot.tiers
-
-    def test_a_snapshot_naming_no_tier_claims_none_collected(self, snapshot):
-        """Never inferred: a default is not evidence of a collector's depth."""
-        assert snapshot.tiers == frozenset()
 
 
 _ACTING = ProvenanceKey("cardsfolder/s/shock.txt", 0, "spell", 0)

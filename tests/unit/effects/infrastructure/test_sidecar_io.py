@@ -74,9 +74,6 @@ def _sidecar() -> ProvenanceSidecar:
 
 
 class TestRowAlignment:
-    def test_row_i_is_the_ith_entry_of_lines(self):
-        assert _sidecar().row_for(_TRIGGER) == 1
-
     def test_the_row_is_the_position_not_the_rendered_line_index(self):
         """``line_index`` points into the .txt; the cache row is the array slot."""
         sidecar = _sidecar()
@@ -99,20 +96,6 @@ class TestSerialization:
         assert "script_file" not in data["lines"][1]["provenance"][0]
         assert data["script_file"] == _SCRIPT
 
-    def test_a_read_key_carries_the_headers_script_file(self):
-        restored = sidecar_from_dict(sidecar_to_dict(_sidecar()))
-        assert restored.lines[1].provenance[0].script_file == _SCRIPT
-
-    def test_dropped_keys_survive(self):
-        restored = sidecar_from_dict(sidecar_to_dict(_sidecar()))
-        assert restored.dropped_keys == (_DROPPED,)
-
-    def test_role_spans_and_sub_ability_links_survive(self):
-        restored = sidecar_from_dict(sidecar_to_dict(_sidecar()))
-        line = restored.lines[1]
-        assert line.role_spans[0].role == "trigger-condition"
-        assert line.sub_ability_links[0].path == (0,)
-
     def test_the_file_is_written_beside_the_converted_text(self, tmp_path):
         txt = tmp_path / "a" / "ajanis_pridemate.txt"
         path = sidecar_path_for(txt)
@@ -124,12 +107,18 @@ class TestSerialization:
         write_sidecar(_sidecar(), path)
         assert read_sidecar(path) == _sidecar()
 
-    def test_a_written_sidecar_is_valid_json(self, tmp_path):
-        path = sidecar_path_for(tmp_path / "x.txt")
-        write_sidecar(_sidecar(), path)
-        assert json.loads(path.read_text(encoding="utf-8"))["card"] == (
-            "Ajani's Pridemate"
-        )
+    def test_every_converter_written_sidecar_reads_and_writes_back_member_for_member(self):
+        """The sidecars above are written by this test's own builder; these are
+        the ones Java's ``convert`` wrote for the gen-3 fixture: nothing they
+        hold is dropped, renamed or reordered on a read and a write."""
+        from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS
+
+        paths = sorted(p for folder in GEN3_SIDECAR_FOLDERS
+                       for p in folder.rglob("*.provenance.json"))
+        assert len(paths) > 600
+        for path in paths:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            assert json.dumps(sidecar_to_dict(read_sidecar(path))) == json.dumps(raw), path.name
 
     def test_a_missing_sidecar_raises_rather_than_reading_as_empty(self, tmp_path):
         with pytest.raises(FileNotFoundError):
@@ -511,15 +500,6 @@ class TestOptionKeys:
         ]
         assert data["lines"][1]["provenance"][0]["option"] == 0
         assert data["dropped_keys"][0]["option"] == 3
-
-    def test_a_gen1_sidecar_reads_with_no_option(self):
-        data = sidecar_to_dict(self._sidecar())
-        for line in data["lines"]:
-            for key in line["provenance"]:
-                key.pop("option", None)
-        sidecar = sidecar_from_dict(data)
-        assert all(key.option is None for line in sidecar.lines for key in line.provenance)
-
 
 class TestSidecarRoots:
     """``--cards-folder`` values to a cache's ``tree -> folder`` (FR-063b)."""

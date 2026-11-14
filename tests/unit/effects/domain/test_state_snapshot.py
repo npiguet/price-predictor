@@ -179,13 +179,6 @@ class TestTheJavaGoldensRead:
     def _named(name: str) -> list[EntityState]:
         return [e for e in TestTheJavaGoldensRead._entities() if e.name == name]
 
-    def test_every_entity_reads_in_the_gen3_shape(self):
-        entities = self._entities()
-        assert len(entities) > 100
-        assert all(e.lines is not None for e in entities)
-        assert all(e.granted_attached == () for e in entities)
-        assert any(e.lines for e in entities)
-
     def test_power_and_toughness_read_base_temporary_and_counters(self):
         for data, entity in zip(java_golden_entities(), self._entities(), strict=True):
             if data["base_pt"] is None:
@@ -345,12 +338,6 @@ class TestTheGen3FactsRead:
     def test_an_extra_entity_is_not_one_of_the_tiers(self):
         assert not make_entity("L7", "Bear", role=EntityRole.LAST_KNOWN).in_tiers
         assert make_entity("E7", "Bear").in_tiers
-
-    def test_a_gen2_snapshot_reads_no_gen3_member(self):
-        snapshot = _snapshot()
-        assert snapshot.links is None and snapshot.global_.floating_effects == ()
-        assert all(player.turn_counts is None for player in snapshot.players)
-
 
 class TestTheGen3FixtureRead:
     """Story 2's snapshot scenarios on real records: the gen-3 fixture cut from

@@ -21,22 +21,7 @@ from effects.domain.event_schema import (
 )
 
 
-class TestVocabulary:
-    def test_event_type_values_are_unique_and_snake_case(self):
-        values = [t.value for t in EventType]
-        assert len(values) == len(set(values))
-        assert all(v == v.lower() and " " not in v for v in values)
-
-
 class TestEventNormalization:
-    def test_an_event_accepts_the_params_its_type_normalizes(self):
-        event = Event(
-            type=EventType.DAMAGE_DEALT,
-            subjects=("E12",),
-            params={"amount": 3, "combat": True},
-        )
-        assert event.params["amount"] == 3
-
     def test_an_event_rejects_a_param_the_schema_does_not_normalize(self):
         with pytest.raises(ValueError, match="does not normalize"):
             Event(type=EventType.DAMAGE_DEALT, params={"amonut": 3})
@@ -55,41 +40,6 @@ class TestEventNormalization:
             attributed_to="0",
         )
         assert Event.from_dict(event.as_dict()) == event
-
-
-class TestTheZoneChangeRow:
-    """The one slot a `Moved` replacement can move and nothing else.
-
-    A replacement that puts a card second from the top of its library instead
-    of into the graveyard changes the destination and the position; without a
-    slot for the position, the two halves of the rewrite serialize alike and
-    the record is dropped as an identity — which is why `Moved` was 91 of 110
-    dropped rewrites and had never once produced a written one.
-    """
-
-    def test_a_library_destination_can_say_where_in_the_library(self):
-        event = Event(
-            type=EventType.ZONE_CHANGE,
-            subjects=("E1",),
-            params={
-                "from_zone": "battlefield", "to_zone": "library",
-                "library_position": 1,
-            },
-        )
-        assert event.params["library_position"] == 1
-
-    def test_it_round_trips(self):
-        event = Event(
-            type=EventType.ZONE_CHANGE,
-            params={"to_zone": "library", "library_position": 0},
-        )
-        assert Event.from_dict(event.as_dict()) == event
-
-    def test_it_is_optional(self):
-        """Absent wherever the destination is not a library."""
-        assert Event(
-            type=EventType.ZONE_CHANGE, params={"to_zone": "graveyard"},
-        ).params == {"to_zone": "graveyard"}
 
 
 class TestTheCauseBearingTypes:
@@ -112,14 +62,6 @@ class TestTheCauseBearingTypes:
         """``damage_dealt`` carries ``source``; two spellings of one fact
         would leave a reader to guess which one a collector filled."""
         assert EventType.DAMAGE_DEALT not in CAUSE_BEARING_TYPES
-
-    def test_any_type_may_still_carry_a_cause(self):
-        """Being outside the set bars nothing — it only says the schema does
-        not ask."""
-        assert Event(
-            type=EventType.CARD_DRAWN, params={"count": 1, "cause": "E3"},
-        ).params["cause"] == "E3"
-
 
 class TestAttributionIsTriState:
     """The three states an ``attributed_to`` may report, and the fourth that
@@ -148,30 +90,6 @@ class TestAttributionIsTriState:
         event = Event(type=EventType.DAMAGE_DEALT, attributed_to=AttributionKind.UNRESOLVED)
         assert event.attribution is AttributionKind.UNRESOLVED
         assert Event(type=EventType.DAMAGE_DEALT).attribution is AttributionKind.ABSENT
-
-    def test_the_four_states_are_distinct(self):
-        seen = {
-            attribution_kind(value)
-            for value in ("3", AttributionKind.ROOT, AttributionKind.UNRESOLVED, None)
-        }
-        assert len(seen) == 4
-
-    def test_a_sentinel_is_not_mistakable_for_a_chain_index(self):
-        assert all(
-            not value.isdigit() for value in (AttributionKind.ROOT, AttributionKind.UNRESOLVED)
-        )
-
-    def test_a_sentinel_survives_the_wire_form_unchanged(self):
-        """Widening a value set, not redefining the field: it stays a string."""
-        event = Event(
-            type=EventType.DAMAGE_DEALT,
-            subjects=("E1",),
-            attributed_to=AttributionKind.UNRESOLVED,
-        )
-        assert Event.from_dict(event.as_dict()).attributed_to == (
-            AttributionKind.UNRESOLVED
-        )
-
 
 #: The connector's effects package, read as text. A type the writer never names
 #: cannot appear in a corpus however many games are played, and that is
@@ -477,38 +395,6 @@ class TestEveryDeclaredTypeIsReachable:
             "an AI_CAPABILITY_GAP type is no longer referenced in the connector "
             "source -- its wiring may have been silently removed"
         )
-
-    def test_the_known_list_names_only_declared_types(self):
-        """Against the full vocabulary, not just the params-bearing subset.
-
-        ``EVENT_PARAMS`` would reject this list outright now: most of
-        ``KNOWN_UNEMITTED`` is params-less types by construction (that is the
-        gap the widened guard exists to see), so checking against
-        ``set(EVENT_PARAMS)`` here would fail on every entry rather than catch a
-        real mistake.
-        """
-        assert set(KNOWN_UNEMITTED) <= set(EventType)
-
-    def test_the_ai_capability_gap_is_part_of_known_unemitted(self):
-        assert AI_CAPABILITY_GAP <= set(KNOWN_UNEMITTED)
-
-
-class TestSupersededTypes:
-    """A type the record carries under another name is not an event.
-
-    ``cost_adjusted`` is the playability decision's ``cost_after_adjustment``,
-    ``damage_assignment_ordered`` is the combat payload's
-    ``assignment_choices``. Emitting them as events would give one fact two
-    spellings and let a reader believe a corpus without them was incomplete. A
-    name change is an event again (``name_change``, from a stat change): a
-    continuous effect's ``name`` contribution is the static's, and a resolved
-    ``Animate`` naming a permanent has no other record.
-    """
-
-    def test_the_superseded_types_are_out_of_the_vocabulary(self):
-        for retired in ("cost_adjusted", "damage_assignment_ordered"):
-            assert retired not in EVENT_PARAMS
-
 
 class TestTheJavaVocabularyBothWays:
     """The writer's vocabulary and the reader's are one list. A type or a

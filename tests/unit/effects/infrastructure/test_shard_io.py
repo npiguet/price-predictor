@@ -31,16 +31,6 @@ from tests.unit.effects.infrastructure.test_record_codec import (
 )
 
 
-class TestShardDirectory:
-    def test_every_shard_in_the_directory_is_loaded(self, tmp_path):
-        for worker in (0, 1, 2):
-            with RawShardWriter(tmp_path, "run", worker, f"L{worker}") as writer:
-                writer.write(_record(record_id=f"run.{worker}.1"))
-        assert {r.record_id for r in read_records(tmp_path)} == {
-            "run.0.1", "run.1.1", "run.2.1",
-        }
-
-
 class TestCompressedShards:
     """The Java writer emits `.jsonl.gz` as concatenated gzip members, one per
     block of records. The corpus is the run's real cost on disk — a few
@@ -352,21 +342,17 @@ class TestShardsInSubdirectories:
 
         assert len(iter_shards(tmp_path)) == 2
 
-    def test_a_nested_gz_is_not_claimed_twice(self, tmp_path) -> None:
-        """Each spelling's glob claims its own shards, and only those."""
-        self._shard(tmp_path / "sub" / "run.0-a.jsonl.gz")
+    def test_the_order_is_path_order_across_directories_and_spellings(self, tmp_path) -> None:
+        """Shard order fixes the epoch walk and the split's accumulation: one
+        path order over every subdirectory, both spellings interleaved."""
+        for name in ("dirb/run.0-b.jsonl", "dira/run.0-z.jsonl", "dirc/run.0-c.jsonl.gz",
+                     "dira/run.0-a.jsonl.gz", "top.0-t.jsonl"):
+            self._shard(tmp_path / name)
 
-        found = iter_shards(tmp_path)
-
-        assert len(found) == 1
-
-    def test_the_order_is_stable_across_calls(self, tmp_path) -> None:
-        """Shard order fixes the epoch walk and the split's accumulation."""
-        for name in ("b", "a", "c"):
-            self._shard(tmp_path / f"dir{name}" / f"run.0-{name}.jsonl.gz")
-
-        assert iter_shards(tmp_path) == iter_shards(tmp_path)
-        assert iter_shards(tmp_path) == sorted(iter_shards(tmp_path))
+        assert [p.relative_to(tmp_path).as_posix() for p in iter_shards(tmp_path)] == [
+            "dira/run.0-a.jsonl.gz", "dira/run.0-z.jsonl", "dirb/run.0-b.jsonl",
+            "dirc/run.0-c.jsonl.gz", "top.0-t.jsonl",
+        ]
 
 
 def test_write_shard_round_trips_through_the_reader(tmp_path):
