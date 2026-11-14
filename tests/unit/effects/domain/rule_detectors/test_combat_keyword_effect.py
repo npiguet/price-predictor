@@ -10,6 +10,7 @@ a ``damage_prevented`` at the creature).
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -417,3 +418,34 @@ def test_thrasta_is_still_a_trampler_for_gate_2(thrasta_sidecars):
     lone = replace(thrasta, granted_temporary=GrantedTemporary(
         keywords=("trample_over_planeswalkers",)), lines=())
     assert "trample" in KeywordResolver(None).keywords_of(lone)
+
+
+# ── 702.19e and 702.19f played forward ──────────────────────────────────
+
+#: The combat records of ``DirectedForkPlayedForwardTest``'s two gone-planeswalker
+#: turns, as the connector wrote them: a live attacker (Thrasta; Craw Wurm)
+#: attacking Forge's ``<Nothing>`` placeholder beside a Grizzly Bears
+#: attacking B, and its directed fork's replacement (Colossal Dreadmaw;
+#: Thrasta): for each rule, the fork's record (``aimed_at`` the rule), then the
+#: live game's.
+_PLAYED = Path(__file__).parents[4] / "fixtures" / "effects" / "directed-702.19ef-combats.jsonl"
+
+
+@pytest.mark.parametrize(("rule", "params"), [
+    ("702.19e", {"keyword": "trample_over_planeswalkers", "defender": "gone"}),
+    ("702.19f", {"keyword": "trample_over_planeswalkers", "defender": "gone",
+                 "fires_when": "absent"}),
+])
+def test_a_played_gone_planeswalker_fork_reads_both_sides(rule, params):
+    import json
+
+    from effects.infrastructure.record_codec import record_from_dict
+
+    lines = _PLAYED.read_text(encoding="utf-8").splitlines()
+    at = next(i for i, line in enumerate(lines) if json.loads(line).get("aimed_at") == [rule])
+    records = [record_from_dict(json.loads(line)) for line in lines[at:at + 2]]
+    assert [record.fork for record in records] == [True, False]
+    sides = {record.fork: FAMILY.match(record, None, params) for record in records}
+    assert (sides[False].polarity, sides[False].observed) == (Polarity.FIRES, True)
+    assert (sides[True].polarity, sides[True].observed) == (Polarity.DOES_NOT_FIRE, False)
+    assert sides[True].outcome == sides[False].outcome == ("P1",)

@@ -40,6 +40,7 @@ import com.pricepredictor.connector.effects.directed.rules.MeldPair;
 import com.pricepredictor.connector.effects.directed.rules.MeldedEntry;
 import com.pricepredictor.connector.effects.directed.rules.MorphFaceUp;
 import com.pricepredictor.connector.effects.directed.rules.MutagenToken;
+import com.pricepredictor.connector.effects.directed.rules.NoDamageToAGonePlaneswalker;
 import com.pricepredictor.connector.effects.directed.rules.OptionalSearch;
 import com.pricepredictor.connector.effects.directed.rules.PartnerWithSearch;
 import com.pricepredictor.connector.effects.directed.rules.PlottedFromHand;
@@ -61,6 +62,7 @@ import com.pricepredictor.connector.effects.directed.rules.SuspendProhibited;
 import com.pricepredictor.connector.effects.directed.rules.TextBoxExchange;
 import com.pricepredictor.connector.effects.directed.rules.TokenMeldPartner;
 import com.pricepredictor.connector.effects.directed.rules.ToughnessZero;
+import com.pricepredictor.connector.effects.directed.rules.TrampleOverAGonePlaneswalker;
 import com.pricepredictor.connector.effects.directed.rules.TrampleOverPlaneswalkers;
 import com.pricepredictor.connector.effects.directed.rules.Transfigure;
 import com.pricepredictor.connector.effects.directed.rules.Transmute;
@@ -136,6 +138,8 @@ public final class DirectedRules {
             SharedKeywords.rule(),
             Intimidate.rule(),
             TrampleOverPlaneswalkers.rule(),
+            TrampleOverAGonePlaneswalker.rule(),
+            NoDamageToAGonePlaneswalker.rule(),
             Madness.rule(),
             Transmute.rule(),
             SuspendProhibited.rule(),

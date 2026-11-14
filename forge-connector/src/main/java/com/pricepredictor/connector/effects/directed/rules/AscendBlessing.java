@@ -23,13 +23,17 @@ import java.util.Optional;
  *
  * <p>The base board, read at a boundary: a main phase of the active
  * player's turn begins with the stack empty; the active player controls
- * exactly ten permanents and has no city's blessing, holds an instant or
- * sorcery with ascend it has the untapped lands for, and has no land left to
+ * exactly ten permanents, phased-out ones included as Forge counts its
+ * battlefield zone for ascend, and has no city's blessing, holds a sorcery
+ * with ascend it has the untapped lands for (an instant the AI holds for the
+ * opponent's turn, after the fork has stopped), and has no land left to
  * play ({@link Boards#noLandToPlay}) nor any other permanent card in hand it
  * has the lands for, so no permanent of its own can bring a fork at nine
- * back to ten before the spell. It binds a permanent to take away: a tapped
- * land, else a permanent that makes no mana, else an untapped land beyond
- * the spell's mana value, so the spell stays castable.
+ * back to ten before the spell. It binds a permanent to take away that
+ * changes the turn's play as little as one permanent can: a tapped land,
+ * else an untapped land beyond the spell's mana value, so the spell stays
+ * castable, else a permanent that makes no mana (a creature taken away
+ * changes the combat as well). It binds nothing when no permanent is spare.
  *
  * <p>Variant {@code nine_permanents} ({@code remove_permanent}): the player
  * controls nine permanents, so the spell resolves without the blessing.
@@ -55,14 +59,17 @@ public final class AscendBlessing {
             return Optional.empty();
         }
         Player active = Boards.active(live);
+        // AbilityUtils.resolvePreAbilities counts the battlefield zone,
+        // phased-out permanents included; one of those cannot be taken away.
         List<Card> permanents = active.getCardsIn(ZoneType.Battlefield).stream()
                 .filter(card -> !card.isPhasedOut()).toList();
-        if (permanents.size() != TEN || active.hasBlessing() || !Boards.noLandToPlay(active)) {
+        if (active.getZone(ZoneType.Battlefield).size() != TEN || active.hasBlessing()
+                || !Boards.noLandToPlay(active)) {
             return Optional.empty();
         }
         CardCollectionView hand = active.getCardsIn(ZoneType.Hand);
         Optional<Card> spell = hand.stream()
-                .filter(card -> (card.isInstant() || card.isSorcery()) && card.hasKeyword(Keyword.ASCEND))
+                .filter(card -> card.isSorcery() && card.hasKeyword(Keyword.ASCEND))
                 .filter(card -> Boards.affordable(active, card))
                 .findFirst();
         boolean permanentToCast = hand.stream()
@@ -80,11 +87,9 @@ public final class AscendBlessing {
         if (tappedLand.isPresent()) {
             return tappedLand;
         }
-        Optional<Card> noMana = permanents.stream()
-                .filter(card -> !card.isLand() && card.getManaAbilities().isEmpty()).findFirst();
-        if (noMana.isPresent()) {
-            return noMana;
+        if (spareLands > 0) {
+            return permanents.stream().filter(Card::isLand).findFirst();
         }
-        return spareLands > 0 ? permanents.stream().filter(Card::isLand).findFirst() : Optional.empty();
+        return permanents.stream().filter(card -> !card.isLand() && card.getManaAbilities().isEmpty()).findFirst();
     }
 }

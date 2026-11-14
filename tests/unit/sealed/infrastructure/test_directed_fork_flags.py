@@ -267,6 +267,17 @@ def test_the_worker_lists_its_registered_rules():
 
 _DIRECTED = Path("forge-connector/src/main/java/com/pricepredictor/connector/effects/directed")
 
+def _registered_classes(registry: str) -> list[str]:
+    """The rule classes ``DirectedRules.REGISTERED`` lists in ``registry``, the
+    registry's source: each ``X.rule()`` of the list, comments left out."""
+    import re
+
+    code = re.sub(r"/\*.*?\*/|//[^\n]*", "", registry, flags=re.S)
+    body = code[code.index("REGISTERED = of("):]
+    body = body[:body.index(");")]
+    return re.findall(r"(\w+)\.rule\(\)", body)
+
+
 def _registered_in_source() -> frozenset[str]:
     """The rule ids ``DirectedRules.REGISTERED`` lists, read off the connector's
     source: each listed class's ``RULE`` constant. The integration test below
@@ -274,13 +285,22 @@ def _registered_in_source() -> frozenset[str]:
     import re
 
     registry = (_DIRECTED / "DirectedRules.java").read_text(encoding="utf-8")
-    body = registry[registry.index("REGISTERED = of("):]
-    body = body[:body.index(");")]
     rules = set()
-    for name in re.findall(r"(\w+)\.rule\(\)", body):
+    for name in _registered_classes(registry):
         source = (_DIRECTED / "rules" / f"{name}.java").read_text(encoding="utf-8")
         rules.add(re.search(r'public static final String RULE = "([^"]+)";', source).group(1))
     return frozenset(rules)
+
+
+def test_a_commented_out_line_is_no_registration():
+    registry = """
+    static final DirectedRules REGISTERED = of(
+            StunCounter.rule(),
+            // VanishingInstances.rule(),
+            /* Dethrone.rule(), */
+            ToughnessZero.rule()); // Aftermath.rule()
+    """
+    assert _registered_classes(registry) == ["StunCounter", "ToughnessZero"]
 
 
 def test_the_startup_check_passes_over_the_whole_list():
@@ -296,4 +316,4 @@ def test_the_startup_check_passes_over_the_whole_list():
         if error is not None:
             refused[rule] = error
     assert refused == {}
-    assert len(listed) == len(set(listed)) == 69
+    assert len(listed) == len(set(listed)) == 71

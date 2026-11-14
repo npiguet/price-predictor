@@ -748,11 +748,10 @@ and that the reporting half never enters the control score.
   rewrite record names no replacing effect for the replacement Forge builds at runtime from the
   finality counter; 104.4c, whose GameDrawn draw no record shows; 701.10c, 701.11c and 712.4c,
   whose scenarios declare no detector; 701.40c and 701.40d, whose variant replaces a face-down
-  permanent, which `replace_card` refuses; 702.19e and 702.19f, whose base board, an attacker whose
-  planeswalker left combat, Forge's game copier cannot copy; 115.7a, whose point needs a spell cast
-  after the boundary; and 712.16, whose point no sealed pool holds the cards for (`directed-rules`
+  permanent, which `replace_card` refuses; 115.7a, whose point needs a spell cast after the
+  boundary; and 712.16, whose point no sealed pool holds the cards for (`directed-rules`
   names each with its reason). The list is checked in as `rules/directed-fork-rules.txt`, one rule
-  id per line, 69 rules in unit order, and is what the full collection passes to
+  id per line, 71 rules in unit order, and is what the full collection passes to
   `--directed-fork-rules`; `directed-rules` over the gen-2 counts writes it unchanged. Every
   listed rule passes the startup check (FR-014).
 

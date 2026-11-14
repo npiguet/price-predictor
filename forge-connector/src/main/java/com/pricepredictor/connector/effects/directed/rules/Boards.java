@@ -204,6 +204,45 @@ final class Boards {
                 .toList();
     }
 
+    /**
+     * The unblocked regular-step attackers ({@link #unblockedRegularStrikers})
+     * whose attacked planeswalker or battle has left combat: Forge keeps them
+     * attacking a placeholder of no zone (506.4c, {@code Combat.isRemovedDefender}).
+     */
+    static List<Card> attackersOfAGoneDefender(Combat combat) {
+        return unblockedRegularStrikers(combat).stream()
+                .filter(attacker -> Combat.isRemovedDefender(combat.getDefenderByAttacker(attacker)))
+                .toList();
+    }
+
+    /**
+     * Whether a combatant of the live combat other than {@code attacker} deals
+     * combat damage in the regular damage step: an attacker or blocker with
+     * power above 0 that strikes in it (double strike, or no first strike)
+     * and has something to hit (an attacker its blockers, or unblocked a
+     * player or a planeswalker or battle still in combat; a blocker the
+     * attackers it blocks). A damage step in which no combat damage is dealt
+     * writes no combat record ({@code CombatStepBracket}), so an attacker
+     * dealing none is recorded only beside another's damage.
+     */
+    static boolean anotherDealsRegularDamage(Combat combat, Card attacker) {
+        for (Card other : combat.getAttackers()) {
+            if (other == attacker || !strikesInTheRegularStep(other)) {
+                continue;
+            }
+            if (!combat.getBlockers(other).isEmpty()
+                    || !combat.isBlocked(other) && !Combat.isRemovedDefender(combat.getDefenderByAttacker(other))) {
+                return true;
+            }
+        }
+        return combat.getAllBlockers().stream().anyMatch(blocker -> strikesInTheRegularStep(blocker)
+                && !combat.getAttackersBlockedBy(blocker).isEmpty());
+    }
+
+    private static boolean strikesInTheRegularStep(Card combatant) {
+        return combatant.getNetCombatDamage() > 0 && (combatant.hasDoubleStrike() || !combatant.hasFirstStrike());
+    }
+
     /** The planeswalker on the battlefield {@code attacker} attacks, or empty when it attacks none. */
     static Optional<Card> attackedPlaneswalker(Combat combat, Card attacker) {
         return combat.getDefenderByAttacker(attacker) instanceof Card defender

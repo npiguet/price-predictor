@@ -954,10 +954,6 @@ NOT_DIRECTED = {
                     "its variant puts another card in the manifested permanent's place, and "
                     "replace_card refuses every face-down permanent, so every fork would be "
                     "refused"),
-    **dict.fromkeys(("702.19e", "702.19f"),
-                    "its base is an attacker whose planeswalker left combat, which Forge keeps "
-                    "attacking a placeholder card (<Nothing>, 506.4c) its game copier cannot "
-                    "map, so every fork of that board throws at the copy"),
     "712.16": "no sealed pool makes it happen: no set with draft boosters holds both a card "
               "turning a permanent face down (Ixidron and Vesuvan Shapeshifter in Time "
               "Spiral, Illithid Harvester, the morph sets) and a double-faced card",

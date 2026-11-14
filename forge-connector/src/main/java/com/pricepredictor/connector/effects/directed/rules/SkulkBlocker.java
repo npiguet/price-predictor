@@ -22,8 +22,8 @@ import java.util.Optional;
  * attacks, and B's Centaur Courser (power 3) is not among its legal blockers.
  *
  * <p>The base board, read at a boundary: the declare-blockers step begins,
- * before blockers are declared, with an attacker that has skulk and power 2
- * or more, and its defending player controls an untapped creature with
+ * before blockers are declared, with an attacker that has skulk, and its
+ * defending player controls an untapped creature with
  * greater power that skulk alone keeps from blocking it. The engine's own
  * question before the declaration writes the blockers record that judges it,
  * whatever the defending player then blocks with. It binds the attacker and
@@ -33,8 +33,10 @@ import java.util.Optional;
  * Llanowar Elves, whose power 1, with what the creature's boosts and counters
  * add to it, is less than the attacker's, so it may block. The precondition
  * binds only a creature whose Elves stays below the attacker's power and
- * survives what it carries, and only an attacker with none of the other
- * evasions that would keep a 1/1 Elf from blocking it.
+ * survives what it carries (an attacker of power 1 only where the Elves
+ * would carry a boost to power 0 or less), and only an attacker with none of
+ * the other evasions that would keep a 1/1 Elf from blocking it, nor any
+ * protection.
  */
 public final class SkulkBlocker {
 
@@ -54,12 +56,13 @@ public final class SkulkBlocker {
 
     /**
      * The attacker's keywords besides skulk that keep a creature without
-     * flying, reach or a colour from blocking it. Read in a method: a static
-     * field of Forge's enum would load it with the registry.
+     * flying, reach or a colour from blocking it, or that may keep the Elves
+     * out as well: a protection (from green, from creatures). Read in a
+     * method: a static field of Forge's enum would load it with the registry.
      */
-    private static List<Keyword> otherEvasions() {
+    static List<Keyword> otherEvasions() {
         return List.of(Keyword.FLYING, Keyword.FEAR, Keyword.INTIMIDATE, Keyword.SHADOW,
-                Keyword.HORSEMANSHIP, Keyword.LANDWALK);
+                Keyword.HORSEMANSHIP, Keyword.LANDWALK, Keyword.PROTECTION);
     }
 
     static Optional<Binding> bind(Game live) {
@@ -69,8 +72,7 @@ public final class SkulkBlocker {
         }
         for (Card attacker : combat.getAttackers()) {
             int power = attacker.getNetPower();
-            if (!attacker.hasKeyword(Keyword.SKULK) || power < 2
-                    || otherEvasions().stream().anyMatch(attacker::hasKeyword)) {
+            if (!attacker.hasKeyword(Keyword.SKULK) || otherEvasions().stream().anyMatch(attacker::hasKeyword)) {
                 continue;
             }
             Player defender = combat.getDefenderPlayerByAttacker(attacker);

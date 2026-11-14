@@ -409,4 +409,92 @@ class DirectedForkPlayedForwardTest {
         assertTrue(legal.get(0) instanceof List<?> blockers && blockers.size() == 1
                 && !blockers.contains(ref(courser)), "the Elves, a new card, may block: " + legal);
     }
+
+    /**
+     * Every record of a live turn whose {@code attacker} attacks B's Jace
+     * Beleren unblocked beside a Grizzly Bears attacking B, Jace having left
+     * the battlefield before the damage step (removed by whatever removed it),
+     * so the attacker attacks Forge's placeholder (506.4c). The live game
+     * leaves the declare-blockers step and begins the damage step itself,
+     * {@code rule}'s directed fork taken at that boundary.
+     */
+    /** The Grizzly Bears attacking B beside the attacker of {@link #goneWalkerTurn}. */
+    private String bearsRef;
+
+    private List<String> goneWalkerTurn(String attackerName, String rule) throws Throwable {
+        Game game = board(PhaseType.COMBAT_DECLARE_BLOCKERS);
+        Player active = game.getPlayers().get(0);
+        Player defending = game.getPlayers().get(1);
+        Card attacker = permanent(game, active, attackerName);
+        Card bears = permanent(game, active, "Grizzly Bears");
+        bearsRef = ref(bears);
+        Card jace = permanent(game, defending, "Jace Beleren");
+        Combat combat = new Combat(active);
+        combat.addAttacker(attacker, jace);
+        combat.addAttacker(bears, defending);
+        combat.setBlocked(attacker, false);
+        combat.setBlocked(bears, false);
+        game.getPhaseHandler().setCombat(combat);
+        game.getAction().moveToGraveyard(jace, null);
+        assertTrue(Combat.isRemovedDefender(combat.getDefenderByAttacker(attacker)));
+        return played(game, null, rule, false);
+    }
+
+    /**
+     * The combat damage {@code records} (of the fork, or of the live game)
+     * dealt to player {@code P1} by anything but the Bears beside the attacker.
+     */
+    private List<Map<String, Object>> combatDamageToB(List<String> records, boolean fork) {
+        List<Map<String, Object>> found = new ArrayList<>();
+        for (String record : records) {
+            Map<String, Object> parsed = parse(record);
+            if (Boolean.TRUE.equals(parsed.get("fork")) != fork || !"combat".equals(parsed.get("kind"))) {
+                continue;
+            }
+            for (Map<String, Object> event : eventsOf(List.of(record), "damage_dealt", "P1")) {
+                if (Boolean.TRUE.equals(params(event).get("combat")) && !bearsRef.equals(params(event).get("source"))) {
+                    found.add(event);
+                }
+            }
+        }
+        return found;
+    }
+
+    /** Whether {@code records} hold a combat record (of the fork, or of the live game). */
+    private static boolean hasCombat(List<String> records, boolean fork) {
+        return records.stream().map(RecordLines::parse).anyMatch(parsed ->
+                Boolean.TRUE.equals(parsed.get("fork")) == fork && "combat".equals(parsed.get("kind")));
+    }
+
+    /**
+     * {@code replace_card}, 702.19e: Thrasta, Tempest's Roar attacks a
+     * planeswalker that has left combat and deals its 7 to B; the fork's
+     * Colossal Dreadmaw, with plain trample, deals none.
+     */
+    @Test
+    void aDreadmawInThrastasPlaceDealsNothingOnceThePlaneswalkerIsGone() throws Throwable {
+        List<String> records = goneWalkerTurn("Thrasta, Tempest's Roar", "702.19e");
+
+        assertTrue(hasCombat(records, true) && hasCombat(records, false), "both games recorded the step");
+        List<Map<String, Object>> live = combatDamageToB(records, false);
+        assertEquals(1, live.size(), "Thrasta's damage reaches B live: " + live);
+        assertEquals(7, ((Number) params(live.get(0)).get("amount")).intValue());
+        assertEquals(List.of(), combatDamageToB(records, true), "the Dreadmaw's reaches nobody");
+    }
+
+    /**
+     * {@code replace_card}, 702.19f: Craw Wurm attacks a planeswalker that
+     * has left combat and deals no combat damage; the fork's Thrasta,
+     * Tempest's Roar deals its 7 to B.
+     */
+    @Test
+    void thrastaInTheWurmsPlaceHitsBOnceThePlaneswalkerIsGone() throws Throwable {
+        List<String> records = goneWalkerTurn("Craw Wurm", "702.19f");
+
+        assertTrue(hasCombat(records, true) && hasCombat(records, false), "both games recorded the step");
+        assertEquals(List.of(), combatDamageToB(records, false), "the Wurm's damage reaches nobody live");
+        List<Map<String, Object>> fork = combatDamageToB(records, true);
+        assertEquals(1, fork.size(), "Thrasta's reaches B in the fork: " + fork);
+        assertEquals(7, ((Number) params(fork.get(0)).get("amount")).intValue());
+    }
 }

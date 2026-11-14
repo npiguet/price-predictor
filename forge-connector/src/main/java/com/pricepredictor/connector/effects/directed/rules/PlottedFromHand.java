@@ -23,7 +23,10 @@ import java.util.Optional;
  * player's turn begins with the stack empty, and the active player holds
  * Kellan Joins Up, has the untapped lands for it, and holds exactly one other
  * nonland card of mana value 3 or less, the one card the enters trigger could
- * exile. It binds that card.
+ * exile; and it cannot cast both, having fewer permanents that make mana now
+ * ({@link Boards#manaSources}) than their two mana values: one that could
+ * would cast that card beside Kellan, the AI playing the card first, and the
+ * trigger would find nothing to exile on either side. It binds that card.
  *
  * <p>Variant {@code card_too_expensive} ({@code move_card}): the card is Hill
  * Giant, of mana value 4, so the trigger finds no card to exile and nothing
@@ -61,8 +64,10 @@ public final class PlottedFromHand {
         List<Card> exilable = hand.stream()
                 .filter(card -> card != kellan.get() && !card.isLand() && card.getCMC() <= MOST_MANA_VALUE)
                 .toList();
-        return exilable.size() == 1
-                ? Optional.of(Binding.empty().with("card", exilable.get(0)).with("spell", kellan.get()))
-                : Optional.empty();
+        if (exilable.size() != 1
+                || Boards.manaSources(active).size() >= kellan.get().getCMC() + exilable.get(0).getCMC()) {
+            return Optional.empty();
+        }
+        return Optional.of(Binding.empty().with("card", exilable.get(0)).with("spell", kellan.get()));
     }
 }
