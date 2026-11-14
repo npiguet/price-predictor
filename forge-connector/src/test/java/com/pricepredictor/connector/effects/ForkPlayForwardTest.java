@@ -118,6 +118,9 @@ class ForkPlayForwardTest {
         boolean taken;
         int liveTurnAfterFork = -1;
         PhaseType livePhaseAfterFork;
+        /** The live board as BoardStates reads it, before the fork and after it played on. */
+        Object liveBoardBefore;
+        Object liveBoardAfter;
 
         Forker(Game live, GameRecording recording, PhaseType phase, Consumer<EffectRecord> flags) {
             this.live = live;
@@ -132,6 +135,7 @@ class ForkPlayForwardTest {
                 return;
             }
             taken = true;
+            liveBoardBefore = BoardStates.of(live);
             Forks.ForkRun run = new Forks.ForkRun(
                     "directed", live, () -> { }, () -> live.getPhaseHandler().getPlayerTurn());
             played = run.take(
@@ -139,6 +143,7 @@ class ForkPlayForwardTest {
                     (verified, result) -> result);
             liveTurnAfterFork = live.getPhaseHandler().getTurn();
             livePhaseAfterFork = live.getPhaseHandler().getPhase();
+            liveBoardAfter = BoardStates.of(live);
         }
     }
 
@@ -214,6 +219,9 @@ class ForkPlayForwardTest {
         assertEquals(PhaseType.END_OF_TURN, forker[0].livePhaseAfterFork,
                 "the live game had not moved while the fork played");
         assertEquals(3, forker[0].liveTurnAfterFork);
+        // Nor had its board: every card, player and member as before.
+        assertEquals(forker[0].liveBoardBefore, forker[0].liveBoardAfter,
+                "the live board moved while the fork played");
     }
 
     /**
