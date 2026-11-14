@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed;
 import forge.ai.simulation.GameCopier;
 import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.effects.BoardStates;
+import com.pricepredictor.connector.effects.ForkRefusal;
 import com.pricepredictor.connector.effects.TestBoard;
 import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
 import com.pricepredictor.connector.effects.directed.operations.BoardEdit;
@@ -23,6 +24,7 @@ import forge.game.card.CounterEnumType;
 import forge.game.keyword.Keyword;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
+import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,6 +44,7 @@ import static com.pricepredictor.connector.effects.directed.BoardChanges.renamed
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -464,6 +467,136 @@ class ForkOperationsTest {
      * A started two-seat game: you (P0) and the opponent (P1), with whatever
      * each test puts on it, settled so no trigger is waiting before the edit.
      */
+    // ── replace_card: what names the old card, and what it refuses ─────
+
+    /** The Hill Giant that replaced {@code old} on {@code owner}'s battlefield. */
+    private static Card replacementOf(Board board, Player owner, Card... others) {
+        List<Card> skip = List.of(others);
+        return owner.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(card -> card.getName().equals("Hill Giant") && !skip.contains(card))
+                .findFirst().orElseThrow();
+    }
+
+    /**
+     * Giant Growth on a creature, then replace_card: the boost the new card
+     * took over ends on it at cleanup, the until-end-of-turn command having
+     * been rewritten to name it.
+     */
+    @Test
+    void aPumpTheReplacementTookOverEndsAtCleanup() {
+        Board board = Board.main();
+        Card bears = board.creature(board.you, "Grizzly Bears");
+        SpellAbility growth = TestBoard.inHand(board.game, board.you, "Giant Growth").getFirstSpellAbility();
+        growth.setActivatingPlayer(board.you);
+        growth.getTargets().add(bears);
+        board.game.getStack().addAndUnfreeze(growth);
+        board.game.getStack().resolveStack();
+        assertEquals(5, bears.getNetPower());
+
+        board.edit(new ReplaceCardOperation(bears, "Hill Giant"));
+        Card giant = replacementOf(board, board.you);
+        assertEquals(6, giant.getNetPower(), "the pump carried");
+        board.game.getPhaseHandler().devModeSet(PhaseType.MAIN2, board.you, board.game.getPhaseHandler().getTurn());
+        board.game.getPhaseHandler().devAdvanceToPhase(PhaseType.CLEANUP);
+
+        assertEquals(3, giant.getNetPower(), "the pump ended at cleanup");
+    }
+
+    /** A delayed trigger and a card remembering the old card remember the new one. */
+    @Test
+    void whatRemembersTheReplacedCardRemembersTheReplacement() {
+        Board board = Board.main();
+        Card bears = board.creature(board.you, "Grizzly Bears");
+        Card holder = board.creature(board.opponent, "Gray Ogre");
+        holder.addRemembered(bears);
+        forge.game.trigger.Trigger delayed = forge.game.trigger.TriggerHandler.parseTrigger(
+                "Mode$ Phase | Phase$ End of Turn | TriggerDescription$ test", bears, false);
+        delayed.addRemembered(bears);
+        board.game.getTriggerHandler().registerDelayedTrigger(delayed);
+
+        board.edit(new ReplaceCardOperation(bears, "Hill Giant"));
+        Card giant = replacementOf(board, board.you);
+
+        assertTrue(holder.isRemembered(giant) && !holder.isRemembered(bears), holder.getRemembered().toString());
+        assertSame(giant, delayed.getHostCard());
+        assertEquals(List.of(giant), delayed.getTriggerRemembered());
+    }
+
+    /** Goad, monstrous and renowned are the permanent's designations: carried. */
+    @Test
+    void aReplacementCarriesGoadMonstrousAndRenowned() {
+        Board board = Board.main();
+        Card bears = board.creature(board.you, "Grizzly Bears");
+        bears.addGoad(board.game.getNextTimestamp(), board.opponent);
+        bears.setMonstrous(true);
+        bears.setRenowned(true);
+
+        board.edit(new ReplaceCardOperation(bears, "Hill Giant"));
+        Card giant = replacementOf(board, board.you);
+
+        assertTrue(giant.isGoadedBy(board.opponent));
+        assertTrue(giant.isMonstrous());
+        assertTrue(giant.isRenowned());
+    }
+
+    private static void assertRefused(Board board, Card old, String reason) {
+        ForkRefusal refusal = assertThrows(ForkRefusal.class,
+                () -> new ReplaceCardOperation(old, "Hill Giant").apply(board.game));
+        assertEquals(reason, refusal.reason());
+        assertTrue(old.getZone() != null && old.getZone().is(ZoneType.Battlefield), "the refusal changed the board");
+    }
+
+    @Test
+    void aFaceDownPermanentIsRefused() {
+        Board board = Board.main();
+        Card bears = TestBoard.card(board.game, board.you, "Grizzly Bears");
+        bears.turnFaceDownNoUpdate();
+        board.you.getZone(ZoneType.Battlefield).add(bears);
+        assertRefused(board, bears, ReplaceCardOperation.FACE_DOWN);
+    }
+
+    @Test
+    void aClassAboveItsFirstLevelIsRefused() {
+        Board board = Board.main();
+        Card ranger = board.permanent(board.you, "Ranger Class");
+        ranger.setClassLevel(2);
+        assertRefused(board, ranger, ReplaceCardOperation.CLASS_LEVEL);
+    }
+
+    @Test
+    void aPermanentHoldingAChosenValueIsRefused() {
+        Board board = Board.main();
+        Card bears = board.creature(board.you, "Grizzly Bears");
+        bears.setChosenType("Elf");
+        assertRefused(board, bears, ReplaceCardOperation.CHOSEN_VALUES);
+    }
+
+    @Test
+    void aPermanentRememberingACardIsRefused() {
+        Board board = Board.main();
+        Card bears = board.creature(board.you, "Grizzly Bears");
+        bears.addRemembered(board.creature(board.opponent, "Gray Ogre"));
+        assertRefused(board, bears, ReplaceCardOperation.LINKED_CARDS);
+    }
+
+    @Test
+    void aPermanentPhasedOutIsRefused() {
+        Board board = Board.main();
+        Card bears = board.creature(board.you, "Grizzly Bears");
+        bears.setPhasedOut(board.you);
+        assertRefused(board, bears, ReplaceCardOperation.PHASED_OUT);
+    }
+
+    /** A pending command that cannot be read (it holds an object it cannot write) leaves the edit refused. */
+    @Test
+    void aCommandThatCannotBeRewrittenRefusesTheEdit() {
+        Board board = Board.main();
+        Card bears = board.creature(board.you, "Grizzly Bears");
+        Object unwritable = new Object();
+        board.game.getEndOfTurn().addUntil(() -> unwritable.hashCode());
+        assertRefused(board, bears, ReplaceCardOperation.UNREWRITABLE_COMMAND);
+    }
+
     private static final class Board {
         final Game game;
         final Player you;
