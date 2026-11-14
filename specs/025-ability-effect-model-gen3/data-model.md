@@ -59,7 +59,7 @@ A rule with any scenario at `confirmed/unpatched` has no rule-test records (FR-0
 `pt`, `keyword`, `colour_type`, `counters`, `tap`, `life`, `replace_card`, `remove_permanent`,
 `add_permanent`, `move_card`. Mirrored by the Java `ForkOperation` enum; a contract test pins both
 spellings. Each is a silent edit of the fork's copy (FR-011a); none forces a choice, a target or a
-timing.
+timing. The one play a variant may force beside its operation (FR-010b) is no operation.
 
 ### RuleMapEntry (snapshot, new)
 

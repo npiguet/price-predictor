@@ -1962,9 +1962,9 @@ how a card is scripted. About 90 need setup state that a starting-state file may
 as a designation or a turn's history. About 75 name a suspected Forge departure from the rules, such
 as connive 0 firing the "connives" trigger. `rules/FINDINGS.md` lists ten to test first.
 
-### Collection keeps eight known limits, in mana counting, fork speed, two constant fields, one kind of cast, two rules the records cannot count and the rules without a detector
+### Collection keeps nine known limits, in mana counting, fork speed, two constant fields, one kind of cast, two rules the records cannot count, the rules without a detector and the rules no directed fork can record
 
-**Eight limits of collection were found and left in place.**
+**Nine limits of collection were found and left in place.**
 - The untapped mana production counts a mana ability with a mana cost of its own, such as a filter
   land's, without checking that its {1} can be paid.
 - The affordability check that decides whether a decision candidate's mana cost can be paid counts
@@ -2014,6 +2014,34 @@ as connive 0 firing the "connives" trigger. `rules/FINDINGS.md` lists ten to tes
   the list shows a Grizzly Bears beside Standard Bearer as a legal target. The scenarios of both
   parts have no detector. A third part of the rule, that one instance of "target" cannot name
   the same object twice, has one.
+- Twenty-one rules have no directed fork, because no single change to a board makes a game record
+  the side of the rule that self-play leaves short. They are left off the list of rules directed
+  forks are aimed at, each with its reason in `NOT_DIRECTED` (`scripts/rules_catalogue.py`), and
+  their scenarios keep their detectors. They fall into four groups.
+  - The short side of four rules is an event that a replacement effect meets without changing
+    it, or a game restart. Forge reports a replacement to the collector only when it changes the
+    event, so no board makes it write the record that Rest in Peace (400.6), Lich's Mirror
+    (704.7) or madness (702.35a) met an event and left it alone. A restart (104.6, Karn
+    Liberated's ultimate) is refused in every fork, because it resets a counter the live game's
+    triggers take their ids from.
+  - The short side of five rules is out of reach of any edit. Four need a play made in response
+    or a sequence of plays: a battle's defeat trigger countered (704.5v), a spell copied for each
+    target while another is on the stack (707.10d), a craft that finds its card gone (702.167a),
+    and a face-down merged permanent built in four casts (730.2g). The short side of 111.10n no
+    game shows at all: a Sorcerer Role always gives its +1/+1.
+  - Six rules have no variant whose fork the detector can read on the short side. Four have
+    only variants the catalogue marks as making no contrast: removing Aven Mindcensor leaves
+    Archivist of Oghma's search trigger firing as before (701.23f), and 205.1a, 701.12h and
+    702.70b are alike. Replacing Beloved Beggar with a card without disturb leaves no disturb
+    candidate to record (712.11d). The detector of 701.24g counts no near miss at all.
+  - Six rules turn on a fact the records do not hold. Forge casts a cascaded card as a cast of
+    its own, after the cascade trigger has resolved, so the trigger's record cannot say whether
+    the cascade found a card (702.85a). Jump-start is an optional cost of the card's own cast, so
+    no decision candidate carries it (702.133a). A fused split card's cast is keyed on its first
+    half's line, so its affordability cannot be told from that half's (702.102c). Enlist is an
+    optional attack cost whose trigger exists only once it is paid, so no record shows an enlist
+    that tapped nothing (702.154a). And no record names the static that forbids a suspend
+    (702.62c) or makes a life payment impossible (119.8).
 
 ### The deviance floor is 0.04 nats, where gen-2's output fields turn noisy
 
@@ -2087,5 +2115,9 @@ line gives every field's card-disjoint explained deviance, and each run's "Const
 - **Name a replacement that no card prints on its rewrite record, and record the targets chosen
   for each targeting clause of a cast**, in a later generation. The first makes the finality
   counter's rule countable, the second the two uncounted parts of rule 601.2c.
+- **Write a new variant for each rule left without a directed fork**, where a board edit or a
+  forced play can make its short side: a disturb card one land short of its cost for 712.11d, an
+  own search for 701.23f, a block for 702.70b. The rules whose fact the records do not hold need
+  that record field first.
 - **Draw more of the records a weak output field needs, in gen-4** ([gen-4 record](XXXX-XX-XX-effect-model-gen4-design.md)),
   starting from the fields gen-3's model leaves weak.

@@ -102,3 +102,26 @@ counter, and one taking +1/+1 counters away binds a creature that survives witho
 replacing creature that what it carried leaves at toughness 0 or less, with lethal damage, or with
 deathtouch damage. 702.63c's `keyword` edit refuses (`keyword vanishing not left at one instance`)
 a permanent the edit's closing static check leaves with other than one instance of vanishing.
+
+An `Application` may also name the records its fork keeps (`KeptRecords`, FR-010c), built from the
+fork's binding before the edit: the decision candidates of the cards it names
+(`Application.keepingCandidatesOf(role)`) and the not-fired evaluations of the triggers those cards
+host (`keepingNegativesOf(role)`). A card is named by id, which it keeps through the fork's zone
+changes. In the fork's recording, `PriorityCandidates` writes a kept candidate at every priority stop
+without drawing either sampling stage, and `TriggerChannel` offers a kept not-fired evaluation
+without asking `TriggerNegativeSampler.offer` and counts it toward its line's cap of 24 not-fired
+records only, never toward its mode's balance; deduplication applies to both. Kept records are fork
+records like any other: the fork's lines count toward `--max-records-per-game` when they are written
+to the shard, they enter neither the trigger reservoir nor the mana reservoir, and the fork's
+sampling stream is its own, so the live game's samples do not move. The registry fixes which variants
+keep what: 405.6d, 601.2c, 702.84a, 702.126a, 702.127a, 702.187b, 702.188a and 718.3a keep their
+card's candidates; 608.2p and 702.105a keep their trigger host's negatives.
+
+A registered variant makes the side the rule's counts lack. Where that side needs a rare fact, the
+registered scenario's base is the common board and its variant adds the fact (104.2b, 104.3d,
+614.17d, 701.42a, 702.124j, 702.131a; 712.4a and 712.14c through 712.4a-2, 712.4a-1
+inverted).
+
+Every fork refuses a game restart (FR-010d, `Forks.refuseARestart`): when its copy is made, before
+each main-loop step a fork played on takes, and before a forced resolution drains its stack, a stack
+item whose chain has an `ApiType.RestartGame` clause ends the fork as the refusal `game restart`.

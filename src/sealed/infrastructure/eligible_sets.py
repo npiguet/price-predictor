@@ -1,4 +1,12 @@
-"""Enumerate sealed-legal MTG set codes from MTGJSON AllPrintings.json."""
+"""Enumerate sealed-legal MTG set codes from MTGJSON AllPrintings.json.
+
+Used by ``sealed evaluate-scorer`` alone. Its list is narrower than the one
+the Java side opens pools from (``BoosterTemplates.eligibleSealedSets()``):
+MTGJSON lists a play-booster set's booster under ``booster.play`` and no
+``booster.draft``, so this list stops before the play-booster sets (MKM and
+later), while Forge's edition files give those sets a ``Booster=`` line, the
+template the Java side reads.
+"""
 
 from __future__ import annotations
 
@@ -8,10 +16,10 @@ from pathlib import Path
 MIN_BOOSTER_CARDS = 12
 """Minimum draft-booster size for a set to be considered sealed-viable.
 
-Matches the rule Forge itself uses in
-``AdventureEventData.isValidDraftBlock()`` and the mirrored Java filter in
-``BoosterTemplates.eligibleSealedSets()``. Excludes historical sets (DRK, FEM, …)
-whose 8-card boosters are too small to yield a real sealed pool.
+The same threshold Forge uses in ``AdventureEventData.isValidDraftBlock()`` and
+the Java filter ``BoosterTemplates.eligibleSealedSets()`` applies to Forge's own
+booster templates. Excludes historical sets (DRK, FEM, …) whose 8-card boosters
+are too small to yield a real sealed pool.
 """
 
 
@@ -20,10 +28,12 @@ def eligible_sealed_sets(
 ) -> list[str]:
     """Return set codes eligible for sealed-format play.
 
-    Mirrors the criteria of forge-connector's
-    ``BoosterTemplates.eligibleSealedSets()``: a set is eligible iff it has a
-    draft booster template, is not an un-set (``type == "funny"``), and the
-    draft booster contains at least ``MIN_BOOSTER_CARDS`` (=12) cards.
+    A set is eligible iff MTGJSON gives it a draft booster template, it is not
+    an un-set (``type == "funny"``), and the draft booster contains at least
+    ``MIN_BOOSTER_CARDS`` (=12) cards. ``BoosterTemplates.eligibleSealedSets()``
+    applies the same criteria to Forge's edition files, which give the
+    play-booster sets a booster template where MTGJSON gives them no draft
+    booster, so the Java side's list holds those sets and this one does not.
 
     Args:
         all_printings_path: Path to MTGJSON AllPrintings.json. Defaults to the

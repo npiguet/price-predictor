@@ -119,8 +119,10 @@ State on master when this feature starts (the gen-3 record's Result):
   permanent, change a card in a hand, library or graveyard, or differ by a choice, target or timing.
   Which of these do directed forks cover? → A: The first two, through three more operations,
   `remove_permanent`, `add_permanent` and `move_card` (FR-011), each a silent edit of the fork's
-  copy (FR-011a). Forcing a choice, a target or a timing on a seat stays out of gen-3, and such a
-  variant stays unclassifiable. The classification is rerun with the ten operations (FR-003).
+  copy (FR-011a). A variant that differs from its base only by a choice, a target or a timing stays
+  unclassifiable: no operation makes it. Beside its operation, a variant may force one play in its
+  fork (FR-010b) and may ask that its bound records be kept (FR-010c); every other decision in the
+  fork stays the seat's own. The classification is rerun with the ten operations (FR-003).
 - Q: Which rules are enabled for directed forks? → A: 704.5f, and every rule gen-2's counts show
   with fewer than 100 `fires` records, or with no `does_not_fire` record, that has a variant
   classified into an operation (FR-014b).
@@ -184,6 +186,20 @@ State on master when this feature starts (the gen-3 record's Result):
   script through the variant's `script_edit` (FR-058f).
 - Q: Do the card-disjoint stratum's random-seat records serve as rule-test records? → A: Yes, as
   any natural record there (FR-071, FR-072 unchanged).
+
+### Session 2026-11-14
+
+- Q: Most directed forks write no record their rule's detector can tag. What may a fork do beyond
+  its one board edit? → A: A variant may force one play in its fork: a cast or activation with
+  named targets and its cost paid, a "you may" answered, or an attack (FR-010b); and it may ask
+  that its bound card's decision candidates and its bound trigger's not-fired evaluations be
+  written whatever the samplers say (FR-010c). Every other decision stays the seat's own (FR-010).
+  A variant pointing the wrong way is inverted: the fork binds the common board and adds the rare
+  fact (FR-014a).
+- Q: What of a rule no single board edit yields both sides of? → A: It leaves the list, with its
+  own reason (FR-014b).
+- Q: May a fork restart the game? → A: No. Every fork ends as a refusal before a restart resolves
+  in it (FR-010d).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -687,7 +703,8 @@ and that the reporting half never enters the control score.
   contrasting variant's change through its classified operation; and play the fork on to the end
   of the current turn, recording it. The decisions that produced the forked board are the live
   game's. From the fork on, each seat keeps its live controller (Forge AI or random seat) and
-  decides afresh, as interventional forks do. A fork is kept whether or not its decisions match
+  decides afresh, as interventional forks do, but for the one play its variant may force
+  (FR-010b). A fork is kept whether or not its decisions match
   the ones the live game goes on to make; its records carry the decisions it made and are tagged
   by detectors like any other record. The fork is then discarded and the live game continues
   unchanged. The fork's copy of the game MUST carry the live game's pending delayed triggers and
@@ -701,6 +718,34 @@ and that the reporting half never enters the control score.
   directed forks each has taken so far in the worker JVM's lifetime, ties broken by their order in
   `--directed-fork-rules`; each fork taken, kept or discarded, counts against
   `--directed-forks-per-game`, and no rule is tried once the budget is spent.
+- **FR-010b**: A directed rule's variant MAY name one play its fork forces, made by a seat the
+  binding names, at the fork's own step or a later step of the same turn: a cast or activation of a
+  line of a bound source (chosen by API type or keyword), its targets named by binding role clause
+  by clause (a clause left unnamed drawn from its legal targets by the fork's own random stream),
+  X and modes fixed or drawn, its cost paid through the engine's own payment (what a cost
+  sacrifices, discards or exiles named by role, else the seat's choice); a "you may" of a bound
+  source answered yes or no; or an attack by a bound creature at a bound player or permanent,
+  added to the seat's own declaration. The forcing seat is attached in the fork's copy only.
+  Every other decision in the fork stays the seat's own (FR-010). A forced play is recorded as a
+  live play is, by the fork's own recorders, with no record member marking it forced: a directed
+  fork's records may hold a play its seat was made to make, and which variants force what is
+  fixed per rule in the registry (FR-014a). A fork whose forced play has no legal line or target
+  after the edit, is not made by the end of the turn, or whose cost is not paid ends as a counted
+  refusal and writes nothing.
+- **FR-010c**: A directed rule's variant MAY ask that the records of its bound cards be kept. In
+  its fork, every decision candidate of a card the variant names (a spell, an activated ability,
+  a special action or a land play it hosts) is written whatever `--playability-rate`,
+  `--zone-candidate-rate` and `--plain-candidate-rate` draw, and drawn from neither; and every
+  not-fired evaluation of a trigger a card the variant names hosts is offered for writing whatever
+  the trigger-negative sampler's balance says, and counts toward no mode's balance. Deduplication
+  and the per-line cap of not-fired trigger records still apply. Kept records are ordinary records
+  of the fork: they count toward `--max-records-per-game` as every fork record does, enter no
+  reservoir, and change nothing the live game samples.
+- **FR-010d**: No fork (directed, protection, intervention or damage-step probe) MAY resolve a
+  restart of the game: a fork whose stack holds an ability with a restart clause (Karn Liberated's)
+  ends, before that ability resolves, as the counted refusal `game restart`, writing nothing.
+  Forge's restart resets the JVM-wide trigger id counter, which the live game's records and
+  trigger comparisons depend on.
 - **FR-011**: The fork operations are: change a creature's power or toughness (`pt`); add or
   remove a keyword (`keyword`); change a colour or type (`colour_type`); add or remove counters
   (`counters`); tap or untap a permanent (`tap`); change a life total (`life`); replace one card
@@ -709,7 +754,8 @@ and that the reporting half never enters the control score.
   change which card sits in one of them (`move_card`). The existing damage-step probe is the
   "remove a keyword" operation. This feature MUST build all ten operations, the existing one
   reused, so every classified variant has its operation; a variant marked unclassifiable (FR-003)
-  has none. No operation forces a choice, a target or a timing on a seat.
+  has none. No operation forces a choice, a target or a timing on a seat; the one play a
+  variant may force beside its operation is FR-010b's.
 - **FR-011a**: Each operation MUST edit the fork's copy without the event the change would raise in
   a game. `remove_permanent` removes the permanent from combat, unattaches what is attached to it
   and what it is attached to, and puts it in no zone: no leaves-the-battlefield trigger, no
@@ -737,6 +783,10 @@ and that the reporting half never enters the control score.
   exists only for rules enabled for directed forks. It decides only when to fork: the fork's
   records are tagged afterwards by the Python detectors like any other record, so counts, budgets,
   the mask and rule tests read detector tags alone. The JVM makes no call to Python during a game.
+  A rule's registered variant makes the side its counts lack (FR-014b). Where that side needs a
+  rare fact, the registered scenario's base is the common board and its variant adds the fact
+  (Felidar Sovereign's controller below 40 life, set to 40); a variant taking the rare fact away
+  would record the side the live games already show.
 - **FR-014b**: Board preconditions MUST be registered for 704.5f and 702.98a, listed whatever their
   counts (702.98a's few `does_not_fire` records being one creature in one game), and for every rule that gen-2's
   per-rule counts (`output/effects/rule-counts-gen2.json`) show with fewer than 100 `fires` records
@@ -749,9 +799,16 @@ and that the reporting half never enters the control score.
   finality counter; 104.4c, whose GameDrawn draw no record shows; 701.10c, 701.11c and 712.4c,
   whose scenarios declare no detector; 701.40c and 701.40d, whose variant replaces a face-down
   permanent, which `replace_card` refuses; 115.7a, whose point needs a spell cast after the
-  boundary; and 712.16, whose point no sealed pool holds the cards for (`directed-rules`
-  names each with its reason). The list is checked in as `rules/directed-fork-rules.txt`, one rule
-  id per line, 71 rules in unit order, and is what the full collection passes to
+  boundary; 712.16, whose point no sealed pool holds the cards for; and the rules no single board
+  edit yields the lacking side of: 104.6 (a game restart, which every fork refuses, FR-010d),
+  400.6, 704.7 and 702.35a (a replacement met and not applied, which no hook reports), 701.24g
+  (no near miss declared), 702.167a (a craft returning nothing), 111.10n (a Role's static giving
+  no boost), 704.5v and 707.10d (a play made in response), 730.2g (a sequence of plays), 712.11d
+  (its variant removes the candidate read), 205.1a, 701.12h, 701.23f and 702.70b (variants of
+  polarity `other` alone), and 119.8, 702.62c, 702.85a, 702.102c, 702.133a and 702.154a (a fact
+  the record cannot show) (`directed-rules` names each with its reason). The list is checked in
+  as `rules/directed-fork-rules.txt`, one rule id per line, 50 rules in unit order, and is what
+  the full collection passes to
   `--directed-fork-rules`; `directed-rules` over the gen-2 counts writes it unchanged. Every
   listed rule passes the startup check (FR-014).
 
