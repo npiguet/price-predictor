@@ -428,6 +428,34 @@ class OutcomeHandlerTest {
     // ── the shard, read back ────────────────────────────────────────────
 
     /**
+     * A report's parameters are written in key order at every depth: Forge
+     * builds them with {@code Map.of}, whose iteration order changes from one
+     * JVM to the next, and a die's result is itself such a map.
+     */
+    @Test
+    void anOutcomesNestedMapsAreWrittenInKeyOrder() throws Throwable {
+        SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+        Map<String, Object> roll = new java.util.LinkedHashMap<>();
+        roll.put("natural", 3);
+        roll.put("final", 4);
+        Map<String, Object> params = new java.util.LinkedHashMap<>();
+        params.put("sides", 6);
+        params.put("results", List.of(roll));
+        params.put("by_side", new java.util.LinkedHashMap<>(Map.of("z", 1)));
+
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
+            collectors.clauses().outcomeHandler().invoke(null, ON_OUTCOME,
+                    new Object[]{sa, "dice_rolled", params});
+            bracket.finishGame(Set.of());
+        });
+
+        assertEquals(1, records.size(), records.toString());
+        assertTrue(records.get(0).contains(
+                "\"by_side\":{\"z\":1},\"results\":[{\"final\":4,\"natural\":3}],\"sides\":6"),
+                records.get(0));
+    }
+
+    /**
      * The one event the outcome hook filed for {@code report}, as the shard
      * records it.
      */

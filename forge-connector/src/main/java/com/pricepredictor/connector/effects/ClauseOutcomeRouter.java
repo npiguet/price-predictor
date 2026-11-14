@@ -331,10 +331,41 @@ final class ClauseOutcomeRouter {
                         event.param("characteristics", tokenCharacteristics(token));
                     }
                 }
-                default -> event.param(key, value);
+                default -> event.param(key, inKeyOrder(value));
             }
         }
         return event;
+    }
+
+    /**
+     * {@code value} with every map inside it in key order and every set in
+     * the order of its members' spelling, lists kept as they are: a nested
+     * map Forge built with {@code Map.of} (a die's {@code natural} and
+     * {@code final}) iterates in an order that changes from one JVM to the
+     * next, and is written in the order it iterates.
+     */
+    static Object inKeyOrder(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> ordered = new TreeMap<>();
+            map.forEach((key, member) -> ordered.put(String.valueOf(key), inKeyOrder(member)));
+            return ordered;
+        }
+        if (value instanceof java.util.Set<?> set) {
+            java.util.List<Object> members = new java.util.ArrayList<>();
+            for (Object member : set) {
+                members.add(inKeyOrder(member));
+            }
+            members.sort(java.util.Comparator.comparing(String::valueOf));
+            return members;
+        }
+        if (value instanceof java.util.List<?> list) {
+            java.util.List<Object> members = new java.util.ArrayList<>(list.size());
+            for (Object member : list) {
+                members.add(inKeyOrder(member));
+            }
+            return members;
+        }
+        return value;
     }
 
     /**
