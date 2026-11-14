@@ -64,6 +64,13 @@ public final class RandomChoices {
      * clones of them, which is how a mode's targets, drawn on the original,
      * reach the clone that resolves.
      *
+     * <p>Only among the modes whose targets exist (603.3c): a mode any
+     * clause of whose chain needs more targets than the board offers is no
+     * legal choice. Forge's own list ({@code CharmEffect.makePossibleOptions})
+     * reads a mode's first clause alone, so a mode targeting in a later
+     * clause is read here, and a draw never lands on a mode set the targets
+     * draw would then fail on.
+     *
      * @return the modes, possibly empty where the charm's minimum is zero;
      *         null when the ability is not a charm or has no legal mode set
      */
@@ -71,12 +78,18 @@ public final class RandomChoices {
         if (charm.getApi() != ApiType.Charm) {
             return null;
         }
-        List<AbilitySub> options = CharmEffect.makePossibleOptions(charm);
-        if (options == null || options.isEmpty()) {
+        List<AbilitySub> printed = CharmEffect.makePossibleOptions(charm);
+        if (printed == null || printed.isEmpty()) {
             return null;
         }
+        List<AbilitySub> options = new ArrayList<>();
+        for (AbilitySub option : printed) {
+            if (hasItsTargets(option, charm.getActivatingPlayer())) {
+                options.add(option);
+            }
+        }
         if (charm.isEntwine()) {
-            return new ArrayList<>(options);
+            return options.size() == printed.size() ? new ArrayList<>(options) : null;
         }
         Card host = charm.getHostCard();
         boolean repeat = charm.hasParam("CanRepeatModes");
@@ -87,7 +100,14 @@ public final class RandomChoices {
                 host, charm.getParamOrDefault("CharmNum", "1"), charm);
         int min = CharmModes.minimumModes(charm);
         if (!repeat) {
+            // A mode set of the printed size needs that many distinct legal
+            // modes: fewer legal than the charm's minimum is no legal set.
+            if (Math.min(min, printed.size()) > options.size()) {
+                return null;
+            }
             max = Math.min(max, options.size());
+        } else if (options.isEmpty() && min > 0) {
+            return null;
         }
         min = Math.max(0, Math.min(min, max));
         if (max < 0) {
@@ -131,6 +151,33 @@ public final class RandomChoices {
                 remaining.remove(pick);
             }
         }
+    }
+
+    /**
+     * Whether every targeting clause of {@code mode}'s chain has as many
+     * legal candidates as its minimum, for {@code activator}: each counted
+     * alone, so a cross-target constraint is left to the targets draw.
+     */
+    static boolean hasItsTargets(SpellAbility mode, Player activator) {
+        for (SpellAbility clause = mode; clause != null; clause = clause.getSubAbility()) {
+            if (!clause.usesTargeting() || clause.getMinTargets() <= 0) {
+                continue;
+            }
+            Player was = clause.getActivatingPlayer();
+            if (was == null && activator != null) {
+                clause.setActivatingPlayer(activator);
+            }
+            int legal = 0;
+            for (GameEntity candidate : clause.getTargetRestrictions().getAllCandidates(clause)) {
+                if (clause.canTarget(candidate)) {
+                    legal++;
+                }
+            }
+            if (legal < clause.getMinTargets()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static int pawprintCost(AbilitySub option) {
