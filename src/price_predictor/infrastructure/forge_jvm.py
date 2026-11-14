@@ -788,10 +788,11 @@ STOP_FILE_PROPERTY = "worker.stop.file"
 #: worker stops itself at a game end (``WorkerStop.RECYCLE_SECONDS``).
 RECYCLE_SECONDS_PROPERTY = "worker.recycle.seconds"
 #: What a worker that stopped at a game end prints last, before exiting 0
-#: (``WorkerLoop.stoppedLine``): its reason, then the matches its JVM played.
+#: (``WorkerLoop.stoppedLine``): its reason, the matches its JVM finished and
+#: the games it played to their end (a match it left unfinished included).
 STOPPED_LINE = re.compile(
     r"Worker: stopped at a game end \((?P<reason>.*)\); (?P<matches>\d+) matches "
-    r"generated in this JVM; output closed, exiting 0"
+    r"generated in this JVM; (?P<games>\d+) games played; output closed, exiting 0"
 )
 #: What a worker given a stop prints once Forge is initialised and its shard
 #: open, before its first match (``WorkerStop.describe``): a worker whose log

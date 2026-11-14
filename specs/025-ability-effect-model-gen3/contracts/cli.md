@@ -255,9 +255,10 @@ game-end marker, and its shard is closed whole. The request is a file, not a con
   progress-file line for it; the games it finished keep their records and markers.
 - On stopping the worker closes its shard (the last block written), prints one stdout line and
   exits 0:
-  `Worker: stopped at a game end (<reason>); <n> matches generated in this JVM; output closed, exiting 0`,
-  `<reason>` being `stop file <path>` or `recycling after <seconds> s`. The line matches no
-  worker-failure pattern.
+  `Worker: stopped at a game end (<reason>); <n> matches generated in this JVM; <g> games played; output closed, exiting 0`,
+  `<reason>` being `stop file <path>` or `recycling after <seconds> s`, `<n>` the matches the JVM
+  finished and `<g>` the games it played to their end, those of a match it left unfinished
+  included. The line matches no worker-failure pattern.
 - With either property set the worker prints at startup
   `Graceful stop: at a game end, when <path> exists[ or ]the JVM has run <seconds> s`.
 - What a supervisor cannot rely on: a game has no time bound of its own, and a request made while

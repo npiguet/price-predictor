@@ -13,6 +13,8 @@ Test-only properties (``standin.*``) shape it:
 
 - ``standin.init.seconds``: how long "Forge" takes to initialise (default 0);
 - ``standin.game.seconds``: how long a game takes (default 0.1);
+- ``standin.games.per.match``: the games a match takes (default 1); a stop
+  asked mid-match leaves it unfinished, counted as no match;
 - ``standin.behaviour``: ``honour`` (default); ``ignore`` never looks at a
   stop; ``exit0-without-line`` stops when asked but exits 0 printing nothing;
 - ``standin.crash.after.games``: exit 1, as an uncaught failure, after that
@@ -21,8 +23,8 @@ Test-only properties (``standin.*``) shape it:
   console Ctrl-C reached does (its shutdown hook closes the shard; no stop
   line).
 
-One game is one match (best of one). ``sealed.progress.file`` gets a line per
-match, as the worker's progress writer appends one.
+``sealed.progress.file`` gets a line per finished match, as the worker's
+progress writer appends one.
 """
 
 from __future__ import annotations
@@ -41,7 +43,8 @@ PROGRESS_FILE = "sealed.progress.file"
 #: ``WorkerLoop.STOPPED`` and the rest of ``WorkerLoop.stoppedLine``, with
 #: ``MatchWorkerMain``'s progress noun.
 STOPPED = "Worker: stopped at a game end"
-STOPPED_TAIL = " in this JVM; output closed, exiting 0"
+IN_THIS_JVM = " in this JVM; "
+GAMES_TAIL = " games played; output closed, exiting 0"
 PROGRESS_NOUN = "matches generated"
 #: ``WorkerStop.reason``.
 REASON_STOP_FILE = "stop file "
@@ -107,6 +110,7 @@ def main(argv: list[str]) -> int:
             return BAD_CONFIG
     behaviour = props.get("standin.behaviour", "honour")
     game_seconds = float(props.get("standin.game.seconds", "0.1"))
+    games_per_match = int(props.get("standin.games.per.match", "1"))
     crash_after = int(props.get("standin.crash.after.games", "-1"))
     die_file = Path(props["standin.die.file"]) if "standin.die.file" in props else None
     progress = Path(props[PROGRESS_FILE]) if PROGRESS_FILE in props else None
@@ -139,21 +143,30 @@ def main(argv: list[str]) -> int:
             + ("" if recycle is None else DESCRIBE_RUN + str(recycle) + " s")
         )
     completed = 0
+    games = 0
     while True:
         why = reason()  # before each match
-        if why is None:
-            pause(game_seconds)  # one game, one match
-            completed += 1
-            if progress is not None:
-                _append_line(progress, f"{os.getpid()}\n")
-            if completed == crash_after:
-                _say("Exception in thread \"main\" java.lang.IllegalStateException", sys.stderr)
-                return 1
+        for _ in range(games_per_match if why is None else 0):
+            pause(game_seconds)  # one game
+            games += 1
             why = reason()  # at the game's end
+            if why is not None:
+                break
+        else:
+            if why is None:  # the match finished
+                completed += 1
+                if progress is not None:
+                    _append_line(progress, f"{os.getpid()}\n")
+                if completed == crash_after:
+                    _say("Exception in thread \"main\" java.lang.IllegalStateException",
+                         sys.stderr)
+                    return 1
+                why = reason()
         if why is not None:
             if behaviour == "exit0-without-line":
                 return 0
-            _say(f"{STOPPED} ({why}); {completed} {PROGRESS_NOUN}{STOPPED_TAIL}")
+            _say(f"{STOPPED} ({why}); {completed} {PROGRESS_NOUN}{IN_THIS_JVM}"
+                 f"{games}{GAMES_TAIL}")
             return 0
 
 

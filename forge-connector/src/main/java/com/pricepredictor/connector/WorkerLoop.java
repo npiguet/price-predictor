@@ -169,12 +169,19 @@ final class WorkerLoop {
     /** The first words of {@link #stoppedLine}: a graceful stop, which is no failure. */
     static final String STOPPED = "Worker: stopped at a game end";
 
+    /** What follows the progress noun in {@link #stoppedLine}, before the games. */
+    static final String IN_THIS_JVM = " in this JVM; ";
+    /** The rest of {@link #stoppedLine}, after the games. */
+    static final String GAMES_TAIL = " games played; output closed, exiting 0";
+
     /**
      * The line a worker prints once it has stopped gracefully and closed
-     * what it writes, just before it exits {@link ExitCode#OK}.
+     * what it writes, just before it exits {@link ExitCode#OK}: why, the
+     * attempts (matches) it completed, and the games it played to their
+     * end, a match it left unfinished included.
      */
-    static String stoppedLine(Ending ending, Progress progress) {
+    static String stoppedLine(Ending ending, Progress progress, long games) {
         return STOPPED + " (" + ending.stopped() + "); " + ending.completed() + " "
-                + progress.completed() + " in this JVM; output closed, exiting 0";
+                + progress.completed() + IN_THIS_JVM + games + GAMES_TAIL;
     }
 }

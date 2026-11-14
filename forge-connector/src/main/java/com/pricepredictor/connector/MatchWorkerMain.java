@@ -257,9 +257,10 @@ public class MatchWorkerMain {
         // the worker before its first match, once Forge is initialised.
         WorkerStop stop = config.stop();
         stop.describe().ifPresent(System.out::println);
+        GamePlayer gamePlayer = new GamePlayer(
+                config.bestOf(), effectRecords, caps, stop, forge.game.Match::startGame);
         MatchGenerator generator = MatchGenerator.builder(eligibleSets, config.runId())
-                .gamePlayer(new GamePlayer(
-                        config.bestOf(), effectRecords, caps, stop, forge.game.Match::startGame))
+                .gamePlayer(gamePlayer)
                 .sideA(sideA)
                 .sideB(sideB, config.sideBWeight())
                 .excludedCards(HoldoutCards.fromSystemProperty())
@@ -279,7 +280,7 @@ public class MatchWorkerMain {
             // worker giving up or stopping is when they matter most.
             hookFailureReport.afterMatch();
         }
-        throw stopGracefully(ending, matches, effectRecords);
+        throw stopGracefully(ending, matches, gamePlayer.gamesPlayed(), effectRecords);
     }
 
     /**
@@ -304,12 +305,12 @@ public class MatchWorkerMain {
      * printed, and the process exits {@link ExitCode#OK}.
      */
     static ToolMain.Exit stopGracefully(
-            WorkerLoop.Ending ending, WorkerLoop.Progress progress,
+            WorkerLoop.Ending ending, WorkerLoop.Progress progress, long games,
             RecordShardWriter effectRecords) {
         if (effectRecords != null) {
             effectRecords.close();
         }
-        progress.stream().println(WorkerLoop.stoppedLine(ending, progress));
+        progress.stream().println(WorkerLoop.stoppedLine(ending, progress, games));
         progress.stream().flush();
         return ToolMain.exit(ExitCode.OK);
     }

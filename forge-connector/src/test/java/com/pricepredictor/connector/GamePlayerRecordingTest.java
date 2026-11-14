@@ -245,6 +245,7 @@ class GamePlayerRecordingTest {
 
         assertEquals("stop file " + stopFile, requested.reason());
         assertEquals(1, started.size(), "no game starts after the stop");
+        assertEquals(1, player.gamesPlayed(), "the game it stopped after was played to its end");
         assertTrue(started.get(0).isGameOver(), "the game in progress ended normally");
         writer.close();
         Map<String, List<String>> games = byGame(lines(writer.path()));
@@ -263,13 +264,13 @@ class GamePlayerRecordingTest {
                 "Error generating match");
 
         ToolMain.Exit exit = MatchWorkerMain.stopGracefully(
-                new WorkerLoop.Ending(4, "stop file x"), progress, writer);
+                new WorkerLoop.Ending(4, "stop file x"), progress, 9, writer);
 
         assertEquals(ExitCode.OK, exit.code());
         assertEquals(1, lines(writer.path()).size(), "the block in flight is written");
         String line = out.toString(StandardCharsets.UTF_8).trim();
         assertEquals("Worker: stopped at a game end (stop file x); 4 matches generated in this JVM;"
-                + " output closed, exiting 0", line);
+                + " 9 games played; output closed, exiting 0", line);
         assertFalse(line.contains("Error generating match") || line.contains("giving up"));
     }
 

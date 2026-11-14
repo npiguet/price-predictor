@@ -64,11 +64,16 @@ def _java(name: str) -> str:
     ("WorkerStop.java", f'"{stand_in.RECYCLE_REFUSAL}"'),
     ("WorkerLoop.java", f'STOPPED = "{stand_in.STOPPED}"'),
     ("WorkerLoop.java", 'STOPPED + " (" + ending.stopped() + "); " + ending.completed() + " "'),
-    ("WorkerLoop.java", f'progress.completed() + "{stand_in.STOPPED_TAIL}"'),
+    ("WorkerLoop.java", f'IN_THIS_JVM = "{stand_in.IN_THIS_JVM}"'),
+    ("WorkerLoop.java", f'GAMES_TAIL = "{stand_in.GAMES_TAIL}"'),
+    ("WorkerLoop.java", "progress.completed() + IN_THIS_JVM + games + GAMES_TAIL"),
     ("MatchWorkerMain.java", f'"{stand_in.PROGRESS_NOUN}", "Error generating match"'),
     ("MatchWorkerMain.java", f'PROGRESS_FILE = "{stand_in.PROGRESS_FILE}"'),
     ("MatchWorkerMain.java", "stop.describe().ifPresent(System.out::println)"),
-    ("MatchWorkerMain.java", "progress.stream().println(WorkerLoop.stoppedLine(ending, progress))"),
+    ("MatchWorkerMain.java",
+     "progress.stream().println(WorkerLoop.stoppedLine(ending, progress, games))"),
+    ("MatchWorkerMain.java", "stopGracefully(ending, matches, gamePlayer.gamesPlayed(), "),
+    ("GamePlayer.java", "gamesPlayed++;"),
     ("MatchWorkerMain.java", "return ToolMain.exit(ExitCode.OK)"),
     ("ExitCode.java", f"BAD_CONFIG({stand_in.BAD_CONFIG})"),
     ("ExitCode.java", "OK(0)"),
@@ -84,10 +89,10 @@ def test_the_pool_reads_the_properties_and_lines_the_worker_writes():
     assert RECYCLE_SECONDS_PROPERTY == stand_in.RECYCLE_SECONDS
     assert STARTUP_LINE == stand_in.DESCRIBE
     line = (f"{stand_in.STOPPED} ({stand_in.REASON_STOP_FILE}C:\\a (b)\\run.0.stop); "
-            f"7 {stand_in.PROGRESS_NOUN}{stand_in.STOPPED_TAIL}")
+            f"7 {stand_in.PROGRESS_NOUN}{stand_in.IN_THIS_JVM}12{stand_in.GAMES_TAIL}")
     found = stop_line_of("Worker: 10 matches generated\n" + line + "\n")
     assert found is not None
-    assert found.group("matches") == "7"
+    assert (found.group("matches"), found.group("games")) == ("7", "12")
     assert found.group("reason") == "stop file C:\\a (b)\\run.0.stop"
 
 

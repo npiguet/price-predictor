@@ -178,9 +178,9 @@ def test_the_stop_protocol_s_lines_are_no_failure():
     from tests.unit.infrastructure import stand_in_worker as java
 
     stopped = (f"{java.STOPPED} ({java.REASON_STOP_FILE}C:/logs/run.0.stop); 4 "
-               f"{java.PROGRESS_NOUN}{java.STOPPED_TAIL}")
+               f"{java.PROGRESS_NOUN}{java.IN_THIS_JVM}5{java.GAMES_TAIL}")
     recycled = (f"{java.STOPPED} ({java.REASON_RECYCLING}600 s); 9 "
-                f"{java.PROGRESS_NOUN}{java.STOPPED_TAIL}")
+                f"{java.PROGRESS_NOUN}{java.IN_THIS_JVM}5{java.GAMES_TAIL}")
     startup = (f"{java.DESCRIBE}C:/logs/run.0.stop{java.DESCRIBE_EXISTS}"
                f"{java.DESCRIBE_OR}{java.DESCRIBE_RUN}600 s")
     for line in (stopped, recycled, startup):

@@ -48,6 +48,13 @@ public class GamePlayer {
     /** Asked at each game end: whether the worker is to stop there (D2). */
     private final WorkerStop stop;
 
+    /**
+     * The games this player has played to their end, recording closed: a
+     * stopped worker's stop line names them, since a best-of-N match stopped
+     * after a game counts as no match.
+     */
+    private long gamesPlayed;
+
     /** Plays one game of a match to its end; {@link Match#startGame} but in a test. */
     private final GameDriver driver;
 
@@ -206,6 +213,11 @@ public class GamePlayer {
         return playMatch(deckA, deckB, DeckRules.NONE);
     }
 
+    /** The games played to their end so far, in matches finished or not. */
+    public long gamesPlayed() {
+        return gamesPlayed;
+    }
+
     /**
      * {@link #playMatch(Deck, Deck)} for decks aimed at {@code deckRules}: a
      * steered variant round's decks (FR-058d), whose games' records carry
@@ -326,6 +338,7 @@ public class GamePlayer {
                 closeRecording(recording, thrown);
             }
         }
+        gamesPlayed++;
 
         var winningLobby = game.getOutcome().getWinningLobbyPlayer();
         if (winningLobby == null) {
