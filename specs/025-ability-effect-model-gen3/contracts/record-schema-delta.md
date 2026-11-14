@@ -471,7 +471,7 @@ position a card left a library from, and a search of another player's library.
   | `LifeLost`, `PayLife` / `LifeReduced`, `PayLife` | `life_change` | `delta` −the amount |
   | `CounterAdded` | `counter_change` | `delta` +1: one event per counter |
   | `CounterRemoved` | `counter_change` | `delta` −1: one event per counter |
-  | `CounterAddedOnce` / `AddCounter` | `counter_change` | `delta` +the counters put on (`CounterAmount`; the replacement's `CounterMap` summed) |
+  | `CounterAddedOnce` / `AddCounter` | `counter_change` | `delta` +the counters put on (`CounterAmount`; the replacement's `CounterMap` summed over its players, per counter type as below) |
   | `CounterRemovedOnce` | `counter_change` | `delta` −`CounterAmount` |
   | `RemoveCounter` (replacement) | `counter_change` | `delta` the count the removal leaves (`Result`) less the card's count: 0 or negative |
   | `Drawn`, `Discarded`, `Milled`, `TokenCreated` / `Draw` | `card_drawn`, `card_discarded`, `card_milled`, `token_created` | `count` 1: one event per card |
@@ -487,14 +487,24 @@ position a card left a library from, and a search of another player's library.
   | `Exploited` | `sacrificed` | subject the exploited creature as it last was |
   | `DiscardedAll` | `card_discarded` | subjects the cards, `count` how many |
   | `RolledDie`, `RolledDieOnce` | `dice_rolled` | `sides`, `results` (`[{natural, final}]` for one die; `[{final}]` per die of a roll) |
-  | `CounterPlayerAddedAll` | `counter_change` | subject the object, `delta` the counters put, `counter_type` when one type |
+  | `CounterPlayerAddedAll` | `counter_change` | subject the object, `delta` the counters put, summed over their types, `counter_type` when one type; a trigger record is one firing, never written once per type |
   | `Scry` (replacement) | `card_looked_at` | `count` the scry's number |
   | `CreateToken` (replacement) | `token_created` | `count` the tokens its table makes |
 
   Every other Forge trigger and replacement mode carries no magnitude a declared event holds
-  (`Explore` and `Proliferate` among them) and is a `state_flag_change` with its `mode`. An
-  `AddCounter` replacement naming several counter types writes one event: their summed `delta`
-  and no `counter_type`.
+  (`Explore` and `Proliferate` among them) and is a `state_flag_change` with its `mode`.
+
+  An `AddCounter` replacement whose `CounterMap` names several counter types, on either side
+  of the call, writes one rewrite record per counter type whose count the call changed, in
+  the order of the types' names. Each record's `incoming` and `outgoing` carry that type as
+  `counter_type` and its count before and after as `delta`, summed over the map's players; a
+  type on one side only counts 0 on the other (a type the call removed has `outgoing` delta
+  0). Each carries the call's `result` and `replaced_by`, and its snapshot's `pending_event`
+  is its own `incoming`. A type the call left unchanged writes no record. A call that changed
+  no type's count, a map of one type, and a call whose `before` is null (`incoming_unknown`)
+  write the one record of the whole map: their summed `delta`, and `counter_type` only when
+  the map names one type. This holds as well for an `AddCounter` replacement Forge runs on a
+  permanent's move to the battlefield, over the move's `CounterMap`.
 
   A trigger record's pending `face_change` is that record's event; the same turn is written once
   more, by the bus, in the record the face turned in.

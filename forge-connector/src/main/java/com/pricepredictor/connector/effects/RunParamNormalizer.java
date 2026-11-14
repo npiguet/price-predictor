@@ -55,6 +55,20 @@ final class RunParamNormalizer {
      * change to the wire format.
      */
     static EffectEvent describeParams(Object trait, Object params) {
+        return describeParams(trait, params, null);
+    }
+
+    /**
+     * The same, a counter map read for one counter type alone: its {@code
+     * counter_type} that type and its {@code delta} that type's count, summed
+     * over the map's players (0 where the map holds none of it). An {@code
+     * AddCounter} replacement's record over several types is written once per
+     * type it changed ({@link #changedCounterTypes}).
+     *
+     * @param counterType the type, as {@link CardSpelling#counterName} spells
+     *                    it, or null to read the whole map
+     */
+    static EffectEvent describeParams(Object trait, Object params, String counterType) {
         String mode = modeOf(trait);
         Map<String, Object> byName = paramsByName(params);
         Reading reading = readingOf(trait, mode);
@@ -79,7 +93,7 @@ final class RunParamNormalizer {
                 event.subject(subject);
             }
         }
-        normalizeParams(event, mode, reading, byName);
+        normalizeParams(event, mode, reading, byName, counterType);
         if (reading.extra() != null) {
             reading.extra().read(event, byName);
         }
@@ -268,7 +282,8 @@ final class RunParamNormalizer {
      * else, claiming no more than it read.
      */
     private static void normalizeParams(
-            EffectEvent event, String mode, Reading reading, Map<String, Object> byName) {
+            EffectEvent event, String mode, Reading reading, Map<String, Object> byName,
+            String counterType) {
         switch (event.type()) {
             case ZONE_CHANGE -> {
                 event.param("from_zone", CardSpelling.zoneName(byName.get("Origin")));
@@ -289,7 +304,7 @@ final class RunParamNormalizer {
             }
             case DESTROYED ->
                     event.param("regenerable", boolOf(byName.get("Regeneration")));
-            case COUNTER_CHANGE -> counterParams(event, reading, byName);
+            case COUNTER_CHANGE -> counterParams(event, reading, byName, counterType);
             // LifeAmount on the triggers, LifeGained on the GainLife
             // replacement, Amount on LifeReduced and PayLife's.
             case LIFE_CHANGE -> event.param("delta", signed(
@@ -368,12 +383,19 @@ final class RunParamNormalizer {
      * so what it removes is that count less the card's count now
      * ({@link #removalOf}).
      *
-     * <p>A map naming several counter types at once has one delta and no single
-     * type: the total is the honest answer and a joined type name would be a
-     * value no reader could match.
+     * <p>A map naming several counter types at once, read whole, has one delta
+     * and no single type: the total is the honest answer and a joined type
+     * name would be a value no reader could match. Read for {@code onlyType},
+     * it is that type's count alone.
      */
     private static void counterParams(
-            EffectEvent event, Reading reading, Map<String, Object> byName) {
+            EffectEvent event, Reading reading, Map<String, Object> byName, String onlyType) {
+        if (onlyType != null) {
+            event.param("counter_type", onlyType);
+            event.param("delta", signed(reading,
+                    counterMapTotals(byName.get("CounterMap")).getOrDefault(onlyType, 0)));
+            return;
+        }
         Object type = byName.get("CounterType");
         if (type != null) {
             event.param("counter_type", CardSpelling.counterName(type));
@@ -396,6 +418,48 @@ final class RunParamNormalizer {
         }
         event.param("delta", signed(reading, sum));
     }
+
+    /**
+     * The counter types an {@code AddCounter} replacement changed the count
+     * of, when its map names several, in the order of their names; empty
+     * otherwise: for any other trait, a map of one type, a call that changed
+     * no type's count, and run parameters Forge could not copy ({@code
+     * before} null), where nothing can be compared.
+     *
+     * <p>A type's count is summed over the map's players, before and after;
+     * a type on one side only counts 0 on the other. Each type named is one
+     * record's: the result and the ability that ran are the call's, but a
+     * replacement reading one type ({@code ValidCounterType$}) leaves the
+     * others' counts as they came, and a record of the whole map would say
+     * {@code updated} beside the counters it never touched.
+     *
+     * <p>Ordered by name, not as the map yields them: Forge's counter
+     * multisets hash an enum's identity, which differs from one JVM to the
+     * next.
+     */
+    static List<String> changedCounterTypes(Object trait, Object before, Object after) {
+        if (before == null || !(trait instanceof ReplacementEffect)
+                || !ADD_COUNTER.equals(modeOf(trait))) {
+            return List.of();
+        }
+        Map<String, Integer> was = counterMapTotals(paramsByName(before).get("CounterMap"));
+        Map<String, Integer> now = counterMapTotals(paramsByName(after).get("CounterMap"));
+        Set<String> types = new java.util.TreeSet<>(was.keySet());
+        types.addAll(now.keySet());
+        if (types.size() < 2) {
+            return List.of();
+        }
+        List<String> changed = new ArrayList<>();
+        for (String type : types) {
+            if (was.getOrDefault(type, 0).intValue() != now.getOrDefault(type, 0).intValue()) {
+                changed.add(type);
+            }
+        }
+        return changed;
+    }
+
+    /** The replacement mode whose record is written once per counter type it changed. */
+    private static final String ADD_COUNTER = "AddCounter";
 
     /**
      * What a {@code RemoveCounter} replacement's removal comes to, as a
@@ -828,7 +892,7 @@ final class RunParamNormalizer {
             Map.entry("GainLife", Reading.of(EventType.LIFE_CHANGE)),
             Map.entry("LifeReduced", Reading.loss(EventType.LIFE_CHANGE, Amount.NONE)),
             Map.entry("PayLife", Reading.loss(EventType.LIFE_CHANGE, Amount.NONE)),
-            Map.entry("AddCounter", Reading.of(EventType.COUNTER_CHANGE)),
+            Map.entry(ADD_COUNTER, Reading.of(EventType.COUNTER_CHANGE)),
             Map.entry("RemoveCounter", new Reading(
                     EventType.COUNTER_CHANGE, RunParamNormalizer::removalOf, 0)),
             Map.entry("CreateToken", Reading.of(EventType.TOKEN_CREATED,

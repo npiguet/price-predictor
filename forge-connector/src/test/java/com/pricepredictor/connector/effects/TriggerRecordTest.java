@@ -424,6 +424,31 @@ class TriggerRecordTest {
     }
 
     /**
+     * One putter's counters of several types on one object, as the {@code
+     * CounterPlayerAddedAll} trigger hands them over: one event, their summed
+     * delta and no type. A trigger record is one firing, so it is never
+     * written once per type as an {@code AddCounter} replacement's is.
+     */
+    @Test
+    void aTriggersCounterMapOfSeveralTypesStaysOneSummedEvent() {
+        com.google.common.collect.Multiset<CounterType> counters =
+                com.google.common.collect.LinkedHashMultiset.create();
+        counters.add(CounterType.getType("P1P1"), 1);
+        counters.add(CounterType.getType("Indestructible"), 1);
+        Trigger trigger = triggerOfMode("CounterPlayerAddedAll");
+        Map<String, Object> params = Map.of(
+                "CounterMap", counters, "Object", TestCards.build("Mountain"));
+        Map<String, Object> event = eventOf(trigger, params);
+
+        assertEquals("counter_change", event.get("type"), event.toString());
+        assertFalse(params(event).containsKey("counter_type"), event.toString());
+        assertEquals(2L, params(event).get("delta"), event.toString());
+        assertEquals(List.of(), RunParamNormalizer.changedCounterTypes(trigger, params, Map.of(
+                "CounterMap", com.google.common.collect.LinkedHashMultiset.create())),
+                "a trigger's map is never split");
+    }
+
+    /**
      * The replacement side's word for a life total is read as one, signed
      * as the bus signs a life change: a loss negative.
      */

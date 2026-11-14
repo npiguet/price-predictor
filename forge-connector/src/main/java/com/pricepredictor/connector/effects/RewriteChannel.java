@@ -39,6 +39,13 @@ import java.util.List;
  * oldest record waiting on that ability takes the run's events and the rest,
  * written when the state-based loop next begins, say {@code buffered_ran}
  * with no events; a record whose ability never ran says it did not.
+ *
+ * <p>An {@code AddCounter} replacement over a map of several counter types
+ * writes one record per type whose count it changed, none for a type it left
+ * as it came ({@link RunParamNormalizer#changedCounterTypes}): each carries
+ * that type's counts as its {@code incoming} and {@code outgoing}, the
+ * call's result and the ability that ran, and the board read before the
+ * call with that {@code incoming} as its pending event.
  */
 final class RewriteChannel implements BusBracketCollector.EventTap {
 
@@ -53,7 +60,7 @@ final class RewriteChannel implements BusBracketCollector.EventTap {
     private final Deque<Pending> replacing = new ArrayDeque<>();
 
     /** A replacement's board, read before it ran, and the trait it was read for. */
-    private record Pending(Object trait, String state) {
+    private record Pending(Object trait, Snapshot board) {
     }
 
     /** The records waiting on their buffered ability's run, oldest first. */
@@ -133,13 +140,32 @@ final class RewriteChannel implements BusBracketCollector.EventTap {
     }
 
     /**
-     * One replacement reported: written now, or, when it set an ability
+     * One replacement reported: its record, or one per counter type it
+     * changed, each written now or, when the replacement set an ability
      * aside, held until that ability runs.
+     *
+     * @param board the board read at {@code onReplacing}, or null to read it now
      */
     private void replaced(
             Object trait, Object before, Object after, Object result, Object replacedBy,
-            Object buffered, String state) {
-        Rewrite rewrite = rewrite(trait, before, after, result, replacedBy, buffered);
+            Object buffered, Snapshot board) {
+        List<String> types = RunParamNormalizer.changedCounterTypes(trait, before, after);
+        if (types.isEmpty()) {
+            replaced(trait, rewrite(trait, before, after, result, replacedBy, buffered, null),
+                    buffered, board == null ? null : board.render());
+            return;
+        }
+        for (String type : types) {
+            Rewrite rewrite = rewrite(trait, before, after, result, replacedBy, buffered, type);
+            // The board this type's event would have been read with: the
+            // same subjects and last-known card as the whole map's.
+            replaced(trait, rewrite, buffered,
+                    board == null ? null : board.withPendingEvent(rewrite.incoming()).render());
+        }
+    }
+
+    /** One record of a replacement, on {@code state}, or on the board now. */
+    private void replaced(Object trait, Rewrite rewrite, Object buffered, String state) {
         EffectRecord record = shell(trait, rewrite.incoming(), state);
         if (rewrite.buffered() == null) {
             write(record, rewrite, false, List.of());
@@ -237,8 +263,8 @@ final class RewriteChannel implements BusBracketCollector.EventTap {
      * The board a replacement is about to change, with the event as it
      * arrived: read at {@code onReplacing}, before anything ran.
      */
-    private String board(Object trait, Object runParams) {
-        return live.traitState(trait, RunParamNormalizer.describeParams(trait, runParams));
+    private Snapshot board(Object trait, Object runParams) {
+        return live.traitSnapshot(trait, RunParamNormalizer.describeParams(trait, runParams));
     }
 
     /**
@@ -246,13 +272,13 @@ final class RewriteChannel implements BusBracketCollector.EventTap {
      * none was read for it: a jar whose listener never says {@code
      * onReplacing}, which the record then reads as before, now.
      */
-    private String boardBefore(Object trait) {
+    private Snapshot boardBefore(Object trait) {
         Pending open = replacing.peek();
         if (open == null || open.trait() != trait) {
             return null;
         }
         replacing.pop();
-        return open.state();
+        return open.board();
     }
 
     /**
@@ -295,7 +321,7 @@ final class RewriteChannel implements BusBracketCollector.EventTap {
     EffectRecord record(
             Object trait, Object before, Object after, Object result,
             Object replacedBy, String state) {
-        Rewrite rewrite = rewrite(trait, before, after, result, replacedBy, null);
+        Rewrite rewrite = rewrite(trait, before, after, result, replacedBy, null, null);
         return shell(trait, rewrite.incoming(), state).payload(RecordPayloads.rewritePayload(
                 rewrite.incoming(), rewrite.outgoing(), rewrite.result(), rewrite.replacedBy(),
                 rewrite.incomingUnknown(), null, false, List.of()));
@@ -316,13 +342,17 @@ final class RewriteChannel implements BusBracketCollector.EventTap {
      * the event as it arrived is unknown, so nothing is compared against it.
      * {@code incoming} is then the event as it left, {@code outgoing} null and
      * {@code incoming_unknown} true.
+     *
+     * @param counterType the one counter type this record is about, or null
+     *                    for the whole event
      */
     private Rewrite rewrite(
             Object trait, Object before, Object after, Object result, Object replacedBy,
-            Object buffered) {
+            Object buffered, String counterType) {
         boolean unknown = before == null;
-        EffectEvent rendered = RunParamNormalizer.describeParams(trait, after);
-        EffectEvent incoming = unknown ? rendered : RunParamNormalizer.describeParams(trait, before);
+        EffectEvent rendered = RunParamNormalizer.describeParams(trait, after, counterType);
+        EffectEvent incoming = unknown
+                ? rendered : RunParamNormalizer.describeParams(trait, before, counterType);
         // Null rather than a copy, and this is the whole of the contract. A
         // substitution does not edit the map -- it runs another ability and
         // returns a result -- so a copy here says "changed nothing observable"

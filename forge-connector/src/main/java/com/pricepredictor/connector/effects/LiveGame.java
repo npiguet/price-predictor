@@ -185,7 +185,12 @@ final class LiveGame {
      * to handle.
      */
     String traitState(Object trait, EffectEvent pending) {
-        return snapshots.ofTrait(hostOf(trait), pending).render();
+        return traitSnapshot(trait, pending).render();
+    }
+
+    /** The same board, unrendered: a replacement's, read before it ran, rendered when it is written. */
+    Snapshot traitSnapshot(Object trait, EffectEvent pending) {
+        return snapshots.ofTrait(hostOf(trait), pending);
     }
 
     /**
