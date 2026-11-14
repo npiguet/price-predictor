@@ -10,7 +10,9 @@ budgets added, each carrying the rule it was drawn for and that rule's tag
 entities; a validation record's one natural copy and its added copies, by the
 same rule budgets planned over its stratum (FR-068a); and a record's
 protection copies (FR-058), each a synthetic record of its own. ``turn_action``
-records are written nowhere and counted by subkind (FR-059).
+records are written nowhere and counted by subkind (FR-059). A game the survey
+found cut (no game-end marker in its shard) is written nowhere, every record
+counted under ``dropped-cut``.
 """
 
 from __future__ import annotations
@@ -81,6 +83,9 @@ class WriteTask:
     #: past them (the shard grew between the passes) was never surveyed nor
     #: planned, so it is written nowhere and counted as ``dropped-unsurveyed``.
     surveyed: int | None = None
+    #: The shard's games the survey found cut (``Survey.shard_cut``): written
+    #: nowhere and counted as ``dropped-cut``, whatever the shard holds by now.
+    cut: frozenset[str] = frozenset()
 
 
 # ── the tallies ─────────────────────────────────────────────────────────
@@ -174,7 +179,7 @@ class WriteWorker:
     def write(self, task: WriteTask) -> WriteResult:
         """Filter one shard into its output parts, with what reading it met."""
         ReadGaps.take(self.context.sidecars)
-        writer = _ShardWriter(self.plan, self.context, task.copies, task.surveyed)
+        writer = _ShardWriter(self.plan, self.context, task.copies, task.surveyed, task.cut)
         for record in self.context.records(task.shard):
             writer.observe(record)
         result = writer.finish(task.shard.part_name)
@@ -190,11 +195,12 @@ class _ShardWriter:
     and tallied, then each output written as one part."""
 
     def __init__(self, plan: WritePlan, context: WorkerContext, copies: CopyMap,
-                 surveyed: int | None = None) -> None:
+                 surveyed: int | None = None, cut: frozenset[str] = frozenset()) -> None:
         self.plan = plan
         self.context = context
         self.copies = copies
         self.surveyed = surveyed
+        self.cut = cut
         self.read = 0
         self.out = WriteResult()
         self.outputs: dict[Stratum, list] = {stratum: [] for stratum in OUTPUT_STRATA}
@@ -204,6 +210,9 @@ class _ShardWriter:
         self.read += 1
         if self.surveyed is not None and self.read > self.surveyed:
             self.out.strata.note(Stratum.DROPPED_UNSURVEYED, ())
+            return
+        if record.game_id in self.cut:
+            self.out.strata.note(Stratum.DROPPED_CUT, ())
             return
         if record.kind is RecordKind.TURN_ACTION:
             self.out.turn_actions[str(record.subkind)] += 1

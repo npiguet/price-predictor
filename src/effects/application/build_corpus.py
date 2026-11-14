@@ -410,7 +410,8 @@ class Decisions:
             games = survey.shard_games.get(shard.name, frozenset())
             tasks.append(WriteTask(shard=shard, copies={
                 game: self.copies[game] for game in games if game in self.copies
-            }, surveyed=survey.shard_records.get(shard.name)))
+            }, surveyed=survey.shard_records.get(shard.name),
+                cut=survey.shard_cut.get(shard.name, frozenset())))
         return tasks
 
 
@@ -920,12 +921,26 @@ def _survey(config: BuildCorpusConfig, read: ReadConfig, rules: RuleCatalogue) -
     return survey
 
 
+def _refuse_every_game_cut(config: BuildCorpusConfig, survey: Survey) -> None:
+    """No game ended by its marker while some were read: the collection wrote
+    no marker at all (a connector older than the marker, or every worker
+    killed), and every game would be dropped as cut."""
+    cut = survey.totals.cut.games
+    if cut and not survey.totals.games.games:
+        raise BuildCorpusError(
+            f"none of the {len(cut)} gen-3 game(s) under {config.records_dir} has a "
+            "game-end marker (turn_action / game_end) in its shard, so every game is "
+            "dropped as cut: the collection wrote no marker (a connector built before "
+            "the marker existed?) or no game ended before its worker was killed.")
+
+
 def _decide_or_refuse(
     config: BuildCorpusConfig, survey: Survey, trees: ConvertedTrees, surface: Surface,
     held_out: HeldOutCards, rules: RuleCatalogue,
 ) -> Decisions:
-    """:func:`decide`, refusing a corpus the quality rules reject or a dataset
-    gate 1 could not be scored on."""
+    """:func:`decide`, refusing a corpus the quality rules reject, one whose
+    every game was cut, or a dataset gate 1 could not be scored on."""
+    _refuse_every_game_cut(config, survey)
     check_refusals(survey.totals.refusals, survey.totals.kept)
     decisions = decide(
         survey, sidecars=trees.sidecars, surface=surface, config=config, rules=rules,

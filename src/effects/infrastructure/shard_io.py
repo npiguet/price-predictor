@@ -591,6 +591,27 @@ def peek_envelope(line: str) -> EnvelopeHead | None:
     return None if head is None else EnvelopeHead(*head.groups())
 
 
+#: The game-end marker's subkind as a shard line spells it, near its head.
+_GAME_END = re.compile(r'"subkind"\s*:\s*"game_end"')
+
+
+def ended_games(path: Path) -> frozenset[str]:
+    """The games of one shard that wrote their game-end marker
+    (``turn_action`` / ``game_end``, WP7): a gen-3 game of the shard missing
+    from them was cut. Reads each line's head, parsing only a turn action's
+    or a line whose head is in another shape."""
+    ended: set[str] = set()
+    for number, line in _numbered_lines(path):
+        head = peek_envelope(line)
+        if head is None:
+            data = _decode(path, number, line, _parse_object)
+            if data.get("kind") == "turn_action" and data.get("subkind") == "game_end":
+                ended.add(data["game_id"])
+        elif head.kind == "turn_action" and _GAME_END.search(line, 0, 2 * _ENVELOPE_HEAD_SPAN):
+            ended.add(head.game_id)
+    return frozenset(ended)
+
+
 def read_records_matching(
     directory: Path,
     *,

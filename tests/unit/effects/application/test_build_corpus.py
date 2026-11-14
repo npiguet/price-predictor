@@ -34,6 +34,7 @@ reads ``default_build``, built once for the module.
 
 from __future__ import annotations
 
+import logging
 import math
 from collections import Counter
 from dataclasses import dataclass, replace
@@ -58,6 +59,7 @@ from effects.domain.records import (
     RecordKind,
     ResolutionPayload,
     RewritePayload,
+    TurnActionSubkind,
 )
 from effects.domain.split import HoldoutRule
 from effects.domain.state_snapshot import StateSnapshot
@@ -81,6 +83,7 @@ from tests.unit.effects.builders import (
     held_out_cards,
     make_entity,
     make_snapshot,
+    write_ended_shard,
     write_sidecar,
 )
 from tests.unit.effects.builders import make_record as _any_generation_record
@@ -294,7 +297,7 @@ class CorpusFixture:
         already lives there, and a game split across two source directories
         would be counted once per directory in ``games_by_source``.
         """
-        write_shard(self.records / "full-strength" / "run.0-extra.jsonl.gz", records)
+        write_ended_shard(self.records / "full-strength" / "run.0-extra.jsonl.gz", records)
         return self
 
     @property
@@ -363,8 +366,8 @@ def _write_corpus(root: Path) -> CorpusFixture:
     # collection run apart from a depleted one (FR-149): the tainted game is
     # full-strength by construction, and no game spans the two.
     records_dir = root / "records"
-    write_shard(records_dir / "full-strength" / "run.0-a.jsonl.gz", shard_a)
-    write_shard(records_dir / "depleted" / "run.0-b.jsonl.gz", shard_b)
+    write_ended_shard(records_dir / "full-strength" / "run.0-a.jsonl.gz", shard_a)
+    write_ended_shard(records_dir / "depleted" / "run.0-b.jsonl.gz", shard_b)
 
     return CorpusFixture(
         records=records_dir,
@@ -695,8 +698,12 @@ def test_the_manifest_records_how_its_records_were_collected_and_read(
     unrooted = replace(unrooted, state=replace(unrooted.state, entities=(
         make_entity("E0", "x variant", printed=(variant,),
                     combat=CombatStatus(attacking="p2")),)))
+    from tests.unit.effects.builders import game_end_marker
+
+    # The game ends in this shard too: a game without its marker is cut.
     with open(a_corpus.records / "full-strength" / "run.0-extra.jsonl.gz", "wb") as handle:
-        handle.write(gzip.compress((json.dumps(odd) + "\n").encode("utf-8") + _line(unrooted)))
+        handle.write(gzip.compress((json.dumps(odd) + "\n").encode("utf-8") + _line(unrooted)
+                                   + _line(game_end_marker(unrooted))))
 
     manifest = a_corpus.build(tmp_path / "curated", keyword_definitions=definitions).load()
 
@@ -769,7 +776,7 @@ def test_one_raw_corpus_builds_to_one_digest_wherever_it_sits_and_whatever_ran_b
     unrooted = _combat("g-clean-1.variant", "g-clean-1")
     unrooted = replace(unrooted, state=replace(unrooted.state, entities=(
         make_entity("E0", "x variant", printed=(variant,), combat=CombatStatus(attacking="p2")),)))
-    write_shard(a_corpus.records / "full-strength" / "run.0-variant.jsonl.gz", [unrooted])
+    write_ended_shard(a_corpus.records / "full-strength" / "run.0-variant.jsonl.gz", [unrooted])
 
     first = a_corpus.build(tmp_path / "first").load()
     again = a_corpus.build(tmp_path / "again").load()
@@ -781,6 +788,51 @@ def test_one_raw_corpus_builds_to_one_digest_wherever_it_sits_and_whatever_ran_b
     assert first.damaged_tails[0].startswith("full-strength/run.0-cut.jsonl.gz")
     assert first.join_gaps
     assert first.digest() == again.digest() == elsewhere.digest()
+
+
+def test_a_cut_game_is_written_nowhere_and_counted(tmp_path, a_corpus, caplog):
+    """WP7: a gen-3 game whose shard holds no game-end marker was cut (a
+    killed worker); its records are incomplete, so no stratum holds them,
+    even when it names a held-out card, and the manifest counts it."""
+    cut = [
+        _resolution("g-cut.1", "g-cut", ability=(_HELD_OUT_KEY,), entity_names=(_HELD_OUT_CARD,)),
+        _resolution("g-cut.2", "g-cut", ability=(_SHOCK_KEY,)),
+        make_record(RecordKind.TURN_ACTION, record_id="g-cut.3", game_id="g-cut",
+                    timestamp=_TIMESTAMP, ability=None, generation=3),
+    ]
+    write_shard(a_corpus.records / "full-strength" / "run.0-cut.jsonl.gz", cut)
+    with caplog.at_level(logging.INFO):
+        store = a_corpus.build(tmp_path / "curated")
+    manifest = store.load()
+    assert manifest.per_stratum[Stratum.DROPPED_CUT] == 3
+    assert manifest.per_stratum[Stratum.DROPPED_UNSURVEYED] == 0
+    assert manifest.cut_games == 1
+    assert "g-cut" not in {r.game_id for r in _written(store)}
+    assert "g-cut" not in {*manifest.card_disjoint_games, *manifest.game_disjoint_games}
+    assert "game_end" in manifest.turn_action_left_out
+    assert "draw" not in manifest.turn_action_left_out, "a cut game's turn action is its"
+    assert "1 of 5 game(s)" in caplog.text and "game-end marker" in caplog.text
+
+
+def test_the_cut_count_moves_the_digest_and_nothing_else_does(tmp_path, a_corpus):
+    """The games dropped as cut decide which records the corpus holds."""
+    first = a_corpus.build(tmp_path / "first").load()
+    write_shard(a_corpus.records / "full-strength" / "run.0-cut.jsonl.gz",
+                [_resolution("g-cut.1", "g-cut", ability=(_SHOCK_KEY,))])
+    second = a_corpus.build(tmp_path / "second").load()
+    assert (first.cut_games, second.cut_games) == (0, 1)
+    assert "cut_games" not in first.as_dict(), "omitted at 0, as an older manifest"
+    assert first.digest() != second.digest()
+
+
+def test_a_corpus_whose_every_game_was_cut_is_refused(tmp_path):
+    """No marker at all: the collection wrote none, and every game would drop."""
+    fixture = _write_corpus(tmp_path / "source")
+    for shard in iter_shards(fixture.records):
+        records = [r for r in read_shard(shard) if r.subkind is not TurnActionSubkind.GAME_END]
+        write_shard(shard, records)
+    with pytest.raises(BuildCorpusError, match="game-end marker"):
+        build(fixture.config(tmp_path / "curated"))
 
 
 def test_the_manifest_s_rule_counts_say_what_the_catalogue_says_of_untagged_rules(
@@ -964,7 +1016,7 @@ def a_mixture_corpus(tmp_path_factory) -> CorpusFixture:
             rows.append(
                 _resolution("g-tainted.1", "g-tainted", ability=(_HELD_OUT_KEY,)),
             )
-        write_shard(records_dir / f"run.0-{shard}.jsonl.gz", rows)
+        write_ended_shard(records_dir / f"run.0-{shard}.jsonl.gz", rows)
 
     return CorpusFixture(
         records=records_dir, cards=(root / "cardsfolder",),
@@ -1178,7 +1230,7 @@ def a_corpus_with_variants(tmp_path_factory):
     root = tmp_path_factory.mktemp("variants") / "source"
     fixture = _write_corpus(root)
     _write_variant(root, _VARIANT_FILE, _VARIANT_TEXT)
-    write_shard(
+    write_ended_shard(
         fixture.records / "variants" / "run.0-v.jsonl.gz",
         [
             _resolution(f"g-var.{i}", "g-var", ability=(_VARIANT_KEY,))
@@ -1786,7 +1838,7 @@ def test_a_held_back_game_takes_no_training_slot(tmp_path, a_corpus):
     routed the game away, and the text's slots went unwritten. Gen-2 wrote
     82% of the records it planned.
     """
-    write_shard(a_corpus.records / "full-strength" / "run.0-held.jsonl.gz", [
+    write_ended_shard(a_corpus.records / "full-strength" / "run.0-held.jsonl.gz", [
         _resolution(
             "g-held-2.0", "g-held-2", ability=(_BOLT_KEY,),
             entity_names=(_HELD_OUT_CARD,),
@@ -1817,7 +1869,7 @@ def test_a_held_out_game_resolving_no_held_out_text_is_dropped(tmp_path, a_corpu
     Gate 1 and the gate-one slice score resolution records, so a game whose
     held-out text appears only on a rewrite holds nothing gate 1 measures.
     """
-    write_shard(a_corpus.records / "full-strength" / "run.0-rewrite.jsonl.gz", [
+    write_ended_shard(a_corpus.records / "full-strength" / "run.0-rewrite.jsonl.gz", [
         _rewrite("g-held-3.0", "g-held-3", ability=(_HELD_OUT_KEY,)),
         _resolution(
             "g-held-3.1", "g-held-3", ability=(_SHOCK_KEY,),
@@ -1841,7 +1893,7 @@ def test_a_token_printing_a_held_out_text_holds_its_game_out(tmp_path, a_corpus)
         tmp_path / "source", token_file, "Goblin Held", _HELD_OUT_TEXT,
         index_within_kind=1,
     )
-    write_shard(a_corpus.records / "full-strength" / "run.0-token.jsonl.gz", [
+    write_ended_shard(a_corpus.records / "full-strength" / "run.0-token.jsonl.gz", [
         replace(
             _resolution("g-token.0", "g-token", ability=(_SHOCK_KEY,)),
             state=make_snapshot(entities=(
@@ -1878,7 +1930,7 @@ def test_a_variant_printing_a_held_out_text_trains_on_nothing(tmp_path, a_corpus
         ),
         sidecar_path_for(path),
     )
-    write_shard(a_corpus.records / "variants" / "run.0-v.jsonl.gz", [
+    write_ended_shard(a_corpus.records / "variants" / "run.0-v.jsonl.gz", [
         _resolution("g-var.0", "g-var", ability=(variant_key,)),
         _resolution("g-var.1", "g-var", ability=(_SHOCK_KEY,)),
     ])
@@ -2050,13 +2102,13 @@ def test_a_decision_whose_candidate_key_is_unjoinable_is_refused(tmp_path, a_cor
 
 
 def _gen3_records(root: Path) -> Path:
-    import shutil
-
-    from tests.unit.effects.builders import GEN3_RECORDS
+    """The fixture's shard, each game ended by the marker its copy appends
+    (the fixture predates the marker; ``copy_gen3_fixture``)."""
+    from tests.unit.effects.builders import copy_gen3_fixture
 
     records = root / "records"
     records.mkdir(parents=True)
-    shutil.copy(GEN3_RECORDS, records / GEN3_RECORDS.name)
+    copy_gen3_fixture(records)
     return records
 
 
@@ -2091,7 +2143,7 @@ def test_no_turn_action_record_is_written_and_each_is_counted(gen3_build):
     """Story 6 acceptance 8 (FR-059)."""
     assert not [r for r in _written(gen3_build) if r.kind is RecordKind.TURN_ACTION]
     assert gen3_build.load().turn_action_left_out == {
-        "cleanup_discard": 2, "day_night": 2, "draw": 2, "lore_counter": 2,
+        "cleanup_discard": 2, "day_night": 2, "draw": 2, "game_end": 58, "lore_counter": 2,
         "phasing": 2, "untap": 2}
 
 
@@ -2163,7 +2215,8 @@ def test_the_manifest_holds_every_gen3_field(gen3_build):
     # rule only a validation game or a turn action shows included.
     assert set(manifest.unbudgeted_rules) == {
         rule for rule, entry in manifest.rule_map.items() if entry.verdict != "trained"}
-    assert manifest.rule_counts["records"] == 205
+    # The fixture's 205 records and the 58 markers its copy appends.
+    assert manifest.rule_counts["records"] == 205 + 58
     assert set(manifest.halves) == {"card-disjoint", "game-disjoint"}
 
 

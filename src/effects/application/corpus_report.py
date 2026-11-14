@@ -135,6 +135,14 @@ def report_write_pass(survey: Survey, written: WriteResult) -> None:
             dict(sorted(survey.totals.refusals.by_reason.items())),
             dict(sorted(written.refusals.by_reason.items())),
         )
+    cut = survey.totals.cut.games
+    if cut:
+        read = len(cut | survey.totals.games.games)
+        logger.warning(
+            "%d of %d game(s) (%.1f%%) have no game-end marker in their shard: cut by a "
+            "killed worker or a game that threw, their records incomplete; %d record(s) "
+            "are written to no stratum (manifest cut_games, per_stratum \"dropped-cut\").",
+            len(cut), read, 100.0 * len(cut) / read, survey.totals.cut.records)
     unsurveyed = written.strata.records.get(Stratum.DROPPED_UNSURVEYED, 0)
     if unsurveyed:
         logger.warning(
@@ -338,7 +346,7 @@ def _collection_fields(
     """How the records were collected and read, and what the build ran under
     (P3a #17): the manifest's ``validation_rules``, ``record_flags``,
     ``placement_thresholds``, ``keyword_definitions_digest``,
-    ``decode_off_list``, ``damaged_tails`` and ``join_gaps``, the survey's:
+    ``decode_off_list``, ``damaged_tails``, ``join_gaps`` and ``cut_games``, the survey's:
     the write pass reads the same bytes, and a difference is warned of
     (:func:`report_write_pass`)."""
     import hashlib
@@ -367,6 +375,7 @@ def _collection_fields(
         "damaged_tails": tuple(sorted(
             _under(where, config.records_dir) for where in reading.damaged_tails)),
         "unsupervised_events": dict(sorted(totals.unsupervised.items())),
+        "cut_games": len(totals.cut.games),
         "code_version": _code_version(),
         "sidecar_digest": _sidecar_digest(config.source_trees.sidecar_roots()),
         "join_gaps": {kind: dict(sorted(counts.items())) for kind, counts in (

@@ -745,3 +745,21 @@ class TestValuesOutsideTheClosedLists:
         assert total.off_list[("entity.zone", "'elsewhere-zone'")] == 2
         assert "  entity.zone 'elsewhere-zone': 2" in total.report_lines()
         shard_io.reset_decode_tally()
+
+
+def test_ended_games_are_the_games_whose_marker_the_shard_holds(tmp_path):
+    """WP7: what the build reads for cut games, a reordered envelope included."""
+    from dataclasses import replace
+
+    from effects.infrastructure.shard_io import ended_games, write_shard
+    from tests.unit.effects.builders import game_end_marker
+
+    ended = replace(_record(), game_id="g1", generation=3)
+    cut = replace(_record(), record_id="run-uuid.4.2", game_id="g2", generation=3)
+    reordered = replace(_record(), record_id="run-uuid.4.3", game_id="g3", generation=3)
+    shard = tmp_path / "run.0-a.jsonl.gz"
+    write_shard(shard, [ended, game_end_marker(ended), cut, reordered])
+    marker = record_to_dict(game_end_marker(reordered))
+    with gzip.open(shard, "at", encoding="utf-8") as handle:
+        handle.write(json.dumps(dict(reversed(list(marker.items())))) + "\n")
+    assert ended_games(shard) == {"g1", "g3"}

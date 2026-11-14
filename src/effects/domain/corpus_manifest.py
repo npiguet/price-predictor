@@ -461,6 +461,10 @@ class CorpusManifest:
     #: sha256 over every sidecar the build joined against, by tree, relative
     #: path and size: a reconversion since the build moves it.
     sidecar_digest: str = field(default="", metadata=_gen1_implied(str))
+    #: Gen-3 games dropped whole as cut, their shard holding no game-end marker
+    #: (WP7); their records are ``per_stratum["dropped-cut"]``. Inside the
+    #: digest: which games are cut decides which records the corpus holds.
+    cut_games: int = field(default=0, metadata=_gen1_implied(int))
 
     @property
     def budgeted_rules(self) -> frozenset[str]:
