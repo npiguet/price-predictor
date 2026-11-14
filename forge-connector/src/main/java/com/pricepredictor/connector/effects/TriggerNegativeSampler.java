@@ -138,6 +138,15 @@ final class TriggerNegativeSampler {
     }
 
     /**
+     * Count a negative a directed fork kept (FR-010c) against its line's
+     * flood cap alone: it was written whatever the balance said, so it
+     * repays no mode's deficit.
+     */
+    void keepOutsideTheBalance(String line) {
+        negativesPerLine.merge(line, 1, Integer::sum);
+    }
+
+    /**
      * A flood cap on each acting line's negatives, beside the duplicate check.
      *
      * <p>The duplicate check collapses records that say the same thing; this

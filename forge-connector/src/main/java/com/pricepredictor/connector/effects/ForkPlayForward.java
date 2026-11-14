@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.effects.directed.KeptRecords;
 import forge.game.Game;
 import forge.game.event.GameEventTurnPhase;
 import forge.game.phase.PhaseHandler;
@@ -88,10 +89,18 @@ final class ForkPlayForward {
      *                          discards the fork
      */
     Played play(Game fork, Consumer<EffectRecord> flags) {
+        return play(fork, flags, KeptRecords.NONE);
+    }
+
+    /**
+     * {@link #play(Game, Consumer)}, the records {@code kept} names written
+     * whatever the fork's samplers draw (FR-010c).
+     */
+    Played play(Game fork, Consumer<EffectRecord> flags, KeptRecords kept) {
         Random seat = new Random(forkSeeds.nextLong());
         long sampling = forkSeeds.nextLong();
         List<String> held = new ArrayList<>();
-        GameRecording recording = live.forkRecording(fork, flags, held::add, sampling);
+        GameRecording recording = live.forkRecording(fork, flags, held::add, sampling, kept);
         try {
             recording.open();
             seats.attach(fork, recording.priorityCandidates(), recording.fruitlessActivations(), seat);
@@ -125,6 +134,8 @@ final class ForkPlayForward {
                 throw new IllegalStateException(
                         "fork took " + MAX_STEPS + " steps without ending turn " + turn);
             }
+            // Before the step that could resolve it (FR-010d).
+            Forks.refuseARestart(fork);
             phases.mainLoopStep();
         }
     }

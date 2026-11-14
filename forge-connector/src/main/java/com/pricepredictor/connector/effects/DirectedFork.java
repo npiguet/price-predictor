@@ -4,6 +4,7 @@ import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.DirectedTag;
+import com.pricepredictor.connector.effects.directed.KeptRecords;
 import forge.game.Game;
 import forge.game.player.Player;
 
@@ -24,7 +25,8 @@ import java.util.function.Supplier;
  * silent to the rules, but they still publish bus events (a zone change, an
  * attachment, a stats change), which would otherwise land in the fork's
  * records as if the turn had done them. {@link ForkPlayForward#play} opens the
- * fork's recording only after the edit.
+ * fork's recording only after the edit, keeping the records the variant
+ * names whatever the samplers draw ({@link KeptRecords}, FR-010c).
  *
  * <p>An edit that cannot describe its variant on this board, a bound object
  * the copy does not hold, or a fork that throws while playing on, discards
@@ -56,8 +58,11 @@ final class DirectedFork {
         Forks.ForkRun run = new Forks.ForkRun("directed", game, () -> { }, perspective);
         ForkPlayForward.Played played = run.take((verified, snapshots) -> {
             Game fork = verified.fork();
-            application.edit(binding.inFork(verified.copier())).apply(fork);
-            return playForward.play(fork, flags.andThen(verified::stamp));
+            Binding forked = binding.inFork(verified.copier());
+            // Named before the edit, which may move a named card: it keeps its id.
+            KeptRecords kept = application.kept(forked);
+            application.edit(forked).apply(fork);
+            return playForward.play(fork, flags.andThen(verified::stamp), kept);
         }, (verified, result) -> result);
         return played != null;
     }

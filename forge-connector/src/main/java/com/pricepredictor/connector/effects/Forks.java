@@ -478,6 +478,9 @@ final class Forks {
                     forked[0] = verified.get().fork();
                     R produced;
                     try {
+                        // A copy whose stack already holds a restart is refused
+                        // before its body can resolve it (FR-010d).
+                        refuseARestart(verified.get().fork());
                         // The fork's own state, read against the live game it came from.
                         SnapshotBuilder snapshots = SnapshotBuilder.forFork(verified.get().fork(), live);
                         produced = body.run(verified.get(), snapshots);
@@ -615,6 +618,33 @@ final class Forks {
                         + ", trigger ids " + triggerIds + "; after: " + after.marks() + ", trigger ids "
                         + after.triggerIds() + (restarted ? "; the fork restarted its game" : "")
                         + " (later ones are counted, not printed)");
+            }
+        }
+    }
+
+    /**
+     * End the fork as the refusal {@link ForkRefusal#GAME_RESTART} when its
+     * stack holds an ability with a restart clause (Karn Liberated's
+     * ultimate), before that ability can resolve (FR-010d).
+     *
+     * <p>Forge's {@code RestartGameEffect} calls {@code Trigger.resetIDs()},
+     * which sets the trigger id counter every game of the JVM shares to
+     * 50000; the live game's later triggers would then take ids its own
+     * triggers hold, which Forge compares triggers by and the records write
+     * ({@code D<id>}). So every fork asks this where its stack can come to
+     * resolve: once its copy is made ({@link ForkRun#take}), before each step
+     * a fork played on takes ({@link ForkPlayForward}), and before a forced
+     * resolution drains its stack ({@link InterventionFork}). A restart put on
+     * the stack resolves at the earliest in the main-loop step after the one
+     * that put it there, once every other player has passed, so the check
+     * before each step comes first. {@link LiveMarks} stays the backstop: it
+     * counts a fork whose game was restarted all the same.
+     */
+    static void refuseARestart(Game fork) {
+        for (forge.game.spellability.SpellAbilityStackInstance instance : fork.getStack()) {
+            SpellAbility ability = instance.getSpellAbility();
+            if (ability != null && InterventionScheduler.restartsTheGame(ability)) {
+                throw new ForkRefusal(ForkRefusal.GAME_RESTART);
             }
         }
     }

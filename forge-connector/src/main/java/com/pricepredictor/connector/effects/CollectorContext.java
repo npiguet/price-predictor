@@ -1,5 +1,7 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.effects.directed.KeptRecords;
+
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -49,6 +51,11 @@ final class CollectorContext {
     private final Consumer<String> endOfGameOut;
     /** Whether this context writes a fork's records. */
     private final boolean fork;
+    /**
+     * The records a directed fork writes whatever its samplers draw
+     * (FR-010c); nothing for a live game's or any other fork's.
+     */
+    private final KeptRecords kept;
 
     CollectorContext(
             RecordShardWriter writer, String gameId, AttributionMode mode,
@@ -57,14 +64,15 @@ final class CollectorContext {
                 aimedAt == null ? null : List.copyOf(aimedAt), record -> { },
                 // Not writer::write, which would dereference a writer a
                 // collector that never writes is built without.
-                line -> writer.write(line), line -> writer.writeUncapped(line), false);
+                line -> writer.write(line), line -> writer.writeUncapped(line), false,
+                KeptRecords.NONE);
     }
 
     private CollectorContext(
             RecordShardWriter writer, String gameId, AttributionMode mode,
             String randomSeatPlayerId, List<String> aimedAt,
             Consumer<EffectRecord> forkFlags, Consumer<String> out,
-            Consumer<String> endOfGameOut, boolean fork) {
+            Consumer<String> endOfGameOut, boolean fork, KeptRecords kept) {
         this.writer = writer;
         this.gameId = gameId;
         this.mode = mode;
@@ -74,17 +82,25 @@ final class CollectorContext {
         this.out = out;
         this.endOfGameOut = endOfGameOut;
         this.fork = fork;
+        this.kept = kept;
     }
 
     /**
      * The context a fork played on from this game writes through: the same
      * game id, run, mode, random seat and aim, every record first given
      * {@code flags}, and each finished line handed to {@code out} rather
-     * than the shard, so a fork that ends in a throw can be dropped whole.
+     * than the shard, so a fork that ends in a throw can be dropped whole;
+     * the records {@code kept} names are written whatever the fork's
+     * samplers draw (FR-010c).
      */
-    CollectorContext forFork(Consumer<EffectRecord> flags, Consumer<String> out) {
+    CollectorContext forFork(Consumer<EffectRecord> flags, Consumer<String> out, KeptRecords kept) {
         return new CollectorContext(
-                writer, gameId, mode, randomSeatPlayerId, aimedAt, flags, out, out, true);
+                writer, gameId, mode, randomSeatPlayerId, aimedAt, flags, out, out, true, kept);
+    }
+
+    /** The records written whatever the samplers draw: none but in a directed fork. */
+    KeptRecords kept() {
+        return kept;
     }
 
     /** This game's recording has ended: the shard writer reports what its cap withheld. */

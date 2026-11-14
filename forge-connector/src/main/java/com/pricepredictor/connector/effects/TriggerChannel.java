@@ -88,7 +88,10 @@ final class TriggerChannel {
             if (mode == null) {
                 mode = RunParamNormalizer.UNKNOWN_MODE;
             }
-            if (!negatives.offer(mode, fired)) {
+            // A not-fired evaluation a directed fork keeps (FR-010c) is offered
+            // whatever the mode's balance says, and repays none of it.
+            boolean kept = !fired && context.kept().keepsNegative(trait);
+            if (!kept && !negatives.offer(mode, fired)) {
                 return;
             }
             ProvenanceKey.Resolved line = LiveGame.lineOf(trait);
@@ -108,7 +111,11 @@ final class TriggerChannel {
             // Counted only for a record that is actually written, so a
             // suppressed duplicate spends neither the negatives' quota nor
             // the line's cap, and the ratio holds over what reaches the shard.
-            negatives.keep(mode, key, fired);
+            if (kept) {
+                negatives.keepOutsideTheBalance(key);
+            } else {
+                negatives.keep(mode, key, fired);
+            }
         });
     }
 

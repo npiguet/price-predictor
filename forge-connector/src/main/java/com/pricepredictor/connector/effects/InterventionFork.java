@@ -378,6 +378,9 @@ final class InterventionFork implements InterventionScheduler.Forcing {
                 }
             }
         };
+        // The forced line is never a restart (InterventionScheduler), but the
+        // stack it joined is the copy's (FR-010d).
+        Forks.refuseARestart(fork);
         Forks.listeningForHooks(hooks, () -> {
             GameSimulator.resolveStack(fork, actor.getWeakestOpponent());
             return null;

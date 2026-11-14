@@ -92,6 +92,15 @@ public final class PlayabilityChannel {
     }
 
     /**
+     * Whether {@code candidate} is one a directed fork keeps (FR-010c): its
+     * decision record is written whatever either stage would draw, and
+     * neither draws for it.
+     */
+    boolean kept(SpellAbility candidate) {
+        return context.kept().keepsCandidate(candidate);
+    }
+
+    /**
      * Stage 2: whether a candidate stage 1 kept is written, by its bucket.
      *
      * <p>A bulk bucket's rate is a share of every candidate enumerated, so its

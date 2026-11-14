@@ -462,4 +462,68 @@ class ForkPlayForwardTest {
             assertTrue(timestampedIn(record).contains(pump), record);
         }
     }
+
+    /**
+     * FR-010d: Karn Liberated at 14 loyalty as a fork's first main phase
+     * begins, and a seat that activates its restart at its first priority.
+     * The ability reaches the fork's stack, and the fork is refused as
+     * {@code game restart} before it resolves: the JVM-wide trigger id
+     * counter is not lowered, nothing counts the live game as moved, and the
+     * live Karn keeps its loyalty. The live game is stepped only up to the
+     * boundary, so its own AI never gets to activate the restart.
+     */
+    @Test
+    void aForkWhoseStackHoldsARestartIsRefusedBeforeItResolves() throws Throwable {
+        Game game = board();
+        Player active = game.getPlayers().get(0);
+        game.getPhaseHandler().devModeSet(PhaseType.UPKEEP, active, 3);
+        Card karn = TestBoard.inPlay(game, active, "Karn Liberated");
+        karn.setCounters(forge.game.card.CounterEnumType.LOYALTY, 14);
+        AtomicReference<SpellAbility> activated = new AtomicReference<>();
+        ForkSeats restarting = (fork, candidates, fruitless, random) -> {
+            Player seat = fork.getPlayers().get(0);
+            seat.dangerouslySetController(new PlayerControllerAi(fork, seat, seat.getLobbyPlayer()) {
+                @Override
+                public List<SpellAbility> chooseSpellAbilityToPlay() {
+                    if (activated.get() != null || !fork.getPhaseHandler().is(PhaseType.MAIN1)) {
+                        return null;
+                    }
+                    Card forked = fork.getCardsIn(ZoneType.Battlefield).stream()
+                            .filter(card -> card.getName().equals("Karn Liberated")).findFirst().orElseThrow();
+                    SpellAbility restart = TestBoard.ability(forked, ApiType.RestartGame);
+                    restart.setActivatingPlayer(seat);
+                    activated.set(restart);
+                    return List.of(restart);
+                }
+            });
+        };
+        CollectionCaps caps = TestCaps.caps().interventions(0).probes(0).build();
+        String refusal = "directed " + ForkRefusal.GAME_RESTART;
+        long refusedBefore = ForkRefusals.counts().getOrDefault(refusal, 0L);
+        long movedBefore = HookFailures.counts().getOrDefault("fork directed moved the live game", 0L);
+        int triggerIdsBefore = Forks.LiveMarks.currentTriggerIds();
+        RecordShardWriter writer = ShardRun.writer(tempDir);
+        Forker forker;
+        try (GameRecording recording = new GameRecording(
+                game, writer, ShardRun.GAME_ID, caps, 7L, null, restarting)) {
+            recording.open();
+            forker = new Forker(game, recording, PhaseType.MAIN1, DIRECTED);
+            game.subscribeToEvents(forker);
+            for (int steps = 0; !forker.taken; steps++) {
+                assertTrue(steps < ForkPlayForward.MAX_STEPS, "the live game reached its first main phase");
+                game.getPhaseHandler().mainLoopStep();
+            }
+        } finally {
+            writer.close();
+        }
+
+        assertNotNull(activated.get(), "the fork's seat activated the restart");
+        assertNull(forker.played, "the fork was refused");
+        assertEquals(refusedBefore + 1, ForkRefusals.counts().getOrDefault(refusal, 0L));
+        assertTrue(Forks.LiveMarks.currentTriggerIds() >= triggerIdsBefore, "the trigger id counter was not reset");
+        assertEquals(movedBefore, HookFailures.counts().getOrDefault("fork directed moved the live game", 0L));
+        assertEquals(14, karn.getCounters(forge.game.card.CounterEnumType.LOYALTY));
+        assertTrue(game.getAge() != GameStage.RestartedByKarn);
+        assertTrue(forkRecords(ShardRun.readShard(writer.path())).isEmpty(), "the refused fork wrote nothing");
+    }
 }

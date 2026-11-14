@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import com.google.common.eventbus.Subscribe;
 import com.pricepredictor.connector.effects.directed.DirectedRules;
+import com.pricepredictor.connector.effects.directed.KeptRecords;
 import forge.game.Game;
 import forge.game.event.GameEventTurnPhase;
 import forge.game.phase.PhaseType;
@@ -204,10 +205,12 @@ public final class GameRecording implements AutoCloseable {
      * @param flags the flags every record of the fork carries
      * @param held  where the fork's finished lines go until the fork is kept
      * @param seed  seeds the fork's sampling stream
+     * @param kept  the records the fork writes whatever its samplers draw
+     *              (FR-010c)
      */
     GameRecording forkRecording(
-            Game fork, Consumer<EffectRecord> flags, Consumer<String> held, long seed) {
-        return new GameRecording(fork, envelope.forFork(flags, held), caps, seed);
+            Game fork, Consumer<EffectRecord> flags, Consumer<String> held, long seed, KeptRecords kept) {
+        return new GameRecording(fork, envelope.forFork(flags, held, kept), caps, seed);
     }
 
     /** Plays forks of this game on to the end of the turn (D4). */

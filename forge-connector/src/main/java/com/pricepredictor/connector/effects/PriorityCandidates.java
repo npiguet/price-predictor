@@ -106,7 +106,8 @@ public final class PriorityCandidates {
 
     /**
      * A priority stop: enumerate both players' candidates, and record each
-     * both sampling stages keep, the player without priority included.
+     * both sampling stages keep, the player without priority included, and
+     * each a directed fork keeps whatever they draw.
      */
     void settle(Player priorityPlayer) {
         Game game = live.game();
@@ -115,9 +116,11 @@ public final class PriorityCandidates {
             candidates.addAll(candidatesOf(game, player));
         }
         for (Candidate candidate : candidates) {
-            if (records.sampled()) {
+            // A candidate a directed fork keeps draws from neither stage (FR-010c).
+            boolean kept = records.kept(candidate.ability());
+            if (kept || records.sampled()) {
                 candidate.read()
-                        .filter(read -> records.keeps(read.sample()))
+                        .filter(read -> kept || records.keeps(read.sample()))
                         .ifPresent(read -> records.recordDecision(
                                 candidate.player(), candidate.ability(), read));
             }
