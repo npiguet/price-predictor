@@ -12,7 +12,6 @@ import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.combat.Combat;
-import forge.game.event.GameEventTurnPhase;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
@@ -32,16 +31,21 @@ import org.junit.jupiter.api.io.TempDir;
 @ExtendWith(ForgeExtension.class)
 class ForkHookEventsTest {
 
-    /** Boundaries published: at one in twenty, the gate passes at about ten. */
-    private static final int BOUNDARIES = 200;
+    /**
+     * Boundaries published, each of a game turn of its own: the worker's
+     * gate draws once a turn and spends what is left of the budget one turn
+     * at a time past a typical game's length.
+     */
+    private static final int BOUNDARIES = 40;
 
     @TempDir
     Path tempDir;
 
+    /** Publish {@code count} boundaries of the step the game is in, the same player's, each in the next turn. */
     private static void boundaries(Game game, int count) {
         for (int i = 0; i < count; i++) {
-            game.fireEvent(new GameEventTurnPhase(
-                    game.getPhaseHandler().getPlayerTurn(), game.getPhaseHandler().getPhase(), ""));
+            game.getPhaseHandler().devModeSet(game.getPhaseHandler().getPhase(),
+                    game.getPhaseHandler().getPlayerTurn(), game.getPhaseHandler().getTurn() + 1);
         }
     }
 
@@ -164,6 +168,60 @@ class ForkHookEventsTest {
         assertEquals(List.of(Refs.of(blade)), held.get(0).get("subjects"), payloadOf(records.get(0)));
         assertTrue(ghost.getZone() != null && ghost.getZone().is(forge.game.zone.ZoneType.Battlefield),
                 "the live ghost was sacrificed by the fork");
+    }
+
+    /**
+     * A forced ability whose one target left before it resolved fizzles as
+     * an observed one does: its effect half is written, holding nothing (an
+     * ability leaves no card behind), and says it fizzled. Royal Assassin's
+     * ability can target only the tapped Skulking Ghost, which sacrifices
+     * itself on becoming a target.
+     */
+    @Test
+    void aForcedAbilityThatFizzlesWritesAnEmptyFizzledHalf() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = game.getPlayers().get(0);
+        Card ghost = TestBoard.inPlay(game, game.getPlayers().get(1), "Skulking Ghost");
+        ghost.setTapped(true);
+        Card assassin = TestBoard.inPlay(game, you, "Royal Assassin");
+        game.getTriggerHandler().resetActiveTriggers();
+        SpellAbility destroy = assassin.getSpellAbilities().stream()
+                .filter(ability -> ability.getApi() == forge.game.ability.ApiType.Destroy).findFirst().orElseThrow();
+        CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(1).probes(0).build();
+
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
+                tempDir, game, caps, 1L, destroy, "to read the resolution hook's fizzle");
+
+        assertTrue(fork.wrote(), "the fizzled forced ability wrote nothing");
+        List<String> records = fork.records();
+        assertEquals(1, records.size(), records.toString());
+        assertEquals("fizzled", RecordLines.payload(records.get(0)).get("outcome"), payloadOf(records.get(0)));
+        assertEquals(List.of(), events(records.get(0)), payloadOf(records.get(0)));
+    }
+
+    /**
+     * A forced ability that resolved and did nothing is written, `[]` and
+     * resolved, as a live one is: Tormod's Crypt exiling an empty graveyard.
+     * Its resolution started, which tells it from a fork that never acted.
+     */
+    @Test
+    void aForcedAbilityThatResolvedAndDidNothingWritesAnEmptyResolvedHalf() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = game.getPlayers().get(0);
+        Card crypt = TestBoard.inPlay(game, you, "Tormod's Crypt");
+        SpellAbility exile = crypt.getSpellAbilities().stream()
+                .filter(ability -> ability.getApi() == forge.game.ability.ApiType.ChangeZoneAll)
+                .findFirst().orElseThrow();
+        CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(1).probes(0).build();
+
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
+                tempDir, game, caps, 1L, exile, "to read the resolution hook");
+
+        assertTrue(fork.wrote(), "the forced ability that did nothing wrote nothing");
+        List<String> records = fork.records();
+        assertEquals(1, records.size(), records.toString());
+        assertEquals("resolved", RecordLines.payload(records.get(0)).get("outcome"), payloadOf(records.get(0)));
+        assertEquals(List.of(), events(records.get(0)), payloadOf(records.get(0)));
     }
 
     /**

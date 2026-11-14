@@ -29,6 +29,9 @@ final class InterventionFork implements InterventionScheduler.Forcing {
     /** A refusal's reason: the forced ability never reached the copy's stack (a special action). */
     static final String NOT_ON_THE_STACK = "nothing reached the stack";
 
+    /** A refusal's reason: the forced ability reached the stack, never began to resolve and did nothing. */
+    static final String NEVER_RESOLVED = "never resolved";
+
     private final Game game;
     private final CollectorContext context;
     private final ForkBudget budget;
@@ -88,12 +91,15 @@ final class InterventionFork implements InterventionScheduler.Forcing {
                 throw new ForkRefusal(ForkRefusal.NO_COUNTERPART);
             }
             ForcedResolution resolution = forceResolution(verified.fork(), forked, actor, snapshots);
-            // An empty event list is not an observation. "The ability resolved
-            // and did nothing" and "the ability never got to act" render the
-            // same record, and nothing in it tells them apart. A
-            // counterfactual nobody can read is worse than one that was never
-            // written, so this drops it.
-            return resolution == null || resolution.isEmpty() ? null : resolution;
+            // "Never got to act" and "resolved and did nothing" both leave no
+            // event; the resolution hook tells them apart. One whose
+            // resolution started is written as a live one is, its halves
+            // empty ([], resolved or fizzled); one that never started is
+            // nothing to write.
+            if (resolution.isEmpty() && !resolution.started()) {
+                throw new ForkRefusal(NEVER_RESOLVED);
+            }
+            return resolution;
         }, (verified, resolution) -> {
             write(resolution, ability, verified);
             return Boolean.TRUE;
@@ -155,12 +161,18 @@ final class InterventionFork implements InterventionScheduler.Forcing {
      *                resolving, where the live bracket re-reads it, or null
      *                when the fork never saw it finish
      * @param outcome what became of it, as a live effect half says
-     *                (FR-042b): resolved or partially fizzled; a fizzled
-     *                one did nothing and is never written
+     *                (FR-042b): resolved, partially fizzled or fizzled; a
+     *                fizzled one holds its spell card's move off the stack
+     *                and nothing else, an ability's nothing at all
+     * @param started whether the resolution hook told the forced item's
+     *                resolution starting: a resolution that started and did
+     *                nothing is written with empty halves, one that never
+     *                started is not
      */
     private record ForcedResolution(
             String refs, List<HeldHalves.Half<ModeSplit.ModeHalf>> halves,
-            ActivationOutcome outcome, ChainTargets resolving, ChainTargets atCast) {
+            ActivationOutcome outcome, ChainTargets resolving, ChainTargets atCast,
+            boolean started) {
 
         /**
          * A half's board, paired with its refs as the live bracket pairs
@@ -242,8 +254,10 @@ final class InterventionFork implements InterventionScheduler.Forcing {
      * Lava Axe pushed with no target resolves into nothing.
      *
      * @return what resolved, one half per chosen mode; every half empty if the
-     *         ability resolved and did nothing observable; null if it could
-     *         not be resolved at all
+     *         ability resolved and did nothing observable, or never began to
+     *         resolve ({@link ForcedResolution#started} tells which)
+     * @throws ForkRefusal when its choices cannot be drawn or nothing
+     *         reached the stack
      */
     private ForcedResolution forceResolution(
             Game fork, SpellAbility ability, Player actor, SnapshotBuilder snapshots) {
@@ -290,6 +304,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
         // charm must be the very ability on the stack, the one this record
         // is about, and a clause or a producer its chain.
         boolean[] fizzled = {false};
+        boolean[] started = {false};
         // The forced item's targets as its resolution started and as cast,
         // read as the live bracket reads them.
         ChainTargets[] targets = {null, null};
@@ -303,6 +318,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
             public void resolutionStarting(
                     SpellAbility item, boolean itemFizzled, Object targetsAtCast) {
                 if (item.getId() == onStack.getId()) {
+                    started[0] = true;
                     // A bestowed Aura or a mutating spell whose target went
                     // resolves as a creature spell, as the live bracket reads it.
                     fizzled[0] = itemFizzled && !BusBracketCollector.resolvesAsACreature(item);
@@ -361,7 +377,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
         if (outcome == ActivationOutcome.FIZZLED) {
             halves = onlyMoveOffTheStack(halves, onStack);
         }
-        return new ForcedResolution(cast.refs(), halves, outcome, targets[0], targets[1]);
+        return new ForcedResolution(cast.refs(), halves, outcome, targets[0], targets[1], started[0]);
     }
 
     /**
