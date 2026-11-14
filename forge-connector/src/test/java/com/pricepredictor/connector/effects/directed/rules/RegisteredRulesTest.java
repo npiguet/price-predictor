@@ -2414,8 +2414,8 @@ class RegisteredRulesTest {
             board.game.getPhaseHandler().devModeSet(phase, board.you);
             assertTrue(GameLossReplaced.bind(board.game).isEmpty(), phase.toString());
         }
-        for (PhaseType phase : List.of(PhaseType.UPKEEP, PhaseType.MAIN1, PhaseType.COMBAT_DECLARE_ATTACKERS,
-                PhaseType.MAIN2)) {
+        for (PhaseType phase : List.of(PhaseType.UPKEEP, PhaseType.DRAW, PhaseType.MAIN1,
+                PhaseType.COMBAT_DECLARE_ATTACKERS, PhaseType.MAIN2)) {
             Board board = mirrorBoard(1, "Plains", "Plains");
             board.game.getPhaseHandler().devModeSet(phase, board.you);
             assertTrue(GameLossReplaced.bind(board.game).isPresent(), phase.toString());
@@ -2689,6 +2689,26 @@ class RegisteredRulesTest {
         assertTrue(error.getMessage().contains("the first state-based check"), error.getMessage());
     }
 
+    /**
+     * Only a player's Keyword Effects card is the engine's to tidy at the
+     * first check: a change naming another effect card or an emblem, and a
+     * floating effect gone that no Keyword Effects card made, stay changes.
+     */
+    @Test
+    void theTwinForgivesOnlyAKeywordEffectsCardTheCheckTidies() {
+        Map<String, Object> edited = Map.of("global", Map.of("floating_effects",
+                List.of(Map.of("source", "E3"), Map.of("source", "E9"))));
+        Map<String, Object> keywordCardGone = Map.of("global", Map.of("floating_effects",
+                List.of(Map.of("source", "E9"))));
+        Map<String, Object> otherGone = Map.of("global", Map.of("floating_effects",
+                List.of(Map.of("source", "E3"))));
+        Set<String> tidied = Set.of("E3");
+        assertEquals(Set.of(), Board.withoutTidied(
+                Set.of("-E3", "E3.lines", "global.floating_effects"), tidied, edited, keywordCardGone));
+        assertEquals(Set.of("-E9", "global.floating_effects"), Board.withoutTidied(
+                Set.of("-E9", "global.floating_effects"), tidied, edited, otherGone));
+    }
+
     /** A +1/+1 counter beside a -1/-1 one moves no card, but the check annihilates the pair. */
     @Test
     void theTwinCatchesCountersTheFirstCheckAnnihilates() {
@@ -2884,11 +2904,12 @@ class RegisteredRulesTest {
             Map<String, Object> edited = BoardStates.of(fork);
             assertEquals(real, BoardStates.of(game), "the edit reached the live game");
             Map<String, String> placed = placed(fork);
-            Set<String> effectCards = effectCards(fork);
+            Set<String> tidied = keywordEffectCards(fork);
             fork.getAction().checkStateEffects(true);
             assertEquals(placed, placed(fork),
                     rule.rule() + ": the first state-based check moved a card of the edited board");
-            assertEquals(Set.of(), withoutEffectCards(changes(edited, BoardStates.of(fork)), effectCards),
+            Map<String, Object> checked = BoardStates.of(fork);
+            assertEquals(Set.of(), withoutTidied(changes(edited, checked), tidied, edited, checked),
                     rule.rule() + ": the first state-based check changed the edited board");
             assertFalse(fork.isGameOver(), rule.rule() + ": the first state-based check ended the fork's game");
             for (Player player : fork.getRegisteredPlayers()) {
@@ -2898,50 +2919,84 @@ class RegisteredRulesTest {
             return new Twin(changes(real, edited), real, edited, forked, fork);
         }
 
-        /** The snapshot ids of the engine's effect cards in {@code game} ({@code E<id>}). */
-        private static Set<String> effectCards(Game game) {
+        /**
+         * The effect card the engine tidies away at a state-based check once
+         * its source is gone: a player's {@code Keyword Effects} card
+         * ({@code Player.getKeywordCard}), which holds the keywords statics
+         * give the player. No other effect card, emblem or command-zone card
+         * leaves at a check, and a change to one fails the twin.
+         */
+        static final String KEYWORD_EFFECTS = "Keyword Effects";
+
+        /** Whether {@code card} is a player's {@link #KEYWORD_EFFECTS} card. */
+        private static boolean keywordEffectCard(Card card) {
+            return card.isImmutable() && !card.isEmblem() && KEYWORD_EFFECTS.equals(card.getName());
+        }
+
+        /** The snapshot ids of the players' {@link #KEYWORD_EFFECTS} cards in {@code game} ({@code E<id>}). */
+        private static Set<String> keywordEffectCards(Game game) {
             Set<String> ids = new TreeSet<>();
             for (Card card : game.getCardsInGame()) {
-                if (card.isImmutable()) {
+                if (keywordEffectCard(card)) {
                     ids.add("E" + card.getId());
                 }
             }
             return ids;
         }
 
+        /** Whether a change names one of {@code ids}: the entity itself, its fields, or a link to it. */
+        private static boolean names(String change, Set<String> ids) {
+            return ids.stream().anyMatch(id -> change.equals("-" + id) || change.equals("+" + id)
+                    || change.startsWith(id + ".") || change.contains("=" + id + ",")
+                    || change.contains("=" + id + "}"));
+        }
+
         /**
-         * {@code changes} without what names one of {@code effectCards}: the
-         * engine's effect cards, which the check tidies away once their source
-         * is gone (a player keyword's holder card), and with them the
-         * floating-effects list they made, when one went.
+         * {@code changes} without what names one of the {@code tidied}
+         * {@link #KEYWORD_EFFECTS} cards, and without {@code global.floating_effects}
+         * when the two snapshots' floating effects differ only by entries
+         * naming one of them.
          */
-        private static Set<String> withoutEffectCards(Set<String> changes, Set<String> effectCards) {
+        static Set<String> withoutTidied(Set<String> changes, Set<String> tidied,
+                                         Map<String, Object> edited, Map<String, Object> checked) {
             Set<String> kept = new TreeSet<>();
-            boolean effectCardChanged = false;
             for (String change : changes) {
-                boolean names = effectCards.stream().anyMatch(id -> change.equals("-" + id) || change.equals("+" + id)
-                        || change.startsWith(id + ".") || change.contains("=" + id + ",")
-                        || change.contains("=" + id + "}"));
-                effectCardChanged |= names;
-                if (!names) {
+                if (!names(change, tidied)) {
                     kept.add(change);
                 }
             }
-            if (effectCardChanged) {
+            if (kept.contains("global.floating_effects")
+                    && floatingWithout(edited, tidied).equals(floatingWithout(checked, tidied))) {
                 kept.remove("global.floating_effects");
+            }
+            return kept;
+        }
+
+        /** The snapshot's floating effects, as text, less each entry naming one of {@code ids}. */
+        private static List<String> floatingWithout(Map<String, Object> snapshot, Set<String> ids) {
+            Object global = snapshot.get("global");
+            Object floating = global instanceof Map<?, ?> map ? map.get("floating_effects") : null;
+            List<String> kept = new ArrayList<>();
+            if (floating instanceof List<?> entries) {
+                for (Object entry : entries) {
+                    String text = String.valueOf(entry);
+                    if (ids.stream().noneMatch(id -> text.matches(".*\\b" + id + "\\b.*"))) {
+                        kept.add(text);
+                    }
+                }
             }
             return kept;
         }
 
         /**
          * Every card of {@code game} by id, to its zone and what it is
-         * attached to; not the engine's effect cards, which the check tidies
-         * away once their source is gone.
+         * attached to; not a player's {@link #KEYWORD_EFFECTS} card, which the
+         * check tidies away once its source is gone.
          */
         private static Map<String, String> placed(Game game) {
             Map<String, String> placed = new java.util.TreeMap<>();
             for (Card card : game.getCardsInGame()) {
-                if (card.isImmutable()) {
+                if (keywordEffectCard(card)) {
                     continue;
                 }
                 placed.put(card.getName() + "#" + card.getId(),
