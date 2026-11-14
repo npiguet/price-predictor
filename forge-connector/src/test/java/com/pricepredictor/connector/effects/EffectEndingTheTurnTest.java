@@ -13,6 +13,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import static com.pricepredictor.connector.effects.RecordLines.events;
 import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
@@ -161,6 +162,11 @@ class EffectEndingTheTurnTest {
                         && "stack".equals(params(event).get("from_zone"))
                         && "exile".equals(params(event).get("to_zone"))),
                 "the spell's own exile off the stack: " + half);
+        // The combat it ended, named by its attacking player, on the real path.
+        List<Map<String, Object>> ended = events(half).stream()
+                .filter(event -> "combat_ended".equals(event.get("type"))).toList();
+        assertEquals(1, ended.size(), half);
+        assertEquals(List.of(Refs.of(attacking)), ended.get(0).get("subjects"), half);
     }
 
     /** A card's spell put on the stack the way a cast puts it there, with no target. */

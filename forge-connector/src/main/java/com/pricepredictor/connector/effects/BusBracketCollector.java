@@ -760,6 +760,10 @@ public final class BusBracketCollector extends BusEventReader {
      */
     @Override
     void fileOutcome(EffectEvent event, String namedCause) {
+        fileOutcome(event, namedCause, Filing.OUTCOME);
+    }
+
+    private void fileOutcome(EffectEvent event, String namedCause, Filing filing) {
         if (event.type() == EventType.UNATTACHED && heldResolution.isHolding()
                 && (inStateBasedLoop || game.getTracker().isFrozen())
                 && !event.subjects().isEmpty()) {
@@ -774,7 +778,7 @@ public final class BusBracketCollector extends BusEventReader {
                     event, host instanceof String left ? left : event.subjects().get(0));
             return;
         }
-        route(event, namedCause, Filing.OUTCOME);
+        route(event, namedCause, filing);
     }
 
     /**
@@ -786,7 +790,7 @@ public final class BusBracketCollector extends BusEventReader {
      */
     void recordClauseEvent(EffectEvent event) {
         if (event != null) {
-            record(event);
+            fileOutcome(event, null, Filing.CLAUSE);
         }
     }
 
@@ -859,7 +863,14 @@ public final class BusBracketCollector extends BusEventReader {
          * bracket's, whose cast did not leave the board in that state
          * (FR-029).
          */
-        STATE_BASED_DEATH
+        STATE_BASED_DEATH,
+        /**
+         * What a resolving clause did, told at the clause's end: the resolving
+         * item's even when the clause handed the game to another step
+         * ({@link #stepTakenOver}) — Mandate of Peace's {@code combat_ended}
+         * is told after the combat phase it ended is over.
+         */
+        CLAUSE
     }
 
     /**
@@ -991,7 +1002,7 @@ public final class BusBracketCollector extends BusEventReader {
                 }
             }
             case RESOLUTION -> {
-                if (stepTakenOver) {
+                if (stepTakenOver && filing != Filing.CLAUSE) {
                     fileAsTheStepsOwn(event, namedCause, filing);
                 } else {
                     brackets.file(
