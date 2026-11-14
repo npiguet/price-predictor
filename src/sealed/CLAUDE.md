@@ -62,7 +62,7 @@ This file lists the rules to respect and the file formats. It does not describe 
 - Mirror matches are excluded by equality of the card-name multiset. If no non-mirror file deck exists for deck A's set, the file roll falls back to the Forge methods.
 - With both flags absent the command must reproduce the original behaviour: four Forge methods on both sides, random eligible set.
 - `--best-of` must be a positive odd integer.
-- The supervisor restarts crashed workers. Long Forge AI games can crash the JVM and that is expected. Why the workers are short-lived by design: `src/effects/CLAUDE.md` § Collection.
+- The supervisor restarts crashed workers. Long Forge AI games can crash the JVM and that is expected. Why the workers are short-lived by design: `src/effects/docs/collection-runs.md` § Short-lived workers.
 - `--workers` is 1 to 12.
 - With `--effect-records DIR` the workers honour the stop protocol (`specs/025-ability-effect-model-gen3/contracts/cli.md` § Match worker stop protocol): each recycles itself at a game end after `--recycle-seconds`, and the run's end or a first Ctrl-C asks each to finish its game, killing one only after `--stop-timeout`. A second Ctrl-C kills any worker still finishing. A match stopped after one of its games is abandoned: no outcome or cards-played row.
 - With `--effect-records DIR` the worker logs go under `DIR/logs/`, never beside the shards, and the supervisor scans them for failure lines at every status line. The run exits 1 when it played matches and wrote no effect record.

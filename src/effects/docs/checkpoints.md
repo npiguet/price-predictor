@@ -13,6 +13,13 @@ Rules to respect when changing what a checkpoint or `resume.pt` holds, a loader,
 - A gen-3 checkpoint's weights are the averaged ones. It records `best_control_score`, the loss denominators, `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight`, `--relation-values`, the manifest's `rule_map_digest` and the `selection_set_digest`.
 - `training_settings` holds `input_layout` with the relation types, subtypes, named counters and closed output lists, whose order fixes the model's tables. A loader refuses a checkpoint whose layout or lists differ.
 
+## Loading
+
+- `application/model_loading.py` rebuilds encoder, model and batcher from a saved checkpoint, the weights read by `effect_model_store.load_weights`.
+- Loading is strict: a model state missing anything but the training-only heads, or carrying an unexpected key, is refused. Loaded leniently, the missing part would run at random initial weights. The encoder and model come back in eval mode.
+- The `identity` baseline's `e` comes from a free embedding table and not from the encoder, so the table rides in the checkpoint's `extra` with its texts, and the runner rebuilds it from them. Rebuilt empty, the baseline is scored on random vectors and gate 1 gets a margin nobody earned.
+- The table indexes texts exactly: one row per text the run's sidecars encode to (`ability_text.known_texts`), plus one shared row for any other text, such as a counterfactual copy's. A hashed table would let two texts share a row, which is the memorization the baseline exists to measure.
+
 ## `resume.pt`
 
 - It is not a checkpoint. It is rewritten at the end of every epoch, to a temporary name and renamed, and carries everything a checkpoint drops: the training-only heads, the optimizer, the step, the early stopper, the noise on `e`, the averaged weights, the loss denominators, the best control score and the generator states.

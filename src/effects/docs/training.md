@@ -42,6 +42,15 @@ Rules to respect when running or changing `train-effect-model`. Each says what m
 - The value head's at-least-k bits (k = 1…40) are averaged so the block weighs one binary target. They exist to make `e` carry amounts as a thermometer the trunk can compare.
 - The MLM pass zeroes a masked position's numeric value and number flag along with its token. The encoder adds the number embedding beside the token's, so leaving them would hand the masked digit back.
 
+## One batching pipeline
+
+- `application/surface_batching.py` turns records into the trunk's inputs (`TrunkInputs`), and the trainer and gate 1's evaluator both go through it. They must agree exactly.
+- The encoding text has one definition, `SurfaceBatcher.text_of`. With two, one caller keys a batch's encodings by prose and the other looks them up by script: the effect head trains on an all-zero `e`, every loss still falls, and the four evaluation baselines come out identical to the shipping model.
+- The variant masks have one definition, `SurfaceBatcher._masked`. They are the whole difference between a baseline and the model gate 1 compares it against.
+  - `state-only` zeroes every `e`, `[ACT]`'s included.
+  - `no-state` zeroes the context abilities' `e` but keeps `[ACT]`'s, and zeroes every card and player feature and every `[GLOBAL]` input except the trailing record-kind, moment and subkind one-hots (`KIND_FLAG_WIDTH`). The average-effect control sees which ability acts and what kind of record it is, and nothing of the board.
+  - The masks zero inputs and never drop slots, so the per-entity targets keep their shape.
+
 ## Layout and magnitudes
 
 - A checkpoint records its input layout and the ordered lists behind it (relation types, subtypes, named counters, the closed output lists). Every loader refuses another layout or a differing list (`CheckpointLayoutError`). Reordering any of those lists invalidates every existing checkpoint. See `model-layout.md` and `checkpoints.md`.

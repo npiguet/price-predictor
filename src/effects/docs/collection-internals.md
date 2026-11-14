@@ -26,6 +26,8 @@ Each record's board is read just before the moment it describes, and its events 
 ## The hook inventory
 
 - `PatchHooks.REQUIRED` lists every class, method and the record channel it feeds. It is load-bearing, not documentation: `AttributionMode` probes `PatchHooks.SUB_ABILITY`, `ContinuousChannel.CAN_SUPPRESS` reads the six `…Without` entries, and `PatchHooks.report()` prints what is missing at worker startup.
+- Attribution mode is detected at worker startup, never compiled in. `../forge` is rebuilt independently of this repository, so a build-time switch would mislabel a corpus collected on a checkout without the hooks. Every record carries the detected `mode`.
+- With the hooks a run reaches all eight sampling classes. Without them it reaches three, and every record is stamped `degraded`.
 - A partly-applied patch is the state that matters. The mode still reads `patched`, because that is one hook's answer, while a channel the run meant to collect is quietly empty. Read the report line, not just the mode.
 - The connector builds against stock Forge and reaches every hook by name. A typo in a hook's name therefore shows up at runtime as `degraded`, not at compile time, which is why every record carries the detected mode and `tests/integration/test_effects_patched.py` asserts it.
 - The tests read the checkout rather than assuming it. One that pinned `degraded` would fail the day the patch landed, with nothing wrong.

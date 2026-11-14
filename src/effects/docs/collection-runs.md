@@ -1,10 +1,43 @@
 # Collection runs
 
-Rules to respect when running, babysitting or changing `collect-coverage`, `collect-variants`, `validate-corpus` or `field-coverage`. This file does not describe the commands:
+Rules to respect when running, babysitting or changing `collect-coverage`, `collect-variants`, `validate-corpus`, `field-coverage` or a `sealed match-outcomes --effect-records` run, and when changing how workers are recycled, stopped or killed. This file does not describe the commands:
 
 - Flags and defaults: each command's `--help`; the shared collection flags are defined in `sealed/infrastructure/effect_collection_flags.py`.
 - The variant rounds: `specs/2026-10-30-ability-effect-model-gen3.md` § 8.15, `domain/variant_rounds.py`, `application/steered_variants.py`.
-- Why the workers are short-lived, and catching defects in the first minutes: `src/effects/CLAUDE.md` § Collection.
+- The stop protocol: `specs/025-ability-effect-model-gen3/contracts/cli.md` § Match worker stop protocol, and Java `WorkerStop`. The pool: `ForgeWorkerPool` in `price_predictor/infrastructure/forge_jvm.py`.
+- What a user launching a collection must know: `specs/025-ability-effect-model-gen3/quickstart.md` Stage 5.
+
+## Collection is an opt-in
+
+- Collection rides a command that already exists: `python -m sealed match-outcomes --effect-records DIR`. `--effect-records` has no default there, because a default would turn every self-play run into a collection run. Without the flag no shard is opened, and `match-outcomes.txt` and `cards-played.txt` keep their exact format and content.
+- The instrumentation costs no extra simulation: it rides matches that were going to be played anyway.
+- `MatchWorkerMain` has a records-only mode: with `-Deffect.records.dir` set and `-Doutput.file` absent, neither sealed writer is constructed. `collect-coverage` and `collect-variants` run their workers that way. Their decks are built for coverage and not for a fair self-play sample, so their matches in the sealed corpus would corrupt the scorer's training data.
+
+## Short-lived workers
+
+- Every collecting supervisor runs its Forge workers under `-Xmx1200m` and recycles each one: a worker stops itself at the first game end after `--recycle-seconds` of its JVM's life, and `ForgeWorkerPool` starts a fresh one at once.
+- The heap and the recycle are one measure, and neither is a tuning knob. Forge misbehaves late in a JVM's life, with loops that do not terminate and allocation that grows without bound. The small heap turns a runaway worker into an early, cheap death the pool restarts, where a large one lets one worker drag the machine down hours into a run. The recycle bounds the pathologies that do not allocate.
+- Do not raise the heap, lengthen the recycle or propose removing either without saying what contains Forge instead: either change hides the pathology. The price, a handful of GC crashes per overnight run, each costing the game in flight and nothing else, is paid deliberately.
+- A worker whose game has not ended `--stop-timeout` past its recycle time is killed.
+
+## Stopping a worker
+
+- Each worker slot has a stop file, `logs/<run_id>.<slot>.stop`, deleted once the pool's run ends. A round's end, the run's end and a first Ctrl-C create every running worker's file and wait for each to finish its game, write its game-end marker, close its shard and exit 0 with its stop line.
+- The workers run in process groups of their own (`forge_jvm.graceful_popen_options`), so a console Ctrl-C reaches the supervisor alone and never a worker JVM.
+- A worker still starting Forge, with no startup line in its log, is killed at once: it has no game to cut (`killed_starting`).
+- No worker is restarted once the round's budget is reached, so a round ends at most one game's length, bounded by `--stop-timeout`, after its budget.
+- The kill (`taskkill /F /T`, `ForgeWorkerPool._kill`) is the backstop only. It ends a worker still playing `--stop-timeout` after the request, one overdue past its recycle time by `--stop-timeout`, every worker on a second Ctrl-C, and a survivor of a crash.
+- A round is counted only once every worker of its pool has ended.
+- Each round reports, and `run.json` records, how the workers ended (`worker_stops`) and how many games the counts left out as cut (`cut_games`).
+
+## Restarts are the normal condition
+
+- An eight-hour run is hundreds of JVM lifetimes across its worker slots, and a crash or a kill ends a JVM mid-game without a stop. Record identity, game boundaries and any resume logic must be correct across hundreds of restarts and across a JVM ended mid-game. This is a correctness constraint, not a throughput one.
+- Anything a worker counts from zero is namespaced by the JVM lifetime, not by the worker slot. Counted per slot, `record_id` values repeat and one `game_id`, the corpus's join key, merges unrelated games. The id and shard-name layout: `record-format.md` § Shards.
+- A file boundary is not a game boundary. A kill or a crash cuts a game and its remainder is never written. A game that ended writes a `turn_action` / `game_end` marker as its last record, and a game whose shard holds no marker is a cut one: `build-corpus` drops it whole, and the collectors' counters and `rule-counts` count nothing from it (`domain/game_ends.py`).
+- A worker that stops at a game end closes its shard whole, and the shard writer writes its block in flight at every game end, right after the marker (`RecordShardWriter.endGame`). A killed or crashed worker therefore loses the game in progress only: that game's records in complete 256-record blocks stay in the shard, its last 255 at most are absent, and so are its end-of-game records (fired triggers, mana reservoirs, the outcome, the marker), so it reads as cut.
+- A resume must not assume a clean shutdown left a marker.
+- Run `python -m effects validate-corpus --effect-records <dir>` over the first few minutes of every pass. A defect of this kind shows in the first minute of shards and raises nothing for the rest of the run.
 
 ## Both collectors
 
@@ -12,7 +45,7 @@ Rules to respect when running, babysitting or changing `collect-coverage`, `coll
 - Point `--training-corpus` at the depleted corpus. Discovery recurses, so a tree also holding the full-strength corpus would count validation records toward coverage, and a card whose only records are held out would read as satisfied. A directory without a `holdout-cards.txt` is refused rather than run undepleted.
 - A collector's run directory is its `--effect-records`: shards at the top level, every worker log and progress file under `logs/`, decks files under `decks/`.
 - Each run's decks go to a file of its own (`decks/coverage-decks.<run_id>.txt`, `decks/variant-decks.<run_id>.txt`), because every worker reloads the file at its start.
-- A round ends once its progress file counts `--decks-per-round` matches and every worker has finished the game it was playing. How workers are stopped and recycled: `src/effects/CLAUDE.md` § Collection.
+- A round ends once its progress file counts `--decks-per-round` matches and every worker has finished the game it was playing. How workers are stopped and recycled: § Stopping a worker.
 - There is one progress file per round, so a worker the backstop kill could not end appends to its own round's file and never to the next round's count.
 - A gen-3 game whose shard holds no game-end marker credits no card, held-out text or variant, as `build-corpus` drops it.
 - A run that plays rounds and writes no record in its own shards exits 1. A run that plays none exits 0 when every unit was already done, and 1 when units remain that no deck could hold.
