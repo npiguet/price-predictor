@@ -27,7 +27,8 @@ import java.util.Optional;
  * begins, it holds an Aura it has the lands to cast whose static ability
  * sets the enchanted permanent's card type (removes its card types and gives
  * it another: Song of the Dryads, Imprisoned in the Moon), and an opponent
- * controls a creature with no +1/+1 counter. It binds the creature Forge's
+ * controls a creature with no +1/+1 counter and no -1/-1 counter (beside
+ * which the variant's +1/+1 counter is annihilated, 704.5q). It binds the creature Forge's
  * AI rates best among those, the one such a curse most likely enchants, and
  * the Aura.
  *
@@ -65,7 +66,8 @@ public final class TypeSettingAura {
         }
         List<Card> creatures = active.getOpponents().stream()
                 .flatMap(opponent -> opponent.getCreaturesInPlay().stream())
-                .filter(creature -> creature.getCounters(CounterEnumType.P1P1) == 0)
+                .filter(creature -> creature.getCounters(CounterEnumType.P1P1) == 0
+                        && creature.getCounters(CounterEnumType.M1M1) == 0)
                 .toList();
         if (creatures.isEmpty()) {
             return Optional.empty();

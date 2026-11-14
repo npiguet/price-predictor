@@ -24,11 +24,12 @@ import java.util.Optional;
  * resolves.
  *
  * <p>The base board, read at a boundary: a main phase of the active player
- * begins, a permanent on the battlefield replaces moves to a graveyard
- * ({@link GraveyardReplacement#replacesGraveyardMoves}, Rest in Peace), and
- * the active player controls a permanent with an activated ability whose cost
- * sacrifices one other permanent, for which it controls exactly one
- * candidate, a creature. It binds that creature and the ability's permanent.
+ * begins, the active player controls a permanent with an activated ability
+ * whose cost sacrifices one other permanent, for which it controls exactly
+ * one candidate, a creature, and a permanent on the battlefield replaces
+ * that creature's move to a graveyard ({@link Boards#replacesGraveyardMoveOf}:
+ * Rest in Peace does, an opponent's Leyline of the Void does, one's own does
+ * not). It binds that creature and the ability's permanent.
  *
  * <p>Variant {@code nothing_to_sacrifice} ({@code remove_permanent}): the
  * creature is not on the battlefield, so nothing can be sacrificed and the
@@ -50,15 +51,15 @@ public final class ReplacedSacrificeCost {
     }
 
     static Optional<Binding> bind(Game live) {
-        if (!Boards.atMainPhase(live)
-                || live.getCardsIn(ZoneType.Battlefield).stream().noneMatch(GraveyardReplacement::replacesGraveyardMoves)) {
+        if (!Boards.atMainPhase(live)) {
             return Optional.empty();
         }
         Player active = Boards.active(live);
         for (Card permanent : active.getCardsIn(ZoneType.Battlefield)) {
             for (SpellAbility ability : permanent.getSpellAbilities()) {
                 Optional<Card> only = soleSacrifice(ability, active);
-                if (only.isPresent()) {
+                if (only.isPresent() && live.getCardsIn(ZoneType.Battlefield).stream()
+                        .anyMatch(replacer -> Boards.replacesGraveyardMoveOf(replacer, only.get()))) {
                     return Optional.of(Binding.empty().with("creature", only.get()).with("permanent", permanent));
                 }
             }

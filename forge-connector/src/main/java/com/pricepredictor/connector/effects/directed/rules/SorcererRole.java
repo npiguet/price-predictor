@@ -29,6 +29,10 @@ import java.util.Optional;
  * controls exactly one untapped permanent that makes mana, the last mana it
  * has for that payment. It binds that mana source.
  *
+ * <p>The active player cannot add a land to its mana this turn
+ * ({@link Boards#noLandToPlay}): it holds no land, or its land drop is
+ * used, so the turn's land drop cannot undo the mana the variant takes.
+ *
  * <p>Variant {@code cannot_pay} ({@code remove_permanent}): the mana source is
  * not on the battlefield, as A has two Plains instead of three, so no mana
  * remains at the beginning of combat and no Role is created.
@@ -54,6 +58,9 @@ public final class SorcererRole {
             return Optional.empty();
         }
         Player active = Boards.active(live);
+        if (!Boards.noLandToPlay(active)) {
+            return Optional.empty();
+        }
         boolean paysForRole = active.getCardsIn(ZoneType.Battlefield).stream()
                 .anyMatch(SorcererRole::paysForRoleAtCombat);
         if (!paysForRole) {

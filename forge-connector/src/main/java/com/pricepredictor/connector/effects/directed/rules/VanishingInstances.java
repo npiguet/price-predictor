@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects.directed.rules;
 
+import com.pricepredictor.connector.effects.ForkRefusal;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
@@ -34,6 +35,8 @@ public final class VanishingInstances {
     public static final String RULE = "702.63c";
     static final String SCENARIO = "702.63c-1";
     static final String ONE_INSTANCE = "one_instance";
+    /** A refusal's reason: after the edit and the static check the permanent does not have exactly one instance. */
+    static final String NOT_ONE_INSTANCE = "keyword vanishing not left at one instance";
 
     private VanishingInstances() {
     }
@@ -57,7 +60,10 @@ public final class VanishingInstances {
      * Every instance of vanishing taken away and one given back, through
      * {@link KeywordEdit} as the {@code keyword} operation does: a later
      * keyword layer adds after an earlier one removes, so the permanent ends
-     * with exactly one instance, in the spelling its first one had.
+     * with exactly one instance, in the spelling its first one had. The
+     * static check the edit ends with could put one back (a static granting
+     * vanishing applies anew); the edit then refuses rather than fork a
+     * board with two.
      */
     record OneInstance(Card permanent) implements BoardEdit {
 
@@ -78,6 +84,9 @@ public final class VanishingInstances {
             }
             KeywordEdit.add(fork, permanent, carried.get(0));
             BoardEdit.settle(fork);
+            if (permanent.getAmountOfKeyword(Keyword.VANISHING) != 1) {
+                throw new ForkRefusal(NOT_ONE_INSTANCE);
+            }
         }
     }
 }

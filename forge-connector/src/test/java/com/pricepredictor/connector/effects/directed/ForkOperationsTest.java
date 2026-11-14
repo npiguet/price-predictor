@@ -597,6 +597,42 @@ class ForkOperationsTest {
         assertRefused(board, bears, ReplaceCardOperation.UNREWRITABLE_COMMAND);
     }
 
+    /**
+     * C4 #1: the damage the replaced creature carries is lethal to a smaller
+     * card, which the fork's first check would put into a graveyard; the edit
+     * refuses rather than fork that board. Hill Giant with 2 damage becomes
+     * Grizzly Bears with 2 damage.
+     */
+    @Test
+    void aReplacementTheCarriedDamageKillsIsRefused() {
+        Board board = Board.main();
+        Card giant = board.creature(board.you, "Hill Giant");
+        giant.setDamage(2);
+        ForkRefusal refusal = assertThrows(ForkRefusal.class,
+                () -> new ReplaceCardOperation(giant, "Grizzly Bears").apply(board.game));
+        assertEquals(ReplaceCardOperation.DIES, refusal.reason());
+    }
+
+    @Test
+    void aReplacementTheCarriedCountersKillIsRefused() {
+        Board board = Board.main();
+        Card giant = board.creature(board.you, "Hill Giant");
+        giant.setCounters(CounterEnumType.M1M1, 2);
+        ForkRefusal refusal = assertThrows(ForkRefusal.class,
+                () -> new ReplaceCardOperation(giant, "Grizzly Bears").apply(board.game));
+        assertEquals(ReplaceCardOperation.DIES, refusal.reason());
+    }
+
+    @Test
+    void aReplacementThatSurvivesTheCarriedDamageGoesThrough() {
+        Board board = Board.main();
+        Card bears = board.creature(board.you, "Grizzly Bears");
+        bears.setDamage(1);
+        new ReplaceCardOperation(bears, "Hill Giant").apply(board.game);
+        assertTrue(board.you.getCardsIn(ZoneType.Battlefield).stream()
+                .anyMatch(card -> card.getName().equals("Hill Giant") && card.getDamage() == 1));
+    }
+
     private static final class Board {
         final Game game;
         final Player you;

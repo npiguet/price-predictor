@@ -924,15 +924,28 @@ NOT_DIRECTED = {
                "701.12d-2's contrast is ownership, not a board edit",
     "702.62d": "the suspend cast happens inside a resolution, never at a priority stop, so "
                "no playability record exists for it",
+    **{rule: f"restates {other}, which is listed in its place (the user's decision of "
+             "2026-11-14): its scenario declares the same fact as " + other + "'s"
+       for rule, other in {"121.4": "704.5b", "122.1g": "704.5v", "703.4m": "510.2",
+                           "701.42c": "701.42b"}.items()},
+    **dict.fromkeys(("505.5", "614.10a", "701.24f", "702.105b"),
+                    "the record cannot show the rule's fact, so its scenarios declare no "
+                    "detector (the user's decision of 2026-11-14)"),
 }
 #: Left out of this collection only: they qualified on the recount after the T030
 #: detectors (2026-11-06), when the list of 70 was fixed for production; by the user's
 #: rule, more than five newcomers wait for a later collection rather than delay this one
 #: by a registration each.
-DEFERRED_DIRECTED = dict.fromkeys((
-    "104.4a", "104.4c", "115.7a", "701.10c", "701.11c", "701.40c", "701.40d",
-    "702.19c", "702.19e", "702.19f", "702.131a", "702.170c", "712.4c", "712.16",
-), "qualified after the production list was fixed; registered for a later collection")
+DEFERRED_DIRECTED = {
+    **dict.fromkeys((
+        "104.4a", "104.4c", "115.7a", "701.10c", "701.11c", "701.40c", "701.40d",
+        "702.19c", "702.19e", "702.19f", "702.131a", "702.170c", "712.4c", "712.16",
+    ), "qualified after the production list was fixed; to be registered for a later "
+       "collection"),
+    "702.118b": "qualified when the 2026-11-13 review's catalogue revision gave 702.118b-1 a "
+                "detector gen-2 records show, after the production list was fixed; to be "
+                "registered for a later collection",
+}
 FIRES, DOES_NOT_FIRE = "fires", "does_not_fire"
 
 

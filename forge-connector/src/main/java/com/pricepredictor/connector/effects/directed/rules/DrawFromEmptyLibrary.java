@@ -16,9 +16,10 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 121.4, a player who attempted to draw from an empty library loses at the
- * next state-based check, on scenario {@code 121.4-1}: A casts Divination
- * with one card in its library, draws it, fails the second draw and loses.
+ * 704.5b, a player who attempted to draw from an empty library since the
+ * last state-based check loses the game (121.4 restates it), on scenario
+ * {@code 704.5b-1}: A casts Divination with one card in its library, draws
+ * it, fails the second draw and loses.
  *
  * <p>The base board, read at a boundary: a main phase of the active player
  * begins, its library holds exactly one card, and it holds a spell it has the
@@ -31,8 +32,8 @@ import java.util.Optional;
  */
 public final class DrawFromEmptyLibrary {
 
-    public static final String RULE = "121.4";
-    static final String SCENARIO = "121.4-1";
+    public static final String RULE = "704.5b";
+    static final String SCENARIO = "704.5b-1";
     static final String EMPTY = "empty";
 
     private DrawFromEmptyLibrary() {

@@ -31,7 +31,10 @@ import java.util.Set;
  * listed keywords any of them has (Concerted Effort, a {@code PumpAll} with
  * {@code SharedKeywordsZone$}), and of the two or more creatures that player
  * controls exactly one has any of the listed keywords, so the others would
- * gain it. It binds that creature.
+ * gain it, and it has them of its own text alone ({@link Boards#ownKeywordOnly}:
+ * an Equipment's or a resolved effect's would stay on the card put in its
+ * place) and carries nothing that card would die of
+ * ({@link Boards#carriesNothingLethal}). It binds that creature.
  *
  * <p>Variant {@code no_keywords} ({@code replace_card}): Hill Giant is in that
  * creature's place, so no creature has a listed keyword and none is granted.
@@ -82,12 +85,21 @@ public final class SharedKeywords {
         return Optional.of(Keyword.setValueOf(pump.get("KW")));
     }
 
-    /** The one creature {@code player} controls with any of {@code listed}, when it controls another. */
+    /**
+     * The one creature {@code player} controls with any of {@code listed},
+     * when it controls another, has them of its own text and carries nothing
+     * lethal.
+     */
     private static Optional<Card> soleHolder(Player player, Set<Keyword> listed) {
         List<Card> creatures = List.copyOf(player.getCreaturesInPlay());
         List<Card> holders = creatures.stream()
                 .filter(creature -> listed.stream().anyMatch(creature::hasKeyword))
                 .toList();
-        return creatures.size() >= 2 && holders.size() == 1 ? Optional.of(holders.get(0)) : Optional.empty();
+        if (creatures.size() < 2 || holders.size() != 1) {
+            return Optional.empty();
+        }
+        Card holder = holders.get(0);
+        boolean own = listed.stream().allMatch(keyword -> Boards.ownKeywordOnly(holder, keyword));
+        return own && Boards.carriesNothingLethal(holder) ? Optional.of(holder) : Optional.empty();
     }
 }

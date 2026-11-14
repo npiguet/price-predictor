@@ -4,11 +4,15 @@ import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.effects.BoardStates;
 import com.pricepredictor.connector.effects.TestBoard;
 import com.pricepredictor.connector.effects.TestForks;
+import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.DirectedRules;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.KeywordEdit;
+import com.pricepredictor.connector.effects.directed.operations.BoardEdit;
+import com.pricepredictor.connector.effects.directed.operations.CountersOperation;
+import com.pricepredictor.connector.effects.directed.operations.LifeOperation;
 import forge.StaticData;
 import forge.ai.simulation.GameCopier;
 import forge.game.Game;
@@ -30,8 +34,10 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Function;
 
 import static com.pricepredictor.connector.effects.directed.BoardChanges.changes;
 import static com.pricepredictor.connector.effects.directed.BoardChanges.id;
@@ -39,6 +45,7 @@ import static com.pricepredictor.connector.effects.directed.BoardChanges.renamed
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -389,7 +396,7 @@ class RegisteredRulesTest {
         assertTrue(twin.fork().card("enlisted").isTapped());
     }
 
-    // ── 703.4m, simultaneous combat damage: replace_card ────────────────
+    // ── 510.2 (703.4m), simultaneous combat damage: replace_card ────────
 
     /** A's Grizzly Bears attacks, B's {@code blocker} blocks it; the first-strike damage step begins. */
     private static Board blockedBoard(String blocker) {
@@ -759,7 +766,7 @@ class RegisteredRulesTest {
         assertTrue(twin.fork().player("opponent").canLoseLife());
     }
 
-    // ── 121.4, a draw from an empty library: move_card ──────────────────
+    // ── 704.5b (121.4), a draw from an empty library: move_card ─────────
 
     private static Board divinationBoard(int library) {
         Board board = new Board(PhaseType.MAIN1);
@@ -800,7 +807,7 @@ class RegisteredRulesTest {
         assertTrue(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library).isEmpty());
     }
 
-    // ── 122.1g, a battle's last defense counter: counters ───────────────
+    // ── 704.5v (122.1g), a battle's last defense counter: counters ──────
 
     private static Board battleBoard(int defense) {
         Board board = new Board(PhaseType.MAIN1);
@@ -944,35 +951,6 @@ class RegisteredRulesTest {
         assertTrue(twin.fork().card("land").isTapped());
     }
 
-    // ── 505.5, a roll to visit Attractions: remove_permanent ────────────
-
-    /** A's Balloon Stand, an Attraction: Forge files Attractions with the variant cards, not the common ones. */
-    private static Board balloonBoard(PhaseType phase) {
-        Board board = new Board(phase);
-        Card stand = CardFactory.getCard(
-                StaticData.instance().getVariantCards().getCard("Balloon Stand"), board.you, board.game);
-        board.subject = board.game.getAction().moveToPlay(stand, board.you, null, null);
-        board.subject.setGameTimestamp(board.game.getNextTimestamp());
-        return board;
-    }
-
-    @Test
-    void attractionVisitBindsTheAttractionAsThePrecombatMainPhaseBegins() {
-        Board board = balloonBoard(PhaseType.MAIN1);
-        assertEquals(board.subject, AttractionVisit.bind(board.game).orElseThrow().card("attraction"));
-    }
-
-    @Test
-    void attractionVisitBindsNothingInTheSecondMainPhase() {
-        assertTrue(AttractionVisit.bind(balloonBoard(PhaseType.MAIN2).game).isEmpty());
-    }
-
-    @Test
-    void attractionVisitForksTheBoardWithoutTheAttraction() {
-        Board board = balloonBoard(PhaseType.MAIN1);
-        assertOnlyRemoved(board.twin(AttractionVisit.rule()), board.subject, "attraction");
-    }
-
     // ── 601.2c, one target chosen once: add_permanent ───────────────────
 
     private static Board undoBoard() {
@@ -1068,34 +1046,6 @@ class RegisteredRulesTest {
         String saga = id(board.subject);
         assertEquals(Set.of(saga + ".counters"), twin.changes());
         assertEquals(1, twin.fork().card("saga").getCounters(CounterEnumType.LORE));
-    }
-
-    // ── 614.10a, a skipped upkeep's trigger: remove_permanent ───────────
-
-    private static Board eonHubBoard(boolean arena) {
-        Board board = new Board(PhaseType.UNTAP);
-        board.subject = board.card(board.you, "Eon Hub");
-        if (arena) {
-            board.card(board.you, "Phyrexian Arena");
-        }
-        return board;
-    }
-
-    @Test
-    void skippedUpkeepTriggerBindsTheSkippingPermanent() {
-        Board board = eonHubBoard(true);
-        assertEquals(board.subject, SkippedUpkeepTrigger.bind(board.game).orElseThrow().card("permanent"));
-    }
-
-    @Test
-    void skippedUpkeepTriggerBindsNothingWithoutAnUpkeepTrigger() {
-        assertTrue(SkippedUpkeepTrigger.bind(eonHubBoard(false).game).isEmpty());
-    }
-
-    @Test
-    void skippedUpkeepTriggerForksTheBoardWithoutTheSkippingPermanent() {
-        Board board = eonHubBoard(true);
-        assertOnlyRemoved(board.twin(SkippedUpkeepTrigger.rule()), board.subject, "permanent");
     }
 
     // ── 614.17d, a permanent that can't enter: remove_permanent ─────────
@@ -1276,7 +1226,7 @@ class RegisteredRulesTest {
         assertEquals(1, twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library).size());
     }
 
-    // ── 701.24f, two shuffles at once: replace_card ─────────────────────
+    // ── 701.24g, a shuffle and a put-on-top at once: replace_card ───────
 
     private static Board barterBoard(String... opponentCreatures) {
         Board board = new Board(PhaseType.MAIN1);
@@ -1297,29 +1247,6 @@ class RegisteredRulesTest {
     }
 
     @Test
-    void simultaneousShufflesBindsOneOfTheTwoColossi() {
-        Board board = barterBoard("Darksteel Colossus", "Darksteel Colossus");
-        Card bound = SimultaneousShuffles.bind(board.game).orElseThrow().card("creature");
-        assertEquals("Darksteel Colossus", bound.getName());
-        assertEquals(board.opponent, bound.getController());
-    }
-
-    @Test
-    void simultaneousShufflesBindsNothingWithOneColossus() {
-        assertTrue(SimultaneousShuffles.bind(barterBoard("Darksteel Colossus", "Grizzly Bears").game).isEmpty());
-    }
-
-    @Test
-    void simultaneousShufflesForksGrizzlyBearsInAColossussPlace() {
-        Board board = barterBoard("Darksteel Colossus", "Darksteel Colossus");
-        Card bound = SimultaneousShuffles.bind(board.game).orElseThrow().card("creature");
-        Card bears = assertOnlyReplaced(board.twin(SimultaneousShuffles.rule()), bound, SimultaneousShuffles.BEARS);
-        assertFalse(SimultaneousShuffles.shufflesIntoLibrary(bears));
-    }
-
-    // ── 701.24g, a shuffle and a put-on-top at once: replace_card ───────
-
-    @Test
     void shuffleAndPlaceOnTopBindsTheShuffledCreature() {
         Board board = barterBoard("Darksteel Colossus", "Gravebane Zombie");
         assertEquals(board.subject, ShuffleAndPlaceOnTop.bind(board.game).orElseThrow().card("creature"));
@@ -1333,9 +1260,8 @@ class RegisteredRulesTest {
     @Test
     void shuffleAndPlaceOnTopForksGrizzlyBearsInTheColossussPlace() {
         Board board = barterBoard("Darksteel Colossus", "Gravebane Zombie");
-        Card bears = assertOnlyReplaced(board.twin(ShuffleAndPlaceOnTop.rule()), board.subject,
-                SimultaneousShuffles.BEARS);
-        assertFalse(SimultaneousShuffles.shufflesIntoLibrary(bears));
+        Card bears = assertOnlyReplaced(board.twin(ShuffleAndPlaceOnTop.rule()), board.subject, "Grizzly Bears");
+        assertTrue(bears.getReplacementEffects().isEmpty(), "nothing shuffles the Bears anywhere");
     }
 
     // ── 701.39a, bolster: remove_permanent ──────────────────────────────
@@ -1374,7 +1300,7 @@ class RegisteredRulesTest {
         assertOnlyRemoved(board.twin(Bolster.rule()), board.subject, "creature");
     }
 
-    // ── 701.42a-c, meld: replace_card ───────────────────────────────────
+    // ── 701.42a-b, meld: replace_card ───────────────────────────────────
 
     /**
      * A's {@code host} beside A's {@code partner}, a card or a token copy of
@@ -1445,26 +1371,6 @@ class RegisteredRulesTest {
     void tokenMeldPartnerForksTheCardInTheTokensPlace() {
         Board board = meldBoard("Graf Rats", "Midnight Scavengers", true, 0);
         Card card = assertOnlyReplaced(board.twin(TokenMeldPartner.rule()), board.subject, "Midnight Scavengers",
-                "token_script_id");
-        assertFalse(card.isToken());
-    }
-
-    @Test
-    void unmeldableStayBindsTheTokenPartnerOfAnAffordableActivatedMeld() {
-        Board board = meldBoard("Hanweir Battlements", "Hanweir Garrison", true, 5);
-        assertEquals(board.subject, UnmeldableStay.bind(board.game).orElseThrow().card("partner"));
-    }
-
-    @Test
-    void unmeldableStayBindsNothingWithoutTheManaToActivate() {
-        assertTrue(UnmeldableStay.bind(meldBoard("Hanweir Battlements", "Hanweir Garrison", true, 4).game).isEmpty());
-        assertTrue(UnmeldableStay.bind(meldBoard("Graf Rats", "Midnight Scavengers", true, 5).game).isEmpty());
-    }
-
-    @Test
-    void unmeldableStayForksTheCardInTheTokensPlace() {
-        Board board = meldBoard("Hanweir Battlements", "Hanweir Garrison", true, 5);
-        Card card = assertOnlyReplaced(board.twin(UnmeldableStay.rule()), board.subject, "Hanweir Garrison",
                 "token_script_id");
         assertFalse(card.isToken());
     }
@@ -2042,51 +1948,6 @@ class RegisteredRulesTest {
         assertOnlyReplaced(board.twin(BestowIllegalTarget.rule()), board.subject, BestowIllegalTarget.COURSER);
     }
 
-    // ── 702.105b, dethrone instances: remove_permanent ──────────────────
-
-    /** A (15 life) with Enraged Revolutionary and, when {@code marchesa}, Marchesa, the Black Rose; B at 20. */
-    private static Board marchesaBoard(boolean marchesa) {
-        Board board = new Board(PhaseType.COMBAT_DECLARE_ATTACKERS);
-        board.other = board.card(board.you, "Enraged Revolutionary");
-        if (marchesa) {
-            board.subject = board.card(board.you, "Marchesa, the Black Rose");
-        }
-        board.you.setLife(15, null);
-        board.game.getAction().checkStaticAbilities();
-        return board;
-    }
-
-    @Test
-    void dethroneInstancesBindsTheGrantingPermanent() {
-        Board board = marchesaBoard(true);
-        assertEquals(2, board.other.getKeywords(Keyword.DETHRONE).size());
-        assertEquals(board.subject, DethroneInstances.bind(board.game).orElseThrow().card("permanent"));
-    }
-
-    @Test
-    void dethroneInstancesBindsNothingOnOneInstance() {
-        assertTrue(DethroneInstances.bind(marchesaBoard(false).game).isEmpty());
-    }
-
-    @Test
-    void dethroneInstancesForksTheBoardWithoutTheGrantingPermanent() {
-        Board board = marchesaBoard(true);
-        Twin twin = board.twin(DethroneInstances.rule());
-        String gone = id(board.subject);
-        String creature = id(board.other);
-        assertTrue(twin.changes().contains("-" + gone), twin.changes().toString());
-        for (String change : twin.changes()) {
-            // The creature loses the instance Marchesa granted it.
-            assertTrue(change.equals("-" + gone) || change.endsWith(".order_rank")
-                            || change.equals(creature + ".lines") || change.equals(creature + ".granted_temporary")
-                            || change.startsWith("-link ") && change.contains("=" + gone),
-                    "removing changed " + change + "; all: " + twin.changes());
-        }
-        Card forked = twin.forkGame().getCardsIn(ZoneType.Battlefield).stream()
-                .filter(card -> id(card).equals(creature)).findFirst().orElseThrow();
-        assertEquals(1, forked.getKeywords(Keyword.DETHRONE).size());
-    }
-
     // ── 702.124j, partner with's search: move_card ──────────────────────
 
     /** A's Pir, Imaginative Rascal in hand over three Forests; A's library top card first. */
@@ -2483,6 +2344,345 @@ class RegisteredRulesTest {
         assertOnlyChanged(twin, board.subject, library.get(0));
     }
 
+    // ── what makes a variant come undone (review C4, V3 #9-10) ──────────
+
+    /**
+     * C4 #2: a land in the holder's hand would be played as the turn goes on
+     * and give back the mana a "one land short" variant takes, so the rule
+     * does not bind; with the turn's land drop used it binds again.
+     */
+    private static void assertALandToPlayStopsTheBinding(Board board, DirectedRule rule) {
+        assertTrue(rule.precondition(board.game).isPresent(), rule.rule() + ": the base binds");
+        TestBoard.inHand(board.game, board.you, "Forest");
+        assertTrue(rule.precondition(board.game).isEmpty(), rule.rule() + ": binds with a land to play");
+        board.you.setLandsPlayedThisTurn(1);
+        assertTrue(rule.precondition(board.game).isPresent(), rule.rule() + ": the land drop is used");
+    }
+
+    @Test
+    void fusedCostBindsNothingWithALandToPlay() {
+        assertALandToPlayStopsTheBinding(fuseBoard(3), FusedCost.rule());
+    }
+
+    @Test
+    void prototypeBindsNothingWithALandToPlay() {
+        assertALandToPlayStopsTheBinding(automatonBoard(3), Prototype.rule());
+    }
+
+    @Test
+    void mayhemBindsNothingWithALandToPlay() {
+        assertALandToPlayStopsTheBinding(boltBoard(true, 2), Mayhem.rule());
+    }
+
+    @Test
+    void morphFaceUpBindsNothingWithALandToPlay() {
+        assertALandToPlayStopsTheBinding(angelBoard(4), MorphFaceUp.rule());
+    }
+
+    @Test
+    void mutagenTokenBindsNothingWithALandToPlay() {
+        assertALandToPlayStopsTheBinding(mutagenBoard(false), MutagenToken.rule());
+    }
+
+    @Test
+    void sorcererRoleBindsNothingWithALandToPlay() {
+        assertALandToPlayStopsTheBinding(vendorBoard(1), SorcererRole.rule());
+    }
+
+    @Test
+    void improviseBindsNothingWithALandToPlay() {
+        assertALandToPlayStopsTheBinding(engineerBoard(3), Improvise.rule());
+    }
+
+    /** A modal double-faced card whose back is a land is a land to play too. */
+    @Test
+    void aModalCardWithALandBackIsALandToPlay() {
+        Board board = fuseBoard(3);
+        TestBoard.inHand(board.game, board.you, "Turntimber Symbiosis");
+        assertTrue(FusedCost.bind(board.game).isEmpty());
+    }
+
+    /**
+     * C4 #3: Lich's Mirror's fork is taken only where its loss can still
+     * happen in the turn the fork plays: not as the untap step begins, nor at
+     * the end step or cleanup, after the turn's last draw and damage.
+     */
+    @Test
+    void gameLossReplacedBindsNothingOutsideTheTurnsDecisiveSteps() {
+        for (PhaseType phase : List.of(PhaseType.UNTAP, PhaseType.END_OF_TURN, PhaseType.CLEANUP)) {
+            Board board = mirrorBoard(1, "Plains", "Plains");
+            board.game.getPhaseHandler().devModeSet(phase, board.you);
+            assertTrue(GameLossReplaced.bind(board.game).isEmpty(), phase.toString());
+        }
+        for (PhaseType phase : List.of(PhaseType.UPKEEP, PhaseType.MAIN1, PhaseType.COMBAT_DECLARE_ATTACKERS,
+                PhaseType.MAIN2)) {
+            Board board = mirrorBoard(1, "Plains", "Plains");
+            board.game.getPhaseHandler().devModeSet(phase, board.you);
+            assertTrue(GameLossReplaced.bind(board.game).isPresent(), phase.toString());
+        }
+    }
+
+    /** C4 #4: a second permanent doing the same thing would still do it once the bound one is removed. */
+    @Test
+    void gameLossReplacedBindsNothingWithASecondReplacingPermanent() {
+        Board board = mirrorBoard(1, "Plains", "Plains");
+        board.card(board.you, "Lich's Mirror");
+        assertTrue(GameLossReplaced.bind(board.game).isEmpty());
+    }
+
+    /** Platinum Angel stops the loss too, by a static rather than a replacement. */
+    @Test
+    void gameLossReplacedBindsNothingForAPlayerWhoCannotLose() {
+        Board board = mirrorBoard(1, "Plains", "Plains");
+        board.card(board.you, "Platinum Angel");
+        board.game.getAction().checkStaticAbilities();
+        assertTrue(GameLossReplaced.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void graveyardReplacementBindsNothingWithASecondReplacingPermanent() {
+        Board board = restInPeaceBoard("Rest in Peace");
+        board.card(board.opponent, "Leyline of the Void");
+        assertTrue(GraveyardReplacement.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void cantEnterBattlefieldBindsNothingWithASecondStoppingPermanent() {
+        Board board = cageBoard(true);
+        board.card(board.opponent, "Grafdigger's Cage");
+        assertTrue(CantEnterBattlefield.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void limitedSearchBindsNothingWithASecondLimitingPermanent() {
+        Board board = mindcensorBoard(true);
+        board.card(board.you, "Aven Mindcensor");
+        assertTrue(LimitedSearch.bind(board.game).isEmpty());
+    }
+
+    /**
+     * C4 #4: a keyword the bound creature has from an Equipment stays on the
+     * card {@code replace_card} puts in its place, since the edit relinks the
+     * attachment; so does one a resolved effect gave it.
+     */
+    /** Sword of Fire and Ice (protection from red and from blue) on {@code creature}. */
+    private static void equipSword(Board board, Card creature) {
+        Card sword = board.card(creature.getController(), "Sword of Fire and Ice");
+        sword.attachToEntity(creature, null);
+        board.game.getAction().checkStaticAbilities();
+        assertTrue(creature.hasKeyword(Keyword.PROTECTION));
+    }
+
+    @Test
+    void sharedKeywordsBindsNothingWhenTheKeywordComesFromAnAttachment() {
+        Board board = concertedBoard("Grizzly Bears", "Hill Giant");
+        equipSword(board, board.subject);
+        assertTrue(SharedKeywords.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void sharedKeywordsBindsNothingWhenTheKeywordComesFromAResolvedEffect() {
+        Board board = concertedBoard("Grizzly Bears", "Hill Giant");
+        KeywordEdit.add(board.game, board.subject, "First Strike");
+        assertTrue(board.subject.hasFirstStrike());
+        assertTrue(SharedKeywords.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void copyForEachTargetBindsNothingWhenTheProtectionComesFromAnAttachment() {
+        Board board = new Board(PhaseType.MAIN1);
+        for (int i = 0; i < 6; i++) {
+            board.card(board.you, "Mountain");
+        }
+        TestBoard.inHand(board.game, board.you, "Radiate");
+        TestBoard.inHand(board.game, board.you, "Shock");
+        board.subject = board.card(board.opponent, "Grizzly Bears");
+        equipSword(board, board.subject);
+        assertTrue(CopyForEachTarget.bind(board.game).isEmpty());
+    }
+
+    /**
+     * C4 #5: a sorcery in the non-active player's hand cannot be cast this
+     * turn, so the fork would be spent on nothing. An instant can
+     * ({@code toughnessZeroBindsTheCreatureTheSpellWouldKill}'s Disfigure,
+     * {@code limitedSearchBindsTheLimitingPermanent}'s Vampiric Tutor).
+     */
+    @Test
+    void toughnessZeroBindsNothingForASorceryInTheNonActiveHand() {
+        Board board = new Board(PhaseType.MAIN1);
+        board.card(board.you, "Drudge Skeletons");
+        for (int i = 0; i < 3; i++) {
+            board.card(board.opponent, "Swamp");
+        }
+        Card fatigue = TestBoard.inHand(board.game, board.opponent, "Crippling Fatigue");
+        assertEquals(2, ToughnessZero.toughnessLoss(fatigue));
+        assertTrue(ToughnessZero.bind(board.game).isEmpty());
+
+        Board instant = new Board(PhaseType.MAIN1);
+        instant.card(instant.you, "Drudge Skeletons");
+        instant.card(instant.opponent, "Swamp");
+        TestBoard.inHand(instant.game, instant.opponent, "Disfigure");
+        assertTrue(ToughnessZero.bind(instant.game).isPresent(), "Disfigure is an instant");
+    }
+
+    @Test
+    void smallLibraryShuffleBindsNothingForASorceryInTheNonActiveHand() {
+        Board board = new Board(PhaseType.MAIN1);
+        board.card(board.you, "Cosi's Trickster");
+        board.card(board.opponent, "Swamp");
+        board.card(board.opponent, "Swamp");
+        TestBoard.inHand(board.game, board.opponent, "Demonic Tutor");
+        board.library(board.opponent, "Forest", "Grizzly Bears");
+        assertTrue(SmallLibraryShuffle.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void limitedSearchBindsNothingForASorceryInTheNonActiveHand() {
+        Board board = new Board(PhaseType.MAIN1);
+        board.card(board.you, "Aven Mindcensor");
+        board.card(board.you, "Archivist of Oghma");
+        board.card(board.opponent, "Swamp");
+        board.card(board.opponent, "Swamp");
+        TestBoard.inHand(board.game, board.opponent, "Demonic Tutor");
+        assertTrue(LimitedSearch.bind(board.game).isEmpty());
+        // Vampiric Tutor, an instant, binds there (limitedSearchBindsTheLimitingPermanent).
+    }
+
+    /**
+     * C4 #1, V3 #9 (b): {@code replace_card} carries the permanent's marked
+     * damage and counters to the card put in its place, so a smaller card
+     * dies of them at the fork's first state-based check.
+     */
+    @Test
+    void simultaneousDamageBindsNothingWhenTheBlockerCarriesDamage() {
+        Board board = blockedBoard("Grizzly Bears");
+        board.subject.setDamage(1);
+        assertTrue(SimultaneousDamage.bind(board.game).isEmpty(), "Youthful Knight is a 2/1");
+    }
+
+    @Test
+    void shuffleAndPlaceOnTopBindsNothingWhenTheColossusCarriesDamage() {
+        Board board = barterBoard("Darksteel Colossus", "Gravebane Zombie");
+        board.subject.setDamage(3);
+        assertTrue(ShuffleAndPlaceOnTop.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void copyForEachTargetBindsNothingWhenTheCreatureCarriesAMinusCounter() {
+        Board board = radiateBoard("Shock");
+        board.subject.setCounters(CounterEnumType.M1M1, 3);
+        assertTrue(CopyForEachTarget.bind(board.game).isEmpty(), "Hill Giant is a 3/3");
+    }
+
+    @Test
+    void textBoxExchangeBindsNothingWhenTheCreatureCarriesDamage() {
+        Board board = exchangeBoard("Giant Spider");
+        assertTrue(TextBoxExchange.bind(board.game).isPresent(), "Giant Spider has reach");
+        board.subject.setDamage(3);
+        assertTrue(TextBoxExchange.bind(board.game).isEmpty(), "Hill Giant is a 3/3");
+    }
+
+    /** C4 #6: a +1/+1 counter set beside a -1/-1 counter is annihilated with it (704.5q). */
+    @Test
+    void typeSettingAuraBindsNothingOnACreatureWithAMinusCounter() {
+        Board board = dryadsBoard(3);
+        board.subject.setCounters(CounterEnumType.M1M1, 1);
+        assertTrue(TypeSettingAura.bind(board.game).isEmpty());
+    }
+
+    /** C4 #6: taking the counter away kills a creature whose toughness rests on it. */
+    @Test
+    void unleashBindsNothingWhenTheCreatureLivesByItsCounter() {
+        Board board = unleashBoard("Rakdos Cackler", 1);
+        board.subject.setDamage(2);
+        assertTrue(UnleashCantBlock.bind(board.game).isEmpty(), "a 2/2 Cackler with 2 damage dies at 1 toughness");
+    }
+
+    /** C4 #7: Leyline of the Void exiles only opponents' cards, so it does not replace its controller's sacrifice. */
+    @Test
+    void replacedSacrificeCostBindsNothingWhenTheReplacementSparesTheSacrifice() {
+        Board board = bombardmentBoard(false);
+        board.card(board.you, "Leyline of the Void");
+        assertTrue(ReplacedSacrificeCost.bind(board.game).isEmpty());
+        Board opposing = bombardmentBoard(false);
+        opposing.card(opposing.opponent, "Leyline of the Void");
+        assertTrue(ReplacedSacrificeCost.bind(opposing.game).isPresent());
+    }
+
+    /**
+     * C4 #8: the defender cut to one life under the most anyone else has
+     * must not be left in reach of the attack the fork's point is.
+     */
+    @Test
+    void dethroneBindsNothingWhenTheCutWouldLeaveTheDefenderInReach() {
+        Board board = dethroneBoard(4);
+        board.you.setLife(4, null);
+        assertTrue(Dethrone.bind(board.game).isEmpty(), "3 life against Enraged Revolutionary's 2 power and its dethrone counter");
+        Board safe = dethroneBoard(20);
+        safe.you.setLife(20, null);
+        assertTrue(Dethrone.bind(safe.game).isPresent());
+    }
+
+    // ── what the twin itself catches ────────────────────────────────────
+
+    /** A rule of one variant on the active player, for the twin's own tests. */
+    private static DirectedRule onePlayerRule(ForkOperation operation,
+                                              Function<Binding, BoardEdit> edit) {
+        return DirectedRule.of("0.0", "0.0-1",
+                live -> Optional.of(Binding.empty().with("player", Boards.active(live))),
+                "v", new Application(operation, edit));
+    }
+
+    /** TC3: the first check ending the fork's game moves no card, and the twin still sees it. */
+    @Test
+    void theTwinCatchesAnEditTheFirstCheckLosesAPlayerWith() {
+        Board board = new Board(PhaseType.MAIN1);
+        DirectedRule zeroLife = onePlayerRule(ForkOperation.LIFE, fork -> new LifeOperation(fork.player("player"), 0));
+        AssertionError error = assertThrows(AssertionError.class,
+                () -> board.twin(zeroLife));
+        assertTrue(error.getMessage().contains("the first state-based check"), error.getMessage());
+    }
+
+    @Test
+    void theTwinCatchesTenPoisonCounters() {
+        Board board = new Board(PhaseType.MAIN1);
+        DirectedRule poison = onePlayerRule(ForkOperation.COUNTERS,
+                fork -> new PoisonCounters(fork.player("player")));
+        AssertionError error = assertThrows(AssertionError.class,
+                () -> board.twin(poison));
+        assertTrue(error.getMessage().contains("the first state-based check"), error.getMessage());
+    }
+
+    /** A +1/+1 counter beside a -1/-1 one moves no card, but the check annihilates the pair. */
+    @Test
+    void theTwinCatchesCountersTheFirstCheckAnnihilates() {
+        Board board = new Board(PhaseType.MAIN1);
+        board.subject = board.card(board.you, "Hill Giant");
+        board.subject.setCounters(CounterEnumType.M1M1, 1);
+        Card giant = board.subject;
+        DirectedRule counter = DirectedRule.of("0.0", "0.0-1",
+                live -> Optional.of(Binding.empty().with("creature", giant)), "v",
+                new Application(ForkOperation.COUNTERS,
+                        fork -> new CountersOperation(fork.card("creature"), CounterEnumType.P1P1, 1)));
+        AssertionError error = assertThrows(AssertionError.class,
+                () -> board.twin(counter));
+        assertTrue(error.getMessage().contains("changed the edited board"), error.getMessage());
+    }
+
+    /** Ten poison counters on a player, as a {@code counters} edit for the twin's own test. */
+    private record PoisonCounters(Player player) implements BoardEdit {
+        @Override
+        public ForkOperation operation() {
+            return ForkOperation.COUNTERS;
+        }
+
+        @Override
+        public void apply(Game fork) {
+            player.setPoisonCounters(10, null);
+            BoardEdit.settle(fork);
+        }
+    }
+
     // ── shared checks ───────────────────────────────────────────────────
 
     /**
@@ -2648,11 +2848,53 @@ class RegisteredRulesTest {
             Map<String, Object> edited = BoardStates.of(fork);
             assertEquals(real, BoardStates.of(game), "the edit reached the live game");
             Map<String, String> placed = placed(fork);
+            Set<String> effectCards = effectCards(fork);
             fork.getAction().checkStateEffects(true);
             assertEquals(placed, placed(fork),
                     rule.rule() + ": the first state-based check moved a card of the edited board");
+            assertEquals(Set.of(), withoutEffectCards(changes(edited, BoardStates.of(fork)), effectCards),
+                    rule.rule() + ": the first state-based check changed the edited board");
+            assertFalse(fork.isGameOver(), rule.rule() + ": the first state-based check ended the fork's game");
+            for (Player player : fork.getRegisteredPlayers()) {
+                assertFalse(player.hasLost(), rule.rule() + ": the first state-based check lost " + player);
+            }
             assertEquals(real, BoardStates.of(game), "the check reached the live game");
             return new Twin(changes(real, edited), real, edited, forked, fork);
+        }
+
+        /** The snapshot ids of the engine's effect cards in {@code game} ({@code E<id>}). */
+        private static Set<String> effectCards(Game game) {
+            Set<String> ids = new TreeSet<>();
+            for (Card card : game.getCardsInGame()) {
+                if (card.isImmutable()) {
+                    ids.add("E" + card.getId());
+                }
+            }
+            return ids;
+        }
+
+        /**
+         * {@code changes} without what names one of {@code effectCards}: the
+         * engine's effect cards, which the check tidies away once their source
+         * is gone (a player keyword's holder card), and with them the
+         * floating-effects list they made, when one went.
+         */
+        private static Set<String> withoutEffectCards(Set<String> changes, Set<String> effectCards) {
+            Set<String> kept = new TreeSet<>();
+            boolean effectCardChanged = false;
+            for (String change : changes) {
+                boolean names = effectCards.stream().anyMatch(id -> change.equals("-" + id) || change.equals("+" + id)
+                        || change.startsWith(id + ".") || change.contains("=" + id + ",")
+                        || change.contains("=" + id + "}"));
+                effectCardChanged |= names;
+                if (!names) {
+                    kept.add(change);
+                }
+            }
+            if (effectCardChanged) {
+                kept.remove("global.floating_effects");
+            }
+            return kept;
         }
 
         /**

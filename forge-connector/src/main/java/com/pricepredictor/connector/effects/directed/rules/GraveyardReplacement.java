@@ -8,10 +8,9 @@ import com.pricepredictor.connector.effects.directed.operations.RemovePermanentO
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.phase.PhaseType;
-import forge.game.replacement.ReplacementEffect;
-import forge.game.replacement.ReplacementType;
 import forge.game.zone.ZoneType;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -24,7 +23,9 @@ import java.util.Optional;
  * permanent on the battlefield whose replacement effect sends elsewhere what
  * would be put into a graveyard, from a permanent's static rather than one
  * watching only its own card (Rest in Peace, Leyline of the Void), so the
- * turn's next card to head for a graveyard meets it. It binds that
+ * turn's next card to head for a graveyard meets it
+ * ({@link Boards#replacesOthersGraveyardMoves}), and no other permanent
+ * does, which would still replace the move with it gone. It binds that
  * permanent.
  *
  * <p>Variant {@code no_replacement} ({@code remove_permanent}): the permanent
@@ -49,27 +50,11 @@ public final class GraveyardReplacement {
         if (!Boards.at(live, PhaseType.MAIN1)) {
             return Optional.empty();
         }
-        return live.getCardsIn(ZoneType.Battlefield).stream()
-                .filter(GraveyardReplacement::replacesGraveyardMoves)
-                .findFirst()
-                .map(card -> Binding.empty().with("permanent", card));
-    }
-
-    /** Whether one of the permanent's replacement effects replaces another card's move to a graveyard. */
-    static boolean replacesGraveyardMoves(Card permanent) {
-        for (ReplacementEffect replacement : permanent.getReplacementEffects()) {
-            if (replacement.getMode() != ReplacementType.Moved
-                    || !replacement.hasParam("ReplaceWith")
-                    || !replacement.hasParam("Destination")
-                    || !replacement.getParam("Destination").contains("Graveyard")) {
-                continue;
-            }
-            String zones = replacement.hasParam("ActiveZones") ? replacement.getParam("ActiveZones") : "Battlefield";
-            String valid = replacement.hasParam("ValidCard") ? replacement.getParam("ValidCard") : "Card";
-            if (zones.contains("Battlefield") && !valid.startsWith("Card.Self")) {
-                return true;
-            }
-        }
-        return false;
+        List<Card> replacing = live.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(Boards::replacesOthersGraveyardMoves)
+                .toList();
+        return replacing.size() == 1
+                ? Optional.of(Binding.empty().with("permanent", replacing.get(0)))
+                : Optional.empty();
     }
 }

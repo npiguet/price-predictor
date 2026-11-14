@@ -18,9 +18,10 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 122.1g, a battle with no defense counters is put into its owner's
- * graveyard, on scenario {@code 122.1g-1}: A's Lightning Bolt removes the
- * last 3 defense counters of Invasion of Zendikar.
+ * 704.5v, a battle with no defense counters that is not the source of an
+ * ability on the stack is put into its owner's graveyard (122.1g restates
+ * it), on scenario {@code 704.5v-1}: A's Lightning Bolt removes the last 3
+ * defense counters of Invasion of Zendikar.
  *
  * <p>The base board, read at a boundary: a main phase of the active player
  * begins, it holds a spell it has the lands to cast that deals a fixed N
@@ -34,8 +35,8 @@ import java.util.Optional;
  */
 public final class BattleDefense {
 
-    public static final String RULE = "122.1g";
-    static final String SCENARIO = "122.1g-1";
+    public static final String RULE = "704.5v";
+    static final String SCENARIO = "704.5v-1";
     static final String FOUR_DEFENSE = "four_defense";
 
     private BattleDefense() {

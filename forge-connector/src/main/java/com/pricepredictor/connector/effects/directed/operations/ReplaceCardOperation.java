@@ -64,6 +64,9 @@ import java.util.function.UnaryOperator;
  * permanent holding chosen values (a player, number, type, colour, card,
  * name or parity its text chose) or remembered, imprinted or exiled-with
  * cards, and a permanent a pending command names that cannot be rewritten.
+ * It also refuses, after the edit, a replacing creature the next
+ * state-based check would put into a graveyard: the damage and counters it
+ * carried are lethal to it.
  *
  * @param permanent the fork's permanent to replace
  * @param cardName  the replacing card's name in the card database
@@ -86,6 +89,7 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
     public static final String CHOSEN_VALUES = "replace_card chosen values";
     public static final String LINKED_CARDS = "replace_card remembered, imprinted or exiled cards";
     public static final String UNREWRITABLE_COMMAND = "replace_card command that cannot be rewritten";
+    public static final String DIES = "replace_card replacement dies at the first state-based check";
 
     @Override
     public void apply(Game fork) {
@@ -112,6 +116,26 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
         AddPermanentOperation.put(fork, replacement, controller, index);
         carryState(old, replacement);
         BoardEdit.settle(fork);
+        if (diesAtTheFirstCheck(replacement)) {
+            throw new ForkRefusal(DIES);
+        }
+    }
+
+    /**
+     * Whether the next state-based check puts the replacing card into a
+     * graveyard: a creature at toughness 0 or less, or with lethal or
+     * deathtouch damage carried from the card it replaced. No variant's point
+     * is that death (the rules' preconditions keep such boards out); this is
+     * the edit's own guard for every rule using it.
+     */
+    static boolean diesAtTheFirstCheck(Card replacement) {
+        if (!replacement.isCreature()) {
+            return false;
+        }
+        int toughness = replacement.getNetToughness();
+        int damage = replacement.getDamage();
+        return toughness <= 0 || damage >= toughness
+                || damage > 0 && replacement.hasBeenDealtDeathtouchDamage();
     }
 
     /** Refuse a permanent whose state belongs to its own text or face; see the class comment. */

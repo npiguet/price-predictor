@@ -384,6 +384,21 @@
           "operation": {
             "unclassifiable": "choice: B blocks with Youthful Knight (first strike) instead of its Grizzly Bears"
           }
+        },
+        {
+          "label": "knight_in_the_bears_place",
+          "polarity": "does_not_fire",
+          "delta": "B's blocking Grizzly Bears is Youthful Knight (first strike), in the Bears' place in combat.",
+          "expected": "Youthful Knight deals 2 damage in the first-strike damage step and A's Grizzly Bears moves to A's graveyard before it can deal damage; Youthful Knight has no damage marked and stays on the battlefield.",
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [],
+            "add": [
+              "K:First Strike"
+            ],
+            "note": "Youthful Knight (first strike) replaces Grizzly Bears as the blocker; the Bears gain first strike"
+          }
         }
       ],
       "cards": [

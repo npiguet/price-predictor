@@ -25,6 +25,10 @@ import java.util.Optional;
  * lands, exactly as many as the prototype cost's mana value. It binds one of
  * those lands.
  *
+ * <p>The active player cannot add a land to its mana this turn
+ * ({@link Boards#noLandToPlay}): it holds no land, or its land drop is
+ * used, so the turn's land drop cannot undo the mana the variant takes.
+ *
  * <p>Variant {@code two_mountains} ({@code remove_permanent}): that land is
  * gone, so the prototype cost is one mana short and neither cast is legal.
  */
@@ -48,6 +52,9 @@ public final class Prototype {
             return Optional.empty();
         }
         Player active = Boards.active(live);
+        if (!Boards.noLandToPlay(active)) {
+            return Optional.empty();
+        }
         for (Card card : active.getCardsIn(ZoneType.Hand)) {
             for (Cost cost : Boards.keywordCosts(card, Keyword.PROTOTYPE)) {
                 int value = Boards.manaValue(cost);

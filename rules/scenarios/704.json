@@ -342,6 +342,13 @@
           "operation": {
             "unclassifiable": "not a board edit: adds a second card to A's library from no zone; move_card only moves or replaces a card"
           }
+        },
+        {
+          "label": "empty",
+          "polarity": "fires",
+          "delta": "A's library is empty.",
+          "expected": "Both draws are attempted from the empty library and A loses the game at the next state-based check.",
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -1974,6 +1981,22 @@
           "expected": "Invasion of Zendikar stays on the battlefield with defense 0 while its trigger is on the stack, then is exiled and cast transformed; Awakened Skyclave enters A's battlefield and A's graveyard holds only Lightning Bolt.",
           "operation": {
             "unclassifiable": "choice: A does not cast Stifle"
+          }
+        },
+        {
+          "label": "four_defense",
+          "polarity": "does_not_fire",
+          "delta": "Invasion of Zendikar has 4 defense counters, so no defeat trigger goes on the stack and Stifle is not cast.",
+          "expected": "Invasion of Zendikar keeps 1 defense counter and stays on the battlefield.",
+          "operation": "counters",
+          "script_edit": {
+            "card": "Invasion of Zendikar",
+            "remove": [
+              "Defense:3"
+            ],
+            "add": [
+              "Defense:4"
+            ]
           }
         }
       ],

@@ -3,7 +3,6 @@ arcanum wings
 archivist of oghma
 aven farseer
 aven mindcensor
-balloon stand
 barkweave crusher
 barter in blood
 beloved beggar
@@ -34,11 +33,9 @@ electro's bolt
 elfhame sanctuary
 ellivere of the wild court
 enraged revolutionary
-eon hub
 everlasting torment
 exalted angel
 exchange of words
-fatigue
 felidar sovereign
 fiery temper
 fleshwrither
@@ -53,8 +50,6 @@ grafdigger's cage
 gravebane zombie
 grizzly bears
 hakbal of the surging soul
-hanweir battlements
-hanweir garrison
 hanweir watchkeep
 hill giant
 history of benalia
@@ -68,7 +63,6 @@ karn liberated
 leyline of punishment
 lich's mirror
 lightning bolt
-marchesa, the black rose
 merfolk branchwalker
 midnight scavengers
 mountain
@@ -77,7 +71,6 @@ narci, fable singer
 naturalize
 night's whisper
 ornithopter
-phyrexian arena
 pir, imaginative rascal
 plains
 platinum emperion

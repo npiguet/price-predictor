@@ -82,5 +82,20 @@ its precondition waits for (two scenarios of a rule may share a variant label), 
 `Map<String variantLabel, Application>`, each `Application` naming its `ForkOperation` and building the
 `BoardEdit` from the fork's binding (an edit of another operation is refused). A JUnit contract test
 reads `rules/scenarios/*.json` and fails when a registered scenario does not exist or does not list the
-rule, a registered variant is missing, is the base variant, or its operation differs.
+rule, a registered variant is missing, is the base variant, or its operation differs, when a card a
+rule class names (a `static final String` the card database knows) is not one of its scenario's
+`cards`, and when a rule `rules/directed-fork-rules.txt` lists has no registration.
 `DirectedRulesMain` prints the registered rule ids, one per line.
+
+A precondition binds only a board where its variant's edit makes the variant true for the turn the
+fork plays: a `remove_permanent` variant binds the one permanent doing what it removes (no second
+one would do it in its place); a "one land short" variant binds only when the active player holds no
+card it could play as a land or has used its land drops; a spell the variant waits for is castable
+at this boundary (a sorcery only in the active player's hand); a `replace_card` variant binds a
+permanent with no marked damage, deathtouch damage or -1/-1 counter, whose keyword the variant takes
+away is of its own text (none granted by an attachment, a static or a resolved effect); a `counters`
+variant adding a +1/+1 counter binds no permanent with a -1/-1 counter, and one taking +1/+1
+counters away binds a creature that survives without them. A `replace_card` edit refuses
+(`replace_card replacement dies at the first state-based check`) a replacing creature that the
+damage and counters it carried leave at toughness 0 or less, with lethal damage, or with deathtouch
+damage.

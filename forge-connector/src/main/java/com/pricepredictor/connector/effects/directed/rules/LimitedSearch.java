@@ -14,6 +14,7 @@ import forge.game.staticability.StaticAbility;
 import forge.game.trigger.TriggerType;
 import forge.game.zone.ZoneType;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -25,8 +26,9 @@ import java.util.Optional;
  * <p>The base board, read at a boundary: a main phase begins, a player
  * controls a permanent whose static ability limits its opponents' searches
  * (Aven Mindcensor) and a permanent that triggers when a player searches a
- * library (Archivist of Oghma), and an opponent of that player holds a card it
- * has the mana for whose spell searches its library. It binds the limiting
+ * library (Archivist of Oghma), no other permanent limits searches, and an
+ * opponent of that player holds a card whose spell searches its library and
+ * that it can cast now ({@link #searchersInHand}). It binds the limiting
  * permanent.
  *
  * <p>Variant {@code no-mindcensor} ({@code remove_permanent}): the limiting
@@ -50,26 +52,21 @@ public final class LimitedSearch {
     }
 
     static Optional<Binding> bind(Game live) {
-        if (!Boards.atMainPhase(live)) {
+        List<Card> limiting = live.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(LimitedSearch::limitsOpponentsSearches)
+                .toList();
+        if (!Boards.atMainPhase(live) || limiting.size() != 1) {
             return Optional.empty();
         }
-        for (Player player : live.getPlayers()) {
-            boolean watches = player.getCardsIn(ZoneType.Battlefield).stream()
-                    .flatMap(card -> card.getTriggers().stream())
-                    .anyMatch(trigger -> trigger.getMode() == TriggerType.SearchedLibrary);
-            boolean searching = player.getOpponents().stream()
-                    .anyMatch(opponent -> !Boards.castableInHand(opponent, LimitedSearch::searches).isEmpty());
-            if (!watches || !searching) {
-                continue;
-            }
-            Optional<Card> limiting = player.getCardsIn(ZoneType.Battlefield).stream()
-                    .filter(LimitedSearch::limitsOpponentsSearches)
-                    .findFirst();
-            if (limiting.isPresent()) {
-                return Optional.of(Binding.empty().with("permanent", limiting.get()));
-            }
-        }
-        return Optional.empty();
+        Player player = limiting.get(0).getController();
+        boolean watches = player.getCardsIn(ZoneType.Battlefield).stream()
+                .flatMap(card -> card.getTriggers().stream())
+                .anyMatch(trigger -> trigger.getMode() == TriggerType.SearchedLibrary);
+        boolean searching = player.getOpponents().stream()
+                .anyMatch(opponent -> !searchersInHand(opponent).isEmpty());
+        return watches && searching
+                ? Optional.of(Binding.empty().with("permanent", limiting.get(0)))
+                : Optional.empty();
     }
 
     /** Whether one of the permanent's static abilities limits its controller's opponents' library searches. */
@@ -82,6 +79,18 @@ public final class LimitedSearch {
             }
         }
         return false;
+    }
+
+    /**
+     * The cards in {@code player}'s hand it has the mana for whose spell
+     * searches its library and that it can cast at this boundary
+     * ({@link Boards#castableAtItsSpeed}: a sorcery only as the active
+     * player).
+     */
+    static List<Card> searchersInHand(Player player) {
+        return Boards.castableInHand(player, LimitedSearch::searches).stream()
+                .filter(card -> Boards.castableAtItsSpeed(player, card))
+                .toList();
     }
 
     /** Whether the spell searches a library: it moves a card of a stated type out of one, its contents hidden. */

@@ -25,7 +25,9 @@ import java.util.Optional;
  *
  * <p>The base board, read at a boundary: a main phase begins, a player holds
  * a spell that gives a target creature -N/-N (a pump with a negative
- * toughness number) and has as many untapped lands as its mana value, and an
+ * toughness number), can cast it now ({@link Boards#castableAtItsSpeed}: a
+ * sorcery only as the active player) and has as many untapped lands as its
+ * mana value, and an
  * opponent of that player controls a creature of toughness 1 to N, which the
  * spell would take to 0 or less. It binds the creature Forge's AI rates best
  * among those, the one its removal would most likely aim at, and the spell's
@@ -58,7 +60,7 @@ public final class ToughnessZero {
             int lands = Boards.untappedLands(holder);
             for (Card spell : holder.getCardsIn(ZoneType.Hand)) {
                 int loss = toughnessLoss(spell);
-                if (loss == 0 || spell.getCMC() > lands) {
+                if (loss == 0 || spell.getCMC() > lands || !Boards.castableAtItsSpeed(holder, spell)) {
                     continue;
                 }
                 List<Card> killed = holder.getOpponents().stream()

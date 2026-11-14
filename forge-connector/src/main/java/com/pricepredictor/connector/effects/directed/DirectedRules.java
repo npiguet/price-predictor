@@ -1,7 +1,6 @@
 package com.pricepredictor.connector.effects.directed;
 
 import com.pricepredictor.connector.effects.directed.rules.Aftermath;
-import com.pricepredictor.connector.effects.directed.rules.AttractionVisit;
 import com.pricepredictor.connector.effects.directed.rules.AuraSwap;
 import com.pricepredictor.connector.effects.directed.rules.AuraSwapCantEnchant;
 import com.pricepredictor.connector.effects.directed.rules.AuraSwapExchange;
@@ -17,7 +16,6 @@ import com.pricepredictor.connector.effects.directed.rules.ConniveWithoutDraw;
 import com.pricepredictor.connector.effects.directed.rules.CopyForEachTarget;
 import com.pricepredictor.connector.effects.directed.rules.CraftMaterial;
 import com.pricepredictor.connector.effects.directed.rules.Dethrone;
-import com.pricepredictor.connector.effects.directed.rules.DethroneInstances;
 import com.pricepredictor.connector.effects.directed.rules.DiscoverNothingFound;
 import com.pricepredictor.connector.effects.directed.rules.DistinctTargets;
 import com.pricepredictor.connector.effects.directed.rules.Disturb;
@@ -53,8 +51,6 @@ import com.pricepredictor.connector.effects.directed.rules.SeveralExplore;
 import com.pricepredictor.connector.effects.directed.rules.SharedKeywords;
 import com.pricepredictor.connector.effects.directed.rules.ShuffleAndPlaceOnTop;
 import com.pricepredictor.connector.effects.directed.rules.SimultaneousDamage;
-import com.pricepredictor.connector.effects.directed.rules.SimultaneousShuffles;
-import com.pricepredictor.connector.effects.directed.rules.SkippedUpkeepTrigger;
 import com.pricepredictor.connector.effects.directed.rules.SmallLibraryShuffle;
 import com.pricepredictor.connector.effects.directed.rules.SorcererRole;
 import com.pricepredictor.connector.effects.directed.rules.StunCounter;
@@ -67,7 +63,6 @@ import com.pricepredictor.connector.effects.directed.rules.Transmute;
 import com.pricepredictor.connector.effects.directed.rules.TypeSettingAura;
 import com.pricepredictor.connector.effects.directed.rules.Unearth;
 import com.pricepredictor.connector.effects.directed.rules.UnleashCantBlock;
-import com.pricepredictor.connector.effects.directed.rules.UnmeldableStay;
 import com.pricepredictor.connector.effects.directed.rules.UnturnableFaceDown;
 import com.pricepredictor.connector.effects.directed.rules.VanishingInstances;
 import com.pricepredictor.connector.effects.directed.rules.VirtuousRole;
@@ -111,30 +106,25 @@ public final class DirectedRules {
             OptionalSearch.rule(),
             CantGainLifeExchange.rule(),
             CantLoseLifeExchange.rule(),
-            DrawFromEmptyLibrary.rule(),
             StunCounter.rule(),
-            BattleDefense.rule(),
             FinalityCounter.rule(),
             TypeSettingAura.rule(),
             GraveyardReplacement.rule(),
             MorphFaceUp.rule(),
-            AttractionVisit.rule(),
+            SimultaneousDamage.rule(),
             DistinctTargets.rule(),
             Champion.rule(),
             FinalChapterResolves.rule(),
-            SkippedUpkeepTrigger.rule(),
             CantEnterBattlefield.rule(),
             AuraSwap.rule(),
             LifeExchange.rule(),
             TextBoxExchange.rule(),
             LimitedSearch.rule(),
             SmallLibraryShuffle.rule(),
-            SimultaneousShuffles.rule(),
             ShuffleAndPlaceOnTop.rule(),
             Bolster.rule(),
             Meld.rule(),
             TokenMeldPartner.rule(),
-            UnmeldableStay.rule(),
             ExploreEmptyLibrary.rule(),
             SeveralExplore.rule(),
             ConniveWithoutDraw.rule(),
@@ -155,7 +145,6 @@ public final class DirectedRules {
             FusedCost.rule(),
             BestowIllegalTarget.rule(),
             Dethrone.rule(),
-            DethroneInstances.rule(),
             PartnerWithSearch.rule(),
             Improvise.rule(),
             Aftermath.rule(),
@@ -164,8 +153,9 @@ public final class DirectedRules {
             CraftMaterial.rule(),
             Mayhem.rule(),
             WebSlinging.rule(),
-            SimultaneousDamage.rule(),
+            DrawFromEmptyLibrary.rule(),
             ToughnessZero.rule(),
+            BattleDefense.rule(),
             GameLossReplaced.rule(),
             CopyForEachTarget.rule(),
             MeldPair.rule(),

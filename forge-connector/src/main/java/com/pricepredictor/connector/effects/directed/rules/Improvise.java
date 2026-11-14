@@ -25,6 +25,10 @@ import java.util.Optional;
  * together pay exactly, the artifacts no more than the card's generic mana. It
  * binds one of those artifacts.
  *
+ * <p>The active player cannot add a land to its mana this turn
+ * ({@link Boards#noLandToPlay}): it holds no land, or its land drop is
+ * used, so the turn's land drop cannot undo the mana the variant takes.
+ *
  * <p>Variant {@code one_artifact_tapped} ({@code tap}): that artifact is
  * tapped, so the generic mana is one short and the spell cannot be cast. Of
  * the scenario's two classified variants this is the less invasive (the other
@@ -49,6 +53,9 @@ public final class Improvise {
             return Optional.empty();
         }
         Player active = Boards.active(live);
+        if (!Boards.noLandToPlay(active)) {
+            return Optional.empty();
+        }
         List<Card> artifacts = active.getCardsIn(ZoneType.Battlefield).stream()
                 .filter(card -> card.isArtifact() && !card.isLand() && !card.isTapped())
                 .toList();

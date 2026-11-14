@@ -25,8 +25,9 @@ import java.util.Optional;
  * controls a permanent that triggers when an opponent shuffles their library
  * (Cosi's Trickster), and an opponent of theirs with exactly two cards in
  * their library holds a card they have the mana for whose spell searches
- * their library ({@link LimitedSearch#searches}). It binds the bottom card of
- * that library.
+ * their library and that they can cast now
+ * ({@link LimitedSearch#searchersInHand}: a sorcery only as the active
+ * player). It binds the bottom card of that library.
  *
  * <p>Variant {@code zero-cards} ({@code move_card}): that card is in its
  * owner's graveyard instead, so the library holds one card, which the search
@@ -57,7 +58,7 @@ public final class SmallLibraryShuffle {
             }
             for (Player searcher : watcher.getOpponents()) {
                 List<Card> library = List.copyOf(searcher.getCardsIn(ZoneType.Library));
-                if (library.size() == 2 && !Boards.castableInHand(searcher, LimitedSearch::searches).isEmpty()) {
+                if (library.size() == 2 && !LimitedSearch.searchersInHand(searcher).isEmpty()) {
                     return Optional.of(Binding.empty().with("card", library.get(1)));
                 }
             }
