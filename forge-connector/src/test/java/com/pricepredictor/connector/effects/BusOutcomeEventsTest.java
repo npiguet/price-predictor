@@ -160,6 +160,9 @@ class BusOutcomeEventsTest {
                 told.stream().map(event -> event.get("type")).toList(), outcome.get(0));
         assertEquals(List.of(Refs.of(opponent)), told.get(0).get("subjects"), outcome.get(0));
         assertEquals("LifeReachedZero", params(told.get(0)).get("reason"), outcome.get(0));
+        // The winner, though the bolt's own bracket had closed before the
+        // state-based check found the game over.
+        assertEquals(List.of(Refs.of(caster)), told.get(1).get("subjects"), outcome.get(0));
     }
 
     /**

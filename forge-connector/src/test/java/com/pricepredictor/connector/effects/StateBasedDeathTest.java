@@ -368,9 +368,15 @@ class StateBasedDeathTest {
 
         List<String> halves = effectHalves(records);
         assertEquals(1, halves.size(), halves.toString());
-        assertTrue(halves.get(0).contains(deathOf(first))
-                        || halves.get(0).contains(deathOf(secondCard)),
-                "one Isamaru went to the graveyard: " + halves.get(0));
+        // The legend its controller chose to lose: the one in the graveyard
+        // now. Its death is in the half; the one that stayed has none.
+        List<Card> dead = game.getCardsIn(forge.game.zone.ZoneType.Graveyard).stream()
+                .filter(card -> card.getName().equals("Isamaru, Hound of Konda")).toList();
+        assertEquals(1, dead.size(), "one Isamaru went to the graveyard: " + dead);
+        Card lost = dead.get(0).getId() == first.getId() ? first : secondCard;
+        Card kept = lost == first ? secondCard : first;
+        assertEquals(1, count(halves.get(0), deathOf(lost)), halves.get(0));
+        assertFalse(halves.get(0).contains(deathOf(kept)), halves.get(0));
     }
 
     /** An Aura falls off when the creature it enchanted dies, in the same check. */
@@ -779,6 +785,8 @@ class StateBasedDeathTest {
 
         List<String> halves = effectHalves(records);
         assertEquals(3, halves.size(), halves.toString());
+        // One half a chosen mode, the repeated mode twice, in the order chosen.
+        assertEquals(List.of(0L, 0L, 1L), halves.stream().map(RecordLines::optionOf).toList());
         assertFalse(halves.get(0).contains(deathOf(bears)), halves.get(0));
         assertEquals(1, count(halves.get(1), deathOf(bears)), halves.get(1));
         assertFalse(halves.get(2).contains(deathOf(bears)), halves.get(2));

@@ -79,6 +79,9 @@ class EventAttributionTest {
                 EventAttribution.attributedTo(root));
         assertEquals(EventAttribution.UNRESOLVED,
                 EventAttribution.attributedTo(null));
+        // A pointer that is no ability at all names nothing either.
+        assertEquals(EventAttribution.UNRESOLVED,
+                EventAttribution.attributedTo("not an ability"));
         assertNotEquals(EventAttribution.ROOT, EventAttribution.UNRESOLVED);
     }
 
@@ -97,24 +100,6 @@ class EventAttributionTest {
 
         assertEquals(EventAttribution.UNRESOLVED,
                 EventAttribution.attributedTo(orphan));
-    }
-
-    /**
-     * And attribution never returns null, whatever it is handed: each kind of
-     * pointer lands on the one of the three states it means.
-     */
-    @Test
-    void attributionAlwaysNamesOneOfTheThreeStates() {
-        SpellAbility root = threeClauseAbility();
-        Object[] pointers = {null, "not an ability", root, root.getSubAbility()};
-        String[] expected = {
-                EventAttribution.UNRESOLVED, EventAttribution.UNRESOLVED,
-                EventAttribution.ROOT, "0"};
-
-        for (int i = 0; i < pointers.length; i++) {
-            assertEquals(expected[i], EventAttribution.attributedTo(pointers[i]),
-                    String.valueOf(pointers[i]));
-        }
     }
 
     /** And an event stamped inside a clause carries that clause's index. */

@@ -179,28 +179,6 @@ class ModalResolutionTest {
                 "the second snapshot shows the first mode's effect: " + second);
     }
 
-    /** Spec Story 3 scenario 13 on the record: a repeated mode acts in two halves. */
-    @Test
-    void aRepeatedModeActsInOneHalfPerResolution() throws Throwable {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        SpellAbility charm = charmOf(game, game.getPlayers().get(0), "Brokers Confluence");
-        List<AbilitySub> clones = TestBoard.chain(charm, 0, 0, 2);
-
-        List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
-            bracket.beginBracket(charm);
-            for (AbilitySub clone : clones) {
-                collectors.clauses().clauseHandler().invoke(null, HookShapes.clauseResolving(), new Object[]{clone});
-            }
-            bracket.endBracket(charm.getId(), false);
-            bracket.onNextAction();
-        });
-
-        assertEquals(4, records.size(), records.toString());
-        assertEquals(0L, optionOf(records.get(1)), records.get(1));
-        assertEquals(0L, optionOf(records.get(2)), records.get(2));
-        assertEquals(2L, optionOf(records.get(3)), records.get(3));
-    }
-
     /**
      * A mode that fizzled on its own — no target left when it resolved —
      * still gets its half, with nothing in it, under its own option: the
