@@ -97,19 +97,41 @@ final class ForkPlayForward {
      * whatever the fork's samplers draw (FR-010c).
      */
     Played play(Game fork, Consumer<EffectRecord> flags, KeptRecords kept) {
+        return play(fork, flags, kept, null);
+    }
+
+    /**
+     * {@link #play(Game, Consumer, KeptRecords)}, the actor of {@code forced}
+     * made to make its play (FR-010b), or with no play forced when it is
+     * null. A forced play refused while the fork plays on ends it between two
+     * main-loop steps; one never made ends it after the turn; either way
+     * before any of its lines is written.
+     *
+     * @throws ForkRefusal when the forced play was not made
+     */
+    Played play(Game fork, Consumer<EffectRecord> flags, KeptRecords kept, ForcedPlayRun forced) {
         Random seat = new Random(forkSeeds.nextLong());
         long sampling = forkSeeds.nextLong();
+        // Drawn only by a fork that forces, so the forks that do not draw
+        // their seeds as they did.
+        Random forcing = forced == null ? null : new Random(forkSeeds.nextLong());
         List<String> held = new ArrayList<>();
         GameRecording recording = live.forkRecording(fork, flags, held::add, sampling, kept);
         try {
             recording.open();
             seats.attach(fork, recording.priorityCandidates(), recording.fruitlessActivations(), seat);
+            if (forced != null) {
+                forced.attach(forcing);
+            }
             live.routingTo(recording, () -> Forks.playingForward(fork, () -> {
-                playToTheEndOfTheTurn(fork);
+                playToTheEndOfTheTurn(fork, forced);
                 return null;
             }));
         } finally {
             recording.close();
+        }
+        if (forced != null) {
+            forced.finish();
         }
         live.writeForkLines(held);
         return new Played(held.size(), fork.isGameOver());
@@ -124,7 +146,7 @@ final class ForkPlayForward {
      * untap step: its phase event and its turn-based actions (F10). So the
      * fork stops before it, in the cleanup step, its own actions done.
      */
-    private static void playToTheEndOfTheTurn(Game fork) {
+    private static void playToTheEndOfTheTurn(Game fork, ForcedPlayRun forced) {
         PhaseHandler phases = fork.getPhaseHandler();
         int turn = phases.getTurn();
         PhaseStart.begin(phases);
@@ -136,6 +158,10 @@ final class ForkPlayForward {
             }
             // Before the step that could resolve it (FR-010d).
             Forks.refuseARestart(fork);
+            if (forced != null) {
+                // A play refused, or whose step passed unmade, plays nothing more.
+                forced.check();
+            }
             phases.mainLoopStep();
         }
     }

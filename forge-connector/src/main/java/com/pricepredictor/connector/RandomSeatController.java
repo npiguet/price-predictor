@@ -1,5 +1,7 @@
 package com.pricepredictor.connector;
 
+import com.pricepredictor.connector.effects.ForcedPlayRun;
+import com.pricepredictor.connector.effects.ForcedPlaySeat;
 import com.pricepredictor.connector.effects.FruitlessActivations;
 import com.pricepredictor.connector.effects.PriorityCandidates;
 import com.pricepredictor.connector.effects.RandomChoices;
@@ -17,9 +19,11 @@ import forge.game.combat.Combat;
 import forge.game.combat.CombatUtil;
 import forge.game.cost.Cost;
 import forge.game.player.Player;
+import forge.game.player.PlayerActionConfirmMode;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 import forge.game.spellability.TargetChoices;
+import forge.game.trigger.WrappedAbility;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -65,8 +69,13 @@ import java.util.function.Supplier;
  * {@code blockers} records come from the engine's turn-based declaration
  * itself, before any controller declares, so the seat's declarations are
  * recorded like every other.
+ *
+ * <p>In a directed fork whose variant forces a play of this seat (FR-010b),
+ * the seat consults the play first ({@link ForcedPlaySeat}): at the
+ * decisions the play is made in it answers as the play says, attached or
+ * not, and everywhere else it is the random seat it would be.
  */
-public final class RandomSeatController extends PlayerControllerAi {
+public final class RandomSeatController extends PlayerControllerAi implements ForcedPlaySeat {
 
     private final double probability;
     /**
@@ -91,6 +100,9 @@ public final class RandomSeatController extends PlayerControllerAi {
 
     /** The play decision's draw, carried from one engine call to the next; set when attached. */
     private RandomPlayDraw playDraw;
+
+    /** A directed fork's forced play of this seat, or null. */
+    private ForcedPlayRun forced;
 
     /**
      * @param liveRandom the seat's draws for the live game, asked for once,
@@ -136,6 +148,11 @@ public final class RandomSeatController extends PlayerControllerAi {
         this.random = random;
         this.choices = new RandomChoices(random);
         this.playDraw = new RandomPlayDraw(random);
+    }
+
+    @Override
+    public void force(ForcedPlayRun run) {
+        this.forced = run;
     }
 
     /** Whether this controller is the live seat rather than a fork's copy. */
@@ -233,6 +250,10 @@ public final class RandomSeatController extends PlayerControllerAi {
      */
     @Override
     public List<SpellAbility> chooseSpellAbilityToPlay() {
+        List<SpellAbility> line = forced == null ? null : forced.choose(player);
+        if (line != null) {
+            return line;
+        }
         if (!isLive()) {
             return super.chooseSpellAbilityToPlay();
         }
@@ -320,6 +341,10 @@ public final class RandomSeatController extends PlayerControllerAi {
      */
     @Override
     public boolean playChosenSpellAbility(SpellAbility sa) {
+        Boolean played = forced == null ? null : forced.playChosen(player, sa);
+        if (played != null) {
+            return played;
+        }
         if (!isLive()) {
             return super.playChosenSpellAbility(sa);
         }
@@ -534,6 +559,33 @@ public final class RandomSeatController extends PlayerControllerAi {
      */
     @Override
     public void declareAttackers(Player attacker, Combat combat) {
+        declareOwnAttackers(attacker, combat);
+        if (forced != null) {
+            forced.declared(attacker, combat);
+        }
+    }
+
+    /**
+     * A forced play's answer to an optional trigger of its source, else the
+     * AI's.
+     */
+    @Override
+    public boolean confirmTrigger(WrappedAbility wrapper) {
+        Boolean answer = forced == null || wrapper.isMandatory()
+                ? null : forced.answer(player, wrapper.getWrappedAbility());
+        return answer != null ? answer : super.confirmTrigger(wrapper);
+    }
+
+    /** A forced play's answer to its source's "you may", else the AI's. */
+    @Override
+    public boolean confirmAction(SpellAbility sa, PlayerActionConfirmMode mode, String message,
+                                 List<String> options, Card cardToShow, Map<String, Object> params) {
+        Boolean answer = forced == null ? null : forced.answer(player, sa);
+        return answer != null ? answer : super.confirmAction(sa, mode, message, options, cardToShow, params);
+    }
+
+    /** The seat's own declaration, before a forced attack is added. */
+    private void declareOwnAttackers(Player attacker, Combat combat) {
         if (!isLive() || attacker != player || !draw()) {
             super.declareAttackers(attacker, combat);
             return;

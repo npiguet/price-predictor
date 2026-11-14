@@ -51,7 +51,7 @@ import java.util.function.Consumer;
  * <p>Mana payment stays the AI's: {@link RandomCostDecision} leaves
  * {@code CostPartMana} to its superclass, as FR-022c and FR-023 require.
  */
-final class RandomSpellPlayer {
+public final class RandomSpellPlayer {
 
     private RandomSpellPlayer() {
     }
@@ -69,7 +69,7 @@ final class RandomSpellPlayer {
      *                      passes one only for a {@code TargetingPlayer}
      *                      clause, which the random seat never draws for
      */
-    static boolean play(
+    public static boolean play(
             final Player ai, SpellAbility sa, CostDecisionMakerBase decision,
             Consumer<SpellAbility> chooseTargets) {
         final Card source = sa.getHostCard();

@@ -120,11 +120,19 @@ final class DirectedForkScheduler {
                 break;
             }
             DirectedRule rule = match.rule();
+            String variant = variantOf(rule);
+            Application application = rule.variants().get(variant);
+            // A forced play the live board cannot offer (FR-010b) is refused
+            // before the fork is taken, so the budget is not spent on it.
+            Optional<String> refused = ForcedPlayRun.dryRun(application, match.binding(), game);
+            if (refused.isPresent()) {
+                ForkRefusals.count("directed", refused.get());
+                continue;
+            }
             budget.spendDirected();
             forkedThisGame.add(rule.rule());
             tally.count(rule.rule());
-            String variant = variantOf(rule);
-            fork.take(rule, variant, rule.variants().get(variant), match.binding());
+            fork.take(rule, variant, application, match.binding());
             taken++;
         }
         return taken;

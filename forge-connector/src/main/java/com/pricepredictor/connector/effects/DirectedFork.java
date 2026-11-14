@@ -26,7 +26,9 @@ import java.util.function.Supplier;
  * attachment, a stats change), which would otherwise land in the fork's
  * records as if the turn had done them. {@link ForkPlayForward#play} opens the
  * fork's recording only after the edit, keeping the records the variant
- * names whatever the samplers draw ({@link KeptRecords}, FR-010c).
+ * names whatever the samplers draw ({@link KeptRecords}, FR-010c), and
+ * attaches the variant's forced play to its actor's seat in the copy
+ * ({@link ForcedPlayRun}, FR-010b).
  *
  * <p>An edit that cannot describe its variant on this board, a bound object
  * the copy does not hold, or a fork that throws while playing on, discards
@@ -62,7 +64,9 @@ final class DirectedFork {
             // Named before the edit, which may move a named card: it keeps its id.
             KeptRecords kept = application.kept(forked);
             application.edit(forked).apply(fork);
-            return playForward.play(fork, flags.andThen(verified::stamp), kept);
+            // Its line looked for on the edited copy, which may have given it.
+            ForcedPlayRun forced = ForcedPlayRun.start(application, forked, fork);
+            return playForward.play(fork, flags.andThen(verified::stamp), kept, forced);
         }, (verified, result) -> result);
         return played != null;
     }

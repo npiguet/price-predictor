@@ -8,8 +8,9 @@ import java.util.function.Function;
 /**
  * How one scenario variant is made out of a board its rule's precondition
  * bound: the {@link ForkOperation} the scenario classifies the variant into,
- * the edit that applies it to the fork's objects, and the records of the
- * fork kept whatever the samplers say ({@link KeptRecords}, FR-010c).
+ * the edit that applies it to the fork's objects, the records of the fork
+ * kept whatever the samplers say ({@link KeptRecords}, FR-010c), and the one
+ * play its fork forces, if any ({@link ForcedPlay}, FR-010b).
  *
  * <p>The operation is named apart from the edit so the registry can be
  * checked against {@code rules/scenarios/*.json} without a game
@@ -21,9 +22,12 @@ import java.util.function.Function;
  * @param edit      builds the edit from the fork's binding
  * @param kept      names, from the fork's binding, the cards whose records
  *                  the fork keeps
+ * @param forced    the play the fork forces, or null when its seats make
+ *                  every decision
  */
 public record Application(
-        ForkOperation operation, Function<Binding, BoardEdit> edit, Function<Binding, KeptRecords> kept) {
+        ForkOperation operation, Function<Binding, BoardEdit> edit, Function<Binding, KeptRecords> kept,
+        ForcedPlay forced) {
 
     public Application {
         Objects.requireNonNull(operation, "operation");
@@ -31,14 +35,19 @@ public record Application(
         Objects.requireNonNull(kept, "kept");
     }
 
-    /** A variant whose fork keeps nothing beyond what the samplers draw. */
+    /** A variant whose fork keeps nothing beyond what the samplers draw and forces no play. */
     public Application(ForkOperation operation, Function<Binding, BoardEdit> edit) {
-        this(operation, edit, fork -> KeptRecords.NONE);
+        this(operation, edit, fork -> KeptRecords.NONE, null);
     }
 
     /** This variant, its fork keeping the records {@code kept} names (FR-010c). */
     public Application keeping(Function<Binding, KeptRecords> kept) {
-        return new Application(operation, edit, kept);
+        return new Application(operation, edit, kept, forced);
+    }
+
+    /** This variant, its fork forcing {@code play} (FR-010b). */
+    public Application forcing(ForcedPlay play) {
+        return new Application(operation, edit, kept, Objects.requireNonNull(play, "play"));
     }
 
     /** This variant, its fork keeping the decision candidates of the card bound as {@code role}. */
