@@ -477,12 +477,17 @@ class TriggerRecordTest {
         Card host = TestCards.build("Paralyze");
         Card source = TestCards.build("Sol Ring");
 
+        // The run parameters Card.addCounterInternal hands CounterAdded: one
+        // firing a counter, CounterAmount the count reached.
         Map<String, Object> event = eventOf(triggerOfMode("CounterAdded"),
                 Map.of("Card", host, "Source", source,
-                        "CounterType", "P1P1", "CounterNum", 1));
+                        "CounterType", CounterType.getType("P1P1"), "CounterAmount", 3));
 
         assertEquals(Refs.of(source), params(event).get("cause"),
                 event.toString());
+        assertEquals("counter_change", event.get("type"), event.toString());
+        assertEquals("+1/+1", params(event).get("counter_type"), event.toString());
+        assertEquals(1L, params(event).get("delta"), "one counter a firing: " + event);
     }
 
     /** A cause that is a spell is named by the card it is printed on. */
