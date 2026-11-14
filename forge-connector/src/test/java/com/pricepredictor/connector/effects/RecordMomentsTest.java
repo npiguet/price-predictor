@@ -696,6 +696,10 @@ class RecordMomentsTest {
         assertEquals(1, before.size(), cost);
         assertEquals("battlefield", before.get(0).get("zone"), cost);
         assertEquals(false, before.get(0).get("tapped"), cost);
+        // Its costs say what was paid: the tap and the sacrifice of the Wilds.
+        Map<String, Object> costs = asMap(payload(cost).get("costs"));
+        assertEquals(List.of(ref(wilds)), costs.get("sacrificed"), cost);
+        assertEquals(List.of(ref(wilds)), costs.get("tapped"), cost);
         String effect = only(all, "resolution", script);
         List<Map<String, Object>> after = entitiesWithId(effect, ref(wilds));
         assertEquals(1, after.size(), effect);

@@ -344,12 +344,16 @@ class ProvenanceSidecarTest {
                 FIXTURE_CARDS, tempDir,
                 SourceTree.CARDSFOLDER);
         String json = Files.readString(tempDir.resolve("t/test_bear.provenance.json"));
-        assertTrue(json.startsWith("{\"card\":"), json);
-        assertTrue(json.contains("\"script_file\":\"cardsfolder/t/test_bear.txt\""),
-                json);
-        assertTrue(json.contains("\"lines\":["), json);
-        assertTrue(json.contains("\"dropped_keys\":["), json);
-        assertTrue(json.endsWith("}"), json);
+        java.util.Map<String, Object> sidecar = RecordLines.parse(json);
+        assertEquals(java.util.Set.of("card", "script_file", "lines", "dropped_keys"),
+                sidecar.keySet(), json);
+        assertEquals("cardsfolder/t/test_bear.txt", sidecar.get("script_file"), json);
+        // A vanilla bear prints no ability line; its implicit cast spell is
+        // the one trait, and it is dropped.
+        assertEquals("test bear", sidecar.get("card"), json);
+        assertEquals(List.of(), sidecar.get("lines"), json);
+        assertEquals(List.of(java.util.Map.of("face", 0L, "trait_kind", "spell", "index_within_kind", 0L)),
+                sidecar.get("dropped_keys"), json);
     }
 
     /**

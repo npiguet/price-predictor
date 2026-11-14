@@ -50,14 +50,19 @@ class GeneratedDecksIndexTest {
         assertEquals(2, index.size());
         Set<String> seenSets = new HashSet<>();
         Set<String> seenLabels = new HashSet<>();
+        java.util.Map<String, List<String>> cardsBySet = new java.util.HashMap<>();
         Random rng = new Random(0);
         for (int i = 0; i < 50; i++) {
             GeneratedDecksIndex.GeneratedDeck pick = index.randomDeck(rng);
             seenSets.add(pick.setCode());
             seenLabels.add(pick.label());
+            cardsBySet.put(pick.setCode(), pick.cardNames());
         }
         assertEquals(Set.of("MH3", "BLB"), seenSets);
         assertEquals(Set.of("gen-2", "gen-3"), seenLabels);
+        // Each deck's own card names, in order, split on the pipe.
+        assertEquals(java.util.Map.of("MH3", List.of("A", "B", "C"),
+                "BLB", List.of("X", "Y", "Z", "W")), cardsBySet);
     }
 
     @Test

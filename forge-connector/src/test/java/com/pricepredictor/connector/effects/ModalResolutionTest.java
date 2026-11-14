@@ -202,6 +202,10 @@ class ModalResolutionTest {
         assertEquals(3, records.size(), records.toString());
         assertEquals(0L, optionOf(records.get(1)), records.get(1));
         assertEquals(List.of(), eventTypes(records.get(1)), records.get(1));
+        // An empty half is still the mode's: resolved, under the cast's link.
+        assertEquals("resolved", RecordLines.outcomeOf(records.get(1)), records.get(1));
+        assertEquals(linkOf(records.get(0)), linkOf(records.get(1)));
+        assertEquals(linkOf(records.get(0)), linkOf(records.get(2)));
         assertEquals(2L, optionOf(records.get(2)), records.get(2));
         assertEquals(List.of("keyword_change"), eventTypes(records.get(2)), records.get(2));
     }

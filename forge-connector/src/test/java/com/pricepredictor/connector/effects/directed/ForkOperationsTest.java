@@ -186,6 +186,7 @@ class ForkOperationsTest {
         Set<String> left = changes(renamed(before, id(board.bears), id(courser)), after);
         Set<String> identity = Set.of("name", "colors", "subtypes", "mana_value", "mana_cost",
                 "base_pt", "lines");
+        assertTrue(left.contains(id(courser) + ".name"), "the card itself changed: " + left);
         for (String change : left) {
             assertTrue(change.startsWith(id(courser) + ".")
                             && identity.contains(change.substring(change.indexOf('.') + 1)),

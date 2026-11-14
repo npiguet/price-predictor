@@ -1513,7 +1513,9 @@ class RegisteredRulesTest {
         List<Card> library = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library));
         assertEquals(List.of("Forest", DiscoverNothingFound.BEARS, "Island"),
                 library.stream().map(Card::getName).toList());
-        assertOnlyChanged(twin, board.subject, library.get(1));
+        // A library card the board shows by count alone: the swap the list
+        // above shows changes no visible member.
+        assertTrue(twin.changes().isEmpty(), "visible changes: " + twin.changes());
     }
 
     // ── 702.1c, keywords shared by "the same is true for": replace_card ─
@@ -1616,7 +1618,9 @@ class RegisteredRulesTest {
         List<Card> library = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library));
         assertEquals(List.of("Forest", "Shock", Transmute.COURSER, "Island"),
                 library.stream().map(Card::getName).toList());
-        assertOnlyChanged(twin, board.subject, library.get(2));
+        // A library card the board shows by count alone: the swap the list
+        // above shows changes no visible member.
+        assertTrue(twin.changes().isEmpty(), "visible changes: " + twin.changes());
     }
 
     // ── 702.62c, a prohibition stopping a suspend: remove_permanent ─────
@@ -1837,7 +1841,9 @@ class RegisteredRulesTest {
         Twin twin = board.twin(Cascade.rule());
         List<Card> library = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library));
         assertEquals(List.of("Mountain", Cascade.WURM, "Hill Giant"), library.stream().map(Card::getName).toList());
-        assertOnlyChanged(twin, board.subject, library.get(1));
+        // A library card the board shows by count alone: the swap the list
+        // above shows changes no visible member.
+        assertTrue(twin.changes().isEmpty(), "visible changes: " + twin.changes());
     }
 
     // ── 702.98a, unleash can't block: counters ──────────────────────────
@@ -1980,7 +1986,9 @@ class RegisteredRulesTest {
         List<Card> library = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library));
         assertEquals(List.of("Forest", PartnerWithSearch.FOREST, "Forest"),
                 library.stream().map(Card::getName).toList());
-        assertOnlyChanged(twin, board.subject, library.get(1));
+        // A library card the board shows by count alone: the swap the list
+        // above shows changes no visible member.
+        assertTrue(twin.changes().isEmpty(), "visible changes: " + twin.changes());
     }
 
     // ── 702.126a, improvise: tap ────────────────────────────────────────
@@ -3487,12 +3495,17 @@ class RegisteredRulesTest {
      */
     private static void assertOnlyChanged(Twin twin, Card gone, Card added, String... members) {
         Set<String> ids = new TreeSet<>(List.of(id(gone), id(added)));
+        java.util.function.Predicate<String> own = change -> ids.stream().anyMatch(
+                card -> change.equals("-" + card) || change.equals("+" + card)
+                        || change.startsWith(card + ".")
+                        || change.startsWith("-link ") && change.contains("=" + card)
+                        || change.startsWith("+link ") && change.contains("=" + card));
+        // Something of the edited cards changed: an edit that did nothing
+        // passes every "only" check below.
+        assertTrue(twin.changes().stream().anyMatch(own),
+                "the edit changed nothing of " + ids + "; all: " + twin.changes());
         for (String change : twin.changes()) {
-            boolean own = ids.stream().anyMatch(card -> change.equals("-" + card) || change.equals("+" + card)
-                    || change.startsWith(card + ".")
-                    || change.startsWith("-link ") && change.contains("=" + card)
-                    || change.startsWith("+link ") && change.contains("=" + card));
-            assertTrue(own || List.of(members).contains(change),
+            assertTrue(own.test(change) || List.of(members).contains(change),
                     "changed " + change + "; all: " + twin.changes());
         }
     }

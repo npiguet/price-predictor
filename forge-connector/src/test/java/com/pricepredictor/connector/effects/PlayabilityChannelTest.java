@@ -80,6 +80,9 @@ class PlayabilityChannelTest {
                 });
         boolean pairedAdmitted = admitsAPlayabilityRecord(paired);
 
+        // The premise: the first live draw is sampled out, the second in, so
+        // a fork's draw leaking into the live stream would admit the record.
+        assertFalse(soloAdmitted, "premise: alone, the live game's first draw is sampled out");
         assertEquals(soloAdmitted, pairedAdmitted,
                 "a fork's stop ahead of it must not change whether the live candidate "
                         + "behind it is sampled in: solo=" + soloAdmitted

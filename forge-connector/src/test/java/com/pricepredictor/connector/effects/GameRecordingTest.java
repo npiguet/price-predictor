@@ -15,12 +15,14 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** What a game's recording leaves behind on the engine's static hooks. */
 @ExtendWith(ForgeExtension.class)
@@ -84,6 +86,41 @@ class GameRecordingTest {
                 "the mana hook outlived a close that threw");
         assertNull(installed(PlayerControllerAi.class, "CONFIRM_HOOK"),
                 "the confirm hook outlived a close that threw");
+        assertEquals(List.of(), hooksStillInstalled(), "hooks that outlived a close that threw");
+    }
+
+    /** Every engine class that holds an effect-record hook, by name. */
+    private static final List<String> HOOK_OWNERS = List.of(
+            "forge.ai.PlayerControllerAi", "forge.game.ability.AbilityUtils",
+            "forge.game.ability.EffectRecordOutcomes", "forge.game.combat.CombatLegalityObserver",
+            "forge.game.cost.CostPayment", "forge.game.phase.PhaseHandler",
+            "forge.game.replacement.ReplacementObserver", "forge.game.spellability.AbilityManaPart",
+            "forge.game.trigger.TriggerHandler", "forge.game.zone.MagicStack");
+
+    /**
+     * Every static {@code EffectRecordHook} field of the engine's hook
+     * owners that still holds a listener: all of them, not the two a test
+     * happened to name. A hook owner Forge renames fails here by name.
+     */
+    private static List<String> hooksStillInstalled() throws Exception {
+        List<String> installed = new java.util.ArrayList<>();
+        int hooks = 0;
+        for (String owner : HOOK_OWNERS) {
+            for (Field field : Class.forName(owner).getDeclaredFields()) {
+                if (!java.lang.reflect.Modifier.isStatic(field.getModifiers())
+                        || !field.getType().getSimpleName().equals("EffectRecordHook")) {
+                    continue;
+                }
+                hooks++;
+                field.setAccessible(true);
+                Object hook = field.get(null);
+                if (hook.getClass().getMethod("get").invoke(hook) != null) {
+                    installed.add(owner + "." + field.getName());
+                }
+            }
+        }
+        assertTrue(hooks >= HOOK_OWNERS.size(), "found only " + hooks + " hooks");
+        return installed;
     }
 
     /**
@@ -167,6 +204,7 @@ class GameRecordingTest {
         assertNull(installed(PlayerControllerAi.class, "CONFIRM_HOOK"),
                 "the confirm hook outlived the close");
         assertNull(installed(AbilityManaPart.class, "MANA_HOOK"));
+        assertEquals(List.of(), hooksStillInstalled(), "hooks that outlived the close");
     }
 
     /** The listener a patched engine class's hook holds, or null when none is. */

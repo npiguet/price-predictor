@@ -338,7 +338,7 @@ public class MatchWorkerMain {
      * with the collection state it runs under, or null when the run collects
      * none.
      */
-    private static RecordShardWriter openEffectRecords(WorkerConfig config, CollectionCaps caps) {
+    static RecordShardWriter openEffectRecords(WorkerConfig config, CollectionCaps caps) {
         if (!config.collectsEffectRecords()) {
             return null;
         }

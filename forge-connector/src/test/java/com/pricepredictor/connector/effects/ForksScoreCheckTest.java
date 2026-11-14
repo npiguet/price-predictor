@@ -112,7 +112,8 @@ class ForksScoreCheckTest {
         Random was = MyRandom.getRandom();
         MyRandom.setRandom(stream);
         try {
-            Forks.scoreCheck(live, copier, fork, you);
+            assertTrue(Forks.scoreCheck(live, copier, fork, you),
+                    "an exact copy passes, so the score path ran");
             assertSame(stream, MyRandom.getRandom(), "the live stream was not put back");
         } finally {
             MyRandom.setRandom(was);
