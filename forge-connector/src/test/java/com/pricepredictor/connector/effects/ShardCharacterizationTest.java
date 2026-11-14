@@ -60,4 +60,31 @@ class ShardCharacterizationTest {
         Characterization.assertMatches(
                 "shard-spell-and-combat.jsonl", Characterization.recordLines(records));
     }
+
+    /**
+     * Lightning Bolt to an opponent at 3 life ends the game: the record
+     * holding the outcome, then the game-end marker, last.
+     */
+    @Test
+    void aGameToItsEnd() throws Throwable {
+        Assumptions.assumeTrue(AttributionMode.detect() == AttributionMode.PATCHED,
+                "the expected shard was captured against the patched ../forge");
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Player you = board.you;
+        Player opponent = board.opponent;
+        opponent.setLife(3, null);
+
+        List<String> records = ShardRun.recordsWithClauseHook(
+                tempDir, board.game, "", () -> {
+                    TestBoard.cast(board.game, board.card("Lightning Bolt", you), you, opponent);
+                    board.game.getStack().resolveStack();
+                    board.game.getAction().checkStateEffects(false);
+                    // What Match.startGame publishes once the game is over.
+                    board.game.fireEvent(new forge.game.event.GameEventGameFinished());
+                });
+
+        assertTrue(board.game.isGameOver(), "the bolt ended the game");
+        Characterization.assertMatches(
+                "shard-game-end.jsonl", Characterization.recordLines(records));
+    }
 }

@@ -220,10 +220,61 @@ class RecordCharacterizationTest {
             Map<AbilityKey, Object> after = AbilityKey.newMap(before);
             after.put(AbilityKey.DamageAmount, 3);
             listener.onReplacement(prevent, before, after, ReplacementResult.Updated, null);
+
+            // Run parameters Forge could not copy: incoming_unknown.
+            listener.onReplacement(prevent, null, after, ReplacementResult.Updated, null);
         });
 
         Characterization.assertMatches(
                 "record-rewrite.jsonl", Characterization.recordLines(records));
+    }
+
+    /**
+     * Shock at Swans of Bryn Argoll, played on the hooked path: the
+     * prevention's rewrite record names the buffered draw and takes the
+     * events of its run.
+     */
+    @Test
+    void bufferedRewriteRecords() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Player you = board.you;
+        for (int i = 0; i < 2; i++) {
+            board.game.getAction().moveToLibrary(board.hand("Island", you), null, null);
+        }
+        Card swans = board.battlefield("Swans of Bryn Argoll", board.opponent);
+
+        List<String> records = ShardRun.recordsWithClauseHook(
+                tempDir, board.game, "for the buffered-ability hooks", () -> {
+                    board.cast(board.card("Shock", you), you, swans);
+                    board.game.getStack().resolveStack();
+                    board.game.getAction().checkStateEffects(false);
+                });
+
+        Characterization.assertMatches("record-rewrite-buffered.jsonl",
+                Characterization.recordLines(records.stream()
+                        .filter(line -> line.contains("\"kind\":\"rewrite\"")).toList()));
+    }
+
+    /**
+     * A pain land tapped for coloured mana, played on the hooked path: its
+     * mana record holds the tap, the mana, and the damage its sub-ability
+     * dealt its controller.
+     */
+    @Test
+    void manaRecords() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Player you = board.you;
+        Card wastes = board.battlefield("Adarkar Wastes", you);
+        SpellAbility pain = wastes.getManaAbilities().stream()
+                .filter(sa -> sa.getSubAbility() != null).findFirst().orElseThrow();
+        pain.setActivatingPlayer(you);
+
+        List<String> records = ShardRun.recordsWithClauseHook(
+                tempDir, board.game, "for the payment and clause hooks", () ->
+                        forge.ai.ComputerUtil.playNoStack(you, pain, board.game, false));
+
+        Characterization.assertMatches(
+                "record-mana.jsonl", Characterization.recordLines(records));
     }
 
     // ── trigger ─────────────────────────────────────────────────────────
@@ -389,6 +440,20 @@ class RecordCharacterizationTest {
             declaration.onAttackersDeclared(new GameEventAttackersDeclared(you, declared));
             listener.onBlockersDeclarable(
                     opponent, bears, List.of(angel, giant), List.of(angel), 1);
+
+            // A blocker Pacifism keeps out (responsible_static), and one a
+            // lure attacking beside the anchor calls away (required_elsewhere).
+            Card pacified = board.battlefield("Gray Ogre", opponent);
+            board.battlefield("Pacifism", you).attachToEntity(pacified, null);
+            Card unicorn = board.battlefield("Prized Unicorn", you);
+            Card lured = board.battlefield("Runeclaw Bear", opponent);
+            board.game.getAction().checkStaticAbilities();
+            Combat lure = new Combat(you);
+            lure.addAttacker(bears, opponent);
+            lure.addAttacker(unicorn, opponent);
+            board.game.getPhaseHandler().setCombat(lure);
+            listener.onBlockersDeclarable(
+                    opponent, bears, List.of(pacified, lured), List.of(), 1);
         });
 
         Characterization.assertMatches(
