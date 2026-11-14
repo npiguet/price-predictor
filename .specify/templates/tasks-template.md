@@ -156,6 +156,9 @@ Examples of foundational tasks (adjust based on your project):
 - [ ] TXXX [P] Additional unit tests (if requested) in tests/unit/
 - [ ] TXXX Security hardening
 - [ ] TXXX Run quickstart.md validation
+- [ ] TXXX Glossary update per Principle IX: every term the feature introduced, renamed or redefined is in the root or module `GLOSSARY.md`, and code and documents use it as defined
+- [ ] TXXX CLAUDE.md and topic files per Principle XI: every file that names something the feature touched is updated, following the `maintaining-claude-md` skill
+- [ ] TXXX End-of-feature review per Principle X (LAST task): review every file the feature added or changed by the method of `.claude/commands/review.md`, and look for implementation errors (bugs, departures from spec.md and contracts, unhandled failure paths, tests that do not test what they claim); report findings with severity and confidence; the user decides which to act on
 
 ---
 
@@ -251,3 +254,6 @@ With multiple developers:
 - Avoid: vague tasks, same file conflicts, cross-story dependencies that break independence
 - **Principle VII (Codebase-Aware Planning)**: Any task that creates a new entity, service, port, or adapter MUST reference the nearest prior art identified in plan.md's Codebase Survey. If no prior art is cited, either reuse/extend existing code or document in the task description why a parallel concept is warranted.
 - **Principle VIII (Performance-Conscious Implementation)**: Any task touching data loading or model compute MUST be checked against the performance checklist (batch/cache I/O, GPU placement, batch GPU ops, no per-item host↔device transfers in hot loops, stream large inputs, load-once reuse). Optimization beyond the checklist requires a profiling/measurement justification.
+- **Principle IX (Ubiquitous Language)**: Any task that introduces, renames or redefines a domain term MUST update the glossary in the same commit. Task descriptions use glossary terms as defined.
+- **Principle X (End-of-Feature Review)**: The task list MUST end with the end-of-feature review. The feature is not complete until each finding is fixed or explicitly declined by the user.
+- **Principle XI (Agent Guidance in Sync)**: Any task that renames, removes or changes the behaviour of something a CLAUDE.md or a topic file names MUST update that file in the same commit.

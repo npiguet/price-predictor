@@ -100,6 +100,14 @@ Optimization *beyond* this checklist MUST be backed by a
 profile/measurement identifying the hot path; do not add speculative
 optimizations (Principle II).
 
+### Vocabulary (Principle IX — required)
+
+List every domain term this feature introduces, renames or redefines,
+each with the `GLOSSARY.md` that holds or will hold it (the root one
+for a term more than one module uses). Write "None" when the feature
+adds no term. Every other term in this plan MUST be used as its
+glossary defines it.
+
 ## Project Structure
 
 ### Documentation (this feature)

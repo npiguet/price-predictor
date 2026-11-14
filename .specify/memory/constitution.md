@@ -1,6 +1,40 @@
 <!--
   Sync Impact Report
   ==================
+  Version change: 2.4.0 → 2.5.0
+  Modified principles: None
+  Added sections:
+    - IX. Ubiquitous Language (the glossaries define the domain
+      terms; code and documents use them as defined, and a change
+      to a term changes the glossary in the same commit)
+    - X. End-of-Feature Review (a review of all code the feature
+      wrote, by the method of the /review command plus a search
+      for implementation errors, before the feature is complete)
+    - XI. Agent Guidance in Sync (CLAUDE.md files and the topic
+      files they point to are updated in the commit that changes
+      what they describe; the maintaining-claude-md skill holds
+      the rules for their content and shape)
+  Removed sections: None
+  Templates requiring updates:
+    - .specify/templates/plan-template.md — ✅ updated
+      (Constitution Check gains a Vocabulary subsection for
+      Principle IX)
+    - .specify/templates/tasks-template.md — ✅ updated
+      (Polish phase gains the glossary, guidance-file and
+      end-of-feature review tasks; Notes reference Principles
+      IX, X and XI)
+    - .specify/templates/spec-template.md — ✅ No change
+  Quality Gates updated:
+    - ✅ Added glossary gate (Principle IX)
+    - ✅ Added guidance-file gate (Principle XI)
+    - ✅ The code-review gate now names the Principle X review
+  Follow-up TODOs:
+    - .claude/commands/speckit.implement.md step 9 (completion
+      validation) does not mention the Principle X review; the
+      tasks template carries it as the last task instead.
+
+  Prior report
+  ------------
   Version change: 2.3.0 → 2.4.0
   Modified principles:
     - IV. Domain-Driven Design & Separation of Concerns —
@@ -315,6 +349,92 @@ cheap to change instead of as a follow-up patch. The closing
 premature optimization Principle II forbids: the listed items are
 known hot spots; anything beyond them needs evidence.
 
+### IX. Ubiquitous Language
+
+The glossaries define the project's domain terms. Everything
+written for the project MUST use those terms as defined, and the
+glossaries MUST be kept current.
+
+- The root `GLOSSARY.md` holds the terms more than one module
+  uses; each module's `GLOSSARY.md` holds its own.
+- Code identifiers, specs, experiment records, CLAUDE.md files,
+  commit messages and conversation with the user MUST use a
+  glossary term with the meaning the glossary gives it. A second
+  word for a defined concept, or a defined word used for another
+  concept, is a defect.
+- A change that introduces a domain term, renames one or changes
+  what one means MUST update the glossary in the same commit, and
+  MUST bring the code and documents that use the term into line.
+- A term from the game's own rules is not redefined in a
+  glossary and MUST be used with its accepted meaning.
+- The `domain-modeling` skill governs how a term is challenged,
+  chosen and recorded.
+
+**Rationale**: The models, the corpora and the Forge engine each
+bring their own vocabulary, and the same thing is easily named
+three ways across a spec, a module and a record. A reader who
+meets two words cannot tell whether they name one concept or two,
+and a term that drifts from its definition makes every document
+that used it unreliable. Fixing the vocabulary in one place, and
+changing it only there, keeps code and documents readable against
+each other.
+
+### X. End-of-Feature Review
+
+Before a feature is declared complete, all the code written for it
+MUST be reviewed.
+
+- The review runs after the last implementation task and covers
+  every file the feature added or changed, tests included.
+- The review MUST apply the method of the `/review` command
+  (`.claude/commands/review.md`): readability and complexity,
+  duplication, logic that belongs in a domain object, missing
+  domain concepts, dead code, low-value tests and simple
+  performance problems.
+- The review MUST also look for implementation errors: bugs,
+  behaviour that departs from the feature's `spec.md` and
+  contracts, failure paths that are not handled, and tests that do
+  not exercise what they claim to.
+- Every finding is reported with its location, a suggested fix, a
+  severity and a confidence. The review changes nothing by itself.
+- The user decides which findings are acted on. Each finding MUST
+  be either fixed or explicitly declined before the feature is
+  complete.
+
+**Rationale**: A feature is written task by task, and each task is
+checked against its own acceptance test. Nothing in that loop
+looks at the feature's code as a whole, which is where duplicated
+logic, a concept that should have been a type, and a departure
+from the spec become visible. A review at the end, while the
+design is still fresh and before other work builds on it, is the
+cheapest point to find them.
+
+### XI. Agent Guidance in Sync
+
+The CLAUDE.md files, and the topic files they point to, MUST
+describe the code as it is.
+
+- A change that renames, removes or changes the behaviour of
+  something a CLAUDE.md or a topic file names (a command, a flag,
+  a file, a class, a file format, a rule) MUST update that file in
+  the same commit.
+- A new subcommand, module or topic file MUST be added to the
+  CLAUDE.md that indexes it in the same commit.
+- A CLAUDE.md holds the rules that must be respected and pointers
+  to where the rest lives. Description of what the code does
+  belongs to the code, specification to `specs/`, and rationale
+  and measurements to `experiments/`.
+- The `maintaining-claude-md` skill holds the rules for what these
+  files contain, how they are split and how they are checked, and
+  MUST be followed for every edit to them.
+
+**Rationale**: These files are read by every session that works on
+a module, before any code is. A stale rule is followed as
+faithfully as a current one, and a pointer to a section that no
+longer exists sends a session nowhere. They also cost context on
+every load, so content that the code, a spec or an experiment
+record already holds is paid for twice and drifts from its source.
+
 ## Quality Gates
 
 Every pull request and feature delivery MUST satisfy these gates:
@@ -335,8 +455,13 @@ Every pull request and feature delivery MUST satisfy these gates:
   Principle VIII performance review (I/O batching/caching, GPU
   placement and batching, no per-item host↔device transfers in
   hot loops, streaming for large inputs, load-once reuse).
-- Code has been reviewed by at least one other contributor (or
-  self-reviewed with a structured checklist for solo work).
+- Every domain term the change introduces, renames or redefines
+  is in the glossary, and the change uses glossary terms as
+  defined (Principle IX).
+- Every CLAUDE.md and topic file that names something the change
+  touched has been updated (Principle XI).
+- The feature's code has passed the Principle X end-of-feature
+  review, and every finding is fixed or explicitly declined.
 
 ## Development Workflow
 
@@ -346,6 +471,8 @@ Every pull request and feature delivery MUST satisfy these gates:
 - Tasks are tracked and completed in priority order.
 - Each user story is independently testable and deliverable.
 - Commits are small, focused, and reference the relevant task ID.
+- A feature ends with the Principle X review; it is not complete
+  before the review's findings are settled.
 
 ## Governance
 
@@ -367,4 +494,4 @@ and architectural decisions MUST comply with the principles above.
   the conflict MUST be raised explicitly and resolved by amending
   the constitution, not by silently bypassing it.
 
-**Version**: 2.4.0 | **Ratified**: 2026-02-26 | **Last Amended**: 2026-09-07
+**Version**: 2.5.0 | **Ratified**: 2026-02-26 | **Last Amended**: 2026-11-14
