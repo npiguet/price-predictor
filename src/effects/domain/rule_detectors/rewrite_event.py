@@ -32,13 +32,21 @@ Parameters:
 - ``keyword``: the replacing line is the line this keyword produced
   (``etbCounter``, ``Madness``, ``Tribute``, ``Unleash``), compared in
   ``keyword_names``' spelling;
-- ``paid_as_cost``: true to count only an event a cost's action made
-  (118.11): it names a ``cause`` and the stack is empty
-  (``global.stack_size`` 0), so no spell or ability was resolving, and the
-  cause's move was the payment Forge makes before it puts an activated
-  ability on the stack (or a mana ability's). A cost paid while the stack
-  holds something cannot be told from a resolution's effect there and is on
-  neither side;
+- ``paid_as_cost`` (118.11): true to count only an incoming event that names
+  a ``cause`` while the stack is empty (``global.stack_size`` 0). That is all
+  it reads: no record says that a cost is being paid (a rewrite's state
+  names the replacement's source, never the item paying a cost, and the
+  event's ``cause`` is the causing ability's card whatever the ability is
+  doing). It therefore catches a cost paid with the stack empty (Forge pays
+  an activated ability's costs, and a mana ability's, before the ability
+  is on the stack), and with it every other event a cause made off the
+  stack: a special action (a land played, ``hand`` to ``battlefield``), a
+  mana ability's own effects, an ability Forge resolves without the stack
+  (``ComputerUtil.playNoStack``, a ``Static$ True`` trigger's effect). It
+  misses every cost paid while the stack holds something, which is on
+  neither side. A declaration keeps to a cost's action through its other
+  parameters (118.11-1's ``zone_change`` from the battlefield to a
+  graveyard leaves out a land played);
 - ``prevention``: true to count only prevention effects. Forge reports a
   prevention as ``prevented`` only for a ``Prevent$ True`` replacement or
   protection; a shield (``PreventDamage``, ``PreventionEffect$ True``)
@@ -122,9 +130,9 @@ def _amount_changed(incoming, outgoing, change: str) -> bool:
 
 
 def paid_as_cost(record: EffectRecord, incoming) -> bool:
-    """Whether the incoming event is a cost's action: it names a cause and
-    nothing was on the stack, so nothing was resolving (see the module
-    docstring's ``paid_as_cost``)."""
+    """Whether the incoming event names a cause while the stack is empty: a
+    cost paid with nothing on the stack, or any other event a cause made off
+    the stack (the module docstring's ``paid_as_cost`` says which)."""
     return bool((incoming.params or {}).get("cause")) and record.state.global_.stack_size == 0
 
 
