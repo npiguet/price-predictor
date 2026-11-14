@@ -1,9 +1,11 @@
 """Fork collection against a real game (T125).
 
 Forks need a live game to copy, so this is where the budget arithmetic meets the
-engine. Skips when the JAR is not built or the run produces no forks — stage
-three is opt-in and a stock stage-one run takes none, which is correct rather
-than a failure.
+engine. Two worker runs serve the module: a stage-one run, which takes no fork
+(stage three is opt-in, and taking none is correct rather than a failure), and
+a forking run with interventions and damage-step probes on, played until it has
+taken both kinds; each ends by the stop protocol, its game finished. Skips when
+the JAR is not built.
 
 The property that matters: **a fork discarded by the score check still counts
 against its budget.** Without that, a systematically failing copy retries until
@@ -12,8 +14,10 @@ the game ends and the run spends its whole simulation budget producing nothing.
 
 from __future__ import annotations
 
+import subprocess
 import time
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -30,6 +34,9 @@ pytestmark = pytest.mark.integration
 
 _COLLECTION_SECONDS = 240
 _POLL_SECONDS = 5
+#: How long a worker asked to stop may take to finish its game.
+_STOP_SECONDS = 300
+_PROBED = "first_strike,trample,deathtouch"
 
 
 def pair_forks(records: list[EffectRecord]) -> list[tuple[EffectRecord, EffectRecord]]:
@@ -43,10 +50,13 @@ def pair_forks(records: list[EffectRecord]) -> list[tuple[EffectRecord, EffectRe
 
 
 def _run(
-    records_dir: Path, interventions: int = 0, probe_keywords: str = "",
+    records_dir: Path, *, enough: Callable[[list], bool], interventions: int = 0,
+    probe_keywords: str = "",
 ) -> list:
+    """Collect until ``enough`` holds of the records or the window closes,
+    then stop the worker at its game's end; the records it wrote."""
     require_jar()
-
+    stop_file = records_dir.parent / "worker.stop"
     process = MatchWorkerConnector().start(
         None,
         run_id=str(uuid.uuid4()),
@@ -58,6 +68,7 @@ def _run(
             probes_per_game=4,
             probe_keywords=probe_keywords,
         ).as_system_properties(),
+        stop_file=stop_file,
     )
     try:
         deadline = time.monotonic() + _COLLECTION_SECONDS
@@ -65,36 +76,54 @@ def _run(
             time.sleep(_POLL_SECONDS)
             if process.poll() is not None:
                 pytest.fail(f"worker exited early with {process.returncode}")
-            records = list(read_records(records_dir))
-            # A fork run has to reach combat, which is several turns in — the
-            # twenty-record mark is the first turn, long before one happens.
-            if probe_keywords:
-                if any(r.fork for r in records):
-                    break
-            elif len(records) >= 20:
+            if enough(list(read_records(records_dir))):
                 break
-        return list(read_records(records_dir))
+        stop_file.touch()
+        assert process.wait(timeout=_STOP_SECONDS) == 0, "the worker did not stop cleanly"
+    except subprocess.TimeoutExpired:
+        pytest.fail(f"the worker did not stop within {_STOP_SECONDS} s of the request")
     finally:
         kill_process_tree(process)
+    return list(read_records(records_dir))
 
 
-def test_a_stage_one_run_takes_no_forks(tmp_path: Path) -> None:
-    """Correct rather than a failure: stage three is opt-in."""
-    records = _run(tmp_path / "records")
+def _probes(records: list) -> list:
+    return [r for r in records if r.fork and not r.interventional]
+
+
+@pytest.fixture(scope="module")
+def stage_one(tmp_path_factory) -> list:
+    """A run with no fork budget: the first turns of a game are enough."""
+    root = tmp_path_factory.mktemp("stage-one")
+    records = _run(root / "records", enough=lambda so_far: len(so_far) >= 20)
     if not records:
         pytest.skip("worker produced no records within the collection window")
+    return records
+
+
+@pytest.fixture(scope="module")
+def forked(tmp_path_factory) -> list:
+    """A run taking interventions and probes, until it has both: a probe
+    needs a combat with a probed keyword, several turns in."""
+    root = tmp_path_factory.mktemp("forked")
+    return _run(
+        root / "records", interventions=2, probe_keywords=_PROBED,
+        enough=lambda so_far: any(r.interventional for r in so_far)
+        and bool(_probes(so_far)),
+    )
+
+
+def test_a_stage_one_run_takes_no_forks(stage_one) -> None:
+    """Correct rather than a failure: stage three is opt-in."""
+    records = stage_one
     assert not any(record.fork for record in records)
     assert not any(record.interventional for record in records)
 
 
-def test_a_fork_record_carries_the_forks_own_state(tmp_path: Path) -> None:
-    records = _run(tmp_path / "records")
+def test_a_fork_record_carries_the_forks_own_state(forked) -> None:
+    records = forked
     forks = [r for r in records if r.fork]
-    if not forks:
-        pytest.skip(
-            "no fork records: stage-three collection is opt-in and this run "
-            "took none"
-        )
+    assert forks, "the forking run took no fork within the collection window"
     for fork in forks:
         # The intervention changed the board; recording the original would
         # describe a situation the resolution never saw.
@@ -110,17 +139,17 @@ def test_a_fork_record_carries_the_forks_own_state(tmp_path: Path) -> None:
         assert len(halves) >= 2, f"interventional half {link_id} has no partner"
 
 
-def test_forks_pair_to_the_records_they_mirror(tmp_path: Path) -> None:
-    records = _run(tmp_path / "records")
+def test_forks_pair_to_the_records_they_mirror(forked) -> None:
+    records = forked
     pairs = pair_forks(records)
     if not pairs:
-        pytest.skip("no matched fork pairs in this run")
+        pytest.skip("no probe landed within the collection window")
     for real, fork in pairs:
         assert fork.mirror_of == real.record_id
         assert fork.game_id == real.game_id, "a fork mirrors a same-game record"
 
 
-def test_an_intervention_records_what_the_ability_did(tmp_path: Path) -> None:
+def test_an_intervention_records_what_the_ability_did(forked) -> None:
     """The failure this catches is a fork that copies, score-checks, snapshots
     and writes an empty payload — a record saying an ability was forced without
     saying what it did, which looks like a working collector.
@@ -128,7 +157,7 @@ def test_an_intervention_records_what_the_ability_did(tmp_path: Path) -> None:
     Needs the budget switched on, which is what makes this the only test in the
     file that takes a fork on purpose.
     """
-    records = _run(tmp_path / "records", interventions=2)
+    records = forked
     forks = [r for r in records if r.interventional]
     if not forks:
         pytest.skip("no intervention landed within the collection window")
@@ -146,9 +175,7 @@ def test_an_intervention_records_what_the_ability_did(tmp_path: Path) -> None:
         assert record.ability, "an intervention names the line it forced"
 
 
-def test_an_intervention_forces_something_observation_misses(
-    tmp_path: Path,
-) -> None:
+def test_an_intervention_forces_something_observation_misses(forked) -> None:
     """Lands and mana abilities are excluded on purpose: every game plays them,
     so forking to force one spends a game copy to observe the commonest event in
     the corpus.
@@ -158,7 +185,7 @@ def test_an_intervention_forces_something_observation_misses(
     a live game does. The two are alike on the record, so mana records are left
     to the connector's ``InterventionSchedulerTest`` and this checks the rest.
     """
-    records = _run(tmp_path / "records", interventions=2)
+    records = forked
     forks = [
         r for r in records
         if r.interventional and r.ability and r.link_id is None
@@ -183,14 +210,12 @@ def _only_mana(record: EffectRecord) -> bool:
     )
 
 
-_PROBED = "first_strike,trample,deathtouch"
 
-
-def test_a_probe_pairs_to_the_combat_it_varies(tmp_path: Path) -> None:
+def test_a_probe_pairs_to_the_combat_it_varies(forked) -> None:
     """A branch that pairs to nothing is unreadable: the whole point is the
     difference between it and the step it forked from."""
-    records = _run(tmp_path / "records", probe_keywords=_PROBED)
-    probes = [r for r in records if r.fork and not r.interventional]
+    records = forked
+    probes = _probes(records)
     if not probes:
         pytest.skip("no probe landed within the collection window")
 
@@ -202,12 +227,12 @@ def test_a_probe_pairs_to_the_combat_it_varies(tmp_path: Path) -> None:
         )
 
 
-def test_a_probe_names_what_it_perturbed(tmp_path: Path) -> None:
+def test_a_probe_names_what_it_perturbed(forked) -> None:
     """Keyword and carrier both. A board with two tramplers gives the keyword
     alone two readings, and an evaluator reproducing the perturbation
     model-side would strip the wrong creature."""
-    records = _run(tmp_path / "records", probe_keywords=_PROBED)
-    probes = [r for r in records if r.fork and not r.interventional]
+    records = forked
+    probes = _probes(records)
     if not probes:
         pytest.skip("no probe landed within the collection window")
 
@@ -216,12 +241,12 @@ def test_a_probe_names_what_it_perturbed(tmp_path: Path) -> None:
         assert probe.payload.probed_entity, "no carrier named"
 
 
-def test_the_probed_creature_actually_lost_the_keyword(tmp_path: Path) -> None:
+def test_the_probed_creature_actually_lost_the_keyword(forked) -> None:
     """The failure this catches is a strip that silently does nothing: the
     branch then equals the real step, and the counterfactual says the keyword
     was worth nothing."""
-    records = _run(tmp_path / "records", probe_keywords=_PROBED)
-    probes = [r for r in records if r.fork and not r.interventional]
+    records = forked
+    probes = _probes(records)
     if not probes:
         pytest.skip("no probe landed within the collection window")
 
@@ -249,8 +274,8 @@ def test_the_probed_creature_actually_lost_the_keyword(tmp_path: Path) -> None:
     assert checked, "no probe's carrier appeared in its own snapshot"
 
 
-def test_an_observed_combat_record_perturbs_nothing(tmp_path: Path) -> None:
-    records = _run(tmp_path / "records", probe_keywords=_PROBED)
+def test_an_observed_combat_record_perturbs_nothing(forked) -> None:
+    records = forked
     observed = [
         r for r in records
         if r.kind.value == "combat" and not r.fork
@@ -262,12 +287,9 @@ def test_an_observed_combat_record_perturbs_nothing(tmp_path: Path) -> None:
         assert record.payload.probed_entity is None
 
 
-def test_no_record_carries_a_precomputed_diff(tmp_path: Path) -> None:
+def test_no_record_carries_a_precomputed_diff(stage_one, forked) -> None:
     """FR-042: the real-versus-fork difference is an evaluation-time
     diagnostic, never something the corpus stores and a trainer could read."""
-    records = _run(tmp_path / "records")
-    if not records:
-        pytest.skip("worker produced no records within the collection window")
-    for record in records:
+    for record in stage_one + forked:
         assert "diff" not in record.extra_fields
         assert "real_vs_fork" not in record.extra_fields
