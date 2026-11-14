@@ -32,6 +32,13 @@ Parameters:
 - ``keyword``: the replacing line is the line this keyword produced
   (``etbCounter``, ``Madness``, ``Tribute``, ``Unleash``), compared in
   ``keyword_names``' spelling;
+- ``paid_as_cost``: true to count only an event a cost's action made
+  (118.11): it names a ``cause`` and the stack is empty
+  (``global.stack_size`` 0), so no spell or ability was resolving, and the
+  cause's move was the payment Forge makes before it puts an activated
+  ability on the stack (or a mana ability's). A cost paid while the stack
+  holds something cannot be told from a resolution's effect there and is on
+  neither side;
 - ``prevention``: true to count only prevention effects. Forge reports a
   prevention as ``prevented`` only for a ``Prevent$ True`` replacement or
   protection; a shield (``PreventDamage``, ``PreventionEffect$ True``)
@@ -86,7 +93,7 @@ from effects.domain.rule_detectors.outcome_event import (
 #: How the outgoing event's ``amount`` compares with the incoming one's.
 AMOUNT_CHANGES = frozenset({"doubled", "increased", "decreased"})
 _OWN = frozenset({"event", "result", "mode", "keyword", "prevention",
-                  "amount_change"}) | frozenset(
+                  "amount_change", "paid_as_cost"}) | frozenset(
     SUBJECT_QUALIFIERS)
 
 #: A chain that prevents: a ``PreventDamage``/``Prevent$``/``PreventionEffect$``
@@ -114,6 +121,13 @@ def _amount_changed(incoming, outgoing, change: str) -> bool:
             "decreased": after < before}[change]
 
 
+def paid_as_cost(record: EffectRecord, incoming) -> bool:
+    """Whether the incoming event is a cost's action: it names a cause and
+    nothing was on the stack, so nothing was resolving (see the module
+    docstring's ``paid_as_cost``)."""
+    return bool((incoming.params or {}).get("cause")) and record.state.global_.stack_size == 0
+
+
 def _results(value: Any) -> frozenset[RewriteResult]:
     values = [value] if isinstance(value, str | RewriteResult) else list(value)
     return frozenset(RewriteResult(v) for v in values)
@@ -123,7 +137,8 @@ def _results(value: Any) -> frozenset[RewriteResult]:
 class RewriteEvent:
     id: str = "rewrite_event"
     params: frozenset[str] = _OWN | EVENT_FILTERS
-    general: frozenset[str] = frozenset({"event", "result", "prevention", "keyword"})
+    general: frozenset[str] = frozenset({"event", "result", "prevention", "keyword",
+                                         "paid_as_cost"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         return frozenset(field for name, field in SUBJECT_QUALIFIER_NEEDS.items()
@@ -136,8 +151,12 @@ class RewriteEvent:
         event_filters(self.id, EventType(params["event"]), params, _OWN)
         dv.check(self.id, params, {**EVENT_FILTER_CHECKS, **QUALIFIER_CHECKS,
                                    "keyword": dv.keyword, "prevention": dv.boolean,
+                                   "paid_as_cost": dv.boolean,
                                    "mode": dv.mode_of_rewrite,
                                    "amount_change": dv.one_of(*AMOUNT_CHANGES)})
+        if params.get("paid_as_cost") is False:
+            raise ValueError(f"{self.id}: paid_as_cost is declared true or left out; "
+                             "an event no cost made is no population the record reads")
         if "result" in params:
             _results(params["result"])
 
@@ -164,6 +183,8 @@ class RewriteEvent:
             return None
         if not subject_verdict(incoming.subjects, record.state, params):
             return None  # not the object the rule is about, or unreadable
+        if params.get("paid_as_cost") and not paid_as_cost(record, incoming):
+            return None
         result = record.payload.result
         if result is None:
             return None  # collected before the result was recorded: no side to read

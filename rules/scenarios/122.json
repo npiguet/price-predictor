@@ -697,7 +697,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "none": "Could not express: the replacing effect (a finality counter, which no line carries; an Attraction's own leaving rule) is picked by no rewrite_event parameter."
+        "none": "The record does not name the replacing effect: Forge builds a finality counter's replacement at runtime with no script line (Card.updateReplacementEffects), and the rewrite record of the dying permanent carries ability [] with ability_unresolved no_card_state, refs.source the permanent itself and an unkeyed replacement line on its entity; only its FINALITY counter on the board says which replacement it was, which no declaration may take for the line."
       }
     },
     {

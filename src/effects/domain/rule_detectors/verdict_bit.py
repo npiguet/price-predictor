@@ -57,6 +57,15 @@ The candidates a rule speaks for, each filter narrowing both sides:
   before attackers are declared", Forge's ``Upkeep->BeginCombat``;
   ``combat_declare_attackers`` for "before blockers"; ``combat_declare_blockers``
   first for "after blockers"), in ``rule_outcomes.PHASE_ORDER``'s spelling;
+- ``min_targets``: an integer of 2 or more: the candidate's line has one
+  targeting clause (one segment with ``ValidTgts$``), whose ``TargetMin$``
+  is at least this; read off the sidecar, so a candidate whose line it
+  dropped is unreadable. Its ``legal_targets`` are then that clause's, and
+  with ``some_legal_target`` the ``fires`` side of ``has_legal_target``
+  false is a clause that has a legal object but fewer than it must name,
+  which it cannot name twice (601.2c: Undo with one creature out);
+- ``some_legal_target``: the candidate's ``legal_targets`` list is (true) or
+  is not (false) empty;
 - ``candidate_face``: ``front`` for a candidate acting through its card's
   first face, ``alternative`` for one acting through another (a double-faced
   card's back face, an Adventure, an Omen, a split card's second half), read
@@ -102,13 +111,16 @@ from effects.domain.rule_detectors.acting_line import (
 )
 from effects.domain.rule_detectors.entity_facts import has_designation
 from effects.domain.rule_outcomes import PHASE_ORDER, forge_phases
+from effects.domain.script_text import params as segment_params
+from effects.domain.script_text import segments
 
 GEN2_BITS = frozenset({"can_play", "affordable", "has_legal_target"})
 GEN3_BITS = frozenset({"timing", "failed_check"})
 FILTERS = frozenset({"keyword", "source_keyword", "cost_symbol", "cost_part", "script_param",
                      "land_play", "candidate_face", "candidate", "source_type",
                      "source_designation", "sorcery_speed", "phase_list_first",
-                     "phase_list_last", "source_tapped", "source_sick"})
+                     "phase_list_last", "source_tapped", "source_sick", "min_targets",
+                     "some_legal_target"})
 CANDIDATE_FACES = frozenset({"front", "alternative"})
 #: What a candidate is: its card's cast, or an activated ability (a land play
 #: is ``land_play``'s).
@@ -206,6 +218,21 @@ def _phase_list(candidate: Candidate, lines: SidecarLookup | None) -> list[str] 
     return None if phases is None else [p for p in PHASE_ORDER if p in phases]
 
 
+def sole_clause_minimum(candidate: Candidate, lines: SidecarLookup | None) -> int | None:
+    """The ``TargetMin$`` of the candidate's one targeting clause (1 where it
+    names none); None where its line is unreadable or has no targeting clause
+    or several, or the minimum is no number (an X)."""
+    line = line_of(candidate.ability, lines)
+    if line is None or not line.script_text:
+        return None
+    clauses = [segment_params(segment) for segment in segments(line.script_text)]
+    targeting = [clause for clause in clauses if "ValidTgts" in clause]
+    if len(targeting) != 1:
+        return None
+    written = targeting[0].get("TargetMin", "1").strip()
+    return int(written) if written.isdigit() else None
+
+
 def _source(record: EffectRecord):
     source = record.state.refs.source
     return record.state.entity(source) if source else None
@@ -244,6 +271,13 @@ def _passes(candidate: Candidate, lines: SidecarLookup | None,
             return False
         if "phase_list_last" in params and listed[-1] != params["phase_list_last"]:
             return False
+    if "min_targets" in params:
+        minimum = sole_clause_minimum(candidate, lines)
+        if minimum is None or minimum < params["min_targets"]:
+            return False
+    if "some_legal_target" in params and bool(candidate.legal_targets) is not bool(
+            params["some_legal_target"]):
+        return False
     if "candidate_face" in params:
         if not candidate.ability:
             return False
@@ -315,8 +349,12 @@ class VerdictBit:
             "source_keyword": dv.keyword, "cost_symbol": dv.cost_symbol,
             "script_param": dv.script_param, "source_type": dv.card_type,
             "source_designation": dv.designation, "source_tapped": dv.boolean,
-            "source_sick": dv.boolean, "phase_list_first": dv.one_of(*PHASE_ORDER),
+            "source_sick": dv.boolean, "some_legal_target": dv.boolean,
+            "min_targets": dv.integer, "phase_list_first": dv.one_of(*PHASE_ORDER),
             "phase_list_last": dv.one_of(*PHASE_ORDER)})
+        if "min_targets" in params and params["min_targets"] < 2:
+            raise ValueError("verdict_bit: min_targets is 2 or more; a clause of one "
+                             "target is any targeting clause")
         if "check" in params and bit != "failed_check":
             raise ValueError("verdict_bit: check names a failed_check declaration's check")
 

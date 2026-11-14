@@ -172,3 +172,49 @@ def test_a_record_whose_incoming_event_is_unknown_shows_no_side(by_kind):
     unknown = replace(record, payload=replace(record.payload, incoming_unknown=True,
                                               outgoing=None))
     assert FAMILY.match(unknown, None, params) is None
+
+
+class TestPaidAsCost:
+    """118.11 (WP6): the replaced action was a cost's. Forge pays an activated
+    ability's costs before it puts the ability on the stack, so a move a
+    cause made while the stack was empty is a payment; one made while the
+    stack held something could be a resolution's and is on neither side."""
+
+    PARAMS = {"event": "zone_change", "from_zone": "battlefield", "to_zone": "graveyard",
+              "paid_as_cost": True}
+
+    @staticmethod
+    def _sacrificed(by_kind, *, cause="E2", stack_size=0, result=RewriteResult.REPLACED):
+        record = next(r for r in by_kind("rewrite")
+                      if r.payload.incoming.type.value == "zone_change")
+        incoming = replace(record.payload.incoming, params={
+            "mode": "Moved", "from_zone": "battlefield", "to_zone": "graveyard",
+            **({"cause": cause} if cause else {})})
+        state = replace(record.state, global_=replace(record.state.global_,
+                                                      stack_size=stack_size))
+        return replace(record, state=state, payload=replace(
+            record.payload, incoming=incoming, outgoing=None, result=result))
+
+    def test_a_cost_s_move_a_replacement_changed_fires(self, by_kind):
+        found = FAMILY.match(self._sacrificed(by_kind), None, self.PARAMS)
+        assert found.polarity is Polarity.FIRES and found.observed
+
+    def test_a_cost_s_move_left_alone_is_the_near_miss(self, by_kind):
+        record = self._sacrificed(by_kind, result=RewriteResult.NOT_REPLACED)
+        assert FAMILY.match(record, None, self.PARAMS).polarity is Polarity.DOES_NOT_FIRE
+
+    def test_a_move_while_the_stack_holds_something_shows_no_side(self, by_kind):
+        assert FAMILY.match(self._sacrificed(by_kind, stack_size=1), None, self.PARAMS) is None
+
+    def test_a_move_nothing_caused_shows_no_side(self, by_kind):
+        """A state-based death names no cause."""
+        assert FAMILY.match(self._sacrificed(by_kind, cause=None), None, self.PARAMS) is None
+        declared = {key: value for key, value in self.PARAMS.items() if key != "paid_as_cost"}
+        assert FAMILY.match(self._sacrificed(by_kind, cause=None), None, declared) is not None
+
+    def test_it_is_declared_true_or_left_out(self):
+        FAMILY.validate(self.PARAMS)
+        with pytest.raises(ValueError, match="paid_as_cost"):
+            FAMILY.validate({**self.PARAMS, "paid_as_cost": False})
+        with pytest.raises(ValueError, match="boolean"):
+            FAMILY.validate({**self.PARAMS, "paid_as_cost": "yes"})

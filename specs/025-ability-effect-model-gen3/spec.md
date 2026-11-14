@@ -606,7 +606,10 @@ and that the reporting half never enters the control score.
   no family parameter tells apart, MUST declare `none` with its reason. The blocking and targeting
   rules name the rule that excludes an entity (`legality_membership`'s `restriction`, decided by
   `rule_outcomes.blocking_restrictions` and `targeting_restrictions`); the timing rules narrow the
-  candidates by kind, card type, keyword, designation or sorcery speed (`verdict_bit`).
+  candidates by kind, card type, keyword, designation or sorcery speed (`verdict_bit`); a clause
+  with a legal object but fewer than it must name is `verdict_bit`'s `min_targets` with
+  `some_legal_target`, and a cost's action a replacement modified is `rewrite_event`'s
+  `paid_as_cost` (an event naming a cause while the stack is empty).
 - **FR-002c**: Building the detector index (`DetectorIndex.of`) MUST refuse, naming the scenario, a
   parameter its family does not declare and a value the family cannot read. A declaration asking
   its record kind for an event the collector never writes on that kind (the per-kind table
@@ -735,11 +738,17 @@ and that the reporting half never enters the control score.
   counts (702.98a's few `does_not_fire` records being one creature in one game), and for every rule that gen-2's
   per-rule counts (`output/effects/rule-counts-gen2.json`) show with fewer than 100 `fires` records
   over all sources, or with no `does_not_fire` record, and that has a non-base variant classified
-  into an operation after the rerun of FR-003, except 104.2a, 500.11, 701.12d and 702.62d, whose
-  forks no detector can tell from their live games, and except the rules of `DEFERRED_DIRECTED`, which qualified only after the list was fixed for the production collection and wait for a later one
-  (`directed-rules` names each with its reason, decided 2026-11-06). The list is checked in as
-  `rules/directed-fork-rules.txt`, one rule id per line, and is what the full collection passes to
-  `--directed-fork-rules`.
+  into an operation after the rerun of FR-003, except the rules of `NOT_DIRECTED`: 104.2a, 500.11,
+  701.12d and 702.62d, whose forks no detector can tell from their live games; 121.4, 122.1g,
+  703.4m and 701.42c, which restate 704.5b, 704.5v, 510.2 and 701.42b, listed in their place; and
+  505.5, 614.10a, 701.24f and 702.105b, whose fact the record cannot show; and except the rules
+  of `DEFERRED_DIRECTED`, which qualified only after the list was fixed for the production
+  collection and wait for a later one (`directed-rules` names each with its reason). The list is
+  checked in as `rules/directed-fork-rules.txt`, one rule id per line, 65 rules in unit order,
+  and is what the full collection passes to `--directed-fork-rules`; `directed-rules` over the
+  gen-2 counts writes it unchanged. Every listed rule passes the startup check (FR-014) except
+  122.1h, whose scenario declares no detector: its rewrite record names no line for a finality
+  counter's replacement.
 
 #### Rules-to-fields map (root § 7)
 

@@ -1028,7 +1028,17 @@
       ],
       "forge_notes": "",
       "detector": {
-        "none": "Could not express: that the replaced action was a cost's is read by no rewrite_event parameter."
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A replacement effect modifies the move a cost's action makes (a creature sacrificed as a cost is exiled instead of put into the graveyard), and the cost still counts as paid.",
+        "near_miss": "A cost's move to a graveyard meets a replacement effect that does not replace it.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "graveyard",
+          "paid_as_cost": true
+        },
+        "needs": []
       }
     },
     {

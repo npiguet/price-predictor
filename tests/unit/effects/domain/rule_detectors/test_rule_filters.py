@@ -233,3 +233,46 @@ def test_amount_change_compares_the_rewrite_s_amounts():
     assert rewrite.match(record(2, 3), None, params) is None
     assert rewrite.match(record(3, 1), None, {**params, "amount_change": "decreased"}
                          ).polarity is Polarity.FIRES
+
+
+class TestOneObjectCannotBeNamedTwice:
+    """601.2c (WP6): Undo ("return two target creatures") with one creature
+    out has a legal object but no legal choice of targets."""
+
+    UNDO = _Lines("SP$ ChangeZone | TargetMin$ 2 | TargetMax$ 2 | ValidTgts$ Creature "
+                  "| Origin$ Battlefield | Destination$ Hand")
+    PARAMS = {"bit": "has_legal_target", "min_targets": 2, "some_legal_target": True}
+
+    @staticmethod
+    def _undo(legal_targets, has_legal_target):
+        undo = make_entity("E1", "undo", zone="hand", types=("Sorcery",))
+        record = _decision(undo, True)
+        candidate = replace(record.payload.candidates[0], legal_targets=legal_targets,
+                            has_legal_target=has_legal_target)
+        return replace(record, payload=PlayabilityDecisionPayload(candidates=(candidate,)))
+
+    def test_one_legal_object_for_two_targets_fires(self):
+        found = VERDICT.match(self._undo(("E2",), False), self.UNDO, self.PARAMS)
+        assert found.polarity is Polarity.FIRES
+
+    def test_two_legal_objects_are_the_near_miss(self):
+        found = VERDICT.match(self._undo(("E2", "E3"), True), self.UNDO, self.PARAMS)
+        assert found.polarity is Polarity.DOES_NOT_FIRE
+
+    def test_no_legal_object_at_all_is_on_neither_side(self):
+        assert VERDICT.match(self._undo((), False), self.UNDO, self.PARAMS) is None
+
+    def test_a_clause_of_one_target_or_several_clauses_are_on_neither_side(self):
+        shock = _Lines("SP$ DealDamage | ValidTgts$ Any | NumDmg$ 2")
+        assert VERDICT.match(self._undo(("E2",), False), shock, self.PARAMS) is None
+        blow = _Lines("SP$ Pump | ValidTgts$ Creature | SubAbility$ SV1 [SEG] "
+                      "SV1: DB$ Pump | ValidTgts$ Land | TargetMin$ 2")
+        assert VERDICT.match(self._undo(("E2",), False), blow, self.PARAMS) is None
+        assert VERDICT.match(self._undo(("E2",), False), None, self.PARAMS) is None
+
+    def test_min_targets_is_two_or_more(self):
+        families()["verdict_bit"].validate(self.PARAMS)
+        with pytest.raises(ValueError, match="min_targets"):
+            families()["verdict_bit"].validate({**self.PARAMS, "min_targets": 1})
+        with pytest.raises(ValueError):
+            families()["verdict_bit"].validate({**self.PARAMS, "min_targets": "2"})

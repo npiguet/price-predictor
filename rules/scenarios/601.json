@@ -196,7 +196,16 @@
       ],
       "forge_notes": "",
       "detector": {
-        "none": "Could not express: why no target is legal (the spell itself, a card off the battlefield, one object named twice) is read by no verdict_bit filter."
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell or ability whose one targeting clause must name two or more targets has a legal object but fewer than it must name, so it has no legal choice of targets: one object cannot be chosen twice for one instance of the word target.",
+        "near_miss": "The same kind of candidate has as many legal objects as its clause must name, and a legal choice of targets.",
+        "params": {
+          "bit": "has_legal_target",
+          "min_targets": 2,
+          "some_legal_target": true
+        },
+        "needs": []
       }
     },
     {
@@ -285,7 +294,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "none": "Could not express: that one object is chosen for two instances of 'target' is read by no verdict_bit filter."
+        "none": "A playability record cannot show one object chosen for two instances of target: its legal_targets are the union over the candidate's clauses and name no choice (the caster's own Swamps are legal land targets, so Spiteful Blow is legal whenever a creature is out). Only the resolution's refs could, as fewer targets than targeting clauses, which is another record kind than this scenario's."
       }
     },
     {
@@ -354,7 +363,10 @@
         "Standard Bearer",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "The record cannot show the target a Flagbearer's MustTarget static refuses: a decision record's legal_targets are the targeting restriction's candidates, which the static does not narrow (Forge checks it on the chosen set, StaticAbilityMustTarget.meetsMustTargetRestriction), and a choice it refuses is never cast, so no record holds it."
+      }
     },
     {
       "id": "601.2e-1",
