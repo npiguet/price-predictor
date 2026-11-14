@@ -298,9 +298,19 @@ class InterventionSchedulerTest {
     /**
      * Two players at MAIN1 of the first one's turn: the first holds Lightning
      * Bolt and the variant Volcanic Hammer, the second the variant Searing
-     * Spear. Both names are registered as variants here and named by no other
-     * test, since the registry is JVM-wide.
+     * Spear. Both names are registered as variants here and forgotten after
+     * each test ({@link #forgetTheVariants}), since the registry is JVM-wide.
      */
+    /**
+     * The two variant names put back after each test: they are real cards,
+     * and left registered they would key every later test's Volcanic Hammer
+     * or Searing Spear under {@code variant-scripts/}.
+     */
+    @org.junit.jupiter.api.AfterEach
+    void forgetTheVariants() {
+        VariantRegistry.forget("Volcanic Hammer", "Searing Spear");
+    }
+
     private static Board variantBoard(Path dir) throws IOException {
         Files.writeString(dir.resolve("volcanic_hammer.txt"), "Name:Volcanic Hammer\n");
         Files.writeString(dir.resolve("searing_spear.txt"), "Name:Searing Spear\n");

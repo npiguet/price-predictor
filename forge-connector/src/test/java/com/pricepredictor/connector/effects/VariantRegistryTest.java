@@ -28,7 +28,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(ForgeExtension.class)
 class VariantRegistryTest {
 
-    // The registry is JVM-wide, so each test names its variants uniquely.
+    // The registry is JVM-wide, so each test names its variants uniquely, and
+    // every name registered here is forgotten after each test: Echo Tracer is
+    // a real card, which a later test's records would otherwise key under
+    // variant-scripts/.
+    @org.junit.jupiter.api.AfterEach
+    void forgetTheVariants() {
+        VariantRegistry.forget("Lightning Bolt Variant 0", "Shock Variant 1", "Bolt Variant 2",
+                "Lonely Variant 3", "Lightning Bolt Variant 4", "Echo Tracer",
+                "Sidecar Not A Script", "Listed Not A Script");
+    }
 
     @Test
     void anUnregisteredNameIsNotAVariant() {
@@ -96,9 +105,8 @@ class VariantRegistryTest {
     /**
      * FR-039: a face-down variant shows no name, so its key is read from the
      * name its rules declare, and still names the variant tree. A real morph
-     * stands in for the staged variant: what is under test is the name lookup,
-     * and Echo Tracer is named by no other test, so registering it in this
-     * JVM-wide registry changes no other test's key.
+     * stands in for the staged variant: what is under test is the name lookup;
+     * the name is forgotten after the test.
      */
     @Test
     void aFaceDownVariantsKeyStillNamesTheVariantTree(@TempDir Path dir)
