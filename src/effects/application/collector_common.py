@@ -21,7 +21,18 @@ from effects.domain import default_paths
 from effects.domain.card_names import fold_card_name
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.split import HoldoutRule
-from price_predictor.infrastructure.forge_jvm import MAX_WORKERS, worker_count
+from price_predictor.infrastructure.forge_jvm import (
+    DEFAULT_RECYCLE_SECONDS,
+    DEFAULT_STOP_TIMEOUT,
+    MAX_RECYCLE_SECONDS,
+    MAX_STOP_TIMEOUT,
+    MAX_WORKERS,
+    MIN_RECYCLE_SECONDS,
+    WorkerStopSettings,
+    recycle_seconds,
+    stop_timeout,
+    worker_count,
+)
 from sealed.domain.manabase import compute_basic_lands
 
 if TYPE_CHECKING:
@@ -110,6 +121,25 @@ class CollectorConfig:
             f"{MAX_WORKERS} (default: %(default)s)"
         ),
     })
+    stop_timeout: int = field(default=DEFAULT_STOP_TIMEOUT, metadata={
+        "type": stop_timeout,
+        "help": (
+            "Seconds a worker asked to stop (a round's end, Ctrl-C) may take to "
+            f"finish its game before it is killed, 1 to {MAX_STOP_TIMEOUT} "
+            "(default: %(default)s). A game has no time bound; a worker killed "
+            "mid-game cuts it, and build-corpus drops a cut game whole"
+        ),
+    })
+    recycle_seconds: int = field(default=DEFAULT_RECYCLE_SECONDS, metadata={
+        "type": recycle_seconds,
+        "help": (
+            "Seconds of its JVM's life after which a worker stops itself at its "
+            "next game end and a fresh one starts, bounding what Forge "
+            f"accumulates in a long-lived JVM, {MIN_RECYCLE_SECONDS} to "
+            f"{MAX_RECYCLE_SECONDS} (default: %(default)s); a worker still "
+            "playing --stop-timeout seconds past it is killed"
+        ),
+    })
     #: Every record a collector writes is aimed (FR-009a): at the run's
     #: ``--directed-fork-rules``, and at no rule, ``[]``, where it names none.
     caps: CollectionCaps = CollectionCaps(aimed_at=())
@@ -132,6 +162,11 @@ class CollectorConfig:
         from effects.infrastructure.converted_trees import SourceTrees
 
         return SourceTrees.of(self.cards_folders)
+
+    @property
+    def worker_stop(self) -> WorkerStopSettings:
+        """How the run's workers are stopped and recycled."""
+        return WorkerStopSettings(timeout=self.stop_timeout, recycle_seconds=self.recycle_seconds)
 
 
 TWO_HOLDOUT_SOURCES = (
@@ -294,6 +329,7 @@ def collector_supervisor(
     effect_records: Path,
     caps: CollectionCaps,
     variant_scripts: Path | None = None,
+    stop: WorkerStopSettings | None = None,
 ) -> Iterator[CollectorSupervisor]:
     """A records-only supervisor under a fresh run id, stopped however its
     rounds end: without ``stop()`` the worker logs holding the latched failure
@@ -303,6 +339,7 @@ def collector_supervisor(
     supervisor = CollectorSupervisor(
         worker_count=workers, effect_records=effect_records,
         run_id=str(uuid.uuid4()), caps=caps, variant_scripts=variant_scripts,
+        stop=stop,
     )
     try:
         yield supervisor

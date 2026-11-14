@@ -413,7 +413,7 @@ def _collect_coverage_parser(subparsers) -> None:
     _add_holdout_flags(parser)
     add_config_flags(parser, CollectCoverageConfig, only=(
         "wording_cards", "min_text_games", "target_records", "no_progress_rounds",
-        "decks_per_round", "workers", "seed",
+        "decks_per_round", "workers", "stop_timeout", "recycle_seconds", "seed",
     ))
     parser.add_argument(
         "--count-from", type=Path, action="append", default=None, metavar="DIR",
@@ -456,7 +456,9 @@ def _collect_variants_parser(subparsers) -> None:
     # to be the one build-corpus is given.
     _add_cards_folder(parser)
     _add_holdout_flags(parser)
-    add_config_flags(parser, CollectVariantsConfig, only=("decks_per_round", "workers"))
+    add_config_flags(parser, CollectVariantsConfig, only=(
+        "decks_per_round", "workers", "stop_timeout", "recycle_seconds",
+    ))
     parser.add_argument(
         "--continues", action="append", default=None, metavar="RUN_ID",
         help=(

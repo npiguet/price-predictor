@@ -346,3 +346,57 @@ class TestWorkersAndTheEnd:
 
         assert run_match_outcomes(args) == code
         supervisor.run.assert_called_once()
+
+
+class TestTheWorkerStopFlags:
+    """V4 #1 / P1 #1: with effect records the run's end asks each worker to
+    stop at its game's end; the flags bound the wait and set the recycle."""
+
+    def test_unset_they_take_the_defaults(self, monkeypatch):
+        from price_predictor.infrastructure.forge_jvm import WorkerStopSettings
+
+        assert self._settings(monkeypatch, "--effect-records", "records") == (
+            WorkerStopSettings(timeout=600, recycle_seconds=600))
+
+    def test_the_values_reach_the_supervisor(self, monkeypatch):
+        from price_predictor.infrastructure.forge_jvm import WorkerStopSettings
+
+        assert self._settings(
+            monkeypatch, "--effect-records", "records", "--stop-timeout", "45",
+            "--recycle-seconds", "900",
+        ) == WorkerStopSettings(timeout=45, recycle_seconds=900)
+
+    @pytest.mark.parametrize("argv", [
+        ("--stop-timeout", "0"), ("--stop-timeout", "3601"),
+        ("--recycle-seconds", "59"), ("--recycle-seconds", "86401"),
+    ])
+    def test_a_value_out_of_bounds_is_a_usage_error(self, argv):
+        with pytest.raises(SystemExit) as exit_info:
+            parse("match-outcomes", "--effect-records", "records", *argv)
+        assert exit_info.value.code == 2
+
+    @pytest.mark.parametrize("flag", ["--stop-timeout", "--recycle-seconds"])
+    def test_without_effect_records_they_are_refused(self, monkeypatch, capsys, flag):
+        import sealed.application.match_outcomes as module
+
+        monkeypatch.setattr(module, "MatchOutcomeSupervisor", lambda **_: pytest.fail("ran"))
+        assert run_match_outcomes(parse("match-outcomes", flag, "600")) == 2
+        assert "need --effect-records" in capsys.readouterr().err
+
+    @staticmethod
+    def _settings(monkeypatch, *argv):
+        from unittest.mock import MagicMock
+
+        import sealed.application.match_outcomes as module
+        from price_predictor.infrastructure import forge_jvm
+
+        made = {}
+
+        def supervisor(**kwargs):
+            made.update(kwargs)
+            return MagicMock(collected_nothing=False)
+
+        monkeypatch.setattr(module, "MatchOutcomeSupervisor", supervisor)
+        monkeypatch.setattr(forge_jvm, "check_worker_prerequisites", lambda **_: None)
+        assert run_match_outcomes(parse("match-outcomes", "--workers", "1", *argv)) == 0
+        return made["worker_stop"]

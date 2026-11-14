@@ -15,16 +15,23 @@ import pytest
 
 from effects.domain.collection_caps import CollectionCaps
 from effects.infrastructure.collector_connector import CollectorSupervisor
+from price_predictor.infrastructure.forge_jvm import WorkerStopSettings
 from tests.unit.sealed.conftest import FakeProcess
 
 #: The one deck every round here plays: a decks-only round refuses none.
 _DECKS = [["Plains"]]
 
 
-def _supervisor(tmp_path, *, workers: int = 1, run_id: str = "run") -> CollectorSupervisor:
+#: A test's fake workers neither read a stop file nor print a startup line:
+#: a short timeout and start allowance keep a stop from waiting ten minutes.
+_QUICK_STOP = WorkerStopSettings(timeout=1, recycle_seconds=3600, init_seconds=1)
+
+
+def _supervisor(tmp_path, *, workers: int = 1, run_id: str = "run",
+                stop: WorkerStopSettings = _QUICK_STOP) -> CollectorSupervisor:
     return CollectorSupervisor(
         worker_count=workers, effect_records=tmp_path, run_id=run_id,
-        caps=CollectionCaps(),
+        caps=CollectionCaps(), stop=stop,
     )
 
 
@@ -346,6 +353,130 @@ class TestTheRoundReportsItsWorkerLogs:
         assert entry["worker_failures"] == {"match_error": 2}
         assert entry["worker_failure_examples"] == {"match_error": "Error generating match: a"}
         assert entry["worker_survivors"] == []
+        assert (entry["stop_timeout"], entry["recycle_seconds"]) == (1, 3600)
+        assert entry["worker_stops"] == {
+            "stopped": 0, "recycled": 0, "killed": 0, "ended_otherwise": 0, "crashed": 0,
+            "survived": 0,
+        }
+        assert entry["hook_failures"] == {"connector": {}, "forge": {}}
+
+    def test_the_hook_failure_report_reaches_the_round_report_and_the_manifest(
+        self, tmp_path, caplog,
+    ):
+        """WP7: the worker prints its hook-failure counts and nothing read them."""
+        report = ("effect-record hook failures so far, listener calls that threw and lost "
+                  "their records: {RESOLVE=3}; contained by Forge, per slot: {resolve=3}")
+        supervisor = self._round_logging(tmp_path, {0: [report]})
+
+        assert "Effect-record hook failures over the run: 3 RESOLVE; contained by Forge: " \
+               "3 resolve" in caplog.text
+        assert not supervisor.worker_failures, "a count, not a failure line"
+
+
+class TestTheWorkersStopAtAGameEnd:
+    """V4 #1 / P1 #1: a round's end killed every worker mid-game."""
+
+    def test_each_worker_gets_its_stop_file_and_recycle_time(self, tmp_path):
+        supervisor = _supervisor(tmp_path / "records", run_id="r1",
+                                 stop=WorkerStopSettings(recycle_seconds=900))
+        connector = _rigged(supervisor)
+
+        supervisor.start_worker(2, tmp_path / "decks.txt")
+
+        kwargs = connector.start.call_args.kwargs
+        assert kwargs["stop_file"] == tmp_path / "records" / "logs" / "r1.2.stop"
+        assert kwargs["recycle_seconds"] == 900
+        supervisor.stop()
+
+    def test_the_round_s_pool_runs_the_protocol_on_the_same_files(self, tmp_path):
+        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+
+        supervisor = _supervisor(tmp_path, run_id="r1")
+        pools = []
+        with patch.object(ForgeWorkerPool, "run", lambda pool: pools.append(pool)):
+            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=1)
+
+        graceful = pools[0]._graceful
+        assert graceful is not None
+        assert graceful.stop_file_for(0) == tmp_path / "logs" / "r1.0.stop"
+        assert graceful.log_path_for(0) == supervisor._worker_logs.path_for(0)
+        assert graceful.settings == _QUICK_STOP
+
+    def test_cut_games_are_reported_by_round_and_kept_in_the_manifest(self, tmp_path, caplog):
+        import json
+
+        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+        from price_predictor.infrastructure.run_manifest import run_recorded
+
+        def body():
+            supervisor = _supervisor(tmp_path)
+            supervisor.count_cut_games(4)
+            with patch.object(ForgeWorkerPool, "run", autospec=True):
+                supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage",
+                                      matches=1)
+            supervisor.count_cut_games(1)
+            with patch.object(ForgeWorkerPool, "run", autospec=True):
+                supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage",
+                                      matches=1)
+            supervisor.count_cut_games(0)
+            return 0
+
+        run_recorded(tmp_path, body, command="python -m effects collect-coverage")
+
+        entry = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))["invocations"][0]
+        assert entry["cut_games"] == {"before_rounds": 4, "by_round": [1, 0], "total": 5}
+        assert "Round 1: 1 cut game(s) (no game-end marker) left out of the counts" in caplog.text
+
+    def test_a_round_ends_once_every_worker_has_finished_its_game(self, tmp_path):
+        """Real child processes standing in for the Java worker: once the
+        progress file reaches the budget each finishes its game and stops,
+        so when ``play_round`` returns every worker has ended, every game the
+        progress file counts was finished, and the round's shards are final."""
+        import subprocess
+        import sys
+
+        from price_predictor.infrastructure.forge_jvm import stop_line_of
+        from tests.unit.infrastructure import stand_in_worker
+
+        supervisor = _supervisor(tmp_path, workers=2, stop=WorkerStopSettings(
+            timeout=20, recycle_seconds=3600, init_seconds=20))
+        started: list[subprocess.Popen] = []
+
+        def start(output_file, **kwargs):
+            properties = {
+                "worker.stop.file": kwargs["stop_file"],
+                "worker.recycle.seconds": kwargs["recycle_seconds"],
+                "sealed.progress.file": kwargs["progress_file"],
+                "standin.game.seconds": 0.2,
+            }
+            started.append(subprocess.Popen(
+                [sys.executable, "-u", stand_in_worker.__file__,
+                 *(f"-D{key}={value}" for key, value in properties.items())],
+                stdout=kwargs["log_file"], stderr=subprocess.STDOUT,
+            ))
+            return started[-1]
+
+        supervisor._connector = MagicMock()
+        supervisor._connector.start.side_effect = start
+        try:
+            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=4)
+            supervisor.stop()
+
+            assert [proc.poll() for proc in started] == [0, 0]
+            assert (supervisor.stops.stopped, supervisor.stops.killed) == (2, 0)
+            logs = "".join(supervisor._worker_logs.path_for(slot).read_text(encoding="utf-8")
+                           for slot in range(2))
+            stopped = [stop_line_of(line) for line in logs.splitlines() if stop_line_of(line)]
+            played = len(supervisor.progress_path.read_text(encoding="utf-8").splitlines())
+            assert sum(int(line.group("matches")) for line in stopped) == played
+            # Past the budget only what the 2 s budget poll lets through, and
+            # each worker's last game, finished.
+            assert played >= 4
+        finally:
+            for proc in started:
+                if proc.poll() is None:
+                    proc.kill()
+                proc.wait(timeout=10)
 
 
 class TestTheDecksFileIsTheRunsOwn:

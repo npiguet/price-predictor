@@ -52,7 +52,7 @@ _ALLOWED: dict[str, set[str] | None] = {
     # failures into the running command's run.json entry (V4 #3, #4).
     "price_predictor.infrastructure.run_manifest": {"annotate_run"},
     # The worker-log scan, shared with sealed match-outcomes (V4 #3).
-    "price_predictor.domain.worker_failures": {"WorkerFailures"},
+    "price_predictor.domain.worker_failures": {"WorkerFailures", "render_hook_failures"},
     "price_predictor.infrastructure.worker_log_scan": {"WorkerLogReport"},
     "sealed.domain.manabase": {"compute_basic_lands"},
     "sealed.infrastructure.converted_card_locator": {"ConvertedCardLocator"},

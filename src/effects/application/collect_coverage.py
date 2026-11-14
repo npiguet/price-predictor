@@ -527,6 +527,7 @@ def _play_to_completion(
     Ctrl-C ended them, 1 when they played and wrote no record at all."""
     with collector_supervisor(
         workers=config.workers, effect_records=config.effect_records, caps=caps,
+        stop=config.worker_stop,
     ) as supervisor:
         if rounds.unresolved.pool:
             supervisor.record(**rounds.unresolved.fields())

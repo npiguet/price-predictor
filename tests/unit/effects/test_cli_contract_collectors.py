@@ -821,3 +821,37 @@ class TestContinues:
             )) == 1
         collect.assert_not_called()
         assert "untargeted round only" in caplog.text
+
+
+class TestTheWorkerStopFlags:
+    """V4 #1 / P1 #1: how long a worker asked to stop may take to finish its
+    game, and when it recycles itself; the old pool killed instead."""
+
+    @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
+    def test_the_defaults_are_ten_minutes_each(self, command):
+        args = parse(command)
+        assert (args.stop_timeout, args.recycle_seconds) == (600, 600)
+
+    @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
+    @pytest.mark.parametrize("argv", [
+        ("--stop-timeout", "0"), ("--stop-timeout", "3601"),
+        ("--recycle-seconds", "59"), ("--recycle-seconds", "86401"),
+    ])
+    def test_a_value_out_of_bounds_is_a_usage_error(self, command, argv):
+        with pytest.raises(SystemExit) as exit_info:
+            parse(command, *argv)
+        assert exit_info.value.code == 2
+
+    @COLLECTORS
+    def test_the_values_reach_the_supervisor_s_settings(self, command, module, runner):
+        from unittest.mock import patch
+
+        from price_predictor.infrastructure.forge_jvm import WorkerStopSettings
+
+        with patch(module, return_value=0) as collect:
+            assert runner(parse(
+                command, "--exclude-cards", "h.txt", "--stop-timeout", "90",
+                "--recycle-seconds", "1200",
+            )) == 0
+        config = collect.call_args.args[0]
+        assert config.worker_stop == WorkerStopSettings(timeout=90, recycle_seconds=1200)

@@ -385,3 +385,28 @@ class TestMatchWorkerConnectorRandomSeat:
         cmd = mock_popen.call_args[0][0]
         assert "-Deffect.random.seat.share=0.125" in cmd
         assert "-Deffect.random.seat.probability=0.25" in cmd
+
+
+class TestTheStopProtocolProperties:
+    """The worker reads its stop file and recycle time from these two
+    properties (``WorkerStop``); pinned to the Java names by
+    ``tests/unit/infrastructure/test_worker_stop_protocol.py``."""
+
+    def test_both_reach_the_command(self, tmp_path, stub_classpath):
+        stop = tmp_path / "logs" / "run.0.stop"
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock()
+            MatchWorkerConnector().start(
+                None, run_id=RUN_ID, best_of=BEST_OF, effect_records_dir=tmp_path,
+                stop_file=stop, recycle_seconds=600,
+            )
+        cmd = mock_popen.call_args[0][0]
+        assert f"-Dworker.stop.file={stop}" in cmd
+        assert "-Dworker.recycle.seconds=600" in cmd
+
+    def test_neither_by_default(self, tmp_path, stub_classpath):
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock()
+            MatchWorkerConnector().start(tmp_path / "o.txt", run_id=RUN_ID, best_of=BEST_OF)
+        cmd = mock_popen.call_args[0][0]
+        assert not any(arg.startswith("-Dworker.") for arg in cmd)

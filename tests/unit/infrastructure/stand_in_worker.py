@@ -27,6 +27,7 @@ match, as the worker's progress writer appends one.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
 import time
@@ -79,7 +80,7 @@ def _append_line(path: Path, line: str) -> None:
     while handle is None and time.monotonic() < give_up:
         try:
             handle = os.open(lock, os.O_CREAT | os.O_EXCL)
-        except FileExistsError:
+        except OSError:  # held, or (Windows) still being deleted by its holder
             time.sleep(0.001)
     try:
         with open(path, "a", encoding="utf-8") as out:
@@ -87,7 +88,8 @@ def _append_line(path: Path, line: str) -> None:
     finally:
         if handle is not None:
             os.close(handle)
-            os.unlink(lock)
+            with contextlib.suppress(OSError):
+                os.unlink(lock)
 
 
 def main(argv: list[str]) -> int:

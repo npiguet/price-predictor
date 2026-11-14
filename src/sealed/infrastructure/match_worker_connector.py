@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import IO
 
 from price_predictor.infrastructure.forge_jvm import (
+    RECYCLE_SECONDS_PROPERTY,
+    STOP_FILE_PROPERTY,
     build_forge_classpath,
     build_jvm_command,
 )
@@ -41,6 +43,8 @@ class MatchWorkerConnector:
         decks_only: bool = False,
         progress_file: Path | None = None,
         variant_scripts: Path | None = None,
+        stop_file: Path | None = None,
+        recycle_seconds: int | None = None,
     ) -> subprocess.Popen:
         """Spawn a MatchWorkerMain Java subprocess and return its Popen handle.
 
@@ -109,6 +113,12 @@ class MatchWorkerConnector:
                 ``ForgeEnvironmentInitializer.initialize`` at worker startup,
                 so a script that only appears afterward is invisible for the
                 life of the JVM.
+            stop_file: The file whose existence asks the worker to stop at
+                its game's end, passed as ``-Dworker.stop.file=<path>``
+                (``contracts/cli.md`` § Match worker stop protocol); the
+                supervisor creates it, the worker never does.
+            recycle_seconds: The JVM age at which the worker stops itself at
+                its next game end, passed as ``-Dworker.recycle.seconds``.
 
         Returns:
             subprocess.Popen handle for the spawned worker process.
@@ -147,6 +157,10 @@ class MatchWorkerConnector:
             system_properties["sealed.progress.file"] = str(progress_file)
         if variant_scripts is not None:
             system_properties["effect.variant.scripts"] = str(variant_scripts)
+        if stop_file is not None:
+            system_properties[STOP_FILE_PROPERTY] = str(stop_file)
+        if recycle_seconds is not None:
+            system_properties[RECYCLE_SECONDS_PROPERTY] = str(recycle_seconds)
         if side_a_decks_path is not None:
             system_properties["side.a.decks.file"] = str(side_a_decks_path)
         if side_b_decks_path is not None:
@@ -163,10 +177,11 @@ class MatchWorkerConnector:
             # death that ForgeWorkerPool restarts, instead of one worker
             # dragging the machine down hours into a run. The price is a
             # handful of GC crashes per overnight run, which is accepted:
-            # a crashed worker costs the block of records in flight and
-            # nothing else. Raising it hides the pathology rather than
-            # containing it, and it is paired with the pool's recycle
-            # (ForgeWorkerPool._kill_oldest_worker) — the two are one measure,
+            # a crashed worker costs the game it was playing (cut, no
+            # game-end marker) and nothing else. Raising it hides the
+            # pathology rather than containing it, and it is paired with the
+            # pool's recycle (recycle_seconds, or without a stop file
+            # ForgeWorkerPool._kill_oldest_worker) — the two are one measure,
             # not two knobs.
             xmx="1200m",
         )

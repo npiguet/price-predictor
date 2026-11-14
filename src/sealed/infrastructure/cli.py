@@ -15,6 +15,7 @@ from price_predictor.infrastructure.cli_run_manifest import (
     dispatch,
     tag_subcommands,
 )
+from price_predictor.infrastructure.forge_jvm import add_worker_stop_flags
 from price_predictor.infrastructure.forge_jvm import worker_count as forge_worker_count
 from sealed.application.encode_cards import EncodeCardsConfig
 from sealed.application.evaluate_scorer import EvaluateScorerConfig
@@ -1075,6 +1076,43 @@ def _add_effect_record_flags(parser: argparse.ArgumentParser) -> None:
     )
     add_cap_flags(parser)
     add_directed_fork_flags(parser)
+    # The stop protocol needs the worker logs, which only a run collecting
+    # effect records keeps; without them the pool kills as it always did.
+    add_worker_stop_flags(parser, only_with="--effect-records")
+
+
+def worker_stop_settings(args: argparse.Namespace):
+    """The workers' stop settings, or None (exit 2 named by
+    :func:`worker_stop_error`) when a stop flag is given without
+    ``--effect-records``."""
+    from price_predictor.infrastructure.forge_jvm import (
+        DEFAULT_RECYCLE_SECONDS,
+        DEFAULT_STOP_TIMEOUT,
+        WorkerStopSettings,
+    )
+
+    timeout = getattr(args, "stop_timeout", None)
+    recycle = getattr(args, "recycle_seconds", None)
+    return WorkerStopSettings(
+        timeout=DEFAULT_STOP_TIMEOUT if timeout is None else timeout,
+        recycle_seconds=DEFAULT_RECYCLE_SECONDS if recycle is None else recycle,
+    )
+
+
+def worker_stop_error(args: argparse.Namespace) -> str | None:
+    """Why the stop flags cannot apply, or None: a worker prints its stop
+    line to the log only a run collecting effect records keeps."""
+    given = [
+        flag for flag, dest in (("--stop-timeout", "stop_timeout"),
+                                ("--recycle-seconds", "recycle_seconds"))
+        if getattr(args, dest, None) is not None
+    ]
+    if given and not getattr(args, "effect_records", None):
+        return (
+            f"{' and '.join(given)} need --effect-records: without it the workers "
+            "keep no log, and the pool recycles and ends them by the kill"
+        )
+    return None
 
 
 def check_random_seat_flags(args: argparse.Namespace) -> str | None:
@@ -1797,6 +1835,11 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
         print(f"Error: {seat_error}", file=sys.stderr)
         return 2
 
+    stop_error = worker_stop_error(args)
+    if stop_error is not None:
+        print(f"Error: {stop_error}", file=sys.stderr)
+        return 2
+
     rate_error = candidate_rate_error(args)
     if rate_error is not None:
         print(f"Error: {rate_error}", file=sys.stderr)
@@ -1852,6 +1895,7 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
             effect_records_dir=effect_records_dir,
             collection_caps=_effect_collection_caps(args),
             exclude_cards_path=exclude_cards,
+            worker_stop=worker_stop_settings(args),
         )
         supervisor.run()
     except (FileNotFoundError, forge_jvm.WorkerStartError) as exc:

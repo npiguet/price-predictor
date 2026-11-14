@@ -505,7 +505,8 @@ class TestTheRunReportsWhatItsWorkersLogged:
     """V4 #3 on match-outcomes: worker failure lines went to the logs and
     nowhere else, and a run that recorded nothing said nothing."""
 
-    def _run(self, tmp_path, *, matches: int, record_lines: int, log_lines=()):
+    def _run(self, tmp_path, *, matches: int, record_lines: int, log_lines=(),
+             random_seat_matches: int = 0):
         records = tmp_path / "records"
         output_file = tmp_path / "match-outcomes.txt"
         supervisor = MatchOutcomeSupervisor(
@@ -519,6 +520,9 @@ class TestTheRunReportsWhatItsWorkersLogged:
             log.flush()
             with open(output_file, "a", encoding="utf-8") as out:
                 out.write("row\n" * matches)
+            # Every match played to its end, a random-seat one (no row) included.
+            with open(supervisor._progress_path, "a", encoding="utf-8") as progress:
+                progress.write("match\n" * (matches + random_seat_matches))
             if record_lines:
                 shard = records / f"{supervisor.run_id}.0-abc.jsonl"
                 shard.write_text("{}\n" * record_lines, encoding="utf-8")
@@ -546,6 +550,75 @@ class TestTheRunReportsWhatItsWorkersLogged:
 
     def test_no_match_played_is_no_verdict(self, tmp_path):
         assert self._run(tmp_path, matches=0, record_lines=0).collected_nothing is False
+
+    def test_a_run_of_random_seat_matches_alone_is_judged_too(self, tmp_path):
+        """A random-seat match writes no outcome row (WP7): such a run read
+        as no match played, whatever it recorded."""
+        supervisor = self._run(tmp_path, matches=0, record_lines=0, random_seat_matches=3)
+        assert supervisor.collected_nothing is True
+
+    def test_random_seat_matches_that_threw_are_matches_played(self, tmp_path):
+        supervisor = self._run(tmp_path, matches=0, record_lines=0, log_lines=[
+            "Error generating match: [random-seat match] boom",
+        ])
+        assert supervisor.worker_failures.as_dict() == {"random_seat_match_error": 1}
+        assert supervisor.collected_nothing is True
+
+    def test_the_run_s_stops_and_matches_reach_its_manifest(self, tmp_path):
+        import json
+
+        from price_predictor.infrastructure.run_manifest import run_recorded
+
+        def body():
+            self._run(tmp_path, matches=1, record_lines=2, random_seat_matches=2)
+            return 0
+
+        run_recorded(tmp_path / "records", body, command="python -m sealed match-outcomes")
+
+        entry = json.loads(
+            (tmp_path / "records" / "run.json").read_text(encoding="utf-8"))["invocations"][0]
+        assert (entry["matches"], entry["matches_played"]) == (1, 3)
+        assert (entry["stop_timeout"], entry["recycle_seconds"]) == (600, 600)
+        assert entry["worker_stops"]["survived"] == 0
+        assert entry["hook_failures"] == {"connector": {}, "forge": {}}
+
+    def test_with_effect_records_each_worker_gets_the_stop_protocol(self, tmp_path):
+        from unittest.mock import MagicMock
+
+        from price_predictor.infrastructure.forge_jvm import WorkerStopSettings
+
+        supervisor = MatchOutcomeSupervisor(
+            worker_count=1, output_path=tmp_path / "out.txt", best_of=3,
+            effect_records_dir=tmp_path / "records",
+            worker_stop=WorkerStopSettings(timeout=30, recycle_seconds=900),
+        )
+        supervisor._connector = MagicMock()
+        supervisor._connector.start.return_value = FakeProcess(pid=1000)
+
+        supervisor._start_worker(1)
+
+        kwargs = supervisor._connector.start.call_args.kwargs
+        logs = tmp_path / "records" / "logs"
+        assert kwargs["stop_file"] == logs / f"{supervisor.run_id}.1.stop"
+        assert kwargs["recycle_seconds"] == 900
+        assert kwargs["progress_file"] == logs / f"{supervisor.run_id}.progress.txt"
+        assert supervisor._pool._graceful.settings.timeout == 30
+
+    def test_without_effect_records_the_pool_kills_as_before(self, tmp_path):
+        from unittest.mock import MagicMock
+
+        supervisor = MatchOutcomeSupervisor(
+            worker_count=1, output_path=tmp_path / "out.txt", best_of=3,
+        )
+        supervisor._connector = MagicMock()
+        supervisor._connector.start.return_value = FakeProcess(pid=1000)
+
+        supervisor._start_worker(0)
+
+        kwargs = supervisor._connector.start.call_args.kwargs
+        assert (kwargs["stop_file"], kwargs["recycle_seconds"], kwargs["progress_file"]) == (
+            None, None, None)
+        assert supervisor._pool._graceful is None
 
     def test_the_pool_scans_the_logs_at_every_status_line(self, tmp_path):
         supervisor = MatchOutcomeSupervisor(
