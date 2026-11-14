@@ -43,8 +43,10 @@ records or no `does_not_fire` record that has a forkable variant; a rule the cou
 zero when one of its scenarios declares a detector that tags gen-2 records; never a rule of
 `NOT_DIRECTED`, 104.2a, 500.11, 701.12d and 702.62d (no detector tells their fork from its live game), 121.4, 122.1g, 703.4m and 701.42c (restating 704.5b, 704.5v, 510.2 and 701.42b), 505.5, 614.10a, 701.24f and 702.105b (facts the record cannot show) and 122.1h (its rewrite record names no replacing effect for the finality counter's replacement), or of `DEFERRED_DIRECTED`, rules that qualified after the list was fixed for the production collection, 702.118b among them, each printed with its reason) and
 `rules/coverage-wording-cards.txt` (FR-038a: every card those rules' scenarios name, a back face or
-meld result under its front card's converted name). Prints, per rule, its forkable variants, those of
-the polarity its counts lack first and starred.
+meld result under its front card's converted name), and `rules/directed-fork-counts.json`: the
+members of `--counts` the list is decided from (`rules`, and the rule ids of `not_countable` and
+`none`), one rule a line, so the list regenerates from checked-in files alone. Prints, per rule, its
+forkable variants, those of the polarity its counts lack first and starred.
 
 ## `python -m effects rule-counts` (new)
 

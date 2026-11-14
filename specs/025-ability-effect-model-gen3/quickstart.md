@@ -26,8 +26,8 @@ Check: `validate` passes with every scenario declaring a detector or `none` and 
 variant classified. The printed table and `output/effects/rule-counts.json` agree. Review the listed
 records against Forge, starting with `rules/FINDINGS.md`'s suspected departures, and record outcomes
 on the scenarios. The counts decide which rules to enable for directed forks and coverage rounds:
-`directed-rules` writes `rules/directed-fork-rules.txt` and `rules/coverage-wording-cards.txt` from
-them; record that choice in the gen-3 record.
+`directed-rules` writes `rules/directed-fork-rules.txt`, `rules/coverage-wording-cards.txt` and
+the part of the counts they are decided from, `rules/directed-fork-counts.json`, from them; record that choice in the gen-3 record.
 
 ## Stage 2 — the relation-aware trunk (story 4, no gen-3 data)
 

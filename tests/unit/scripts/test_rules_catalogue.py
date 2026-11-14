@@ -304,15 +304,33 @@ def test_the_rules_left_out_are_those_the_user_dropped_each_with_a_reason():
 
 
 def test_the_regenerated_list_is_the_committed_one():
-    """``directed-rules`` over the gen-2 counts writes the committed list,
-    order included, wherever the counts file is at hand."""
-    counts_path = rc.OUTPUT / "effects" / "rule-counts-gen2.json"
-    if not counts_path.exists():
-        pytest.skip("the gen-2 counts are not on this machine (output/ is never committed)")
-    counts = json.loads(counts_path.read_text(encoding="utf-8"))
+    """``directed-rules`` over the counts checked in beside the list writes
+    the committed list, order included, on any machine."""
+    counts = json.loads((rc.RULES / rc.DIRECTED_COUNTS).read_text(encoding="utf-8"))
     chosen = rc.directed_rules(counts, rc.load_scenarios_by_rule(rc.RULES))
     listed = (rc.RULES / "directed-fork-rules.txt").read_text(encoding="utf-8").split()
     assert list(chosen) == listed
+
+
+def test_the_committed_counts_are_the_gen2_counts_cut_down():
+    """The checked-in counts are the part of ``output/effects/rule-counts-gen2.json``
+    the list is decided from; it needs that file, which output/ never commits."""
+    counts_path = rc.OUTPUT / "effects" / "rule-counts-gen2.json"
+    if not counts_path.exists():
+        pytest.skip("needs output/effects/rule-counts-gen2.json (never committed)")
+    counts = json.loads(counts_path.read_text(encoding="utf-8"))
+    committed = json.loads((rc.RULES / rc.DIRECTED_COUNTS).read_text(encoding="utf-8"))
+    assert committed == rc.decided_from(counts)
+
+
+def test_the_subcommand_writes_the_counts_it_decided_from(catalogue, capsys):
+    rc.cmd_directed_rules(catalogue)
+    written = json.loads((catalogue.rules_dir / rc.DIRECTED_COUNTS).read_text(encoding="utf-8"))
+    counts = json.loads(catalogue.counts.read_text(encoding="utf-8"))
+    assert written == rc.decided_from(counts)
+    assert "review" not in written and "records" not in written
+    assert list(rc.directed_rules(written, rc.load_scenarios_by_rule(catalogue.rules_dir))) == (
+        catalogue.rules_dir / "directed-fork-rules.txt").read_text(encoding="utf-8").split()
 
 
 # --- gen3-fields (T108): newly learnable rules and the turn_action verdict -------------------

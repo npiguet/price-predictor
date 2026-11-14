@@ -15,7 +15,8 @@ Subcommands:
   directed-rules --counts FILE
             write rules/directed-fork-rules.txt (the rules enabled for directed forks) and
             rules/coverage-wording-cards.txt (the cards of their scenarios) from gen-2's
-            per-rule counts
+            per-rule counts, and rules/directed-fork-counts.json (the part of the counts
+            the list is decided from)
 
 A unit is a three-digit section (704), except sections 701 and 702, whose units are their
 second-level rules (702.2, one keyword each), because those two sections hold a third of all rules.
@@ -1062,6 +1063,30 @@ def wording_cards(chosen, by_rule, card_of_face):
     return sorted({card_of_face.get(name, name) for name in named}), unknown
 
 
+#: The part of the counts ``directed_rules`` reads, checked in beside the list.
+DIRECTED_COUNTS = "directed-fork-counts.json"
+
+
+def decided_from(counts):
+    """The members of a ``rule-counts`` file ``directed_rules`` reads: each
+    rule's records by polarity and source, and the ids of the rules the
+    counts cannot speak for (``not_countable``, ``none``)."""
+    return {"rules": counts["rules"], "not_countable": sorted(counts["not_countable"]),
+            "none": sorted(counts["none"])}
+
+
+def write_decided_from(path, counts):
+    """``decided_from(counts)`` as JSON, one rule a line."""
+    kept = decided_from(counts)
+    rules = ",\n".join(f"    {json.dumps(rule)}: {json.dumps(kept['rules'][rule], sort_keys=True)}"
+                       for rule in sorted(kept["rules"], key=rule_sort_key))
+    path.write_text("{\n"
+                    f'  "not_countable": {json.dumps(kept["not_countable"])},\n'
+                    f'  "none": {json.dumps(kept["none"])},\n'
+                    f'  "rules": {{\n{rules}\n  }}\n'
+                    "}\n", encoding="utf-8", newline="\n")
+
+
 def cmd_directed_rules(args):
     rules_dir = args.rules_dir
     counts = json.loads(args.counts.read_text(encoding="utf-8"))
@@ -1070,6 +1095,7 @@ def cmd_directed_rules(args):
     cards, unknown = wording_cards(chosen, by_rule, converted_card_of_face(args.cards_folder))
     (rules_dir / "directed-fork-rules.txt").write_text(
         "".join(f"{rule}\n" for rule in chosen), encoding="utf-8", newline="\n")
+    write_decided_from(rules_dir / DIRECTED_COUNTS, counts)
     (rules_dir / "coverage-wording-cards.txt").write_text(
         "".join(f"{card}\n" for card in cards), encoding="utf-8", newline="\n")
     for rule, row in chosen.items():
@@ -1110,8 +1136,9 @@ def main():
     p = sub.add_parser("gen3-fields", help="write each heads line's gen-3 ids and "
                        "learnable_after_gen3, and print the rules newly learnable (FR-016)")
     p.add_argument("--rules-dir", type=Path, default=RULES, help=argparse.SUPPRESS)
-    p = sub.add_parser("directed-rules", help="write the rules enabled for directed forks and "
-                       "the cards of their scenarios (FR-014b, FR-038a)")
+    p = sub.add_parser("directed-rules", help="write the rules enabled for directed forks, "
+                       "the cards of their scenarios and the counts they were decided from "
+                       "(FR-014b, FR-038a)")
     p.add_argument("--counts", type=Path, required=True,
                    help="gen-2's per-rule counts, as `effects rule-counts` writes them")
     p.add_argument("--cards-folder", type=Path, default=OUTPUT / "cardsfolder",
