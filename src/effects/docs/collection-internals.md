@@ -113,4 +113,3 @@ What the collectors must read of the hooks:
 
 - A collector that writes `"blocking":[]` produces records byte-identical to ones for a creature that genuinely is not blocking. The shape is right, the contract tests pass, and the field is dead. `field-coverage` exists to name every field a corpus never varied.
 - `KNOWN_CONSTANT_FIELDS` (`application/field_coverage.py`) lists the fields known dead, and is empty. The integration test fails when a listed field starts carrying data, so the list can only shrink. It is asserted in that direction only, because a field that is merely rare looks exactly like one that is unwired.
-
