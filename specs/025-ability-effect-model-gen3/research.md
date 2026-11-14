@@ -593,7 +593,9 @@ attaches the new controller, so the seat would otherwise play as the plain AI. D
 the match source would shift later games' seats. Spec correction S1(2): interventional forks resolve
 the stack and stop; they do not play the turn on.
 
-Forge's AI decisions in a fork still draw from the shared `MyRandom`, as interventions already do.
+Forge's AI decisions in a fork draw from a random stream of the fork's own (`Forks.isolated` puts a
+fresh stream in `MyRandom` for the whole fork and the live game's back after it), as every fork's
+do: a draw a fork took from the live game's stream would be one the live game no longer takes.
 
 #### D5. `mirror_of` on a directed-fork record
 
