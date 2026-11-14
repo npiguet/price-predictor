@@ -3,6 +3,7 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
+import forge.game.CardTraitBase;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.keyword.KeywordInterface;
@@ -10,9 +11,10 @@ import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
 
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
+import java.util.function.BiConsumer;
 
 /**
  * Haunt keyword ability — expands the haunt keyword into its constituent lines:
@@ -27,6 +29,18 @@ public final class HauntKeyword {
     private HauntKeyword() {}
 
     public static List<Ability> of(KeywordInterface ki, Card card) {
+        return of(ki, card, (trait, line) -> { });
+    }
+
+    /**
+     * The lines, telling {@code rendered} which line each generated trait
+     * printed: the spell Forge builds for a non-creature card prints the spell
+     * effect; a trigger prints the line of its description, a duplicate the
+     * line its first copy printed; and the two description-less triggers that
+     * end a haunting belong to the haunt line, beside the trigger that haunts.
+     */
+    public static List<Ability> of(KeywordInterface ki, Card card,
+                                   BiConsumer<CardTraitBase, Ability> rendered) {
         List<Ability> result = new ArrayList<>();
 
         // Get spell effect description from the SA Forge built for non-creature haunt.
@@ -50,15 +64,24 @@ public final class HauntKeyword {
         if (!isCreature && effectDesc != null) {
             String normalized = AbilityDescription.normalize(effectDesc);
             if (normalized != null) {
-                result.add(new SpellEffect(normalized, List.of()));
+                SpellEffect spell = new SpellEffect(normalized, List.of());
+                result.add(spell);
+                for (SpellAbility sa : ki.getAbilities()) {
+                    rendered.accept(sa, spell);
+                }
             }
         }
 
         // 2. Process triggers — deduplicate by description
-        Set<String> emitted = new HashSet<>();
+        Map<String, Ability> emitted = new HashMap<>();
+        List<Trigger> blank = new ArrayList<>();
+        Ability hauntLine = null;
         for (Trigger t : ki.getTriggers()) {
             String tDesc = t.getParam("TriggerDescription");
-            if (tDesc == null || "Blank".equals(tDesc)) continue;
+            if (tDesc == null || "Blank".equals(tDesc)) {
+                blank.add(t);
+                continue;
+            }
 
             // Replace ABILITY placeholder with the actual effect description
             if (tDesc.contains("ABILITY")) {
@@ -72,9 +95,14 @@ public final class HauntKeyword {
                             CharmAbility.expandPlaceholder(tDesc, overrideSa, null);
                     String charmDesc = expanded.description();
                     if (charmDesc == null) continue;
-                    if (!emitted.add(charmDesc)) continue;
-                    result.add(new TextAbility(AbilityType.forTrigger(t),
-                            charmDesc, 0, expanded.options()));
+                    Ability charm = emitted.get(charmDesc);
+                    if (charm == null) {
+                        charm = new TextAbility(AbilityType.forTrigger(t),
+                                charmDesc, 0, expanded.options());
+                        emitted.put(charmDesc, charm);
+                        result.add(charm);
+                    }
+                    rendered.accept(t, charm);
                     continue;
                 } else if (effectDesc != null) {
                     tDesc = tDesc.replace("ABILITY", effectDesc);
@@ -83,9 +111,17 @@ public final class HauntKeyword {
 
             String normalized = AbilityDescription.normalize(tDesc);
             if (normalized == null) continue;
-            if (!emitted.add(normalized)) continue; // skip duplicates
-
-            result.add(new TextAbility(AbilityType.forTrigger(t), normalized));
+            Ability line = emitted.get(normalized);
+            if (line == null) {
+                line = new TextAbility(AbilityType.forTrigger(t), normalized);
+                emitted.put(normalized, line);
+                result.add(line);
+            }
+            rendered.accept(t, line);
+            if (tDesc.startsWith("Haunt")) hauntLine = line;
+        }
+        for (Trigger t : blank) {
+            rendered.accept(t, hauntLine);
         }
 
         return result;

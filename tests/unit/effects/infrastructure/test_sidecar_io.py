@@ -317,10 +317,9 @@ class TestSidecarCache:
                 assert key in joined.provenance, key
                 assert joined in cache.get(key.script_file).lines, key
 
-    @pytest.mark.xfail(strict=True, reason=(
-        "WP12-N1: the converter gives every chapter line of a saga every chapter's "
-        "trigger key, so the join reads chapter I's text for chapters II and III"))
     def test_a_saga_s_chapter_trigger_joins_its_own_chapter_line(self):
+        """Over the converter's own sidecar of a three-chapter saga: each
+        chapter's trigger joins its own chapter line and no other line holds it."""
         from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS
 
         cache = SidecarCache({folder.name: folder for folder in GEN3_SIDECAR_FOLDERS})
@@ -329,6 +328,8 @@ class TestSidecarCache:
         assert len(chapters) == 3
         for chapter, line in enumerate(chapters):
             assert cache.line_for(ProvenanceKey(script, 0, "trigger", chapter)) == line
+            assert [key for key in line.provenance if key.trait_kind == "trigger"] == [
+                ProvenanceKey(script, 0, "trigger", chapter)]
 
 
 class TestTheVariantTreeHasNoProse:

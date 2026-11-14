@@ -179,7 +179,7 @@ final class FaceParser {
             if (kw == Keyword.UNDEFINED) {
                 routeUndefinedKeyword(ki);
             } else if (kw == Keyword.HAUNT) {
-                abilities.addAll(HauntKeyword.of(ki, card));
+                abilities.addAll(HauntKeyword.of(ki, card, recorder::rendered));
             } else if (kw == Keyword.GIFT) {
                 abilities.add(GiftKeyword.of(ki, card));
             } else if (kw == Keyword.COMPANION && ki instanceof Companion comp) {
@@ -205,7 +205,8 @@ final class FaceParser {
                 new TextAbility(AbilityType.STATIC, AbilityDescription.applyCasing(ki.getOriginal())));
         handlers.put("CARDNAME ", nameStatic);
         handlers.put("NICKNAME ", nameStatic);
-        handlers.put("Chapter:", (ki, p) -> p.abilities.addAll(ChapterAbility.fromKeyword(ki)));
+        handlers.put("Chapter:", (ki, p) -> p.abilities.addAll(
+                ChapterAbility.fromKeyword(ki, p.recorder::rendered)));
         handlers.put("Class:", (ki, p) -> {
             ClassLevelAbility level = ClassLevelAbility.of(ki);
             if (level != null) {
