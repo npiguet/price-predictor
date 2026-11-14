@@ -9,7 +9,11 @@ import pytest
 from effects.domain.records import RewriteResult
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors.acting_line import acting_line
-from effects.domain.rule_detectors.rewrite_event import FAMILY, is_prevention_line, paid_as_cost
+from effects.domain.rule_detectors.rewrite_event import (
+    FAMILY,
+    caused_with_empty_stack,
+    is_prevention_line,
+)
 
 
 def _entering(by_kind):
@@ -175,14 +179,14 @@ def test_a_record_whose_incoming_event_is_unknown_shows_no_side(by_kind):
 
 
 class TestPaidAsCost:
-    """118.11 (WP6): ``paid_as_cost`` reads an incoming event naming a cause
+    """118.11 (WP6): ``caused_with_empty_stack`` reads an incoming event naming a cause
     while the stack is empty. Forge pays an activated ability's costs before
     it puts the ability on the stack, so a cost paid then is read; so is any
     other event a cause made off the stack, and a cost paid while the stack
     held something is on neither side."""
 
     PARAMS = {"event": "zone_change", "from_zone": "battlefield", "to_zone": "graveyard",
-              "paid_as_cost": True}
+              "caused_with_empty_stack": True}
 
     @staticmethod
     def _sacrificed(by_kind, *, cause="E2", stack_size=0, result=RewriteResult.REPLACED):
@@ -210,7 +214,8 @@ class TestPaidAsCost:
     def test_a_move_nothing_caused_shows_no_side(self, by_kind):
         """A state-based death names no cause."""
         assert FAMILY.match(self._sacrificed(by_kind, cause=None), None, self.PARAMS) is None
-        declared = {key: value for key, value in self.PARAMS.items() if key != "paid_as_cost"}
+        declared = {key: value for key, value in self.PARAMS.items()
+                    if key != "caused_with_empty_stack"}
         assert FAMILY.match(self._sacrificed(by_kind, cause=None), None, declared) is not None
 
     def test_any_event_a_cause_made_off_the_stack_is_read_not_a_cost_s_alone(self, by_kind):
@@ -220,13 +225,14 @@ class TestPaidAsCost:
         land = replace(record, payload=replace(record.payload, incoming=replace(
             record.payload.incoming, params={"mode": "Moved", "from_zone": "hand",
                                              "to_zone": "battlefield", "cause": "E2"})))
-        assert paid_as_cost(land, land.payload.incoming)
+        assert caused_with_empty_stack(land, land.payload.incoming)
         assert FAMILY.match(land, None, self.PARAMS) is None
-        assert FAMILY.match(land, None, {"event": "zone_change", "paid_as_cost": True}) is not None
+        assert FAMILY.match(land, None, {"event": "zone_change",
+                                         "caused_with_empty_stack": True}) is not None
 
     def test_it_is_declared_true_or_left_out(self):
         FAMILY.validate(self.PARAMS)
-        with pytest.raises(ValueError, match="paid_as_cost"):
-            FAMILY.validate({**self.PARAMS, "paid_as_cost": False})
+        with pytest.raises(ValueError, match="caused_with_empty_stack"):
+            FAMILY.validate({**self.PARAMS, "caused_with_empty_stack": False})
         with pytest.raises(ValueError, match="boolean"):
-            FAMILY.validate({**self.PARAMS, "paid_as_cost": "yes"})
+            FAMILY.validate({**self.PARAMS, "caused_with_empty_stack": "yes"})

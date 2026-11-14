@@ -609,7 +609,7 @@ and that the reporting half never enters the control score.
   candidates by kind, card type, keyword, designation or sorcery speed (`verdict_bit`); a clause
   with a legal object but fewer than it must name is `verdict_bit`'s `min_targets` with
   `some_legal_target`, and a cost's action a replacement modified is `rewrite_event`'s
-  `paid_as_cost`, which reads an event naming a cause while the stack is empty: it also catches
+  `caused_with_empty_stack`, which reads an event naming a cause while the stack is empty: it also catches
   every other event a cause makes off the stack (a special action, a mana ability's effects, an
   ability resolved without the stack) and misses a cost paid while the stack holds something, so a
   declaration keeps to a cost's action through its other parameters.

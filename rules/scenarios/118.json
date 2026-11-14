@@ -1036,7 +1036,7 @@
           "event": "zone_change",
           "from_zone": "battlefield",
           "to_zone": "graveyard",
-          "paid_as_cost": true
+          "caused_with_empty_stack": true
         },
         "needs": []
       }
