@@ -143,7 +143,9 @@ def _sides(fires, does_not_fire):
 
 
 @pytest.fixture
-def catalogue(tmp_path):
+def catalogue(tmp_path, monkeypatch):
+    # The fixture's rule ids are its own: none of the real list's exclusions applies.
+    monkeypatch.setattr(rc, "NOT_DIRECTED", {})
     """A rules dir, a converted tree and gen-2 counts covering each way a rule
     gets in or stays out."""
     rules = tmp_path / "rules"
@@ -290,21 +292,32 @@ def test_the_rules_always_listed_are_704_5f_and_702_98a_each_with_a_reason():
     assert all(reason.strip() for reason in rc.ALWAYS_DIRECTED.values())
 
 
+#: The rules no single board edit yields the lacking side of (the user's
+#: decision of 2026-11-14, DF-A): each has its own reason.
+NO_EDIT_YIELDS_THEM = [
+    "104.6", "111.10n", "119.8", "205.1a", "400.6", "701.12h", "701.23f", "701.24g",
+    "702.102c", "702.133a", "702.154a", "702.167a", "702.35a", "702.62c", "702.70b",
+    "702.85a", "704.5v", "704.7", "707.10d", "712.11d", "730.2g"]
+
+
 def test_the_rules_left_out_are_those_the_user_dropped_each_with_a_reason():
     """2026-11-06: four no detector tells from their live game; 2026-11-14:
-    four that restate a listed rule, four the record cannot show, and 122.1h,
-    whose record names no replacing effect; and eight of the rules that
-    qualified after the list was first fixed, each with its own reason (no
-    detector reads it, its variant's edit is refused, its point needs a
-    choice no boundary foresees, or no sealed pool makes it happen)."""
-    assert sorted(rc.NOT_DIRECTED) == [
+    four that restate another rule, four the record cannot show, and 122.1h,
+    whose record names no replacing effect; eight of the rules that qualified
+    after the list was first fixed, each with its own reason (no detector reads
+    it, its variant's edit is refused, its point needs a choice no boundary
+    foresees, or no sealed pool makes it happen); and the rules no single board
+    edit yields the lacking side of."""
+    assert sorted(rc.NOT_DIRECTED) == sorted([
         "104.2a", "104.4c", "115.7a", "121.4", "122.1g", "122.1h", "500.11", "505.5",
         "614.10a", "701.10c", "701.11c", "701.12d", "701.24f", "701.40c", "701.40d",
-        "701.42c", "702.105b", "702.62d", "703.4m", "712.16", "712.4c"]
+        "701.42c", "702.105b", "702.62d", "703.4m", "712.16", "712.4c", *NO_EDIT_YIELDS_THEM])
     assert all(reason.strip() for reason in rc.NOT_DIRECTED.values())
-    for rule, listed in {"121.4": "704.5b", "122.1g": "704.5v", "703.4m": "510.2",
-                         "701.42c": "701.42b"}.items():
-        assert listed in rc.NOT_DIRECTED[rule], rule
+    reasons = {rc.NOT_DIRECTED[rule] for rule in NO_EDIT_YIELDS_THEM}
+    assert len(reasons) == len(NO_EDIT_YIELDS_THEM), "each with a reason of its own"
+    for rule, other in {"121.4": "704.5b", "122.1g": "704.5v", "703.4m": "510.2",
+                        "701.42c": "701.42b"}.items():
+        assert other in rc.NOT_DIRECTED[rule], rule
 
 
 def test_the_regenerated_list_is_the_committed_one():

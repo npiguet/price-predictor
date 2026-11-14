@@ -19,30 +19,33 @@ import java.util.Optional;
 
 /**
  * 104.2b, an effect that states a player wins the game ends it, on scenario
- * {@code 104.2b-1}: A has 40 life as its upkeep begins, so Felidar
- * Sovereign's trigger resolves and A wins.
+ * {@code 104.2b-1}: A has 39 life as its upkeep begins, so Felidar
+ * Sovereign's trigger does not fire; at 40 it would resolve and A would win.
  *
  * <p>The base board, read at a boundary: the upkeep begins and the active
  * player controls a permanent whose beginning-of-upkeep trigger wins it the
  * game if its life total is at least N (Felidar Sovereign, Test of
- * Endurance), and its life is at least N, so the trigger is about to fire. It
- * binds the permanent and the player.
+ * Endurance), its life is below N and above 0, and its life can change. It
+ * binds the permanent and the player. The live game, below N, is the common
+ * side; the fork adds the rare fact.
  *
- * <p>Variant {@code one_short} ({@code life}): the player has N - 1 life, as
- * A has 39 instead of 40, so the trigger does not fire.
+ * <p>Variant {@code forty} ({@code life}): the player has N life, as A has
+ * 40 instead of 39, so the trigger fires, resolves and wins the game in the
+ * fork: the resolution holds the {@code player_won} 104.2b-1's declaration
+ * reads.
  */
 public final class LifeTotalWin {
 
     public static final String RULE = "104.2b";
     static final String SCENARIO = "104.2b-1";
-    static final String ONE_SHORT = "one_short";
+    static final String FORTY = "forty";
 
     private LifeTotalWin() {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, LifeTotalWin::bind, ONE_SHORT,
-                new Application(ForkOperation.LIFE, LifeTotalWin::oneShort));
+        return DirectedRule.of(RULE, SCENARIO, LifeTotalWin::bind, FORTY,
+                new Application(ForkOperation.LIFE, LifeTotalWin::winning));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -52,7 +55,8 @@ public final class LifeTotalWin {
         Player active = Boards.active(live);
         for (Card permanent : active.getCardsIn(ZoneType.Battlefield)) {
             Optional<Integer> needed = winningLife(permanent);
-            if (needed.isPresent() && active.getLife() >= needed.get()) {
+            if (needed.isPresent() && active.getLife() < needed.get() && active.getLife() > 0
+                    && active.canGainLife()) {
                 return Optional.of(Binding.empty().with("permanent", permanent).with("player", active));
             }
         }
@@ -80,9 +84,9 @@ public final class LifeTotalWin {
         return Optional.empty();
     }
 
-    private static BoardEdit oneShort(Binding fork) {
+    private static BoardEdit winning(Binding fork) {
         int needed = winningLife(fork.card("permanent")).orElseThrow(
                 () -> new IllegalStateException("the fork's permanent wins no game"));
-        return new LifeOperation(fork.player("player"), needed - 1);
+        return new LifeOperation(fork.player("player"), needed);
     }
 }

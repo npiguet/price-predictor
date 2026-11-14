@@ -67,13 +67,14 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A Aftermath candidate passes its zone check.",
-        "near_miss": "A Aftermath candidate that fails it.",
+        "outcome": "The aftermath half of a split card with aftermath (its second face) passes its zone check.",
+        "near_miss": "The aftermath half fails it.",
         "params": {
           "bit": "failed_check",
           "check": "zone",
           "fires_when": true,
-          "keyword": "Aftermath"
+          "source_keyword": "Aftermath",
+          "candidate_face": "alternative"
         },
         "needs": [
           "failed_checks"

@@ -33,6 +33,10 @@ import java.util.Optional;
  * <p>Variant {@code cannot_pay} ({@code tap}): the land is already tapped, so
  * the morph cost cannot be paid and turning the permanent face up is not
  * legal.
+ *
+ * <p>The fork keeps the face-down permanent's decision candidates whatever the decision
+ * sample draws (FR-010c): the collector reads their verdicts at each of the
+ * fork's priority stops itself, whether or not a seat plays them.
  */
 public final class MorphFaceUp {
 
@@ -45,7 +49,8 @@ public final class MorphFaceUp {
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, MorphFaceUp::bind, CANNOT_PAY,
-                new Application(ForkOperation.TAP, fork -> new TapOperation(fork.card("land"), true)));
+                new Application(ForkOperation.TAP, fork -> new TapOperation(fork.card("land"), true))
+                        .keepingCandidatesOf("permanent"));
     }
 
     static Optional<Binding> bind(Game live) {

@@ -26,7 +26,7 @@ import java.util.Optional;
  * (Cosi's Trickster), and an opponent of theirs with exactly two cards in
  * their library holds a card they have the mana for whose spell searches
  * their library and that they can cast now
- * ({@link LimitedSearch#searchersInHand}: a sorcery only as the active
+ * ({@link Boards#searchersInHand}: a sorcery only as the active
  * player). It binds the bottom card of that library.
  *
  * <p>Variant {@code zero-cards} ({@code move_card}): that card is in its
@@ -58,7 +58,7 @@ public final class SmallLibraryShuffle {
             }
             for (Player searcher : watcher.getOpponents()) {
                 List<Card> library = List.copyOf(searcher.getCardsIn(ZoneType.Library));
-                if (library.size() == 2 && !LimitedSearch.searchersInHand(searcher).isEmpty()) {
+                if (library.size() == 2 && !Boards.searchersInHand(searcher).isEmpty()) {
                     return Optional.of(Binding.empty().with("card", library.get(1)));
                 }
             }

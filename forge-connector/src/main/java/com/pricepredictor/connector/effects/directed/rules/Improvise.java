@@ -23,7 +23,7 @@ import java.util.Optional;
  * begins, and it holds a card with improvise that its untapped lands alone
  * cannot pay for but its untapped lands and its untapped nonland artifacts
  * together pay exactly, the artifacts no more than the card's generic mana. It
- * binds one of those artifacts.
+ * binds one of those artifacts and the card.
  *
  * <p>The active player cannot add a land to its mana this turn
  * ({@link Boards#noLandToPlay}): it holds no land, or its land drop is
@@ -33,6 +33,10 @@ import java.util.Optional;
  * tapped, so the generic mana is one short and the spell cannot be cast. Of
  * the scenario's two classified variants this is the less invasive (the other
  * removes the artifact).
+ *
+ * <p>The fork keeps the card's decision candidates whatever the decision
+ * sample draws (FR-010c): the collector reads their verdicts at each of the
+ * fork's priority stops itself, whether or not a seat plays them.
  */
 public final class Improvise {
 
@@ -45,7 +49,8 @@ public final class Improvise {
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, Improvise::bind, ONE_ARTIFACT_TAPPED,
-                new Application(ForkOperation.TAP, fork -> new TapOperation(fork.card("artifact"), true)));
+                new Application(ForkOperation.TAP, fork -> new TapOperation(fork.card("artifact"), true))
+                        .keepingCandidatesOf("card"));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -67,7 +72,7 @@ public final class Improvise {
             int value = card.getCMC();
             if (card.hasKeyword(Keyword.IMPROVISE) && lands < value && lands + artifacts.size() == value
                     && card.getManaCost().getGenericCost() >= artifacts.size()) {
-                return Optional.of(Binding.empty().with("artifact", artifacts.get(0)));
+                return Optional.of(Binding.empty().with("artifact", artifacts.get(0)).with("card", card));
             }
         }
         return Optional.empty();

@@ -23,12 +23,16 @@ import java.util.Optional;
  * <p>The base board, read at a boundary: a main phase of the active player
  * begins, it holds a card with web-slinging whose web-slinging cost it has the
  * lands for, and it controls exactly one tapped creature, the only one it
- * could return. It binds that creature.
+ * could return. It binds that creature and the card.
  *
  * <p>Variant {@code creature_untapped} ({@code tap}): that creature is
  * untapped, so nothing can be returned and the web-slinging cost cannot be
  * paid. The scenario's other variant taps the land paying the mana instead;
  * this one changes the fact web-slinging adds to the cost.
+ *
+ * <p>The fork keeps the card's decision candidates whatever the decision
+ * sample draws (FR-010c): the collector reads their verdicts at each of the
+ * fork's priority stops itself, whether or not a seat plays them.
  */
 public final class WebSlinging {
 
@@ -41,7 +45,8 @@ public final class WebSlinging {
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, WebSlinging::bind, CREATURE_UNTAPPED,
-                new Application(ForkOperation.TAP, fork -> new TapOperation(fork.card("creature"), false)));
+                new Application(ForkOperation.TAP, fork -> new TapOperation(fork.card("creature"), false))
+                        .keepingCandidatesOf("card"));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -53,8 +58,9 @@ public final class WebSlinging {
         if (tapped.size() != 1) {
             return Optional.empty();
         }
-        boolean slings = active.getCardsIn(ZoneType.Hand).stream()
-                .anyMatch(card -> Boards.canPayKeyword(active, card, Keyword.WEB_SLINGING));
-        return slings ? Optional.of(Binding.empty().with("creature", tapped.get(0))) : Optional.empty();
+        return active.getCardsIn(ZoneType.Hand).stream()
+                .filter(card -> Boards.canPayKeyword(active, card, Keyword.WEB_SLINGING))
+                .findFirst()
+                .map(card -> Binding.empty().with("creature", tapped.get(0)).with("card", card));
     }
 }

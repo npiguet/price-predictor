@@ -24,6 +24,10 @@ import java.util.Optional;
  *
  * <p>Variant {@code from_hand} ({@code move_card}): the card is in the active
  * player's hand instead, where the aftermath half cannot be cast.
+ *
+ * <p>The fork keeps the card's decision candidates whatever the decision
+ * sample draws (FR-010c): the collector reads their verdicts at each of the
+ * fork's priority stops itself, whether or not a seat plays them.
  */
 public final class Aftermath {
 
@@ -37,7 +41,8 @@ public final class Aftermath {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, Aftermath::bind, FROM_HAND,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.move(fork.card("card"), ZoneType.Hand, null)));
+                        fork -> MoveCardOperation.move(fork.card("card"), ZoneType.Hand, null))
+                        .keepingCandidatesOf("card"));
     }
 
     static Optional<Binding> bind(Game live) {

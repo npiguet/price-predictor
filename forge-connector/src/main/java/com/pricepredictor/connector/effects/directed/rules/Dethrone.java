@@ -43,6 +43,12 @@ import java.util.Set;
  * than the most any other player has, so attacking it does not trigger
  * dethrone. The other players having 2 or more keeps the opponent alive, and
  * having more than the attack's reach keeps the attack from killing it.
+ *
+ * <p>The fork keeps the not-fired evaluations of the triggers the creature hosts
+ * whatever the trigger-negative sampler's balance says (FR-010c): a fork's
+ * recording is fresh, so the sampler holds no earlier firing of the mode
+ * for a negative to repay. Whether the creature attacks is its seat's own
+ * decision.
  */
 public final class Dethrone {
 
@@ -55,7 +61,7 @@ public final class Dethrone {
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, Dethrone::bind, LESS_LIFE,
-                new Application(ForkOperation.LIFE, Dethrone::lessLife));
+                new Application(ForkOperation.LIFE, Dethrone::lessLife).keepingNegativesOf("attacker"));
     }
 
     static Optional<Binding> bind(Game live) {

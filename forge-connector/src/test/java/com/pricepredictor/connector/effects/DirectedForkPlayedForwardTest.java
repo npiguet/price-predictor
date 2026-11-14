@@ -42,6 +42,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * record), and the game's end at a state-based check (104.4a's two losses
  * live, and the fork's one beside a win).
  *
+ * <p>The kept-record cases (FR-010c) play with no decision candidate
+ * sampled, live or in the fork, and find the bound card's candidates, or
+ * its trigger's not-fired evaluations, in the fork's records all the same.
+ * The inverted cases (FR-014a) bind the common board and find the rare
+ * fact's record in the fork. A few cases' point follows a seat's own cast or
+ * attack (104.3d, 702.105a, 702.124j, 702.131a), which Forge's AI makes on
+ * these boards; a forced play (FR-010b) would make it certain. Run with {@code -Ddirected.records.dump=DIR}, every
+ * case's records are copied to {@code DIR} for tagging with the Python
+ * detectors.
+ *
  * <p>{@code pt} is played forward by
  * {@code ForkRecordsTest.theRegisteredToughnessZeroRuleForksATougherCreatureToTheEndOfTheTurn}.
  * The families left out ({@code tap}, {@code colour_type}) have no
@@ -75,11 +85,11 @@ class DirectedForkPlayedForwardTest {
      * fork's records, each checked to name the rule.
      */
     private List<String> forkOf(Game game, PhaseType step, String rule, String variant) throws Throwable {
-        return forkOf(game, step, rule, variant, false);
+        return forkOf(game, step, rule, variant, Decisions.SAMPLED);
     }
 
-    /** {@link #forkOf(Game, PhaseType, String, String)}, every decision candidate written when {@code decisions}. */
-    private List<String> forkOf(Game game, PhaseType step, String rule, String variant, boolean decisions)
+    /** {@link #forkOf(Game, PhaseType, String, String)}, decision candidates sampled as {@code decisions} says. */
+    private List<String> forkOf(Game game, PhaseType step, String rule, String variant, Decisions decisions)
             throws Throwable {
         List<String> forked = new ArrayList<>();
         for (String record : played(game, step, rule, decisions)) {
@@ -101,13 +111,17 @@ class DirectedForkPlayedForwardTest {
      * boundary itself, its turn-based actions included. A live game the turn
      * ended writes its end, as {@code Match.startGame} has it do.
      */
-    private List<String> played(Game game, PhaseType step, String rule, boolean decisions) throws Throwable {
+    private List<String> played(Game game, PhaseType step, String rule, Decisions decisions) throws Throwable {
         TestCaps built = TestCaps.caps().manaCap(2000).interventions(0).probes(0);
-        if (decisions) {
-            built = built.everyDecision();
-        }
+        built = switch (decisions) {
+            case SAMPLED -> built;
+            case NONE -> built.playabilityRate(0.0).candidateRates(0.0, 0.0);
+            case EVERY -> built.everyDecision();
+        };
         CollectionCaps caps = built.directed(1, 1.0, rule).build();
-        RecordShardWriter shard = ShardRun.writer(tempDir);
+        // A directory of its own per game: one test may play several.
+        RecordShardWriter shard = ShardRun.writer(
+                java.nio.file.Files.createDirectories(tempDir.resolve("game-" + DUMPED.incrementAndGet())));
         try (GameRecording recording = new GameRecording(game, shard, ShardRun.GAME_ID, caps, 7L, null)) {
             recording.open();
             game.getTriggerHandler().resetActiveTriggers();
@@ -121,7 +135,113 @@ class DirectedForkPlayedForwardTest {
         } finally {
             shard.close();
         }
-        return ShardRun.readShard(shard.path());
+        List<String> records = ShardRun.readShard(shard.path());
+        dump(rule, records);
+        return records;
+    }
+
+    /** How a case's decision candidates are sampled, live and in the fork alike. */
+    enum Decisions {
+        /** At the defaults' rates. */
+        SAMPLED,
+        /** At rate 0: only the candidates a fork keeps (FR-010c) are written. */
+        NONE,
+        /** At rate 1: every candidate is written. */
+        EVERY
+    }
+
+    /**
+     * Where each case's records are copied when the property
+     * {@code directed.records.dump} names a directory: one
+     * {@code <rule>-<n>.jsonl} per game played, for tagging with the Python
+     * detectors (the brief's check that both sides of a rule are tagged).
+     */
+    private static final String DUMP = System.getProperty("directed.records.dump");
+    private static final java.util.concurrent.atomic.AtomicInteger DUMPED = new java.util.concurrent.atomic.AtomicInteger();
+
+    private static void dump(String rule, List<String> records) throws java.io.IOException {
+        if (DUMP == null) {
+            return;
+        }
+        Path dir = Path.of(DUMP);
+        java.nio.file.Files.createDirectories(dir);
+        java.nio.file.Files.write(dir.resolve(rule + "-" + DUMPED.incrementAndGet() + ".jsonl"), records,
+                java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    /** A case's board: the game and the card whose records the case reads. */
+    record Setup(Game game, Card host) {
+    }
+
+    /**
+     * Play {@code board} with no decision sampled, so only the candidates the
+     * rule's fork keeps are written, and return the fork's records; when
+     * dumping, play a second board with every candidate written, so the live
+     * game's side is dumped too.
+     */
+    private List<String> keptFork(java.util.function.Supplier<Setup> board, PhaseType step, String rule,
+                                  String variant) throws Throwable {
+        Setup setup = board.get();
+        List<String> all = played(setup.game(), step, rule, Decisions.NONE);
+        for (String record : all) {
+            if (!Boolean.TRUE.equals(parse(record).get("fork"))) {
+                assertFalse("decision".equals(parse(record).get("subkind")),
+                        "no live decision candidate is sampled at rate 0: " + record);
+            }
+        }
+        if (DUMP != null) {
+            played(board.get().game(), step, rule, Decisions.EVERY);
+        }
+        return forkOf(all, rule, variant);
+    }
+
+    /** The fork's records among {@code all}, each checked to name the rule and the variant. */
+    private static List<String> forkOf(List<String> all, String rule, String variant) {
+        List<String> forked = new ArrayList<>();
+        for (String record : all) {
+            Map<String, Object> parsed = parse(record);
+            if (Boolean.TRUE.equals(parsed.get("fork"))) {
+                assertEquals(List.of(rule), parsed.get("aimed_at"), record);
+                assertEquals(variant, RecordLines.asMap(parsed.get("directed")).get("variant"), record);
+                forked.add(record);
+            }
+        }
+        assertFalse(forked.isEmpty(), rule + ": the fork was kept and recorded");
+        return forked;
+    }
+
+    /** The candidates of the decision records among {@code records} whose card is {@code host}. */
+    private static List<Map<String, Object>> candidatesOf(List<String> records, Card host) {
+        List<Map<String, Object>> found = new ArrayList<>();
+        for (String record : records) {
+            Map<String, Object> parsed = parse(record);
+            if (!"decision".equals(parsed.get("subkind"))) {
+                continue;
+            }
+            Object source = RecordLines.asMap(RecordLines.asMap(parsed.get("state")).get("refs")).get("source");
+            if (ref(host).equals(source) && RecordLines.payload(record).get("candidates") instanceof List<?> list) {
+                list.forEach(candidate -> found.add(RecordLines.asMap(candidate)));
+            }
+        }
+        return found;
+    }
+
+    /** A verdict bit of each candidate. */
+    private static List<Object> bits(List<Map<String, Object>> candidates, String bit) {
+        return candidates.stream().map(candidate -> RecordLines.asMap(candidate.get("verdict")).get(bit)).toList();
+    }
+
+    /** The failed checks of each candidate, by identifier. */
+    private static List<List<Object>> failedChecks(List<Map<String, Object>> candidates) {
+        List<List<Object>> found = new ArrayList<>();
+        for (Map<String, Object> candidate : candidates) {
+            List<Object> checks = new ArrayList<>();
+            if (candidate.get("failed_checks") instanceof List<?> list) {
+                list.forEach(check -> checks.add(RecordLines.asMap(check).get("check")));
+            }
+            found.add(checks);
+        }
+        return found;
     }
 
     /** Every event of {@code records} of {@code type} naming {@code ref}. */
@@ -184,43 +304,28 @@ class DirectedForkPlayedForwardTest {
     }
 
     /**
-     * {@code life}, 104.2b: Felidar Sovereign's controller at 40 life as the
-     * upkeep begins. The live game ends in its win; the fork's 39 life
-     * fires no win.
+     * {@code life}, 104.2b, inverted: Felidar Sovereign's controller at 39
+     * life as the upkeep begins. The live trigger does not fire; the fork's
+     * 40 life fires it, it resolves and wins the game, the {@code player_won}
+     * in the resolution's effect half 104.2b-1's declaration reads.
      */
     @Test
-    void oneLifeShortOfFortyWinsNothing() throws Throwable {
+    void fortyLifeWinsTheGameInTheFork() throws Throwable {
         Game game = board(PhaseType.UPKEEP);
         Player active = game.getPlayers().get(0);
         permanent(game, active, "Felidar Sovereign");
-        active.setLife(40, null);
+        active.setLife(39, null);
 
-        List<String> fork = forkOf(game, PhaseType.UPKEEP, "104.2b", "one_short");
+        List<String> fork = forkOf(game, PhaseType.UPKEEP, "104.2b", "forty");
 
+        List<String> won = new ArrayList<>();
         for (String record : fork) {
-            assertFalse(RecordLines.eventTypes(record).contains("player_won"), record);
+            if (RecordLines.eventTypes(record).contains("player_won")) {
+                won.add(parse(record).get("kind") + "/" + parse(record).get("moment"));
+            }
         }
-    }
-
-    /**
-     * {@code remove_permanent}, 400.6: Rest in Peace as the first main phase
-     * begins, and Sneak Attack's Hill Giant to be sacrificed at the end step.
-     * The live Giant is exiled instead of put into a graveyard; the fork has
-     * no Rest in Peace, and its Giant goes to the graveyard.
-     */
-    @Test
-    void withoutTheReplacementTheSacrificeReachesTheGraveyard() throws Throwable {
-        Game game = board(PhaseType.MAIN1);
-        Player active = game.getPlayers().get(0);
-        Card giant = ForkPlayForwardTest.sneakAttack(game);
-        permanent(game, active, "Rest in Peace");
-
-        List<String> fork = forkOf(game, PhaseType.MAIN1, "400.6", "no_replacement");
-
-        List<Map<String, Object>> moves = eventsOf(fork, "zone_change", ref(giant));
-        assertTrue(moves.stream().anyMatch(move -> "graveyard".equals(params(move).get("to_zone"))),
-                "the fork's Giant goes to the graveyard: " + moves);
-        assertTrue(moves.stream().noneMatch(move -> "exile".equals(params(move).get("to_zone"))), moves.toString());
+        assertEquals(List.of("resolution/resolution"), won, "the win is in the trigger's effect half");
+        assertFalse(game.isGameOver(), "the live game goes on");
     }
 
     /**
@@ -295,40 +400,230 @@ class DirectedForkPlayedForwardTest {
                 "the loss is in an effect half, where 704.5b-1's declaration reads it");
     }
 
+    // ── kept records (FR-010c) ──────────────────────────────────────────
+    //
+    // Each case plays with no decision candidate sampled, live or in the
+    // fork: the fork's records still hold the bound card's candidates, which
+    // its variant keeps, and the live game's hold none.
+
+    /** A started two-seat game in {@code step} of the first seat's third turn, both libraries ten Forests. */
+    private static Game bare(PhaseType step) {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player active = game.getPlayers().get(0);
+        game.getPhaseHandler().devModeSet(step, active, 3);
+        for (Player player : game.getPlayers()) {
+            for (int i = 0; i < 10; i++) {
+                game.getAction().moveToLibrary(TestBoard.card(game, player, "Forest"), null, null);
+            }
+        }
+        return game;
+    }
+
+    private static Card lands(Game game, Player owner, String name, int count) {
+        Card first = null;
+        for (int i = 0; i < count; i++) {
+            Card land = permanent(game, owner, name);
+            first = first == null ? land : first;
+        }
+        return first;
+    }
+
     /**
      * {@code add_permanent}, 601.2c: the active player holds Undo ("return
      * two target creatures") with Grizzly Bears the only creature as its
      * first main phase begins. The live Undo has no legal choice of targets;
-     * the fork's opponent also controls Craw Wurm, and the decision records
-     * of the fork's priority stops show Undo with a legal choice of targets.
+     * the fork's opponent also controls Craw Wurm, and the fork's kept
+     * decision records show Undo with a legal choice of targets.
      */
     @Test
     void aSecondCreatureGivesTheTwoTargetSpellALegalChoice() throws Throwable {
-        Game game = board(PhaseType.MAIN1);
-        Player active = game.getPlayers().get(0);
-        for (int i = 0; i < 3; i++) {
-            permanent(game, active, "Island");
-        }
-        TestBoard.inHand(game, active, "Undo");
+        Card[] undo = new Card[1];
+        List<String> fork = keptFork(() -> {
+            Game game = bare(PhaseType.MAIN1);
+            Player active = game.getPlayers().get(0);
+            lands(game, active, "Island", 3);
+            permanent(game, game.getPlayers().get(1), "Grizzly Bears");
+            undo[0] = TestBoard.inHand(game, active, "Undo");
+            return new Setup(game, undo[0]);
+        }, PhaseType.MAIN1, "601.2c", "two-creatures");
 
-        List<String> fork = forkOf(game, PhaseType.MAIN1, "601.2c", "two-creatures", true);
-
-        List<Object> verdicts = new ArrayList<>();
-        for (String record : fork) {
-            if (!"playability".equals(parse(record).get("kind"))
-                    || !(RecordLines.payload(record).get("candidates") instanceof List<?> candidates)) {
-                continue;
-            }
-            for (Object candidate : candidates) {
-                Map<String, Object> read = RecordLines.asMap(candidate);
-                if (read.get("ability") instanceof List<?> keys && keys.stream().anyMatch(key ->
-                        "cardsfolder/u/undo.txt".equals(RecordLines.asMap(key).get("script_file")))) {
-                    verdicts.add(RecordLines.asMap(read.get("verdict")).get("has_legal_target"));
-                }
-            }
-        }
-        assertFalse(verdicts.isEmpty(), "a fork decision record names Undo");
+        List<Object> verdicts = bits(candidatesOf(fork, undo[0]), "has_legal_target");
+        assertFalse(verdicts.isEmpty(), "a kept fork decision record names Undo");
         assertTrue(verdicts.contains(true), "Undo has a legal choice of targets in the fork: " + verdicts);
+    }
+
+    /** 405.6d: a face-down Exalted Angel over four Plains; the fork taps one, so the morph cost cannot be paid. */
+    @Test
+    void aTappedPlainsLeavesTheMorphCostUnpaid() throws Throwable {
+        Card[] angel = new Card[1];
+        List<String> fork = keptFork(() -> {
+            Game game = bare(PhaseType.MAIN1);
+            Player active = game.getPlayers().get(0);
+            lands(game, active, "Plains", 4);
+            angel[0] = TestBoard.card(game, active, "Exalted Angel");
+            angel[0].turnFaceDownNoUpdate();
+            active.getZone(forge.game.zone.ZoneType.Battlefield).add(angel[0]);
+            angel[0].setSickness(false);
+            angel[0].setGameTimestamp(game.getNextTimestamp());
+            return new Setup(game, angel[0]);
+        }, PhaseType.MAIN1, "405.6d", "cannot_pay");
+
+        List<Object> playable = bits(candidatesOf(fork, angel[0]), "can_play");
+        assertFalse(playable.isEmpty(), "a kept candidate turns the Angel face up");
+        assertTrue(playable.contains(false), playable.toString());
+    }
+
+    /** 702.126a: Reverse Engineer over two Islands and three Ornithopters; the fork taps one, so improvise is a mana short. */
+    @Test
+    void aTappedArtifactLeavesImproviseShort() throws Throwable {
+        Card[] engineer = new Card[1];
+        List<String> fork = keptFork(() -> {
+            Game game = bare(PhaseType.MAIN1);
+            Player active = game.getPlayers().get(0);
+            lands(game, active, "Island", 2);
+            lands(game, active, "Ornithopter", 3);
+            engineer[0] = TestBoard.inHand(game, active, "Reverse Engineer");
+            return new Setup(game, engineer[0]);
+        }, PhaseType.MAIN1, "702.126a", "one_artifact_tapped");
+
+        List<Object> affordable = bits(candidatesOf(fork, engineer[0]), "affordable");
+        assertFalse(affordable.isEmpty(), "kept candidates of Reverse Engineer");
+        assertTrue(affordable.contains(false), affordable.toString());
+    }
+
+    /** 702.127a: Cut // Ribbons in A's graveyard; the fork has it in hand, where the aftermath half fails its zone check. */
+    @Test
+    void theAftermathHalfInHandFailsItsZoneCheck() throws Throwable {
+        Card[] cut = new Card[1];
+        List<String> fork = keptFork(() -> {
+            Game game = bare(PhaseType.MAIN1);
+            cut[0] = TestBoard.inGraveyard(game, game.getPlayers().get(0), "Cut // Ribbons");
+            return new Setup(game, cut[0]);
+        }, PhaseType.MAIN1, "702.127a", "from_hand");
+
+        List<List<Object>> checks = failedChecks(candidatesOf(fork, cut[0]));
+        assertTrue(checks.stream().anyMatch(failed -> failed.contains("zone")), checks.toString());
+    }
+
+    /** 702.187b: Electro's Bolt discarded this turn over two Mountains; the fork takes one away, so the mayhem cast is unplayable. */
+    @Test
+    void oneMountainLeavesMayhemUnplayable() throws Throwable {
+        Card[] bolt = new Card[1];
+        List<String> fork = keptFork(() -> {
+            Game game = bare(PhaseType.MAIN2);
+            Player active = game.getPlayers().get(0);
+            lands(game, active, "Mountain", 2);
+            bolt[0] = TestBoard.inGraveyard(game, active, "Electro's Bolt");
+            bolt[0].setDiscarded(true);
+            return new Setup(game, bolt[0]);
+        }, PhaseType.MAIN2, "702.187b", "one_mountain");
+
+        List<Object> playable = bits(candidatesOf(fork, bolt[0]), "can_play");
+        assertTrue(playable.contains(false), playable.toString());
+    }
+
+    /** 702.188a: Spider-Man, Web-Slinger over a Plains and a tapped Grizzly Bears; the fork untaps the Bears, so nothing can be returned. */
+    @Test
+    void anUntappedCreatureLeavesWebSlingingUnplayable() throws Throwable {
+        Card[] spider = new Card[1];
+        List<String> fork = keptFork(() -> {
+            Game game = bare(PhaseType.MAIN2);
+            Player active = game.getPlayers().get(0);
+            permanent(game, active, "Plains");
+            permanent(game, active, "Grizzly Bears").setTapped(true);
+            spider[0] = TestBoard.inHand(game, active, "Spider-Man, Web-Slinger");
+            return new Setup(game, spider[0]);
+        }, PhaseType.MAIN2, "702.188a", "creature_untapped");
+
+        List<Object> playable = bits(candidatesOf(fork, spider[0]), "can_play");
+        assertTrue(playable.contains(false), playable.toString());
+    }
+
+    /** 718.3a: Blitz Automaton over three Mountains; the fork takes one away, so the prototype cast is unplayable. */
+    @Test
+    void twoMountainsLeaveThePrototypeUnplayable() throws Throwable {
+        Card[] automaton = new Card[1];
+        List<String> fork = keptFork(() -> {
+            Game game = bare(PhaseType.MAIN1);
+            Player active = game.getPlayers().get(0);
+            lands(game, active, "Mountain", 3);
+            automaton[0] = TestBoard.inHand(game, active, "Blitz Automaton");
+            return new Setup(game, automaton[0]);
+        }, PhaseType.MAIN1, "718.3a", "two_mountains");
+
+        List<Object> playable = bits(candidatesOf(fork, automaton[0]), "can_play");
+        assertTrue(playable.contains(false), playable.toString());
+    }
+
+    /** 702.84a: Dregscape Zombie in A's graveyard over a Swamp; the fork has it in hand, where unearth fails its zone check. */
+    @Test
+    void unearthFromHandFailsItsZoneCheck() throws Throwable {
+        Card[] zombie = new Card[1];
+        List<String> fork = keptFork(() -> {
+            Game game = bare(PhaseType.MAIN1);
+            Player active = game.getPlayers().get(0);
+            permanent(game, active, "Swamp");
+            zombie[0] = TestBoard.inGraveyard(game, active, "Dregscape Zombie");
+            return new Setup(game, zombie[0]);
+        }, PhaseType.MAIN1, "702.84a", "card_in_hand");
+
+        List<List<Object>> checks = failedChecks(candidatesOf(fork, zombie[0]));
+        assertTrue(checks.stream().anyMatch(failed -> failed.contains("zone")), checks.toString());
+    }
+
+    /** The not-fired trigger records among {@code records} whose trigger's host is {@code host}. */
+    private static List<String> notFired(List<String> records, Card host) {
+        List<String> found = new ArrayList<>();
+        for (String record : records) {
+            Map<String, Object> parsed = parse(record);
+            Object source = RecordLines.asMap(RecordLines.asMap(parsed.get("state")).get("refs")).get("source");
+            if ("trigger".equals(parsed.get("kind")) && ref(host).equals(source)
+                    && Boolean.FALSE.equals(RecordLines.payload(record).get("fired"))) {
+                found.add(record);
+            }
+        }
+        return found;
+    }
+
+    /**
+     * 608.2p: Narci, Fable Singer beside History of Benalia at two lore
+     * counters as the first main phase begins. The live final chapter fires
+     * Narci; the fork's Saga has one counter, so chapter II resolves and
+     * Narci's trigger is evaluated and does not fire, a negative the fork
+     * keeps although its sampler holds no firing to repay.
+     */
+    @Test
+    void aNonFinalChapterLeavesTheResolutionTriggerUnfired() throws Throwable {
+        Card[] narci = new Card[1];
+        List<String> fork = keptFork(() -> {
+            Game game = bare(PhaseType.MAIN1);
+            Player active = game.getPlayers().get(0);
+            narci[0] = permanent(game, active, "Narci, Fable Singer");
+            permanent(game, active, "History of Benalia").setCounters(CounterEnumType.LORE, 2);
+            return new Setup(game, narci[0]);
+        }, PhaseType.MAIN1, "608.2p", "not-final-chapter");
+
+        assertFalse(notFired(fork, narci[0]).isEmpty(), "Narci's trigger evaluated and not fired, kept");
+    }
+
+    /**
+     * 702.105a: Enraged Revolutionary (A at 15 life) as the declare-attackers
+     * step begins, B at 20; the fork's B has 14, so if the Revolutionary
+     * attacks, dethrone is evaluated and does not fire. Whether it attacks is
+     * its seat's decision.
+     */
+    @Test
+    void attackingThePlayerWithLessLifeLeavesDethroneUnfired() throws Throwable {
+        Card[] revolutionary = new Card[1];
+        List<String> fork = keptFork(() -> {
+            Game game = bare(PhaseType.MAIN1);
+            Player active = game.getPlayers().get(0);
+            revolutionary[0] = permanent(game, active, "Enraged Revolutionary");
+            active.setLife(15, null);
+            return new Setup(game, revolutionary[0]);
+        }, null, "702.105a", "less-life");
+
+        assertFalse(notFired(fork, revolutionary[0]).isEmpty(), "dethrone evaluated and not fired, kept");
     }
 
     /** The subjects of every event of {@code record} of {@code type}. */
@@ -360,7 +655,7 @@ class DirectedForkPlayedForwardTest {
         active.setLife(1, null);
         opponent.setLife(1, null);
 
-        List<String> records = played(game, null, "104.4a", false);
+        List<String> records = played(game, null, "104.4a", Decisions.SAMPLED);
 
         List<List<Object>> ends = new ArrayList<>();
         for (String record : records) {
@@ -437,7 +732,7 @@ class DirectedForkPlayedForwardTest {
         game.getPhaseHandler().setCombat(combat);
         game.getAction().moveToGraveyard(jace, null);
         assertTrue(Combat.isRemovedDefender(combat.getDefenderByAttacker(attacker)));
-        return played(game, null, rule, false);
+        return played(game, null, rule, Decisions.SAMPLED);
     }
 
     /**
@@ -496,5 +791,119 @@ class DirectedForkPlayedForwardTest {
         List<Map<String, Object>> fork = combatDamageToB(records, true);
         assertEquals(1, fork.size(), "Thrasta's reaches B in the fork: " + fork);
         assertEquals(7, ((Number) params(fork.get(0)).get("amount")).intValue());
+    }
+
+    // ── inverted variants (DF-A item 3) ─────────────────────────────────
+
+    /** The fork's records among {@code records} holding an event of {@code type}, as kind/moment. */
+    private static List<String> holding(List<String> records, String type) {
+        List<String> found = new ArrayList<>();
+        for (String record : records) {
+            if (RecordLines.eventTypes(record).contains(type)) {
+                found.add(parse(record).get("kind") + "/" + parse(record).get("moment"));
+            }
+        }
+        return found;
+    }
+
+    /**
+     * {@code add_permanent}, 614.17d, inverted: Zombify in hand and Craw Wurm
+     * in A's graveyard, no Grafdigger's Cage; the fork adds the Cage. Forge's
+     * AI reads the Cage and, in the games played, did not cast Zombify under
+     * it, so the fork writes no prevented move until its variant forces the
+     * cast (FR-010b); the case checks the fork's board alone.
+     */
+    @Test
+    void theForksBoardHoldsTheCage() throws Throwable {
+        Game game = bare(PhaseType.MAIN1);
+        Player active = game.getPlayers().get(0);
+        lands(game, active, "Swamp", 4);
+        TestBoard.inHand(game, active, "Zombify");
+        TestBoard.inGraveyard(game, active, "Craw Wurm");
+        permanent(game, game.getPlayers().get(1), "Hill Giant");
+
+        List<String> all = played(game, PhaseType.MAIN1, "614.17d", Decisions.EVERY);
+
+        List<String> fork = forkOf(all, "614.17d", "cage");
+        assertTrue(fork.stream().anyMatch(record -> record.contains("\"name\":\"Grafdigger's Cage\"")),
+                "the fork's board holds the Cage");
+    }
+
+    /**
+     * {@code move_card}, 702.124j, inverted: Pir, Imaginative Rascal in hand
+     * over a library of Forests. The fork's top card is Toothy, Imaginary
+     * Friend, which Pir's partner-with trigger finds, if Pir is cast.
+     */
+    @Test
+    void thePartnerOnTopIsFound() throws Throwable {
+        Game game = bare(PhaseType.MAIN1);
+        Player active = game.getPlayers().get(0);
+        lands(game, active, "Forest", 3);
+        TestBoard.inHand(game, active, "Pir, Imaginative Rascal");
+
+        List<String> fork = forkOf(game, PhaseType.MAIN1, "702.124j", "named_card_in_library");
+
+        assertTrue(fork.stream().anyMatch(record -> "resolution".equals(parse(record).get("kind"))
+                        && record.contains("\"from_zone\":\"library\",\"to_zone\":\"hand\"")),
+                "the partner-with trigger finds Toothy in the fork");
+    }
+
+    /**
+     * {@code add_permanent}, 702.131a, inverted: nine permanents and Secrets
+     * of the Golden City in hand. The fork adds a tapped Island; the spell
+     * resolving gives the city's blessing, if it is cast.
+     */
+    @Test
+    void aTenthPermanentGivesTheBlessing() throws Throwable {
+        Game game = bare(PhaseType.MAIN1);
+        Player active = game.getPlayers().get(0);
+        lands(game, active, "Island", 8);
+        permanent(game, active, "Grizzly Bears");
+        TestBoard.inHand(game, active, "Secrets of the Golden City");
+
+        List<String> fork = forkOf(game, PhaseType.MAIN1, "702.131a", "ten_permanents");
+
+        assertTrue(holding(fork, "state_flag_change").contains("resolution/resolution"),
+                "the spell's resolution gives the blessing in the fork");
+    }
+
+    /**
+     * {@code counters}, 104.3d, inverted: B at 8 poison counters and Ichor
+     * Rats in A's hand. The fork's B has 9, so the Rats' enters trigger, if
+     * they are cast, gives B its tenth and B loses.
+     */
+    @Test
+    void aNinthPoisonCounterLetsTheNextOneKill() throws Throwable {
+        Game game = bare(PhaseType.MAIN1);
+        Player active = game.getPlayers().get(0);
+        lands(game, active, "Swamp", 3);
+        TestBoard.inHand(game, active, "Ichor Rats");
+        game.getPlayers().get(1).setCounters(CounterEnumType.POISON, 8, null, false);
+
+        List<String> fork = forkOf(game, PhaseType.MAIN1, "104.3d", "nine");
+
+        assertTrue(holding(fork, "player_lost").contains("resolution/resolution"),
+                "B's tenth poison counter loses it the game in the fork");
+    }
+
+    /**
+     * {@code replace_card}, 701.42a, 712.4a and 712.14c, inverted: Graf Rats
+     * beside Hill Giant as the first main phase begins. The fork's Giant is
+     * Midnight Scavengers, so at the beginning of combat Graf Rats' trigger
+     * melds the two into Chittering Host, with no seat's choice.
+     */
+    @Test
+    void thePartnerInTheGiantsPlaceMelds() throws Throwable {
+        for (String rule : List.of("701.42a", "712.4a", "712.14c")) {
+            Game game = bare(PhaseType.MAIN1);
+            Player active = game.getPlayers().get(0);
+            permanent(game, active, "Graf Rats");
+            permanent(game, active, "Hill Giant");
+
+            List<String> fork = forkOf(game, PhaseType.MAIN1, rule, "meld_pair");
+
+            assertFalse(fork.stream().filter(record -> record.contains("\"to_zone\":\"exile\"")).toList().isEmpty(),
+                    rule + ": the pair is exiled to meld");
+        }
     }
 }

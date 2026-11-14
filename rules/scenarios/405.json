@@ -706,10 +706,10 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A face-down permanent's turn-face-up special action is a candidate the player can take (can_play true).",
-        "near_miss": "The same special action is a candidate the player cannot take.",
+        "outcome": "A face-down permanent's turn-face-up special action is a candidate whose cost the player can pay (affordable true).",
+        "near_miss": "The same special action is a candidate whose cost the player cannot pay.",
         "params": {
-          "bit": "can_play",
+          "bit": "affordable",
           "fires_when": true,
           "keyword": "Morph"
         },

@@ -78,10 +78,10 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A candidate produced by a Prototype keyword (casting a spell for its prototype cost) is legal when that cost can be paid.",
-        "near_miss": "A Prototype candidate the verdict marks not playable because its cost cannot be paid.",
+        "outcome": "A candidate produced by a Prototype keyword (casting a spell for its prototype cost) is affordable when that cost can be paid.",
+        "near_miss": "A Prototype candidate whose cost cannot be paid.",
         "params": {
-          "bit": "can_play",
+          "bit": "affordable",
           "fires_when": true,
           "keyword": "Prototype"
         },

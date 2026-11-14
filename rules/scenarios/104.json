@@ -97,7 +97,7 @@
         "active": "A",
         "step": "upkeep",
         "life": {
-          "A": 40,
+          "A": 39,
           "B": 20
         },
         "battlefield": {
@@ -124,16 +124,16 @@
       ],
       "variants": [
         {
-          "label": "base",
-          "polarity": "fires",
-          "delta": "",
-          "expected": "A has 40 life, Felidar Sovereign's trigger fires and resolves, and A wins the game; the game ends before the draw step."
-        },
-        {
           "label": "one_short",
           "polarity": "does_not_fire",
-          "delta": "A has 39 life instead of 40.",
-          "expected": "Felidar Sovereign's trigger does not fire; nobody wins and the game proceeds to the draw step, where A draws Plains.",
+          "delta": "",
+          "expected": "Felidar Sovereign's trigger does not fire; nobody wins and the game proceeds to the draw step, where A draws Plains."
+        },
+        {
+          "label": "forty",
+          "polarity": "fires",
+          "delta": "A has 40 life instead of 39.",
+          "expected": "A has 40 life, Felidar Sovereign's trigger fires and resolves, and A wins the game; the game ends before the draw step.",
           "operation": "life"
         }
       ],
@@ -322,7 +322,7 @@
         "graveyard": {},
         "library": {},
         "exile": {},
-        "notes": "B has 9 poison counters and A has none."
+        "notes": "B has 8 poison counters and A has none."
       },
       "decisions": [
         "A casts Ichor Rats, tapping three Swamps.",
@@ -331,16 +331,16 @@
       ],
       "variants": [
         {
-          "label": "base",
-          "polarity": "fires",
-          "delta": "",
-          "expected": "B goes from 9 to 10 poison counters and A from 0 to 1; B loses the game at the next state-based check and A wins."
-        },
-        {
           "label": "eight",
           "polarity": "does_not_fire",
-          "delta": "B has 8 poison counters instead of 9.",
-          "expected": "B goes from 8 to 9 poison counters and A from 0 to 1; nobody loses and the game continues.",
+          "delta": "",
+          "expected": "B goes from 8 to 9 poison counters and A from 0 to 1; nobody loses and the game continues."
+        },
+        {
+          "label": "nine",
+          "polarity": "fires",
+          "delta": "B has 9 poison counters instead of 8.",
+          "expected": "B goes from 9 to 10 poison counters and A from 0 to 1; B loses the game at the next state-based check and A wins.",
           "operation": "counters"
         }
       ],

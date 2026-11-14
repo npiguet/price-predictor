@@ -315,6 +315,23 @@ final class Boards {
     }
 
     /**
+     * The cards in {@code player}'s hand it has the mana for whose spell
+     * searches its library and that it can cast at this boundary
+     * ({@link #castableAtItsSpeed}: a sorcery only as the active player).
+     */
+    static List<Card> searchersInHand(Player player) {
+        return castableInHand(player, Boards::searches).stream()
+                .filter(card -> castableAtItsSpeed(player, card))
+                .toList();
+    }
+
+    /** Whether the spell searches a library: it moves a card of a stated type out of one, its contents hidden. */
+    static boolean searches(SpellAbility spell) {
+        return spell.getApi() == ApiType.ChangeZone && lists(spell.getParam("Origin"), "Library")
+                && spell.hasParam("ChangeType");
+    }
+
+    /**
      * The cards in {@code player}'s hand it has the mana to cast
      * ({@link #affordable}) with a spell {@code spell} accepts.
      */

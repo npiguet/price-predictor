@@ -929,8 +929,9 @@ NOT_DIRECTED = {
                "no playability record exists for it",
     **{rule: f"restates {other}, which is listed in its place (the user's decision of "
              "2026-11-14): its scenario declares the same fact as " + other + "'s"
-       for rule, other in {"121.4": "704.5b", "122.1g": "704.5v", "703.4m": "510.2",
-                           "701.42c": "701.42b"}.items()},
+       for rule, other in {"121.4": "704.5b", "703.4m": "510.2", "701.42c": "701.42b"}.items()},
+    "122.1g": "restates 704.5v (the user's decision of 2026-11-14): its scenario declares the "
+              "same fact as 704.5v's, which is left out for its own reason",
     **dict.fromkeys(("505.5", "614.10a", "701.24f", "702.105b"),
                     "the record cannot show the rule's fact, so its scenarios declare no "
                     "detector (the user's decision of 2026-11-14)"),
@@ -954,9 +955,83 @@ NOT_DIRECTED = {
                     "its variant puts another card in the manifested permanent's place, and "
                     "replace_card refuses every face-down permanent, so every fork would be "
                     "refused"),
-    "712.16": "no sealed pool makes it happen: no set with draft boosters holds both a card "
-              "turning a permanent face down (Ixidron and Vesuvan Shapeshifter in Time "
-              "Spiral, Illithid Harvester, the morph sets) and a double-faced card",
+    "712.16": "no sealed pool makes it happen: no Forge edition with a booster (play-booster "
+              "sets included) holds both a card that turns a permanent face down (SetState "
+              "TurnFaceDown: Ixidron and Vesuvan Shapeshifter in Time Spiral, Illithid "
+              "Harvester in Commander Legends: Battle for Baldur's Gate, Backslide and "
+              "Mischievous Quanar in Onslaught block) and a double-faced card; disguise, "
+              "cloak, manifest and morph "
+              "put cards onto the battlefield face down, which turns no permanent face down",
+    # No single board edit yields the side the counts lack (the user's decision of
+    # 2026-11-14, DF-A): each reason says why.
+    "104.6": "its lacking side is a game restart, which every fork refuses before it "
+             "resolves (Forge's restart resets the JVM-wide trigger id counter); its variant, "
+             "Karn Liberated at 13 loyalty, writes no restart resolution",
+    "400.6": "its lacking side is a zone change that meets a replacement and is not replaced: "
+             "Forge's hooks fire only for a replacement that applies, so no board edit writes "
+             "that rewrite record; its variant, no Rest in Peace, writes no rewrite at all",
+    "704.7": "its lacking side is a game loss that meets a replacement and is not replaced: "
+             "Forge's hooks fire only for a replacement that applies, so no board edit writes "
+             "that rewrite record; its variant, no Lich's Mirror, writes no rewrite at all",
+    "701.24g": "its scenario's declaration counts no near miss (the shuffle and the placement "
+               "come from replacements, so no api narrows the detector), so no fork writes "
+               "its lacking side",
+    "702.35a": "its lacking side is a discard that meets madness's replacement and is not "
+               "replaced: Forge's hooks fire only for a replacement that applies; its variant, "
+               "Shock in Fiery Temper's place, writes no rewrite at all",
+    "702.167a": "its lacking side is a craft ability that resolves and returns nothing, which "
+                "needs the card gone after the activation; its variant, no material, leaves "
+                "craft nothing to activate",
+    "111.10n": "its lacking side is a Sorcerer Role's static contributing no boost, which the "
+               "Role always gives; its variant creates no Role, so its fork writes no record "
+               "of a Role's static",
+    "704.5v": "its lacking side is a battle at zero defense put into the graveyard by the "
+              "state-based check, which needs its defeat trigger countered in response (Stifle "
+              "after the damage); a defeated Siege's own trigger exiles it",
+    "730.2g": "its point needs a merge, a turn face down and a turn-face-up effect in one turn "
+              "(Soul Summons, Cloudpiercer, Ixidron, Break Open): no single board edit or play "
+              "brings them together",
+    "707.10d": "its point needs a spell copied for each target, cast in response to another "
+               "spell on the stack, which no fork taken at a phase boundary, its stack empty, "
+               "plays",
+    "712.11d": "its only classified variant removes the Disturb candidate its declaration reads "
+               "(Hanweir Watchkeep in Beloved Beggar's place), so its fork writes no record of "
+               "the rule; a one-land-short variant would make the near miss",
+    "205.1a": "its classified variants are polarity other (a land creature in the Bears' "
+              "place, a kept +1/+1 counter) and its lacking side is the type-setting Aura "
+              "cast at all: no board edit makes a seat cast Song of the Dryads",
+    "701.12h": "its classified variant is polarity other (two vanilla creatures) and its near "
+               "miss needs the exchange's target destroyed in response; its fires side needs "
+               "Exchange of Words's trigger targets chosen, which Forge's AI has no logic for",
+    "701.23f": "its classified variant is polarity other (the search trigger fires with or "
+               "without Aven Mindcensor's limit) and its near miss, the player's own search, "
+               "moves a card between two hands, two facts",
+    "702.70b": "its classified variant is polarity other (one poisonous instance fewer still "
+               "fires once) and its near miss, poisonous meeting damage to a creature, needs "
+               "a block, a seat's choice",
+    "119.8": "119.8-2's scenario declares no detector, and 119.8-1's declaration reads a "
+             "can't-be-cast static the decision candidate names, which a can't-lose-life "
+             "static (Platinum Emperion's) never is: the record names no static for a cost the "
+             "static makes unpayable",
+    "702.62c": "the record cannot show the prohibition: a suspend candidate a can't-be-cast "
+               "static forbids fails only Forge's own restriction check (script_restriction), "
+               "and the collector names a prohibiting static for spells and activated "
+               "abilities alone, never a special action",
+    "702.133a": "the record cannot show jump-start: Forge's jump-start is an optional cost of "
+                "the card's own cast from the graveyard, so no decision candidate carries the "
+                "keyword or its discard, and the cast's candidate fails its zone check whatever "
+                "the hand holds",
+    "702.154a": "the record cannot show the near miss: Forge's enlist is an optional attack "
+                "cost (a static) whose reflexive trigger exists only once the cost is paid, so "
+                "no enlist trigger is evaluated where nothing is enlisted",
+    "702.85a": "the record cannot show the hit: Forge casts the cascaded card as a cast of its "
+               "own after the cascade trigger resolves, so the trigger's effect half holds the "
+               "cards exiled and no move from exile to the stack, which is in the cast's own "
+               "record, naming no cascade; no declaration tells a cascade that hit from one that "
+               "missed",
+    "702.102c": "the record cannot tell a fused cast from its left half's: both candidates act "
+                "through the split card's first spell line, so no declaration reads the fused "
+                "cast's affordability apart from Give's",
 }
 FIRES, DOES_NOT_FIRE = "fires", "does_not_fire"
 

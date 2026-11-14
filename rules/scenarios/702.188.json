@@ -74,10 +74,10 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A web-slinging cost is a playable candidate: the mana is payable and a tapped creature can be returned.",
-        "near_miss": "A web-slinging candidate is not playable (no tapped creature to return, or unpayable mana).",
+        "outcome": "A web-slinging cost is a candidate its controller can pay: the mana is payable and a tapped creature can be returned.",
+        "near_miss": "A web-slinging candidate whose cost cannot be paid (no tapped creature to return, or unpayable mana).",
         "params": {
-          "bit": "can_play",
+          "bit": "affordable",
           "fires_when": true,
           "keyword": "Web-slinging"
         },

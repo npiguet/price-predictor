@@ -78,10 +78,10 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A mayhem alternative cost is a playable candidate for a card discarded this turn.",
-        "near_miss": "A mayhem candidate is not playable (not discarded this turn, or unpayable).",
+        "outcome": "A mayhem alternative cost of a card discarded this turn is a candidate its controller can pay.",
+        "near_miss": "A mayhem candidate whose cost its controller cannot pay.",
         "params": {
-          "bit": "can_play",
+          "bit": "affordable",
           "fires_when": true,
           "keyword": "Mayhem"
         },

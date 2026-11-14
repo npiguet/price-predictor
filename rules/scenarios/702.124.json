@@ -35,7 +35,7 @@
         "library": {
           "A": [
             "Forest",
-            "Toothy, Imaginary Friend",
+            "Forest",
             "Forest"
           ]
         },
@@ -49,16 +49,16 @@
       ],
       "variants": [
         {
-          "label": "named_card_in_library",
-          "polarity": "fires",
-          "delta": "",
-          "expected": "Toothy, Imaginary Friend moves from A's library to A's hand and A's library is shuffled."
-        },
-        {
           "label": "named_card_absent",
           "polarity": "does_not_fire",
-          "delta": "A's library holds three Forests and no Toothy, Imaginary Friend.",
-          "expected": "The trigger resolves and A finds nothing. A's hand stays empty, and the library is shuffled.",
+          "delta": "",
+          "expected": "The trigger resolves and A finds nothing. A's hand stays empty, and the library is shuffled."
+        },
+        {
+          "label": "named_card_in_library",
+          "polarity": "fires",
+          "delta": "A's library holds Forest, Toothy, Imaginary Friend, Forest instead of three Forests.",
+          "expected": "Toothy, Imaginary Friend moves from A's library to A's hand and A's library is shuffled.",
           "operation": "move_card"
         }
       ],

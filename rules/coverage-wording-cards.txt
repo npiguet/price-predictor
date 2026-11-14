@@ -1,20 +1,9 @@
-abbey gargoyles
 arcanum wings
-archivist of oghma
-aven farseer
-aven mindcensor
-barkweave crusher
-barter in blood
-beloved beggar
 blitz automaton
-bloodbraid elf
-braided net
-break open
 cached defenses
 centaur courser
 changeling hero
 clone
-cloudpiercer
 colossal dreadmaw
 concerted effort
 cosi's trickster
@@ -22,13 +11,11 @@ counterspell
 craw wurm
 crustacean commando
 cut
-darksteel colossus
 demonic tutor
 dimir infiltrator
 divination
 dregscape zombie
 dryad arbor
-durkwood baloth
 echo inspector
 electro's bolt
 elfhame sanctuary
@@ -36,52 +23,37 @@ ellivere of the wild court
 enraged revolutionary
 everlasting torment
 exalted angel
-exchange of words
 felidar sovereign
-fiery temper
 flame rift
 fleshwrither
 forest
 furtive homunculus
 geological appraiser
 giant growth
-give
 glorious purpose
 goblin bombardment
 graf rats
 grafdigger's cage
-gravebane zombie
 grizzly bears
 hakbal of the surging soul
-hanweir watchkeep
 hill giant
 history of benalia
 holy strength
 hopeful eidolon
 ichor rats
-invasion of zendikar
 island
-ixidron
 jace beleren
-karn liberated
 kellan joins up
 leyline of punishment
-lich's mirror
 lightning bolt
 llanowar elves
 merfolk branchwalker
 midnight scavengers
 mountain
-mutagenic growth
 narci, fable singer
-naturalize
-night's whisper
 ornithopter
 pir, imaginative rascal
 plains
-platinum emperion
-radiate
-radical idea
 rest in peace
 reverse engineer
 runeclaw bear
@@ -89,29 +61,19 @@ savannah lions
 seal of fire
 secrets of the golden city
 shock
-short sword
-song of the dryads
-soul summons
-spellbook vendor
 spider-man, web-slinger
 spirit of the labyrinth
 spiteful blow
 standard bearer
-steel golem
 stifle
 swamp
 swords to plowshares
 thrasta, tempest's roar
 toothy, imaginary friend
-tormenting voice
 tree of perdition
 tree of redemption
-typhoid rats
 undo
-unsummon
 val, marooned surveyor
-vampiric tutor
-virulent sliver
 vitalize
 wall of wood
 white knight

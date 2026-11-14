@@ -14,7 +14,7 @@ import java.util.Optional;
 
 /**
  * 702.84a, unearth can be activated only from the graveyard and only as a
- * sorcery, on scenario {@code 702.84a-4}: in A's main phase with an empty
+ * sorcery, on scenario {@code 702.84a-5}: in A's main phase with an empty
  * stack, A may unearth Dregscape Zombie from its graveyard.
  *
  * <p>The base board, read at a boundary: a main phase of the active player
@@ -22,12 +22,17 @@ import java.util.Optional;
  * the lands for. It binds that card.
  *
  * <p>Variant {@code card_in_hand} ({@code move_card}): the card is in its
- * owner's hand instead, where unearth does not function.
+ * owner's hand instead, where unearth does not function: its unearth
+ * candidate fails the zone check 702.84a-5's declaration reads.
+ *
+ * <p>The fork keeps the card's decision candidates whatever the decision
+ * sample draws (FR-010c): the collector reads their verdicts at each of the
+ * fork's priority stops itself, whether or not a seat plays them.
  */
 public final class Unearth {
 
     public static final String RULE = "702.84a";
-    static final String SCENARIO = "702.84a-4";
+    static final String SCENARIO = "702.84a-5";
     static final String CARD_IN_HAND = "card_in_hand";
 
     private Unearth() {
@@ -36,7 +41,8 @@ public final class Unearth {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, Unearth::bind, CARD_IN_HAND,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.move(fork.card("card"), ZoneType.Hand, null)));
+                        fork -> MoveCardOperation.move(fork.card("card"), ZoneType.Hand, null))
+                        .keepingCandidatesOf("card"));
     }
 
     static Optional<Binding> bind(Game live) {

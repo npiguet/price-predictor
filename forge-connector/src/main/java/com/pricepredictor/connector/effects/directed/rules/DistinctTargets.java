@@ -34,10 +34,9 @@ import java.util.Optional;
  *
  * <p>The point needs no seat's choice: the collector reads the spell's
  * verdict at each of the fork's priority stops itself
- * ({@code PriorityCandidates}), whether or not a seat casts it. It is written
- * only as the decision sample keeps the candidate ({@code --playability-rate}
- * and {@code --plain-candidate-rate}), so most such forks write no record
- * of it.
+ * ({@code PriorityCandidates}), whether or not a seat casts it, and the fork
+ * keeps the spell's decision candidates whatever the decision sample draws
+ * (FR-010c).
  */
 public final class DistinctTargets {
 
@@ -52,7 +51,8 @@ public final class DistinctTargets {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, DistinctTargets::bind, TWO_CREATURES,
                 new Application(ForkOperation.ADD_PERMANENT,
-                        fork -> AddPermanentOperation.of(WURM, fork.player("opponent"), false)));
+                        fork -> AddPermanentOperation.of(WURM, fork.player("opponent"), false))
+                        .keepingCandidatesOf("spell"));
     }
 
     static Optional<Binding> bind(Game live) {

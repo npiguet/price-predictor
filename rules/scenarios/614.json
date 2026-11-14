@@ -2134,8 +2134,7 @@
             "Swamp",
             "Swamp",
             "Swamp",
-            "Swamp",
-            "Grafdigger's Cage"
+            "Swamp"
           ],
           "B": []
         },
@@ -2159,17 +2158,17 @@
       ],
       "variants": [
         {
-          "label": "cage",
-          "polarity": "fires",
-          "delta": "",
-          "expected": "Grafdigger's Cage means creature cards in graveyards can't enter the battlefield: Grizzly Bears stays in A's graveyard. Zombify goes to A's graveyard."
-        },
-        {
           "label": "no_cage",
           "polarity": "does_not_fire",
-          "delta": "Grafdigger's Cage is not on the battlefield.",
-          "expected": "Grizzly Bears enters the battlefield under A's control. Zombify goes to A's graveyard.",
-          "operation": "remove_permanent"
+          "delta": "",
+          "expected": "Grizzly Bears enters the battlefield under A's control. Zombify goes to A's graveyard."
+        },
+        {
+          "label": "cage",
+          "polarity": "fires",
+          "delta": "Grafdigger's Cage is on the battlefield under A's control.",
+          "expected": "Grafdigger's Cage means creature cards in graveyards can't enter the battlefield: Grizzly Bears stays in A's graveyard. Zombify goes to A's graveyard.",
+          "operation": "add_permanent"
         }
       ],
       "cards": [

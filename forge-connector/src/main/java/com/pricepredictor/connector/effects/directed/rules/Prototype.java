@@ -23,7 +23,7 @@ import java.util.Optional;
  * begins, it holds a card with prototype whose own mana value is more than
  * the mana it can make, and the permanents it can make mana with are all
  * lands, exactly as many as the prototype cost's mana value. It binds one of
- * those lands.
+ * those lands and the card.
  *
  * <p>The active player cannot add a land to its mana this turn
  * ({@link Boards#noLandToPlay}): it holds no land, or its land drop is
@@ -31,6 +31,10 @@ import java.util.Optional;
  *
  * <p>Variant {@code two_mountains} ({@code remove_permanent}): that land is
  * gone, so the prototype cost is one mana short and neither cast is legal.
+ *
+ * <p>The fork keeps the card's decision candidates whatever the decision
+ * sample draws (FR-010c): the collector reads their verdicts at each of the
+ * fork's priority stops itself, whether or not a seat plays them.
  */
 public final class Prototype {
 
@@ -44,7 +48,8 @@ public final class Prototype {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, Prototype::bind, TWO_MOUNTAINS,
                 new Application(ForkOperation.REMOVE_PERMANENT,
-                        fork -> new RemovePermanentOperation(fork.card("land"))));
+                        fork -> new RemovePermanentOperation(fork.card("land")))
+                        .keepingCandidatesOf("card"));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -60,7 +65,7 @@ public final class Prototype {
                 int value = Boards.manaValue(cost);
                 Optional<Card> land = Boards.lastLandFor(active, value);
                 if (land.isPresent() && card.getCMC() > value) {
-                    return Optional.of(Binding.empty().with("land", land.get()));
+                    return Optional.of(Binding.empty().with("land", land.get()).with("card", card));
                 }
             }
         }

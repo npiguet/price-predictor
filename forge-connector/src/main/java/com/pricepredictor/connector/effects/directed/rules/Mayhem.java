@@ -23,7 +23,7 @@ import java.util.Optional;
  * <p>The base board, read at a boundary: a main phase of the active player
  * begins, its graveyard holds a card with a mayhem cost that it discarded this
  * turn, and the permanents it can make mana with are all lands, exactly as
- * many as that cost's mana value. It binds one of those lands.
+ * many as that cost's mana value. It binds one of those lands and the card.
  *
  * <p>The active player cannot add a land to its mana this turn
  * ({@link Boards#noLandToPlay}): it holds no land, or its land drop is
@@ -31,6 +31,10 @@ import java.util.Optional;
  *
  * <p>Variant {@code one_mountain} ({@code remove_permanent}): that land is
  * gone, so the mayhem cost is one mana short and the card cannot be cast.
+ *
+ * <p>The fork keeps the card's decision candidates whatever the decision
+ * sample draws (FR-010c): the collector reads their verdicts at each of the
+ * fork's priority stops itself, whether or not a seat plays them.
  */
 public final class Mayhem {
 
@@ -44,7 +48,8 @@ public final class Mayhem {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, Mayhem::bind, ONE_MOUNTAIN,
                 new Application(ForkOperation.REMOVE_PERMANENT,
-                        fork -> new RemovePermanentOperation(fork.card("land"))));
+                        fork -> new RemovePermanentOperation(fork.card("land")))
+                        .keepingCandidatesOf("card"));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -62,7 +67,7 @@ public final class Mayhem {
             for (Cost cost : Boards.keywordCosts(card, Keyword.MAYHEM)) {
                 Optional<Card> land = Boards.lastLandFor(active, Boards.manaValue(cost));
                 if (land.isPresent()) {
-                    return Optional.of(Binding.empty().with("land", land.get()));
+                    return Optional.of(Binding.empty().with("land", land.get()).with("card", card));
                 }
             }
         }

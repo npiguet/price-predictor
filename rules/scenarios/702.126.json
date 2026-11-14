@@ -188,16 +188,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A candidate for a card with improvise is not affordable although untapped artifacts exist, since improvise pays no coloured mana.",
-        "near_miss": "A candidate for a card with improvise that is affordable.",
-        "params": {
-          "bit": "affordable",
-          "fires_when": false,
-          "source_keyword": "Improvise"
-        },
-        "needs": []
+        "none": "The record cannot tell an improvise candidate short of coloured mana from one short of generic mana: affordable is false either way, which 702.126a-1 reads as its near miss, so a declaration reading it as this scenario's fires side would tag every unaffordable improvise candidate fires."
       }
     },
     {

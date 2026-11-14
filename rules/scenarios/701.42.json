@@ -27,7 +27,7 @@
               "summoning_sick": false
             },
             {
-              "card": "Midnight Scavengers",
+              "card": "Hill Giant",
               "summoning_sick": false
             }
           ]
@@ -43,16 +43,16 @@
       ],
       "variants": [
         {
-          "label": "meld_pair",
-          "polarity": "fires",
-          "delta": "",
-          "expected": "Graf Rats and Midnight Scavengers are exiled and A's Chittering Host (5/6, haste, menace) enters the battlefield. It is one permanent represented by both cards; neither Graf Rats nor Midnight Scavengers is on the battlefield as a separate permanent."
-        },
-        {
           "label": "wrong_partner",
           "polarity": "does_not_fire",
-          "delta": "A controls Hill Giant instead of Midnight Scavengers.",
-          "expected": "Graf Rats' trigger does not fire. Graf Rats and Hill Giant stay on the battlefield and nothing is exiled.",
+          "delta": "",
+          "expected": "Graf Rats' trigger does not fire. Graf Rats and Hill Giant stay on the battlefield and nothing is exiled."
+        },
+        {
+          "label": "meld_pair",
+          "polarity": "fires",
+          "delta": "A controls Midnight Scavengers instead of Hill Giant.",
+          "expected": "Graf Rats and Midnight Scavengers are exiled and A's Chittering Host (5/6, haste, menace) enters the battlefield. It is one permanent represented by both cards; neither Graf Rats nor Midnight Scavengers is on the battlefield as a separate permanent.",
           "operation": "replace_card"
         }
       ],

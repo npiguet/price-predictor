@@ -105,6 +105,79 @@
       }
     },
     {
+      "id": "712.4a-2",
+      "rules": [
+        "712.4a",
+        "712.14c"
+      ],
+      "title": "Meld cards brought together meld into one permanent with their back faces up",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Graf Rats",
+              "summoning_sick": false
+            },
+            {
+              "card": "Hill Giant",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A moves to the beginning of combat. Graf Rats' trigger fires; A has no other action and passes priority, B passes, and the trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "wrong_partner",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Graf Rats' trigger does not fire. Graf Rats (2/1) and Hill Giant stay on the battlefield as separate permanents and nothing is exiled."
+        },
+        {
+          "label": "meld_pair",
+          "polarity": "fires",
+          "delta": "A controls Midnight Scavengers instead of Hill Giant.",
+          "expected": "Graf Rats and Midnight Scavengers are exiled and return as a single permanent, Chittering Host (colorless 5/6 Eldrazi Horror with haste and menace), represented by both cards with their back faces up. Neither Graf Rats nor Midnight Scavengers is on the battlefield as a separate permanent. Chittering Host's enters trigger resolves with no other creature to affect.",
+          "operation": "replace_card"
+        }
+      ],
+      "cards": [
+        "Graf Rats",
+        "Midnight Scavengers",
+        "Chittering Host",
+        "Hill Giant"
+      ],
+      "forge_notes": "Forge implements the meld through the Meld ability on Graf Rats, whose intervening-if checks for a creature named Midnight Scavengers.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A meld resolution exiles both cards of a meld pair from the battlefield and puts them back as one melded permanent with their back faces up.",
+        "near_miss": "A meld resolution that exiles fewer than two cards, as when one of the pair has left the battlefield.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "Battlefield",
+          "to_zone": "Exile",
+          "min_count": 2,
+          "api": "Meld"
+        },
+        "needs": []
+      }
+    },
+    {
       "id": "712.4b-1",
       "rules": [
         "712.4b"

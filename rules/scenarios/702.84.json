@@ -238,7 +238,7 @@
       "rules": [
         "702.84a"
       ],
-      "title": "Unearth can be activated only as a sorcery and only from the graveyard",
+      "title": "Unearth can be activated only as a sorcery",
       "record_kind": "playability",
       "setup": {
         "active": "A",
@@ -281,6 +281,68 @@
           "operation": {
             "unclassifiable": "phase or turn: the step is beginning_of_combat instead of main1"
           }
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Dregscape Zombie"
+      ],
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A unearth candidate passes its casting-speed check (sorcery timing).",
+        "near_miss": "A unearth candidate that fails it.",
+        "params": {
+          "bit": "failed_check",
+          "check": "casting_speed",
+          "fires_when": true,
+          "keyword": "Unearth"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
+    },
+    {
+      "id": "702.84a-5",
+      "rules": [
+        "702.84a"
+      ],
+      "title": "Unearth can be activated only from the graveyard",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Dregscape Zombie"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A has priority with an empty stack and considers activating unearth ({B}) on Dregscape Zombie."
+      ],
+      "variants": [
+        {
+          "label": "main_phase_graveyard",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Activating unearth is legal (can_play true)."
         },
         {
           "label": "card_in_hand",
@@ -298,11 +360,11 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A unearth candidate passes its casting-speed check (sorcery timing).",
+        "outcome": "A unearth candidate passes its zone check (the card is in its owner's graveyard).",
         "near_miss": "A unearth candidate that fails it.",
         "params": {
           "bit": "failed_check",
-          "check": "casting_speed",
+          "check": "zone",
           "fires_when": true,
           "keyword": "Unearth"
         },

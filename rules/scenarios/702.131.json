@@ -30,7 +30,6 @@
             "Island",
             "Island",
             "Island",
-            "Island",
             "Island"
           ],
           "B": [
@@ -63,17 +62,17 @@
       ],
       "variants": [
         {
-          "label": "ten_permanents",
-          "polarity": "fires",
-          "delta": "",
-          "expected": "A controls ten permanents when the spell resolves, gets the city's blessing and draws three cards: A's hand holds 3 Plains, A's library holds 2. Secrets of the Golden City goes to A's graveyard."
-        },
-        {
           "label": "nine_permanents",
           "polarity": "does_not_fire",
-          "delta": "A controls 9 Islands instead of 10.",
-          "expected": "A controls nine permanents when the spell resolves, does not get the city's blessing and draws two cards: A's hand holds 2 Plains, A's library holds 3. B's three Mountains do not count. Secrets of the Golden City goes to A's graveyard.",
-          "operation": "remove_permanent"
+          "delta": "",
+          "expected": "A controls nine permanents when the spell resolves, does not get the city's blessing and draws two cards: A's hand holds 2 Plains, A's library holds 3. B's three Mountains do not count. Secrets of the Golden City goes to A's graveyard."
+        },
+        {
+          "label": "ten_permanents",
+          "polarity": "fires",
+          "delta": "A also controls a tapped Island: ten permanents.",
+          "expected": "A controls ten permanents when the spell resolves, gets the city's blessing and draws three cards: A's hand holds 3 Plains, A's library holds 2. Secrets of the Golden City goes to A's graveyard.",
+          "operation": "add_permanent"
         }
       ],
       "cards": [

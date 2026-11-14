@@ -26,11 +26,16 @@ import java.util.Optional;
  * (before its lore counters are added), the active player controls a
  * permanent whose trigger watches the final chapter ability of a Saga resolve
  * (Narci), and a Saga whose next lore counter reaches its final chapter. It
- * binds the Saga.
+ * binds the Saga and the watching permanent.
  *
  * <p>Variant {@code not-final-chapter} ({@code counters}): the Saga has one
  * lore counter fewer, so the chapter that resolves is not the final one and
  * the trigger does not fire.
+ *
+ * <p>The fork keeps the not-fired evaluations of the triggers the watching permanent hosts
+ * whatever the trigger-negative sampler's balance says (FR-010c): a fork's
+ * recording is fresh, so the sampler holds no earlier firing of the mode
+ * for a negative to repay.
  */
 public final class FinalChapterResolves {
 
@@ -47,7 +52,7 @@ public final class FinalChapterResolves {
                 new Application(ForkOperation.COUNTERS, fork -> {
                     Card saga = fork.card("saga");
                     return new CountersOperation(saga, LORE, saga.getCounters(LORE) - 1);
-                }));
+                }).keepingNegativesOf("watcher"));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -55,10 +60,10 @@ public final class FinalChapterResolves {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        boolean watched = active.getCardsIn(ZoneType.Battlefield).stream()
-                .flatMap(card -> card.getTriggers().stream())
-                .anyMatch(FinalChapterResolves::watchesFinalChapter);
-        if (!watched) {
+        Optional<Card> watcher = active.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(card -> card.getTriggers().stream().anyMatch(FinalChapterResolves::watchesFinalChapter))
+                .findFirst();
+        if (watcher.isEmpty()) {
             return Optional.empty();
         }
         return active.getCardsIn(ZoneType.Battlefield).stream()
@@ -66,7 +71,7 @@ public final class FinalChapterResolves {
                 .filter(card -> card.getCounters(LORE) >= 1
                         && card.getCounters(LORE) == card.getFinalChapterNr() - 1)
                 .findFirst()
-                .map(saga -> Binding.empty().with("saga", saga));
+                .map(saga -> Binding.empty().with("saga", saga).with("watcher", watcher.get()));
     }
 
     /** Whether the trigger fires on a Saga's final chapter ability resolving. */
