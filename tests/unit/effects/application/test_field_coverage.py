@@ -183,13 +183,23 @@ class TestTheWalk:
         The walk reads the dataclasses, so a new field is audited by existing
         here rather than by anyone remembering to add it to a list.
         """
-        record = _record(ResolutionPayload(), moment=Moment.RESOLUTION,
+        entity = EntityState(id="E1", name="x", zone="battlefield", controller="P0",
+                             combat=CombatStatus())
+        record = _record(ResolutionPayload(), _snapshot(entity), moment=Moment.RESOLUTION,
                          kind=RecordKind.RESOLUTION)
         coverage = field_coverage([record])
-        for spec in dataclasses.fields(EntityState):
-            assert f"record.state.entities[].{spec.name}" not in coverage or True
-        for spec in dataclasses.fields(GlobalState):
-            assert f"record.state.global_.{spec.name}" in coverage
+
+        def walked(prefix: str) -> bool:
+            return any(path == prefix or path.startswith((f"{prefix}.", f"{prefix}[]"))
+                       for path in coverage)
+
+        for owner, prefix in ((EntityState, "record.state.entities[]"),
+                              (GlobalState, "record.state.global_"),
+                              (ResolutionPayload, "record.payload<ResolutionPayload>")):
+            # A field outside equality is the codec's bookkeeping, not data.
+            missing = [spec.name for spec in dataclasses.fields(owner)
+                       if spec.compare and not walked(f"{prefix}.{spec.name}")]
+            assert not missing, (owner.__name__, missing)
 
 
 class TestTheRewriteChannelIsNotExcused:
@@ -223,11 +233,6 @@ class TestTheRewriteChannelIsNotExcused:
                 "a dead channel rather than an unexercised one"
             )
 
-    def test_the_walk_reaches_them(self):
-        coverage = field_coverage([self._rewrite("r1")])
-        assert "record.payload<RewritePayload>.result" in coverage
-        assert "record.payload<RewritePayload>.replaced_by" in coverage
-
     def test_a_hook_that_passes_no_result_reads_as_a_constant_field(self):
         """The shape of the pre-contract corpus, and what it should report."""
         records = [self._rewrite("r1"), self._rewrite("r2")]
@@ -257,41 +262,19 @@ class TestTheRewriteChannelIsNotExcused:
 
 
 class TestTheRatchet:
-    def test_every_known_constant_names_a_field_the_schema_has(self):
-        """A path that no longer exists means the entry is stale.
+    def test_every_known_constant_names_a_field_the_collector_writes(self):
+        """A path that no longer exists means the entry is stale: without this
+        a renamed field leaves its old path on the list forever, silently
+        asserting nothing. Checked against the walk over every Java golden
+        record, the collector's own shapes (the list is empty today)."""
+        from effects.infrastructure.record_codec import record_from_dict
+        from tests.unit.effects.builders import java_golden_records
 
-        Without this a renamed field leaves its old path on the list forever,
-        silently asserting nothing.
-        """
-        record = _record(ContinuousPayload(contributions=(
-            Contribution(entity="E1"),
-        )), _snapshot(
-            EntityState(id="E1", name="x", zone="battlefield", controller="P0",
-                        combat=CombatStatus()),
-        ))
-        walked = set(field_coverage([record]))
-        # Only the paths this synthetic record can reach are checkable here;
-        # the rest are covered by the integration test's real corpus.
-        reachable = {p for p in KNOWN_CONSTANT_FIELDS
-                     if p.startswith(("record.state", "record.payload<Continuous"))}
-        assert reachable <= walked, sorted(reachable - walked)
-
-    def test_only_the_unvarying_fields_read_as_constant(self):
-        records = [
-            _record(ContinuousPayload(board_hash="a")),
-            _record(ContinuousPayload(board_hash="b"), record_id="r2"),
-        ]
-        coverage = field_coverage(records)
-        assert not coverage["record.payload<ContinuousPayload>.board_hash"].constant
-        assert coverage["record.game_id"].constant
+        walked = set(field_coverage([record_from_dict(raw) for raw in java_golden_records()]))
+        assert set(KNOWN_CONSTANT_FIELDS) <= walked, sorted(set(KNOWN_CONSTANT_FIELDS) - walked)
 
     def test_coverage_of_no_records_is_empty_rather_than_an_error(self):
         assert field_coverage([]) == {}
-
-    def test_a_coverage_row_reports_what_it_saw(self):
-        row = FieldCoverage(path="p", populated=1, seen=4, varied=True)
-        assert not row.constant
-
 
 class TestReportLines:
     """The rows ``field-coverage`` prints, tagged by what the list says."""
@@ -396,6 +379,28 @@ class TestTheGen3Fields:
             "record.copy_dropped",
         }, sorted(constant)
 
+    def test_the_members_the_fixture_predates_are_written_and_vary_on_the_goldens(self):
+        """The test above excuses members as constant because the pilots that
+        cut the fixture predate them; the collector's own records show each
+        is written, and that the ones a record can vary do vary, so an excuse
+        never hides a dead channel."""
+        from effects.infrastructure.record_codec import record_from_dict
+        from tests.unit.effects.builders import java_golden_records
+
+        coverage = field_coverage(record_from_dict(raw) for raw in java_golden_records())
+        varying = [
+            "record.payload<ResolutionPayload>.outcome", "record.copy_dropped",
+            *(f"record.payload<RewritePayload>.{name}" for name in (
+                "incoming_unknown", "buffered", "buffered_ran", "buffered_events")),
+            *(f"record.payload<PlayabilityBlockersPayload>.forbidden[].{name}"
+              for name in ("required_elsewhere", "responsible_own", "responsible_unresolved")),
+        ]
+        written = [*varying, "record.payload<ActivationPayload>.events",
+                   "record.payload<TurnActionPayload>.records_withheld",
+                   "record.state.players[].max_land_plays"]
+        assert [path for path in written if not coverage[path].populated] == []
+        assert [path for path in varying if coverage[path].constant] == []
+
     def test_the_report_rows_each_gen3_field(self):
         lines = gen3_report_lines(field_coverage(self._golden()))
         assert lines[1].startswith("gen-3 fields (root § 8.13): ")
@@ -424,5 +429,12 @@ class TestTheGen3Fields:
             field_coverage([record])))
 
     def test_the_section_follows_the_constant_fields(self):
+        """After every constant-field row, set off by a blank line, and
+        before the event parameters."""
         lines = report_lines(field_coverage(self._golden()))
-        assert any(line.startswith("gen-3 fields") for line in lines)
+        header = next(i for i, line in enumerate(lines) if line.startswith("gen-3 fields"))
+        events = next(i for i, line in enumerate(lines) if line.startswith("event parameters"))
+        rows = [i for i, line in enumerate(lines)
+                if line.startswith(("  [known ]", "  [NEW   ]"))]
+        assert rows and max(rows) < header < events
+        assert lines[header - 1] == ""

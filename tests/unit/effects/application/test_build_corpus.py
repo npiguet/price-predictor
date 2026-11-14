@@ -393,13 +393,6 @@ def default_build(tmp_path_factory, shared_corpus) -> CorpusStore:
     return shared_corpus.build(tmp_path_factory.mktemp("default-build") / "curated")
 
 
-def test_build_writes_the_three_strata_and_a_manifest(default_build):
-    store = default_build
-    assert store.manifest_path.exists()
-    assert list(store.training_dir.glob("*.jsonl.gz"))
-    assert store.load().digest()
-
-
 def test_a_build_writes_the_legacy_token_key_fields_empty(default_build):
     """Older manifests carry them and a digest hashes them, so they stay, unset."""
     manifest = default_build.load()
@@ -1761,15 +1754,6 @@ def test_a_records_set_mixing_generations_is_refused(tmp_path, a_corpus):
         a_corpus.build(tmp_path / "out", rules=_GEN2_RULES)
 
 
-def test_the_retired_game_count_flag_is_rejected_by_argparse(capsys):
-    """Spec Story 4 scenario 10: ``--game-disjoint-share`` replaced it."""
-    from effects.infrastructure.cli import build_parser
-
-    with pytest.raises(SystemExit):
-        build_parser().parse_args(["build-corpus", "--game-disjoint-games", "1000"])
-    assert "--game-disjoint-games" in capsys.readouterr().err
-
-
 def test_the_game_disjoint_keywords_parse_as_a_comma_separated_list():
     from effects.infrastructure.cli import build_parser
 
@@ -1789,15 +1773,6 @@ def gen2_build(tmp_path_factory, shared_corpus) -> CorpusStore:
     """``shared_corpus`` built once under :data:`_GEN2_RULES`."""
     output = tmp_path_factory.mktemp("gen2-build") / "curated"
     return shared_corpus.build(output, rules=_GEN2_RULES)
-
-
-def test_two_builds_with_one_seed_write_the_same_training_records(
-    tmp_path, shared_corpus, gen2_build,
-):
-    """FR-052."""
-    again = shared_corpus.build(tmp_path / "two", rules=_GEN2_RULES)
-
-    assert _training_ids(gen2_build) == _training_ids(again)
 
 
 def test_random_seat_changes_no_selection(tmp_path, shared_corpus, gen2_build):

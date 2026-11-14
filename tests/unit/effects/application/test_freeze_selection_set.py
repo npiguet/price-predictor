@@ -318,14 +318,6 @@ def test_untrained_rules_have_no_tests_and_undetected_rules_are_named_untested()
         assert [(item.item, item.reason) for item in left] == [("never-seen", UNTESTED)]
 
 
-def test_rule_test_entities_come_from_the_tag() -> None:
-    halves = _two_halves(1)
-    records, tags = _balanced_records(halves)
-    frozen = _freeze(halves, records, tags)
-    rows = frozen.rule_tests[GD]["selection"]["R"]["fires"]
-    assert {row.entities for row in rows} == {("E1",)}
-
-
 def test_rule_test_entities_are_the_tag_s_outcome_entities() -> None:
     """Research R1: a rule test reads where the outcome falls, never the condition."""
     halves = _two_halves(1)

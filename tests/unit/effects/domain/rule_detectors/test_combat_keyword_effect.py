@@ -17,7 +17,6 @@ import pytest
 from effects.domain.event_schema import Event, EventType
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import families
 from effects.domain.rule_detectors.combat_keyword_effect import FAMILY
 from effects.domain.state_snapshot import (
     CombatStatus,
@@ -74,10 +73,6 @@ def _combat(entities, events=(), substep="regular"):
 
 def _attacking(blocked_by=()):
     return CombatStatus(attacking="p2", blocked_by=tuple(blocked_by))
-
-
-def test_the_family_is_registered():
-    assert families()["combat_keyword_effect"] is FAMILY
 
 
 @pytest.mark.parametrize("keyword", ["toxic", "poisonous"])

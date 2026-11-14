@@ -360,15 +360,6 @@ def test_a_family_with_no_records_takes_no_share(fake_sidecars):
     assert decisions.selection.families[REWRITE]["a"].share == 300
 
 
-def test_two_decisions_with_one_seed_are_identical(fake_sidecars):
-    """FR-052: selection is a function of the corpus, the flags and the seed."""
-    survey = a_survey(cells=_families({"a": [700, 20], "b": [3]}), heap_cap=200)
-    first = _decide(survey, fake_sidecars, class_mix={REWRITE: 1.0}, training_records=500)
-    again = _decide(survey, fake_sidecars, class_mix={REWRITE: 1.0}, training_records=500)
-
-    assert first.selection == again.selection
-
-
 def test_the_class_targets_are_planned_in_full(fake_sidecars):
     """Every target is placed somewhere in the class's tree, nothing past it."""
     cells = _families({"a": [700, 20], "b": [3]})

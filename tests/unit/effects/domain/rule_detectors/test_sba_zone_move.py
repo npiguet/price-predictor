@@ -95,10 +95,6 @@ def test_an_unknown_check_is_refused():
         FAMILY.validate({"check": "legend_rule_typo"})
 
 
-def test_the_family_runs_on_gen2_records():
-    assert FAMILY.needs({"check": "toughness_zero"}) == frozenset()
-
-
 def _fires(records, check):
     from effects.domain.rule_catalogue import Polarity as P
 

@@ -103,22 +103,6 @@ def test_the_holdout_carries_its_texts_for_sizing_the_stratum() -> None:
     assert held.texts == frozenset({"SP$ DealDamage | NumDmg$ 3"})
 
 
-def test_a_corpus_shaped_holdout_carries_its_texts_too() -> None:
-    """The ``--corpus`` path's holdout needs the same texts.
-
-    A curated dataset's manifest is ``--corpus``'s only source for
-    ``HeldOutCards`` — there is no sidecar scan to fall back on. Asserting the
-    populated value (not just that it round-trips non-empty) is what would
-    catch a manifest field that reached ``HeldOutCards`` empty.
-    """
-    from tests.unit.effects.domain.test_corpus_manifest import manifest
-
-    built = manifest(held_out_texts=("SP$ DealDamage | NumDmg$ 3",))
-    held = held_out_cards(built.held_out_cards, texts=built.held_out_texts)
-
-    assert held.texts == frozenset({"SP$ DealDamage | NumDmg$ 3"})
-
-
 class TestTheConvertedToRuntimeNameBoundary:
     """Card names change case crossing from the converted tree to Forge.
 

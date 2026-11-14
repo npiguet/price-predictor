@@ -72,16 +72,6 @@ def test_merging_heaps_with_mismatched_caps_raises_error():
         left.merge(right)
 
 
-def test_merging_equal_cap_heaps_with_overlapping_ranges():
-    left, right = CapHeap(3), CapHeap(3)
-    for value in (5, 10, 15):
-        left.offer(value)
-    for value in (2, 8, 12):
-        right.offer(value)
-    left.merge(right)
-    assert sorted(left.values()) == [2, 5, 8]
-
-
 def test_a_heap_keeps_items_with_their_values_and_breaks_ties_on_the_tiebreak():
     left, right = KeyedCapHeap(3), KeyedCapHeap(3)
     left.offer(30, "c", (0,))

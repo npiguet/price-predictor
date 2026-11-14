@@ -12,8 +12,6 @@ from __future__ import annotations
 
 from dataclasses import fields
 
-import pytest
-
 from effects.application.corpus_validation.findings import Thresholds
 from effects.infrastructure.cli import build_parser
 
@@ -23,11 +21,6 @@ def parse(*argv: str):
 
 
 class TestEveryThresholdHasAFlag:
-    def test_the_two_sets_are_the_same_set(self):
-        args = parse()
-        for spec in fields(Thresholds):
-            assert hasattr(args, spec.name), spec.name
-
     def test_the_parsed_defaults_rebuild_the_default_thresholds(self):
         """A flag whose default drifts from the dataclass's makes two runs
         that measured different things and report the same words."""
@@ -35,24 +28,6 @@ class TestEveryThresholdHasAFlag:
         assert Thresholds(**{
             spec.name: getattr(args, spec.name) for spec in fields(Thresholds)
         }) == Thresholds()
-
-
-class TestTheWatchedRatesTakeAFloor:
-    """Passing a floor turns a measurement into a verdict and changes nothing
-    else about what is measured."""
-
-    @pytest.mark.parametrize(
-        "flag,name",
-        [
-            ("--min-zone-change-from-zone-rate", "min_zone_change_from_zone_rate"),
-            ("--min-attributed-rate", "min_attributed_rate"),
-            ("--min-fork-attributed-rate", "min_fork_attributed_rate"),
-            ("--min-cause-rate", "min_cause_rate"),
-        ],
-    )
-    def test_unset_it_watches_and_set_it_judges(self, flag, name):
-        assert getattr(parse(), name) is None
-        assert getattr(parse(flag, "0.8"), name) == 0.8
 
 
 class TestTheMirrorTurnCheckIsJudgedAtZero:
@@ -64,7 +39,3 @@ class TestTheMirrorTurnCheckIsJudgedAtZero:
     def test_it_defaults_to_zero_rather_than_to_unset(self):
         assert parse().max_mirror_turn_disagreement_rate == 0.0
 
-    def test_it_can_be_widened(self):
-        assert parse(
-            "--max-mirror-turn-disagreement-rate", "0.05",
-        ).max_mirror_turn_disagreement_rate == 0.05

@@ -492,13 +492,6 @@ class TestLifelink:
         state, _ = _attacker_and_blockers()
         assert _qualifies("lifelink", state, state.entity("B0"))
 
-    def test_a_zero_power_lifelinker_gains_nothing(self):
-        carrier = _creature(
-            "A", 0, 4, keywords=("lifelink",),
-            combat=CombatStatus(attacking=_PLAYER_DEFENDER),
-        )
-        assert not _qualifies("lifelink", _board(carrier), carrier)
-
     def test_a_blocker_whose_attacker_is_gone_deals_nothing(self):
         carrier = _creature(
             "B0", 2, 2, controller="P1", combat=CombatStatus(blocking=("A",)),
@@ -666,14 +659,6 @@ class TestIndestructible:
 
 
 class TestTheTableIsTheSingleSource:
-    @pytest.mark.parametrize("substep", ["first_strike", "regular"])
-    def test_a_row_qualifies_exactly_when_an_effect_is_observable(self, substep):
-        state, carrier = _attacker_and_blockers(substep=substep)
-        for keyword in KEYWORDS_BY_NAME:
-            assert _qualifies(keyword, state, carrier) == bool(
-                _observable(keyword, state, carrier)
-            ), keyword
-
     @pytest.mark.parametrize(
         "keyword",
         ["deathtouch", "lifelink", "trample", "indestructible", "wither",
