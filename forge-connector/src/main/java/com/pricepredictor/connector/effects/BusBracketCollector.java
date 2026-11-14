@@ -538,7 +538,7 @@ public final class BusBracketCollector extends BusEventReader {
      * 702.140b; {@code MagicStack.resolveStack}), its permanent entering the
      * battlefield. Its effect half is a resolution's, held with its events.
      */
-    private static boolean resolvesAsACreature(SpellAbility ability) {
+    static boolean resolvesAsACreature(SpellAbility ability) {
         return ability.isBestow() || ability.isMutate();
     }
 

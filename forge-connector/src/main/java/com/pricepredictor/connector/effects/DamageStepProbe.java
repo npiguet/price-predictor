@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.effects.directed.KeywordEdit;
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.spellability.SpellAbility;
 
 import java.util.HashSet;
 import java.util.List;
@@ -124,18 +125,36 @@ final class DamageStepProbe {
         // assignment only exists after. Both are read as the observed
         // record reads them, so the branch and the record it mirrors agree.
         CombatShape shape = CombatShape.of(fork.getCombat());
-        if (fork.getCombat().assignCombatDamage(firstStrike)) {
-            shape.addAssignment(fork.getCombat());
-            fork.getCombat().dealAssignedDamage();
-            // And then let the deaths happen. Damage alone kills nothing;
-            // a creature with lethal damage on it leaves the battlefield
-            // during state-based actions, and stopping before them would make
-            // the branch systematically miss every death the real step had —
-            // biasing the difference gate 2 computes towards "the keyword
-            // changed nothing". The same call Forge's own simulator makes
-            // after resolving a stack.
-            fork.getAction().checkStateEffects(false, new HashSet<>());
-        }
+        // What the observed combat record takes from the hooks rather than
+        // the bus, damage a shield or a protection prevented above all, is
+        // the branch's too: without it the difference gate 2 reads would
+        // hold a prevention the stripped keyword did not cause.
+        Forks.ForkHooks hooks = new Forks.ForkHooks() {
+            @Override
+            public void clauseEvent(SpellAbility clause, EffectEvent event) {
+                sink.fileOutcome(event, null);
+            }
+
+            @Override
+            public void outcome(SpellAbility ability, EffectEvent event) {
+                sink.fileOutcome(event, null);
+            }
+        };
+        Forks.listeningForHooks(hooks, () -> {
+            if (fork.getCombat().assignCombatDamage(firstStrike)) {
+                shape.addAssignment(fork.getCombat());
+                fork.getCombat().dealAssignedDamage();
+                // And then let the deaths happen. Damage alone kills nothing;
+                // a creature with lethal damage on it leaves the battlefield
+                // during state-based actions, and stopping before them would
+                // make the branch systematically miss every death the real
+                // step had — biasing the difference gate 2 computes towards
+                // "the keyword changed nothing". The same call Forge's own
+                // simulator makes after resolving a stack.
+                fork.getAction().checkStateEffects(false, new HashSet<>());
+            }
+            return null;
+        });
         return new ProbedStep(shape, sink.events());
     }
 

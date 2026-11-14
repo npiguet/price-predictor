@@ -98,18 +98,23 @@ final class Forks {
     }
 
     /**
-     * What a forced resolution hears of the hooks while it runs: the
-     * resolutions and clauses of its fork, and the mana its resolutions make.
+     * What a forced resolution or a probe hears of the hooks while it runs:
+     * the resolutions and clauses of its fork, the mana its resolutions make,
+     * the events its clauses promise and the outcomes its effects report.
      *
      * <p>The hooks are JVM statics that the live game's handlers own, and
      * each handler drops a fork's callbacks on game identity — rightly, for
      * its own records. A forced resolution needs the same moments the live
      * bracket takes: its resolution's start (FR-042b), each chosen mode's
      * first clause (FR-029f), whether each conditional clause met its
-     * condition (FR-034) and the mana it made (FR-042c). So the live handlers
-     * hand what they are not keeping to whatever fork is running on their
-     * thread, and {@code InterventionFork.forceResolution} installs one for
-     * exactly the span of its own resolution.
+     * condition (FR-034) and the mana it made (FR-042c); and both it and a
+     * probe need the events the live record takes from the hooks rather
+     * than the bus, the clauses' and the outcomes' (a token made, damage
+     * prevented), or a fork's record would lack what its live twin holds.
+     * So the live handlers hand what they are not keeping to whatever fork
+     * is running on their thread, and {@code InterventionFork.forceResolution}
+     * and {@code DamageStepProbe} install one for exactly the span of their
+     * own resolution or damage step.
      */
     interface ForkHooks {
         /** An item of some other game's stack starts to resolve. */
@@ -139,6 +144,24 @@ final class Forks {
         /** Mana some other game's resolving spell or trigger made, as its event. */
         default void manaProduced(SpellAbility producer, EffectEvent produced) {
         }
+
+        /**
+         * The event a clause of some other game promised by its effect API's
+         * own parameters, told once the clause ran ({@code ApiEvents}): a
+         * turn added, a choice made, a continuous effect created.
+         */
+        default void clauseEvent(SpellAbility clause, EffectEvent event) {
+        }
+
+        /**
+         * What an effect of some other game computed and reported through
+         * the outcome hook: a coin flipped, a token made, damage prevented.
+         *
+         * @param ability the ability the effect named, or null for one with
+         *                none (combat damage a shield prevented)
+         */
+        default void outcome(SpellAbility ability, EffectEvent event) {
+        }
     }
 
     /**
@@ -156,6 +179,11 @@ final class Forks {
 
     private static final ForkHooks NO_FORK = new ForkHooks() {
     };
+
+    /** Whether a forced resolution or a probe on this thread hears the hooks, which some callbacks cost to build for. */
+    static boolean forkHooksListening() {
+        return FORK_HOOKS.get() != null;
+    }
 
     /** Run {@code action} with {@code hooks} hearing what {@link #forkHooks} is handed. */
     static <T> T listeningForHooks(ForkHooks hooks, Supplier<T> action) {

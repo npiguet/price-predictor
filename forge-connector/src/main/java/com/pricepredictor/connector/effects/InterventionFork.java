@@ -272,7 +272,10 @@ final class InterventionFork implements InterventionScheduler.Forcing {
         // resolution's start, where its board is read (FR-042b); a mode's
         // first clause, the boundary between per-mode halves and the moment
         // its snapshot is taken (FR-029b, FR-029f); each conditional clause's
-        // answer (FR-034); and the mana its own effect makes (C3).
+        // answer (FR-034); the mana its own effect makes (C3); and the events
+        // its clauses promise and its effects report (a token made, a coin
+        // flipped, damage prevented), which the live bracket hears from the
+        // hooks too.
         //
         // Only this ability's own modes and clauses count: the live clause
         // handler forwards every clause it drops, and anything else resolving
@@ -297,7 +300,9 @@ final class InterventionFork implements InterventionScheduler.Forcing {
             public void resolutionStarting(
                     SpellAbility item, boolean itemFizzled, Object targetsAtCast) {
                 if (item.getId() == onStack.getId()) {
-                    fizzled[0] = itemFizzled;
+                    // A bestowed Aura or a mutating spell whose target went
+                    // resolves as a creature spell, as the live bracket reads it.
+                    fizzled[0] = itemFizzled && !BusBracketCollector.resolvesAsACreature(item);
                     targets[0] = ChainTargets.now(item);
                     targets[1] = ChainTargets.atCast(item, targetsAtCast);
                     sink.resolutionStarted(snapshots.ofResolving(onStack, targets[1]));
@@ -324,6 +329,19 @@ final class InterventionFork implements InterventionScheduler.Forcing {
                 if (producer.getRootAbility() == onStack) {
                     sink.manaProduced(produced);
                 }
+            }
+
+            // What the live bracket takes from the hooks rather than the
+            // bus: filed as the live router files it, where the forced
+            // ability stands deciding whether it is the forced ability's.
+            @Override
+            public void clauseEvent(SpellAbility clause, EffectEvent event) {
+                sink.fileOutcome(event, null);
+            }
+
+            @Override
+            public void outcome(SpellAbility ability, EffectEvent event) {
+                sink.fileOutcome(event, null);
             }
         };
         Forks.listeningForHooks(hooks, () -> {

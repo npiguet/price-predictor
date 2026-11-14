@@ -24,8 +24,9 @@ import java.util.function.Function;
  * mode begins; the outcome hook carries what an effect computed and would
  * otherwise discard — a coin flip, a vote, a token made. Both file through
  * {@link BusBracketCollector#recordClauseEvent}, because only the bracket
- * collector of this same game knows which resolution is open, and both drop
- * what a fork's resolution reports on the same JVM-static hooks.
+ * collector of this same game knows which resolution is open, and both hand
+ * what a fork reports on the same JVM-static hooks to the forced resolution
+ * or probe running on their thread ({@link Forks#forkHooks}), if any.
  */
 final class ClauseOutcomeRouter {
 
@@ -135,6 +136,15 @@ final class ClauseOutcomeRouter {
                 : observations.pop();
         if (!live.owns(clause)) {
             Forks.forkHooks().clauseResolved(clause, run);
+            // The clause's events too, as the live bracket files them: built
+            // only for a fork listening, which a fork played on is not (its
+            // own recording's router files them).
+            if ((run == null || "RAN".equals(run)) && Forks.forkHooksListening()) {
+                EffectEvent event = observed.finish();
+                if (event != null) {
+                    Forks.forkHooks().clauseEvent(clause, event);
+                }
+            }
             return;
         }
         FloatingEffects.of(live.game()).clauseResolved(live.game(), clause);
@@ -261,6 +271,10 @@ final class ClauseOutcomeRouter {
                     : live.ownsNullAbilityOutcome();
             if (liveGame) {
                 bracket.recordClauseEvent(event);
+            } else {
+                // A forced resolution's or a probe's, which hears it through
+                // the fork hooks; nobody's when no such fork is listening.
+                Forks.forkHooks().outcome(ability, event);
             }
         });
     }
