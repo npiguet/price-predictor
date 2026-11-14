@@ -32,6 +32,9 @@ class WorkerFailure(StrEnum):
     #: A deck naming a card Forge's database does not hold (decks-only
     #: rounds refuse the whole deck): the match is lost.
     UNRESOLVED_DECK = "unresolved_deck"
+    #: An exception out of a match with a random seat (``[random-seat
+    #: match]``): the match is lost, and it would have written no outcome row.
+    RANDOM_SEAT_MATCH_ERROR = "random_seat_match_error"
     #: Any other exception out of one match: the match is lost.
     MATCH_ERROR = "match_error"
     #: A worker stopped after too many failed matches in a row.
@@ -44,6 +47,10 @@ class WorkerFailure(StrEnum):
     UNKNOWN_OUTCOME_TYPE = "unknown_outcome_type"
     #: A phase-boundary step threw and lost its records.
     BOUNDARY_STEP_FAILED = "boundary_step_failed"
+    #: A game's end-of-game marker could not be written: the game reads as
+    #: cut and ``build-corpus`` drops it (printed once per worker; later ones
+    #: are counted in the hook-failure report under ``game-end marker``).
+    GAME_END_MARKER_UNWRITTEN = "game_end_marker_unwritten"
     #: A game reached ``--max-records-per-game`` and withheld the rest.
     RECORDS_WITHHELD = "records_withheld"
     #: A fork whose score disagreed with the live game's, discarded.
@@ -85,6 +92,8 @@ FAILURE_PATTERNS: tuple[FailurePattern, ...] = (
     _pattern(WorkerFailure.UNRESOLVED_DECK,
              r"Error generating match: .*deck cannot be materialized",
              "deck cannot be materialized: "),
+    _pattern(WorkerFailure.RANDOM_SEAT_MATCH_ERROR,
+             r"Error generating match: \[random-seat match\] ", "[random-seat match] "),
     _pattern(WorkerFailure.MATCH_ERROR, r"Error generating match: ", "Error generating match"),
     _pattern(WorkerFailure.WORKER_GAVE_UP, r"Worker giving up after ", "Worker giving up after "),
     _pattern(WorkerFailure.HOOK_FAILURE, r"effect-record hook \S+: its listener threw",
@@ -96,6 +105,9 @@ FAILURE_PATTERNS: tuple[FailurePattern, ...] = (
              "ClauseOutcomeRouter: outcomeHandler() received "),
     _pattern(WorkerFailure.BOUNDARY_STEP_FAILED, r"Effect records: the phase boundary's ",
              "Effect records: the phase boundary's "),
+    _pattern(WorkerFailure.GAME_END_MARKER_UNWRITTEN,
+             r"Effect records: the game-end marker of game ",
+             "Effect records: the game-end marker of game "),
     _pattern(WorkerFailure.RECORDS_WITHHELD,
              r"Effect records: game \S+ reached --max-records-per-game",
              " reached --max-records-per-game "),
@@ -169,3 +181,81 @@ class WorkerFailures:
         if not self:
             return "no failure lines"
         return ", ".join(f"{count} {kind}" for kind, count in self.as_dict().items())
+
+
+# ── the hook-failure report ─────────────────────────────────────────────
+
+#: The counts a worker prints at every match end where they changed
+#: (``MatchWorkerMain.HookFailureReport``): the connector's own failures by
+#: hook, then Forge's contained ones by slot, each a Java map, running totals
+#: of that JVM. A count, not a failure line: no pattern above reads it.
+HOOK_COUNTS_LINE = re.compile(
+    r"effect-record hook failures so far, listener calls that threw and lost their "
+    r"records: \{(?P<connector>[^{}]*)\}"
+    r"(?:; contained by Forge, per slot: \{(?P<forge>[^{}]*)\})?"
+)
+#: The line a worker JVM prints as it opens its shard, at its start
+#: (``MatchWorkerMain.openEffectRecords``): a new lifetime, counting from zero.
+JVM_START_LINE = re.compile(r"Effect records: .* \[mode=")
+
+
+def _java_map(body: str | None) -> Counter[str]:
+    """``{a=1, b c=2}``'s inside as counts; an item that is no ``key=number`` is skipped."""
+    counts: Counter[str] = Counter()
+    for item in (body or "").split(", "):
+        key, sep, value = item.rpartition("=")
+        if sep and value.strip().isdigit():
+            counts[key.strip()] = int(value)
+    return counts
+
+
+@dataclass
+class HookFailureCounts:
+    """The hook-failure counts one slot's worker JVMs printed.
+
+    Each JVM prints its own running totals, from zero at its start, so the
+    slot's are each lifetime's latest report summed: a lifetime ends where the
+    next one's start line is read.
+    """
+
+    #: Summed over the lifetimes already over.
+    ended_connector: Counter[str] = field(default_factory=Counter)
+    ended_forge: Counter[str] = field(default_factory=Counter)
+    #: The running lifetime's latest report.
+    connector: Counter[str] = field(default_factory=Counter)
+    forge: Counter[str] = field(default_factory=Counter)
+
+    def add_line(self, line: str) -> None:
+        if JVM_START_LINE.search(line):
+            self.ended_connector.update(self.connector)
+            self.ended_forge.update(self.forge)
+            self.connector, self.forge = Counter(), Counter()
+        found = HOOK_COUNTS_LINE.search(line)
+        if found is not None:
+            self.connector = _java_map(found.group("connector"))
+            self.forge = _java_map(found.group("forge"))
+
+    def totals(self) -> tuple[Counter[str], Counter[str]]:
+        """The connector's counts and Forge's, over every lifetime."""
+        return self.ended_connector + self.connector, self.ended_forge + self.forge
+
+
+def hook_failure_document(slots: list[HookFailureCounts]) -> dict[str, dict[str, int]]:
+    """Every slot's hook-failure counts summed, as ``run.json`` records them:
+    ``{"connector": {hook: calls}, "forge": {slot: calls}}``, each key sorted."""
+    connector: Counter[str] = Counter()
+    forge: Counter[str] = Counter()
+    for slot in slots:
+        own, contained = slot.totals()
+        connector.update(own)
+        forge.update(contained)
+    return {"connector": dict(sorted(connector.items())), "forge": dict(sorted(forge.items()))}
+
+
+def render_hook_failures(document: dict[str, dict[str, int]]) -> str:
+    """One line: the listener calls each hook lost, then what Forge contained."""
+    if not any(document.values()):
+        return "no hook failures"
+    parts = [f"{n} {hook}" for hook, n in document["connector"].items()]
+    contained = ", ".join(f"{n} {slot}" for slot, n in document["forge"].items())
+    return ", ".join(parts) + (f"; contained by Forge: {contained}" if contained else "")

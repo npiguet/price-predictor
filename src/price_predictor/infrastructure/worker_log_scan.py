@@ -7,6 +7,9 @@ by its file changing identity: the rest of the rotated file is read before
 the new one. Rotated twice between scans, the generation read so far is gone
 (the second rotation replaced its ``.1``): the loss is counted as
 ``log_unread``, and the ``.1`` there now, never read, is read whole.
+
+The same reading follows each slot's hook-failure report, a count each
+worker JVM prints and no failure line (``HookFailureCounts``).
 """
 
 from __future__ import annotations
@@ -16,7 +19,12 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from price_predictor.domain.worker_failures import WorkerFailure, WorkerFailures
+from price_predictor.domain.worker_failures import (
+    HookFailureCounts,
+    WorkerFailure,
+    WorkerFailures,
+    hook_failure_document,
+)
 
 if TYPE_CHECKING:
     from price_predictor.infrastructure.forge_jvm import WorkerLogFiles
@@ -28,6 +36,8 @@ class WorkerLogScan:
     def __init__(self) -> None:
         #: Per log path: the file's identity and how far it has been read.
         self._read: dict[Path, tuple[int, int]] = {}
+        #: Per log path: the hook-failure counts its worker JVMs printed.
+        self._hooks: dict[Path, HookFailureCounts] = {}
 
     def scan(self, paths: Iterable[Path]) -> WorkerFailures:
         """The failure lines ``paths`` gained since the last scan."""
@@ -36,7 +46,13 @@ class WorkerLogScan:
             self._scan_one(Path(path), failures)
         return failures
 
+    def hook_failures(self) -> dict[str, dict[str, int]]:
+        """The hook-failure counts every log read so far reports, summed
+        (``worker_failures.hook_failure_document``)."""
+        return hook_failure_document(list(self._hooks.values()))
+
     def _scan_one(self, path: Path, failures: WorkerFailures) -> None:
+        hooks = self._hooks.setdefault(path, HookFailureCounts())
         try:
             identity = os.stat(path).st_ino
         except OSError:
@@ -51,7 +67,7 @@ class WorkerLogScan:
             except OSError:
                 rotated_identity = None
             if rotated_identity == known:
-                _read_lines(rotated, offset, failures)
+                _read_lines(rotated, offset, failures, hooks)
             else:
                 failures.add(
                     WorkerFailure.LOG_UNREAD,
@@ -59,9 +75,9 @@ class WorkerLogScan:
                     "generation read so far is gone",
                 )
                 if rotated_identity is not None:
-                    _read_lines(rotated, 0, failures)
+                    _read_lines(rotated, 0, failures, hooks)
             offset = 0
-        self._read[path] = (identity, _read_lines(path, offset, failures))
+        self._read[path] = (identity, _read_lines(path, offset, failures, hooks))
 
 
 class WorkerLogReport:
@@ -84,17 +100,25 @@ class WorkerLogReport:
         self.totals.merge(found)
         return found
 
+    def hook_failures(self) -> dict[str, dict[str, int]]:
+        """The latest hook-failure counts the workers printed, summed over
+        every worker JVM of the run."""
+        return self._scan.hook_failures()
+
     def manifest_fields(self) -> dict:
         """The totals as ``run.json`` records them."""
         return {
             "worker_failures": self.totals.as_dict(),
             "worker_failure_examples": dict(self.totals.examples),
+            "hook_failures": self.hook_failures(),
         }
 
 
-def _read_lines(path: Path, offset: int, failures: WorkerFailures) -> int:
+def _read_lines(
+    path: Path, offset: int, failures: WorkerFailures, hooks: HookFailureCounts,
+) -> int:
     """Count the failure lines of ``path`` from ``offset`` to its last complete
-    line; the offset just past that line."""
+    line, and follow its hook-failure reports; the offset just past that line."""
     try:
         with open(path, "rb") as handle:
             handle.seek(offset)
@@ -106,4 +130,5 @@ def _read_lines(path: Path, offset: int, failures: WorkerFailures) -> int:
         return offset
     for line in chunk[:end].decode("utf-8", errors="replace").splitlines():
         failures.add_line(line)
+        hooks.add_line(line)
     return offset + end + 1

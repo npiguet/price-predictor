@@ -34,6 +34,9 @@ LINES = {
         "Error generating match: deck cannot be materialized: 1 of 40 card names "
         "did not resolve against Forge's card database: zzz. a decks-only round"
     ),
+    WorkerFailure.RANDOM_SEAT_MATCH_ERROR: (
+        "Error generating match: [random-seat match] Cannot invoke \"Card.getName()\""
+    ),
     WorkerFailure.MATCH_ERROR: "Error generating match: null",
     WorkerFailure.WORKER_GAVE_UP: (
         "Worker giving up after 50 consecutive failed attempts with no success"
@@ -47,6 +50,10 @@ LINES = {
     ),
     WorkerFailure.BOUNDARY_STEP_FAILED: (
         "Effect records: the phase boundary's PROBES step threw, and lost its records"
+    ),
+    WorkerFailure.GAME_END_MARKER_UNWRITTEN: (
+        "Effect records: the game-end marker of game r.0-ab.3 could not be written, so "
+        "the game reads as cut (later failures are counted, not printed): disk full"
     ),
     WorkerFailure.RECORDS_WITHHELD: (
         "Effect records: game r.0-ab.3 reached --max-records-per-game 5000; withheld 12"
@@ -138,6 +145,9 @@ def test_a_failure_line_behind_interleaved_output_is_still_found(kind):
     "Directed forks: none",
     "Random seat: share=0.25 probability=0.5",
     "effect-record hook failures so far, listener calls that threw and lost their records: {}",
+    "effect-record hook failures so far, listener calls that threw and lost their records: "
+    "{game-end marker=2, RESOLVE=1}; contained by Forge, per slot: {resolve=1}",
+    "Effect records: C:/out/run.0-ab.jsonl.gz [mode=patched]",
     "[Forge] random seat failed to play Shock",
     "Effect records: dropping a probe branch taken on turn 3 that would mirror x",
 ])
@@ -151,3 +161,91 @@ def test_an_unread_generation_is_counted_with_where_it_was():
 
     assert failures.as_dict() == {"log_unread": 1}
     assert failures.examples["log_unread"] == "logs/run.0.log: rotated twice"
+
+
+def test_a_random_seat_match_error_is_counted_apart_from_other_match_errors():
+    failures = WorkerFailures()
+    failures.add_line(LINES[WorkerFailure.RANDOM_SEAT_MATCH_ERROR])
+    failures.add_line(LINES[WorkerFailure.MATCH_ERROR])
+
+    assert failures.as_dict() == {"match_error": 1, "random_seat_match_error": 1}
+
+
+def test_the_stop_protocol_s_lines_are_no_failure():
+    """A worker that stopped at a game end, or that says at its start how it
+    will stop, reports nothing wrong. Spelled from the stand-in's literals,
+    which are pinned to the Java sources."""
+    from tests.unit.infrastructure import stand_in_worker as java
+
+    stopped = (f"{java.STOPPED} ({java.REASON_STOP_FILE}C:/logs/run.0.stop); 4 "
+               f"{java.PROGRESS_NOUN}{java.STOPPED_TAIL}")
+    recycled = (f"{java.STOPPED} ({java.REASON_RECYCLING}600 s); 9 "
+                f"{java.PROGRESS_NOUN}{java.STOPPED_TAIL}")
+    startup = (f"{java.DESCRIBE}C:/logs/run.0.stop{java.DESCRIBE_EXISTS}"
+               f"{java.DESCRIBE_OR}{java.DESCRIBE_RUN}600 s")
+    for line in (stopped, recycled, startup):
+        assert classify(line) is None, line
+
+
+def test_the_hook_report_and_the_shard_line_are_spelled_as_the_worker_prints_them():
+    from price_predictor.domain.worker_failures import HOOK_COUNTS_LINE, JVM_START_LINE
+
+    main = (_CONNECTOR_SOURCES / "com" / "pricepredictor" / "connector"
+            / "MatchWorkerMain.java").read_text(encoding="utf-8")
+    assert ('"effect-record hook failures so far, listener calls that threw"\n'
+            '                        + " and lost their records: " + counts\n'
+            '                        + "; contained by Forge, per slot: " + byForge') in main
+    assert '"Effect records: " + effectRecords.path()' in main
+    assert '+ " [mode=" + AttributionMode.detect().wireName() + "]"' in main
+    assert HOOK_COUNTS_LINE.search(
+        "effect-record hook failures so far, listener calls that threw and lost their "
+        "records: {a=1}; contained by Forge, per slot: {b=2}")
+    assert JVM_START_LINE.search("Effect records: C:/x y/r.0-l.jsonl.gz [mode=degraded]")
+
+
+class TestHookFailureCounts:
+    """The report is a running count per worker JVM, read by nothing before
+    (WP7): the run's counts are each lifetime's latest, summed."""
+
+    REPORT = ("effect-record hook failures so far, listener calls that threw and lost "
+              "their records: {{{own}}}; contained by Forge, per slot: {{{forge}}}")
+    START = "Effect records: C:/out/run.0-{life}.jsonl.gz [mode=patched]"
+
+    def test_a_lifetime_s_latest_report_stands_and_lifetimes_add_up(self):
+        from price_predictor.domain.worker_failures import (
+            HookFailureCounts,
+            hook_failure_document,
+        )
+
+        slot = HookFailureCounts()
+        for line in (
+            self.START.format(life="a"),
+            self.REPORT.format(own="RESOLVE=1", forge="resolve=1"),
+            self.REPORT.format(own="RESOLVE=3, game-end marker=1", forge="resolve=3"),
+            self.START.format(life="b"),
+            self.REPORT.format(own="RESOLVE=2", forge=""),
+        ):
+            slot.add_line(line)
+
+        assert hook_failure_document([slot]) == {
+            "connector": {"RESOLVE": 5, "game-end marker": 1},
+            "forge": {"resolve": 3},
+        }
+
+    def test_slots_add_up_and_render_on_one_line(self):
+        from price_predictor.domain.worker_failures import (
+            HookFailureCounts,
+            hook_failure_document,
+            render_hook_failures,
+        )
+
+        first, second = HookFailureCounts(), HookFailureCounts()
+        first.add_line(self.REPORT.format(own="RESOLVE=1", forge=""))
+        second.add_line(self.REPORT.format(own="RESOLVE=2, subscriber X.y=1", forge="s=4"))
+        document = hook_failure_document([first, second])
+
+        assert document == {"connector": {"RESOLVE": 3, "subscriber X.y": 1},
+                            "forge": {"s": 4}}
+        assert render_hook_failures(document) == (
+            "3 RESOLVE, 1 subscriber X.y; contained by Forge: 4 s")
+        assert render_hook_failures(hook_failure_document([])) == "no hook failures"

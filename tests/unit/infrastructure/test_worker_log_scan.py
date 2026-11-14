@@ -77,3 +77,38 @@ def test_a_log_rotated_twice_between_scans_reports_the_lost_generation(tmp_path)
 
     assert found.as_dict() == {"match_error": 1, "worker_gave_up": 1, "log_unread": 1}
     assert str(log) in found.examples["log_unread"]
+
+
+_REPORT = ("effect-record hook failures so far, listener calls that threw and lost their "
+           "records: {{RESOLVE={n}}}; contained by Forge, per slot: {{resolve={n}}}\n")
+
+
+def test_the_hook_report_is_followed_across_scans_lifetimes_and_slots(tmp_path):
+    """A count each worker JVM prints and nothing read (WP7): the run's counts
+    are each lifetime's latest report, summed over lifetimes and slots, and
+    none of it is a failure line."""
+    first, second = tmp_path / "run.0.log", tmp_path / "run.1.log"
+    _append(first, "Effect records: x/run.0-a.jsonl.gz [mode=patched]\n" + _REPORT.format(n=1))
+    _append(second, _REPORT.format(n=4))
+    scan = WorkerLogScan()
+
+    assert not scan.scan([first, second])
+    _append(first, _REPORT.format(n=2) + "Effect records: x/run.0-b.jsonl.gz [mode=patched]\n"
+            + _REPORT.format(n=3))
+    scan.scan([first, second])
+
+    assert scan.hook_failures() == {"connector": {"RESOLVE": 9}, "forge": {"resolve": 9}}
+
+
+def test_the_report_s_totals_reach_the_manifest_fields(tmp_path):
+    from price_predictor.infrastructure.forge_jvm import WorkerLogFiles
+    from price_predictor.infrastructure.worker_log_scan import WorkerLogReport
+
+    logs = WorkerLogFiles(tmp_path, "run")
+    _append(logs.path_for(0), _REPORT.format(n=2))
+    report = WorkerLogReport(logs, 1)
+    report.scan()
+
+    assert report.manifest_fields()["hook_failures"] == {
+        "connector": {"RESOLVE": 2}, "forge": {"resolve": 2},
+    }
