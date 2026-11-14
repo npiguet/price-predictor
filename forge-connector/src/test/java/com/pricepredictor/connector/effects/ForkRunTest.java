@@ -197,7 +197,9 @@ class ForkRunTest {
             assertTrue(Forks.LiveMarks.currentTriggerIds() < ids, "the counter went down");
             assertEquals(before + 1, count("fork run-test-restart moved the live game"));
         } finally {
-            maxId.setInt(null, Math.max(maxId.getInt(null), ids) + 1_000_000);
+            // Just above what was handed out: far below Characterization.PinnedForgeIds' base,
+            // which refuses to pin once the counter has reached it.
+            maxId.setInt(null, Math.max(maxId.getInt(null), ids) + 1);
         }
     }
 
