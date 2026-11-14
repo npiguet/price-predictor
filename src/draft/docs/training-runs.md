@@ -2,9 +2,12 @@
 
 Rules to respect when running or changing the three trainers, reading an anchor margin, or pairing a corpus with a checkpoint. This file does not describe the trainers: flags are in `--help`, losses and schedules in the specs and design records listed in `src/draft/CLAUDE.md`.
 
-## All three trainers
+## Shared by the trainers
 
 - The critic's target standardization mean and std are stored in the checkpoint and reused: inference de-standardizes with them, and the RL trainer keeps the critic in the reference checkpoint's reward space. They are never recomputed downstream.
+
+The two offline trainers (`train-draft-agent`, `train-draft-agent-rl`) only; the online trainer has no `--resume`, no architecture flags and no validation split, and its patience rules are in its own section:
+
 - Architecture flags together with `--resume` or `--checkpoint` fail fast; the architecture comes from the checkpoint.
 - Train and validation splits are draft-disjoint.
 - `--lr-decay-patience` and `--patience` share one strict-best counter. `--lr-decay-patience` must be smaller than `--patience`, and early stop only fires once the LR floor is reached. The decay position is checkpointed so `--resume` continues annealing; an explicit `--lr` override restarts it.

@@ -6,7 +6,7 @@ Rules to respect when running or changing `play-draft-games`, comparing agents b
 
 - `play-draft-games` is the first measure of a draft agent that is not a function of the frozen scorer: games won.
 - The corpus is projected once into a flat seat table, and the Java `DraftGameWorkerMain` workers are autonomous. Each draws a pod, draws two distinct seats of it, rejects a mirror pair unless `--include-mirrors`, plays one best-of-`--best-of` match and appends a row. Python issues no work and never parses a game result.
-- A pod whose seats all share one label is dropped when the table is loaded. That is what makes the mirror-rejection loop terminate.
+- Unless `--include-mirrors`, a pod whose seats all share one label is dropped when the table is loaded (`SeatTableIndex.canYieldPairing`). That is what makes the mirror-rejection loop terminate.
 - Sampling is with replacement, and matchup frequencies follow the corpus composition; they are not equalised. There is no seed and a run is not reproducible.
 - `--n-pairings` counts the rows this invocation recorded, not a pre-existing file. Without it the run plays until Ctrl-C.
 - A pairing lost to a failure or a recycle is simply redrawn. Nothing was reserved for it, so there is no skipped count.

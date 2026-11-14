@@ -1202,7 +1202,7 @@ class TestEveryFixtureTargetFitsItsField:
 class TestTheWp4Wire:
     """What the targets read of the gen-3 wire WP3 and WP4 write
     (``record-schema-delta.md``): each decision is stated in
-    ``src/effects/CLAUDE.md`` § Losses."""
+    ``src/effects/docs/training.md`` § Losses."""
 
     def test_a_hidden_keyword_change_sets_no_keyword_column_and_is_counted(self):
         """Forge's text (``CARDNAME can't block.``) names no keyword column: the
