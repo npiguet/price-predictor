@@ -93,9 +93,13 @@ Behaviour:
   records: cost and effect halves, trigger, combat, the three playability subkinds and the draw
   step's turn action; the decision subkind only when the run's `run.json` records a
   `playability_rate` above 0 (the smallest any invocation recorded). Rarer kinds are watched.
-- The positives floor reads the trigger records of games that ended in the window: a game has
-  ended when one of its records holds `player_won` or `player_lost`. Under 50 such records it is
-  watched.
+- The positives floor reads the trigger records of games that ended in the window: a gen-3 game
+  has ended when its game-end marker is read, an older game when one of its records holds
+  `player_won` or `player_lost`. Under 50 such records it is watched.
+- The gen-3 games without a game-end marker are watched, by count and share (a game still running
+  at the window's end has none); the check fails only when no game of the window wrote a marker
+  while one of them is followed by a later game of its JVM lifetime. The records the markers say
+  the cap withheld are summed, watched. A marker owes `records_withheld`.
 - A keyword key in a variant tree the run was not given fails the keyword-join check as
   unchecked; a machine with no converted tree at all watches it.
 - A copy keying its keyword lines into the copied card's file is watched.
@@ -313,6 +317,10 @@ No new flag. Behaviour:
 - Warns, naming every one, on raw shards whose size changed since the survey; the records past those
   the survey read in a shard go to no stratum (`dropped-unsurveyed` in `per_stratum`).
 - Writes no `turn_action` record; counts them by subkind.
+- Drops whole every gen-3 game whose shard holds no game-end marker, in both passes: its records
+  go to no stratum (`dropped-cut` in `per_stratum`), the manifest counts the games in `cut_games`,
+  and the build warns with the share of games dropped. Exit 1 before `--output` is touched when
+  none of the gen-3 games has a marker.
 - Writes a `curation` member on every record it writes, and each protection copy drawn as a
   synthetic record `<record_id>~pc<i>`.
 - Exit 1 when it can already tell that a rule-test component misses its precision target, naming

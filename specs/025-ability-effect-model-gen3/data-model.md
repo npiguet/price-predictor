@@ -170,12 +170,12 @@ players. Shapes as
 | playability `decision` candidate | `verdict.timing`, `failed_checks: [{check, responsible_static}]`, `legal_targets` (all clauses, no cap), `land_play` | `timing = false` ⇒ a `casting_speed` entry; a land-play candidate (`land_play = true`, FR-033a) fails only `whose_turn`, `casting_speed`, `zone`, `static_prohibition` or `land_play_limit` |
 | `attackers` | `anchor_attacker`, `legal_defenders`, `must_attack`, `tapped_by_attack?` | one record per creature the attacking player controls, a tapped one included; `tapped_by_attack` only when the anchor was declared; gen-2's `legal_attackers` and `forbidden` kept; no `what_if` |
 | `blockers` | `must_block` | the refs of the listed creatures a requirement makes block the anchor |
-| `blockers` | `forbidden[].responsible_static`, `forbidden[].required_elsewhere?` | the static keeping the creature from blocking the anchor, else from blocking at all (`cantBlockStatic`); `required_elsewhere: true` when a requirement makes it block another attacker instead (a lure) |
+| `blockers` | `forbidden[].responsible_static`, `forbidden[].required_elsewhere?` | the static keeping the creature from blocking the anchor, else from blocking at all (`cantBlockStatic`); `required_elsewhere: true` when a requirement makes it block another attacker instead (a lure); a forbidden blocker no named static, evasion, tap, hidden can't-block keyword or `required_elsewhere` explains is `legality_membership`'s `effect` restriction (detain), which has no near miss |
 | `turn_action` | `events` | |
-| `turn_action` / `game_end` | `events: []`, `records_withheld` | the records `--max-records-per-game` kept out for the game; a game with no marker is cut |
-| `rewrite` | `incoming_unknown?`, `buffered?`, `buffered_ran?`, `buffered_events?` | `incoming_unknown: true` when Forge could not copy the incoming event (then `outgoing` null); on a damage replacement that set an ability aside, its keys, whether it ran, and the events of its run |
+| `turn_action` / `game_end` | `events: []`, `records_withheld` | the records `--max-records-per-game` kept out for the game; a game with no marker is cut. The marker derives no target and no detector reads it; `build-corpus` drops a gen-3 game with no marker in its shard |
+| `rewrite` | `incoming_unknown?`, `buffered?`, `buffered_ran?`, `buffered_events?` | `incoming_unknown: true` when Forge could not copy the incoming event (then `outgoing` null, no in-place edit is told and `rewrite_event` reads the record on neither side); on a damage replacement that set an ability aside, its keys, whether it ran, and the events of its run, which are the record's happened events: they supervise its per-entity targets and, when non-empty, its record heads; detectors read them only as a place of their own (`emittable_events.BUFFERED`) |
 | `trigger` | `fired` | true only for a trigger Forge ran; an evaluation that held and never ran writes nothing |
-| resolution, mana record | `events` | `tapped`, the other events of its own payment, `mana_produced`, the events of its own sub-abilities |
+| resolution, mana record | `events` | `tapped`, the other events of its own payment, `mana_produced`, the events of its own sub-abilities; every one supervises the mana ability's per-entity targets |
 | `combat` | snapshot at the start of the damage step | shape at the first damage event |
 | `combat`, observed and probe | damage events carry `source` | the bus's `cause`, else from `assignment_choices` |
 | decision candidate | `cost_after_adjustment` | the cost after Forge's cost adjustment |
@@ -234,11 +234,13 @@ ended) and `join_gaps`
 (`unresolved` | `undescribed` → script file → keys, `unconfigured` → source tree → keys: keys read as
 no line), all three the survey's; `unsupervised_events` (kind → events no output column reads),
 `code_version` (`git rev-parse HEAD`, "" outside a checkout) and `sidecar_digest` (sha256 over the
-sidecars by tree, path and size). These six are outside the digest; `record_flags` also counts
+sidecars by tree, path and size). These six are outside the digest; `cut_games` (gen-3 games
+dropped whole for want of a game-end marker in their shard) is inside it; `record_flags` also counts
 `runtime_only` resolutions. `rule_counts` carries `declared_zero`, `none`, `untaggable` and
 `same_as` (`CatalogueStanding`). `per_stratum` counts `dropped-unsurveyed`: records past those the
 survey read in their shard, a new game's or a placed game's (a shard
-grown between the two passes), written to no stratum. Gen-3 manifests only; no gen-2 compatibility.
+grown between the two passes), written to no stratum, and `dropped-cut`: the records of the cut
+games, written to no stratum. Gen-3 manifests only; no gen-2 compatibility.
 
 ### Placement (new, `stratum_placement.py`)
 
@@ -247,7 +249,8 @@ games, per-game inventories `game → {(rule, polarity): n}` of rule-test-eligib
 `PlacementRule` (gen-2's draws, the pool factor, the half minimum, the item error). Only Forge-AI
 games enter a validation stratum. Output: `GameStrata` gains `halves`, `left_out_of_half` and
 `surveyed` (every game the survey saw); a game outside `surveyed` is `dropped-unsurveyed`, never
-training, as is every record past the survey's count of its shard (`WriteTask.surveyed`).
+training, as is every record past the survey's count of its shard (`WriteTask.surveyed`); a game
+the survey found cut in a shard is `dropped-cut` there (`WriteTask.cut`).
 Deterministic for a given corpus; not stable across corpus growth (R3).
 
 ## Model

@@ -912,9 +912,13 @@ and that the reporting half never enters the control score.
   playability subkinds, the draw step's turn action; decision records only where the run's
   `run.json` records a `playability_rate` above 0), a window whose trigger records of games that
   ended in it hold fewer than `--min-trigger-fired-share` (0.05) positives (watched under 50 such
-  records), and a window of at least
+  records; a gen-3 game has ended when its game-end marker is read, an older game when a record
+  holds `player_won` or `player_lost`), a window of at least
   `--min-cost-evidence` gen-3 cost halves none of which meets its effect half (a lone one is
-  counted, and the countered ones named); report an undecodable shard line as a failed finding
+  counted, and the countered ones named), and a window none of whose gen-3 games wrote a game-end
+  marker while one of them is followed by a later game of its JVM lifetime; report the gen-3 games
+  without a marker (count and share) and the records the markers say the cap withheld as watched
+  figures; report an undecodable shard line as a failed finding
   naming the shard and line and read the other shards on; report the decode tally as watched
   figures; read the variant tree through `--variant-scripts`, failing the keyword-join check on a
   key in a tree it was not given. `field-coverage` MUST give each event parameter a cell of its own
@@ -1153,8 +1157,12 @@ and that the reporting half never enters the control score.
   before the survey, and a raw shard the survey cannot read whole before it clears `--output`; a
   shard that turns unreadable only in the write pass stops the build after `--output` was cleared,
   saying so. The write pass MUST write no record past those the survey read in its shard (a shard
-  grown between the passes) and count each as `dropped-unsurveyed`. Two builds of one raw corpus
-  MUST reach one digest wherever it sits and whatever ran before in the process.
+  grown between the passes) and count each as `dropped-unsurveyed`. The survey MUST drop whole,
+  before any tally reads it, every gen-3 game whose shard holds no game-end marker (a cut game),
+  and the write pass the same games, counting their records as `dropped-cut` and the games in the
+  manifest's `cut_games`, inside the digest; a records set none of whose gen-3 games has a marker
+  MUST be refused before `--output` is cleared. Two builds of one raw corpus MUST reach one digest
+  wherever it sits and whatever ran before in the process.
 - **FR-060a**: `build-corpus` MUST read the rules-to-fields map (`rules/heads/`) once, and write
   into the manifest, for every tagged rule, its map verdict and the outputs the map names for it,
   with the map's content hash, and each rule's effective outputs: the outputs of its map entry at
