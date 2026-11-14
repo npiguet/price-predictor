@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.ForgeExtension;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -117,6 +118,21 @@ class ForksScoreCheckTest {
             MyRandom.setRandom(was);
         }
         assertEquals(0, stream.draws, "the score check drew from the live game's stream");
+    }
+
+    /** A score check that throws is counted under the fork's kind, and discards the fork. */
+    @Test
+    void aScoreCheckThatThrowsIsCounted() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = live.getPlayers().get(0);
+        GameCopier copier = new GameCopier(live);
+        copier.makeCopy();
+        String key = "fork score-test score check";
+        long before = HookFailures.counts().getOrDefault(key, 0L);
+
+        assertFalse(Forks.scoreCheck("score-test", live, copier, null, you));
+
+        assertEquals(before + 1, HookFailures.counts().get(key));
     }
 
     /**

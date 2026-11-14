@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects.directed.operations;
 
+import com.pricepredictor.connector.effects.ForkRefusal;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.KeywordEdit;
 import forge.game.Game;
@@ -42,7 +43,7 @@ public record KeywordOperation(Card permanent, String keyword, boolean add) impl
         } else {
             List<String> carried = KeywordEdit.carried(permanent, keyword);
             if (carried.isEmpty()) {
-                throw new IllegalStateException(permanent + " carries no " + keyword);
+                throw new ForkRefusal(KeywordEdit.CARRIES_NONE);
             }
             for (String original : carried) {
                 KeywordEdit.remove(fork, permanent, original);

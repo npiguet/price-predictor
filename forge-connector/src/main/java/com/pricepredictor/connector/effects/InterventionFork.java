@@ -26,6 +26,9 @@ import java.util.function.Supplier;
  */
 final class InterventionFork implements InterventionScheduler.Forcing {
 
+    /** A refusal's reason: the forced ability never reached the copy's stack (a special action). */
+    static final String NOT_ON_THE_STACK = "nothing reached the stack";
+
     private final Game game;
     private final CollectorContext context;
     private final ForkBudget budget;
@@ -82,7 +85,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
             Player actor = forked == null
                     ? null : Forks.mappedPlayer(verified.copier(), verified.perspective());
             if (forked == null || actor == null) {
-                return null;
+                throw new ForkRefusal(ForkRefusal.NO_COUNTERPART);
             }
             ForcedResolution resolution = forceResolution(verified.fork(), forked, actor, snapshots);
             // An empty event list is not an observation. "The ability resolved
@@ -247,7 +250,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
         // Not guarded here: a forced resolution reaches states ordinary play
         // does not, and Forks.ForkRun discards the fork when a card throws.
         if (!drawForcedChoices(ability, actor)) {
-            return null;
+            throw new ForkRefusal(ForkRefusal.NO_CHOICES);
         }
         fork.copyLastState();
         ForkEventSink sink = ForkEventSink.forCast(fork, ability);
@@ -260,7 +263,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
             // live opens no bracket for one either, so there is no
             // resolution record to write. Otherwise a frozen stack parked
             // it or its targeting was refused, and nothing will resolve.
-            return null;
+            throw new ForkRefusal(NOT_ON_THE_STACK);
         }
         // The ability on the stack is the sink's root from here, as the
         // live bracket's root is the stack's: an event's attributed_to is

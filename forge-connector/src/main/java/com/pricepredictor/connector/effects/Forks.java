@@ -9,6 +9,7 @@ import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.util.MyRandom;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -18,16 +19,19 @@ import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
 /**
- * The machinery shared by stage three's two kinds of fork, which record what
+ * The machinery shared by stage three's four kinds of fork, which record what
  * observation cannot reach.
  *
- * <p>Two kinds of fork, and the flags tell them apart on their own: an
- * {@link InterventionFork interventional resolution} forces an ability Forge's
- * AI never chose to use, and a {@link DamageStepProbe damage-step probe}
- * re-runs one combat with a keyword stripped. {@link ForkBudget} decides how
- * many of each a game may take. What both need is here: copying the live game
- * and checking the copy, mapping live objects into it, and marking the thread
- * while a fork runs.
+ * <p>Four kinds of fork: an {@link InterventionFork interventional
+ * resolution} forces an ability Forge's AI never chose to use; a {@link
+ * DamageStepProbe damage-step probe} re-runs one combat with a keyword
+ * stripped; a {@link ProtectionFork protection fork} grants a creature a rare
+ * protection and plays the turn on; a {@link DirectedFork directed fork}
+ * edits the board as a rule's variant does and plays the turn on.
+ * {@link ForkBudget} decides how many of each a game may take. What all four
+ * need is here: copying the live game and checking the copy, mapping live
+ * objects into it, marking the thread while a fork runs, and making sure a
+ * fork leaves the live game as it was ({@link LiveMarks}).
  *
  * <p><b>Every fork is score-checked against the live game before any
  * perturbation.</b> A copy that already disagrees with the game it came from is
@@ -229,6 +233,15 @@ final class Forks {
      * failing copy would retry until the game ended.
      */
     static boolean scoreCheck(Game live, GameCopier copier, Game fork, Player perspective) {
+        return scoreCheck("unnamed", live, copier, fork, perspective);
+    }
+
+    /**
+     * The same for a fork of {@code kind}: a check that throws is counted
+     * under {@code fork <kind> score check} in the worker's failure report
+     * ({@link HookFailures}) besides its line.
+     */
+    static boolean scoreCheck(String kind, Game live, GameCopier copier, Game fork, Player perspective) {
         try {
             int original = score(live, perspective);
             Player forkPerspective = mappedPlayer(copier, perspective);
@@ -247,6 +260,7 @@ final class Forks {
             }
             return true;
         } catch (RuntimeException | StackOverflowError e) {
+            HookFailures.countContained("fork " + kind + " score check");
             System.err.println(
                     "Effect records: fork score check failed (" + e.getMessage()
                             + "); discarding");
@@ -341,25 +355,26 @@ final class Forks {
     static Optional<VerifiedFork> copyAndVerify(String kind, Game live, Supplier<Player> perspective) {
         GameCopier copier;
         Game fork;
+        Map<String, Integer> copyDropped;
         try {
-            // Both inside the guard: the copier's own constructor reads the
+            // All inside the guard: the copier's own constructor reads the
             // game, so a game it cannot read fails here rather than at makeCopy.
             // A board deep enough to overflow the copier's recursion is one
             // it cannot copy, not one that should end the worker.
             copier = new GameCopier(live);
             fork = copier.makeCopy();
+            // Read once, now: mapping objects into the copy later adds nothing to it.
+            copyDropped = dropped(copier.getNoCounterpartTally());
+            // Before anything reads the fork: every builder over it, the audit's
+            // and a played-forward recording's, reads the live game's notes too.
+            FloatingEffects.ofFork(fork, live);
+            ForkFidelity.report(live, fork, copier.getNoCounterpartTally(), copier.getNoCounterpartExamples());
         } catch (RuntimeException | StackOverflowError e) {
             HookFailures.countContained("fork " + kind + " copy", e);
             return Optional.empty();
         }
-        // Read once, now: mapping objects into the copy later adds nothing to it.
-        Map<String, Integer> copyDropped = dropped(copier.getNoCounterpartTally());
-        // Before anything reads the fork: every builder over it, the audit's
-        // and a played-forward recording's, reads the live game's notes too.
-        FloatingEffects.ofFork(fork, live);
-        ForkFidelity.report(live, fork, copier.getNoCounterpartTally(), copier.getNoCounterpartExamples());
         Player from = perspective.get();
-        if (from == null || !scoreCheck(live, copier, fork, from)) {
+        if (from == null || !scoreCheck(kind, live, copier, fork, from)) {
             return Optional.empty();
         }
         return Optional.of(new VerifiedFork(copier, fork, from, copyDropped));
@@ -396,14 +411,24 @@ final class Forks {
      * {@code StackOverflowError}: a fork reaches states ordinary play does
      * not (an ability resolving with no legal target, a combat without a
      * stripped keyword), and a card that throws there is one this fork
-     * cannot describe. Discarding is right; failing the worker is not. The
-     * writer runs outside the guard, so a record that cannot be written
-     * fails as a live one does.
+     * cannot describe. Discarding is right; failing the worker is not.
      *
-     * <p>A copy or a body that throws is counted under {@code "fork <kind>
-     * copy"} or {@code "fork <kind> body"} in the worker's failure report
-     * ({@link HookFailures}), its first failure printed with its stack: a
-     * systematically failing fork leaves a trace, not just an empty corpus.
+     * <p>A copy (with its audit and its floating effects' notes), a score
+     * check, a body or a writer that throws is counted under {@code "fork
+     * <kind> copy"}, {@code "fork <kind> score check"}, {@code "fork <kind>
+     * body"} or {@code "fork <kind> write"} in the worker's failure report
+     * ({@link HookFailures}), the first copy, body or write failure printed
+     * with its stack: a systematically failing fork leaves a trace, not just
+     * an empty corpus. A body that declines for an expected reason throws a
+     * {@link ForkRefusal}, which is counted apart, by reason, in {@link
+     * ForkRefusals}, and is no failure.
+     *
+     * <p>A fork never changes the live game. What of it is cheap to read
+     * ({@link LiveMarks}: its timestamp and card id counters, the random
+     * stream it draws from, its players' life, zones and controllers, its
+     * stack) is read before the fork and after; a difference is counted
+     * under {@code "fork <kind> moved the live game"}, its first printed
+     * with what moved.
      *
      * <p>The whole span draws from a random stream of its own ({@link
      * #isolated}), never from the live game's: a fork's AI, its stack and
@@ -427,25 +452,115 @@ final class Forks {
          *         its check, the body threw, or the body produced nothing
          */
         <R, W> W take(ForkBody<R> body, BiFunction<VerifiedFork, R, W> write) {
-            // The whole span is the fork, not just its run: see FORK_RUNNING
-            // for what a narrower scope left uncovered.
-            return asFork(() -> isolated(() -> {
-                spend.run();
-                Optional<VerifiedFork> verified = copyAndVerify(kind, live, perspective);
-                if (verified.isEmpty()) {
-                    return null;
+            LiveMarks before = LiveMarks.of(live);
+            try {
+                // The whole span is the fork, not just its run: see FORK_RUNNING
+                // for what a narrower scope left uncovered.
+                return asFork(() -> isolated(() -> {
+                    spend.run();
+                    Optional<VerifiedFork> verified = copyAndVerify(kind, live, perspective);
+                    if (verified.isEmpty()) {
+                        return null;
+                    }
+                    R produced;
+                    try {
+                        // The fork's own state, read against the live game it came from.
+                        SnapshotBuilder snapshots = SnapshotBuilder.forFork(verified.get().fork(), live);
+                        produced = body.run(verified.get(), snapshots);
+                    } catch (ForkRefusal refusal) {
+                        ForkRefusals.count(kind, refusal.reason());
+                        return null;
+                    } catch (RuntimeException | StackOverflowError e) {
+                        HookFailures.countContained("fork " + kind + " body", e);
+                        return null;
+                    }
+                    if (produced == null) {
+                        return null;
+                    }
+                    try {
+                        return write.apply(verified.get(), produced);
+                    } catch (RuntimeException | StackOverflowError e) {
+                        HookFailures.countContained("fork " + kind + " write", e);
+                        return null;
+                    }
+                }));
+            } finally {
+                before.compareAfter("fork " + kind + " moved the live game", live);
+            }
+        }
+
+    }
+
+    /**
+     * What a fork must leave as it was in the live game, the part of it that
+     * is cheap to read: its timestamp and card id counters, the random
+     * stream Forge draws from, each player's life, poison, controller and
+     * zone sizes, and its stack's size.
+     */
+    record LiveMarks(String marks) {
+
+        private static final java.lang.reflect.Field CARD_IDS = counter("cardIdCounter");
+        private static final java.lang.reflect.Field HIDDEN_IDS = counter("hiddenCardIdCounter");
+
+        private static java.lang.reflect.Field counter(String name) {
+            try {
+                java.lang.reflect.Field field = Game.class.getDeclaredField(name);
+                field.setAccessible(true);
+                return field;
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return null;
+            }
+        }
+
+        /** {@code live}'s marks, or none for no game. */
+        static LiveMarks of(Game live) {
+            if (live == null) {
+                return new LiveMarks("");
+            }
+            StringBuilder out = new StringBuilder()
+                    .append("timestamp ").append(live.getTimestamp())
+                    .append(", card ids ").append(read(CARD_IDS, live))
+                    .append(", hidden card ids ").append(read(HIDDEN_IDS, live))
+                    .append(", random stream ").append(System.identityHashCode(MyRandom.getRandom()))
+                    .append(", stack ").append(live.getStack().size());
+            for (Player player : live.getRegisteredPlayers()) {
+                out.append(", ").append(Refs.of(player))
+                        .append(" life ").append(player.getLife())
+                        .append(" poison ").append(player.getPoisonCounters())
+                        .append(" controller ").append(System.identityHashCode(player.getController()))
+                        .append(" zones");
+                for (forge.game.zone.ZoneType zone : MARKED_ZONES) {
+                    out.append(' ').append(player.getZone(zone).size());
                 }
-                R produced;
-                try {
-                    // The fork's own state, read against the live game it came from.
-                    SnapshotBuilder snapshots = SnapshotBuilder.forFork(verified.get().fork(), live);
-                    produced = body.run(verified.get(), snapshots);
-                } catch (RuntimeException | StackOverflowError e) {
-                    HookFailures.countContained("fork " + kind + " body", e);
-                    return null;
-                }
-                return produced == null ? null : write.apply(verified.get(), produced);
-            }));
+            }
+            return new LiveMarks(out.toString());
+        }
+
+        private static final List<forge.game.zone.ZoneType> MARKED_ZONES = List.of(
+                forge.game.zone.ZoneType.Hand, forge.game.zone.ZoneType.Library,
+                forge.game.zone.ZoneType.Battlefield, forge.game.zone.ZoneType.Graveyard,
+                forge.game.zone.ZoneType.Exile, forge.game.zone.ZoneType.Command);
+
+        private static Object read(java.lang.reflect.Field field, Game game) {
+            try {
+                return field == null ? "?" : field.get(game);
+            } catch (ReflectiveOperationException e) {
+                return "?";
+            }
+        }
+
+        /** Count a difference from {@code live}'s marks now under {@code key}, the first printed. */
+        void compareAfter(String key, Game live) {
+            LiveMarks after;
+            try {
+                after = of(live);
+            } catch (RuntimeException e) {
+                return;
+            }
+            if (!after.equals(this)) {
+                HookFailures.countContained(key, "Effect records: " + key + "; before the fork: " + marks
+                        + "; after: " + after.marks() + " (later ones are counted, not printed)");
+            }
         }
     }
 

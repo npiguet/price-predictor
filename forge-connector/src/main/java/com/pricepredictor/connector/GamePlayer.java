@@ -58,6 +58,9 @@ public class GamePlayer {
     /** Plays one game of a match to its end; {@link Match#startGame} but in a test. */
     private final GameDriver driver;
 
+    /** The match's start in milliseconds, which seeds it; the wall clock but in a test. */
+    private final java.util.function.LongSupplier clock;
+
     /** How a game of a match is played to its end, a seam for a test that makes one throw. */
     @FunctionalInterface
     interface GameDriver {
@@ -135,11 +138,22 @@ public class GamePlayer {
      */
     GamePlayer(int gamesPerMatch, RecordShardWriter effectRecords, CollectionCaps caps,
             WorkerStop stop, GameDriver driver) {
+        this(gamesPerMatch, effectRecords, caps, stop, driver, System::currentTimeMillis);
+    }
+
+    /**
+     * The same, the match's start read from {@code clock}: a test replaying
+     * one match twice gives both the same start, which seeds the match's
+     * source and its games' recordings.
+     */
+    GamePlayer(int gamesPerMatch, RecordShardWriter effectRecords, CollectionCaps caps,
+            WorkerStop stop, GameDriver driver, java.util.function.LongSupplier clock) {
         this.gamesPerMatch = gamesPerMatch;
         this.effectRecords = effectRecords;
         this.caps = caps;
         this.stop = stop;
         this.driver = driver;
+        this.clock = clock;
     }
 
     /**
@@ -224,7 +238,8 @@ public class GamePlayer {
      * both decks' rules as {@code aimed_at}.
      */
     public PlayedMatch playMatch(Deck deckA, Deck deckB, DeckRules deckRules) {
-        long startMillis = System.currentTimeMillis();
+        long wallStart = System.currentTimeMillis();
+        long startMillis = clock.getAsLong();
         // The match's own seeded source, scrambled for the reason the
         // collectors' sampler is: consecutive matches start milliseconds
         // apart, and a linear congruential generator's first draw is nearly
@@ -273,7 +288,7 @@ public class GamePlayer {
             throw error;
         }
 
-        int durationSeconds = (int) ((System.currentTimeMillis() - startMillis) / 1000);
+        int durationSeconds = (int) ((System.currentTimeMillis() - wallStart) / 1000);
         return new PlayedMatch(outcomes, durationSeconds, randomSeat.isPresent());
     }
 

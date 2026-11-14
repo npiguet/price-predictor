@@ -85,8 +85,14 @@ Before the first long run, the fork fidelity audit (T181): collect for 20 minute
 directory, stop the run, and count the `fork fidelity:` lines by field in its `logs/` worker logs
 (the run's end prints their total as `fork_fidelity`). Then run `validate-corpus` on the scratch
 run: its watched line "fork records whose copy left something out" gives the share of fork records
-carrying each `copy_dropped` kind. The workers' hook-failure line counts the forks whose copy or
-body threw, as `fork <kind> copy` and `fork <kind> body`. None of the three discards a record.
+carrying each `copy_dropped` kind. The workers' hook-failure line counts the forks whose copy, score
+check, body or writer threw, as `fork <kind> copy`, `fork <kind> score check`, `fork <kind> body` and
+`fork <kind> write`, and the forks that changed the live game, as `fork <kind> moved the live game`;
+the refusal line (`Effect records: fork refusals so far, expected and no failure: {…}`) counts the
+forks that declined, by kind and reason, and wrote nothing. None of these discards a record. The
+audit reads a fork's copy as it was taken, before any perturbation: it cannot tell what a fork did
+after that, and it never sees a fork that wrote nothing, which only the refusal line and the
+failure counts account for.
 
 ```powershell
 .venv\Scripts\python.exe -u -m sealed match-outcomes --workers 6 --effect-records <scratch run dir> --random-seat-share 0.25 --random-seat-probability 0.5 --interventions-per-game 4 --probes-per-game 4 --directed-fork-rules $rules --count-dropped-events

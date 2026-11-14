@@ -10,4 +10,9 @@ public final class TestHookFailures {
     public static void count(String key) {
         HookFailures.countContained(key);
     }
+
+    /** Count one fork of {@code kind} that refused, for {@code reason}. */
+    public static void refuse(String kind, String reason) {
+        ForkRefusals.count(kind, reason);
+    }
 }

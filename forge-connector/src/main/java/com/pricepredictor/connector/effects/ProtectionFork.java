@@ -114,7 +114,7 @@ final class ProtectionFork {
         ForkPlayForward.Played played = run.take((verified, snapshots) -> {
             Card forked = Forks.mappedCard(verified.copier(), grant.creature());
             if (forked == null) {
-                return null;
+                throw new ForkRefusal(ForkRefusal.NO_COUNTERPART);
             }
             // Before the fork's collectors listen (ForkPlayForward.play opens
             // them): the grant publishes a stats change, which is the fork's

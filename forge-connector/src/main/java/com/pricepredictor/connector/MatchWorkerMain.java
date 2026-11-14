@@ -394,6 +394,7 @@ public class MatchWorkerMain {
     static final class HookFailureReport {
         private Map<String, Long> reported = Map.of();
         private Map<String, Long> reportedByForge = Map.of();
+        private Map<String, Long> reportedRefusals = Map.of();
 
         /**
          * Print the counts when they changed: the connector's
@@ -401,7 +402,9 @@ public class MatchWorkerMain {
          * subscribers, boundary steps, unreadable candidates) and Forge's
          * own per slot ({@link PatchHooks#forgeFailureCounts}), which also
          * holds the argument builds Forge made inside a hook's call; a
-         * listener's failure is in both.
+         * listener's failure is in both. Then, on a line of its own and only
+         * when it changed, the forks that refused, by kind and reason
+         * ({@code ForkRefusals}), which are no failures.
          */
         void afterMatch() {
             Map<String, Long> counts = HookFailures.counts();
@@ -413,7 +416,17 @@ public class MatchWorkerMain {
                 reported = counts;
                 reportedByForge = byForge;
             }
+            // Beside the failures and never among them: forks that declined
+            // for an expected reason, by kind and reason (ForkRefusals).
+            Map<String, Long> refusals = com.pricepredictor.connector.effects.ForkRefusals.counts();
+            if (!refusals.equals(reportedRefusals)) {
+                System.err.println(REFUSALS_LINE + refusals);
+                reportedRefusals = refusals;
+            }
         }
+
+        /** How the refusal tally's line starts; a count, not a failure line. */
+        static final String REFUSALS_LINE = "Effect records: fork refusals so far, expected and no failure: ";
     }
 
     /**

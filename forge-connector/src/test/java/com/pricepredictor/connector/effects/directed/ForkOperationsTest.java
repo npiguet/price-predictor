@@ -97,10 +97,10 @@ class ForkOperationsTest {
     }
 
     @Test
-    void removingAKeywordTheCardLacksFails() {
+    void removingAKeywordTheCardLacksIsRefused() {
         Board board = Board.main();
         Card bears = board.creature(board.you, "Grizzly Bears");
-        assertThrows(IllegalStateException.class,
+        assertThrows(com.pricepredictor.connector.effects.ForkRefusal.class,
                 () -> KeywordOperation.removing(bears, "flying").apply(board.game));
     }
 
@@ -357,7 +357,8 @@ class ForkOperationsTest {
                 List.of(forge.game.keyword.Keyword.FLYING));
         bears.updateKeywordsCache();
 
-        assertThrows(IllegalStateException.class, () -> KeywordEdit.add(board.game, bears, "Flying"));
+        assertThrows(com.pricepredictor.connector.effects.ForkRefusal.class,
+                () -> KeywordEdit.add(board.game, bears, "Flying"));
     }
 
     @Test

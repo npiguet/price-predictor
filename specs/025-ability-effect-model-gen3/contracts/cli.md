@@ -347,9 +347,23 @@ A game whose marker could not be written prints, once per worker,
 every such failure is counted under `game-end marker` in the worker's failure report
 (`effect-record hook failures so far, listener calls that threw and lost their records: {…}; contained by Forge, per slot: {…}`).
 
+A fork's failures are counted in the same report, by kind of fork (`intervention`, `probe`,
+`protection`, `directed`): `fork <kind> copy`, `fork <kind> score check`, `fork <kind> body`,
+`fork <kind> write`, and `fork <kind> moved the live game` for a fork after which the live game's
+timestamp, card id counters, random stream, players' life, poison, controllers, zone sizes or stack
+size differ from before it. The first copy, body or write failure of each kind prints
+`Effect records: fork <kind> <step> threw, and is discarded (later failures are counted, not printed): <exception>`
+with its stack; the first live-game change of each kind prints
+`Effect records: fork <kind> moved the live game; before the fork: <marks>; after: <marks> (later ones are counted, not printed)`.
+A fork that declines for an expected reason is no failure: it is counted in a tally of its own,
+which the worker prints at a match end whenever it changed, on a line of its own:
+`Effect records: fork refusals so far, expected and no failure: {<kind> <reason>=<forks>, …}`
+(a Java map, running totals of the JVM, keys in name order).
+
 The supervisor's log scan reads these: `Error generating match: [random-seat match] ` is the
 failure kind `random_seat_match_error`, counted apart from `match_error`; the marker line is
-`game_end_marker_unwritten`. The failure report is a running count per worker JVM, not a failure
+`game_end_marker_unwritten`; a fork's first-failure line is `fork_failed` and its live-game line
+`fork_moved_live_game`. The refusal tally is not read. The failure report is a running count per worker JVM, not a failure
 line: the scan keeps each JVM lifetime's latest report (a lifetime starts at its
 `Effect records: <shard> [mode=…]` line), sums them over lifetimes and slots, prints them in the
 round report (collectors) or at the run's end (`match-outcomes`), and records them in `run.json`

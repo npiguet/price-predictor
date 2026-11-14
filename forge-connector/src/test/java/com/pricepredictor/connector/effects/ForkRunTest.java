@@ -12,6 +12,7 @@ import forge.game.card.Card;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.util.MyRandom;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -144,6 +145,80 @@ class ForkRunTest {
         assertFalse(verified.stamp(new EffectRecord(
                 "r", "run", "t", "g", RecordKind.COMBAT, AttributionMode.PATCHED))
                 .toJson().contains("copy_dropped"));
+    }
+
+    /**
+     * A fork that changes the live game is counted under its kind: here a
+     * body that takes a timestamp from the live game rather than its copy,
+     * the way Forge's evaluator once did.
+     */
+    @Test
+    void aForkThatMovesTheLiveGameIsCounted() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        long before = count("fork run-test-leak moved the live game");
+
+        Object written = run("run-test-leak", live, new AtomicInteger()).take(
+                (verified, snapshots) -> live.getNextTimestamp(), (verified, produced) -> produced);
+
+        assertTrue(written instanceof Long, "the fork ran: " + written);
+        assertEquals(before + 1, count("fork run-test-leak moved the live game"));
+    }
+
+    /**
+     * The score check plays the turn's combat out in copies of both games,
+     * and leaves the live game's timestamp and controllers as they were:
+     * nothing is counted as having moved it.
+     */
+    @Test
+    void aForksScoreCheckLeavesTheLiveGameAsItWas() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = live.getPhaseHandler().getPlayerTurn();
+        for (String name : List.of("Grizzly Bears", "Hill Giant")) {
+            TestBoard.inPlay(live, you, name).setSickness(false);
+        }
+        TestBoard.inPlay(live, you.getWeakestOpponent(), "Gray Ogre");
+        long stamp = live.getTimestamp();
+        long before = count("fork run-test-check moved the live game");
+
+        Object written = run("run-test-check", live, new AtomicInteger()).take(
+                (verified, snapshots) -> "checked", (verified, produced) -> produced);
+
+        assertEquals("checked", written);
+        assertEquals(stamp, live.getTimestamp());
+        assertEquals(before, count("fork run-test-check moved the live game"));
+    }
+
+    /**
+     * A body that declines for an expected reason is a refusal, counted by
+     * reason apart from the failures, and writes nothing.
+     */
+    @Test
+    void aRefusalIsCountedApartFromTheFailures() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        long refused = ForkRefusals.counts().getOrDefault("run-test-refuse no choices", 0L);
+
+        Object written = run("run-test-refuse", live, new AtomicInteger()).take((verified, snapshots) -> {
+            throw new ForkRefusal(ForkRefusal.NO_CHOICES);
+        }, (verified, produced) -> "written");
+
+        assertNull(written);
+        assertEquals(refused + 1, ForkRefusals.counts().get("run-test-refuse no choices"));
+        assertEquals(0, count("fork run-test-refuse body"));
+    }
+
+    /** A writer that throws is counted under the fork's kind, not the boundary step's. */
+    @Test
+    void aWriterThatThrowsIsCountedUnderTheFork() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        long before = count("fork run-test-write write");
+
+        Object written = run("run-test-write", live, new AtomicInteger()).take(
+                (verified, snapshots) -> "ran", (verified, produced) -> {
+                    throw new IllegalStateException("a record that cannot be written");
+                });
+
+        assertNull(written);
+        assertEquals(before + 1, count("fork run-test-write write"));
     }
 
     /** A random stream that counts what is drawn from it. */

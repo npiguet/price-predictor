@@ -57,6 +57,9 @@ final class DamageStepProbe {
      * @param step the damage step about to be dealt, which the fork deals too
      * @return the held branch, or null when the fork could not be taken
      */
+    /** A refusal's reason: the copy holds no combat to deal. */
+    static final String NO_COMBAT = "no combat in the copy";
+
     HeldProbe probe(String keyword, Card carrier, DamageStep step) {
         if (!budget.mayProbe(keyword) || carrier == null) {
             return null;
@@ -69,8 +72,11 @@ final class DamageStepProbe {
         return run.take((verified, snapshots) -> {
             Game fork = verified.fork();
             Card forkCarrier = Forks.mappedCard(verified.copier(), carrier);
-            if (forkCarrier == null || fork.getCombat() == null) {
-                return null;
+            if (forkCarrier == null) {
+                throw new ForkRefusal(ForkRefusal.NO_COUNTERPART);
+            }
+            if (fork.getCombat() == null) {
+                throw new ForkRefusal(NO_COMBAT);
             }
             // A stripped keyword reaches combat states ordinary play does
             // not; Forks.ForkRun discards the fork when one throws. Every

@@ -58,4 +58,23 @@ class HookFailureReportTest {
 
         assertEquals("", stderrOf(report::afterMatch));
     }
+
+    /**
+     * A fork that refused is no failure: the tally is a line of its own,
+     * printed when it changed, and the failure line does not hold it.
+     */
+    @Test
+    void forkRefusalsArePrintedApartFromTheFailures() {
+        MatchWorkerMain.HookFailureReport report = new MatchWorkerMain.HookFailureReport();
+        stderrOf(report::afterMatch);
+
+        TestHookFailures.refuse("report-test", "no choices");
+        String printed = stderrOf(report::afterMatch);
+
+        assertEquals(MatchWorkerMain.HookFailureReport.REFUSALS_LINE
+                + com.pricepredictor.connector.effects.ForkRefusals.counts(), printed.trim());
+        assertTrue(printed.contains("report-test no choices=1"), printed);
+        assertTrue(!HookFailures.counts().containsKey("report-test no choices"));
+        assertEquals("", stderrOf(report::afterMatch));
+    }
 }

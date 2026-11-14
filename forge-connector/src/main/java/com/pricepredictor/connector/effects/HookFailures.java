@@ -153,6 +153,17 @@ public final class HookFailures {
     }
 
     /**
+     * The same, the first failure under {@code key} printed as {@code
+     * firstLine}: a fork that moved the live game ({@code "fork <kind> moved
+     * the live game"}), where what moved says more than a stack.
+     */
+    static void countContained(String key, String firstLine) {
+        if (COUNTS.computeIfAbsent(key, name -> new AtomicLong()).incrementAndGet() == 1) {
+            System.err.println(firstLine);
+        }
+    }
+
+    /**
      * The failures counted so far, by hook, short call, subscriber or
      * contained failure, in name order; empty when none failed.
      */
