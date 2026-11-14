@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.effects.BoardStates;
 import com.pricepredictor.connector.effects.TestBoard;
+import com.pricepredictor.connector.effects.TestForks;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.DirectedRules;
@@ -2620,9 +2621,16 @@ class RegisteredRulesTest {
         }
 
         /**
-         * Copy the game as a directed fork does, map the precondition's
+         * Copy the game as a directed fork does, score-check the copy as every
+         * fork is checked before it is changed, map the precondition's
          * binding into the copy and apply the rule's one variant, then compare
          * the copy with the live board. The live board is left as it was.
+         *
+         * <p>The edited copy is then put through the state-based check the
+         * fork's first priority makes, which must move no card: an edit that
+         * the check undoes (a creature dying of the toughness it was given,
+         * an Aura falling off, the legend rule) would fork a board the rule's
+         * variant does not describe.
          */
         Twin twin(DirectedRule rule) {
             assertEquals(1, rule.variants().size(), rule.rule() + " registers one variant");
@@ -2632,13 +2640,36 @@ class RegisteredRulesTest {
             GameCopier copier = new GameCopier(game);
             Game fork = copier.makeCopy();
             assertEquals(Set.of(), changes(real, BoardStates.of(fork)), "the unedited copy differs");
+            assertTrue(TestForks.scoreChecks(game, copier, fork), rule.rule() + ": the copy fails its score check");
 
             Binding forked = binding.inFork(copier);
             rule.variants().values().iterator().next().edit(forked).apply(fork);
 
             Map<String, Object> edited = BoardStates.of(fork);
             assertEquals(real, BoardStates.of(game), "the edit reached the live game");
+            Map<String, String> placed = placed(fork);
+            fork.getAction().checkStateEffects(true);
+            assertEquals(placed, placed(fork),
+                    rule.rule() + ": the first state-based check moved a card of the edited board");
+            assertEquals(real, BoardStates.of(game), "the check reached the live game");
             return new Twin(changes(real, edited), real, edited, forked, fork);
+        }
+
+        /**
+         * Every card of {@code game} by id, to its zone and what it is
+         * attached to; not the engine's effect cards, which the check tidies
+         * away once their source is gone.
+         */
+        private static Map<String, String> placed(Game game) {
+            Map<String, String> placed = new java.util.TreeMap<>();
+            for (Card card : game.getCardsInGame()) {
+                if (card.isImmutable()) {
+                    continue;
+                }
+                placed.put(card.getName() + "#" + card.getId(),
+                        card.getZone() + " on " + card.getEntityAttachedTo());
+            }
+            return placed;
         }
     }
 }
