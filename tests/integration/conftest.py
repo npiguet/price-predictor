@@ -23,6 +23,29 @@ COLLECTION_SECONDS = 240
 POLL_SECONDS = 5
 
 
+#: The worker-failure kinds (``price_predictor.domain.worker_failures``) whose
+#: line means a match, a game or a worker's output was lost: a run the stop
+#: protocol ended cleanly has none. The others (a fork discarded, a fidelity
+#: difference, a hook that threw) cost a record or a fork and are reported,
+#: not asserted: what a few games show of them is a reading, not a verdict.
+LOST_OUTPUT_FAILURES = (
+    "match_error", "random_seat_match_error", "worker_gave_up",
+    "game_end_marker_unwritten", "jvm_error", "log_unread",
+)
+
+
+def assert_no_lost_output(entry: dict) -> None:
+    """``run.json``'s entry records no failure line of a lost match, game or
+    worker output; the others it records are printed for the reader."""
+    failures = entry["worker_failures"]
+    lost = {kind: failures.get(kind, 0) for kind in LOST_OUTPUT_FAILURES}
+    assert not any(lost.values()), (lost, entry["worker_failure_examples"])
+    others = {kind: count for kind, count in failures.items() if count}
+    if others:
+        print(f"worker failure lines: {others}; first of each: "
+              f"{entry['worker_failure_examples']}")
+
+
 def require_jar() -> None:
     """Skip the test unless the forge-connector fat JAR is built."""
     try:
