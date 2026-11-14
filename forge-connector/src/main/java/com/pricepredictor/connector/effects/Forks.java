@@ -579,6 +579,15 @@ final class Forks {
             new java.util.concurrent.atomic.AtomicLong();
 
     /**
+     * Seed the next fork's stream as this JVM's first fork's: for a test whose
+     * fork plays on and whose written records must not depend on how many
+     * forks the JVM took before it.
+     */
+    static void restartStreams() {
+        FORK_STREAMS.set(0);
+    }
+
+    /**
      * Run {@code action} with Forge's global random stream ({@code MyRandom})
      * replaced by a fresh one of the fork's own, and the live game's put back
      * however the action ends, so the fork draws nothing from it. Nothing is

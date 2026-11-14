@@ -31,6 +31,11 @@ final class CharacterizationBoard {
         this.opponent = game.getPlayers().get(1);
     }
 
+    /** A board on {@code game}, built by the caller (seats of its own choosing). */
+    static CharacterizationBoard on(Game game) {
+        return new CharacterizationBoard(game);
+    }
+
     /** An empty board in {@code phase} of the first player's turn, past the start. */
     static CharacterizationBoard empty(PhaseType phase) {
         return new CharacterizationBoard(TestBoard.startedTwoPlayerGame(phase));

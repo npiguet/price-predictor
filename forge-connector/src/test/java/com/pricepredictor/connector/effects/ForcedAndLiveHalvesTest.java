@@ -2,7 +2,6 @@ package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
 import forge.ai.LobbyPlayerAi;
-import forge.ai.PlayerControllerAi;
 import forge.game.Game;
 import forge.game.GameStage;
 import forge.game.ability.ApiType;
@@ -10,7 +9,6 @@ import forge.game.ability.effects.CharmEffect;
 import forge.game.card.Card;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
-import forge.game.player.PlayerActionConfirmMode;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 import org.junit.jupiter.api.Test;
@@ -50,39 +48,6 @@ class ForcedAndLiveHalvesTest {
     Path tempDir;
 
     private final java.util.concurrent.atomic.AtomicInteger runs = new java.util.concurrent.atomic.AtomicInteger();
-
-    /** A seat whose controller refuses every "you may", in the live game and in its copies. */
-    private static final class DecliningSeat extends LobbyPlayerAi {
-        DecliningSeat(String name) {
-            super(name, null);
-        }
-
-        @Override
-        public Player createIngamePlayer(Game game, int id) {
-            Player player = new Player(getName(), game, id);
-            player.setFirstController(new Declining(game, player, this));
-            return player;
-        }
-    }
-
-    private static final class Declining extends PlayerControllerAi {
-        Declining(Game game, Player player, LobbyPlayerAi lobby) {
-            super(game, player, lobby);
-        }
-
-        @Override
-        public boolean confirmAction(SpellAbility sa, PlayerActionConfirmMode mode, String message,
-                                     List<String> options, Card cardToShow, Map<String, Object> params) {
-            try {
-                java.lang.reflect.Method note = PlayerControllerAi.class.getDeclaredMethod(
-                        "noteEffectRecordConfirm", SpellAbility.class, boolean.class);
-                note.setAccessible(true);
-                return (Boolean) note.invoke(null, sa, false);
-            } catch (ReflectiveOperationException e) {
-                throw new AssertionError(e);
-            }
-        }
-    }
 
     /** A board, built afresh for each side, and the spell its first player holds. */
     private record Play(Function<Boolean, Game> board, String spell, Consumer<SpellAbility> liveChoices) {
