@@ -6,10 +6,9 @@ import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
-import forge.game.ability.ApiType;
 import forge.game.card.Card;
+import forge.game.phase.PhaseType;
 import forge.game.player.Player;
-import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 
 import java.util.List;
@@ -18,22 +17,28 @@ import java.util.Optional;
 /**
  * 704.5b, a player who attempted to draw from an empty library since the
  * last state-based check loses the game (121.4 restates it), on scenario
- * {@code 704.5b-1}: A casts Divination with one card in its library, draws
- * it, fails the second draw and loses.
+ * {@code 704.5b-2}: A's library holds one card as its upkeep begins, and its
+ * draw step draws it.
  *
- * <p>The base board, read at a boundary: a main phase of the active player
- * begins, its library holds exactly one card, and it holds a spell it has the
- * lands to cast that makes it draw cards (Divination). It binds the library's
- * card and the spell.
+ * <p>The point is the draw step's turn-based draw (504.1), which no player
+ * chooses: a draw spell (scenario {@code 704.5b-1}'s Divination) would wait
+ * on the AI casting it, and Forge's AI casts no draw spell drawing at least
+ * its library's size less three ({@code DrawAi}, "don't deck yourself").
  *
- * <p>Variant {@code empty} ({@code move_card}): the library is empty, the
- * card moved to its owner's graveyard (a move is the operation's only way to
- * empty a library), so every draw the spell makes fails and the player loses.
+ * <p>The base board, read at a boundary: the active player's upkeep begins,
+ * its draw step is not skipped (the first turn of a two-player game skips
+ * it), and its library holds exactly one card, which the draw step draws. It
+ * binds that card.
+ *
+ * <p>Variant {@code empty} ({@code move_card}): the card is in its owner's
+ * graveyard (a move is the operation's only way to empty a library), so the
+ * draw step's draw is attempted from an empty library and the player loses
+ * the game at the next state-based check.
  */
 public final class DrawFromEmptyLibrary {
 
     public static final String RULE = "704.5b";
-    static final String SCENARIO = "704.5b-1";
+    static final String SCENARIO = "704.5b-2";
     static final String EMPTY = "empty";
 
     private DrawFromEmptyLibrary() {
@@ -46,7 +51,7 @@ public final class DrawFromEmptyLibrary {
     }
 
     static Optional<Binding> bind(Game live) {
-        if (!Boards.atMainPhase(live)) {
+        if (!Boards.at(live, PhaseType.UPKEEP) || drawStepSkipped(live)) {
             return Optional.empty();
         }
         Player active = Boards.active(live);
@@ -54,20 +59,11 @@ public final class DrawFromEmptyLibrary {
         if (library.size() != 1) {
             return Optional.empty();
         }
-        return active.getCardsIn(ZoneType.Hand).stream()
-                .filter(card -> Boards.affordable(active, card) && drawsForCaster(card))
-                .findFirst()
-                .map(spell -> Binding.empty().with("card", library.get(0)).with("spell", spell));
+        return Optional.of(Binding.empty().with("card", library.get(0)));
     }
 
-    /** Whether the card is a spell that makes its caster draw cards. */
-    static boolean drawsForCaster(Card card) {
-        for (SpellAbility spell : card.getSpells()) {
-            if (spell.getApi() == ApiType.Draw && !spell.usesTargeting()
-                    && "You".equals(spell.getParamOrDefault("Defined", "You"))) {
-                return true;
-            }
-        }
-        return false;
+    /** Whether this turn's draw step is skipped as Forge skips it: a two-player game's first turn. */
+    private static boolean drawStepSkipped(Game live) {
+        return live.getPhaseHandler().getTurn() == 1 && live.getPlayers().size() == 2;
     }
 }

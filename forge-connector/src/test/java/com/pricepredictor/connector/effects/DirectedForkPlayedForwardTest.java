@@ -31,14 +31,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * ({@code DirectedFork.take}), the live turn played out and the fork played
  * to its end; the fork's records then show the variant's point happening,
  * not only the edited board. Each case picks a rule whose point is the
- * engine's own (a turn-based action, a trigger, combat damage), so neither
+ * engine's own (a turn-based action, a trigger, combat damage, the
+ * collector's own reading of a priority stop's candidates), so neither
  * seat's choices decide it.
  *
  * <p>{@code pt} is played forward by
  * {@code ForkRecordsTest.theRegisteredToughnessZeroRuleForksATougherCreatureToTheEndOfTheTurn}.
- * The families left out ({@code add_permanent}, {@code move_card},
- * {@code tap}, {@code colour_type}) have no registered rule whose point
- * happens without a seat's choice: a spell cast, an attack, a block.
+ * The families left out ({@code tap}, {@code colour_type}) have no
+ * registered rule whose point happens without a seat's choice: a spell
+ * cast, an attack, a block.
  */
 @ExtendWith(ForgeExtension.class)
 class DirectedForkPlayedForwardTest {
@@ -67,8 +68,17 @@ class DirectedForkPlayedForwardTest {
      * fork's records, each checked to name the rule.
      */
     private List<String> forkOf(Game game, PhaseType step, String rule, String variant) throws Throwable {
-        CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(0).probes(0)
-                .directed(1, 1.0, rule).build();
+        return forkOf(game, step, rule, variant, false);
+    }
+
+    /** {@link #forkOf(Game, PhaseType, String, String)}, every decision candidate written when {@code decisions}. */
+    private List<String> forkOf(Game game, PhaseType step, String rule, String variant, boolean decisions)
+            throws Throwable {
+        TestCaps built = TestCaps.caps().manaCap(2000).interventions(0).probes(0);
+        if (decisions) {
+            built = built.everyDecision();
+        }
+        CollectionCaps caps = built.directed(1, 1.0, rule).build();
         RecordShardWriter shard = ShardRun.writer(tempDir);
         try (GameRecording recording = new GameRecording(game, shard, ShardRun.GAME_ID, caps, 7L, null)) {
             recording.open();
@@ -224,5 +234,77 @@ class DirectedForkPlayedForwardTest {
         }
         assertTrue(knight != null && !knight.equals(ref(blocker)), "a new card dealt the attacker's damage");
         assertTrue(eventsOf(fork, "damage_dealt", knight).isEmpty(), "the Knight is dealt no damage");
+    }
+
+    /**
+     * {@code move_card}, 704.5b: the active player's library holds one card
+     * as its upkeep begins. The live draw step draws it and the game goes
+     * on; the fork's card is in the graveyard, so the draw step's draw is
+     * attempted from the empty library and the player loses the game.
+     */
+    @Test
+    void aDrawStepFromAnEmptyLibraryLosesTheGame() throws Throwable {
+        Game game = board(PhaseType.UPKEEP);
+        Player active = game.getPlayers().get(0);
+        List<Card> library = List.copyOf(active.getCardsIn(forge.game.zone.ZoneType.Library));
+        for (Card card : library.subList(1, library.size())) {
+            game.getAction().exile(card, null, null);
+        }
+        assertEquals(1, active.getCardsIn(forge.game.zone.ZoneType.Library).size());
+
+        List<String> fork = forkOf(game, PhaseType.UPKEEP, "704.5b", "empty");
+
+        List<String> kinds = new ArrayList<>();
+        Map<String, Object> lost = null;
+        for (String record : fork) {
+            for (Map<String, Object> event : events(record)) {
+                if ("player_lost".equals(event.get("type"))
+                        && List.of(Refs.of(active)).equals(event.get("subjects"))) {
+                    lost = event;
+                    kinds.add(parse(record).get("kind") + "/" + parse(record).get("moment"));
+                }
+            }
+        }
+        assertTrue(lost != null, "the active player loses in the fork: " + fork);
+        assertEquals("Milled", params(lost).get("reason"), lost.toString());
+        assertFalse(active.hasLost(), "the live player draws its last card and plays on");
+        assertEquals(List.of("resolution/resolution"), kinds,
+                "the loss is in an effect half, where 704.5b-1's declaration reads it");
+    }
+
+    /**
+     * {@code add_permanent}, 601.2c: the active player holds Undo ("return
+     * two target creatures") with Grizzly Bears the only creature as its
+     * first main phase begins. The live Undo has no legal choice of targets;
+     * the fork's opponent also controls Craw Wurm, and the decision records
+     * of the fork's priority stops show Undo with a legal choice of targets.
+     */
+    @Test
+    void aSecondCreatureGivesTheTwoTargetSpellALegalChoice() throws Throwable {
+        Game game = board(PhaseType.MAIN1);
+        Player active = game.getPlayers().get(0);
+        for (int i = 0; i < 3; i++) {
+            permanent(game, active, "Island");
+        }
+        TestBoard.inHand(game, active, "Undo");
+
+        List<String> fork = forkOf(game, PhaseType.MAIN1, "601.2c", "two-creatures", true);
+
+        List<Object> verdicts = new ArrayList<>();
+        for (String record : fork) {
+            if (!"playability".equals(parse(record).get("kind"))
+                    || !(RecordLines.payload(record).get("candidates") instanceof List<?> candidates)) {
+                continue;
+            }
+            for (Object candidate : candidates) {
+                Map<String, Object> read = RecordLines.asMap(candidate);
+                if (read.get("ability") instanceof List<?> keys && keys.stream().anyMatch(key ->
+                        "cardsfolder/u/undo.txt".equals(RecordLines.asMap(key).get("script_file")))) {
+                    verdicts.add(RecordLines.asMap(read.get("verdict")).get("has_legal_target"));
+                }
+            }
+        }
+        assertFalse(verdicts.isEmpty(), "a fork decision record names Undo");
+        assertTrue(verdicts.contains(true), "Undo has a legal choice of targets in the fork: " + verdicts);
     }
 }

@@ -342,13 +342,6 @@
           "operation": {
             "unclassifiable": "not a board edit: adds a second card to A's library from no zone; move_card only moves or replaces a card"
           }
-        },
-        {
-          "label": "empty",
-          "polarity": "fires",
-          "delta": "A's library is empty.",
-          "expected": "Both draws are attempted from the empty library and A loses the game at the next state-based check.",
-          "operation": "move_card"
         }
       ],
       "cards": [
@@ -360,6 +353,69 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A player who attempted to draw from an empty library loses the game: a player_lost event whose reason is Milled.",
+        "near_miss": "A player loses the game for another reason; not counted, since no API scopes the near miss.",
+        "params": {
+          "event": "player_lost",
+          "reason": "Milled"
+        },
+        "needs": []
+      }
+    },
+    {
+      "id": "704.5b-2",
+      "rules": [
+        "704.5b"
+      ],
+      "title": "A draw step's draw from an empty library loses the game",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "It is not the game's first turn, so A's draw step is not skipped."
+      },
+      "decisions": [
+        "Both players pass in A's upkeep; A's draw step begins and A draws a card (504.1)."
+      ],
+      "variants": [
+        {
+          "label": "one_card",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "A draws the only card of its library; the library is empty, and the game continues because no draw was attempted from it."
+        },
+        {
+          "label": "empty",
+          "polarity": "fires",
+          "delta": "A's library is empty: its Island is in A's graveyard.",
+          "expected": "The draw step's draw is attempted from the empty library, and A loses the game at the next state-based check, as A would receive priority in the draw step.",
+          "operation": "move_card"
+        }
+      ],
+      "cards": [
+        "Island"
+      ],
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A player who attempted to draw from an empty library loses the game: a player_lost event whose reason is Milled, in the effect half that holds the game's end after the draw step's state-based check.",
         "near_miss": "A player loses the game for another reason; not counted, since no API scopes the near miss.",
         "params": {
           "event": "player_lost",

@@ -766,14 +766,13 @@ class RegisteredRulesTest {
         assertTrue(twin.fork().player("opponent").canLoseLife());
     }
 
-    // ── 704.5b (121.4), a draw from an empty library: move_card ─────────
+    // ── 704.5b (121.4), a draw step's draw from an empty library: move_card
 
-    private static Board divinationBoard(int library) {
-        Board board = new Board(PhaseType.MAIN1);
-        for (int i = 0; i < 3; i++) {
-            board.card(board.you, "Island");
-        }
-        board.other = TestBoard.inHand(board.game, board.you, "Divination");
+    /** Your upkeep of game turn {@code turn}, {@code library} Forests in your library. */
+    private static Board lastCardBoard(int library, PhaseType phase, int turn) {
+        Board board = new Board(phase);
+        board.game.getPhaseHandler().devModeSet(phase, board.you, turn);
+        board.card(board.you, "Island");
         for (int i = 0; i < library; i++) {
             board.subject = board.game.getAction().moveToLibrary(
                     TestBoard.card(board.game, board.you, "Forest"), -1, null, null);
@@ -782,21 +781,27 @@ class RegisteredRulesTest {
     }
 
     @Test
-    void drawFromEmptyLibraryBindsTheLastCardAndTheDrawSpell() {
-        Board board = divinationBoard(1);
-        Binding binding = DrawFromEmptyLibrary.bind(board.game).orElseThrow();
-        assertEquals(board.subject, binding.card("card"));
-        assertEquals(board.other, binding.card("spell"));
+    void drawFromEmptyLibraryBindsTheLastCardAsTheUpkeepBegins() {
+        Board board = lastCardBoard(1, PhaseType.UPKEEP, 3);
+        assertEquals(board.subject, DrawFromEmptyLibrary.bind(board.game).orElseThrow().card("card"));
     }
 
     @Test
     void drawFromEmptyLibraryBindsNothingWithTwoCardsLeft() {
-        assertTrue(DrawFromEmptyLibrary.bind(divinationBoard(2).game).isEmpty());
+        assertTrue(DrawFromEmptyLibrary.bind(lastCardBoard(2, PhaseType.UPKEEP, 3).game).isEmpty());
+    }
+
+    @Test
+    void drawFromEmptyLibraryBindsNothingWhereNoDrawStepFollows() {
+        assertTrue(DrawFromEmptyLibrary.bind(lastCardBoard(1, PhaseType.MAIN1, 3).game).isEmpty(),
+                "past the draw step");
+        assertTrue(DrawFromEmptyLibrary.bind(lastCardBoard(1, PhaseType.UPKEEP, 1).game).isEmpty(),
+                "the first turn skips its draw step");
     }
 
     @Test
     void drawFromEmptyLibraryForksAnEmptyLibrary() {
-        Board board = divinationBoard(1);
+        Board board = lastCardBoard(1, PhaseType.UPKEEP, 3);
         Twin twin = board.twin(DrawFromEmptyLibrary.rule());
         String forest = id(board.subject);
         assertTrue(twin.changes().containsAll(Set.of("P0.library", "P0.graveyard")), twin.changes().toString());
