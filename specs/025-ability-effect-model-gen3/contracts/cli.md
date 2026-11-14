@@ -220,11 +220,14 @@ game-end marker, and its shard is closed whole. The request is a file, not a con
 | `-D` property | Value | Meaning |
 |---|---|---|
 | `worker.stop.file` | a path | the worker stops once a file exists at this path; its content is ignored; the worker never creates or deletes it |
-| `worker.recycle.seconds` | integer, at least 0 | the worker stops at the first game end after its JVM has run this many seconds; absent: never; malformed or negative: exit 2 at startup |
+| `worker.recycle.seconds` | integer, at least 1 | the worker stops at the first game end after this many seconds counted from its `main` start (before Forge is initialised); absent: never; malformed or below 1: exit 2 before Forge is initialised |
 
+- Both properties are read with the worker's other properties, before Forge is initialised.
 - The worker asks before each match and at the end of each game, once the game's recording is
   closed and its marker written. A request is honoured within the remainder of the game in progress
   (or before the next match starts, between matches). No game starts after it.
+- A stop file present at startup, or created while Forge initialises, stops the worker before its
+  first match, once initialisation is over, with the stop line.
 - Stopping mid-match leaves the match unfinished: no `match-outcomes.txt`, `cards-played.txt` or
   progress-file line for it; the games it finished keep their records and markers.
 - On stopping the worker closes its shard (the last block written), prints one stdout line and
@@ -234,9 +237,10 @@ game-end marker, and its shard is closed whole. The request is a file, not a con
   worker-failure pattern.
 - With either property set the worker prints at startup
   `Graceful stop: at a game end, when <path> exists[ or ]the JVM has run <seconds> s`.
-- A game has no time bound of its own: a worker that has not exited within the supervisor's
-  timeout after the request is killed (`taskkill /F /T`) as before, and the game it was playing
-  has no marker.
+- What a supervisor cannot rely on: a game has no time bound of its own, and a request made while
+  the worker initialises Forge waits for the end of initialisation. A worker that has not exited
+  within the supervisor's timeout after the request is killed (`taskkill /F /T`) as before, and the
+  game it was playing has no marker.
 
 What the supervisor does:
 
@@ -252,7 +256,16 @@ What the supervisor does:
   the supervisor's process ends.
 
 A match that threw prints `Error generating match: <message>` with its stack trace, as before;
-when the match had a random seat, `<message>` starts with `[random-seat match] `.
+when the match had a random seat, `<message>` starts with `[random-seat match] `, whatever failed
+after the seat was drawn: the match's set-up, a game, a game's recording closing. An `Error`
+(out of memory, a stack overflow) ends the worker; in a random-seat match it first prints
+`Error generating match: [random-seat match] <error>` on stderr. A failure before the seat is drawn
+(building or loading the decks) names no random seat: the match had none yet.
+
+A game whose marker could not be written prints, once per worker,
+`Effect records: the game-end marker of game <game id> could not be written, so the game reads as cut (later failures are counted, not printed): <exception>`;
+every such failure is counted under `game-end marker` in the worker's failure report
+(`effect-record hook failures so far, listener calls that threw and lost their records: {…}; contained by Forge, per slot: {…}`).
 
 ## `python -m effects collect-variants` (existing)
 

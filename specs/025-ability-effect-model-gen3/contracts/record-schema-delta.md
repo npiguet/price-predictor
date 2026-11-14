@@ -52,10 +52,28 @@ stratum.
 - One per game, written as the game's last record: after the bracket's end-of-game records, the
   trigger and mana reservoirs' records, the rewrite records still waiting on a buffered ability,
   and every kept fork's records.
-- Written only for a game that ended (`Game.isGameOver()`) with every end-of-game write done. A game
-  that threw mid-match, a game whose end-of-game writes threw, and a game cut by a killed worker
-  have none.
+- Written only for a game that ended (`Game.isGameOver()`) with every end-of-game write done: the
+  record holding the outcome (`player_lost`, `player_won`), the fired trigger records, the mana
+  records and the waiting rewrite records, none of which the cap withholds. A game that threw
+  mid-match, a game whose end-of-game writes threw, a game cut by a killed worker, and a game whose
+  marker could not be written (its snapshot threw; counted as `game-end marker` in the worker's
+  failure report) have none.
 - Never withheld by `--max-records-per-game`.
+
+What `--max-records-per-game` (the cap) bounds: the records of a game written as it is played, its
+forks' included. Past the cap the shard still takes the game's end-of-game records, each bounded
+on its own:
+
+| Passes the cap | At most, per game |
+|---|---|
+| fired `trigger` records | 24 per trigger line (`lineKey`: its provenance key, or reason, host, mode and parameters for a line that keys to none) |
+| mana records | `--mana-cap` per mana key (the ability's text and the mana it produced) |
+| the record holding the outcome | 1 |
+| the marker | 1 |
+
+A game therefore writes at most the cap + 24 × its fired trigger lines + `--mana-cap` × its mana
+keys + 2 records. At the defaults (cap 5000, `--mana-cap` 1), a game whose 20 trigger lines fired
+and whose lands made 10 kinds of mana writes at most 5000 + 480 + 10 + 2 = 5492.
 - Payload `{"events": [], "records_withheld": n}`: `records_withheld` the records of the game the
   cap kept out of the shard (`0` for none).
 - `actor_player` the player whose turn the game ended in, else the first registered player;
@@ -255,7 +273,7 @@ static, as it writes no `affected`. `line_of`, `line_of_the_same_card`, `mode_of
 | decision candidate | `legal_targets` | union over every targeting clause, uncapped |
 | decision candidate | `responsible_static` | the key of the static forbidding the play (its `static_prohibition` entry's), else empty |
 | `attackers` | `anchor_attacker`, `legal_defenders`, `must_attack`, `tapped_by_attack?` | one record per creature the attacking player controls, these four first and `legal_attackers`, `forbidden` after them; `anchor_attacker` a card ref; `legal_defenders` the refs (`P`/`E`) of the declaration's defenders (players, planeswalkers, battles) the anchor may attack, in Forge's defender order, `[]` for a creature that may attack none; `must_attack` whether an attack requirement applies to the anchor (`AttackRequirement.hasRequirement`), whether or not it can attack; `tapped_by_attack` on a declared anchor only: whether a `GameEventCardTapped` for it arrived between the engine's first question and `GameEventAttackersDeclared`. `legal_attackers` and `forbidden` keep their gen-2 shape and are the declaration's, the same on each of its records: a creature is legal when it may attack at least one defender, and a forbidden one's `responsible_static` is the first static, in defender order, keeping it from a defender |
-| `blockers` | `forbidden` entries | `{entity, responsible_static, required_elsewhere?}`: `responsible_static` the static keeping the creature from blocking the anchor (`cantBlockByStatic`), else the static keeping it from blocking at all (`cantBlockStatic`: Pacifism), else empty; `required_elsewhere: true`, last, when a requirement makes the creature block another attacker of the combat and none makes it block the anchor (a lure, 509.1c), absent otherwise |
+| `blockers` | `forbidden` entries | `{entity, responsible_static, required_elsewhere?}`: `responsible_static` the static keeping the creature from blocking the anchor (`cantBlockByStatic`), else the static keeping it from blocking at all (`cantBlockStatic`: Pacifism), else empty; `required_elsewhere: true`, last, when a requirement makes the creature block another attacker of the combat, none makes it block the anchor, and the restrictions alone would let it block the anchor (a lure, 509.1c); absent otherwise, and on a creature the restrictions keep from the anchor anyway (a flying anchor, whose keyword line is then the `responsible_static`). A creature kept out by a hidden keyword with no static (Panic's "can't block this turn") has `responsible_static: []` |
 | `blockers` | `must_block` | after `forbidden`: the refs of the listed creatures, legal or forbidden, in candidate order, that a requirement makes block the anchor; a listed creature not in it is false. Requirements: the creature's `getMustBlockCards`, the anchor's `MustBeBlockedBy` (while no creature of that kind blocks it) and `MustBeBlockedByAll`, a lure ("All creatures able to block CARDNAME do so."), and a `MustBlock` static naming the creature (names every attacker); a requirement whose block costs something is none (509.1c); recorded whether or not the creature can obey it |
 | `continuous` | contributions' `abilities`, `hidden_keywords` | after `colors`, on every contribution: `abilities` a token per layer-6 change the static makes to the entity, a granted ability's line key as `ProvenanceKey.describe` spells it (`(cardsfolder/c/cryptolith_rite.txt) face0/static[0]`; `runtime` for one that keys to no line), and `-` before the key of an ability it takes away; `hidden_keywords` the hidden keywords the static grants (`AddHiddenKeyword$`), as Forge writes them. A static whose only change is one of these is a `continuous` record. `keywords` starts with a lone `=` when the static removes every keyword (`RemoveAllAbilities$`), as `types` and `colors` mark a line set outright |
 | `continuous` | contributions' `set_pt`, `controller` | `set_pt` after `pt_boost`: `[power, toughness]`, the base the static sets (layer 7a, then 7b), a half `null` where it sets only the other; `controller` last: the player ref the static gives control to (a `GainControl$` static, when the permanent's controller without it differs). Each present only when set. A static whose only change is one of these is a `continuous` record |
@@ -274,7 +292,7 @@ member, or the provenance `mode` any event may carry. `state_flag_change` gains 
 | Event | Field | Shape |
 |---|---|---|
 | `tapped` | after a `zone_change` onto the battlefield | subjects the card, written when it entered tapped, in the record that moved it |
-| `tapped` | mana record | subjects each permanent the mana ability's cost tapped, before `mana_produced`. A triggered mana ability (Wild Growth), never paid for, writes no record of its own: its `mana_produced` follows in the record of the activation that set it off |
+| `tapped` | mana record | subjects each permanent the mana ability's cost tapped, before `mana_produced`. A triggered mana ability whose payment Forge reports (Wild Growth) is an activation of its own: a mana record keyed to its own line (`wild_growth.txt`), read before its payment; one whose payment Forge does not report adds its `mana_produced` to the record of the activation that set it off, while that record is being built |
 | `zone_change` off the stack | last event of a spell's resolution in its effect half | the resolved spell's card to the graveyard (or wherever `finishResolving` puts it), after the resolution's own events and before the state-based deaths the half holds; a permanent spell's move onto the battlefield is made while it resolves. A forced resolution's half takes it too |
 | `zone_change` into a library | `library_position` | int, after `to_zone`: where the card sits in the library as the bus publishes the move (after the add): `0` the top, `-1` the bottom of a library holding other cards, else its index from the top; a card alone in its library is `0`. Absent on every other move, where the card is not found in the library, and on a move into a library that a `library_shuffled` of that library's owner follows in the same event buffer (the shuffle takes it off). Never written for a move out of a library |
 | `pt_change` | `set_pt` | `[power, toughness]`, after `toughness_delta`: the base the change set (`getNetPowerBreakdown().currentValue`, the snapshot's `base_pt`), written when the base moved and the card is a creature after the change: a layer-7b setting effect, a CDA, a face change, an animation of a noncreature. A `pt_change` is written when the base moved even if the total did not (deltas `0`) |
@@ -458,6 +476,8 @@ position a card left a library from, and a search of another player's library.
   applied before such a snapshot and published after it reaches no record and is counted as
   dropped.
 - `can_play = canPlay ∧ timing ∧ no static prohibition`.
+- `affordable` is false for a spell whose mana cost is "no cost" (Ancestral Vision), cast other than
+  through an effect that casts it without paying (118.6).
 - Decision candidates exist for both players at every priority stop.
 - A decision candidate is every spell ability of every card its player could play from, unplayable
   ones included, land plays included and mana abilities aside; an alternative cost is a candidate of
