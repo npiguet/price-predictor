@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from effects.domain.effect_head_layout import HeadField, ZoneOutcome, counter_field
+from effects.domain.keyword_names import with_implied
 from effects.domain.provenance import ProvenanceKey, SidecarLookup
 from effects.domain.records import RecordKind
 from effects.domain.rule_outcomes import (
@@ -612,7 +613,9 @@ class KeywordResolver:
 
     Printed and attachment-granted keywords arrive as ability tokens; only an
     until-end-of-turn grant is a bare string in the overlay, so reading the
-    overlay alone misses the common case.
+    overlay alone misses the common case. A keyword another implies is added
+    (``keyword_names.with_implied``): a creature with trample over
+    planeswalkers alone is a trampler.
     """
 
     def __init__(self, sidecars: SidecarLookup | None = None) -> None:
@@ -628,13 +631,13 @@ class KeywordResolver:
     def keywords_of(self, entity) -> set[str]:
         # Already normalized by ``record_codec`` at parse time.
         found = set(entity.granted_temporary.keywords)
-        if self._sidecars is None:
-            return found
-        for key in entity.ability_keys:
-            keyword = self._keyword_for(key)
-            if keyword is not None:
-                found.add(keyword)
-        return found
+        if self._sidecars is not None:
+            for key in entity.ability_keys:
+                keyword = self._keyword_for(key)
+                if keyword is not None:
+                    found.add(keyword)
+        # Trample over planeswalkers is trample too (702.19c).
+        return with_implied(found)
 
 
 def qualifying_observations(

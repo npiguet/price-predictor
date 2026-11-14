@@ -23,6 +23,8 @@ def _line(text: str | None, api: str | None = "Keyword") -> SidecarLine:
     ("First Strike", "First Strike", "first_strike"),
     ("Ward:2", "Ward", "ward"),
     ("Protection from red", "Protection from red", "protection_from_red"),
+    # Thrasta's second trample line, as the converter writes it.
+    ("Trample:Planeswalker", "Trample", "trample_over_planeswalkers"),
     # A keyword whose script carries a parameter names its keyword, and is
     # not the keyword alone.
     ("Equip:2:::ReduceCost$ Y:This ability costs {2} less", "Equip", None),

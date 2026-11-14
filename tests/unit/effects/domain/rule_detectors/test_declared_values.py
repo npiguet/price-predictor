@@ -96,3 +96,13 @@ def test_the_designations_are_the_connector_s():
         pytest.skip(f"no connector source at {path}")
     source = path.read_text(encoding="utf-8")
     assert dv.DESIGNATIONS == set(re.findall(r'table\.put\("([a-z_]+)"', source))
+
+
+def test_a_keyword_of_its_own_by_its_detail_is_a_keyword():
+    """``Trample:Planeswalker`` reads ``trample_over_planeswalkers``, which a
+    declaration may name in either spelling; it is printed (Thrasta, Kevin)."""
+    for spelling in ("trample_over_planeswalkers", "Trample:Planeswalker",
+                     "Trample over planeswalkers"):
+        dv.keyword("f", "keyword", spelling)
+    with pytest.raises(ValueError):
+        dv.keyword("f", "keyword", "trample_over_battles")

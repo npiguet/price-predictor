@@ -18,7 +18,7 @@ from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
 from effects.domain.forge_vocabularies import KEYWORD_COUNTERS, NAMED_COUNTERS, SUBTYPES
-from effects.domain.keyword_names import normalize_keyword
+from effects.domain.keyword_names import DETAILED_KEYWORDS, normalize_keyword
 from effects.domain.provenance import KEYWORD_API_TYPE
 from effects.domain.rule_outcomes import CARD_TYPES
 from effects.domain.state_snapshot import FaceState, normalize_counter_type
@@ -155,7 +155,11 @@ SUPERTYPES: frozenset[str] = frozenset({"basic", "legendary", "snow", "world", "
 _SUBTYPES = frozenset(s.lower() for s in SUBTYPES)
 _COUNTERS = frozenset(normalize_counter_type(c) for c in (*NAMED_COUNTERS, *KEYWORD_COUNTERS,
                                                           "+1/+1", "-1/-1"))
-_KEYWORDS = frozenset(normalize_keyword(k) for k in (*FORGE_KEYWORDS, *KEYWORD_LINES_BEYOND_ENUM))
+#: A detail making a keyword of its own (``trample_over_planeswalkers``) is one too.
+_KEYWORDS = frozenset({
+    *(normalize_keyword(k) for k in (*FORGE_KEYWORDS, *KEYWORD_LINES_BEYOND_ENUM)),
+    *DETAILED_KEYWORDS.values(),
+})
 _ZONES = frozenset(z.lower() for z in FORGE_ZONES if z) | {"any"}
 _MANA = re.compile(r"^(\d+|[WUBRGCSXYZ]|[WUBRGC\d]+/[WUBRGCP](/P)?)$")
 _SYMBOL_CLASSES = frozenset({"hybrid", "monohybrid", "phyrexian"})

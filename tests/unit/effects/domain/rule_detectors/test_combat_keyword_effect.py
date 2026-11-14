@@ -294,3 +294,126 @@ def test_real_regular_step_first_strikers_are_the_near_miss(gen3_combats, gen3_s
     for f in found:
         assert f.observed is (f.polarity is Polarity.FIRES)
         assert f.condition and f.outcome
+
+
+# ── trample over planeswalkers as the collector writes it ───────────────
+
+#: The converted sidecars, verbatim (``output/cardsfolder/``): Thrasta's two
+#: trample lines are ``Trample`` and ``Trample:Planeswalker``.
+_THRASTA_SIDECAR = (
+    '{"card":"thrasta, tempest\'s roar","script_file":"cardsfolder/t/thrasta_tempests_roar.txt",'
+    '"lines":[{"line_index":4,"line_kind":"static","provenance":[{"face":0,'
+    '"trait_kind":"keyword","index_within_kind":1}],"sub_ability_links":[],'
+    '"script_api_type":"Keyword","script_param_keys":[],"script_text":"Trample",'
+    '"role_spans":[{"start":0,"end":7,"role":"effect"}]},{"line_index":5,"line_kind":"static",'
+    '"provenance":[{"face":0,"trait_kind":"keyword","index_within_kind":2}],'
+    '"sub_ability_links":[],"script_api_type":"Keyword","script_param_keys":[],'
+    '"script_text":"Trample:Planeswalker","role_spans":[{"start":0,"end":26,"role":"effect"}]},'
+    '{"line_index":6,"line_kind":"static","provenance":[{"face":0,"trait_kind":"keyword",'
+    '"index_within_kind":0}],"sub_ability_links":[],"script_api_type":"Keyword",'
+    '"script_param_keys":[],"script_text":"Haste","role_spans":[{"start":0,"end":5,'
+    '"role":"effect"}]}],"dropped_keys":[{"face":0,"trait_kind":"spell","index_within_kind":0}]}'
+)
+_DREADMAW_SIDECAR = (
+    '{"card":"colossal dreadmaw","script_file":"cardsfolder/c/colossal_dreadmaw.txt",'
+    '"lines":[{"line_index":4,"line_kind":"static","provenance":[{"face":0,'
+    '"trait_kind":"keyword","index_within_kind":0}],"sub_ability_links":[],'
+    '"script_api_type":"Keyword","script_param_keys":[],"script_text":"Trample",'
+    '"role_spans":[{"start":0,"end":7,"role":"effect"}]}],'
+    '"dropped_keys":[{"face":0,"trait_kind":"spell","index_within_kind":0}]}'
+)
+
+
+def _keyword_line(script_file, index, fragment):
+    return {"keys": [{"script_file": script_file, "face": 0, "trait_kind": "keyword",
+                      "index_within_kind": index}],
+            "kind": "keyword", "granted": False, "fragment": fragment}
+
+
+def _thrasta_combat(*, thrasta: bool):
+    """A real fixture combat record, its attacker made Thrasta (or the fork's
+    Colossal Dreadmaw) attacking P0's planeswalker as ``EntityJson`` writes
+    them: the keyword list lower-cased from ``getOriginal``, one line per
+    keyword instance with its fragment, the defender rendered ``Name (id)``."""
+    import copy
+    import gzip
+    import json
+
+    from effects.infrastructure.record_codec import record_from_dict
+
+    with gzip.open(GEN3_RECORDS, "rt", encoding="utf-8") as lines:
+        data = next(d for line in lines if (d := json.loads(line))["record_id"]
+                    == "e8aa2e54-4112-425c-a7fa-96c7bb7340db.0-mvyv5jxepqmy.86")
+    data = copy.deepcopy(data)
+    entities = data["state"]["entities"]
+    attacker = next(e for e in entities if e["id"] == "E77")
+    walker = copy.deepcopy(attacker)
+    if thrasta:
+        script = "cardsfolder/t/thrasta_tempests_roar.txt"
+        attacker.update(name="Thrasta, Tempest's Roar", base_pt=[7, 7], lines=[
+            _keyword_line(script, 1, "Trample"), _keyword_line(script, 2, "Trample:Planeswalker"),
+            _keyword_line(script, 0, "Haste")])
+        attacker["granted_temporary"]["keywords"] = ["trample", "haste", "trample:planeswalker"]
+    else:
+        script = "cardsfolder/c/colossal_dreadmaw.txt"
+        attacker.update(name="Colossal Dreadmaw", base_pt=[6, 6],
+                        lines=[_keyword_line(script, 0, "Trample")])
+        attacker["granted_temporary"]["keywords"] = ["trample"]
+    attacker["combat"]["attacking"] = "Liliana, Dreadhorde General (90)"
+    walker.update(id="E90", name="Liliana, Dreadhorde General", owner="P0", controller="P0",
+                  types=["planeswalker"], subtypes=["liliana"], base_pt=None, pt_boosts=None,
+                  tapped=False, combat=None, counters={"LOYALTY": 3}, lines=[])
+    entities.append(walker)
+    excess = [{"type": "damage_dealt", "subjects": ["P0"],
+               "params": {"amount": 4, "combat": True, "cause": "E77", "source": "E77"},
+               "duration": "instant", "attributed_to": "unresolved"}] if thrasta else []
+    data["payload"]["assignment_choices"] = {"E77": {"E90": 3, **({"P0": 4} if thrasta else {})}}
+    data["payload"]["events"] = [
+        {"type": "damage_dealt", "subjects": ["E90"],
+         "params": {"amount": 3 if thrasta else 6, "combat": True, "cause": "E77",
+                    "source": "E77"},
+         "duration": "instant", "attributed_to": "unresolved"}, *excess]
+    return record_from_dict(data)
+
+
+@pytest.fixture
+def thrasta_sidecars(tmp_path):
+    from effects.infrastructure.converted_trees import SourceTrees
+
+    for path, text in (("t/thrasta_tempests_roar", _THRASTA_SIDECAR),
+                       ("c/colossal_dreadmaw", _DREADMAW_SIDECAR)):
+        target = tmp_path / "cardsfolder" / f"{path}.provenance.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8")
+    return SourceTrees.of([tmp_path / "cardsfolder"]).sidecar_cache()
+
+
+def test_a_live_thrasta_at_a_planeswalker_reads_fires(thrasta_sidecars):
+    """702.19c over the spelling the collector and the converter write: the
+    keyword list's ``trample:planeswalker`` and the sidecar's
+    ``Trample:Planeswalker`` line both read ``trample_over_planeswalkers``."""
+    record = _thrasta_combat(thrasta=True)
+    for lines in (thrasta_sidecars, None):
+        found = FAMILY.match(record, lines, {"keyword": "trample_over_planeswalkers"})
+        assert (found.polarity, found.observed) == (Polarity.FIRES, True)
+        assert (found.condition, found.outcome) == (("E77",), ("P0",))
+
+
+def test_the_fork_s_plain_trampler_reads_does_not_fire(thrasta_sidecars):
+    found = FAMILY.match(_thrasta_combat(thrasta=False), thrasta_sidecars,
+                         {"keyword": "trample_over_planeswalkers"})
+    assert (found.polarity, found.observed) == (Polarity.DOES_NOT_FIRE, False)
+
+
+def test_thrasta_is_still_a_trampler_for_gate_2(thrasta_sidecars):
+    """Trample over planeswalkers is trample (702.19c): a carrier of either
+    spelling alone is trample's, as Forge's ``hasKeyword(Keyword.TRAMPLE)`` says."""
+    from effects.domain.damage_step_keywords import KeywordResolver
+
+    record = _thrasta_combat(thrasta=True)
+    thrasta = record.state.entity("E77")
+    assert {"trample", "trample_over_planeswalkers"} <= KeywordResolver(
+        thrasta_sidecars).keywords_of(thrasta)
+    lone = replace(thrasta, granted_temporary=GrantedTemporary(
+        keywords=("trample_over_planeswalkers",)), lines=())
+    assert "trample" in KeywordResolver(None).keywords_of(lone)
