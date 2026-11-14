@@ -247,7 +247,10 @@ def test_a_cut_game_is_left_out_of_every_count_and_counted(tmp_path):
     assert ended["cut_games"] == 0 and ended["rules"]
     assert cut["cut_games"] == 58
     assert cut["rules"] == {} and cut["carriers"] == {} and cut["review"] == []
-    assert cut["records"] == ended["records"] - 58, "every record is still read"
+    # As the build's rule_counts: a cut game's records are read and count
+    # nowhere, neither as records nor as rules they could not count.
+    assert cut["records"] == 0 and ended["records"] > 0
+    assert cut["not_countable"] == []
 
 
 def test_a_gen2_game_is_never_cut(tmp_path, gen2_dir):

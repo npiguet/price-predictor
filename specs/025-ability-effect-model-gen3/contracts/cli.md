@@ -67,9 +67,10 @@ and `carriers`: per rule, the script files of the cards whose lines are its tags
 entities, each with the line keys its tags act through and its record count, read by the steered
 variant round (FR-058f), as `rule -> [{script_file, records, lines: [{key, records}]}]`, a key
 spelled as a sidecar spells it (without `script_file`). A gen-3 game whose shard holds no
-game-end marker (a cut game, which `build-corpus` drops) counts toward no rule, review entry or
-carrier; its records are still read and in `records`, and the file's `cut_games` and a printed
-line say how many games were left out. Exit 1 when the directory holds no shard, holds a
+game-end marker (a cut game, which `build-corpus` drops) counts toward no rule, review entry,
+carrier or `not_countable` rule, and its records are read but not in `records`, as in the
+build's `rule_counts`; the file's `cut_games` and a printed line say how many games were left
+out. The steered variant round's own count of its shards prints the same line. Exit 1 when the directory holds no shard, holds a
 gen-1 shard, or mixes generations.
 
 ## `python -m effects validate-corpus` (existing)

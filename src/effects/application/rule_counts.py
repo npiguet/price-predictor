@@ -25,8 +25,9 @@ Shards are read once each, in parallel; a game never spans shards (a shard is
 one worker JVM's lifetime), so whether a game has a random seat, and whether a
 gen-3 game ended (its game-end marker read), is decided at the end of its
 shard. A gen-3 game without a marker was cut and ``build-corpus`` drops it
-whole: its records are read but tag, review and carry nothing, and the counts
-say how many such games were left out (``cut_games``). Each worker builds the
+whole: its records are read but count toward nothing (no tag, review,
+carrier, ``records`` or ``not_countable``, as the build's ``rule_counts``),
+and the counts say how many such games were left out (``cut_games``). Each worker builds the
 detector index and its sidecar cache once. Prior art: the ``build-corpus``
 survey (``corpus_survey``'s ``_ShardSurveyor``), which reads shards the same
 way; it is not reused whole because its read context is built around the
@@ -255,9 +256,10 @@ def count_shard(built, shard: Path, *, salvage: bool = False) -> RuleCounts:
     seat_games: set[str] = set()
     ends = GameEnds()
     pending: list[_Pending] = []
+    by_game = _GameReads()
     try:
-        _count_records(read_shard(shard), out, index, sidecars, keywords, seat_games, pending,
-                       ends)
+        _count_records(read_shard(shard), by_game, index, sidecars, keywords, seat_games,
+                       pending, ends)
     except SHARD_DAMAGE as exc:
         if not salvage:
             raise
@@ -265,6 +267,10 @@ def count_shard(built, shard: Path, *, salvage: bool = False) -> RuleCounts:
         out.damaged.append(str(exc))
     cut = ends.cut
     out.cut_games = len(cut)
+    for game, records in by_game.records.items():
+        if game not in cut:
+            out.records += records
+            out.not_countable |= by_game.not_countable.get(game, set())
     for found in pending:
         if found.game_id in cut:
             continue
@@ -280,6 +286,15 @@ def count_shard(built, shard: Path, *, salvage: bool = False) -> RuleCounts:
     return out
 
 
+@dataclass
+class _GameReads:
+    """What each game of a shard read, held until the shard ends: its
+    records and the rules its records could not count."""
+
+    records: Counter = field(default_factory=Counter)
+    not_countable: dict = field(default_factory=dict)
+
+
 @dataclass(frozen=True)
 class _Pending:
     """What one record adds, held until its game is known to have ended."""
@@ -291,15 +306,17 @@ class _Pending:
     carried: frozenset
 
 
-def _count_records(records, out: RuleCounts, index, sidecars, keywords,
+def _count_records(records, by_game: _GameReads, index, sidecars, keywords,
                    seat_games: set[str], pending: list, ends: GameEnds) -> None:
     for record in records:
-        out.records += 1
+        by_game.records[record.game_id] += 1
         ends.note(record)
         if record.random_seat:
             seat_games.add(record.game_id)
         result = tag_record(record, index, sidecars)
-        out.not_countable |= result.not_countable
+        if result.not_countable:
+            by_game.not_countable.setdefault(record.game_id, set()).update(
+                result.not_countable)
         review = frozenset((record.record_id, tag.scenario) for tag in result.review)
         carried = frozenset(
             (tag.rule, script_file, key)
@@ -403,6 +420,12 @@ def rule_order(rule: str):
     return (int(m.group(1)), int(m.group(2)), m.group(3)) if m else (0, 0, rule)
 
 
+def cut_games_line(cut_games: int) -> str:
+    """What a count says of the gen-3 games it left out as cut."""
+    return (f"{cut_games} gen-3 game(s) without a game-end marker (cut) left out of "
+            "every count, as build-corpus drops them")
+
+
 def run(config: RuleCountsConfig) -> int:
     counts, standing = count(config)
     document = counts.to_json(standing)
@@ -413,7 +436,6 @@ def run(config: RuleCountsConfig) -> int:
     for line in [*counts.decode.report_lines(), *counts.joins.report_lines()]:
         print(line)
     if counts.cut_games:
-        print(f"{counts.cut_games} gen-3 game(s) without a game-end marker (cut) left "
-              "out of every count, as build-corpus drops them")
+        print(cut_games_line(counts.cut_games))
     print(f"{counts.records} records; counts written to {config.output}")
     return 0

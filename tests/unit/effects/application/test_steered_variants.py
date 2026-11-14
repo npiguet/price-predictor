@@ -298,3 +298,31 @@ def test_the_steered_round_is_what_round_steered_runs(monkeypatch, tmp_path):
     assert collect_variants.run(config) == 0
     collect.assert_called_once()
 
+
+
+def test_the_steered_rule_count_says_how_many_cut_games_it_left_out(tmp_path, caplog):
+    """The run's own shards are counted as rule-counts counts them, cut
+    games left out, and the count says so in rule-counts' words."""
+    import logging
+    import shutil
+    from pathlib import Path
+
+    from effects.application.steered_variants import RunRuleCounter
+
+    fixtures = Path(__file__).parents[3] / "fixtures" / "effects"
+    records = tmp_path / "records"
+    records.mkdir()
+    # The fixture predates the game-end marker: every game in it reads as cut.
+    shutil.copyfile(fixtures / "gen3-records.jsonl.gz", records / "run-1.0-a.jsonl.gz")
+    counter = RunRuleCounter(
+        records, "run-1", rules_dir=Path(__file__).parents[4] / "rules",
+        sidecar_roots={"cardsfolder": fixtures / "gen3-sidecars" / "cardsfolder",
+                       "tokenscripts": fixtures / "gen3-sidecars" / "tokenscripts"},
+        workers=1)
+
+    with caplog.at_level(logging.INFO):
+        counter.update()
+
+    assert counter.total.cut_games == 58 and counter.total.records == 0
+    assert ("58 gen-3 game(s) without a game-end marker (cut) left out of every count"
+            in caplog.text)

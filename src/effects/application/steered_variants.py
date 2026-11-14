@@ -276,17 +276,23 @@ class RunRuleCounter:
         self.total = RuleCounts()
 
     def update(self) -> None:
-        from effects.application.rule_counts import CountContext, count_shard
+        """Count the run's shards not counted yet, and say, as ``rule-counts``
+        does, how many gen-3 games they left out as cut."""
+        from effects.application.rule_counts import CountContext, count_shard, cut_games_line
 
         fresh = [shard for shard in self._games.fresh_shards() if shard not in self._counted]
+        cut = 0
         # A damaged shard is counted up to the damage: one must not stop the run.
         for found in run_parallel(
             fresh, partial(count_shard, salvage=True), workers=self._workers,
             label="Counted rules in",
             progress_every=50, context=CountContext(self._rules_dir, self._roots),
         ):
+            cut += found.cut_games
             merge_into(self.total, found)
         self._counted.update(fresh)
+        if cut:
+            logger.info("Steered rule counts: %s", cut_games_line(cut))
 
     def document(self) -> dict:
         return self.total.to_json()
