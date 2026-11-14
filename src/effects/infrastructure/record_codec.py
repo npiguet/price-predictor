@@ -946,11 +946,16 @@ def _decision_from_json(data: dict) -> PlayabilityDecisionPayload:
 
 
 def _forbidden_to_json(forbidden: tuple[ForbiddenEntity, ...]) -> list[dict]:
-    """``required_elsewhere`` last, only when true, as the collector writes it."""
+    """``responsible_own``, ``responsible_unresolved`` and
+    ``required_elsewhere`` after ``responsible_static``, in that order, each
+    only when set, as the collector writes them."""
     return [
         {
             "entity": f.entity,
             "responsible_static": _keys_to_json(f.responsible_static),
+            **({"responsible_own": True} if f.responsible_own else {}),
+            **({"responsible_unresolved": str(f.responsible_unresolved)}
+               if f.responsible_unresolved is not None else {}),
             **({"required_elsewhere": True} if f.required_elsewhere else {}),
         }
         for f in forbidden
@@ -963,6 +968,8 @@ def _forbidden_from_json(data: Any) -> tuple[ForbiddenEntity, ...]:
             entity=f["entity"],
             responsible_static=_keys_from_json(f.get("responsible_static")),
             required_elsewhere=bool(f.get("required_elsewhere", False)),
+            responsible_own=bool(f.get("responsible_own", False)),
+            responsible_unresolved=f.get("responsible_unresolved"),
         )
         for f in data or ()
     )

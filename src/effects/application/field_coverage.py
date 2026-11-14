@@ -105,6 +105,10 @@ GEN3_FIELDS: tuple[str, ...] = (
     *(f"record.payload<RewritePayload>.{name}" for name in (
         "incoming_unknown", "buffered", "buffered_ran", "buffered_events")),
     "record.payload<PlayabilityBlockersPayload>.forbidden[].required_elsewhere",
+    # A forbidden creature's own keyword line, and a responsible line no key names.
+    *(f"record.payload<{payload}>.forbidden[].{name}"
+      for payload in ("PlayabilityAttackersPayload", "PlayabilityBlockersPayload")
+      for name in ("responsible_own", "responsible_unresolved")),
 )
 
 

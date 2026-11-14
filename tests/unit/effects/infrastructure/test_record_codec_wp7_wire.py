@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from effects.domain.event_schema import EventType
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
@@ -144,6 +146,25 @@ class TestAForbiddenBlocker:
             (_PACIFISM,), False)
         assert (by_entity["E11"].responsible_static, by_entity["E11"].required_elsewhere) == (
             (), True)
+
+    def test_its_own_keyword_line_and_an_unkeyed_static_read_apart(self):
+        """Grakk's own "can't attack or block" line, an engine effect's
+        unkeyable static, and Pacifism, another card's static."""
+        by_entity = {e.entity: e for e in record_from_dict(self._raw()).payload.forbidden}
+        grakk, stopped, pacified = by_entity["E12"], by_entity["E13"], by_entity["E8"]
+        assert grakk.responsible_static[0].script_file == "cardsfolder/g/grakk_the_pacifist.txt"
+        assert (grakk.responsible_own, grakk.responsible_unresolved) == (True, None)
+        assert (stopped.responsible_static, stopped.responsible_own,
+                stopped.responsible_unresolved) == ((), False, "engine_effect")
+        assert (pacified.responsible_own, pacified.responsible_unresolved) == (False, None)
+        assert all(e.explained for e in (grakk, stopped, pacified, by_entity["E11"]))
+
+    def test_an_unresolved_reason_outside_the_vocabulary_is_refused(self):
+        raw = self._raw()
+        entries = [dict(e, responsible_unresolved="made_up") if e["entity"] == "E13" else e
+                   for e in raw["payload"]["forbidden"]]
+        with pytest.raises(ValueError, match="responsible_unresolved"):
+            record_from_dict(dict(raw, payload=dict(raw["payload"], forbidden=entries)))
 
     def test_it_writes_back_as_the_collector_wrote_it(self):
         _round_trips(self._raw())

@@ -668,17 +668,54 @@ class PlayabilityDecisionPayload(_PayloadQueries):
 class ForbiddenEntity:
     """An entity a static effect keeps out of a legal set, and which static.
 
-    Gen-3 blockers: ``responsible_static`` the static keeping the creature
-    from blocking the anchor, else the one keeping it from blocking at all
-    (Pacifism), else empty (a hidden keyword with no static, Panic's "can't
-    block"); ``required_elsewhere`` when a requirement makes it block another
-    attacker and none makes it block the anchor, which the restrictions alone
-    would allow (a lure, 509.1c).
+    Gen-3 blockers: ``responsible_static`` the key of the line keeping the
+    creature out: the static keeping it from blocking the anchor, else the
+    one keeping it from blocking at all (Pacifism), else its own keyword line
+    Forge reads as a keyword (Grakk's "can't attack or block", the "alone"
+    forms), else empty (a hidden keyword with no line, Panic's "can't
+    block", or the rules alone). ``responsible_own`` when that line is the
+    creature's own (a static it hosts, a keyword it prints) rather than
+    another card's; ``responsible_unresolved`` the reason, in the
+    ``ability_unresolved`` vocabulary, when a responsible line exists and has
+    no key (``responsible_static`` then empty). ``required_elsewhere`` when
+    the restrictions alone would let it block the anchor and Forge refuses
+    the block for a requirement to block another attacker (a lure, provoke,
+    an attacker that must be blocked if able, by exactly one or by two or
+    more creatures, while that is unmet; 509.1c). Gen-3 attackers carry the
+    first three the same way.
     """
 
     entity: str
     responsible_static: tuple[ProvenanceKey, ...] = ()
     required_elsewhere: bool = False
+    responsible_own: bool = False
+    responsible_unresolved: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.responsible_unresolved is None:
+            return
+        if self.responsible_static:
+            raise ValueError(
+                f"forbidden {self.entity}: responsible_unresolved="
+                f"{self.responsible_unresolved!r} beside a responsible_static key"
+            )
+        if self.responsible_unresolved not in UnresolvedReason:
+            raise ValueError(
+                f"forbidden {self.entity}: responsible_unresolved="
+                f"{self.responsible_unresolved!r} is outside the closed vocabulary"
+            )
+        object.__setattr__(
+            self, "responsible_unresolved", UnresolvedReason(self.responsible_unresolved),
+        )
+
+    @property
+    def explained(self) -> bool:
+        """Whether the record names what keeps the creature out: a line,
+        keyed or not, or a requirement elsewhere. A hidden keyword is read
+        off the entity's ``granted_temporary`` instead."""
+        return bool(self.responsible_static) or (
+            self.responsible_unresolved is not None or self.required_elsewhere
+        )
 
 
 @dataclass(frozen=True, slots=True)

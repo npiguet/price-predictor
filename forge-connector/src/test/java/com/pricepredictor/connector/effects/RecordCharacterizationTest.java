@@ -441,19 +441,31 @@ class RecordCharacterizationTest {
             listener.onBlockersDeclarable(
                     opponent, bears, List.of(angel, giant), List.of(angel), 1);
 
-            // A blocker Pacifism keeps out (responsible_static), and one a
-            // lure attacking beside the anchor calls away (required_elsewhere).
+            // A blocker Pacifism keeps out (responsible_static), one a lure
+            // attacking beside the anchor calls away (required_elsewhere),
+            // one its own keyword line keeps out (responsible_own), and one
+            // an engine-built effect's static keeps out, which no line names
+            // (responsible_unresolved).
             Card pacified = board.battlefield("Gray Ogre", opponent);
             board.battlefield("Pacifism", you).attachToEntity(pacified, null);
             Card unicorn = board.battlefield("Prized Unicorn", you);
             Card lured = board.battlefield("Runeclaw Bear", opponent);
+            Card grakk = board.battlefield("Grakk the Pacifist", opponent);
+            Card stopped = board.battlefield("Walking Corpse", opponent);
+            Card effect = new Card(board.game.nextCardId(), board.game);
+            effect.setName("Engine Effect");
+            effect.setOwner(you);
+            effect.setGamePieceType(forge.card.GamePieceType.EFFECT);
+            effect.addStaticAbility("Mode$ CantBlock | ValidCard$ Creature.namedWalking Corpse"
+                    + " | EffectZone$ Command | Description$ Walking Corpse can't block.");
+            board.game.getAction().moveTo(ZoneType.Command, effect, null, null);
             board.game.getAction().checkStaticAbilities();
             Combat lure = new Combat(you);
             lure.addAttacker(bears, opponent);
             lure.addAttacker(unicorn, opponent);
             board.game.getPhaseHandler().setCombat(lure);
             listener.onBlockersDeclarable(
-                    opponent, bears, List.of(pacified, lured), List.of(), 1);
+                    opponent, bears, List.of(pacified, lured, grakk, stopped), List.of(), 1);
         });
 
         Characterization.assertMatches(

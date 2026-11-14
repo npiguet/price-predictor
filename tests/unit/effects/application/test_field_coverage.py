@@ -388,6 +388,10 @@ class TestTheGen3Fields:
             *(f"record.payload<RewritePayload>.{name}" for name in (
                 "incoming_unknown", "buffered", "buffered_ran", "buffered_events")),
             "record.payload<PlayabilityBlockersPayload>.forbidden[].required_elsewhere",
+            # ... nor a forbidden creature's own line or an unkeyed one.
+            *(f"record.payload<{payload}>.forbidden[].{name}"
+              for payload in ("PlayabilityAttackersPayload", "PlayabilityBlockersPayload")
+              for name in ("responsible_own", "responsible_unresolved")),
         }, sorted(constant)
 
     def test_the_report_rows_each_gen3_field(self):
@@ -406,6 +410,8 @@ class TestTheGen3Fields:
         assert status["record.payload<RewritePayload>.buffered_events"] == "varies"
         assert status[
             "record.payload<PlayabilityBlockersPayload>.forbidden[].required_elsewhere"] == "varies"
+        assert status[
+            "record.payload<PlayabilityBlockersPayload>.forbidden[].responsible_own"] == "varies"
         assert status["record.state.global_.dungeons"] == "const"
 
     def test_a_corpus_without_gen3_records_gets_no_section(self):
