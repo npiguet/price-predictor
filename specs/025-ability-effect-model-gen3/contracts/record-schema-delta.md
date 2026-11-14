@@ -24,6 +24,7 @@ within gen-3. Relative to gen-2 a field may change meaning or go away.
 | `generation` | `3` | every record |
 | `aimed_at` | `["704.5f", …]` | aimed records only: every `collect-coverage` and `collect-variants` record (the run's `--directed-fork-rules`, `[]` when it names none) and every directed fork (`[rule]`); never another `match-outcomes` record |
 | `directed` | `{"variant": "tougher", "operation": "pt"}` | directed-fork records only |
+| `copy_dropped` | `{"remembered": 1, "command": 2}` | fork records only (interventional resolution, damage-step probe, directed fork, protection fork), after `directed`: what the copier left out of the fork's copy for want of a counterpart in it, kind to count, kinds in name order, each count at least 1; absent on every live record and on a fork whose copy left nothing out |
 
 Flag signatures, added row:
 
@@ -38,8 +39,24 @@ partner, and neither has a protection fork's mana record (every event `mana_prod
 one has none; no flag tells the two apart. Readers accept an interventional record of every kind, with
 or without `link_id`.
 
-`mirror_of` on a directed-fork record names the live record open at the fork point, and is absent
-when none was open.
+`mirror_of` is `null` on a directed-fork record: a directed fork is taken at a phase boundary,
+which no live record stays open across. Directed-fork records are paired with the live turn by
+`game_id`, turn and `directed`.
+
+`copy_dropped` kinds, the values of Forge's `GameCopier.NoCounterpart` lower-cased:
+
+| Kind | What the copy left out |
+|---|---|
+| `command` | a pending command (end of turn, end of combat, leaves the battlefield, a state-based check's) |
+| `delayed_trigger` | a pending delayed trigger, or an extra turn's or extra phase's trigger |
+| `remembered` | an object a card or a trigger remembers |
+| `link` | a link between cards: exiled with, held until it leaves, gained control of, merged, encoded, haunting, devoured, exploited, delved |
+| `attack` | an attack made this turn, by defender |
+| `ability` | an ability a copied object names (what made an effect card, what exiled a card) |
+| `activation` | a key of a card's activation, resolution or chosen-mode tables |
+
+`copy_dropped` is collection metadata: it decides nothing at collection (the fork is kept and
+written as any other) and nothing in training.
 
 ## Kinds
 
@@ -388,6 +405,16 @@ position a card left a library from, and a search of another player's library.
   transition a record holds for the same subjects is written once; the same transition after
   another of those subjects is written again (a creature flickered twice, a permanent tapped twice).
 - A forced (interventional) resolution reads its board when its resolution starts, as a live one.
+- A forced resolution's effect half and a damage-step probe's combat record hold the events a live
+  record takes from the engine hooks rather than the bus, filed by the same rules: the events a
+  clause's effect API promises (`turn_added`, `choice_made`, `continuous_effect_created`, …) and
+  the outcomes an effect reports (`token_created`, `coin_flipped`, `dice_rolled`,
+  `damage_prevented`, `spell_countered`, …). A forced resolution whose only events are these is
+  written.
+- A forced spell's X is announced before its targets are drawn, so a clause dividing X among its
+  targets divides the X announced.
+- A forced bestowed Aura or mutating spell whose target is illegal as it resolves is `resolved`, as
+  a live one is: it resolves as a creature spell.
 - A phased-out permanent is an entity of the board, its `designations` holding `phased_out`.
 - An entity's `copy_source` is the ref of what it is a copy of: the permanent or spell a copy was
   made from, else the card a copy effect copied (a Clone's original); `null` on any other card.

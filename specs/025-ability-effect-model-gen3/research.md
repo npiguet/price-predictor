@@ -597,13 +597,14 @@ Forge's AI decisions in a fork still draw from the shared `MyRandom`, as interve
 
 #### D5. `mirror_of` on a directed-fork record
 
-**Decision**: a directed-fork record carries `mirror_of` only when a live record was open at the fork
-point. A fork taken at a phase boundary usually has none, because the live turn's records are written
-after the fork ends. Directed-fork records are paired with the live turn by `game_id`, turn and
+**Decision**: a directed-fork record carries no `mirror_of` (it is `null`). A directed fork is taken
+at a phase boundary, and a phase boundary closes every live record before the fork, so no live
+record is open to mirror. Directed-fork records are paired with the live turn by `game_id`, turn and
 `directed`.
 
-**Rationale**: FR-009a says "where one exists". Holding the fork's records to the live turn's end for
-a join would add a held-record queue for a field no consumer reads.
+**Rationale**: FR-009a says "where one exists", and at a phase boundary none does. Holding the
+fork's records to the live turn's end for a join would add a held-record queue for a field no
+consumer reads.
 
 ### Model
 

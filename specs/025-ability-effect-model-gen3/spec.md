@@ -97,7 +97,7 @@ State on master when this feature starts (the gen-3 record's Result):
 - Q: How does a record show it came from a directed fork or from collection aimed at a rule? → A:
   Through a new gen-3 envelope metadata field `aimed_at`, the list of rule ids the record was
   collected for: a directed-fork record sets it to its rule and carries `fork = true`,
-  `interventional = false`, `directed = {variant, operation}` and `mirror_of` its live twin; every
+  `interventional = false` and `directed = {variant, operation}`; every
   record of a `collect-coverage` or `collect-variants` run sets it, empty where the run names no
   rule; absent means natural; never a model input (FR-009, FR-009a, FR-018).
 - Q: Which matching phase boundaries get a directed fork when matches outnumber the per-game
@@ -669,8 +669,8 @@ and that the reporting half never enters the control score.
   `collect-variants` record MUST carry `aimed_at`, listing the rules its run names through
   `--directed-fork-rules` and empty where it names none. A directed-fork record MUST carry
   `aimed_at` set to its rule, `fork = true`, `interventional = false`, `directed =
-  {variant, operation}` (the scenario variant label and the fork operation applied), and
-  `mirror_of` set to the live record it was forked beside, where one exists. A
+  {variant, operation}` (the scenario variant label and the fork operation applied); its
+  `mirror_of` is `null`, since a phase boundary leaves no live record open. A
   `match-outcomes` record outside a directed fork MUST NOT carry `aimed_at`. `aimed_at` and
   `directed` are collection metadata and never reach the model.
 
