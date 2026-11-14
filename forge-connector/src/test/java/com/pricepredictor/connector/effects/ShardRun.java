@@ -85,7 +85,7 @@ final class ShardRun {
      * installed: the body drives them by hand.
      */
     static List<String> records(Path dir, Game game, Body body) throws Throwable {
-        return records(dir, game, CollectionCaps.defaults(), body);
+        return records(dir, game, TestCaps.unprobed(), body);
     }
 
     /** The same, under caps of the test's choosing. */
@@ -96,7 +96,7 @@ final class ShardRun {
 
     /** The same, returning the shard unread, for a test about whether there is one. */
     static Path shardOf(Path dir, Game game, Body body) throws Throwable {
-        return shardOf(dir, game, CollectionCaps.defaults(), body);
+        return shardOf(dir, game, TestCaps.unprobed(), body);
     }
 
     static Path shardOf(Path dir, Game game, CollectionCaps caps, Body body) throws Throwable {
@@ -106,7 +106,7 @@ final class ShardRun {
     /** The same, for a match whose random seat is {@code randomSeatPlayerId}. */
     static List<String> recordsWithRandomSeat(
             Path dir, Game game, String randomSeatPlayerId, Body body) throws Throwable {
-        return records(dir, game, CollectionCaps.defaults(), randomSeatPlayerId, body);
+        return records(dir, game, TestCaps.unprobed(), randomSeatPlayerId, body);
     }
 
     /** The same, under caps of the test's choosing. */

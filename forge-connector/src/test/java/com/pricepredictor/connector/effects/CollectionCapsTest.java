@@ -34,9 +34,11 @@ class CollectionCapsTest {
         assertEquals(0.001, defaults.plainCandidateRate());
         assertEquals(2, defaults.interventionsPerGame());
         assertEquals(2, defaults.probesPerGame());
-        // A worker started without the property probes nothing; the eight
-        // keywords a run probes by default are the supervisor's to send.
-        assertTrue(defaults.probeKeywords().isEmpty());
+        // A worker started without the property probes what a supervisor's
+        // default run sends: all eight damage-step keywords, in gate 2's order.
+        assertEquals(List.of("first_strike", "double_strike", "deathtouch", "lifelink",
+                "trample", "indestructible", "wither", "infect"), defaults.probeKeywords());
+        assertTrue(defaults.probesEnabled());
         // FR-041a: a game writes at most 5000 records.
         assertEquals(5000, defaults.maxRecordsPerGame());
     }
@@ -72,6 +74,25 @@ class CollectionCapsTest {
             assertEquals(12, caps.maxRecordsPerGame());
         } finally {
             properties.keySet().forEach(System::clearProperty);
+        }
+    }
+
+    /**
+     * The probe keywords are read by the property's presence: unset, the
+     * default eight; set blank, which is what a run emptying {@code
+     * --probe-keywords} sends, none at all.
+     */
+    @Test
+    void aBlankProbeKeywordPropertyProbesNothingAndAnUnsetOneTheDefaults() {
+        assertEquals(CollectionCaps.DEFAULT_PROBE_KEYWORDS,
+                CollectionCaps.fromSystemProperties().probeKeywords());
+        System.setProperty(CollectionCaps.PROBE_KEYWORDS, "");
+        try {
+            CollectionCaps caps = CollectionCaps.fromSystemProperties();
+            assertEquals(List.of(), caps.probeKeywords());
+            assertFalse(caps.probesEnabled());
+        } finally {
+            System.clearProperty(CollectionCaps.PROBE_KEYWORDS);
         }
     }
 

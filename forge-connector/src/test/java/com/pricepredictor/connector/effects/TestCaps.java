@@ -44,9 +44,20 @@ public final class TestCaps {
         maxRecordsPerGame = from.maxRecordsPerGame();
     }
 
-    /** {@link CollectionCaps#defaults()}, to be varied. */
+    /**
+     * {@link CollectionCaps#defaults()} without its probe keywords, to be
+     * varied: a test takes a probe fork only for the keywords it names, so a
+     * combat in a test about something else forks nothing.
+     */
     public static TestCaps caps() {
-        return new TestCaps(CollectionCaps.defaults());
+        TestCaps caps = new TestCaps(CollectionCaps.defaults());
+        caps.probeKeywords = List.of();
+        return caps;
+    }
+
+    /** {@link #caps()} unvaried: the defaults taking no probe fork. */
+    public static CollectionCaps unprobed() {
+        return caps().build();
     }
 
     public TestCaps manaCap(int cap) {

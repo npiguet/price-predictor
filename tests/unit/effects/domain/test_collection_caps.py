@@ -414,11 +414,13 @@ class TestTheJvmDefaultsAreThePythonDefaultsArgumentByArgument:
         assert self._java_defaults()["aimedAt"] == "Optional.empty()"
         assert CollectionCaps().aimed_at is None
 
-    @pytest.mark.xfail(strict=True, reason=(
-        "TP1 strengthen / C5 readability: CollectionCaps.defaults() names no probe "
-        "keyword where Python's default names all eight, so a worker started "
-        "without the property probes nothing (a Java fix: TC4's "
-        "CollectionCapsTest.theDefaultCapsAreTheContracts pins the empty list)"))
     def test_the_probe_keywords_default_is_the_python_one(self):
-        java = self._java_defaults()["probeKeywords"]
-        assert java != "List.of()", "the JVM's default probes no keyword"
+        """A worker started without ``effect.probe.keywords`` probes what a
+        default run sends: the same keywords in the same order, which the
+        JVM's probe rotation reads."""
+        assert self._java_defaults()["probeKeywords"] == "DEFAULT_PROBE_KEYWORDS"
+        listed = re.search(r"DEFAULT_PROBE_KEYWORDS = List\.of\((.*?)\);",
+                           _JAVA_CAPS.read_text(encoding="utf-8"), re.S).group(1)
+        java = [word.strip().strip('"') for word in listed.split(",")]
+        assert java == CollectionCaps().probe_keywords.split(",")
+        assert len(java) == 8

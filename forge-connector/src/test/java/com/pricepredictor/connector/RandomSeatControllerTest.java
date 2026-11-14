@@ -1,7 +1,7 @@
 package com.pricepredictor.connector;
 
-import com.pricepredictor.connector.effects.TestCaps;
 import com.pricepredictor.connector.effects.CollectionCaps;
+import com.pricepredictor.connector.effects.TestCaps;
 import com.pricepredictor.connector.effects.GameRecording;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 import com.pricepredictor.connector.effects.Refs;
@@ -552,7 +552,7 @@ class RandomSeatControllerTest {
         int draws = 400;
         int[] attacks = new int[creatures.size()];
         try (GameRecording recording = new GameRecording(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L,
+                game, writer, "run.0-l1.0", TestCaps.unprobed(), 1L,
                 Refs.of(a))) {
             seat.attach(game, recording.priorityCandidates(), recording.fruitlessActivations());
             for (int draw = 0; draw < draws; draw++) {
@@ -602,7 +602,7 @@ class RandomSeatControllerTest {
         boolean blockedOnce = false;
         boolean heldBackOnce = false;
         try (GameRecording recording = new GameRecording(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L,
+                game, writer, "run.0-l1.0", TestCaps.unprobed(), 1L,
                 Refs.of(a))) {
             seat.attach(game, recording.priorityCandidates(), recording.fruitlessActivations());
             for (int draw = 0; draw < 100; draw++) {

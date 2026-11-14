@@ -51,16 +51,28 @@ public record CollectionCaps(
         double directedForkProbability,
         int maxRecordsPerGame) {
 
+    /**
+     * {@code --probe-keywords}'s default: every damage-step keyword gate 2
+     * checks, in the corpus's spelling and the order of its table
+     * ({@code effects.domain.damage_step_keywords}), which the probe rotation
+     * reads. A worker started without the property probes all eight, as a
+     * supervisor's default run does; the property set blank probes none.
+     */
+    public static final List<String> DEFAULT_PROBE_KEYWORDS = List.of(
+            "first_strike", "double_strike", "deathtouch", "lifelink",
+            "trample", "indestructible", "wither", "infect");
+
     /** {@code --max-records-per-game}'s default (FR-041a). */
     public static final int DEFAULT_MAX_RECORDS_PER_GAME = 5000;
 
     public CollectionCaps {
+        probeKeywords = List.copyOf(probeKeywords);
         directedForkRules = List.copyOf(directedForkRules);
     }
 
     public static CollectionCaps defaults() {
         return new CollectionCaps(
-                1, 0.01, 0.0001, 0.001, 2, 2, List.of(), 0.0, 0.0, Optional.empty(), false,
+                1, 0.01, 0.0001, 0.001, 2, 2, DEFAULT_PROBE_KEYWORDS, 0.0, 0.0, Optional.empty(), false,
                 List.of(), 2, 0.25, DEFAULT_MAX_RECORDS_PER_GAME);
     }
 
@@ -103,7 +115,10 @@ public record CollectionCaps(
                         INTERVENTIONS_PER_GAME, defaults.interventionsPerGame(), policy),
                 WorkerProperties.intProperty(
                         PROBES_PER_GAME, defaults.probesPerGame(), policy),
-                WorkerProperties.listProperty(PROBE_KEYWORDS),
+                // Unset, the default eight; set blank, as a run emptying
+                // --probe-keywords sends it, none.
+                WorkerProperties.presentListProperty(PROBE_KEYWORDS)
+                        .orElse(defaults.probeKeywords()),
                 // The random seat's two knobs (FR-021). A share of matches
                 // and a per-decision P: both are drawn in the JVM, so the
                 // supervisor can only name them. The Python side refuses a
