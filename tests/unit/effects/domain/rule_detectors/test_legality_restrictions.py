@@ -268,3 +268,62 @@ def test_detain_has_no_near_miss(index):
     attacker = _creature("E1", controller="P0")
     record = _forbidding(attacker, legal=(_creature("E3"),))
     assert "701.35a" not in _sides(index, record, _RESTRICTED)
+
+
+_GRAKK = ProvenanceKey("cardsfolder/g/grakk_the_pacifist.txt", 0, "keyword", 0)
+
+
+def _explained_as_written(attacker, creature, *, statics=(), elsewhere=False, own=False,
+                          unresolved=None, extra=()):
+    """A blockers record whose one forbidden creature's entry is as the
+    connector writes it, with ``extra`` entities on the board."""
+    entry = ForbiddenEntity(creature.id, statics, elsewhere, responsible_own=own,
+                            responsible_unresolved=unresolved)
+    state = make_snapshot(entities=(attacker, creature, *extra), players=(
+        PlayerState(id="P0", life=20, hand=0, library=30, graveyard=0),
+        PlayerState(id="P1", life=20, hand=0, library=30, graveyard=0)))
+    return make_record(RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.BLOCKERS,
+                       state=state, generation=3,
+                       payload=PlayabilityBlockersPayload(
+                           anchor_attacker=attacker.id, forbidden=(entry,)))
+
+
+def test_only_a_blocker_nothing_explains_tags_detain_through_the_real_catalogue(index):
+    """Every board Forge refuses a block on for a reason the record states,
+    read through every detector of the catalogue: a second attacker that must
+    be blocked if able (``required_elsewhere``, which the connector writes
+    for every such requirement), a creature its own printed keyword keeps
+    out, one an unkeyed static keeps out, a Pacifism'd one. Only the plain
+    unexplained blocker, which Forge refuses only when detained, is 701.35a's."""
+    attacker = _creature("E1", controller="P0")
+    must = _creature("E9", "cardname must be blocked if able.", controller="P0")
+    boards = {
+        "must be blocked elsewhere": _explained_as_written(
+            attacker, _creature("E2"), elsewhere=True, extra=(must,)),
+        "own printed keyword": _explained_as_written(
+            attacker, _creature("E2", "cardname can't attack or block."),
+            statics=(_GRAKK,), own=True),
+        "unkeyed static": _explained_as_written(
+            attacker, _creature("E2"), unresolved="engine_effect"),
+        "pacifism": _explained_as_written(attacker, _creature("E2"), statics=(_PACIFISM,)),
+        "plain unexplained": _explained_as_written(attacker, _creature("E2")),
+    }
+    tagged = {name: {t.rule for t in tag_record(record, index).tags}
+              for name, record in boards.items()}
+    assert {name for name, rules in tagged.items() if "701.35a" in rules} == {
+        "plain unexplained"}
+
+
+def test_a_can_t_block_keyword_of_its_own_explains_without_the_record_s_key(index):
+    """A creature's own can't-block keyword explains it however the entry
+    reads; an "alone" form only while its controller has no other creature."""
+    attacker = _creature("E1", controller="P0")
+    grakk = _explained_as_written(attacker, _creature("E2", "cardname can't attack or block."))
+    alone = _explained_as_written(
+        attacker, _creature("E2", "cardname can't attack or block alone."))
+    beside = _explained_as_written(
+        attacker, _creature("E2", "cardname can't attack or block alone."),
+        extra=(_creature("E3"),))
+    assert "701.35a" not in _sides(index, grakk, _RESTRICTED)
+    assert "701.35a" not in _sides(index, alone, _RESTRICTED)
+    assert _fires(index, beside, _RESTRICTED) == {"701.35a"}

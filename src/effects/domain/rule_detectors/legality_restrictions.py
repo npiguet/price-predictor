@@ -16,13 +16,19 @@ names the one rule a declaration speaks for, decided by ``rule_outcomes``:
   ``Land.nonBasic``, ``Swamp.Snow``; where no line names it, a gen-2 entity
   or a chosen type, the attacker's landwalk and no other reason); and
   ``effect``, a forbidden creature nothing the record shows explains: no
-  evasion, tap or landwalk, no static (gen-3 names the static forbidding the
-  block, Pacifism's included: ``responsible_static``), no hidden "can't
-  block" keyword (``granted_temporary.hidden_keywords``, Panic's) and no
-  requirement binding it to another attacker (``required_elsewhere``, a
-  lure). Forge forbids a block with none of those only for a detained
-  creature (701.35a, ``Card.isDetained``), which no record marks, so
-  ``effect`` has no near miss: it is in play only where it applies;
+  evasion, tap or landwalk, no responsible line (gen-3 names the static
+  forbidding the block, Pacifism's included, or the creature's own keyword
+  line: ``responsible_static``; or says one exists that no key names:
+  ``responsible_unresolved``), no can't-block keyword of its own or hidden
+  (Grakk's "can't attack or block", the "alone" forms while its controller
+  has no other creature, Panic's ``granted_temporary.hidden_keywords``) and
+  no requirement binding it to another attacker (``required_elsewhere``: a
+  lure, or another attacker that must be blocked if able). When the
+  blockers are declarable no blocker is declared yet, so of the gates
+  ``CombatUtil.canBlock(attacker, blocker, combat)`` reads, only a detained
+  creature (701.35a, ``Card.isDetained``), which no record marks, is
+  refused with none of those, so ``effect`` has no near miss: it is in play
+  only where it applies;
 - on ``legal_targets``, each battlefield entity and player against each
   targeting candidate's card: a :class:`TargetingRestriction`
   (``hexproof``, ``hexproof_from``, ``shroud``, ``protection``), read off
@@ -132,8 +138,7 @@ def blocker_judgements(record: EffectRecord, lines: SidecarLookup | None, restri
         return []
     keywords_of = KeywordResolver(lines).keywords_of
     attacker = _filtered(keywords_of(anchor), quality)
-    statics = {f.entity for f in payload.forbidden if f.responsible_static}
-    elsewhere = {f.entity for f in payload.forbidden if f.required_elsewhere}
+    named = {f.entity for f in payload.forbidden if f.explained}
     listed = [(e, True) for e in payload.legal_blockers]
     listed += [(f.entity, False) for f in payload.forbidden]
     found = []
@@ -150,24 +155,37 @@ def blocker_judgements(record: EffectRecord, lines: SidecarLookup | None, restri
             attacker_power=anchor.power if anchor.pt is not None else None,
             blocker_power=blocker.power if blocker.pt is not None else None,
             blocker_changeling="changeling" in blocker_keywords)
-        explained = (bool(evasions) or blocker.tapped or entity_id in statics
-                     or entity_id in elsewhere or _hidden_cant_block(blocker))
+        explained = (bool(evasions) or blocker.tapped or entity_id in named
+                     or _cant_block_keyword(blocker, blocker_keywords, state))
         walked = _walked(anchor, blocker, state) if restriction == LANDWALK else None
         found.append(_blocker(restriction, entity_id, inside, attacker, blocker_keywords,
                               evasions, blocker, explained, walked))
     return found
 
 
-#: Forge's hidden keywords keeping a creature from blocking with no static
-#: (``CombatUtil.canBlock``): "can't block", "can't attack or block", and
-#: their "alone" forms.
-_HIDDEN_CANT_BLOCK = ("can't block", "can't attack or block")
+#: The keywords Forge reads, with no static, to keep a creature from
+#: blocking at all (``CombatUtil.canBlock(Card, boolean)``), lower-cased.
+_CANT_BLOCK = ("cardname can't block.", "cardname can't attack or block.")
+#: The same while its controller has no other creature in play.
+_CANT_BLOCK_ALONE = ("cardname can't block alone.", "cardname can't attack or block alone.")
 
 
-def _hidden_cant_block(blocker: EntityState) -> bool:
-    """Whether a hidden keyword on the blocker forbids it to block."""
+def _cant_block_keyword(blocker: EntityState, keywords: set[str], state) -> bool:
+    """Whether a keyword of the blocker's own, printed or granted
+    (``keywords``), or hidden (``granted_temporary.hidden_keywords``), keeps
+    it from blocking at all, as Forge reads it: "can't block", "can't attack
+    or block", and the "alone" forms while its controller controls no other
+    creature."""
     hidden = blocker.granted_temporary.hidden_keywords or ()
-    return any(phrase in text for text in hidden for phrase in _HIDDEN_CANT_BLOCK)
+    texts = {k.lower().strip() for k in (*keywords, *hidden)}
+    if texts & set(_CANT_BLOCK):
+        return True
+    if not texts & set(_CANT_BLOCK_ALONE):
+        return False
+    creatures = [e for e in state.entities if e.on_battlefield
+                 and e.controller == blocker.controller
+                 and "creature" in {t.lower() for t in e.types}]
+    return len(creatures) < 2
 
 
 def _walked(anchor: EntityState, blocker: EntityState, state) -> bool | None:
