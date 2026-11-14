@@ -624,4 +624,34 @@ class RecordCharacterizationTest {
         Characterization.assertMatches(
                 "record-intervention.jsonl", Characterization.recordLines(fork.records()));
     }
+
+    /**
+     * A forced resolution through the hooks, on a copy that left something
+     * out: Raise the Alarm's effect half holds the {@code token_created} the
+     * outcome hook reports, and the record carries {@code copy_dropped} for
+     * the one remembered object (a token that ceased to exist) the copier
+     * could not map.
+     */
+    @Test
+    void anInterventionalResolutionOnALossyCopyThroughTheHooks() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Player you = board.you;
+        Card holder = board.battlefield("Hill Giant", you);
+        Card token = board.token("w_1_1_soldier", you);
+        holder.addRemembered(token);
+        token.getZone().remove(token);
+        SpellAbility alarm = board.spell(board.hand("Raise the Alarm", you), you);
+        CollectionCaps caps = TestCaps.caps().everyDecision()
+                .interventions(1).probes(0).build();
+
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
+                tempDir, board.game, caps, 1L, alarm, "to hear the outcome hook");
+        assertTrue(fork.wrote(), "the fork observed nothing");
+        String record = fork.records().get(0);
+        assertTrue(record.contains("\"copy_dropped\":{\"remembered\":1}"), record);
+        assertTrue(record.contains("\"token_created\""), record);
+
+        Characterization.assertMatches(
+                "record-intervention-hooked.jsonl", Characterization.recordLines(fork.records()));
+    }
 }
