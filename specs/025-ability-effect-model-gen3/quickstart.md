@@ -83,7 +83,10 @@ $rules = (Get-Content rules/directed-fork-rules.txt | Where-Object { $_.Trim() -
 
 Before the first long run, the fork fidelity audit (T181): collect for 20 minutes into a scratch run
 directory, stop the run, and count the `fork fidelity:` lines by field in its `logs/` worker logs
-(the run's end prints their total as `fork_fidelity`).
+(the run's end prints their total as `fork_fidelity`). Then run `validate-corpus` on the scratch
+run: its watched line "fork records whose copy left something out" gives the share of fork records
+carrying each `copy_dropped` kind. The workers' hook-failure line counts the forks whose copy or
+body threw, as `fork <kind> copy` and `fork <kind> body`. None of the three discards a record.
 
 ```powershell
 .venv\Scripts\python.exe -u -m sealed match-outcomes --workers 6 --effect-records <scratch run dir> --random-seat-share 0.25 --random-seat-probability 0.5 --interventions-per-game 4 --probes-per-game 4 --directed-fork-rules $rules --count-dropped-events
