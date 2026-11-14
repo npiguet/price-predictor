@@ -23,7 +23,6 @@ import com.pricepredictor.connector.effects.directed.rules.DrawFromEmptyLibrary;
 import com.pricepredictor.connector.effects.directed.rules.Enlist;
 import com.pricepredictor.connector.effects.directed.rules.ExploreEmptyLibrary;
 import com.pricepredictor.connector.effects.directed.rules.FinalChapterResolves;
-import com.pricepredictor.connector.effects.directed.rules.FinalityCounter;
 import com.pricepredictor.connector.effects.directed.rules.FusedCost;
 import com.pricepredictor.connector.effects.directed.rules.GameLossReplaced;
 import com.pricepredictor.connector.effects.directed.rules.GraveyardReplacement;
@@ -107,7 +106,6 @@ public final class DirectedRules {
             CantGainLifeExchange.rule(),
             CantLoseLifeExchange.rule(),
             StunCounter.rule(),
-            FinalityCounter.rule(),
             TypeSettingAura.rule(),
             GraveyardReplacement.rule(),
             MorphFaceUp.rule(),

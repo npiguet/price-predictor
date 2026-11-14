@@ -740,15 +740,15 @@ and that the reporting half never enters the control score.
   over all sources, or with no `does_not_fire` record, and that has a non-base variant classified
   into an operation after the rerun of FR-003, except the rules of `NOT_DIRECTED`: 104.2a, 500.11,
   701.12d and 702.62d, whose forks no detector can tell from their live games; 121.4, 122.1g,
-  703.4m and 701.42c, which restate 704.5b, 704.5v, 510.2 and 701.42b, listed in their place; and
-  505.5, 614.10a, 701.24f and 702.105b, whose fact the record cannot show; and except the rules
-  of `DEFERRED_DIRECTED`, which qualified only after the list was fixed for the production
-  collection and wait for a later one (`directed-rules` names each with its reason). The list is
-  checked in as `rules/directed-fork-rules.txt`, one rule id per line, 65 rules in unit order,
-  and is what the full collection passes to `--directed-fork-rules`; `directed-rules` over the
-  gen-2 counts writes it unchanged. Every listed rule passes the startup check (FR-014) except
-  122.1h, whose scenario declares no detector: its rewrite record names no line for a finality
-  counter's replacement.
+  703.4m and 701.42c, which restate 704.5b, 704.5v, 510.2 and 701.42b, listed in their place;
+  505.5, 614.10a, 701.24f and 702.105b, whose fact the record cannot show; and 122.1h, whose
+  rewrite record names no replacing effect for the replacement Forge builds at runtime from the
+  finality counter; and except the rules of `DEFERRED_DIRECTED`, which qualified only after the
+  list was fixed for the production collection and wait for a later one (`directed-rules` names
+  each with its reason). The list is checked in as `rules/directed-fork-rules.txt`, one rule id
+  per line, 64 rules in unit order, and is what the full collection passes to
+  `--directed-fork-rules`; `directed-rules` over the gen-2 counts writes it unchanged. Every
+  listed rule passes the startup check (FR-014).
 
 #### Rules-to-fields map (root § 7)
 

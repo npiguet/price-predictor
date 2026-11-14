@@ -840,37 +840,6 @@ class RegisteredRulesTest {
         assertEquals(4, twin.fork().card("battle").getCounters(CounterEnumType.DEFENSE));
     }
 
-    // ── 122.1h, a finality counter: counters ────────────────────────────
-
-    private static Board finalityBoard(int finality) {
-        Board board = new Board(PhaseType.MAIN1);
-        board.subject = board.card(board.opponent, "Grizzly Bears");
-        board.subject.setCounters(CounterEnumType.FINALITY, finality);
-        return board;
-    }
-
-    @Test
-    void finalityCounterBindsTheCreatureWithOne() {
-        Board board = finalityBoard(1);
-        assertEquals(board.subject, FinalityCounter.bind(board.game).orElseThrow().card("creature"));
-    }
-
-    @Test
-    void finalityCounterBindsNothingWithoutOne() {
-        assertTrue(FinalityCounter.bind(finalityBoard(0).game).isEmpty());
-    }
-
-    @Test
-    void finalityCounterForksTheCreatureWithoutIt() {
-        Board board = finalityBoard(1);
-        Twin twin = board.twin(FinalityCounter.rule());
-        String bears = id(board.subject);
-        assertTrue(twin.changes().contains(bears + ".counters"), twin.changes().toString());
-        assertTrue(Set.of(bears + ".counters", bears + ".lines").containsAll(twin.changes()),
-                twin.changes().toString());
-        assertEquals(0, twin.fork().card("creature").getCounters(CounterEnumType.FINALITY));
-    }
-
     // ── 205.1a, a type-setting effect: counters ─────────────────────────
 
     private static Board dryadsBoard(int forests) {

@@ -267,14 +267,6 @@ def test_the_worker_lists_its_registered_rules():
 
 _DIRECTED = Path("forge-connector/src/main/java/com/pricepredictor/connector/effects/directed")
 
-#: Listed rules the startup check refuses, each for a reason the user has to
-#: settle: nothing else on the list may be refused.
-_KNOWN_NOT_READY = {
-    "122.1h": "declares its detector none: the rewrite record names no line for a "
-              "finality counter's replacement (ability [], ability_unresolved no_card_state)",
-}
-
-
 def _registered_in_source() -> frozenset[str]:
     """The rule ids ``DirectedRules.REGISTERED`` lists, read off the connector's
     source: each listed class's ``RULE`` constant. The integration test below
@@ -294,7 +286,8 @@ def _registered_in_source() -> frozenset[str]:
 def test_the_startup_check_passes_over_the_whole_list():
     """Every rule of the real ``rules/directed-fork-rules.txt``, checked
     against the real catalogue and the connector's registrations, all at
-    once: the failure names every rule the check would refuse, not the first."""
+    once: no listed rule is refused, and the failure names every rule the
+    check would refuse, not the first."""
     listed = Path("rules/directed-fork-rules.txt").read_text(encoding="utf-8").split()
     registered = _registered_in_source()
     refused = {}
@@ -302,5 +295,5 @@ def test_the_startup_check_passes_over_the_whole_list():
         error = directed_fork_error((rule,), 0.25, registered=lambda: registered)
         if error is not None:
             refused[rule] = error
-    assert set(refused) == set(_KNOWN_NOT_READY), refused
-    assert len(listed) == len(set(listed)) == 65
+    assert refused == {}
+    assert len(listed) == len(set(listed)) == 64

@@ -931,6 +931,9 @@ NOT_DIRECTED = {
     **dict.fromkeys(("505.5", "614.10a", "701.24f", "702.105b"),
                     "the record cannot show the rule's fact, so its scenarios declare no "
                     "detector (the user's decision of 2026-11-14)"),
+    "122.1h": "the rewrite record names no replacing effect for a replacement Forge builds at "
+              "runtime from the finality counter, so its scenario declares no detector (the "
+              "user's decision of 2026-11-14)",
 }
 #: Left out of this collection only: they qualified on the recount after the T030
 #: detectors (2026-11-06), when the list of 70 was fixed for production; by the user's

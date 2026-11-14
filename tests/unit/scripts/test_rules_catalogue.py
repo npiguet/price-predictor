@@ -292,10 +292,11 @@ def test_the_rules_always_listed_are_704_5f_and_702_98a_each_with_a_reason():
 
 def test_the_rules_left_out_are_those_the_user_dropped_each_with_a_reason():
     """2026-11-06: four no detector tells from their live game; 2026-11-14:
-    four that restate a listed rule and four the record cannot show."""
+    four that restate a listed rule, four the record cannot show, and 122.1h,
+    whose record names no replacing effect."""
     assert sorted(rc.NOT_DIRECTED) == [
-        "104.2a", "121.4", "122.1g", "500.11", "505.5", "614.10a", "701.12d", "701.24f",
-        "701.42c", "702.105b", "702.62d", "703.4m"]
+        "104.2a", "121.4", "122.1g", "122.1h", "500.11", "505.5", "614.10a", "701.12d",
+        "701.24f", "701.42c", "702.105b", "702.62d", "703.4m"]
     assert all(reason.strip() for reason in rc.NOT_DIRECTED.values())
     for rule, listed in {"121.4": "704.5b", "122.1g": "704.5v", "703.4m": "510.2",
                          "701.42c": "701.42b"}.items():
