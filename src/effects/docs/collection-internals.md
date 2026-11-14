@@ -25,7 +25,7 @@ Each record's board is read just before the moment it describes, and its events 
 
 ## The hook inventory
 
-- `PatchHooks.REQUIRED` lists every class, method and the record channel it feeds. It is load-bearing, not documentation: `AttributionMode` probes `PatchHooks.SUB_ABILITY`, `PatchedCollectors.CAN_SUPPRESS` reads the three `…Without` entries, and `PatchHooks.report()` prints what is missing at worker startup.
+- `PatchHooks.REQUIRED` lists every class, method and the record channel it feeds. It is load-bearing, not documentation: `AttributionMode` probes `PatchHooks.SUB_ABILITY`, `ContinuousChannel.CAN_SUPPRESS` reads the six `…Without` entries, and `PatchHooks.report()` prints what is missing at worker startup.
 - A partly-applied patch is the state that matters. The mode still reads `patched`, because that is one hook's answer, while a channel the run meant to collect is quietly empty. Read the report line, not just the mode.
 - The connector builds against stock Forge and reaches every hook by name. A typo in a hook's name therefore shows up at runtime as `degraded`, not at compile time, which is why every record carries the detected mode and `tests/integration/test_effects_patched.py` asserts it.
 - The tests read the checkout rather than assuming it. One that pinned `degraded` would fail the day the patch landed, with nothing wrong.
@@ -112,5 +112,4 @@ What the collectors must read of the hooks:
 ## Dead fields
 
 - A collector that writes `"blocking":[]` produces records byte-identical to ones for a creature that genuinely is not blocking. The shape is right, the contract tests pass, and the field is dead. `field-coverage` exists to name every field a corpus never varied.
-- `KNOWN_CONSTANT_FIELDS` lists the fields known dead. The integration test fails when one of them starts carrying data, so the list can only shrink. It is asserted in that direction only, because a field that is merely rare looks exactly like one that is unwired.
-- `pt_duration` and `type_color_duration` are the two head fields no target path writes.
+- `KNOWN_CONSTANT_FIELDS` (`application/field_coverage.py`) lists the fields known dead, and is empty. The integration test fails when a listed field starts carrying data, so the list can only shrink. It is asserted in that direction only, because a field that is merely rare looks exactly like one that is unwired.

@@ -111,7 +111,7 @@ Where each format is described: effect-record shards, the record envelope and dr
 
 Three rules hold whatever the task:
 
-- `mode`, `interventional`, `fork`, `synthetic`, `random_seat`, `what_if`, `generation`, `aimed_at`, `directed` and `curation` are collection and curation metadata and never reach the model.
+- `mode`, `interventional`, `fork`, `synthetic`, `random_seat`, `what_if`, `generation`, `aimed_at`, `directed`, `copy_dropped` and `curation` are collection and curation metadata and never reach the model.
 - The record envelope is frozen within a generation: a later capability adds `kind` values and members, and never redefines a field. `tests/unit/effects/domain/test_schema_compatibility.py` enforces the compatibility rules.
 - The ability cache lives under `output/effects/abilities/`, outside `output/cardsfolder/`, because the sealed pipeline's `encode-cards --clean` deletes every `.npz` under that tree.
 
