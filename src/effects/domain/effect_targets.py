@@ -49,6 +49,7 @@ from effects.domain.records import (
     PlayabilityAttackersPayload,
     PlayabilityBlockersPayload,
     PlayabilityDecisionPayload,
+    RewritePayload,
     TriggerPayload,
     events_of,
     is_game_end,
@@ -219,7 +220,8 @@ def derive_targets(record: EffectRecord) -> RecordTargets:
     if is_game_end(record):
         return RecordTargets(gated=False)
     record_class = sampling_class(record)
-    targets = RecordTargets(gated=not _is_playability(record))
+    targets = RecordTargets(
+        gated=not _is_playability(record) and not _outcome_partly_unknown(record))
     players = {player.id for player in record.state.players}
 
     def slot(subject: str) -> EntityTargets:
@@ -246,6 +248,19 @@ def derive_targets(record: EffectRecord) -> RecordTargets:
     _apply_playability(record, slot)
     _apply_continuous(record, slot)
     return targets
+
+
+def _outcome_partly_unknown(record: EffectRecord) -> bool:
+    """Whether a rewrite record cannot say who its replacement left
+    unaffected, so it trains no gate: what came in is unknown
+    (``incoming_unknown``: what changed is unknown), or the ability it set
+    aside ran and another record holds that run's events. The events it does
+    hold (its own outgoing event, a run it holds) are still supervised."""
+    payload = record.payload
+    if not isinstance(payload, RewritePayload):
+        return False
+    return payload.incoming_unknown or (
+        bool(payload.buffered_ran) and not payload.holds_buffered_run)
 
 
 def _is_playability(record: EffectRecord) -> bool:

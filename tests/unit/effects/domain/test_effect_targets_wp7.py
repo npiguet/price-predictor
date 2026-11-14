@@ -31,16 +31,35 @@ class TestASetAsideAbilitysRun:
         assert targets["P0"].fields[HeadField.CARDS_DRAWN] == 2
         assert targets["P0"].affected and targets["E1"].affected and targets["E2"].affected
 
-    def test_a_run_that_never_came_supervises_nothing(self):
+    def test_a_run_that_never_came_trains_nobody_affected(self):
+        """The set-aside ability never ran: the replacement's outcome is
+        known, and it touched nobody."""
         record = _buffered()
         never = replace(record, payload=replace(
             record.payload, buffered_ran=False, buffered_events=()))
-        assert dict(derive_targets(never)) == {}
+        targets = derive_targets(never)
+        assert dict(targets) == {} and targets.gated
 
-    def test_a_record_whose_run_another_record_took_supervises_nothing(self):
+    def test_a_record_whose_run_another_record_took_trains_no_gate(self):
+        """The run happened and its events are another record's: who it
+        touched is not this record's to say, so no entity is trained as
+        unaffected (the holder of the same run says P0 drew two)."""
         record = _buffered()
         other = replace(record, payload=replace(record.payload, buffered_events=()))
-        assert other.payload.buffered_ran and dict(derive_targets(other)) == {}
+        targets = derive_targets(other)
+        assert other.payload.buffered_ran and dict(targets) == {}
+        assert not targets.gated
+        assert derive_targets(record).gated
+
+    def test_a_non_holder_with_its_own_outgoing_event_supervises_that_alone(self):
+        record = _buffered()
+        event = record.payload.incoming
+        other = replace(record, payload=replace(
+            record.payload, buffered_events=(), outgoing=event))
+        targets = derive_targets(other)
+        assert not targets.gated
+        assert set(targets) == set(event.subjects)
+        assert all(targets[subject].affected for subject in event.subjects)
 
     def test_the_record_holding_the_run_supervises_the_record_heads(self):
         record = _buffered()
@@ -54,8 +73,18 @@ class TestAnUnknownIncomingEvent:
         record = _golden(lambda raw: raw["kind"] == "rewrite"
                          and raw["payload"].get("incoming_unknown"))
         assert isinstance(record.payload, RewritePayload)
-        assert dict(derive_targets(record)) == {}
+        targets = derive_targets(record)
+        assert dict(targets) == {}
         assert supervises_created_objects(record) is False
+
+    def test_what_changed_is_unknown_so_no_gate_trains(self):
+        """Its known-incoming twin, the same replacement, trains the gate: an
+        unknown incoming event must not teach "nobody affected" instead."""
+        record = _golden(lambda raw: raw["kind"] == "rewrite"
+                         and raw["payload"].get("incoming_unknown"))
+        assert not derive_targets(record).gated
+        known = replace(record, payload=replace(record.payload, incoming_unknown=False))
+        assert derive_targets(known).gated
 
 
 class TestAManaRecordsOwnEffects:
