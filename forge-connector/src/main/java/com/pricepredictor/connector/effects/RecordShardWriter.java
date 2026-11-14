@@ -41,9 +41,17 @@ import java.util.zip.GZIPOutputStream;
  * line. A single gzip stream would have neither property, and a member per
  * record would compress almost nothing.
  *
- * <p>The cost is that a crash loses the block in flight rather than one line.
- * That is bounded by {@code BLOCK_RECORDS} and is worth it: these JVMs crash on
- * long games, but one block is a small share of what a run collects.
+ * <p>A member also ends at every game's end ({@link #endGame}), after the
+ * game's game-end marker: a finished game is on disk whole before the next
+ * one starts, so a kill or a crash, which runs no shutdown hook, loses only
+ * the game in progress, never the tail and marker of the game before. The
+ * blocks are written in record order, so a marker is never on disk while an
+ * earlier record of its game is lost. The cost is a member per game, a
+ * fraction of a percent of a shard's size.
+ *
+ * <p>A crash still loses the game in progress: its unwritten records,
+ * at most {@code BLOCK_RECORDS - 1}, and its marker, so the game reads as cut
+ * whole.
  *
  * <p>Owns the two counters the record ids are built from. Both carry the shard
  * token — worker index and lifetime — because workers count independently and
@@ -229,11 +237,16 @@ public final class RecordShardWriter implements AutoCloseable {
     }
 
     /**
-     * A game's recording has ended: if the cap withheld any of its records,
-     * print one line naming the game, how many were withheld, and the turn
-     * and acting card the most of them shared (FR-041a).
+     * A game's recording has ended, its marker written last: the block in
+     * flight is written, so the game is on disk whole before the next one
+     * starts; and if the cap withheld any of its records, print one line
+     * naming the game, how many were withheld, and the turn and acting card
+     * the most of them shared (FR-041a).
      */
     public synchronized void endGame(String gameId) {
+        if (!closed) {
+            flushBlock();
+        }
         GameRecords records = games.remove(gameId);
         if (records != null && records.withheld > 0) {
             System.err.println(records.report(gameId, maxRecordsPerGame));

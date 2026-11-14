@@ -132,6 +132,77 @@ class GamePlayerRecordingTest {
         }
     }
 
+    /** Copies the shard's bytes as they stand on disk at the second turn of the game it watches. */
+    public static final class SnapshotAtTurnTwo {
+        private final Game game;
+        private final Path shard;
+        private final byte[][] taken;
+
+        SnapshotAtTurnTwo(Game game, Path shard, byte[][] taken) {
+            this.game = game;
+            this.shard = shard;
+            this.taken = taken;
+        }
+
+        @Subscribe
+        public void onTurn(GameEventTurnBegan event) throws IOException {
+            if (game.getPhaseHandler().getTurn() == 2 && taken[0] == null) {
+                taken[0] = Files.exists(shard) ? Files.readAllBytes(shard) : new byte[0];
+            }
+        }
+    }
+
+    /** Every line in a shard's bytes as a hard stop leaves them: none is a shard never written. */
+    private static List<String> lines(byte[] shard) throws IOException {
+        if (shard.length == 0) {
+            return List.of();
+        }
+        try (InputStream in = new GZIPInputStream(new java.io.ByteArrayInputStream(shard))) {
+            List<String> lines = new ArrayList<>();
+            for (String line : new String(in.readAllBytes(), StandardCharsets.UTF_8).split("\n")) {
+                if (!line.isEmpty()) {
+                    lines.add(line);
+                }
+            }
+            return lines;
+        }
+    }
+
+    /**
+     * A hard stop (a kill, a crash) early in a match's second game, the
+     * writer never closed: the shard as it stands then holds the first game
+     * whole, its marker included, so a finished game never reads as cut; the
+     * second game has nothing on disk, or a prefix without its marker.
+     */
+    @Test
+    void aFinishedGameIsOnDiskWholeBeforeTheNextGameStarts() throws IOException {
+        RecordShardWriter writer = writer();
+        byte[][] taken = new byte[1][];
+        List<Game> started = new ArrayList<>();
+        GamePlayer player = new GamePlayer(3, writer, caps(), WorkerStop.NEVER, (match, game) -> {
+            started.add(game);
+            if (started.size() == 2) {
+                game.subscribeToEvents(new SnapshotAtTurnTwo(game, writer.path(), taken));
+            }
+            match.startGame(game);
+        });
+
+        player.playMatch(burn(), burn());
+        writer.close();
+
+        assertTrue(started.size() >= 2 && taken[0] != null, "the second game reached its turn 2");
+        Map<String, List<String>> whole = byGame(lines(writer.path()));
+        Map<String, List<String>> onDisk = byGame(lines(taken[0]));
+        List<String> first = onDisk.get("run.0-l1.0");
+        assertEquals(whole.get("run.0-l1.0"), first, "the first game is on disk whole");
+        assertTrue(isMarker(first.get(first.size() - 1)), "with its marker last");
+        List<String> second = onDisk.getOrDefault("run.0-l1.1", List.of());
+        assertTrue(second.stream().noneMatch(GamePlayerRecordingTest::isMarker),
+                "the second game, still playing, has no marker on disk");
+        assertTrue(java.util.Set.of("run.0-l1.0", "run.0-l1.1").containsAll(onDisk.keySet()),
+                "no other game: " + onDisk.keySet());
+    }
+
     /**
      * A game past {@code --max-records-per-game} keeps its outcome record and
      * its marker, the marker counting what the cap withheld: the record

@@ -296,10 +296,13 @@ What the supervisor does (`ForgeWorkerPool` under a `GracefulStop`, `price_predi
   line: a crash in the last game, a Ctrl-C), `crashed` (unasked, no stop line), and `survived`
   (the kill could not end it). The round report prints them; `run.json`'s entry records them as
   `worker_stops`, beside the resolved `stop_timeout` and `recycle_seconds`.
-- What a kill still loses: the game in progress. Its records already written in complete
-  256-record blocks stay in the shard, the last ≤255 are lost, and its end-of-game records (fired
-  triggers, mana reservoirs, the outcome, the game-end marker) never come, so `build-corpus` drops
-  the game whole and the collectors' counters credit nothing from it.
+- What a kill still loses: the game in progress, and nothing before it. The worker writes its
+  block in flight at every game end, right after the game-end marker, so every finished game is
+  on disk whole, its marker included, before the next game starts. The game in progress keeps
+  the records it wrote in complete 256-record blocks, loses its last ≤255, and its end-of-game
+  records (fired triggers, mana reservoirs, the outcome, the game-end marker) never come, so
+  `build-corpus` drops the game whole and the collectors' counters credit nothing from it. A
+  worker killed between two matches loses nothing.
 - `match-outcomes` without `--effect-records` keeps no worker log, so a stop line cannot be read:
   its pool kills the longest-running worker every status interval and every worker at the end, as
   before, and `--stop-timeout` or `--recycle-seconds` without `--effect-records` exits 2.
