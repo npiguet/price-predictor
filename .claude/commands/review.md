@@ -2,15 +2,8 @@
 description: Review existing code for complexity, readability, and missed domain concepts
 ---
 
-**Run this command in plan mode.** Call `EnterPlanMode` immediately, before any other tool call. Stay in plan
-mode for the entire review: read code, form findings, and present the report inside the plan. Do not exit plan
-mode or make any edits until the user has read the findings and explicitly told you which ones to act on.
-
-You are a rigorous senior developer with zero-tolerance for code that is difficult to read. You always look for
-opportunities to introduce domain concepts that might have been missed. You are not afraid of using formal data
-structures such as trees or graphs, and actually prefer those formalisms over ad-hoc nested loops or recursion. You
-consider very long methods as a code smell because they are hard for humans to keep entirely in their mind. You think
-the same about methods with excessive branches and loops which incur too much cognitive complexity.
+This is a read-only review. Edit nothing until the user has read the findings and said which ones to act on:
+the review is input to a decision about what to refactor, and that decision is theirs.
 
 ## Task
 
@@ -19,12 +12,20 @@ Review the code specified by: $ARGUMENTS
 If no specific file or module is given, explore the project structure first and identify the most complex or
 critical areas to review, then focus your review there.
 
-## How to approach the review
+## What this review is for
 
-1. Read the relevant code thoroughly before forming any opinion.
-2. Identify all instances of complexity, duplication, or structural issues. Do not stop at the first one you find.
-3. Look for patterns across instances — prefer solutions that fix multiple problems at once over one-off fixes.
-4. Consider whether any logic would be better expressed using existing libraries or dependencies rather than manual implementation.
+The reviewer this command stands in for cares most that code is easy for a human to read and hold in mind. The
+preferences behind the checklist below:
+
+- Long methods, and methods with many branches and loops, are a smell in themselves, because a reader cannot keep
+  them whole in working memory.
+- A concept that exists in the problem domain should exist in the code as a named type. Look for the ones that
+  were missed.
+- A formal data structure such as a tree or a graph is preferred over ad-hoc nested loops or recursion that
+  encode the same structure implicitly.
+- One change that removes several findings at once is worth more than several one-off fixes, so look for the
+  pattern across instances before proposing a fix for each.
+- Logic that an existing dependency already provides should use the dependency, not a manual reimplementation.
 
 ## What to look for
 
@@ -81,8 +82,8 @@ Examples to flag:
 Avoid null checks where `Optional` map/flatMap/ifPresent would read more clearly.
 
 **None and absence handling (Python):** Prefer empty collections or empty strings over `None` where the caller
-won't distinguish. Use `Optional[T]` type hints. Avoid `if x is not None` chains where a guard clause or
-early return would be cleaner.
+won't distinguish. Where absence is meaningful, say so in the type as `T | None`, the form this codebase uses.
+Avoid `if x is not None` chains where a guard clause or early return would be cleaner.
 
 **Dead code:** Flag code that is no longer reachable or referenced and recommend deletion (don't comment it out
 — git history is the archive). Look for:
@@ -93,9 +94,9 @@ early return would be cleaner.
 - Leftover scaffolding from earlier refactors (TODO stubs, "old_*" or "*_v2" siblings of the real implementation)
 - Test helpers and fixtures that no test uses anymore
 
-Use `ruff` / `grep` / IDE "find usages" before declaring something dead. Public API surfaces (anything imported
-by another package, exposed via the CLI in `infrastructure/cli.py`, or used by `forge-connector` over the
-HTTP/subprocess boundary) need extra care — search the Java side too.
+Search for usages (`ruff`, then a grep over the whole repository) before declaring something dead. Public API
+surfaces (anything imported by another package, exposed via the CLI in `infrastructure/cli.py`, or used by
+`forge-connector` across the subprocess boundary) need extra care — search the Java side too.
 
 **Low-value tests:** A test earns its keep by catching real regressions. Recommend deleting tests that:
 - Assert on getters/setters or trivial constructors with no logic
@@ -130,13 +131,17 @@ pattern is visibly present in the code being reviewed.
 
 ## Output format
 
-Produce a structured review with:
-- A short summary of the overall state of the reviewed code
-- A list of findings, each with:
+Start with a short summary of the overall state of the reviewed code, then list the findings, most valuable
+first. Each finding has:
+
 - Location (file and line range)
 - The problem observed
 - A concrete suggestion for improvement, including any refactoring pattern or dependency to consider
+- Severity: how much the problem costs a reader or a maintainer
+- Confidence: how sure you are that it is a real problem and that the suggestion is right
 
-Do not propose changes you are not confident in. If a finding requires more context to resolve, say so explicitly.
+Report every finding, including the ones you are unsure about or consider minor, and let the severity and
+confidence say so. The user filters; a finding left out is one they never get to weigh. If a finding needs
+more context to resolve, say what is missing.
 
-After presenting the review, ask the user which findings they want to act on before making any changes.
+End by asking the user which findings they want to act on.
