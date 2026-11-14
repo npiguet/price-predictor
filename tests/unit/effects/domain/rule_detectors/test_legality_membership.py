@@ -47,7 +47,8 @@ def test_responsible_static_counts_only_what_a_static_forbids(by_kind):
         ForbiddenEntity(f.entity) for f in record.payload.forbidden)))
     found = FAMILY.match(unattributed, None,
                          {"list": "legal_blockers", "responsible_static": True})
-    assert found is None or found.polarity is Polarity.DOES_NOT_FIRE
+    # Nothing a static forbids and nobody left legal to compare: no tag at all.
+    assert found is None
 
 
 def test_inside_reads_the_legal_list(by_kind):
@@ -249,7 +250,7 @@ class TestKeywordAndCounter:
         for counters, forbidden in (({}, True), ({"+1/+1": 2}, False)):
             edited = self._edited(record, entity_id, counters=counters, forbidden=forbidden)
             found = FAMILY.match(edited, gen2_sidecars, self._declared(keyword))
-            assert found is None or entity_id not in found.entities
+            assert found is None, (counters, forbidden, found)
 
     def test_an_entity_whose_card_lacks_the_keyword_is_not_counted(
             self, by_kind, gen2_sidecars):
@@ -330,7 +331,7 @@ class TestJudgedKind:
         one = replace(two, state=replace(two.state, entities=tuple(
             replace(e, types=("creature",)) for e in two.state.entities)))
         found = FAMILY.match(one, None, declared)
-        assert found is None or judged not in _judged(found, one)
+        assert found is None
 
     def test_judged_not_type_keeps_only_an_entity_without_the_type(self, by_kind):
         record = _forbidden_block(by_kind)

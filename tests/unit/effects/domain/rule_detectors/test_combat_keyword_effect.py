@@ -276,7 +276,7 @@ def test_real_vigilant_attackers_stay_untapped(gen3_combats, gen3_sidecars):
     fires = [f for f in found if f is not None and f.polarity is Polarity.FIRES]
     near = [f for f in found if f is not None and f.polarity is Polarity.DOES_NOT_FIRE]
     if not fires or not near:
-        pytest.skip("the fixture holds no vigilant attacker or no other attacker")
+        pytest.fail("the fixture holds no vigilant attacker or no other attacker")
     assert all(f.observed for f in fires)
     assert sum(f.observed is False for f in near) > len(near) * 0.9
     assert all(f.condition == f.outcome for f in fires)
@@ -286,7 +286,7 @@ def test_real_regular_step_first_strikers_are_the_near_miss(gen3_combats, gen3_s
     found = [f for r in gen3_combats
              if (f := FAMILY.match(r, gen3_sidecars, {"keyword": "first_strike"})) is not None]
     if not found:
-        pytest.skip("the fixture holds no first striker in a regular step")
+        pytest.fail("the fixture holds no first striker in a regular step")
     for f in found:
         assert f.observed is (f.polarity is Polarity.FIRES)
         assert f.condition and f.outcome

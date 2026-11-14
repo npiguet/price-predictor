@@ -21,7 +21,14 @@ from pathlib import Path
 import pytest
 
 from effects.application.corpus_validation.findings import Finding, Findings, Thresholds
-from effects.application.corpus_validation.presence import FieldPresence
+from effects.application.corpus_validation.presence import (
+    GEN3_ENTITY_MEMBERS,
+    GEN3_GLOBAL_MEMBERS,
+    GEN3_PLAYER_MEMBERS,
+    GEN3_REFS_MEMBERS,
+    GEN3_STATE_MEMBERS,
+    FieldPresence,
+)
 from effects.application.validate_corpus import validate_corpus, validate_directory
 from effects.domain.event_schema import (
     AttributionKind,
@@ -371,7 +378,10 @@ class TestValidateDirectory:
 
         assert report.shards == 2
         assert _named(report.findings, "record_id is unique").ok
-        assert _named(report.findings, "gen-2 envelope")
+        # The per-shard check runs over both shards, the nested one included.
+        envelope = _named(report.findings, "gen-2 envelope")
+        assert envelope.ok, envelope.detail
+        assert envelope.measured.startswith("2 shard(s), 2 carrying random_seat")
 
 class TestGameIdNamesOneGame:
     def test_a_backward_turn_jump_inside_one_game_id_fails(self):
@@ -598,6 +608,23 @@ class TestOutcome:
         assert finding.ok
         assert "fizzled 2" in finding.measured
         assert "resolved 2" in finding.measured
+
+    def test_on_gen3_the_effect_halves_carry_it(self):
+        """Gen-3 writes the outcome on the effect half (FR-042b), the cost half
+        none: one value over effect halves fails, two pass."""
+        def halves(*outcomes):
+            return [
+                _resolution(f"run.0-L1.{900 + i}", generation=3, payload=ResolutionPayload(
+                    events=(), outcome=outcome, outcome_written=True))
+                for i, outcome in enumerate(outcomes)
+            ]
+
+        literal = _named(validate_corpus(halves(ResolutionOutcome.RESOLVED,
+                                                ResolutionOutcome.RESOLVED)), "outcome")
+        assert not literal.ok and "1 distinct over 2" in literal.measured
+        varied = _named(validate_corpus(halves(ResolutionOutcome.RESOLVED,
+                                               ResolutionOutcome.FIZZLED)), "outcome")
+        assert varied.ok and "fizzled 1" in varied.measured
 
 
 class TestCosts:
@@ -2131,11 +2158,13 @@ class TestGen2FieldPresence:
 
     def test_a_gen1_shard_passes(self, tmp_path):
         self._write(tmp_path / "a.jsonl", self._rows(seat=False, what_if=None))
-        assert self._finding(tmp_path).ok
+        finding = self._finding(tmp_path)
+        assert finding.ok and finding.measured.startswith("1 shard(s), 0 carrying random_seat; 0 ")
 
     def test_a_gen2_shard_with_both_fields_passes(self, tmp_path):
         self._write(tmp_path / "a.jsonl", self._rows(seat=True, what_if=False))
-        assert self._finding(tmp_path).ok
+        finding = self._finding(tmp_path)
+        assert finding.ok and finding.measured.startswith("1 shard(s), 1 carrying random_seat; 0 ")
 
     def test_random_seat_on_some_records_only_fails(self, tmp_path):
         rows = self._rows(seat=True, what_if=False)
@@ -2147,7 +2176,9 @@ class TestGen2FieldPresence:
 
     def test_a_gen2_legality_record_without_what_if_fails(self, tmp_path):
         self._write(tmp_path / "a.jsonl", self._rows(seat=True, what_if=None))
-        assert not self._finding(tmp_path).ok
+        finding = self._finding(tmp_path)
+        assert not finding.ok
+        assert "1 with what_if on some legality records only" in finding.measured, finding.measured
 
     def test_what_if_on_another_kind_is_refused_by_the_reader(self, tmp_path):
         """The record model rejects it outright, so it never reaches a tally."""
@@ -2220,6 +2251,29 @@ class TestGen3FieldPresence:
         edit(rows[0])
         finding = _named(self._findings(tmp_path, rows), "gen-3 fields")
         assert not finding.ok and f"{site} 1" in finding.detail[0]
+
+    @pytest.mark.parametrize(("site", "member"), [
+        *(("state", m) for m in GEN3_STATE_MEMBERS),
+        *(("state.global", m) for m in GEN3_GLOBAL_MEMBERS),
+        *(("state.players[]", m) for m in GEN3_PLAYER_MEMBERS),
+        *(("state.entities[]", m) for m in GEN3_ENTITY_MEMBERS),
+        *(("state.refs", m) for m in GEN3_REFS_MEMBERS),
+    ])
+    def test_every_owed_snapshot_member_missing_is_named(self, tmp_path, site, member):
+        """Each member of every owed list, not one per site: dropped from the
+        first golden record that carries it."""
+        rows = self._golden()
+        holder = {
+            "state": lambda row: [row["state"]],
+            "state.global": lambda row: [row["state"]["global"]],
+            "state.players[]": lambda row: row["state"]["players"],
+            "state.entities[]": lambda row: row["state"]["entities"],
+            "state.refs": lambda row: [row["state"]["refs"]],
+        }[site]
+        target = next(part for row in rows for part in holder(row) if member in part)
+        del target[member]
+        finding = _named(self._findings(tmp_path, rows), "gen-3 fields")
+        assert not finding.ok and f"{site}.{member} 1" in finding.detail[0], finding.detail
 
     def test_a_static_line_without_active_is_short(self, tmp_path):
         rows = self._golden()

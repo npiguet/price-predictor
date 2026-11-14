@@ -167,9 +167,55 @@ def test_untaggable_and_same_as_scenarios_are_reported(tmp_path, gen2_dir):
 
 
 def test_the_review_list_names_record_and_scenario(tmp_path, gen2_dir):
-    counts, _ = count(_config(tmp_path, gen2_dir))
-    for record_id, scenario in counts.review:
-        assert record_id.count(".") >= 2 and scenario.count("-") == 1
+    """On a shard holding one record whose outcome disagrees with its side
+    (a creature left at toughness 1 that dies anyway, 704.5f): the fixture
+    alone holds none, so the list was never read."""
+    from dataclasses import replace
+
+    from effects.domain.event_schema import EventType
+    from effects.domain.records import ResolutionPayload
+    from effects.infrastructure.shard_io import read_shard, write_shard
+
+    grind_dust = "50e3aa10-aa8d-4153-a614-e786a1dc6a6d.1-mv5eiqndmfap.8695"
+    counts, _ = count(_config(tmp_path / "plain", gen2_dir))
+    assert counts.review == set()
+
+    records = []
+    for record in read_shard(gen2_dir / GEN2.name):
+        if record.record_id == grind_dust:
+            shrink = next(e for e in record.payload.events if e.type is EventType.PT_CHANGE)
+            death = replace(shrink, type=EventType.ZONE_CHANGE, attributed_to="unresolved",
+                            params={"from_zone": "battlefield", "to_zone": "graveyard"})
+            record = replace(record, payload=ResolutionPayload(
+                events=(*record.payload.events, death)))
+        records.append(record)
+    planted = tmp_path / "planted"
+    write_shard(planted / GEN2.name, records)
+
+    counts, _ = count(_config(tmp_path / "counted", planted))
+    assert counts.review == {(grind_dust, "704.5f-1")}
+
+
+@pytest.mark.parametrize(("aimed_at", "source"), [
+    (("704.5f",), "aimed"), ((), "aimed"), (None, "forge_ai"),
+])
+def test_a_record_carrying_aimed_at_counts_as_aimed_even_when_empty(
+    tmp_path, gen2_dir, aimed_at, source,
+):
+    """The member's presence is the source (FR-009a): a coverage or variant
+    run writes ``[]`` where it names no rule, and its records are aimed; a
+    record without the member is natural."""
+    from dataclasses import replace
+
+    from effects.infrastructure.shard_io import read_shard, write_shard
+
+    records = [replace(record, aimed_at=aimed_at) for record in read_shard(gen2_dir / GEN2.name)
+               if not record.random_seat]
+    shard = tmp_path / "aimed" / GEN2.name
+    write_shard(shard, records)
+
+    counts, _ = count(_config(tmp_path, shard.parent))
+    assert counts.counts and {found for (_rule, _side, found) in counts.counts} == {source}
 
 
 def test_one_and_several_workers_count_alike(tmp_path, gen2_dir):

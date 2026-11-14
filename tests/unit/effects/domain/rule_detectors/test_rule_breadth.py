@@ -45,7 +45,7 @@ def _zone_change_effect(gen2_records, gen2_sidecars):
                  and (e.params or {}).get("to_zone")]
         if line is not None and line.script_api_type and moves:
             return record, line.script_api_type, moves[0].params["to_zone"]
-    pytest.skip("no effect half in the fixture moves a card")
+    pytest.fail("no effect half in the fixture moves a card")
 
 
 def _index(*declared):

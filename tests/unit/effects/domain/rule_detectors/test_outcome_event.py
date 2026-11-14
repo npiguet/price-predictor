@@ -317,6 +317,12 @@ def test_a_combat_records_events_show_too(by_kind):
         e.type is EventType.DAMAGE_DEALT for e in r.payload.events))
     assert FAMILY.match(record, None, {"event": "damage_dealt"}).polarity is Polarity.FIRES
     assert FAMILY.match(record, None, {"event": "damage_dealt", "api": "DealDamage"}) is None
+    # The same combat played in a damage-step probe: its events show alike.
+    probe = replace(record, fork=True, mirror_of=record.record_id,
+                    payload=replace(record.payload, probed_keyword="trample",
+                                    probed_entity=record.payload.attackers[0]))
+    assert probe.is_probe
+    assert FAMILY.match(probe, None, {"event": "damage_dealt"}).polarity is Polarity.FIRES
 
 
 class TestT036Shapes:
@@ -344,7 +350,7 @@ class TestT036Shapes:
                         and event.params.get("from_zone") == "battlefield"
                         and len(record.payload.events) >= 2):
                     return record, event
-        pytest.skip("no effect half in the fixture moves its own source")
+        pytest.fail("no effect half in the fixture moves its own source")
 
     def test_a_move_of_the_source_itself_is_what_subject_is_source_reads(self, by_kind):
         record, event = self._self_move(by_kind)

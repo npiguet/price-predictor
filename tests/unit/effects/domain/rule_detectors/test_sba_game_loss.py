@@ -20,7 +20,7 @@ def _player_hit(by_kind):
                for s in e.subjects if s.startswith("P")}
         if hit:
             return record, sorted(hit)[0]
-    pytest.skip("no combat in the fixture damages a player")
+    pytest.fail("no combat in the fixture damages a player")
 
 
 def test_a_player_who_survives_the_hit_is_the_near_miss(by_kind):

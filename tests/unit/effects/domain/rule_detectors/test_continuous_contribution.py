@@ -128,7 +128,7 @@ def test_a_type_is_compared_without_case(by_kind):
     if record is None:
         import pytest
 
-        pytest.skip("no type-changing static in the fixture")
+        pytest.fail("no type-changing static in the fixture")
     written = next(t for c in record.payload.contributions for t in c.types if t.lstrip("-"))
     for spelled in (written, written.upper(), written.capitalize()):
         found = FAMILY.match(record, None, {"field": "types", "value": spelled})
