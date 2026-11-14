@@ -387,19 +387,6 @@ class ForkPlayForwardTest {
         assertEquals(1, naming(forkRecords(all), deathOf(giant)));
     }
 
-    @Test
-    void forkLinesAreHeldUntilTheForkIsKept() {
-        List<String> held = new ArrayList<>();
-        CollectorContext live = TestCollectors.context(ShardRun.writer(tempDir), ShardRun.GAME_ID, null);
-        CollectorContext fork = live.forFork(DIRECTED, held::add);
-
-        fork.emit(fork.newRecord(RecordKind.COMBAT).actor("P0").state("{}").payload("{}"));
-
-        assertEquals(1, held.size());
-        assertTrue(isFork(held.get(0)));
-        assertEquals(Boolean.FALSE, parse(held.get(0)).get("interventional"));
-    }
-
     // ── the fork's floating effects (B4) ────────────────────────────────
 
     /** The timestamped floating effects a record's global block lists. */

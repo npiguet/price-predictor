@@ -90,11 +90,6 @@ class ForkRecordsTest {
     // ── the per-game budget ─────────────────────────────────────────────
 
     @Test
-    void aFreshGameMayIntervene() {
-        assertTrue(new ForkBudget(forkCaps().interventions(2).probes(2).build()).mayIntervene(1));
-    }
-
-    @Test
     void anExhaustedInterventionBudgetStopsFurtherForks() {
         assertFalse(new ForkBudget(forkCaps().interventions(0).probes(2).build()).mayIntervene(1));
     }

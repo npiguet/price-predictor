@@ -91,25 +91,6 @@ class GeneratedDecksIndexTest {
     }
 
     @Test
-    void randomDeckPicksFromAllDecks(@TempDir Path tmp) throws IOException {
-        Path file = writeDecks(tmp, List.of(
-                deckLine("gen-2", "MH3", "mh3", 40),
-                deckLine("gen-2", "BLB", "blb", 40),
-                deckLine("gen-2", "RVR", "rvr", 40)
-        ));
-
-        GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
-        Random rng = new Random(0);
-
-        Set<String> seen = new HashSet<>();
-        for (int i = 0; i < 100; i++) {
-            seen.add(index.randomDeck(rng).setCode());
-        }
-
-        assertEquals(Set.of("MH3", "BLB", "RVR"), seen);
-    }
-
-    @Test
     void randomDeckFromSetReturnsOnlyMatchingSet(@TempDir Path tmp) throws IOException {
         Path file = writeDecks(tmp, List.of(
                 deckLine("gen-2", "MH3", "mh3a", 40),

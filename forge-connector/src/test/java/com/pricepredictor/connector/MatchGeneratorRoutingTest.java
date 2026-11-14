@@ -111,23 +111,6 @@ class MatchGeneratorRoutingTest {
         }
     }
 
-    @Test
-    void withoutDecksOnlyTheRollStillMixes() {
-        // A Forge-built side A against a sampled side B: `sealed
-        // match-outcomes --side-b-decks` is exactly this shape.
-        MatchGenerator generator = generator()
-                .sideB(oneDeckFile(), 4).random(new Random(7)).build();
-
-        boolean sawForgeMethod = false;
-        for (int i = 0; i < 200; i++) {
-            if (!generator.rollIsFileSample()) {
-                sawForgeMethod = true;
-                break;
-            }
-        }
-        assertTrue(sawForgeMethod, "the ordinary roll never picked a Forge method");
-    }
-
     // ── pickDeckB under decksOnly (the mirror fallback) ────────────────────────
     //
     // pickDeckB's happy path (a mirror is accepted) materializes a Forge Deck

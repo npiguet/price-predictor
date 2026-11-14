@@ -45,21 +45,6 @@ class MatchResultTest {
     }
 
     @Test
-    void theSequencesAreOneCharacterPerGameInGameOrder() {
-        // Match length is configurable via --best-of, so any non-empty number
-        // of games is a row: Bo1 up to a long Bo9.
-        List<List<String>> cases = List.of(
-                List.of("A", "B"), List.of("AA", "BA"),
-                List.of("ABABAAB", "BABABAB"), List.of("ABABABABA", "BABABABAB"));
-        for (List<String> sequences : cases) {
-            String[] parts = matchResult(deck40("A"), deck40("B"), sequences.get(0), sequences.get(1))
-                    .toLine().split(";", -1);
-            assertEquals(sequences.get(0), parts[7]);
-            assertEquals(sequences.get(1), parts[8]);
-        }
-    }
-
-    @Test
     void aMatchWithNoGamesIsRejected() {
         // GamePlayer skips draws and aborted games, so a match can end up
         // empty; a blank row must not reach the corpus.

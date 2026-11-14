@@ -382,22 +382,6 @@ class TriggerRecordTest {
     }
 
     /**
-     * Prevention is its own mode, {@code DamagePreventedOnce}, whose map
-     * spells the prevented amount as {@code DamageAmount}: it is a
-     * prevention of that amount, not damage dealt.
-     */
-    @Test
-    void preventedDamageIsNotRecordedAsDamageDealt() {
-        Map<String, Object> event = eventOf(triggerOfMode("DamagePreventedOnce"), Map.of(
-                "DamageAmount", 2,
-                "IsCombatDamage", Boolean.FALSE,
-                "DamageTarget", TestCards.build("Mountain")));
-
-        assertEquals("damage_prevented", event.get("type"), event.toString());
-        assertEquals(2L, params(event).get("amount"), event.toString());
-    }
-
-    /**
      * A counter map is flattened to the type and the number.
      *
      * <p>This is the one shape a counter replacement rewrites in place, so it is

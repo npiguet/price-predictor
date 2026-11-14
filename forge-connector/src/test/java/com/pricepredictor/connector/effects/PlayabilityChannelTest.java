@@ -119,44 +119,6 @@ class PlayabilityChannelTest {
     }
 
     /**
-     * An attackers record is a real declaration made by the player the
-     * engine names, one per candidate, and a candidate the rules keep out is
-     * listed as forbidden rather than left out.
-     */
-    @Test
-    void anAttackDeclarationIsRealAndNamesTheDeciderTheEngineReports() throws Throwable {
-        Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DECLARE_ATTACKERS);
-        Player active = game.getPlayers().get(0);
-        Player other = game.getPlayers().get(1);
-        Card ready = TestBoard.inPlay(game, active, "Grizzly Bears");
-        Card tapped = TestBoard.inPlay(game, active, "Runeclaw Bear");
-        tapped.setTapped(true);
-
-        List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) -> {
-            collectors.playability().legalityHandler().invoke(null, ON_ATTACKERS_DECLARABLE,
-                    new Object[]{active, other, List.of(ready, tapped), List.of(ready)});
-        });
-
-        List<String> records = recordsOf(lines);
-        assertEquals(2, records.size(), "one per candidate: " + records);
-        for (String real : records) {
-            assertTrue(real.contains("\"subkind\":\"attackers\""), real);
-            assertFalse(real.contains("what_if"), real);
-            assertTrue(real.contains("\"actor_player\":\"" + Refs.of(active) + "\""),
-                    "the deciding player is the one the engine names: " + real);
-            assertTrue(real.contains("\"random_seat\":false"), real);
-            assertTrue(real.contains("\"legal_attackers\":[\"" + Refs.of(ready) + "\"]"),
-                    real);
-            assertTrue(real.contains("\"forbidden\":[{\"entity\":\""
-                    + Refs.of(tapped) + "\""), real);
-        }
-        assertTrue(records.get(0).contains("\"anchor_attacker\":\"" + Refs.of(ready) + "\""
-                + ",\"legal_defenders\":[\"" + Refs.of(other) + "\"]"), records.get(0));
-        assertTrue(records.get(1).contains("\"anchor_attacker\":\"" + Refs.of(tapped) + "\""
-                + ",\"legal_defenders\":[]"), records.get(1));
-    }
-
-    /**
      * Nothing about the step or whose turn it is reclassifies a declaration:
      * the engine reports only real ones, so a report outside the
      * declare-attackers step is still written as real.

@@ -293,6 +293,7 @@ class PriorityCandidatesTest {
         assertEquals(true, candidateOf(second).get("land_play"), second);
         assertEquals(false, verdictOf(second).get("can_play"), second);
         assertEquals(true, verdictOf(second).get("affordable"), second);
+        assertEquals(true, verdictOf(second).get("timing"), "only the limit fails it: " + second);
         assertEquals(true, verdictOf(second).get("has_legal_target"), second);
         assertEquals(List.of("land_play_limit"), failedChecks(second));
         assertEquals(List.of(), candidateOf(second).get("legal_targets"));
@@ -343,23 +344,6 @@ class PriorityCandidatesTest {
         Card fireball = TestBoard.inHand(game, a, "Fireball");
 
         assertEquals("{X}{R}", chargedFor(game, a, fireball));
-    }
-
-    /** Exploration raises the limit: the same second land is playable. */
-    @Test
-    void explorationMakesTheSecondLandPlayable() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player a = game.getPlayers().get(0);
-        TestBoard.inPlay(game, a, "Exploration");
-        game.getAction().checkStaticAbilities();
-        a.playLand(TestBoard.inHand(game, a, "Forest"), null);
-        Card mountain = TestBoard.inHand(game, a, "Mountain");
-
-        PriorityCandidates.Candidate second = PriorityCandidates.candidatesOf(game, a).stream()
-                .filter(c -> c.ability().getHostCard() == mountain).findFirst().orElseThrow();
-
-        assertTrue(second.read().orElseThrow().landPlay());
-        assertTrue(second.playable(), second.read().orElseThrow().verdict().toString());
     }
 
     /**

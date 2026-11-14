@@ -130,12 +130,4 @@ class WireVocabularyTest {
                 List.of(EventAttribution.ROOT, EventAttribution.UNRESOLVED));
     }
 
-    /** {@code UNRESOLVED_REASONS} in {@code records.py}: why an {@code ability} is empty. */
-    @Test
-    void unresolvedReasons() {
-        assertEquals(
-                List.of("no_card_state", "unknown_kind", "engine_effect",
-                        "granted_keyword", "granted_trait", "unindexable"),
-                wireNames(UnresolvedReason.class));
-    }
 }

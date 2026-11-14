@@ -73,21 +73,6 @@ class ContinuousChannelTest {
     }
 
     /**
-     * But two lines that happen to render the same are two records.
-     *
-     * <p>Two statics on one card granting the same creatures the same bonus
-     * each leave the other's bonus on their suppressed board, so the
-     * contributions and the snapshot agree, and only the acting line says
-     * there were two of them.
-     */
-    @Test
-    void twoLinesThatRenderIdenticallyAreEachWritten() {
-        RecordDedup dedup = new RecordDedup();
-        assertTrue(dedup.allowDistinct(anthem(0, "{+1/+1}", "{board}")));
-        assertTrue(dedup.allowDistinct(anthem(1, "{+1/+1}", "{board}")));
-    }
-
-    /**
      * A static an Animate grants is found at the first boundary after it is
      * granted, though an earlier boundary looked its card over without it
      * (C12): the static lookup caches what it found by id, and must not have

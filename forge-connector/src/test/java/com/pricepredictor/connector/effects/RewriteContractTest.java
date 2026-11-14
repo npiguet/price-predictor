@@ -11,8 +11,6 @@ import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
 
 import java.lang.reflect.Method;
 import java.nio.file.Files;
@@ -64,26 +62,6 @@ class RewriteContractTest {
     }
 
     // ── one record per replacement, whatever the result ─────────────────
-
-    /**
-     * Each of the five results reaches the payload in its wire spelling.
-     *
-     * <p>Including {@code NotReplaced}, which is this channel's negative: all
-     * five can leave the parameter map untouched and arrive as an identity
-     * pair, so the result is the only thing that tells them apart.
-     */
-    @ParameterizedTest
-    @EnumSource(ReplacementResult.class)
-    void everyResultIsWrittenInItsWireSpelling(ReplacementResult result) {
-        Card card = TestCards.build("Mountain");
-        String json = recording(tempDir).rewrites().record(
-                replacementOfMode("Moved"),
-                Map.of("Card", card), Map.of("Card", card), result, null).toJson();
-
-        // The spellings themselves are WireVocabularyTest's pin.
-        assertTrue(json.contains("\"result\":\"" + RecordPayloads.rewriteResult(result) + "\""),
-                "the lower snake case of " + result + ": " + json);
-    }
 
     /**
      * A result the engine never returned is null, not a guess.

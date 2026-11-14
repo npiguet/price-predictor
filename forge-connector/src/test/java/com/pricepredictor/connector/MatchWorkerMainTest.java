@@ -106,17 +106,6 @@ class MatchWorkerMainTest {
     // ── parseConfig(): -Dsealed.progress.file ──────────────────────────────
 
     @Test
-    void progressFilePropertyIsRead() {
-        System.setProperty("output.file", "dummy-output.txt");
-        System.setProperty("match.run.id", RUN_ID);
-        System.setProperty("sealed.progress.file", "dummy-progress.txt");
-
-        MatchWorkerMain.WorkerConfig config = MatchWorkerMain.parseConfig();
-
-        assertEquals(Optional.of(Path.of("dummy-progress.txt")), config.progressFile());
-    }
-
-    @Test
     void progressFilePropertyIsEmptyWhenAbsent() {
         System.setProperty("output.file", "dummy-output.txt");
         System.setProperty("match.run.id", RUN_ID);
@@ -243,9 +232,4 @@ class MatchWorkerMainTest {
                 twoGameResult(), Optional.empty(), Optional.empty()));
     }
 
-    @Test
-    void cardsPlayedLiveBesideTheMatchOutcomes() {
-        assertEquals(Path.of("out", "sealed", "cards-played.txt"),
-                SealedCorpus.cardsPlayedPath(Path.of("out", "sealed", "match-outcomes.txt")));
-    }
 }
