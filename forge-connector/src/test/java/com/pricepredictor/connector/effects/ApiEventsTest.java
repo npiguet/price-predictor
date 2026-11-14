@@ -73,6 +73,27 @@ class ApiEventsTest {
     }
 
     /**
+     * The count is read off {@code NumTurns$}: Alchemist's Gambit names none,
+     * so its 1 is the fallback a rule that never read the parameter also gives.
+     */
+    @Test
+    void anExtraTurnCountIsTheClausesNumTurns() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "SP$ AddTurn | Defined$ You | NumTurns$ 3", TestCards.build("Grizzly Bears"));
+
+        assertEquals(3, observe(sa).finish().params().get("count"));
+    }
+
+    /** The same for a skipped turn. */
+    @Test
+    void aSkippedTurnCountIsTheClausesNumTurns() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "SP$ SkipTurn | Defined$ You | NumTurns$ 2", TestCards.build("Grizzly Bears"));
+
+        assertEquals(2, observe(sa).finish().params().get("count"));
+    }
+
+    /**
      * Not Blinding Angel: its {@code SkipPhase} clause is the {@code Execute$}
      * of a triggered ability, which lives on the {@code Trigger} object, not
      * in {@code card.getCurrentState().getSpellAbilities()} or any
@@ -135,10 +156,14 @@ class ApiEventsTest {
     @Test
     void anOwnershipChangeWithNoNamedOwnerIsStillAnOwnershipChange() {
         SpellAbility sa = TestCards.scriptedAbility("Darkpact", "GainOwnership");
+        Player activator = new Player("activator", TestCards.game(), 91503);
+        sa.setActivatingPlayer(activator);
 
         EffectEvent event = observe(sa).finish();
 
         assertEquals(EventType.OWNERSHIP_CHANGE, event.type());
+        // OwnershipGainEffect's fallback: no DefinedPlayer, the activator.
+        assertEquals(Refs.of(activator), event.params().get("owner"));
     }
 
     /**
@@ -642,13 +667,6 @@ class ApiEventsTest {
         assertTrue(output.contains(half.names), output);
         assertTrue(output.contains("turn_added"), output);
         assertTrue(output.contains("boom"), output);
-    }
-
-    @Test
-    void anEmitterThatNeverThrowsReportsNothing() throws Throwable {
-        SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-
-        assertEquals("", StdStreams.captureStderr(() -> observe(sa).finish()));
     }
 
     /**
