@@ -34,7 +34,7 @@ import java.util.Set;
  * gain it, and it has them of its own text alone ({@link Boards#ownKeywordOnly}:
  * an Equipment's or a resolved effect's would stay on the card put in its
  * place) and carries nothing that card would die of
- * ({@link Boards#carriesNothingLethal}). It binds that creature.
+ * ({@link Boards#replacementSurvives}). It binds that creature.
  *
  * <p>Variant {@code no_keywords} ({@code replace_card}): Hill Giant is in that
  * creature's place, so no creature has a listed keyword and none is granted.
@@ -100,6 +100,6 @@ public final class SharedKeywords {
         }
         Card holder = holders.get(0);
         boolean own = listed.stream().allMatch(keyword -> Boards.ownKeywordOnly(holder, keyword));
-        return own && Boards.carriesNothingLethal(holder) ? Optional.of(holder) : Optional.empty();
+        return own && Boards.replacementSurvives(holder, GIANT) ? Optional.of(holder) : Optional.empty();
     }
 }

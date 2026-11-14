@@ -319,6 +319,32 @@ class RegisteredRulesTest {
         assertTrue(Dethrone.bind(dethroneBoard(14).game).isEmpty());
     }
 
+    /**
+     * You at 8 life beside Enraged Revolutionary (2 power, 1 more from its
+     * dethrone counter) and a 2-power double striker: counted once the
+     * reach is 5, below the 7 the cut opponent keeps, but the double striker
+     * deals its 2 twice, and 7 is lethal.
+     */
+    @Test
+    void dethroneCountsADoubleStrikersDamageTwice() {
+        Board board = dethroneBoard(20);
+        board.you.setLife(8, null);
+        board.card(board.you, "Mirran Crusader");
+        assertEquals(7, Dethrone.attackReach(board.you));
+        assertTrue(Dethrone.bind(board.game).isEmpty(), "the cut opponent is in the attack's reach");
+    }
+
+    @Test
+    void dethroneBindsNothingWhenSomethingCanGrowTheAttack() {
+        Board exalted = dethroneBoard(20);
+        exalted.card(exalted.you, "Akrasan Squire");
+        assertTrue(Dethrone.bind(exalted.game).isEmpty(), "exalted");
+        Board pump = dethroneBoard(20);
+        pump.card(pump.you, "Forest");
+        TestBoard.inHand(pump.game, pump.you, "Giant Growth");
+        assertTrue(Dethrone.bind(pump.game).isEmpty(), "an instant pump it has the land for");
+    }
+
     @Test
     void dethroneForksTheOpponentOneLifeBelow() {
         Board board = dethroneBoard(20);
@@ -2554,6 +2580,42 @@ class RegisteredRulesTest {
         assertTrue(TextBoxExchange.bind(board.game).isPresent(), "Giant Spider has reach");
         board.subject.setDamage(3);
         assertTrue(TextBoxExchange.bind(board.game).isEmpty(), "Hill Giant is a 3/3");
+    }
+
+    /**
+     * The precondition asks whether the card put in the permanent's place
+     * dies carrying what the edit carries: 1 damage on a Giant Spider (2/4)
+     * leaves the Hill Giant (3/3) put in its place alive, so the board binds.
+     */
+    @Test
+    void textBoxExchangeBindsWhenTheReplacingCardSurvivesTheCarriedDamage() {
+        Board board = exchangeBoard("Giant Spider");
+        board.subject.setDamage(1);
+        assertTrue(TextBoxExchange.bind(board.game).isPresent(), "Hill Giant lives with 1 damage");
+        Twin twin = board.twin(TextBoxExchange.rule());
+        assertEquals(1, twin.fork().card("creature").getDamage(), "the edit carried the damage");
+    }
+
+    /**
+     * A resolved -3/-3 until end of turn leaves Giant Spider at 1 toughness,
+     * alive, and would leave the Hill Giant put in its place at 0: the board
+     * binds nothing, so no fork is spent on the edit's refusal.
+     */
+    @Test
+    void textBoxExchangeBindsNothingWhenACarriedBoostKillsTheReplacingCard() {
+        Board board = exchangeBoard("Giant Spider");
+        board.subject.addPTBoost(-3, -3, board.game.getNextTimestamp(), 0);
+        assertEquals(1, board.subject.getNetToughness());
+        assertTrue(TextBoxExchange.bind(board.game).isEmpty(), "Hill Giant would be a 0/0");
+    }
+
+    /** Serra Angel (4/4) lives with 3 damage; the Hill Giant (3/3) put in its place would not. */
+    @Test
+    void sharedKeywordsBindsNothingWhenTheHolderCarriesDamage() {
+        Board board = concertedBoard("Serra Angel", "Grizzly Bears");
+        assertTrue(SharedKeywords.bind(board.game).isPresent(), "Serra Angel has flying and vigilance");
+        board.subject.setDamage(3);
+        assertTrue(SharedKeywords.bind(board.game).isEmpty(), "Hill Giant is a 3/3");
     }
 
     /** C4 #6: a +1/+1 counter set beside a -1/-1 counter is annihilated with it (704.5q). */

@@ -25,7 +25,7 @@ import java.util.Optional;
  * blocks it alone, both dealing damage and neither with first strike or
  * double strike, so they will deal it to each other in the one regular damage
  * step, and the blocker carries nothing the Youthful Knight put in its place
- * would die of ({@link Boards#carriesNothingLethal}). It binds the attacker
+ * would die of ({@link Boards#replacementSurvives}). It binds the attacker
  * and the blocker.
  *
  * <p>Variant {@code knight_in_the_bears_place} ({@code replace_card}): the blocker
@@ -61,7 +61,7 @@ public final class SimultaneousDamage {
             Card blocker = blockers.get(0);
             if (combat.getAttackersBlockedBy(blocker).size() == 1
                     && dealsRegularDamage(attacker) && dealsRegularDamage(blocker)
-                    && Boards.carriesNothingLethal(blocker)) {
+                    && Boards.replacementSurvives(blocker, KNIGHT)) {
                 return Optional.of(Binding.empty()
                         .with("attacker", attacker)
                         .with("blocker", blocker));

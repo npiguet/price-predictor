@@ -1,10 +1,10 @@
 package com.pricepredictor.connector.effects.directed.rules;
 
+import com.pricepredictor.connector.effects.directed.operations.ReplaceCardOperation;
 import forge.game.Game;
 import forge.game.ability.AbilityFactory;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
-import forge.game.card.CounterEnumType;
 import forge.game.cost.Cost;
 import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;
@@ -77,15 +77,15 @@ final class Boards {
     }
 
     /**
-     * Whether a card put in {@code permanent}'s place by {@code replace_card}
-     * survives the fork's first state-based check whatever its own toughness:
-     * the edit carries the permanent's marked damage, deathtouch damage and
-     * counters across, so a smaller card would die of damage a bigger one
-     * shrugged off, or of the -1/-1 counters it carried.
+     * Whether {@code cardName} put in {@code permanent}'s place by
+     * {@code replace_card} survives the fork's first state-based check,
+     * carrying the permanent's marked damage, deathtouch damage, counters,
+     * boosts and resolved effects: the edit's own reading
+     * ({@link ReplaceCardOperation#replacementDies}), so a precondition binds
+     * no board the edit would refuse.
      */
-    static boolean carriesNothingLethal(Card permanent) {
-        return permanent.getDamage() == 0 && !permanent.hasBeenDealtDeathtouchDamage()
-                && permanent.getCounters(CounterEnumType.M1M1) == 0;
+    static boolean replacementSurvives(Card permanent, String cardName) {
+        return !ReplaceCardOperation.replacementDies(permanent, cardName);
     }
 
     /**

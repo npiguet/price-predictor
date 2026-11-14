@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects.directed.operations;
 
 import forge.StaticData;
+import forge.card.CardRules;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.card.CardFactory;
@@ -23,10 +24,19 @@ final class NewCards {
      * traits; nothing has moved it anywhere, so nothing has fired.
      */
     static Card create(Game fork, String name, Player owner) {
+        return CardFactory.getCard(paper(name), owner, fork);
+    }
+
+    /** The printed rules of the card named {@code name}, read without building a card in any game. */
+    static CardRules rules(String name) {
+        return paper(name).getRules();
+    }
+
+    private static IPaperCard paper(String name) {
         IPaperCard paper = StaticData.instance().getCommonCards().getCard(name);
         if (paper == null) {
             throw new IllegalArgumentException("not in the card database: " + name);
         }
-        return CardFactory.getCard(paper, owner, fork);
+        return paper;
     }
 }

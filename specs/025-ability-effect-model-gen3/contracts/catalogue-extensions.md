@@ -92,10 +92,13 @@ fork plays: a `remove_permanent` variant binds the one permanent doing what it r
 one would do it in its place); a "one land short" variant binds only when the active player holds no
 card it could play as a land or has used its land drops; a spell the variant waits for is castable
 at this boundary (a sorcery only in the active player's hand); a `replace_card` variant binds a
-permanent with no marked damage, deathtouch damage or -1/-1 counter, whose keyword the variant takes
-away is of its own text (none granted by an attachment, a static or a resolved effect); a `counters`
-variant adding a +1/+1 counter binds no permanent with a -1/-1 counter, and one taking +1/+1
-counters away binds a creature that survives without them. A `replace_card` edit refuses
-(`replace_card replacement dies at the first state-based check`) a replacing creature that the
-damage and counters it carried leave at toughness 0 or less, with lethal damage, or with deathtouch
-damage.
+permanent whose replacing card survives the fork's first state-based check carrying the permanent's
+marked damage, deathtouch damage, counters, boosts and resolved effects
+(`ReplaceCardOperation.replacementDies`, the reading the edit's own refusal shares), and whose
+keyword the variant takes away is of its own text (none granted by an attachment, a static or a
+resolved effect); a `counters` variant adding a +1/+1 counter binds no permanent with a -1/-1
+counter, and one taking +1/+1 counters away binds a creature that survives without them. A
+`replace_card` edit refuses (`replace_card replacement dies at the first state-based check`) a
+replacing creature that what it carried leaves at toughness 0 or less, with lethal damage, or with
+deathtouch damage. 702.63c's `keyword` edit refuses (`keyword vanishing not left at one instance`)
+a permanent the edit's closing static check leaves with other than one instance of vanishing.

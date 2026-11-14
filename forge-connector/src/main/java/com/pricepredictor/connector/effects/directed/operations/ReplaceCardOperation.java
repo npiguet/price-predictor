@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.ForkRefusal;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import forge.GameCommand;
 import forge.ai.simulation.GameCommandCopier;
+import forge.card.CardRules;
 import forge.game.Game;
 import forge.game.GameEntity;
 import forge.game.GameObject;
@@ -18,6 +19,8 @@ import forge.game.player.Player;
 import forge.game.trigger.Trigger;
 import forge.game.trigger.TriggerHandler;
 import forge.game.zone.Zone;
+
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -66,7 +69,7 @@ import java.util.function.UnaryOperator;
  * cards, and a permanent a pending command names that cannot be rewritten.
  * It also refuses, after the edit, a replacing creature the next
  * state-based check would put into a graveyard: the damage and counters it
- * carried are lethal to it.
+ * carried, with its boosts and resolved effects, are lethal to it.
  *
  * @param permanent the fork's permanent to replace
  * @param cardName  the replacing card's name in the card database
@@ -123,19 +126,55 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
 
     /**
      * Whether the next state-based check puts the replacing card into a
-     * graveyard: a creature at toughness 0 or less, or with lethal or
-     * deathtouch damage carried from the card it replaced. No variant's point
-     * is that death (the rules' preconditions keep such boards out); this is
-     * the edit's own guard for every rule using it.
+     * graveyard ({@link #diesOf}), read off the card once the edit is made.
+     * No variant's point is that death (the rules' preconditions keep such
+     * boards out, through {@link #replacementDies}); this is the edit's own
+     * guard for every rule using it.
      */
     static boolean diesAtTheFirstCheck(Card replacement) {
-        if (!replacement.isCreature()) {
+        return replacement.isCreature() && diesOf(replacement.getNetToughness(), replacement.getDamage(),
+                replacement.hasBeenDealtDeathtouchDamage());
+    }
+
+    /**
+     * Whether a creature of {@code toughness} with {@code damage} marked on it,
+     * deathtouch damage among it when {@code deathtouch}, is put into a
+     * graveyard by a state-based check: toughness 0 or less (704.5f), lethal
+     * damage (704.5g) or any deathtouch damage (704.5h). The one reading
+     * {@link #diesAtTheFirstCheck} and {@link #replacementDies} share.
+     */
+    static boolean diesOf(int toughness, int damage, boolean deathtouch) {
+        return toughness <= 0 || damage >= toughness || damage > 0 && deathtouch;
+    }
+
+    /**
+     * Whether {@code cardName} put in {@code permanent}'s place would die at
+     * the fork's first state-based check, read off the live permanent before
+     * any edit: the replacing card's toughness is its printed toughness, or
+     * the last toughness a resolved effect set on the permanent, which it
+     * carries, plus the permanent's toughness boosts and counters, which it
+     * carries too, against the permanent's marked damage and deathtouch
+     * damage. A boost from a static ability is read as it applies to the
+     * permanent: the static check the edit ends with applies it to the new
+     * card anew, which differs only where the static selects by a
+     * characteristic the two cards do not share. A replacing card that is
+     * no creature never dies of toughness or damage.
+     *
+     * @throws IllegalArgumentException when the card database has no {@code cardName}
+     */
+    public static boolean replacementDies(Card permanent, String cardName) {
+        CardRules rules = NewCards.rules(cardName);
+        if (!rules.getType().isCreature()) {
             return false;
         }
-        int toughness = replacement.getNetToughness();
-        int damage = replacement.getDamage();
-        return toughness <= 0 || damage >= toughness
-                || damage > 0 && replacement.hasBeenDealtDeathtouchDamage();
+        int toughness = rules.getMainPart().getIntToughness();
+        for (Pair<Integer, Integer> set : permanent.getPTIterable()) {
+            if (set.getRight() != null) {
+                toughness = set.getRight();
+            }
+        }
+        toughness += permanent.getTempToughnessBoost() + permanent.getToughnessBonusFromCounters();
+        return diesOf(toughness, permanent.getDamage(), permanent.hasBeenDealtDeathtouchDamage());
     }
 
     /** Refuse a permanent whose state belongs to its own text or face; see the class comment. */

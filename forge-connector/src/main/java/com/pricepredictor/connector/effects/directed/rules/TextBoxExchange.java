@@ -26,7 +26,7 @@ import java.util.Optional;
  * one with no rules text and one with some, so the exchange has no other
  * pair to choose. It binds the creature with text, when it carries nothing
  * the Hill Giant put in its place would die of
- * ({@link Boards#carriesNothingLethal}).
+ * ({@link Boards#replacementSurvives}).
  *
  * <p>Variant {@code both_vanilla} ({@code replace_card}): Hill Giant is in
  * that creature's place, so both text boxes are empty and the exchange
@@ -62,7 +62,7 @@ public final class TextBoxExchange {
             return Optional.empty();
         }
         List<Card> withText = creatures.stream().filter(TextBoxExchange::hasRulesText).toList();
-        return withText.size() == 1 && Boards.carriesNothingLethal(withText.get(0))
+        return withText.size() == 1 && Boards.replacementSurvives(withText.get(0), GIANT)
                 ? Optional.of(Binding.empty().with("creature", withText.get(0)))
                 : Optional.empty();
     }

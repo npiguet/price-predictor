@@ -26,7 +26,7 @@ import java.util.Optional;
  * and a creature on the battlefield has protection of its own text alone
  * ({@link Boards#ownKeywordOnly}: an Equipment's or a resolved effect's would
  * stay on the card put in its place) and carries nothing that card would die
- * of ({@link Boards#carriesNothingLethal}). It binds that creature.
+ * of ({@link Boards#replacementSurvives}). It binds that creature.
  *
  * <p>Variant {@code hill_giant} ({@code replace_card}): Hill Giant, with no
  * protection, is in that creature's place, so a copy targets it too.
@@ -63,7 +63,7 @@ public final class CopyForEachTarget {
         }
         return live.getCardsIn(ZoneType.Battlefield).stream()
                 .filter(card -> card.isCreature() && card.hasKeyword(Keyword.PROTECTION)
-                        && Boards.ownKeywordOnly(card, Keyword.PROTECTION) && Boards.carriesNothingLethal(card))
+                        && Boards.ownKeywordOnly(card, Keyword.PROTECTION) && Boards.replacementSurvives(card, GIANT))
                 .findFirst()
                 .map(creature -> Binding.empty().with("creature", creature));
     }

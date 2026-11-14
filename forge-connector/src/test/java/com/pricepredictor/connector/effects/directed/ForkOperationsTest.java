@@ -608,6 +608,7 @@ class ForkOperationsTest {
         Board board = Board.main();
         Card giant = board.creature(board.you, "Hill Giant");
         giant.setDamage(2);
+        assertTrue(ReplaceCardOperation.replacementDies(giant, "Grizzly Bears"), "the preconditions' reading");
         ForkRefusal refusal = assertThrows(ForkRefusal.class,
                 () -> new ReplaceCardOperation(giant, "Grizzly Bears").apply(board.game));
         assertEquals(ReplaceCardOperation.DIES, refusal.reason());
@@ -618,6 +619,20 @@ class ForkOperationsTest {
         Board board = Board.main();
         Card giant = board.creature(board.you, "Hill Giant");
         giant.setCounters(CounterEnumType.M1M1, 2);
+        assertTrue(ReplaceCardOperation.replacementDies(giant, "Grizzly Bears"), "the preconditions' reading");
+        ForkRefusal refusal = assertThrows(ForkRefusal.class,
+                () -> new ReplaceCardOperation(giant, "Grizzly Bears").apply(board.game));
+        assertEquals(ReplaceCardOperation.DIES, refusal.reason());
+    }
+
+    /** A resolved -2/-2 until end of turn leaves Hill Giant a 1/1 and would leave Grizzly Bears a 0/0. */
+    @Test
+    void aReplacementTheCarriedBoostKillsIsRefused() {
+        Board board = Board.main();
+        Card giant = board.creature(board.you, "Hill Giant");
+        giant.addPTBoost(-2, -2, board.game.getNextTimestamp(), 0);
+        assertTrue(ReplaceCardOperation.replacementDies(giant, "Grizzly Bears"), "the preconditions' reading");
+        assertFalse(ReplaceCardOperation.replacementDies(giant, "Craw Wurm"), "a 6/4 lives at 2 toughness");
         ForkRefusal refusal = assertThrows(ForkRefusal.class,
                 () -> new ReplaceCardOperation(giant, "Grizzly Bears").apply(board.game));
         assertEquals(ReplaceCardOperation.DIES, refusal.reason());
@@ -628,6 +643,7 @@ class ForkOperationsTest {
         Board board = Board.main();
         Card bears = board.creature(board.you, "Grizzly Bears");
         bears.setDamage(1);
+        assertFalse(ReplaceCardOperation.replacementDies(bears, "Hill Giant"), "the preconditions' reading");
         new ReplaceCardOperation(bears, "Hill Giant").apply(board.game);
         assertTrue(board.you.getCardsIn(ZoneType.Battlefield).stream()
                 .anyMatch(card -> card.getName().equals("Hill Giant") && card.getDamage() == 1));

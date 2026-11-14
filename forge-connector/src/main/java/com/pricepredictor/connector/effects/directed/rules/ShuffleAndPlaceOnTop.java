@@ -27,7 +27,7 @@ import java.util.Optional;
  * instead of going to a graveyard (Darksteel Colossus), the other put on top
  * of it instead (Gravebane Zombie). It binds the shuffled one, when it
  * carries nothing the card put in its place would die of
- * ({@link Boards#carriesNothingLethal}).
+ * ({@link Boards#replacementSurvives}).
  *
  * <p>Variant {@code zombie-only} ({@code replace_card}): Grizzly Bears is in
  * that creature's place, so the sacrifice puts the other on top and shuffles
@@ -61,7 +61,7 @@ public final class ShuffleAndPlaceOnTop {
             }
             Optional<Card> shuffled = creatures.stream().filter(ShuffleAndPlaceOnTop::shufflesIntoLibrary).findFirst();
             boolean placed = creatures.stream().anyMatch(ShuffleAndPlaceOnTop::goesOnTop);
-            if (shuffled.isPresent() && placed && Boards.carriesNothingLethal(shuffled.get())) {
+            if (shuffled.isPresent() && placed && Boards.replacementSurvives(shuffled.get(), BEARS)) {
                 return Optional.of(Binding.empty().with("creature", shuffled.get()));
             }
         }
