@@ -1512,6 +1512,47 @@ class TestOutgoingAgreesWithTheResult:
         assert _named(validate_corpus(records), "outgoing is null on").ok
 
 
+class TestABufferedReplacementAgreesWithItsPayload:
+    """WP7: a damage replacement that set an ability aside (Swans of Bryn
+    Argoll's draw, a ``Prevent$ True`` rider) names it in ``buffered``, never in
+    ``replaced_by``, and its run's events are ``buffered_events``."""
+
+    _DAMAGE = Event(type=EventType.DAMAGE_DEALT, subjects=("E3",), params={"amount": 2})
+    _DRAW = Event(type=EventType.CARD_DRAWN, subjects=("P0",), params={"count": 1},
+                  attributed_to="root")
+
+    def _buffered(self, record_id: str, result=RewriteResult.REPLACED, **payload_kwargs):
+        kwargs = {"buffered": (_KEY,), "buffered_ran": True,
+                  "buffered_events": (self._DRAW,), **payload_kwargs}
+        return _substitution(record_id, incoming=self._DAMAGE, result=result, **kwargs)
+
+    def test_a_prevention_with_a_rider_passes(self):
+        """Gatta and Luzzu: ``prevented``, nothing in ``replaced_by``, the rider buffered."""
+        records = _healthy() + [self._buffered("run.0-L1.900", RewriteResult.PREVENTED)]
+        assert _named(validate_corpus(records), "outgoing is null on").ok
+
+    def test_a_buffered_ability_also_named_as_ran_instead_fails(self):
+        records = _healthy() + [self._buffered("run.0-L1.900", replaced_by=(_KEY,))]
+        finding = _named(validate_corpus(records), "outgoing is null on")
+        assert not finding.ok
+        assert any("run.0-L1.900" in line for line in finding.detail)
+
+    def test_events_of_a_run_that_never_came_fail(self):
+        records = _healthy() + [self._buffered("run.0-L1.900", buffered_ran=False)]
+        assert not _named(validate_corpus(records), "outgoing is null on").ok
+
+    def test_an_unknown_incoming_event_with_an_outgoing_one_fails(self):
+        records = _healthy() + [_substitution(
+            "run.0-L1.900", incoming=self._DAMAGE, result=RewriteResult.UPDATED,
+            incoming_unknown=True, outgoing=self._DAMAGE)]
+        assert not _named(validate_corpus(records), "outgoing is null on").ok
+
+    def test_a_buffered_replacement_names_the_ability_it_set_aside(self):
+        """Its ``replaced_by`` is empty by design: ``buffered`` names the ability."""
+        records = _healthy() + [self._buffered("run.0-L1.900")]
+        assert "3/3" in _named(validate_corpus(records), "ran instead").measured
+
+
 class TestRewritesNameTheAbilityThatRanInstead:
     """Watched, because a ``ReplacementResult$`` script runs no ability at all.
 

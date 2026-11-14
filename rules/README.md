@@ -280,7 +280,11 @@ two.
   apart, declares `none`, and its reason says which ("Could not express: …" where a record field
   holds it and no parameter reads it). A declaration asking its record kind for an event the
   collector never writes there (`rule_detectors/emittable_events.py`) is untaggable: it tags
-  nothing and `rule-counts` lists it with its reason.
+  nothing and `rule-counts` lists it with its reason. The game-end marker (`turn_action` /
+  `game_end`) is read by no declaration. A rewrite's `buffered_events`, the run of an ability a
+  damage replacement set aside, are a place of their own (`emittable_events.BUFFERED`): no family
+  reads them as the rewrite's events, and a rewrite whose `incoming_unknown` says what came in is
+  unknown shows `rewrite_event` neither side.
 
   A detector reads `observed`, whether the rule's outcome happened, from the record it tags. Where
   the collector files the outcome in another record, the outcome is unreadable and the record goes

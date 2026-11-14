@@ -29,7 +29,7 @@ from enum import StrEnum
 from typing import Any, Protocol
 
 from effects.domain.provenance import SidecarLookup
-from effects.domain.records import EffectRecord
+from effects.domain.records import EffectRecord, is_game_end
 from effects.domain.rule_catalogue import (
     DetectorDeclaration,
     Polarity,
@@ -327,7 +327,11 @@ def _merge(rule: str, found: Iterable[RuleTag]) -> RuleTag:
 
 def tag_record(record: EffectRecord, index: DetectorIndex,
                lines: SidecarLookup | None = None) -> TagResult:
-    """Every rule ``record`` shows, one tag per rule id."""
+    """Every rule ``record`` shows, one tag per rule id; none on the game-end
+    marker, which holds no event and changes nothing, so no declaration of
+    its kind (an absence's least of all) may read it."""
+    if is_game_end(record):
+        return TagResult()
     gen3 = record.generation == 3
     per_rule: dict[str, list[RuleTag]] = {}
     not_countable: set[str] = set()

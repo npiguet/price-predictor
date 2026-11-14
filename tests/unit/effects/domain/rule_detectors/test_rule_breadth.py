@@ -94,3 +94,33 @@ def test_a_small_share_of_a_large_pool_is_flagged_and_nothing_else():
             BreadthRow("c-1", ("c",), ("api",), 50, 0),     # a small pool
             BreadthRow("d-1", ("d",), (), 1000, 3)]         # nothing dropped
     assert [row.scenario for row in flagged_rows(rows, min_pool=200, max_share=0.01)] == ["a-1"]
+
+
+def test_the_game_end_marker_counts_in_no_pool():
+    """As ``tag_record`` reads it (WP7): no detector reads the marker."""
+    from effects.domain.records import TurnActionPayload, TurnActionSubkind
+    from effects.domain.rule_catalogue import Polarity
+    from effects.domain.rule_detectors import FamilyMatch
+    from tests.unit.effects.builders import make_record
+
+    class _Everything:
+        id = "everything"
+        params = general = frozenset()
+
+        def needs(self, params):
+            return frozenset()
+
+        def match(self, record, lines, params):
+            return FamilyMatch(Polarity.FIRES, True)
+
+    family = _Everything()
+    entry = (scenario("t-1", ("100.1",), "turn_action", declaration(family.id, "turn_action")),
+             declaration(family.id, "turn_action"), family)
+    index = DetectorIndex({"turn_action": (entry,)}, frozenset({"100.1"}))
+    draw = make_record(RecordKind.TURN_ACTION, subkind=TurnActionSubkind.DRAW,
+                       ability=None, payload=TurnActionPayload(), generation=3)
+    marker = make_record(RecordKind.TURN_ACTION, subkind=TurnActionSubkind.GAME_END,
+                         ability=None, payload=TurnActionPayload(records_withheld=0),
+                         generation=3)
+    assert breadth_counts(draw, index) == Counter({("t-1", POOL): 1, ("t-1", TAGGED): 1})
+    assert breadth_counts(marker, index) == Counter()

@@ -161,3 +161,14 @@ class TestSubjectQualifiers:
         assert FAMILY.match(merged, None, declared).polarity is Polarity.FIRES
         assert FAMILY.needs(declared) == {"links"}
         assert FAMILY.needs(self._declared(record)) == frozenset()
+
+
+def test_a_record_whose_incoming_event_is_unknown_shows_no_side(by_kind):
+    """WP7: ``incoming`` then holds the event as it left; what came in, and
+    whether the replacement edited it, are unknown, so no side is read."""
+    record = _entering(by_kind)
+    params = {"event": "zone_change", "result": "updated"}
+    assert FAMILY.match(record, None, params) is not None
+    unknown = replace(record, payload=replace(record.payload, incoming_unknown=True,
+                                              outgoing=None))
+    assert FAMILY.match(unknown, None, params) is None

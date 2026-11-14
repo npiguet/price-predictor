@@ -82,7 +82,16 @@
       ],
       "forge_notes": "",
       "detector": {
-        "none": "Detain sets a flag on the card (Card.detain), no static and no designation the snapshot writes: an effect forbidding a blocker or a candidate reads like any other (skulk, a Pacifism-style static the connector does not name yet). Taggable once the connector names the forbidding static or writes a detained designation."
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature the defending player controls is forbidden from blocking the anchored attacker and nothing the record shows explains it: no evasion, tap or landwalk, no static named as responsible (the connector names Pacifism's), no hidden can't-block keyword and no requirement binding it to another attacker. Forge forbids such a block only for a detained creature.",
+        "near_miss": "None: no record marks a detained creature, so a creature no detain keeps out reads as any legal blocker; the declaration speaks for the fires side alone.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside",
+          "restriction": "effect"
+        },
+        "needs": []
       }
     },
     {
@@ -167,7 +176,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "none": "Detain sets a flag on the card (Card.detain), no static and no designation the snapshot writes: an effect forbidding a blocker or a candidate reads like any other (skulk, a Pacifism-style static the connector does not name yet). Taggable once the connector names the forbidding static or writes a detained designation."
+        "none": "Detain sets a flag on the card (Card.detain) that no static, no designation and no failed check's responsible static carries: a detained creature's forbidden attack or activation reads like any other failed check. Taggable once the connector writes a detained designation."
       }
     },
     {
@@ -245,7 +254,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "none": "Detain sets a flag on the card (Card.detain), no static and no designation the snapshot writes: an effect forbidding a blocker or a candidate reads like any other (skulk, a Pacifism-style static the connector does not name yet). Taggable once the connector names the forbidding static or writes a detained designation."
+        "none": "Detain sets a flag on the card (Card.detain) that no static, no designation and no failed check's responsible static carries: a detained creature's forbidden attack or activation reads like any other failed check. Taggable once the connector writes a detained designation."
       }
     }
   ]

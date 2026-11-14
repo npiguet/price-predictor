@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from effects.domain.provenance import SidecarLookup
-from effects.domain.records import EffectRecord
+from effects.domain.records import EffectRecord, is_game_end
 from effects.domain.rule_catalogue import DetectorDeclaration, Polarity
 from effects.domain.rule_detectors import DetectorFamily, DetectorIndex
 
@@ -53,6 +53,8 @@ def breadth_counts(record: EffectRecord, index: DetectorIndex,
     skipped, as :func:`tag_record` skips it.
     """
     found: Counter = Counter()
+    if is_game_end(record):
+        return found  # no detector reads the game-end marker, as tag_record says
     gen3 = record.generation == 3
     for scenario, declaration, family in index.by_kind.get(record.kind.value, ()):
         if not gen3 and (declaration.needs or family.needs(declaration.params)):

@@ -4,7 +4,11 @@ A ``rewrite`` record is written whenever a replacement or prevention effect
 is checked against an event: ``incoming`` is the event as proposed, and
 ``result`` what the handler did with it. A replacement rule is on its
 ``fires`` side when the event of its kind was replaced as the rule says, and
-on its near miss when such an event met the effect and was not.
+on its near miss when such an event met the effect and was not. A gen-3
+record whose ``incoming_unknown`` says Forge could not copy the event as it
+arrived shows neither side: its ``incoming`` is the event as it left, which
+may differ from what came in in type, subjects and amounts. A set-aside
+ability's run (``buffered_events``) is no event of this family.
 
 Parameters:
 
@@ -146,7 +150,11 @@ class RewriteEvent:
                   else PREVENTING if prevention else frozenset({RewriteResult.REPLACED}))
         if record.kind is not RecordKind.REWRITE:
             return None
-        incoming = record.payload.incoming
+        incoming = record.payload.arrived
+        if incoming is None:
+            return None  # what came in is unknown: its event, subjects and amounts
+        # A set-aside ability's run (``buffered_events``) is a place of its
+        # own (``emittable_events.BUFFERED``), never this family's event.
         if incoming.type is not event:
             return None
         found = incoming.params or {}

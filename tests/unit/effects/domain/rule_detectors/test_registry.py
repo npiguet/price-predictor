@@ -212,3 +212,26 @@ def test_every_family_module_registers_its_family():
     from effects.domain.rule_detectors import FAMILY_MODULES
 
     assert len(families()) == len(FAMILY_MODULES)
+
+
+def test_the_game_end_marker_is_tagged_by_no_detector():
+    """The marker holds no event and no board change of its own (WP7): no
+    declaration of its kind, an absence's included, may read it."""
+    from effects.domain.records import (
+        RecordKind,
+        TurnActionPayload,
+        TurnActionSubkind,
+    )
+
+    family = _Fixed(FamilyMatch(Polarity.FIRES, True))
+    entry = (scenario("t-1", ("100.1",), "turn_action", declaration(family.id, "turn_action")),
+             declaration(family.id, "turn_action"), family)
+    index = DetectorIndex({"turn_action": (entry,)}, frozenset({"100.1"}))
+    draw = make_record(RecordKind.TURN_ACTION, subkind=TurnActionSubkind.DRAW,
+                       ability=None, payload=TurnActionPayload(), generation=3)
+    marker = make_record(RecordKind.TURN_ACTION, subkind=TurnActionSubkind.GAME_END,
+                         ability=None, generation=3,
+                         payload=TurnActionPayload(records_withheld=0))
+    assert [t.rule for t in tag_record(draw, index).tags] == ["100.1"]
+    assert tag_record(marker, index) == tag_record(marker, DetectorIndex({}))
+    assert tag_record(marker, index).tags == ()

@@ -224,6 +224,8 @@ class _ResultCounts:
 
     with_outgoing: int = 0
     with_replaced_by: int = 0
+    #: Damage replacements naming the ability they set aside (``buffered``).
+    with_buffered: int = 0
     seen: int = 0
 
 
@@ -238,7 +240,9 @@ class Rewrites:
         self.identity = 0
         self.identity_examples: list[str] = []
         #: ``prevented``/``skipped`` records carrying an ``outgoing`` or a
-        #: ``replaced_by``.
+        #: ``replaced_by``, buffered records naming their ability as run
+        #: instead or holding events of a run that never came, and records
+        #: whose unknown incoming event has an outgoing one.
         self.impossible = 0
         self.impossible_examples: list[str] = []
 
@@ -250,6 +254,7 @@ class Rewrites:
         counts = self.results[payload.result]
         counts.with_outgoing += payload.outgoing is not None
         counts.with_replaced_by += bool(payload.replaced_by)
+        counts.with_buffered += payload.buffered is not None
         counts.seen += 1
         if payload.result is None:
             # Pre-contract shard: its writer always produced an identity
@@ -261,9 +266,7 @@ class Rewrites:
         ):
             self.identity += 1
             keep_example(self.identity_examples, example)
-        if payload.result in REWRITE_RESULTS_WITHOUT_ABILITY and (
-            payload.outgoing is not None or payload.replaced_by
-        ):
+        if _disagrees(payload):
             self.impossible += 1
             keep_example(self.impossible_examples, example)
 
@@ -332,12 +335,14 @@ class Rewrites:
         )
 
     def _outcomes_agree_with_their_payload(self) -> Finding:
-        """``prevented`` and ``skipped`` cannot carry a payload.
+        """``prevented`` and ``skipped`` cannot carry a payload, and a
+        buffered damage replacement keeps its shape (:func:`_disagrees`).
 
         Both return before ``executeReplacementUnobserved`` runs any ability, so
         an ``outgoing`` or ``replaced_by`` on one is a listener reading a stale
-        argument. ``not_replaced`` is not judged: its prevention branch writes
-        ``PreventedAmount`` before returning.
+        argument; a ``Prevent$ True`` rider is set aside (``buffered``), never
+        run instead. ``not_replaced`` is not judged: its prevention branch
+        writes ``PreventedAmount`` before returning.
         """
         ran = ", ".join(
             f"{name} {counts.with_outgoing}/{counts.seen} with outgoing, "
@@ -349,8 +354,10 @@ class Rewrites:
             name="outgoing is null on the results that rewrote nothing",
             ok=self.impossible == 0,
             measured=(
-                f"{self.impossible} {'/'.join(cannot)} records carry an "
-                f"outgoing or a replaced_by, of {self.rewrites} rewrites ({ran})"
+                f"{self.impossible} records contradict their payload ({'/'.join(cannot)} "
+                f"with an outgoing or a replaced_by, a buffered ability also run "
+                f"instead or with events of a run that never came, an outgoing "
+                f"beside an unknown incoming event), of {self.rewrites} rewrites ({ran})"
             ),
             detail=tuple(self.impossible_examples),
         )
@@ -362,7 +369,9 @@ class Rewrites:
         for result in REWRITE_RESULTS_RUNNING_AN_ABILITY:
             counts = self.results.get(result)
             if counts:
-                named += counts.with_replaced_by
+                # A buffered damage replacement names its ability in
+                # ``buffered``, its ``replaced_by`` empty by design.
+                named += counts.with_replaced_by + counts.with_buffered
                 seen += counts.seen
         rate = share_of(named, seen)
         return floor_finding(
@@ -375,7 +384,25 @@ class Rewrites:
                 f"key ({rate:.1%}, {limit})"
             ),
             detail=(
-                f"{name}: {counts.with_replaced_by}/{counts.seen} name one"
+                f"{name}: {counts.with_replaced_by}/{counts.seen} name one, "
+                f"{counts.with_buffered} a buffered one"
                 for name, counts in self._by_name()
             ),
         )
+
+
+def _disagrees(payload: RewritePayload) -> bool:
+    """A rewrite whose payload contradicts itself: a ``prevented`` or
+    ``skipped`` result with an ``outgoing`` or a ``replaced_by``; an ability
+    set aside (``buffered``) also named as run instead, or events of a run
+    that never came (``buffered_ran`` false); an ``outgoing`` beside an
+    unknown incoming event, which can be compared with nothing."""
+    if payload.result in REWRITE_RESULTS_WITHOUT_ABILITY and (
+        payload.outgoing is not None or payload.replaced_by
+    ):
+        return True
+    if payload.buffered is not None and (
+        payload.replaced_by or (not payload.buffered_ran and payload.buffered_events)
+    ):
+        return True
+    return payload.incoming_unknown and payload.outgoing is not None

@@ -25,7 +25,21 @@ and ``test_emittable_events`` reads the sources to keep it so:
   engine choke point with no resolving ability, routed as a bus event is;
 - :data:`RUN_PARAMS`: built by ``RunParamNormalizer`` from a trigger's or a
   replacement's run parameters, the trigger record's ``event`` and the rewrite
-  record's ``incoming``/``outgoing``.
+  record's ``incoming``/``outgoing``;
+- :data:`TAPPED`: what the bracket routes (``BusBracketCollector.route``:
+  the bus's events and the choke points'), which two channels take before it
+  files them (``EventTap``). ``ManaChannel`` takes a mana ability's own:
+  what its payment did beyond its taps (a creature sacrificed for mana) and
+  what its sub-abilities did (a pain land's damage), into its mana record, a
+  resolution, whose kind lists them already. ``RewriteChannel`` takes a
+  set-aside ability's run (Swans of Bryn Argoll's draw) into the waiting
+  rewrite record's ``buffered_events`` (:data:`BUFFERED`).
+
+A rewrite's ``buffered_events`` are their own place, not the rewrite's events:
+no detector reading a rewrite record (``rewrite_event``: the event that came
+in, what became of it) reads them, and ``listed_events`` leaves them out. A
+declaration that wants them reads ``RewritePayload.buffered_events`` and
+asks :func:`carries_buffered` whether the place can hold its event.
 
 A second fact decides whether an event's *absence* is readable on one
 record: the hook-derived events (:data:`HOOK_DERIVED`) need the engine
@@ -84,6 +98,12 @@ RUN_PARAMS: frozenset[E] = frozenset({
     E.DICE_ROLLED, E.PLAYER_WON, E.FACE_CHANGE, E.DESTROYED, E.SACRIFICED, E.PLAYER_LOST,
     E.STATE_FLAG_CHANGE,
 })
+#: What the bracket routes and a channel's ``EventTap`` may take first: the
+#: bus's events and the choke points' (``BusBracketCollector.route``).
+TAPPED: frozenset[E] = BUS | CHOKE_POINTS
+#: The events a rewrite record's ``buffered_events`` can hold: the set-aside
+#: ability's run, taken by ``RewriteChannel``'s tap.
+BUFFERED: frozenset[E] = TAPPED
 #: The game's end, filed in the game-end record (module docstring).
 GAME_END: frozenset[E] = frozenset({E.PLAYER_WON, E.PLAYER_LOST})
 #: The APIs whose own resolution ends the game, so their effect half holds its end.
@@ -123,6 +143,11 @@ def carries(kind: RecordKind | str, event: E | str, *, acting_line: bool = False
             and api not in GAME_ENDING_APIS):
         return False
     return event in EMITTABLE.get(kind, frozenset())
+
+
+def carries_buffered(event: E | str) -> bool:
+    """Whether a rewrite record's ``buffered_events`` can hold ``event``."""
+    return E(event) in BUFFERED
 
 
 def is_forced_resolution(record: EffectRecord) -> bool:

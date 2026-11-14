@@ -218,3 +218,53 @@ def test_a_changeling_has_every_creature_type():
     assert BlockingRestriction.PROTECTION in blocking_restrictions(
         ["protection_from_goblin"], ["R"], ["changeling"], ["U"], ["creature"],
         blocker_subtypes=["shapeshifter"], blocker_changeling=True)
+
+
+_PACIFISM = ProvenanceKey("cardsfolder/p/pacifism.txt", 0, "static", 0)
+_RESTRICTED = {"509.1b", "701.35a"}
+
+
+def _forbidding(attacker, legal=(), forbidden=()):
+    """A blockers record whose forbidden entries say who forbids each:
+    ``(creature, responsible_static, required_elsewhere)``."""
+    record = _blockers(attacker, legal, tuple(entry[0] for entry in forbidden))
+    entries = tuple(ForbiddenEntity(creature.id, statics, elsewhere)
+                    for creature, statics, elsewhere in forbidden)
+    return make_record(RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.BLOCKERS,
+                       state=record.state, generation=3,
+                       payload=PlayabilityBlockersPayload(
+                           anchor_attacker=attacker.id,
+                           legal_blockers=record.payload.legal_blockers, forbidden=entries))
+
+
+def test_a_blocker_nothing_on_the_record_explains_is_detain_s(index):
+    """WP7: the connector names Pacifism's static, so a forbidden blocker with
+    none, untapped and under no evasion, hidden keyword or lure is detained."""
+    attacker = _creature("E1", controller="P0")
+    record = _forbidding(attacker, legal=(_creature("E3"),),
+                         forbidden=((_creature("E2"), (), False),))
+    assert _fires(index, record, _RESTRICTED) == {"701.35a"}
+
+
+def test_a_blocker_a_static_forbids_is_the_static_s_rule_not_detain(index):
+    attacker = _creature("E1", controller="P0")
+    record = _forbidding(attacker, forbidden=((_creature("E2"), (_PACIFISM,), False),))
+    assert _fires(index, record, _RESTRICTED) == {"509.1b"}
+    assert "701.35a" not in _sides(index, record, _RESTRICTED)
+
+
+def test_a_lure_bound_blocker_and_a_hidden_can_t_block_are_no_detain(index):
+    attacker = _creature("E1", controller="P0")
+    panicked = make_entity("E3", "e3", controller="P1", types=("Creature",), colors=("G",),
+                           granted_temporary=GrantedTemporary(
+                               hidden_keywords=("CARDNAME can't block.",)))
+    record = _forbidding(attacker, forbidden=((_creature("E2"), (), True), (panicked, (), False)))
+    assert _sides(index, record, _RESTRICTED) == {}
+    assert "701.35a" not in _sides(index, record, _RESTRICTED)
+
+
+def test_detain_has_no_near_miss(index):
+    """No record marks a detained creature: a legal blocker is no near miss."""
+    attacker = _creature("E1", controller="P0")
+    record = _forbidding(attacker, legal=(_creature("E3"),))
+    assert "701.35a" not in _sides(index, record, _RESTRICTED)

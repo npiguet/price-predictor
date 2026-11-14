@@ -16,13 +16,18 @@ import pytest
 from effects.domain.event_schema import EventType
 from effects.domain.records import CollectionMode, Moment, RecordKind
 from effects.domain.rule_detectors.emittable_events import (
+    BUFFERED,
     BUS,
+    CHOKE_POINTS,
     CLAUSE_HOOKS,
+    EMITTABLE,
     RUN_PARAMS,
+    TAPPED,
     absence_readable,
     carries,
+    carries_buffered,
 )
-from tests.unit.effects.builders import make_record
+from tests.unit.effects.builders import java_golden_records, make_record
 
 _SOURCES = (Path(__file__).resolve().parents[5] / "forge-connector" / "src" / "main" / "java"
             / "com" / "pricepredictor" / "connector" / "effects")
@@ -80,3 +85,44 @@ def test_a_protection_fork_s_records_read_absences_as_any_record_does():
     trigger = make_record(RecordKind.TRIGGER, interventional=True, fork=True,
                           mode=CollectionMode.PATCHED)
     assert absence_readable(trigger, EventType.TOKEN_CREATED)
+
+
+def _source(name: str) -> str:
+    path = _SOURCES / f"{name}.java"
+    if not path.exists():
+        pytest.skip(f"no connector source at {path}")
+    return re.sub(r"//[^\n]*|/\*.*?\*/", "", path.read_text(encoding="utf-8"), flags=re.S)
+
+
+def test_the_channels_tapping_the_bracket_are_the_mana_and_rewrite_channels():
+    """What a tap takes is what the bracket routes: the bus's events (its
+    damage, moves and outcomes) and the choke points', asked of the taps first."""
+    taps = {path.stem for path in _SOURCES.glob("*.java")
+            if re.search(r"implements\s+BusBracketCollector\.EventTap", _source(path.stem))}
+    assert taps == {"ManaChannel", "RewriteChannel"}
+    route = _source("BusBracketCollector").split("private void route(", 1)[1]
+    assert route.index("tap.take(") < route.index("classifyNow()")
+    assert TAPPED == BUS | CHOKE_POINTS
+
+
+def test_a_mana_record_carries_its_payment_s_and_sub_abilities_events():
+    """A sacrificed creature's move, a pain land's damage: a mana record is a
+    resolution, whose kind lists every event the mana channel builds or takes."""
+    assert _named("ManaChannel") | TAPPED <= EMITTABLE[RecordKind.RESOLUTION]
+    for event in ("tapped", "sacrificed", "zone_change", "mana_produced",
+                  "damage_dealt", "life_change"):
+        assert carries("resolution", event)
+    mana = [raw for raw in java_golden_records() if raw.get("moment") == "resolution"
+            and any(e["type"] == "mana_produced" for e in raw["payload"]["events"])]
+    assert mana and all(carries("resolution", e["type"])
+                        for raw in mana for e in raw["payload"]["events"])
+
+
+def test_a_set_aside_ability_s_run_is_a_place_of_its_own():
+    """``buffered_events`` hold the run the rewrite channel tapped, never what
+    a rewrite record's own run parameters build."""
+    assert BUFFERED == TAPPED
+    assert carries_buffered("card_drawn") and not carries_buffered("token_created")
+    runs = [e for raw in java_golden_records() if raw["kind"] == "rewrite"
+            for e in raw["payload"].get("buffered_events", ())]
+    assert runs and all(carries_buffered(e["type"]) for e in runs)
