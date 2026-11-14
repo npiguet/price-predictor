@@ -436,9 +436,11 @@ final class Forks {
      * <p>A fork never changes the live game. What of it is cheap to read
      * ({@link LiveMarks}: its timestamp and card id counters, the random
      * stream it draws from, its players' life, zones and controllers, its
-     * stack) is read before the fork and after; a difference is counted
-     * under {@code "fork <kind> moved the live game"}, its first printed
-     * with what moved.
+     * stack, and Forge's JVM-wide trigger id counter, which only a restart of
+     * the game lowers) is read before the fork and after; a difference, or a
+     * fork whose game was restarted, is counted under
+     * {@code "fork <kind> moved the live game"}, its first printed with what
+     * moved.
      *
      * <p>The whole span draws from a random stream of its own ({@link
      * #isolated}), never from the live game's: a fork's AI, its stack and
@@ -463,6 +465,7 @@ final class Forks {
          */
         <R, W> W take(ForkBody<R> body, BiFunction<VerifiedFork, R, W> write) {
             LiveMarks before = LiveMarks.of(live);
+            Game[] forked = {null};
             try {
                 // The whole span is the fork, not just its run: see FORK_RUNNING
                 // for what a narrower scope left uncovered.
@@ -472,6 +475,7 @@ final class Forks {
                     if (verified.isEmpty()) {
                         return null;
                     }
+                    forked[0] = verified.get().fork();
                     R produced;
                     try {
                         // The fork's own state, read against the live game it came from.
@@ -495,7 +499,7 @@ final class Forks {
                     }
                 }));
             } finally {
-                before.compareAfter("fork " + kind + " moved the live game", live);
+                before.compareAfter("fork " + kind + " moved the live game", live, forked[0]);
             }
         }
 
@@ -505,9 +509,43 @@ final class Forks {
      * What a fork must leave as it was in the live game, the part of it that
      * is cheap to read: its timestamp and card id counters, the random
      * stream Forge draws from, each player's life, poison, controller and
-     * zone sizes, and its stack's size.
+     * zone sizes, and its stack's size; and Forge's trigger id counter.
+     *
+     * <p>The trigger id counter ({@code Trigger.maxId}) is static, shared by
+     * every game of the JVM, and every trigger a game makes, a copy's
+     * included, takes the next id, so a fork moves it forward and that is no
+     * difference. A restart of the game ({@code RestartGameEffect}) sets it
+     * to 50000 instead: the live game's later triggers then take ids a run
+     * without the fork would not give them, which its records write (a
+     * delayed trigger's {@code D<id>}), and from a counter above 50000 ids
+     * its own triggers already hold, which Forge compares triggers by. A fork
+     * that lowered the counter, or whose game was restarted, moved the live
+     * game.
+     *
+     * @param triggerIds the trigger id counter, or -1 where it cannot be read
      */
-    record LiveMarks(String marks) {
+    record LiveMarks(String marks, int triggerIds) {
+
+        private static final java.lang.reflect.Field TRIGGER_IDS = triggerCounter();
+
+        private static java.lang.reflect.Field triggerCounter() {
+            try {
+                java.lang.reflect.Field field = forge.game.trigger.Trigger.class.getDeclaredField("maxId");
+                field.setAccessible(true);
+                return field;
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return null;
+            }
+        }
+
+        /** Forge's trigger id counter now, or -1 where it cannot be read. */
+        static int currentTriggerIds() {
+            try {
+                return TRIGGER_IDS == null ? -1 : TRIGGER_IDS.getInt(null);
+            } catch (ReflectiveOperationException e) {
+                return -1;
+            }
+        }
 
         private static final java.lang.reflect.Field CARD_IDS = counter("cardIdCounter");
         private static final java.lang.reflect.Field HIDDEN_IDS = counter("hiddenCardIdCounter");
@@ -525,7 +563,7 @@ final class Forks {
         /** {@code live}'s marks, or none for no game. */
         static LiveMarks of(Game live) {
             if (live == null) {
-                return new LiveMarks("");
+                return new LiveMarks("", currentTriggerIds());
             }
             StringBuilder out = new StringBuilder()
                     .append("timestamp ").append(live.getTimestamp())
@@ -543,7 +581,7 @@ final class Forks {
                     out.append(' ').append(player.getZone(zone).size());
                 }
             }
-            return new LiveMarks(out.toString());
+            return new LiveMarks(out.toString(), currentTriggerIds());
         }
 
         private static final List<forge.game.zone.ZoneType> MARKED_ZONES = List.of(
@@ -559,17 +597,24 @@ final class Forks {
             }
         }
 
-        /** Count a difference from {@code live}'s marks now under {@code key}, the first printed. */
-        void compareAfter(String key, Game live) {
+        /**
+         * Count a difference from {@code live}'s marks now under {@code key},
+         * the first printed; {@code fork} is the fork's game, null when no
+         * copy was made.
+         */
+        void compareAfter(String key, Game live, Game fork) {
             LiveMarks after;
             try {
                 after = of(live);
             } catch (RuntimeException e) {
                 return;
             }
-            if (!after.equals(this)) {
+            boolean restarted = fork != null && fork.getAge() == forge.game.GameStage.RestartedByKarn;
+            if (!after.marks().equals(marks) || after.triggerIds() < triggerIds || restarted) {
                 HookFailures.countContained(key, "Effect records: " + key + "; before the fork: " + marks
-                        + "; after: " + after.marks() + " (later ones are counted, not printed)");
+                        + ", trigger ids " + triggerIds + "; after: " + after.marks() + ", trigger ids "
+                        + after.triggerIds() + (restarted ? "; the fork restarted its game" : "")
+                        + " (later ones are counted, not printed)");
             }
         }
     }

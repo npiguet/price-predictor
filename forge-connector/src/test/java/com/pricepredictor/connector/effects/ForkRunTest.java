@@ -11,6 +11,7 @@ import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
+import forge.game.spellability.SpellAbility;
 import forge.util.MyRandom;
 import java.util.List;
 import java.util.Map;
@@ -162,6 +163,42 @@ class ForkRunTest {
 
         assertTrue(written instanceof Long, "the fork ran: " + written);
         assertEquals(before + 1, count("fork run-test-leak moved the live game"));
+    }
+
+    /**
+     * A fork whose game is restarted (Karn Liberated's ultimate resolving in
+     * it) resets Forge's JVM-wide trigger id counter, which numbers the live
+     * game's later triggers: it is counted as having moved the live game.
+     * The counter is put back above every id handed out, so later tests make
+     * no trigger an earlier one's id.
+     */
+    @Test
+    void aForkThatRestartsItsGameMovesTheLiveGame() throws ReflectiveOperationException {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = live.getPhaseHandler().getPlayerTurn();
+        TestBoard.inPlay(live, you, "Karn Liberated").setCounters(forge.game.card.CounterEnumType.LOYALTY, 14);
+        java.lang.reflect.Field maxId = forge.game.trigger.Trigger.class.getDeclaredField("maxId");
+        maxId.setAccessible(true);
+        int ids = Math.max(maxId.getInt(null), 60000);
+        maxId.setInt(null, ids);
+        long before = count("fork run-test-restart moved the live game");
+        try {
+            Object written = run("run-test-restart", live, new AtomicInteger()).take((verified, snapshots) -> {
+                Card karn = verified.fork().getCardsIn(forge.game.zone.ZoneType.Battlefield).stream()
+                        .filter(card -> card.getName().equals("Karn Liberated")).findFirst().orElseThrow();
+                SpellAbility restart = karn.getSpellAbilities().stream()
+                        .filter(sa -> sa.getApi() == forge.game.ability.ApiType.RestartGame).findFirst().orElseThrow();
+                restart.setActivatingPlayer(karn.getController());
+                forge.game.ability.AbilityUtils.resolve(restart);
+                return verified.fork().getAge();
+            }, (verified, produced) -> produced);
+
+            assertEquals(forge.game.GameStage.RestartedByKarn, written, "the fork's game restarted");
+            assertTrue(Forks.LiveMarks.currentTriggerIds() < ids, "the counter went down");
+            assertEquals(before + 1, count("fork run-test-restart moved the live game"));
+        } finally {
+            maxId.setInt(null, Math.max(maxId.getInt(null), ids) + 1_000_000);
+        }
     }
 
     /**

@@ -353,10 +353,11 @@ A fork's failures are counted in the same report, by kind of fork (`intervention
 `protection`, `directed`): `fork <kind> copy`, `fork <kind> score check`, `fork <kind> body`,
 `fork <kind> write`, and `fork <kind> moved the live game` for a fork after which the live game's
 timestamp, card id counters, random stream, players' life, poison, controllers, zone sizes or stack
-size differ from before it. The first copy, body or write failure of each kind prints
+size differ from before it, after which Forge's JVM-wide trigger id counter is lower than before it,
+or whose game was restarted. The first copy, body or write failure of each kind prints
 `Effect records: fork <kind> <step> threw, and is discarded (later failures are counted, not printed): <exception>`
 with its stack; the first live-game change of each kind prints
-`Effect records: fork <kind> moved the live game; before the fork: <marks>; after: <marks> (later ones are counted, not printed)`.
+`Effect records: fork <kind> moved the live game; before the fork: <marks>, trigger ids <n>; after: <marks>, trigger ids <n>[; the fork restarted its game] (later ones are counted, not printed)`.
 A fork that declines for an expected reason is no failure: it is counted in a tally of its own,
 which the worker prints at a match end whenever it changed, on a line of its own:
 `Effect records: fork refusals so far, expected and no failure: {<kind> <reason>=<forks>, …}`
