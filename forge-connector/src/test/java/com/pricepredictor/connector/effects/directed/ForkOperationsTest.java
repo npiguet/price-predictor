@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects.directed;
 
+import forge.ai.simulation.GameCopier;
 import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.effects.BoardStates;
 import com.pricepredictor.connector.effects.TestBoard;
@@ -271,6 +272,92 @@ class ForkOperationsTest {
         assertEquals(board.you, bears.getOwner());
         assertEquals(board.opponent, bears.getController());
         assertFalse(bears.isSick());
+        assertEquals(Boolean.FALSE, ((Map<?, ?>) entity(BoardStates.of(board.game), id(bears)).get("history"))
+                        .get("entered_this_turn"),
+                "a permanent that is not summoning-sick has been here since an earlier turn");
+    }
+
+    // ── on a real copy, through the first state-based check ─────────────
+
+    /**
+     * A permanent the edit adds and the first state-based check takes away
+     * (a 0/0 Walking Ballista) is seen dying: Blood Artist triggers. The
+     * copy's last-known battlefield was taken before the edit, so without
+     * the edit taking it anew the death looked back at nothing.
+     */
+    @Test
+    void anAddedPermanentTheFirstCheckKillsIsSeenDying() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = live.getPlayers().get(0);
+        TestBoard.inPlay(live, you, "Blood Artist");
+        live.getTriggerHandler().resetActiveTriggers(false, null);
+        live.copyLastState();
+        GameCopier copier = new GameCopier(live);
+        Game fork = copier.makeCopy();
+
+        AddPermanentOperation.of("Walking Ballista", copier.find(you), false).apply(fork);
+        fork.getAction().checkStateEffects(true);
+        fork.getTriggerHandler().runWaitingTriggers();
+
+        assertTrue(copier.find(you).getCardsIn(ZoneType.Battlefield).stream()
+                .noneMatch(card -> card.getName().equals("Walking Ballista")), "the 0/0 did not die");
+        assertTrue(fork.getStack().hasSimultaneousStackEntries() || !fork.getStack().isEmpty(),
+                "Blood Artist did not see the Ballista die");
+    }
+
+    /**
+     * A replacement is the same permanent in every respect but the card: a
+     * resolved pump and a keyword granted until end of turn, its soulbond
+     * pair and what it attacked this turn carry over; an anthem's rows are
+     * the anthem's to apply anew, and a noncreature it no longer applies to
+     * keeps none of them.
+     */
+    @Test
+    void aReplacementCarriesThePermanentsEffectsPairAndHistory() {
+        Board board = Board.main();
+        Card anthem = board.permanent(board.you, "Glorious Anthem");
+        Card bears = board.creature(board.you, "Grizzly Bears");
+        Card partner = board.creature(board.you, "Hill Giant");
+        bears.addPTBoost(3, 3, board.game.getNextTimestamp(), 0);
+        bears.addChangedCardKeywords(List.of("Flying"), null, false, board.game.getNextTimestamp(), null);
+        bears.setPairedWith(partner);
+        partner.setPairedWith(bears);
+        bears.getDamageHistory().setCreatureAttackedThisCombat(board.opponent, 0);
+        board.game.getAction().checkStaticAbilities();
+        assertEquals(2 + 1 + 3, bears.getNetPower());
+
+        board.edit(new ReplaceCardOperation(bears, "Hill Giant"));
+        Card giant = board.you.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(card -> card != partner && card.getName().equals("Hill Giant")).findFirst().orElseThrow();
+
+        assertEquals(3 + 1 + 3, giant.getNetPower(), "the pump and the anthem, once each");
+        assertTrue(giant.hasKeyword("Flying"));
+        assertEquals(partner, giant.getPairedWith());
+        assertEquals(giant, partner.getPairedWith());
+        assertTrue(giant.getDamageHistory().hasAttackedThisTurn(board.opponent));
+
+        board.edit(new ReplaceCardOperation(giant, "Sol Ring"));
+        Card ring = board.you.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(card -> card.getName().equals("Sol Ring")).findFirst().orElseThrow();
+        long anthemRows = ring.getPTBoostTable().cellSet().stream()
+                .filter(cell -> cell.getColumnKey() != 0L).count();
+        assertEquals(0, anthemRows, "the anthem's row stayed on a noncreature: " + ring.getPTBoostTable()
+                + " (anthem " + anthem + ")");
+    }
+
+    /**
+     * A keyword the card cannot have (a can't-have effect) is refused rather
+     * than silently not added, so a fork tagged with the edit is discarded.
+     */
+    @Test
+    void aKeywordTheCardCannotHaveIsRefused() {
+        Board board = Board.main();
+        Card bears = board.creature(board.you, "Grizzly Bears");
+        bears.addCantHaveKeyword(board.game.getNextTimestamp(), 0L,
+                List.of(forge.game.keyword.Keyword.FLYING));
+        bears.updateKeywordsCache();
+
+        assertThrows(IllegalStateException.class, () -> KeywordEdit.add(board.game, bears, "Flying"));
     }
 
     @Test

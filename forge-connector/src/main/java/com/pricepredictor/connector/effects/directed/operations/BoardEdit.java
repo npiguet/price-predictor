@@ -37,17 +37,24 @@ public interface BoardEdit {
     /**
      * What every edit ends with: the engine's static-ability check, so the
      * board's continuous effects account for the change before anything reads
-     * it.
+     * it, then the last-known battlefield taken anew.
      *
      * <p>The active-trigger list is rebuilt first. Forge rebuilds it at its
      * own checkpoints (the state-based check, a resolution, a phase), and the
      * static check runs the state triggers from it: a permanent the edit
      * took off the battlefield would otherwise still be asked about, and one
      * it put there would not yet be. Rebuilding it fires nothing.
+     *
+     * <p>The last-known battlefield is what a dies or leaves trigger looks
+     * back at, and the copy's was taken before the edit: a permanent the
+     * edit put there and the first state-based check takes away (a 0/0
+     * added, the legend rule after a replacement) would leave unseen, and
+     * its dies triggers would never fire.
      */
     static void settle(Game fork) {
         fork.getTriggerHandler().resetActiveTriggers(false, null);
         fork.getAction().checkStaticAbilities();
+        fork.copyLastState();
     }
 
     /** {@code card}, failing when it is not on the battlefield. */

@@ -52,10 +52,21 @@ public final class KeywordEdit {
     /**
      * Give {@code card} the keyword, spelled as a card script spells it
      * ({@code Flying}, {@code Ward:2}).
+     *
+     * @throws IllegalStateException when the card cannot have it (a
+     *         can't-have effect, 113.11), which Forge answers by adding
+     *         nothing: a fork tagged with an edit that did not happen would
+     *         describe a board nobody built, so the fork is discarded
      */
     public static void add(Game game, Card card, String keyword) {
         card.addChangedCardKeywords(
                 List.of(keyword), null, false, game.getNextTimestamp(), null);
+        for (KeywordInterface carried : card.getKeywords()) {
+            if (keyword.equals(carried.getOriginal())) {
+                return;
+            }
+        }
+        throw new IllegalStateException(card + " cannot have " + keyword);
     }
 
     /**
