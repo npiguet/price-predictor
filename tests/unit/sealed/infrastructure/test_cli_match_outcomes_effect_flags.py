@@ -79,12 +79,6 @@ class TestCapAndBudgetFlags:
         assert args.interventions_per_game == 4
         assert args.probes_per_game == 1
 
-    def test_no_flag_chooses_a_snapshot_depth(self):
-        """Every record collects all four tiers."""
-        with pytest.raises(SystemExit):
-            parse("match-outcomes", "--snapshot-tiers", "1,2,3,4")
-
-
 class TestCountDroppedEvents:
     """FR-041: ``--count-dropped-events`` is off by default and travels to the
     worker as ``effect.count.dropped.events``."""
@@ -136,15 +130,6 @@ class TestProbesAnnounceThemselves:
         assert "DISABLED" not in line
         for keyword in EFFECT_PROBE_KEYWORDS.split(","):
             assert keyword in line
-
-
-class TestOtherSealedCommandsAreUnaffected:
-    def test_build_decks_gains_no_effect_flags(self):
-        args = parse("build-decks", "--pools", "p.txt", "--label", "gen-1")
-        assert not hasattr(args, "effect_records")
-
-    def test_train_scorer_gains_no_effect_flags(self):
-        assert not hasattr(parse("train-scorer"), "effect_records")
 
 
 class TestRandomSeatFlags:

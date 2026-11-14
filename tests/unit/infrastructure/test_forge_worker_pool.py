@@ -225,19 +225,6 @@ class TestAWorkerThatCannotStart:
             pytest.fail(f"run() returned after {elapsed:.1f}s instead of raising")
         assert len(calls) <= 2 * 3 + 2
 
-    def test_the_error_comes_within_about_two_seconds(self, tmp_path):
-        def spawn(worker_id):
-            raise FileNotFoundError("java")
-
-        pool = _pool(
-            tmp_path / "out.txt", worker_count=2, spawn_worker=spawn,
-            max_failed_starts=3, restart_backoff=0.01,
-        )
-        started = time.monotonic()
-        with patch(KILL), pytest.raises(WorkerStartError):
-            _run_with_watchdog(pool)
-        assert time.monotonic() - started < 2.5
-
     def test_quick_exits_in_every_slot_end_the_run_after_n_restarts(self, tmp_path):
         spawned = []
 

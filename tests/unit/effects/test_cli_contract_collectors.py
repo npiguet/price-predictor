@@ -7,7 +7,7 @@ side collection is the whole point, on that side it is an opt-in.
 
 from __future__ import annotations
 
-from dataclasses import fields
+from dataclasses import fields, replace
 from pathlib import Path
 
 import pytest
@@ -95,40 +95,61 @@ class TestCollectCoverage:
 
 
 class TestSharedCapFlags:
-    def test_the_defaults_are_the_contracts(self):
-        args = parse("collect-coverage")
-        assert args.mana_cap == 1
-        assert args.playability_rate == 0.01
-        assert args.zone_candidate_rate == 0.0001
-        assert args.plain_candidate_rate == 0.001
-        assert args.interventions_per_game == 2
-        assert args.probes_per_game == 2
-        assert args.probe_keywords == (
-            "first_strike,double_strike,deathtouch,lifelink,trample,"
-            "indestructible,wither,infect"
-        )
+    @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
+    def test_an_unflagged_run_hands_the_worker_every_cap_at_its_default(self, command):
+        """Every cap, not a list this test has to be told about: a collector's
+        resolved caps with no flag set are ``CollectionCaps``' defaults, so a
+        cap added to the dataclass and given another default by a parser, or
+        by the resolution, fails here. ``aimed_at`` is the run's empty list
+        (FR-009a). The literal contract values are pinned once, in
+        ``test_collection_caps.py``."""
+        from effects.infrastructure.cli import collection_caps
 
-    def test_the_constants_and_the_parsed_defaults_agree(self):
-        """Every cap in the table, not a list this test has to be told about.
+        caps = collection_caps(parse(command))
+        assert caps == replace(CollectionCaps(), aimed_at=())
+        assert caps.as_system_properties() == replace(
+            CollectionCaps(), aimed_at=()).as_system_properties()
 
-        Spelled out one by one, a cap added to `CollectionCaps` and to only one
-        of the two parsers would pass here, readable by the JVM and settable by
-        nobody.
-        """
-        args = parse("collect-coverage")
-        for name, default in CAP_DEFAULTS.items():
-            assert getattr(args, name) == default, name
+    #: A value other than the default for each cap a collector flag sets,
+    #: and the property spelling it reaches the worker in.
+    OVERRIDES = {
+        "mana_cap": ("7", "7"), "playability_rate": ("0.5", "0.5"),
+        "zone_candidate_rate": ("0.125", "0.125"), "plain_candidate_rate": ("0.25", "0.25"),
+        "interventions_per_game": ("5", "5"), "probes_per_game": ("4", "4"),
+        "probe_keywords": ("wither", "wither"), "random_seat_share": ("0.5", "0.5"),
+        "random_seat_probability": ("0.25", "0.25"), "count_dropped_events": (None, "true"),
+        "directed_fork_rules": ("704.5f,702.19b", "704.5f,702.19b"),
+        "directed_forks_per_game": ("3", "3"), "directed_fork_probability": ("1", "1.0"),
+        "max_records_per_game": ("300", "300"),
+    }
+
+    @pytest.mark.parametrize(("command", "name"), [
+        (command, f.name) for f in fields(CollectionCaps) if f.name != "aimed_at"
+        for command in ("collect-coverage", "collect-variants")
+        if command == "collect-variants" or f.name not in DIRECTED_CAPS
+    ])
+    def test_each_cap_s_flag_reaches_its_worker_property(self, command, name):
+        """One test over every ``CollectionCaps`` field and both collectors
+        (the directed caps on ``collect-variants`` alone), so a new cap without
+        a flag, or a flag reaching no property, fails by name."""
+        from effects.infrastructure.cli import collection_caps
+
+        assert name in self.OVERRIDES, f"no override listed for the new cap {name}"
+        value, written = self.OVERRIDES[name]
+        flag = "--" + name.replace("_", "-")
+        argv = [flag] if value is None else [flag, value]
+        if name == "random_seat_share":
+            argv += ["--random-seat-probability", "0.25"]
+        properties = collection_caps(parse(command, *argv)).as_system_properties()
+        key = "effect." + name.replace("_", ".")
+        assert properties[key] == written
+        assert properties[key] != CollectionCaps().as_system_properties()[key]
 
     def test_probes_are_on_by_default_and_an_empty_list_turns_them_off(self):
         """Every damage-step keyword is probed unless a run narrows the list,
         and an empty string takes no probe fork at all."""
         assert parse("collect-coverage").probe_keywords
         assert parse("collect-coverage", "--probe-keywords", "").probe_keywords == ""
-
-    def test_continuous_records_take_no_cap(self):
-        """Coalescing per stable board is itself the cap (FR-029)."""
-        args = parse("collect-coverage")
-        assert not hasattr(args, "continuous_cap")
 
     def test_each_cap_is_overridable(self):
         args = parse(
@@ -147,19 +168,6 @@ class TestSharedCapFlags:
 class TestDecisionSamplingOnTheCollectors:
     """FR-033b: the three sampling rates reach the worker, and a bucket rate
     above the stage-1 rate it is drawn from is refused before any worker."""
-
-    @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
-    def test_the_rates_reach_the_worker_properties(self, command):
-        from effects.infrastructure.cli import collection_caps
-
-        args = parse(
-            command, "--playability-rate", "0.5",
-            "--zone-candidate-rate", "0.125", "--plain-candidate-rate", "0.25",
-        )
-        properties = collection_caps(args).as_system_properties()
-        assert properties["effect.playability.rate"] == "0.5"
-        assert properties["effect.zone.candidate.rate"] == "0.125"
-        assert properties["effect.plain.candidate.rate"] == "0.25"
 
     @pytest.mark.parametrize("argv,message", [
         (("--zone-candidate-rate", "0.5"), "exceeds --playability-rate"),
@@ -188,46 +196,12 @@ class TestDecisionSamplingOnTheCollectors:
         assert "--zone-candidate-rate" in caplog.text
 
 
-class TestNoSnapshotTierFlag:
-    """Every record collects all four tiers, so no command takes a depth."""
-
-    def test_collect_coverage_refuses_it(self):
-        with pytest.raises(SystemExit):
-            parse("collect-coverage", "--snapshot-tiers", "1,2,3,4")
-
-    def test_match_outcomes_refuses_it(self):
-        with pytest.raises(SystemExit):
-            sealed_parser().parse_args(
-                ["match-outcomes", "--snapshot-tiers", "1,2,3,4"]
-            )
-
-
 class TestTheRandomSeatOnTheCollectors:
     """Coverage and variant decks reach the random seat like self-play does.
 
     The Forge AI never casts some cards at all; a random seat casts them for
     real, costs and choices included, where an intervention forks past both.
     """
-
-    @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
-    def test_the_flags_reach_the_worker_properties(self, command):
-        from effects.infrastructure.cli import collection_caps
-
-        args = parse(
-            command, "--random-seat-share", "0.5",
-            "--random-seat-probability", "0.25",
-        )
-        properties = collection_caps(args).as_system_properties()
-        assert properties["effect.random.seat.share"] == "0.5"
-        assert properties["effect.random.seat.probability"] == "0.25"
-
-    @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
-    def test_unset_flags_leave_the_seat_off(self, command):
-        from effects.infrastructure.cli import collection_caps
-
-        caps = collection_caps(parse(command))
-        assert caps.random_seat_share == 0.0
-        assert caps.random_seat_probability == 0.0
 
     @pytest.mark.parametrize("argv,message", [
         (("--random-seat-share", "0.5"), "needs --random-seat-probability"),
@@ -260,48 +234,6 @@ class TestTheRandomSeatOnTheCollectors:
         collect.assert_not_called()
         assert f"{command}: " in caplog.text
         assert "--random-seat-probability" in caplog.text
-
-
-class TestCountDroppedEventsOnTheCollectors:
-    """FR-041: both collectors take ``--count-dropped-events`` as
-    ``match-outcomes`` does, off by default, and send it to the worker."""
-
-    @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
-    def test_it_is_off_by_default(self, command):
-        from effects.infrastructure.cli import collection_caps
-
-        caps = collection_caps(parse(command))
-        assert caps.count_dropped_events is False
-        assert caps.as_system_properties()["effect.count.dropped.events"] == "false"
-
-    @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
-    def test_the_flag_reaches_the_worker_property(self, command):
-        from effects.infrastructure.cli import collection_caps
-
-        caps = collection_caps(parse(command, "--count-dropped-events"))
-        assert caps.count_dropped_events is True
-        assert caps.as_system_properties()["effect.count.dropped.events"] == "true"
-
-
-class TestMaxRecordsPerGameOnTheCollectors:
-    """FR-041a: both collectors take ``--max-records-per-game`` as
-    ``match-outcomes`` does, 5000 by default, and send it to the worker."""
-
-    @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
-    def test_it_is_5000_by_default(self, command):
-        from effects.infrastructure.cli import collection_caps
-
-        caps = collection_caps(parse(command))
-        assert caps.max_records_per_game == 5000
-        assert caps.as_system_properties()["effect.max.records.per.game"] == "5000"
-
-    @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
-    def test_the_flag_reaches_the_worker_property(self, command):
-        from effects.infrastructure.cli import collection_caps
-
-        caps = collection_caps(parse(command, "--max-records-per-game", "300"))
-        assert caps.max_records_per_game == 300
-        assert caps.as_system_properties()["effect.max.records.per.game"] == "300"
 
 
 class TestOneHoldoutSource:
@@ -451,14 +383,6 @@ class TestDirectedForksOnCollectVariants:
     ``match-outcomes``, with the same startup check; the rules both take
     directed forks and aim every record."""
 
-    def test_the_defaults_are_the_contracts(self):
-        args = parse("collect-variants")
-        for name, default in DIRECTED_DEFAULTS.items():
-            assert getattr(args, name) == default, name
-        assert args.directed_fork_rules == ()
-        assert args.directed_forks_per_game == 2
-        assert args.directed_fork_probability == 0.25
-
     def test_the_flags_reach_the_worker_properties(self):
         from effects.infrastructure.cli import collection_caps
 
@@ -592,11 +516,6 @@ class TestTheVariantRounds:
         assert args.rule_counts is None
         assert (args.steer_floor, args.steer_variants, args.steer_min_gain,
                 args.steer_iterations) == (100, 2000, 1, 5)
-
-    @pytest.mark.parametrize("flag", ["--variant-volume", "--corpus-records"])
-    def test_the_volume_flags_are_removed(self, flag):
-        with pytest.raises(SystemExit):
-            parse("collect-variants", flag, "1")
 
     def test_an_unknown_round_is_refused(self):
         with pytest.raises(SystemExit):

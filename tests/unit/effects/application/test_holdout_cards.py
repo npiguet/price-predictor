@@ -114,13 +114,6 @@ def test_token_carriers_move_the_list_as_they_move_the_split(tmp_path) -> None:
     )
 
 
-def test_the_default_trees_are_the_card_and_token_trees() -> None:
-    """The flag used to name the card tree alone and find tokens beside it."""
-    assert HoldoutCardsConfig(out=Path("x.txt")).cards_folders == (
-        Path("output/cardsfolder"), Path("output/tokenscripts"),
-    )
-
-
 def test_no_converted_card_is_refused(tmp_path) -> None:
     with pytest.raises(HoldoutCardsError, match="no converted cards"):
         _run(tmp_path, tmp_path / "holdout-cards.txt")

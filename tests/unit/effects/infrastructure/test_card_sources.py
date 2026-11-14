@@ -10,12 +10,14 @@ from effects.infrastructure.converted_trees import ConvertedTrees
 
 class TestCorpusLoaders:
     def test_card_files_are_keyed_by_the_name_line(self, tmp_path):
+        """The name as the converter writes it (lower case), to the
+        tree-prefixed script file every sidecar join keys on."""
         (tmp_path / "s").mkdir()
         (tmp_path / "s" / "serra_angel.txt").write_text(
-            "name: Serra Angel\ntypes: creature angel\n", encoding="utf-8",
+            "name: serra angel\ntypes: creature angel\n", encoding="utf-8",
         )
         assert ConvertedTrees({"cardsfolder": tmp_path}).card_files == {
-            "Serra Angel": "cardsfolder/s/serra_angel.txt",
+            "serra angel": "cardsfolder/s/serra_angel.txt",
         }
 
     def test_a_file_without_a_name_line_is_skipped(self, tmp_path):

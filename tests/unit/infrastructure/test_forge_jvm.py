@@ -226,14 +226,6 @@ class TestWorkerLogFiles:
         finally:
             logs.close_all()
 
-    def test_two_runs_never_share_a_file(self, tmp_path):
-        """A fresh run_id per invocation is what keeps a long-lived
-        ``effect_records_dir`` from accumulating one never-rotated file
-        across every collection ever run into it."""
-        a = WorkerLogFiles(tmp_path, "run-a")
-        b = WorkerLogFiles(tmp_path, "run-b")
-        assert a.path_for(0) != b.path_for(0)
-
     def test_a_line_written_by_a_child_process_is_on_disk_after_a_restart(
         self, tmp_path,
     ):

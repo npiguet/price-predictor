@@ -29,15 +29,6 @@ class TestCollectVariants:
         assert args.variant_games == 2
         assert args.decks_per_round == 500
 
-    def test_it_carries_the_shared_cap_flags(self):
-        args = parse("collect-variants")
-        assert args.mana_cap == 1
-        assert args.probe_keywords == (
-            "first_strike,double_strike,deathtouch,lifelink,trample,"
-            "indestructible,wither,infect"
-        )
-
-
 class TestVariantScriptsFlag:
     #: ``train-effect-model`` refuses to parse without a corpus (FR-125
     #: withdrawn), so every trainer parse here carries one.

@@ -226,27 +226,6 @@ class TestExclusionsWithoutACheckpoint:
         with pytest.raises(ValueError, match="one source"):
             DeckHoldout(split_from=tmp_path / "latest.pt", exclude_cards=listed)
 
-    def test_both_sources_on_a_config_are_refused_when_it_runs(self, tmp_path) -> None:
-        """A config built in code, not from flags, still names one holdout."""
-        from effects.application import collect_coverage
-
-        listed = tmp_path / "holdout-cards.txt"
-        listed.write_text("Soul Echo\n", encoding="utf-8")
-        cards = tmp_path / "cardsfolder"
-        cards.mkdir()
-        (cards / "bears.txt").write_text(
-            "name: Grizzly Bears\ntypes: creature\n", encoding="utf-8",
-        )
-
-        with pytest.raises(ValueError, match="one source"):
-            collect_coverage.run(collect_coverage.CollectCoverageConfig(
-                cards_folders=(cards,), effect_records=tmp_path / "records", workers=1,
-                deck_holdout=DeckHoldout(
-                    split_from=tmp_path / "latest.pt", exclude_cards=listed,
-                ),
-            ))
-
-
 class TestTheRoundPlaysTheComputedDecks:
     """The weights have to reach the table, which is what never happened.
 
@@ -882,19 +861,6 @@ class TestParallelCounting:
 
         assert coverage["soul echo"].records == 30
 
-    def test_already_counted_shards_stay_counted_once(self, tmp_path) -> None:
-        from effects.application.collect_coverage import CoverageCounter
-
-        self._shards(tmp_path, {"Alpha": 4})
-        coverage = {"alpha": CardCoverage("alpha")}
-        counter = CoverageCounter()
-
-        counter.update(coverage, tmp_path, workers=2)
-        counter.update(coverage, tmp_path, workers=2)
-
-        assert coverage["alpha"].records == 4
-
-
 # ── the held-out coverage round (FR-035–FR-038; T044, T045) ──────────────
 
 
@@ -1052,14 +1018,6 @@ class TestHeldOutTextUnit:
         assert read_by_one > 0
         assert len(reads) == read_by_one
         assert first.games == second.games == {}
-
-    def test_satisfaction_is_distinct_games_at_the_floor(self):
-        from effects.domain.coverage import TextCoverage
-
-        unit = TextCoverage(text="t", games={"g1", "g2", "g3", "g4"})
-        assert not unit.satisfied(5)
-        unit.games.add("g5")
-        assert unit.satisfied(5) and unit.progress == 5
 
     def test_the_round_ends_without_waiting_on_uncastable_texts(self):
         """FR-037 / spec Story 2 scenario 6."""

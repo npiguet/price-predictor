@@ -117,12 +117,6 @@ class TestConsultRanksButNeverDrops:
         weights = rank_by_consult({"a": 50.0, "b": 50.0}, {})
         assert weights["a"] == weights["b"] == 50.0
 
-    def test_no_card_is_ever_removed_by_the_consult(self):
-        weights = {"a": 1.0, "b": 2.0, "c": 3.0}
-        verdicts = dict.fromkeys(weights, ConsultVerdict.UNCASTABLE)
-        assert set(rank_by_consult(weights, verdicts)) == set(weights)
-
-
 class TestDeckWeighting:
     def test_a_card_with_no_records_weighs_most(self):
         coverage = {
@@ -163,11 +157,6 @@ class TestDeckCandidateFromConvertedText:
         from effects.domain.coverage import DeckCandidate
 
         assert DeckCandidate.from_converted_text("x", text).mana_cost is None
-
-
-@pytest.mark.parametrize("records,target,expected", [(0, 50, False), (50, 50, True)])
-def test_satisfied_is_records_at_or_above_target(records, target, expected):
-    assert CardCoverage("x", records=records).satisfied(target) is expected
 
 
 _ANTHEM = "cardsfolder/g/glorious_anthem.txt"

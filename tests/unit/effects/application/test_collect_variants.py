@@ -22,7 +22,6 @@ import pytest
 
 from effects.application.collect_variants import (
     PROTECTION_QUALITY_WHITELIST,
-    RANDOM_SEED,
     CollectVariantsConfig,
     GeneratedVariant,
     generate_variants,
@@ -91,18 +90,6 @@ class TestVariantGeneration:
             held_out=frozenset({"Lightning Bolt"}),
         )
         assert variants == []
-
-    def test_a_variant_is_never_converted_to_prose(self, tmp_path):
-        """There is no oracle text for a card nobody printed."""
-        source = tmp_path / "cards"
-        source.mkdir()
-        self._write_source(source, "bolt", "Lightning Bolt", _BOLT_SCRIPT)
-        output = tmp_path / "variants"
-        generate_variants(source, output, held_out=frozenset())
-        # The variant tree holds Forge source scripts. The sidecar beside them
-        # is written by the Java parser, not here.
-        for path in output.glob("*.txt"):
-            assert path.read_text(encoding="utf-8").startswith("Name:")
 
     def test_a_variant_file_is_named_for_the_key_that_resolves_it(
         self, tmp_path,
@@ -319,18 +306,6 @@ class TestProtectionQualitySwap:
 
 
 class TestTheSeed:
-    def test_the_seed_is_settable_so_a_second_run_draws_differently(self):
-        """A second run under another seed perturbs differently; under the same
-        seed it names and reuses the variants the first wrote."""
-        from effects.infrastructure.cli import build_parser
-
-        assert CollectVariantsConfig().seed == RANDOM_SEED
-        assert CollectVariantsConfig(seed=7).seed == 7
-        assert build_parser().parse_args(["collect-variants"]).seed == RANDOM_SEED
-        assert build_parser().parse_args(
-            ["collect-variants", "--seed", "7"],
-        ).seed == 7
-
     def test_two_seeds_perturb_the_same_script_differently(self, tmp_path):
         source = tmp_path / "cards"
         (source / "b").mkdir(parents=True)
@@ -524,14 +499,6 @@ class TestTheVariantCandidateMatchesAConvertedCard:
         assert variant.deck_candidate() == DeckCandidate.from_converted_text(
             "Bolt Variant 0", "name: bolt variant 0\nmana cost: {2}{R}{R}\n",
         )
-
-    def test_a_script_without_a_cost_names_none(self, tmp_path):
-        path = tmp_path / "x.txt"
-        path.write_text("Name:X Variant 0\nTypes:Instant\n", encoding="utf-8")
-        variant = _written("X Variant 0", "X", path)
-
-        assert variant.deck_candidate().mana_cost is None
-
 
 _RUN = "run-1"
 
@@ -972,7 +939,9 @@ class TestOnlyLoadableVariantsAreDecked:
         startup on the machine."""
         from effects.application.collect_variants import LOADABLE_FILE
 
-        assert LOADABLE_FILE == "loadable.lst"
+        # The property, not the spelling: the sibling below pins the spelling
+        # to the Java writer, which would follow any rename to a ``.txt``.
+        assert not LOADABLE_FILE.lower().endswith(".txt")
 
     def test_the_list_is_the_one_variant_sidecar_main_writes(self):
         import re

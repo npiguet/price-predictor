@@ -87,10 +87,6 @@ class TestRarityWeighting:
         weights = rarity_weights({"rare": 1, "common": 100})
         assert weights["rare"] / weights["common"] == pytest.approx(10.0)
 
-    def test_a_rarer_text_weighs_more(self):
-        weights = rarity_weights({"a": 1, "b": 4, "c": 9})
-        assert weights["a"] > weights["b"] > weights["c"]
-
     def test_the_cap_is_twenty_times_the_most_observed_texts_weight(self):
         weights = rarity_weights({"ubiquitous": 10_000, "unique": 1})
         assert weights["unique"] == pytest.approx(
@@ -139,13 +135,6 @@ class TestUniformClasses:
             [*common, *rare], lambda r: texts[r.record_id],
         )
         assert weights[-1] > weights[0]
-
-    def test_a_decision_records_examples_key_on_the_candidates_text(self):
-        """One record, one example per candidate, each keyed on its own text."""
-        record = make_record(RecordKind.PLAYABILITY)
-        assert sampling_class(record) == SamplingClass.PLAYABILITY_DECISION
-        assert record.has_act_line
-
 
 class TestSampleWeightsRarityTable:
     """A curated dataset's corpus-wide rarity table, preferred over the

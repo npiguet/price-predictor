@@ -83,6 +83,18 @@ class TestTheProbeKeywordDefault:
         assert "first_strike" in line and "infect" in line
 
 
+def test_the_contract_defaults_not_pinned_beside_their_own_rule():
+    """The caps whose literal default no class below pins: one mana record per
+    key, two interventions and two probes a game, no random seat, no dropped
+    event counts (features 023 and 025, ``contracts/cli.md``). The collectors'
+    parsers are held to ``CollectionCaps``' defaults by
+    ``test_cli_contract_collectors.py``."""
+    caps = CollectionCaps()
+    assert (caps.mana_cap, caps.interventions_per_game, caps.probes_per_game) == (1, 2, 2)
+    assert (caps.random_seat_share, caps.random_seat_probability) == (0.0, 0.0)
+    assert caps.count_dropped_events is False
+
+
 class TestTheTwoSidesAgree:
     """A default that drifts between the two commands makes two corpora that
     mean different things and nothing says which is which."""
@@ -272,16 +284,6 @@ class TestThePerGameRecordCap:
         assert re.search(
             r"DEFAULT_MAX_RECORDS_PER_GAME = (\d+);", source
         ).group(1) == str(DEFAULT_MAX_RECORDS_PER_GAME)
-
-
-class TestNoSnapshotDepthKnob:
-    """Every record collects all four tiers, so no command can choose a depth."""
-
-    def test_no_property_names_a_depth(self):
-        assert "effect.snapshot.tiers" not in CollectionCaps().as_system_properties()
-        assert "effect.snapshot.tiers" not in _effect_collection_caps(
-            argparse.Namespace()
-        )
 
 
 class TestTheRandomSeat:

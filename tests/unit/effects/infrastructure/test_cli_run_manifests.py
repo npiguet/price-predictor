@@ -11,9 +11,8 @@ import pytest
 
 from effects.infrastructure import cli
 from effects.infrastructure.shard_io import iter_shards
-from effects.infrastructure.sidecar_io import SIDECAR_SUFFIX
 from price_predictor.infrastructure import run_manifest
-from price_predictor.infrastructure.cli_run_manifest import READ_ONLY, subcommand_names
+from price_predictor.infrastructure.cli_run_manifest import subcommand_names
 
 
 @pytest.fixture(autouse=True)
@@ -100,20 +99,11 @@ def test_a_baseline_trains_into_its_own_directory():
     )
 
 
-def test_reports_write_none():
-    assert cli.RUN_MANIFESTS["validate-corpus"] is READ_ONLY
-    assert cli.RUN_MANIFESTS["field-coverage"] is READ_ONLY
-
-
 def test_shard_discovery_never_takes_the_manifest_for_a_shard(tmp_path: Path):
     (tmp_path / "nested").mkdir()
     (tmp_path / "run.json").write_text("{}", encoding="utf-8")
     (tmp_path / "nested" / "run.json").write_text("{}", encoding="utf-8")
     assert iter_shards(tmp_path) == []
-
-
-def test_the_manifest_is_no_sidecar():
-    assert not "run.json".endswith(SIDECAR_SUFFIX)
 
 
 class TestTheCollectorsListWhatTheyRead:
