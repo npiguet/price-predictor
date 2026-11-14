@@ -1,23 +1,86 @@
 # Effect-record format
 
-Covers the shard files, the record envelope, the gen-3 record members, modal resolution halves and the dropped-event counts. Read on demand: `src/effects/CLAUDE.md` says when, and lists the other topic files in this directory.
+What a reader or writer of effect records has to know that no single source file states, because the writer is Java and the readers are Python. The full contracts:
 
-## Effect-record shards
+- `specs/023-ability-effect-model/contracts/record-schema.md` (base schema).
+- `specs/024-ability-effect-model-gen2/contracts/record-schema-delta.md` and `specs/025-ability-effect-model-gen3/contracts/record-schema-delta.md` (each generation's changes).
+- Python side: `domain/records.py`, `infrastructure/record_codec.py`, and `domain/shard_generation.py` for generations.
 
-**Effect-record shards** (`output/effects/records/{run_id}.{worker}-{lifetime}.jsonl.gz`): one JSON record per line, append-only. A shard per worker rather than one shared file because records are far larger than a match-outcome row, so concurrent appends would interleave mid-record; and a shard per worker JVM *lifetime* rather than per worker slot, because the supervisor recycles the longest-running worker every status interval and restarts crashed ones — hundreds of JVMs per run. Each file is a concatenation of complete gzip members, one per block of 256 records: every member stands alone, so a worker killed mid-write truncates the last and the reader stops there, which is the trailing-partial-line rule applied a block at a time. Plain `*.jsonl` still reads — the corpus is append-only and older shards cannot be regenerated. Discovery **recurses**, so a depleted collection run and a full-strength one can be kept in subdirectories of `--effect-records` and still read as one corpus; anything else placed under that tree is read as corpus too. `record_id` is `{run_id}.{worker}-{lifetime}.{counter}` and `game_id` is `{run_id}.{worker}-{lifetime}.{game counter}` — both carry the worker slot because workers count independently, and the JVM lifetime because each worker JVM counts from zero and is replaced hundreds of times per run; `game_id` is the join key for a checkpoint's recorded split, so a repeated one merges unrelated games. The envelope is **frozen before the first record is collected**: a later capability makes new `kind` values reachable and adds snapshot tiers, but never redefine a field. Four compatibility rules govern that and are enforced by `tests/unit/effects/domain/test_schema_compatibility.py` rather than by a version stamp. Full schema: `specs/023-ability-effect-model/contracts/record-schema.md`, with gen 3's changes in `specs/025-ability-effect-model-gen3/contracts/record-schema-delta.md`.
+## Shards
 
-## Record envelope
+- `output/effects/records/{run_id}.{worker}-{lifetime}.jsonl.gz`, one JSON record per line, append-only.
+- One shard per worker JVM lifetime, not per worker slot and not one shared file. Records are large enough that concurrent appends would interleave mid-record, and the supervisor replaces worker JVMs hundreds of times per run.
+- Each file is a concatenation of complete gzip members, one per block of 256 records. A worker killed mid-write truncates the last member and the reader stops there. A shard therefore ends at its last complete block.
+- Plain `*.jsonl` still reads: older shards cannot be regenerated.
+- Discovery recurses. A depleted run and a full-strength one can sit in subdirectories and read as one corpus, and anything else placed under the tree is read as corpus too.
+- `record_id` is `{run_id}.{worker}-{lifetime}.{counter}` and `game_id` is `{run_id}.{worker}-{lifetime}.{game counter}`. Both carry the worker slot because workers count independently, and the lifetime because each JVM counts from zero. `game_id` is the join key for a checkpoint's recorded split, so a repeated one merges unrelated games. Corpora written before the lifetime segment existed stay readable and report an empty lifetime.
 
-**Record envelope**: `record_id` (`{run_id}.{worker}-{lifetime}.{counter}`), `generation` (gen-3: `3`, the member after `record_id`; absent before gen-3), `run_id`, `timestamp` (ISO 8601 UTC), `game_id` (`{run_id}.{worker}-{lifetime}.{game counter}` — the join key for a checkpoint's recorded split), `kind` (`resolution` | `rewrite` | `continuous` | `combat` | `trigger` | `playability` | gen-3 `turn_action`), `moment` (resolution kind only), `subkind` (playability kind only; on `turn_action` one of `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`, `lore_counter`, a record with no `ability` whose payload is its events and which no curated stratum holds), `link_id` (joins a cost half with its effect halves — one ordinarily, one per chosen mode resolution on a patched modal resolution, each acting through the mode's key; absent where a half has no partner: a mana record, the rescue record, an interventional half, and on gen-3 a triggered ability's or a copy's effect half, which nobody cast; a gen-3 cost half always carries one, and has no effect half when its item was countered), `mirror_of`, `variant_of`, `mode` (`patched` | `degraded`), `interventional` / `fork` / `synthetic`, `random_seat` (gen-2: `actor_player` is the random seat), `what_if` (gen-2 `attackers`/`blockers` only: `false` for a real declaration, `true` for an AI what-if query; legality recorded at Forge's declare steps is always `false`; gen-3 `attackers` records carry none), `aimed_at` (gen-3: the rule ids a record was collected for — every `collect-coverage` and `collect-variants` record lists its run's `--directed-fork-rules`, `[]` when it names none, and a directed fork `[rule]`; absent on every other record, which makes it natural), `directed` (gen-3 directed forks only: `{variant, operation}`, the scenario variant and the `ForkOperation` applied — `pt`, `keyword`, `colour_type`, `counters`, `tap`, `life`, `replace_card`, `remove_permanent`, `add_permanent`, `move_card`), `actor_player`, `ability` (provenance keys, a charm mode's carrying an `option` component; absent for `combat` and `playability`), `state`, `payload`. On a gen-2 `playability` record `actor_player` names the deciding player — the candidates' controller, the blockers' controller, the candidate ability's controller — where a gen-1 shard wrote the active or attacking player; this is the one named exception to the frozen schema, versioned by shard generation: a shard whose records carry `random_seat` is gen-2, one without it is gen-1 (its records read `random_seat = false`, `what_if` unknown), and every reader of a records set refuses one mixing the two. Gen-3 is a schema generation of its own: a reader takes a record's generation from `generation`, else `random_seat` (gen-2), else gen-1; relative to gen-2 a field may change meaning or go away (the contract's Gen-3 section lists each); `build-corpus`, `train-effect-model`, `evaluate-effect-model` and the probes read gen-3 only, and `rule-counts` alone reads gen-2 or gen-3, never mixed. A directed fork's flag signature is `fork = true`, `interventional = false`, `directed` set and `aimed_at = [rule]`, its `mirror_of` the live record open at the fork point, absent when none was; a protection fork's records are `fork = true`, `interventional = true`, of any kind, their cost halves linked as live ones. **`mode`, `interventional`, `fork`, `synthetic`, `random_seat`, `what_if`, `generation`, `aimed_at` and `directed` are collection metadata and never reach the model.** A curated shard's records also carry `curation` (`natural_share`, `copies`, `drawn_rule`, `drawn_rules`, `rule_entities`), written by `build-corpus` and never on a collected shard: curation metadata the rule mask weighs a copy's outputs by, never a model input; a protection copy is a synthetic record `<record_id>~pc<i>`.
+## Envelope
 
-## Gen-3 records
+The envelope is frozen within a generation: a later capability makes new `kind` values reachable and adds members, and never redefines a field. `tests/unit/effects/domain/test_schema_compatibility.py` enforces the four compatibility rules; there is no version stamp.
 
-A gen-3 record carries `generation: 3`, and an aimed one `aimed_at` (`forks.md`; every `collect-coverage` and `collect-variants` record too). Snapshots list every line of a card (`lines`: keys, kind, granted, `active` on statics, `cast_with`, `chosen`, a keyword's `fragment`, a static's `affected`), set base P/T and boosts apart, the card, player and global facts of `rules/gen3-fields.json`, floating effects, delayed triggers and dungeons in `global`, extra card entities with a `role` (library cards, cards exiled with a permanent, mutate components, the last-known subject as `L<id>`; a referenced card is always the game's own object for it, so a dies trigger's host is its graveyard card and its last-known copy only `L<id>`) and `links` (§ 10.3's families, written once in their forward direction). `refs.x` is the paid X, else an `SVar:X` the acting chain names, read once before the resolution and never a `Count$Random`; a fork's floating effects read the live game's clause notes up to the copy point (`FloatingEffects.ofFork`); a provenance key's face is numbered over the converter's faces, never a face-down or empty-room state. The collector enumerates both players' decision candidates itself at every priority stop (`FE/PriorityCandidates.java`, at the `priority-settled` hook; lands are candidates with `land_play`) and writes a two-stage sample (`FE/DecisionSample.java`: stage 1 keeps a candidate at `--playability-rate`, 0.01; stage 2 writes a `zone` one at `--zone-candidate-rate`, 1e-4, a plain one at `--plain-candidate-rate`, 1e-3, and every special one stage 1 kept), each verdict with `timing` and `failed_checks`. Attackers records are one per creature (`anchor_attacker`, `legal_defenders`, `must_attack`, `tapped_by_attack`), blockers records gain `must_block`, resolution effect halves `conditions_met`, and turn-based actions get `turn_action` records (`FE/TurnActionWindow.java`) that no curated stratum holds. Contract: `specs/025-ability-effect-model-gen3/contracts/record-schema-delta.md`; `validate-corpus` checks every gen-3 field is on every record that owes it, and `field-coverage` that each varies.
+| Member | Notes |
+|---|---|
+| `record_id`, `run_id`, `timestamp`, `game_id` | ids as above; timestamp ISO 8601 UTC |
+| `generation` | `3` on gen-3, absent before |
+| `kind` | `resolution`, `rewrite`, `continuous`, `combat`, `trigger`, `playability`, gen-3 `turn_action` |
+| `moment` | resolution kind only |
+| `subkind` | playability kind; on `turn_action` one of `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`, `lore_counter` |
+| `link_id` | joins a cost half with its effect halves; see below |
+| `mirror_of`, `variant_of` | the live record a fork mirrors; the variant source |
+| `mode` | `patched` or `degraded` |
+| `interventional`, `fork`, `synthetic` | flags; signatures below |
+| `random_seat` | gen-2 on: `actor_player` is the random seat |
+| `what_if` | gen-2 `attackers`/`blockers` only; gen-3 `attackers` records carry none |
+| `aimed_at` | gen-3: the rule ids a record was collected for |
+| `directed` | gen-3 directed forks only: `{variant, operation}` |
+| `actor_player` | on `playability` records of gen-2 on, the deciding player |
+| `ability` | provenance keys, a charm mode's with an `option`; absent for `combat` and `playability` |
+| `state`, `payload` | the board snapshot and the kind's payload |
+| `curation` | curated shards only, written by `build-corpus` |
 
-## Modal resolutions
+- `mode`, `interventional`, `fork`, `synthetic`, `random_seat`, `what_if`, `generation`, `aimed_at`, `directed` and `curation` are collection and curation metadata and never reach the model.
+- A `turn_action` record has no `ability`, its payload is its events, and no curated stratum holds it.
 
-A patched worker writes one cost half through the charm's root key and one effect half per chosen mode resolution through root key + `option`, all sharing one `link_id`, each with a snapshot taken at its mode's first clause; a fizzled or declined charm likewise writes one empty half per chosen mode (FR-029c), a charm fizzled as a whole, whose clauses never run, each on the board at its resolution's start; a degraded worker writes one root effect half. `validate-corpus` accepts several effect halves per `link_id` only when they are modes of one root.
+## Generations
+
+- A reader takes a record's generation from `generation`, else from the presence of `random_seat` (gen-2), else gen-1. A gen-1 record reads `random_seat = false` and `what_if` unknown.
+- Every reader refuses a records set mixing generations. `build-corpus`, `train-effect-model`, `evaluate-effect-model` and the probes read gen-3 only; `rule-counts` reads gen-2 or gen-3.
+- A curated shard keeps its source's generation, because the codec writes a record back as it read it.
+- `actor_player` on a `playability` record is the one named exception to the frozen schema: gen-1 wrote the active or attacking player, later generations the deciding player.
+- Relative to gen-2, a gen-3 field may change meaning or go away; the 025 contract's Gen-3 section lists each.
+
+## Links and halves
+
+- A resolution is a cost half and an effect half sharing a `link_id`.
+- `link_id` is absent where a half has no partner: a mana record, the rescue record, an interventional half, and on gen-3 a triggered ability's or a copy's effect half, which nobody cast.
+- A gen-3 cost half always carries one, and has no effect half when its item was countered.
+- On a patched worker a modal resolution writes one cost half through the charm's root key and one effect half per chosen mode through root key + `option`, all sharing one `link_id`. A fizzled or declined charm writes one empty half per chosen mode. A degraded worker writes one root effect half.
+
+## Flag signatures
+
+| Record | `fork` | `interventional` | Other |
+|---|---|---|---|
+| Observed | false | false | `aimed_at` absent, or the run's rules on `collect-coverage` and `collect-variants` (`[]` when none) |
+| Interventional resolution | true | true | effect half alone, no `link_id` |
+| Damage-step probe | true | false | `mirror_of`; payload `probed_keyword`, `probed_entity` |
+| Protection fork | true | true | any kind; cost halves linked as live ones |
+| Directed fork | true | false | `directed` set, `aimed_at = [rule]`; `mirror_of` only when a live record was open at the fork point |
+
+A protection copy written by `build-corpus` is a synthetic record `<record_id>~pc<i>`.
+
+## Gen-3 members worth knowing
+
+- A snapshot lists every line of a card (`lines`), sets base P/T and boosts apart, and carries the facts of `rules/gen3-fields.json`, `links`, and extra card entities with a `role`.
+- A referenced card is always the game's own object for it: a dies trigger's host is its graveyard card, and its last-known copy is only `L<id>`.
+- `refs.x` is the paid X, else an `SVar:X` the acting chain names, read once before the resolution and never a `Count$Random`.
+- A provenance key's face is numbered over the converter's faces, never a face-down or empty-room state.
+- Decision candidates are enumerated by the collector itself at every priority stop and written as a two-stage sample (`--playability-rate`, then `--zone-candidate-rate` or `--plain-candidate-rate`). The sampling is what keeps a gen-3 game near 350 KB gzipped.
+- Attackers records are one per creature.
+- `validate-corpus` checks every gen-3 field is on every record that owes it, and `field-coverage` that each varies.
 
 ## Dropped-event counts
 
-**Dropped-event counts** (`output/effects/records/{run_id}.{worker}-{lifetime}.dropped-events.tsv`, written only under `--count-dropped-events`): append-only, one `event_type<TAB>phase<TAB>count` line per (event type, engine phase) pair per game, appended as each game ends — workers are killed, never stopped, so a count held until exit would be lost. `event_type` is the record schema's event wire name, `phase` Forge's `PhaseType` lower-cased (`none` before the game has one). Lines repeat across games and are summed by the supervisor, which skips a line cut short by a kill. Not a shard suffix, so no shard reader takes it for one.
+- `{run_id}.{worker}-{lifetime}.dropped-events.tsv` beside the shard, written only under `--count-dropped-events`: one `event_type<TAB>phase<TAB>count` line per pair per game, appended as each game ends, because workers are killed, never stopped.
+- Lines repeat across games and are summed by the supervisor, which skips a line cut short by a kill.
+- The suffix is not a shard suffix, so no shard reader takes the file for one.

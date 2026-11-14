@@ -1,11 +1,40 @@
 # Rules catalogue, detectors and `rule-counts`
 
-Covers scenario declarations, detector families, rule tags and their two entity roles, and the per-rule counts file. Read on demand: `src/effects/CLAUDE.md` says when, and lists the other topic files in this directory.
+Rules to respect when editing `rules/`, a detector family or rule tagging, and when running or reading `rule-counts`. This file does not describe the catalogue:
 
-## Rules catalogue and detectors
+- The catalogue's own documentation: `rules/README.md`; its file formats: `specs/025-ability-effect-model-gen3/contracts/catalogue-extensions.md`.
+- What is specified: `specs/2026-10-30-ability-effect-model-gen3.md` § 4, 5 and 7.
+- Code: enums in `domain/rule_catalogue.py`, read-only loaders in `infrastructure/rules_catalogue_io.py`, one module per detector family in `domain/rule_detectors/`.
 
-Every scenario of `rules/scenarios/<unit>.json` declares a `detector` — a registered family, its `record_kind`, the outcome and near miss in a sentence, the family's `params` and the gen-3 fields it `needs` — or `{"none": reason}`; every non-base variant carries an `operation` (one of the ten `ForkOperation`s of `domain/fork_operation.py`, pinned against the Java enum both ways) or `{"unclassifiable": reason}`; a scenario may record a `departure` (`suspected`, or `confirmed` and `unpatched`/`patched`/`accepted`). The enums are `domain/rule_catalogue.py`, the read-only loaders `infrastructure/rules_catalogue_io.py` (`load_scenarios`, `load_heads` filtered to `rule_catalogue.head_outputs()`, `heads_digest`); `scripts/rules_catalogue.py validate` checks the declarations, `directed-rules --counts` writes `rules/directed-fork-rules.txt` and `rules/coverage-wording-cards.txt`, `gen3-fields` recomputes the learnable rules after a map rerun, and `scripts/rule_breadth.py` flags for review a declaration that tags a small share of what its family finds with the situation's parameters dropped (one copied from a scenario's specifics looks like that). A detector family is a module of `domain/rule_detectors/` (`sba_zone_move`, `sba_game_loss`, `trigger_mode`, `keyword_combat`, `verdict_bit`, `continuous_contribution`, `rewrite_event`, `legality_membership`, `outcome_event`, `resolution_outcome`, and `combat_keyword_effect` for the combat keywords outside gate 2's table, whose table it leaves alone); its parameters name a rule's general condition (a check, a `Mode$`, a keyword, a verdict bit, an `Event$`), never a card. `tag_record(record, catalogue, sidecars)` returns one `RuleTag(rule, polarity, observed, condition, outcome, scenario)` per rule, merging a rule's scenarios (`fires` if any says so, else `does_not_fire`, else `other`; each role the union of that role). A tag names entities in two roles (research R1, the one definition): condition entities, what the rule's condition reads (a keyword's carrier, the acting source and its targets and controller, a judged permanent, an anchor attacker), and outcome entities, where its outcome falls as the record's targets place it (the creature fought, the defending player, a lifelinker's controller, the player who discarded or drew, every card and player a target legality is written at); a tag whose outcome is an absence (an `absent` declaration's `fires` side, a scoped near miss with no event) names condition entities only, and a `trigger` record's tags name no outcome entity, the trigger's effect arriving as its resolution's record. The hard mask's gate trains at both roles; a rule test reads at the outcome entities. `scripts/rule_entity_audit.py` measures, per rule and output, how often the outputs are supervised at each role's entities; a declaration whose `needs` the record's generation lacks makes the rule not countable rather than zero; a tag whose `observed` disagrees with its polarity goes on the review list and is never a rule-test record. `RuleSource` (`random_seat`, `forge_ai`, `aimed`) is decided per record. `rule-counts`, the `build-corpus` survey and the selection-set freeze all tag through the one `tag_record`.
+## Declarations
+
+- Every scenario of `rules/scenarios/<unit>.json` declares a `detector` or `{"none": reason}`. Every non-base variant carries an `operation` or `{"unclassifiable": reason}`.
+- An `operation` is one of the `ForkOperation`s of `domain/fork_operation.py`, pinned against the Java enum both ways.
+- A detector's parameters name a rule's general condition (a check, a `Mode$`, a keyword, a verdict bit, an `Event$`), never a card. A declaration copied from a scenario's specifics tags only a small share of what its family finds; `scripts/rule_breadth.py` flags those for review.
+- A declaration whose `needs` the record's generation lacks makes the rule not countable, not zero.
+- `combat_keyword_effect` covers the combat keywords outside gate 2's table and leaves that table alone.
+
+## Commands to run after a change
+
+- `scripts/rules_catalogue.py validate` checks the declarations.
+- `scripts/rules_catalogue.py directed-rules --counts` writes `rules/directed-fork-rules.txt` and `rules/coverage-wording-cards.txt`.
+- `scripts/rules_catalogue.py gen3-fields` recomputes the learnable rules after a map rerun.
+- `scripts/rule_entity_audit.py` measures, per rule and output, how often the outputs are supervised at each role's entities.
+
+## Tagging
+
+- `rule-counts`, the `build-corpus` survey and the selection-set freeze all tag through the one `tag_record`.
+- A rule's scenarios merge into one tag: `fires` if any says so, else `does_not_fire`, else `other`.
+- A tag names entities in two roles, and this is the one definition:
+  - Condition entities are what the rule's condition reads: a keyword's carrier, the acting source with its targets and controller, a judged permanent, an anchor attacker.
+  - Outcome entities are where its outcome falls as the record's targets place it: the creature fought, the defending player, a lifelinker's controller, the player who discarded or drew, every card and player a target legality is written at.
+- A tag whose outcome is an absence names condition entities only. A `trigger` record's tags name no outcome entity, because the trigger's effect arrives as its resolution's record.
+- The hard rule mask's gate trains at both roles. A rule test reads at the outcome entities.
+- A tag whose `observed` disagrees with its polarity goes on the review list and is never a rule-test record.
+- `RuleSource` (`random_seat`, `forge_ai`, `aimed`) is decided per record.
 
 ## `rule-counts`
 
-- **`rule-counts`** — tags every record of `--records-dir` with the catalogue's detectors (§ Rules catalogue and detectors) and writes `rule -> polarity -> source -> records` to `--output` (default `output/effects/rule-counts.json`) beside `records`, `not_countable`, `none` (the rules declared without a detector, with their reasons) and `review` (`record_id`, scenario); it prints one line per rule by unit, `fires` and `does_not_fire` each split `random_seat / forge_ai / aimed`, then the `none` rules, the uncountable ones and the review list's size. A rule no record tags is omitted, so absent is not "not countable". Gen-2 or gen-3 shards, never mixed (exit 1, as on an empty directory).
+- Writes `rule -> polarity -> source -> records` to `--output` (default `output/effects/rule-counts.json`), with the rules declared without a detector, the uncountable ones, the review list and the per-rule `carriers`.
+- A rule no record tags is omitted, so absent does not mean "not countable".
+- It reads gen-2 or gen-3 shards, never mixed. The file's `generation` is what the steered variant round checks.
