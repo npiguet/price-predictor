@@ -2,7 +2,7 @@
 
 Real cards cluster (most damage spells deal 2, 3 or 4), so a variant that
 deals 7 breaks a memorized phrase without inventing a mechanic. Perturbations
-are kept small: a numeric shift of up to ±3 or a doubling, floored at zero, or
+are kept small: a numeric shift of up to ±3 or a doubling, floored at one, or
 a selector swapped from a whitelist. A signed value (``NumAtt$ +2``, ``NumDef$
 -2``) keeps its sign and a magnitude of at least one, so a pump stays a pump and
 a debuff a debuff. A deck-building hint (``DeckHints:``, ``DeckNeeds:``,

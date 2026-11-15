@@ -22,6 +22,10 @@ playability     FR-047a: the responsible static's ``Mode$``, else the first
 
 Whatever the kind, a record acting through a keyword line belongs to that
 keyword's family (FR-048): a ward trigger and a ward resolution both teach ward.
+Combat and playability records are the exception, their families read first:
+neither acts through a line. A record of the other kinds whose acting key no
+sidecar line answers for is ``(no-text)``, as is a rewrite line naming no
+``Event$``; a decision record with no candidate is ``none``.
 """
 
 from __future__ import annotations

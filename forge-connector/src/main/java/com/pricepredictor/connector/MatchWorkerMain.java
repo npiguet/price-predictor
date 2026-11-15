@@ -16,13 +16,15 @@ import java.util.Optional;
 /**
  * Match worker entry point.
  *
- * <p>Initializes the Forge environment, then loops indefinitely generating sealed
- * match outcomes via {@link MatchGenerator} and appending them to the shared
- * output file.
+ * <p>Initializes the Forge environment, then plays matches via {@link MatchGenerator}
+ * until it is stopped, appending each match's outcome to the shared output file and,
+ * with {@code -Deffect.records.dir} set, its effect records to a shard of its own.
  *
- * <p>Required system properties:
+ * <p>System properties every run sets:
  * <ul>
- *   <li>{@code -Doutput.file=<path>} — where to append match-outcome lines.</li>
+ *   <li>{@code -Doutput.file=<path>} — where to append match-outcome lines. Absent with
+ *       {@code -Deffect.records.dir} set, the worker runs records-only and constructs
+ *       neither sealed writer.</li>
  *   <li>{@code -Dmatch.run.id=<UUID>} — supervisor-generated run ID written on every match.</li>
  * </ul>
  *
@@ -69,7 +71,10 @@ import java.util.Optional;
  *       the gate that keeps records-only mode out of one.</li>
  * </ul>
  *
- * <p>The worker is terminated externally by the Python supervisor (process.terminate()).
+ * <p>The worker plays until the supervisor ends it. With {@code -Dworker.stop.file} or
+ * {@code -Dworker.recycle.seconds} set it stops itself at a game end ({@link WorkerStop},
+ * {@code contracts/cli.md} § Match worker stop protocol); otherwise, and past the
+ * supervisor's timeout, its process tree is killed.
  */
 public class MatchWorkerMain {
 

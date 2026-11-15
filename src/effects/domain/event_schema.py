@@ -254,9 +254,9 @@ class Event:
     """One attributed outcome inside an effect payload.
 
     ``subjects`` are entity or player refs, never names — the snapshot carries
-    the identities. ``duration`` is ``None`` for an immediate outcome and names
-    the end condition (``end_of_turn``, ``your_next_turn``, ``permanent``) for a
-    continuous one.
+    the identities. ``duration`` is one of the three buckets the collector folds
+    a script's duration into (``instant``, ``end_of_turn``, ``permanent``: Java
+    ``EventDuration``), ``None`` on a record that carries none.
 
     ``attributed_to`` is tri-state, and the three states are what
     :func:`attribution_kind` reads back:

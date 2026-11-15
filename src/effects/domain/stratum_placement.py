@@ -8,9 +8,9 @@ inventories, ``game -> {(rule, polarity): records}``, counted over budgeted
 rules and rule-test-eligible records (:func:`rule_test_eligible`) of games
 two Forge AIs played.
 
-- Only Forge-AI games enter a validation stratum. A random-seat game naming a
-  held-out card is dropped like a held-out game the cap declines; any other
-  random-seat game trains.
+- Only Forge-AI games enter the game-disjoint stratum. The card-disjoint
+  stratum admits games naming a held-out card, random-seat games included
+  (FR-059); any other random-seat game trains.
 - Card-disjoint: the text holdout fixes the candidate games. Games carrying a
   (rule, polarity) still short of its test records are admitted first, the
   scarcest cell first, then every other candidate in seeded order, all under

@@ -803,8 +803,9 @@ STARTUP_LINE = "Graceful stop: at a game end, when "
 #: A game has no time bound of its own. Unrecorded sealed best-of-one
 #: matches, 974,000 of them on the NAS, last 4 s at the median, 116 s at the
 #: 99th percentile, 343 s at the 99.9th and 561 s at the 99.99th, and 63
-#: lasted 600 s or more; gen-3 recorded games are unmeasured and slower, the
-#: recording running beside the game. The 60 s kill-recycle
+#: lasted 600 s or more. Gen-3 recorded games, 1,946 of them measured on
+#: 2026-11-15, last 4 s at the median, 44 s at the 99th percentile and 88 s
+#: at the 99.5th, and about one in 400 runs past 5 minutes. The 60 s kill-recycle
 #: (``ForgeWorkerPool._kill_oldest_worker``) lets no JVM live much past
 #: ``workers × 60`` s, ten to twelve minutes at the usual 10 to 12 workers,
 #: so no game longer than that is ever finished. Ten minutes lets nearly

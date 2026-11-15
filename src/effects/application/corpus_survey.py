@@ -16,10 +16,10 @@ game:
   candidate pool, or that has a random seat, trains whatever placement
   decides: its records fold into the :class:`TrainingSupply` here, and each
   tagged one is kept as a :class:`SurveyedRecord` for the rule budgets;
-- a candidate game, a Forge-AI game of the pool or naming a held-out card,
-  keeps every kept record as a :class:`SurveyedRecord` and its rule inventory,
-  and folds into the supply only once placement trains it;
-- a random-seat game naming a held-out card is dropped and keeps nothing.
+- a candidate game, a Forge-AI game of the pool or any game naming a held-out
+  card (random-seat games included: the card-disjoint stratum admits them,
+  FR-059), keeps every kept record as a :class:`SurveyedRecord` and its rule
+  inventory, and folds into the supply only once placement trains it.
 
 ``turn_action`` records are written to no stratum (FR-059): the survey counts
 them by subkind and reads nothing else of them but their game's properties.

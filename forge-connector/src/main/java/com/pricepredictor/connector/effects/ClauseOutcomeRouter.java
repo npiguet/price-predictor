@@ -176,7 +176,7 @@ final class ClauseOutcomeRouter {
      * <p>{@code CARD_REVEALED} and {@code DAMAGE_PREVENTED} come from the two
      * engine choke points ({@code GameAction.reveal},
      * {@code ReplacementHandler.runSingleReplaceDamageEffect}); the other
-     * twelve, from an effect directly. {@code SPELL_COUNTERED} ({@code
+     * fourteen, from an effect directly. {@code SPELL_COUNTERED} ({@code
      * CounterEffect}), {@code TOKEN_CREATED} ({@code TokenEffectBase}, shared
      * by the six token-making effects) and {@code DICE_ROLLED} ({@code
      * RollDiceEffect}) are the same; {@code PLAYER_WON} is a bus
