@@ -292,13 +292,15 @@ Parameters: stock `TransformerEncoderLayer` names plus `rel_k`, `rel_v` of shape
 ### Output layout (extended)
 
 The 22 outputs of root § 11.2 and the § 11.3 extensions as `FieldSpec` rows (300 per-entity fields,
-1,386 columns); legality fields scored on a gate-free path; a new shipped `global` head (turn-structure
-changes, day/night change); the verdict head (170 columns) gains `timing`, one failed-check column per
+1,636 columns with the 181 subtypes and 70 keywords of the pilot-generated lists, root § 11.3);
+legality fields scored on a gate-free path; a new shipped `global` head (turn-structure
+changes, day/night change); the verdict head (169 columns) gains `timing`, one failed-check column per
 `PlayabilityCheck`, a cost-adjustment delta per mana symbol kind (on casts only),
 `resolution_outcome`, `effects_created` and `replacement_result`, each a `RecordField` with its own
 mask column; created-objects slots gain counters, an other-controller bit, a kind, subtypes and
 keywords. The subtype and keyword output lists are `output_vocabularies.py`, recorded in
-`layout_settings`. Each count field gains a learned log-dispersion.
+`layout_settings`; they, and with them the head widths, are fixed when they are generated from the
+collected corpus (the present lists come from pilot collections). Each count field gains a learned log-dispersion.
 
 ### WeightAverage (new)
 

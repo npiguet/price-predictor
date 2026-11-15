@@ -13,6 +13,8 @@ import pytest
 from effects.domain.effect_head_input import COMBAT_SUBSTEPS, ZONES
 from effects.domain.effect_head_layout import (
     AT_LEAST_SLICES,
+    CREATED_OBJECTS_WIDTH,
+    CREATED_SLOT_WIDTH,
     DURATIONS,
     GLOBAL_WIDTH,
     LIBRARY_EVENTS,
@@ -26,6 +28,7 @@ from effects.domain.effect_head_layout import (
     counter_field,
 )
 from effects.domain.field_types import DIRECTIONS
+from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 
 _PINNED = [
     (COMBAT_SUBSTEPS, ("first_strike", "regular")),
@@ -53,11 +56,17 @@ def test_the_generated_counter_fields_keep_their_names():
 
 
 def test_the_heads_keep_their_widths():
-    """Gen-3's widths (root spec § 11): the per-entity head's 1,386 columns
-    are 932 for the 233 counter fields, the verdict head's 169 are 136 for
-    the cost adjustment's 34 mana symbols and 4 for the resolution outcome
-    (FR-052: resolved, fizzled, partially fizzled, declined)."""
-    assert PER_ENTITY_WIDTH == 1386
+    """Gen-3's widths (root spec § 11.3) with the pilot-generated lists of
+    181 subtypes and 70 keywords: the per-entity head's 1,636 columns are
+    932 for the 233 counter fields, a created-objects slot is 286 columns,
+    the verdict head's 169 are 136 for the cost adjustment's 34 mana symbols
+    and 4 for the resolution outcome (FR-052: resolved, fizzled, partially
+    fizzled, declined). The widths move only when the lists are regenerated
+    from the collected corpus."""
+    assert (len(SUBTYPES_CHANGED), len(KEYWORDS_CHANGED)) == (181, 70)
+    assert PER_ENTITY_WIDTH == 1636
+    assert CREATED_SLOT_WIDTH == 286
+    assert CREATED_OBJECTS_WIDTH == 1145
     assert VERDICT_WIDTH == 169
     assert GLOBAL_WIDTH == 7
     assert VALUE_WIDTH == 541
