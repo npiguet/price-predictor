@@ -93,6 +93,16 @@ final class FloatingEffects {
         }
     }
 
+    /** How many games' notes are held, for a test. */
+    static int gamesHeld() {
+        return BY_GAME.size();
+    }
+
+    /** Whether notes of {@code game} are held, for a test. */
+    static boolean holds(Game game) {
+        return BY_GAME.containsKey(game);
+    }
+
     /** One live clause's resolution: the timestamps Forge drew while it ran. */
     private static final class Note {
         final long start;

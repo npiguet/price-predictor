@@ -99,4 +99,66 @@ class GameRetentionTest {
         int live = LibraryCapture.holds(game) ? 1 : 0;
         assertEquals(held, LibraryCapture.gamesHeld() - live, "the ended fork holds no built card");
     }
+
+    /**
+     * A fork thrown away at its score check (here for want of a perspective)
+     * was already snapshotted by the copy's fidelity audit, which builds its
+     * library cards; it never reaches the body, whose end released the rest.
+     * At most fewer games are held afterwards (an earlier test's collected),
+     * never the discarded copy.
+     */
+    @Test
+    void aForkDiscardedAtItsScoreCheckIsLetGo() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        library(game, game.getPlayers().get(0), "Hill Giant", 8);
+        int built = LibraryCapture.gamesHeld();
+        int noted = FloatingEffects.gamesHeld();
+        boolean[] ran = {false};
+
+        Object written = new Forks.ForkRun("probe", game, () -> { }, () -> null).take(
+                (verified, snapshots) -> {
+                    ran[0] = true;
+                    return verified;
+                },
+                (verified, produced) -> produced);
+
+        assertNull(written, "a fork with no perspective writes nothing");
+        assertFalse(ran[0], "a fork with no perspective never runs its body");
+        int liveBuilt = LibraryCapture.holds(game) ? 1 : 0;
+        int liveNoted = FloatingEffects.holds(game) ? 1 : 0;
+        assertTrue(LibraryCapture.gamesHeld() - liveBuilt <= built,
+                "the discarded fork's built cards are held: " + LibraryCapture.gamesHeld() + " > " + built);
+        assertTrue(FloatingEffects.gamesHeld() - liveNoted <= noted,
+                "the discarded fork's notes are held: " + FloatingEffects.gamesHeld() + " > " + noted);
+    }
+
+    /**
+     * A recorded game whose clause note was left open (its clause threw
+     * before the resolved hook) is let go with its recording: the open note
+     * holds the clause and so the game, which the weak key alone never frees.
+     */
+    @Test
+    void aRecordedGameWithANoteLeftOpenIsLetGo() throws Throwable {
+        WeakReference<Game> game = recordANoteLeftOpen();
+
+        for (int i = 0; i < 50 && game.get() != null; i++) {
+            System.gc();
+            Thread.sleep(20);
+        }
+
+        assertNull(game.get(), "the recorded game is still reachable through its open note");
+    }
+
+    private WeakReference<Game> recordANoteLeftOpen() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        SpellAbility spell = TestBoard.inHand(game, caster, "Divination").getFirstSpellAbility();
+        spell.setActivatingPlayer(caster);
+
+        ShardRun.recordedWithClauseHook(tempDir, game, TestCaps.caps().interventions(0).probes(0).build(), WHY,
+                () -> FloatingEffects.of(game).clauseResolving(game, spell));
+
+        assertFalse(FloatingEffects.holds(game), "the closed recording's game holds no note");
+        return new WeakReference<>(game);
+    }
 }

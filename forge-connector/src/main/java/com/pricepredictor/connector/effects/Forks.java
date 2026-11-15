@@ -357,6 +357,12 @@ final class Forks {
      * ({@link ForkFidelity}), whose differences are reported and decide
      * nothing.
      *
+     * <p>A copy that is not handed on (its audit or its notes threw, the
+     * perspective is null or throws, the score check fails or throws) is
+     * released from the registries keyed by game here ({@link #release}):
+     * the audit has already snapshotted it, and the caller never learns of
+     * it to release it.
+     *
      * @param kind        the fork's kind, which names a copy that threw in
      *                    the worker's failure report ({@code "fork <kind> copy"})
      * @param perspective read after the copy, because a game the copier cannot
@@ -364,7 +370,7 @@ final class Forks {
      */
     static Optional<VerifiedFork> copyAndVerify(String kind, Game live, Supplier<Player> perspective) {
         GameCopier copier;
-        Game fork;
+        Game fork = null;
         Map<String, Integer> copyDropped;
         try {
             // All inside the guard: the copier's own constructor reads the
@@ -381,13 +387,32 @@ final class Forks {
             ForkFidelity.report(live, fork, copier.getNoCounterpartTally(), copier.getNoCounterpartExamples());
         } catch (RuntimeException | StackOverflowError e) {
             HookFailures.countContained("fork " + kind + " copy", e);
+            release(fork);
             return Optional.empty();
         }
-        Player from = perspective.get();
-        if (from == null || !scoreCheck(kind, live, copier, fork, from)) {
-            return Optional.empty();
+        Optional<VerifiedFork> verified = Optional.empty();
+        try {
+            Player from = perspective.get();
+            if (from != null && scoreCheck(kind, live, copier, fork, from)) {
+                verified = Optional.of(new VerifiedFork(copier, fork, from, copyDropped));
+            }
+            return verified;
+        } finally {
+            if (verified.isEmpty()) {
+                release(fork);
+            }
         }
-        return Optional.of(new VerifiedFork(copier, fork, from, copyDropped));
+    }
+
+    /**
+     * Forget everything the registries keyed by game hold for {@code fork}
+     * ({@link LibraryCapture}, {@link FloatingEffects}): its fork has ended,
+     * or was discarded before it began. Each built card or open note holds
+     * its game, so a weak key alone would keep the fork for the JVM's life.
+     */
+    static void release(Game fork) {
+        LibraryCapture.release(fork);
+        FloatingEffects.release(fork);
     }
 
     // ── one fork, start to finish ───────────────────────────────────────
@@ -507,9 +532,10 @@ final class Forks {
                     before.compareAfter("fork " + kind + " moved the live game", live, forked[0]);
                 } finally {
                     // The fork is done with: the registries keyed by game
-                    // would otherwise hold it for the JVM's life.
-                    LibraryCapture.release(forked[0]);
-                    FloatingEffects.release(forked[0]);
+                    // would otherwise hold it for the JVM's life. A copy
+                    // discarded before it was handed on is released by
+                    // copyAndVerify itself.
+                    release(forked[0]);
                 }
             }
         }
