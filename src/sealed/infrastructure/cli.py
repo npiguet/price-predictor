@@ -95,6 +95,18 @@ def _add_cards_path(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_embeddings_path(parser: argparse.ArgumentParser, *, resumable: bool = False) -> None:
+    """Where a reader finds the ``.npz`` card embeddings ``encode-cards`` wrote."""
+    parser.add_argument(
+        "--embeddings-path", default=None,
+        help=(
+            "Directory of the .npz card embeddings, laid out like --cards-path "
+            "(encode-cards --embeddings-path); default: beside the cards in "
+            "--cards-path." + (" Resumable." if resumable else "")
+        ),
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sealed",
@@ -318,9 +330,20 @@ def _build_encode_cards_parser(subparsers) -> None:
         default="output/cardsfolder/",
         help="Directory containing .txt card script files (searched recursively)",
     )
+    encode_parser.add_argument(
+        "--embeddings-path", default=None,
+        help=(
+            "Directory the .npz embeddings are written to, laid out like "
+            "--cards-path (a cache run directory); default: beside each card "
+            "in --cards-path. --clean empties this directory's .npz files only."
+        ),
+    )
     add_dataclass_arg(
         encode_parser, EncodeCardsConfig, "clean",
-        help_text="Delete all existing .npz files before encoding (forces full re-encode)",
+help_text=(
+            "Delete all existing .npz files where the embeddings are written "
+            "before encoding (forces full re-encode)"
+        ),
     )
 
 
@@ -395,6 +418,7 @@ def _build_build_decks_parser(subparsers) -> None:
         help="Scorer model checkpoint (default: models/sealed/scorer/latest.pt)",
     )
     _add_cards_path(build_parser)
+    _add_embeddings_path(build_parser)
     build_parser.add_argument(
         "--output",
         default="output/sealed/generated-decks.txt",
@@ -494,6 +518,7 @@ def _build_train_picker_parser(subparsers) -> None:
         "--cards-path", default=None,
         help="Directory of .npz card embeddings (default: output/cardsfolder/). Resumable.",
     )
+    _add_embeddings_path(parser, resumable=True)
     parser.add_argument(
         "--checkpoint-dir", default=None,
         help=(
@@ -665,6 +690,7 @@ def _build_pick_decks_parser(subparsers) -> None:
         help="Picker weights (default: models/sealed/picker/latest.pt).",
     )
     _add_cards_path(parser)
+    _add_embeddings_path(parser)
     parser.add_argument(
         "--label", type=_parse_label, required=True,
         help=(
@@ -694,7 +720,7 @@ _TRAIN_PICKER_ARCHITECTURE_FLAGS: tuple[str, ...] = (
 )
 _RESUMABLE_PICKER_FLAG_NAMES: tuple[str, ...] = (
     "pools_path", "scorer_checkpoint", "auditor_scorer_checkpoint",
-    "cards_path", "checkpoint_dir",
+    "cards_path", "embeddings_path", "checkpoint_dir",
     "d_model", "n_layers", "n_heads", "d_ff", "dropout",
     "aux_weight", "normalize_advantage", "objective", "topk",
     "batch_size", "n_samples", "temperature",
@@ -703,7 +729,7 @@ _RESUMABLE_PICKER_FLAG_NAMES: tuple[str, ...] = (
 )
 _PICKER_PATH_FIELDS: frozenset[str] = frozenset({
     "pools_path", "scorer_checkpoint", "auditor_scorer_checkpoint",
-    "cards_path", "checkpoint_dir",
+    "cards_path", "embeddings_path", "checkpoint_dir",
 })
 
 
@@ -735,6 +761,7 @@ def _build_train_scorer_parser(subparsers) -> None:
             "Resumable."
         ),
     )
+    _add_embeddings_path(train_parser, resumable=True)
     train_parser.add_argument(
         "--checkpoint-dir",
         default=None,
@@ -905,6 +932,7 @@ def _build_evaluate_scorer_parser(subparsers) -> None:
         help="Model checkpoint to evaluate (e.g. best_l2_h4_s4_ff1088_mlp256.pt)",
     )
     _add_cards_path(eval_parser)
+    _add_embeddings_path(eval_parser)
     add_dataclass_arg(
         eval_parser, EvaluateScorerConfig, "pools",
         help_text="Number of sealed pools to generate for evaluation",
@@ -1272,6 +1300,7 @@ def run_encode_cards(args: argparse.Namespace) -> int:
 
     vocab_path = Path(args.vocab_path)
     cards_path = Path(args.cards_path)
+    embeddings_path = Path(args.embeddings_path) if args.embeddings_path else None
     if not vocab_path.exists():
         print(f"Error: Vocabulary file not found: {vocab_path}", file=sys.stderr)
         return 2
@@ -1280,6 +1309,8 @@ def run_encode_cards(args: argparse.Namespace) -> int:
         return 2
 
     print(f"Encoding cards in {cards_path}")
+    if embeddings_path is not None:
+        print(f"Writing their embeddings to {embeddings_path}")
 
     model.eval()
     tokenizer = load_tokenizer(vocab_path)
@@ -1296,7 +1327,9 @@ def run_encode_cards(args: argparse.Namespace) -> int:
         )
 
     result = use_case.execute(
-        EncodeCardsConfig(cards_path=cards_path, clean=args.clean),
+        EncodeCardsConfig(
+            cards_path=cards_path, clean=args.clean, embeddings_path=embeddings_path,
+        ),
         encoder,
         store,
         progress=report,
@@ -1354,6 +1387,11 @@ def run_generate_pools(args: argparse.Namespace) -> int:
     return 0
 
 
+def _embeddings_path(args: argparse.Namespace) -> Path | None:
+    """``--embeddings-path``, None when unset (the embeddings beside the cards)."""
+    return Path(args.embeddings_path) if args.embeddings_path else None
+
+
 def run_build_decks(args: argparse.Namespace) -> int:
     """Execute the build-decks command."""
     from sealed.application.build_decks import BuildDecksConfig, BuildDecksUseCase
@@ -1363,6 +1401,7 @@ def run_build_decks(args: argparse.Namespace) -> int:
         label=args.label,
         checkpoint=Path(args.checkpoint),
         cards_path=Path(args.cards_path),
+        embeddings_path=_embeddings_path(args),
         output=Path(args.output),
         sa_temperature=args.sa_temperature,
         sa_cooling=args.sa_cooling,
@@ -1387,14 +1426,14 @@ def run_build_decks(args: argparse.Namespace) -> int:
 
 
 _RESUMABLE_FLAG_NAMES: tuple[str, ...] = (
-    "outcomes_path", "cards_path", "checkpoint_dir",
+    "outcomes_path", "cards_path", "embeddings_path", "checkpoint_dir",
     "epochs", "batch_size", "lr",
     "n_layers", "n_heads", "n_seeds", "d_ff", "mlp_hidden", "dropout",
     "embedding_lr", "patience", "val_fraction", "random_seed",
     "encoder_chunk_size", "max_grad_norm", "margin_weighting",
 )
 _PATH_FIELDS: frozenset[str] = frozenset({
-    "outcomes_path", "cards_path", "checkpoint_dir",
+    "outcomes_path", "cards_path", "embeddings_path", "checkpoint_dir",
     "encoder_checkpoint", "scorer_checkpoint", "resume",
 })
 # Fallback CLI defaults for fields that lack a dataclass default (required fields).
@@ -1729,6 +1768,7 @@ def run_pick_decks(args: argparse.Namespace) -> int:
         pools_path=Path(args.pools_path),
         picker_checkpoint=Path(args.picker_checkpoint),
         cards_path=Path(args.cards_path),
+        embeddings_path=_embeddings_path(args),
         label=args.label,
         output=Path(args.output),
         resume=args.resume,
@@ -1766,6 +1806,7 @@ def run_evaluate_scorer(args: argparse.Namespace) -> int:
     config = EvaluateScorerConfig(
         checkpoint=Path(args.checkpoint),
         cards_path=Path(args.cards_path),
+        embeddings_path=_embeddings_path(args),
         pools=args.pools,
         best_of=args.best_of,
         workers=args.workers,
@@ -2024,7 +2065,7 @@ def _train_scorer_inputs(args: argparse.Namespace) -> list[str | None]:
     return [
         args.outcomes_path or defaults.get("outcomes_path"),
         args.cards_path or defaults.get("cards_path"),
-        args.resume, args.scorer_checkpoint, args.encoder_checkpoint,
+        args.embeddings_path, args.resume, args.scorer_checkpoint, args.encoder_checkpoint,
     ]
 
 
@@ -2040,28 +2081,33 @@ def _train_picker_inputs(args: argparse.Namespace) -> list[str | Path | None]:
 
     return [
         args.pools_path, path("scorer_checkpoint"), args.auditor_scorer_checkpoint,
-        path("cards_path"), args.resume, args.picker_checkpoint,
+        path("cards_path"), args.embeddings_path, args.resume, args.picker_checkpoint,
     ]
 
 
 #: Each subcommand's run manifest (``.claude/skills/artifact-layout``): the
 #: argument naming its output and the ones it reads.
 RUN_MANIFESTS: ManifestTable = {
-    # The embeddings land beside the cards, in a tree it never creates.
+    # The embeddings land in --embeddings-path, created for them, else beside
+    # the cards, in a tree it never creates.
     "encode-cards": Writes(
-        "cards_path", create=False,
+        lambda args: args.embeddings_path or args.cards_path,
+        create=lambda args: args.embeddings_path is not None,
         inputs=(_encode_cards_encoder, "scorer_checkpoint", "vocab_path", "cards_path"),
     ),
     "generate-pools": Writes(_pools_dir, inputs=("exclude_cards",)),
     "build-decks": Writes(
-        "output", file=True, inputs=("pools_path", "checkpoint", "cards_path"),
+        "output", file=True,
+        inputs=("pools_path", "checkpoint", "cards_path", "embeddings_path"),
     ),
     "train-scorer": Writes(
         _checkpoint_dir(_REQUIRED_FIELD_CLI_DEFAULTS["checkpoint_dir"]),
         inputs=(_train_scorer_inputs,),
     ),
     # Without --work-dir the evaluation works in a temporary directory.
-    "evaluate-scorer": Writes("work_dir", inputs=("checkpoint", "cards_path")),
+    "evaluate-scorer": Writes(
+        "work_dir", inputs=("checkpoint", "cards_path", "embeddings_path"),
+    ),
     # A collection run's directory is its --effect-records, which also holds
     # the two sealed corpora unless --outcomes-dir sends them elsewhere.
     "match-outcomes": Writes(
@@ -2077,7 +2123,8 @@ RUN_MANIFESTS: ManifestTable = {
         inputs=(_train_picker_inputs,),
     ),
     "pick-decks": Writes(
-        "output", file=True, inputs=("pools_path", "picker_checkpoint", "cards_path"),
+        "output", file=True,
+        inputs=("pools_path", "picker_checkpoint", "cards_path", "embeddings_path"),
     ),
     "analyze-generated-decks": READ_ONLY,
 }

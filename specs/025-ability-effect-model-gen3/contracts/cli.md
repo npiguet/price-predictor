@@ -532,6 +532,8 @@ reads there is named by a flag.
 | `scripts/effect_embedding_probes/*.py` | `--output DIR` | `<reports-dir>/embedding-probes-<checkpoint>-<date>/` | the battery's report directory, shared by every script given it |
 | `scripts/effect_sweep_arm.py` | `--cache-dir DIR` | `abilities/` in `--run-dir` | the arm's ability cache |
 | `scripts/effect_sweep_arm.py` | `--reports-out DIR` | `reports/` in `--run-dir` | the arm's probe reports; when given, the evaluation's files go to `DIR/evaluation/` |
+| `sealed encode-cards` | `--embeddings-path DIR` | beside each card in `--cards-path` | the `.npz` card embeddings, laid out like `--cards-path` (a `cache` run directory); the run directory, made for it; `--clean` deletes the `.npz` files of this directory only |
+| `sealed build-decks`, `pick-decks`, `evaluate-scorer`, `train-scorer`, `train-picker` | `--embeddings-path DIR` | beside the cards in `--cards-path` | where the `.npz` card embeddings are read; resumable on the two trainers |
 
 `scripts/effect_sweep_arm.py` passes its `--probe-set-dir` to `evaluate-effect-model` as
 `--reports-dir`.

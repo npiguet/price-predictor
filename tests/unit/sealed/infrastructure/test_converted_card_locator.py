@@ -147,6 +147,61 @@ class TestLoadEmbedding:
         assert loc.load_embedding("Nonexistent") is None
 
 
+class TestEmbeddingsApartFromTheCards:
+    """``embeddings_path``: the ``.npz`` tree laid out like the cards, elsewhere."""
+
+    def _trees(self, tmp_path):
+        cards, embeddings = tmp_path / "converted" / "cardsfolder", tmp_path / "cache"
+        (cards / "l").mkdir(parents=True)
+        (cards / "l" / "lightning_bolt.txt").write_text("name: lightning bolt\n", encoding="utf-8")
+        return cards, embeddings
+
+    def test_the_embedding_is_read_from_the_embeddings_tree(self, tmp_path):
+        cards, embeddings = self._trees(tmp_path)
+        emb = np.arange(4, dtype=np.float32)
+        path = _write_npz(embeddings / "l", "lightning_bolt", emb)
+        loc = ConvertedCardLocator(cards, embeddings_path=embeddings)
+        assert loc.embedding_path("Lightning Bolt") == path
+        np.testing.assert_array_equal(loc.load_embedding("Lightning Bolt"), emb)
+        assert loc.text_path("Lightning Bolt") == cards / "l" / "lightning_bolt.txt"
+        assert loc.embeddings_root == embeddings
+
+    def test_an_embedding_beside_the_cards_is_not_read(self, tmp_path):
+        cards, embeddings = self._trees(tmp_path)
+        _write_npz(cards / "l", "lightning_bolt", np.zeros(4, dtype=np.float32))
+        loc = ConvertedCardLocator(cards, embeddings_path=embeddings)
+        assert loc.embedding_path("Lightning Bolt") is None
+
+    def test_a_prefix_hit_is_checked_against_the_cards_own_name_line(self, tmp_path):
+        """``Undercity`` must not resolve to ``undercity_dire_rat.npz``: the
+        name line read is the card's, in the cards tree."""
+        cards, embeddings = self._trees(tmp_path)
+        (cards / "u").mkdir()
+        (cards / "u" / "undercity_dire_rat.txt").write_text(
+            "name: undercity dire rat\n", encoding="utf-8")
+        (cards / "f").mkdir()
+        (cards / "f" / "fire_ice.txt").write_text("name: fire\n", encoding="utf-8")
+        _write_npz(embeddings / "u", "undercity_dire_rat", np.zeros(4, dtype=np.float32))
+        fire = _write_npz(embeddings / "f", "fire_ice", np.zeros(4, dtype=np.float32))
+        loc = ConvertedCardLocator(cards, embeddings_path=embeddings)
+        assert loc.embedding_path("Undercity") is None
+        assert loc.embedding_path("Fire") == fire
+
+    def test_the_expected_embedding_path_is_in_the_embeddings_tree(self, tmp_path):
+        cards, embeddings = self._trees(tmp_path)
+        loc = ConvertedCardLocator(cards, embeddings_path=embeddings)
+        bolt = Path("l") / "lightning_bolt"
+        assert loc.expected_path("Lightning Bolt", ".npz") == embeddings / f"{bolt}.npz"
+        assert loc.expected_path("Lightning Bolt", ".txt") == cards / f"{bolt}.txt"
+
+    def test_without_one_the_embeddings_are_the_cards_own_tree(self, tmp_path):
+        cards, _ = self._trees(tmp_path)
+        path = _write_npz(cards / "l", "lightning_bolt", np.zeros(4, dtype=np.float32))
+        loc = ConvertedCardLocator(cards)
+        assert loc.embeddings_root == cards
+        assert loc.embedding_path("Lightning Bolt") == path
+
+
 class TestBasicLandConstants:
     def test_lowercase_set_contents(self):
         """Every Basic-supertype card, as Forge's rule in ``BasicLands.java`` has it."""

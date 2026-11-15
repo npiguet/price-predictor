@@ -40,6 +40,9 @@ class EvaluateScorerConfig:
     work_dir: Path | None = None
     set_code: str | None = None
     resume: bool = False
+    #: The ``.npz`` embeddings' tree, laid out like ``cards_path``; None
+    #: reads them beside the cards.
+    embeddings_path: Path | None = None
 
 
 def score_decks(
@@ -107,7 +110,9 @@ class EvaluateScorerUseCase:
             )
         else:
             model = self._load_model(config.checkpoint)
-            locator = ConvertedCardLocator(config.cards_path)
+            locator = ConvertedCardLocator(
+                config.cards_path, embeddings_path=config.embeddings_path,
+            )
 
             set_code = self._resolve_set_code(config.set_code)
             print(f"Generating pools from set: {set_code}")

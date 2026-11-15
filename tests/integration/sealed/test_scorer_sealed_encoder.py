@@ -65,7 +65,7 @@ def test_train_scorer_with_attn_sealed_encoder(tmp_path: Path):
     rc = run_encode_cards(Namespace(
         encoder_checkpoint=str(encoder_ckpt), scorer_checkpoint=None,
         vocab_path=str(encoder_dir / "vocab.txt"), cards_path=str(cards_dir),
-        clean=True,
+        embeddings_path=None, clean=True,
     ))
     assert rc == 0
     with np.load(cards_dir / "c" / "card_0.npz") as f:

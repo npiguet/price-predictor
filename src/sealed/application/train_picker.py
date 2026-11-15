@@ -72,6 +72,9 @@ class TrainPickerConfig:
     )
     auditor_scorer_checkpoint: Path | None = None
     cards_path: Path = field(default_factory=lambda: Path("output/cardsfolder/"))
+    #: The ``.npz`` embeddings' tree, laid out like ``cards_path``; None
+    #: reads them beside the cards.
+    embeddings_path: Path | None = None
     checkpoint_dir: Path = field(default_factory=lambda: Path("models/sealed/picker/"))
     resume: Path | None = None
     picker_checkpoint: Path | None = None
@@ -633,7 +636,7 @@ def _resume_or_build_picker(
         ckpt = store.load_checkpoint(config.resume)
         _check_picker_width(
             ckpt.config.embedding_dim, embedding_dim,
-            f"--resume {config.resume}", config.cards_path,
+            f"--resume {config.resume}", config.embeddings_path or config.cards_path,
         )
         model = PickerModel(ckpt.config)
         model.load_state_dict(ckpt.model_state_dict)
@@ -649,7 +652,8 @@ def _resume_or_build_picker(
         ckpt = store.load_checkpoint(config.picker_checkpoint)
         _check_picker_width(
             ckpt.config.embedding_dim, embedding_dim,
-            f"--picker-checkpoint {config.picker_checkpoint}", config.cards_path,
+            f"--picker-checkpoint {config.picker_checkpoint}",
+            config.embeddings_path or config.cards_path,
         )
         model = PickerModel(ckpt.config)
         model.load_state_dict(ckpt.model_state_dict)
@@ -774,17 +778,19 @@ class TrainPickerUseCase:
         embedding_dim = scorer.config.d_model
         _log(f"Loaded training scorer (d_model={embedding_dim}) on {device}")
 
-        locator = ConvertedCardLocator(config.cards_path)
+        locator = ConvertedCardLocator(
+            config.cards_path, embeddings_path=config.embeddings_path,
+        )
         prepared = _prepare_pools(parse_pools(config.pools_path), locator)
         if not prepared:
             raise ValueError(
                 f"No usable pools in {config.pools_path} (every pool had fewer "
-                f"than {NONLAND_DECK_SIZE} embeddable cards under {config.cards_path})."
+                f"than {NONLAND_DECK_SIZE} embeddable cards under {locator.embeddings_root})."
             )
         cache_width = prepared[0].dim
         _check_picker_width(
             scorer.config.d_model, cache_width,
-            f"--scorer-checkpoint {config.scorer_checkpoint}", config.cards_path,
+            f"--scorer-checkpoint {config.scorer_checkpoint}", locator.embeddings_root,
         )
 
         auditor: SetTransformerScorer | None = None
@@ -793,7 +799,7 @@ class TrainPickerUseCase:
             _check_picker_width(
                 auditor.config.d_model, cache_width,
                 f"--auditor-scorer-checkpoint {config.auditor_scorer_checkpoint}",
-                config.cards_path,
+                locator.embeddings_root,
             )
             _log("Auditor scorer loaded; cross-scorer audit enabled")
 

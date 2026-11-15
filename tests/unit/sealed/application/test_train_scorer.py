@@ -702,7 +702,7 @@ class TestResumePrecedence:
         )
 
         ns = Namespace(
-            outcomes_path=None, cards_path=None, checkpoint_dir=None,
+            outcomes_path=None, cards_path=None, embeddings_path=None, checkpoint_dir=None,
             resume=str(ckpt), scorer_checkpoint=None, encoder_checkpoint=None,
             epochs=None, batch_size=None, lr=None,
             n_layers=None, n_heads=None, n_seeds=None,
@@ -741,7 +741,7 @@ class TestResumePrecedence:
         )
 
         ns = Namespace(
-            outcomes_path=None, cards_path=None, checkpoint_dir=None,
+            outcomes_path=None, cards_path=None, embeddings_path=None, checkpoint_dir=None,
             resume=str(ckpt), scorer_checkpoint=None, encoder_checkpoint=None,
             epochs=None, batch_size=None, lr=7e-6,  # explicit CLI override
             n_layers=None, n_heads=None, n_seeds=None,

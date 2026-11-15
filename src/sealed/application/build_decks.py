@@ -44,6 +44,9 @@ class BuildDecksConfig:
         default_factory=lambda: Path("models/sealed/scorer/latest.pt"),
     )
     cards_path: Path = field(default_factory=lambda: Path("output/cardsfolder/"))
+    #: The ``.npz`` embeddings' tree, laid out like ``cards_path``; None
+    #: reads them beside the cards.
+    embeddings_path: Path | None = None
     output: Path = field(
         default_factory=lambda: Path("output/sealed/generated-decks.txt"),
     )
@@ -73,7 +76,9 @@ class BuildDecksUseCase:
     def execute(self, config: BuildDecksConfig) -> int:
         pools = parse_pools(config.pools_path)
         model = self._load_model(config.checkpoint)
-        locator = ConvertedCardLocator(config.cards_path)
+        locator = ConvertedCardLocator(
+            config.cards_path, embeddings_path=config.embeddings_path,
+        )
 
         config.output.parent.mkdir(parents=True, exist_ok=True)
 

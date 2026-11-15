@@ -45,6 +45,9 @@ class PickDecksConfig:
         default_factory=lambda: Path("models/sealed/picker/latest.pt"),
     )
     cards_path: Path = field(default_factory=lambda: Path("output/cardsfolder/"))
+    #: The ``.npz`` embeddings' tree, laid out like ``cards_path``; None
+    #: reads them beside the cards.
+    embeddings_path: Path | None = None
     output: Path = field(
         default_factory=lambda: Path("output/sealed/generated-decks.txt"),
     )
@@ -58,7 +61,9 @@ class PickDecksUseCase:
         pools = parse_pools(config.pools_path)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model, embedding_dim = self._load_picker(config.picker_checkpoint, device)
-        locator = ConvertedCardLocator(config.cards_path)
+        locator = ConvertedCardLocator(
+            config.cards_path, embeddings_path=config.embeddings_path,
+        )
 
         config.output.parent.mkdir(parents=True, exist_ok=True)
 
@@ -87,7 +92,7 @@ class PickDecksUseCase:
                     if not width_checked:
                         self._check_width(
                             embedding_dim, embeddings[valid_names[0]].shape[0],
-                            config.picker_checkpoint, config.cards_path,
+                            config.picker_checkpoint, locator.embeddings_root,
                         )
                         width_checked = True
                     deck = self._build_one_deck(

@@ -171,6 +171,7 @@ def _train_args(**overrides) -> Namespace:
     defaults: dict[str, object | None] = {
         "outcomes_path": None,
         "cards_path": None,
+        "embeddings_path": None,
         "checkpoint_dir": None,
         "resume": None,
         "scorer_checkpoint": None,
@@ -346,6 +347,7 @@ def _encode_cards_args(**overrides) -> Namespace:
         "scorer_checkpoint": None,
         "vocab_path": "models/price-predictor/transformer/vocab.txt",
         "cards_path": "output/cardsfolder/",
+        "embeddings_path": None,
         "clean": False,
     }
     defaults.update(overrides)

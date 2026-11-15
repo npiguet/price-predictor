@@ -207,18 +207,64 @@ class TestEncodeCardsSaveArgs:
         assert saved_path.stem == "mycard"
 
 
+class TestEmbeddingsApartFromTheCards:
+    """``embeddings_path``: the ``.npz`` files go to a tree of their own, laid
+    out like the cards, and ``--clean`` empties only that tree."""
+
+    def _trees(self, tmp_path):
+        cards = tmp_path / "converted" / "cardsfolder"
+        (cards / "a").mkdir(parents=True)
+        (cards / "a" / "card_a.txt").write_text("type: Creature", encoding="utf-8")
+        (cards / "b").mkdir()
+        (cards / "b" / "card_b.txt").write_text("type: Instant", encoding="utf-8")
+        return cards, tmp_path / "cache" / "run"
+
+    def _run(self, cards, embeddings, *, clean=False):
+        from sealed.infrastructure.embedding_store import EmbeddingStore
+
+        return EncodeCardsUseCase().execute(
+            EncodeCardsConfig(cards_path=cards, clean=clean, embeddings_path=embeddings),
+            _mock_encoder(np.ones(4, dtype=np.float32)), EmbeddingStore(),
+        )
+
+    def test_the_embeddings_mirror_the_cards_tree_elsewhere(self, tmp_path):
+        cards, embeddings = self._trees(tmp_path)
+        result = self._run(cards, embeddings)
+        assert result.processed == 2
+        assert sorted(p.relative_to(embeddings).as_posix()
+                      for p in embeddings.rglob("*.npz")) == ["a/card_a.npz", "b/card_b.npz"]
+        assert not list(cards.rglob("*.npz"))
+
+    def test_a_card_already_encoded_there_is_skipped(self, tmp_path):
+        cards, embeddings = self._trees(tmp_path)
+        self._run(cards, embeddings)
+        assert self._run(cards, embeddings).skipped == 2
+
+    def test_an_embedding_beside_the_cards_does_not_count_as_encoded(self, tmp_path):
+        cards, embeddings = self._trees(tmp_path)
+        np.savez_compressed(cards / "a" / "card_a.npz", embedding=np.zeros(4, dtype=np.float32))
+        assert self._run(cards, embeddings).processed == 2
+
+    def test_clean_deletes_only_the_embeddings_tree(self, tmp_path):
+        cards, embeddings = self._trees(tmp_path)
+        beside = cards / "a" / "card_a.npz"
+        np.savez_compressed(beside, embedding=np.zeros(4, dtype=np.float32))
+        self._run(cards, embeddings)
+        assert self._run(cards, embeddings, clean=True).processed == 2
+        assert beside.exists()
+
+    def test_without_one_the_embeddings_go_beside_the_cards(self, tmp_path):
+        cards, _ = self._trees(tmp_path)
+        self._run(cards, None)
+        assert sorted(p.relative_to(cards).as_posix()
+                      for p in cards.rglob("*.npz")) == ["a/card_a.npz", "b/card_b.npz"]
+
+
 class TestEncodeCardsScorerCheckpointHappyPath:
     """T035 (US2): with a Phase B scorer checkpoint, encode-cards constructs a
     fresh CardPriceTransformerModel from `encoder_config`, loads weights from
     `encoder_state_dict`, and re-encodes every `.txt` (including never-seen
     cards) into a sibling `.npz` (FR-014, FR-015, US2 acceptance scenario 3)."""
-
-    def test_phase_b_scorer_checkpoint_re_encodes_all_cards(self, tmp_path):
-
-        # Build a phase_b setup inline (this test file has no fixture dep).
-        # We reuse the conftest fixture via pytest's scope; if not available,
-        # this test is skipped. Easiest: import the helper from sealed.conftest.
-        pass  # see test in test_cli.py for the run-through; this checker is light
 
     def test_uses_encoder_config_to_construct_model(self, tmp_path):
         """When --scorer-checkpoint is set, the encoder's TransformerConfig is
@@ -272,6 +318,7 @@ class TestEncodeCardsScorerCheckpointHappyPath:
             scorer_checkpoint=str(ckpt),
             vocab_path=str(vocab_path),
             cards_path=str(cards_dir),
+            embeddings_path=None,
             clean=True,
         )
         rc = run_encode_cards(ns)

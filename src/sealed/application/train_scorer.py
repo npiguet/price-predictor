@@ -42,6 +42,9 @@ class TrainScorerConfig:
     outcomes_path: Path
     cards_path: Path
     checkpoint_dir: Path
+    #: The ``.npz`` embeddings' tree, laid out like ``cards_path``; None
+    #: reads them beside the cards.
+    embeddings_path: Path | None = None
     resume: Path | None = None
     scorer_checkpoint: Path | None = None
     encoder_checkpoint: Path = field(
@@ -317,7 +320,9 @@ class TrainScorerUseCase:
             encoder, tokenizer, max_seq_len = _build_phase_b_encoder(config, resume)
             _check_encoder_width(encoder, embedding_table.embedding_dim, config)
             encoder.to(device)
-            locator = ConvertedCardLocator(config.cards_path)
+            locator = ConvertedCardLocator(
+                config.cards_path, embeddings_path=config.embeddings_path,
+            )
             idx_to_name = {
                 idx: name for name, idx in embedding_table.name_to_idx.items()
             }
@@ -412,7 +417,9 @@ def _load_dataset(
     _log(f"  parsed {len(outcomes)} match outcomes ({time.monotonic() - t0:.1f}s)")
 
     t1 = time.monotonic()
-    examples, embedding_table = build_training_examples(outcomes, config.cards_path)
+    examples, embedding_table = build_training_examples(
+        outcomes, config.cards_path, embeddings_path=config.embeddings_path,
+    )
     _log(
         f"  built {len(examples)} training examples "
         f"(loaded card embeddings, {time.monotonic() - t1:.1f}s)",
@@ -456,7 +463,8 @@ def _check_encoder_width(
     if enc_width != text_width:
         raise ValueError(
             f"Phase B encoder produces a {enc_width}-wide text vector, but the "
-            f".npz cache under {config.cards_path} has a {text_width}-wide text "
+            f".npz cache under {config.embeddings_path or config.cards_path} has a "
+            f"{text_width}-wide text "
             f"slice ({embedding_dim}-wide total). Pass --encoder-checkpoint for "
             "the encoder that produced the cache, or re-run `sealed encode-cards` "
             "with this encoder."
@@ -487,7 +495,7 @@ def _resume_or_build_model(
             )
         _check_scorer_width(
             checkpoint.config.d_model, embedding_dim,
-            f"--resume {config.resume}", config.cards_path,
+            f"--resume {config.resume}", config.embeddings_path or config.cards_path,
         )
         model = SetTransformerScorer(checkpoint.config)
         model.load_state_dict(checkpoint.model_state_dict)
@@ -505,7 +513,8 @@ def _resume_or_build_model(
         checkpoint = store.load_checkpoint(config.scorer_checkpoint)
         _check_scorer_width(
             checkpoint.config.d_model, embedding_dim,
-            f"--scorer-checkpoint {config.scorer_checkpoint}", config.cards_path,
+            f"--scorer-checkpoint {config.scorer_checkpoint}",
+            config.embeddings_path or config.cards_path,
         )
         model = SetTransformerScorer(checkpoint.config)
         model.load_state_dict(checkpoint.model_state_dict)

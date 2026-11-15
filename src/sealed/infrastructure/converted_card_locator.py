@@ -13,6 +13,10 @@ Ajani's Pridemate is ``cardsfolder/a/ajanis_pridemate.txt`` on one side and
 ``tokenscripts/ajanis_pridemate.txt`` on the other — so a locator is bound to a
 tree at construction. ``cardsfolder`` is the default, which is what every
 existing sealed caller means.
+
+The ``.npz`` embeddings may live in a tree of their own (``embeddings_path``,
+``encode-cards --embeddings-path``), laid out like the cards tree; without
+one they sit beside the cards.
 """
 
 from __future__ import annotations
@@ -58,25 +62,36 @@ class ConvertedCardLocator:
 
     ``tree`` names which converted source tree ``cards_path`` holds, which fixes
     the directory layout to search and prefixes the paths
-    :meth:`script_file` returns.
+    :meth:`script_file` returns. ``embeddings_path`` is the root of the
+    ``.npz`` tree, laid out like ``cards_path``; None means ``cards_path``.
     """
 
-    def __init__(self, cards_path: Path, *, tree: str = "cardsfolder") -> None:
+    def __init__(
+        self, cards_path: Path, *, tree: str = "cardsfolder",
+        embeddings_path: Path | None = None,
+    ) -> None:
         if tree not in SOURCE_TREE_LAYOUTS:
             raise ValueError(
                 f"unknown converted source tree {tree!r}; "
                 f"known trees: {sorted(SOURCE_TREE_LAYOUTS)}"
             )
         self._cards_path = cards_path
+        self._embeddings_path = cards_path if embeddings_path is None else embeddings_path
         self._tree = tree
         self._layout = SOURCE_TREE_LAYOUTS[tree]
-        self._letter_index: dict[str, dict[str, Path]] = {}
+        #: Per root, each directory's entries by filename.
+        self._letter_index: dict[Path, dict[str, dict[str, Path]]] = {}
         self._embedding_cache: dict[str, np.ndarray | None] = {}
         self._text_cache: dict[str, ConvertedCardText | None] = {}
 
     @property
     def tree(self) -> str:
         return self._tree
+
+    @property
+    def embeddings_root(self) -> Path:
+        """The root of the ``.npz`` tree: ``cards_path`` unless given apart."""
+        return self._embeddings_path
 
     def script_file(self, card_name: str) -> str | None:
         """The tree-prefixed path a provenance key names, or None if unresolved.
@@ -140,8 +155,13 @@ class ConvertedCardLocator:
     def expected_path(self, card_name: str, ext: str) -> Path:
         """Return the expected exact-match path (used for error messages)."""
         filename, subdirectory = self._split_filename(card_name)
-        base = self._cards_path / subdirectory if subdirectory else self._cards_path
+        root = self._root_for(ext)
+        base = root / subdirectory if subdirectory else root
         return base / f"{filename}{ext}"
+
+    def _root_for(self, ext: str) -> Path:
+        """The tree a file of this extension is looked up in."""
+        return self._embeddings_path if ext == ".npz" else self._cards_path
 
     def _find_file(self, card_name: str, ext: str) -> Path | None:
         hit = self._find_exact_or_prefix(card_name, ext)
@@ -160,7 +180,8 @@ class ConvertedCardLocator:
 
     def _find_exact_or_prefix(self, card_name: str, ext: str) -> Path | None:
         filename, subdirectory = self._split_filename(card_name)
-        index = self._index_for(subdirectory)
+        root = self._root_for(ext)
+        index = self._index_for(root, subdirectory)
 
         exact = index.get(f"{filename}{ext}")
         if exact is not None:
@@ -169,11 +190,18 @@ class ConvertedCardLocator:
         prefix = filename + "_"
         for fname, path in index.items():
             if fname.endswith(ext) and fname.startswith(prefix):
-                if self._prefix_hit_agrees(path, filename):
+                if self._prefix_hit_agrees(self._card_text_of(root, path), filename):
                     return path
         return None
 
-    def _prefix_hit_agrees(self, path: Path, filename: str) -> bool:
+    def _card_text_of(self, root: Path, path: Path) -> Path:
+        """The card's ``.txt`` for a file found under ``root``: beside it in
+        the cards tree, at the same place in it for an embedding apart."""
+        if root == self._cards_path:
+            return path if path.suffix == ".txt" else path.with_suffix(".txt")
+        return (self._cards_path / path.relative_to(root)).with_suffix(".txt")
+
+    def _prefix_hit_agrees(self, txt: Path, filename: str) -> bool:
         """Trust a prefix hit only when the file's own ``name:`` line does not
         contradict the queried name. Multi-face files carry the front-face
         name ("name: fire" in ``fire_ice.txt``), so front-face fallbacks pass;
@@ -181,7 +209,6 @@ class ConvertedCardLocator:
         ``undercity_dire_rat.txt``) is rejected. Files without a readable
         ``name:`` line are trusted as before.
         """
-        txt = path if path.suffix == ".txt" else path.with_suffix(".txt")
         try:
             with open(txt, encoding="utf-8") as f:
                 for _ in range(4):
@@ -194,23 +221,22 @@ class ConvertedCardLocator:
             pass
         return True
 
-    def _index_for(self, subdirectory: str) -> dict[str, Path]:
-        """Index one directory's entries by filename, memoized.
+    def _index_for(self, root: Path, subdirectory: str) -> dict[str, Path]:
+        """Index one directory of the tree at ``root`` by filename, memoized.
 
         ``subdirectory`` is the letter (or ``rebalanced``) in a letter-keyed
         tree and empty in a flat one, where the whole tree is one directory.
         """
-        cached = self._letter_index.get(subdirectory)
+        indexes = self._letter_index.setdefault(root, {})
+        cached = indexes.get(subdirectory)
         if cached is not None:
             return cached
-        directory = (
-            self._cards_path / subdirectory if subdirectory else self._cards_path
-        )
+        directory = root / subdirectory if subdirectory else root
         index: dict[str, Path] = {}
         if directory.is_dir():
             for entry in directory.iterdir():
                 index[entry.name] = entry
-        self._letter_index[subdirectory] = index
+        indexes[subdirectory] = index
         return index
 
     _REBALANCED_DIR = "rebalanced"

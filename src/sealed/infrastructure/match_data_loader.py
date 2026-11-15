@@ -192,6 +192,8 @@ def load_match_outcomes(path: Path) -> list[MatchOutcome]:
 def build_training_examples(
     outcomes: list[MatchOutcome],
     cards_path: Path,
+    *,
+    embeddings_path: Path | None = None,
 ) -> tuple[list[MatchTrainingExample], EmbeddingTable]:
     """Build a shared embedding table and per-match training examples.
 
@@ -203,8 +205,10 @@ def build_training_examples(
     Each match's two decks come from independent sealed pools — they share
     no cards by construction. Don't introduce cross-deck features (e.g.
     shared-card counts) here; they would be vacuously zero.
+
+    ``embeddings_path`` is the ``.npz`` tree when it is not ``cards_path``.
     """
-    builder = _ExampleBuilder(ConvertedCardLocator(cards_path))
+    builder = _ExampleBuilder(ConvertedCardLocator(cards_path, embeddings_path=embeddings_path))
     examples = builder.build(outcomes)
     return examples, builder.into_table()
 

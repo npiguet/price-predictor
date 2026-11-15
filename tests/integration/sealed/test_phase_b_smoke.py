@@ -131,6 +131,7 @@ def test_phase_b_smoke(tmp_path):
         scorer_checkpoint=str(phase_b_best),
         vocab_path=str(encoder_dir / "vocab.txt"),
         cards_path=str(cards_dir),
+        embeddings_path=None,
         clean=True,
     ))
     assert rc == 0

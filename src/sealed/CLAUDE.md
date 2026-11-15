@@ -2,7 +2,7 @@
 
 Entry point: `python -m sealed <subcommand>` (see `src/sealed/infrastructure/cli.py`). The package's domain terms are defined in `GLOSSARY.md` beside this file, and the terms it shares with other packages in the root `GLOSSARY.md`. The sealed pipeline is built around a sealed-trained card encoder; the price-predictor transformer is a valid alternate encoder source via `--encoder-checkpoint`.
 
-Every subcommand that writes files keeps a `run.json` run manifest in its run directory (`.claude/skills/artifact-layout/SKILL.md`), declared in `RUN_MANIFESTS` in `infrastructure/cli.py`: `match-outcomes` records in `--effect-records` when given, else in `--outcomes-dir` (by default `output/sealed/`), and `encode-cards` in the `--cards-path` tree it writes beside.
+Every subcommand that writes files keeps a `run.json` run manifest in its run directory (`.claude/skills/artifact-layout/SKILL.md`), declared in `RUN_MANIFESTS` in `infrastructure/cli.py`: `match-outcomes` records in `--effect-records` when given, else in `--outcomes-dir` (by default `output/sealed/`), and `encode-cards` in its `--embeddings-path` directory, else in the `--cards-path` tree it writes beside.
 
 This file lists the rules to respect and the file formats. It does not describe the commands:
 
@@ -14,7 +14,7 @@ This file lists the rules to respect and the file formats. It does not describe 
 
 - `build-vocab` — writes the sealed-side tokenizer vocabulary.
 - `train-encoder` — trains the card encoder on per-card winnability labels aggregated from `cards-played.txt`, with an MLM auxiliary loss.
-- `encode-cards` — writes one `.npz` embedding beside every converted card.
+- `encode-cards` — writes one `.npz` embedding per converted card, beside it or in the `--embeddings-path` tree.
 - `generate-pools` — Java `PoolMain`; writes sealed pools.
 - `build-decks` — the scorer greedily builds one 40-card deck per pool.
 - `match-outcomes` — long-running supervisor over Java `MatchWorkerMain` workers; plays matches and appends the two corpora.
@@ -40,11 +40,12 @@ This file lists the rules to respect and the file formats. It does not describe 
 
 ## The embedding cache fixes every downstream width
 
-- `encode-cards` strips the `name:` line from each card and writes a `.npz` beside every `.txt` under `output/cardsfolder/`: a `float32` array `(pooled_dim + FEATURE_COUNT,)` under the key `"embedding"`, the pooled text vector followed by the deterministic game features, always in the trailing `FEATURE_COUNT` slots.
+- `encode-cards` strips the `name:` line from each card and writes a `.npz` for every `.txt` under `--cards-path`, beside it, or with `--embeddings-path DIR` at the card's place in a tree of the same layout under `DIR` (a `cache` run directory under the layout): a `float32` array `(pooled_dim + FEATURE_COUNT,)` under the key `"embedding"`, the pooled text vector followed by the deterministic game features, always in the trailing `FEATURE_COUNT` slots.
 - `pooled_dim` depends on the encoder: `2·d_model` for the price encoder and for the sealed encoder's dual pool, `d_model` for the sealed encoder's attention-only pool.
 - The scorer's input width is not a flag. It is the width of the `.npz` cache, and the picker's input width is the scorer's. So any encoder (price or sealed, any `--d-model` or `--pool-mode`) works as long as `encode-cards` was run with it.
 - A scorer checkpoint, Phase B encoder or picker whose width disagrees with the cache fails fast with a clear error rather than a torch shape mismatch.
-- `encode-cards --clean` deletes every `.npz` under the tree. That is why the effect model's ability cache lives outside `output/cardsfolder/`.
+- Every reader of the cache (`build-decks`, `pick-decks`, `train-scorer`, `train-picker`, `evaluate-scorer`, and the draft commands) takes `--embeddings-path` to read it from where `encode-cards` wrote it, through `ConvertedCardLocator(embeddings_path=...)`; unset, it reads beside the cards.
+- `encode-cards --clean` deletes every `.npz` under the tree it writes (`--embeddings-path`, else `--cards-path`). That is why the effect model's ability cache lives outside `output/cardsfolder/`.
 - `--encoder-checkpoint` and `--scorer-checkpoint` are mutually exclusive on `encode-cards`; the second extracts the encoder from a Phase B scorer checkpoint.
 
 ## Pools and decks
