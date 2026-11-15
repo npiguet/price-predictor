@@ -506,6 +506,12 @@ class RegisteredRulesTest {
         assertTrue(OptionalSearch.bind(upkeepBoard("Shock", "Lightning Bolt").game).isEmpty());
     }
 
+    /** Elfhame Sanctuary finds a basic land card: a nonbasic land in the library is none. */
+    @Test
+    void optionalSearchBindsNothingWithOnlyANonbasicLandToFind() {
+        assertTrue(OptionalSearch.bind(upkeepBoard("Shock", "Evolving Wilds").game).isEmpty());
+    }
+
     @Test
     void optionalSearchBindsNothingAtAnotherBoundary() {
         Board board = new Board(PhaseType.MAIN1);
@@ -569,7 +575,8 @@ class RegisteredRulesTest {
             board.card(board.you, land);
         }
         board.card(board.you, "Grizzly Bears");
-        TestBoard.inHand(board.game, board.you, "Craw Wurm");
+        // Centaur Courser is affordable: only the missing role trigger refuses it.
+        TestBoard.inHand(board.game, board.you, "Centaur Courser");
         assertTrue(VirtuousRole.bind(board.game).isEmpty());
     }
 
@@ -621,6 +628,12 @@ class RegisteredRulesTest {
         assertTrue(TypeSettingAura.bind(board.game).isEmpty());
     }
 
+    /** The battlefield's one creature has hexproof: Song of the Dryads, cast by its opponent, cannot target it. */
+    @Test
+    void typeSettingAuraBindsNothingOnACreatureTheAuraCannotTarget() {
+        assertTrue(TypeSettingAura.bind(songBoard("Gladecover Scout", 3).game).isEmpty());
+    }
+
     /** Holy Strength adds to its creature's power and toughness and sets no card type. */
     @Test
     void typeSettingAuraBindsNothingForAnAuraThatSetsNoType() {
@@ -669,6 +682,17 @@ class RegisteredRulesTest {
     @Test
     void searchUnderMindcensorBindsNothingWithoutASearchingPermanent() {
         assertTrue(SearchUnderMindcensor.bind(archivistBoard("Archivist of Oghma", "Forest").game).isEmpty());
+    }
+
+    /**
+     * Prime Speaker Vannifar's search is activated only as a sorcery: on its
+     * controller's opponent's turn the forced activation could never be made.
+     */
+    @Test
+    void searchUnderMindcensorBindsNothingForASorcerySpeedSearch() {
+        Board board = archivistBoard("Archivist of Oghma", "Prime Speaker Vannifar");
+        board.card(board.opponent, "Grizzly Bears");
+        assertTrue(SearchUnderMindcensor.bind(board.game).isEmpty());
     }
 
     /** A tapped Evolving Wilds cannot pay its own tap, whatever other lands its controller has. */
@@ -738,6 +762,12 @@ class RegisteredRulesTest {
     @Test
     void jumpStartFromHandBindsNothingForACardWithoutJumpStart() {
         assertTrue(JumpStartFromHand.bind(jumpStartBoard("Divination", 3).game).isEmpty());
+    }
+
+    /** Quasiduplicate needs a target, which the forced cast's clause would draw: a spell with one is no board the rule binds. */
+    @Test
+    void jumpStartFromHandBindsNothingForASpellThatTargets() {
+        assertTrue(JumpStartFromHand.bind(jumpStartBoard("Quasiduplicate", 3).game).isEmpty());
     }
 
     @Test
