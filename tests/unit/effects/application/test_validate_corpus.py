@@ -1447,8 +1447,10 @@ class TestOutgoingAgreesWithTheResult:
 
 class TestABufferedReplacementAgreesWithItsPayload:
     """WP7: a damage replacement that set an ability aside (Swans of Bryn
-    Argoll's draw, a ``Prevent$ True`` rider) names it in ``buffered``, never in
-    ``replaced_by``, and its run's events are ``buffered_events``."""
+    Argoll's draw, a ``Prevent$ True`` rider) names it in ``buffered`` and its
+    run's events are ``buffered_events``; ``replaced_by`` names it too only
+    where the replacement's own ability ran in the event's place and set its
+    sub-ability aside (Forcefield's ``ReplaceDamage``)."""
 
     _DAMAGE = Event(type=EventType.DAMAGE_DEALT, subjects=("E3",), params={"amount": 2})
     _DRAW = Event(type=EventType.CARD_DRAWN, subjects=("P0",), params={"count": 1},
@@ -1464,11 +1466,43 @@ class TestABufferedReplacementAgreesWithItsPayload:
         records = _healthy() + [self._buffered("run.0-L1.900", RewriteResult.PREVENTED)]
         assert _named(validate_corpus(records), "outgoing is null on").ok
 
-    def test_a_buffered_ability_also_named_as_ran_instead_fails(self):
-        records = _healthy() + [self._buffered("run.0-L1.900", replaced_by=(_KEY,))]
+    #: Forcefield's replacement line: its ``ReplaceDamage`` runs in the
+    #: event's place and its sub-ability (exile the effect) is set aside.
+    _FORCEFIELD = ProvenanceKey("cardsfolder/f/forcefield.txt", 0, "replacement", 0)
+
+    @pytest.mark.parametrize("ran", [False, True])
+    def test_a_replacement_run_in_place_with_its_sub_ability_set_aside_passes(self, ran):
+        """Forcefield: one line in both ``replaced_by`` and ``buffered``, its
+        sub-ability's run whichever way it went (34 such records in a real
+        game, the run's ``buffered_ran`` false)."""
+        records = _healthy() + [self._buffered(
+            "run.0-L1.900", replaced_by=(self._FORCEFIELD,), buffered=(self._FORCEFIELD,),
+            buffered_ran=ran, buffered_events=(self._DRAW,) if ran else ())]
+        finding = _named(validate_corpus(records), "outgoing is null on")
+        assert finding.ok, finding.detail
+
+    def test_a_buffered_ability_of_another_line_than_the_one_run_instead_fails(self):
+        """The ability set aside is the sub-ability of the one that ran, so
+        both key to one line: two lines is a record no replacement writes."""
+        records = _healthy() + [self._buffered(
+            "run.0-L1.900", replaced_by=(self._FORCEFIELD,), buffered=(_KEY,))]
         finding = _named(validate_corpus(records), "outgoing is null on")
         assert not finding.ok
         assert any("run.0-L1.900" in line for line in finding.detail)
+
+    def test_a_keyless_buffered_ability_beside_a_named_one_run_instead_fails(self):
+        """One resolver keys both: the sub-ability keys to no line only when
+        the ability that ran keys to none either."""
+        records = _healthy() + [self._buffered(
+            "run.0-L1.900", replaced_by=(self._FORCEFIELD,), buffered=())]
+        assert not _named(validate_corpus(records), "outgoing is null on").ok
+
+    def test_a_prevention_naming_an_ability_run_instead_beside_its_rider_fails(self):
+        """A ``Prevent$ True`` replacement returns before any ability runs."""
+        records = _healthy() + [self._buffered(
+            "run.0-L1.900", RewriteResult.PREVENTED,
+            replaced_by=(self._FORCEFIELD,), buffered=(self._FORCEFIELD,))]
+        assert not _named(validate_corpus(records), "outgoing is null on").ok
 
     def test_events_of_a_run_that_never_came_fail(self):
         records = _healthy() + [self._buffered("run.0-L1.900", buffered_ran=False)]
@@ -1492,6 +1526,18 @@ class TestABufferedReplacementAgreesWithItsPayload:
         330/312)."""
         records = _healthy() + [self._buffered("run.0-L1.900", replaced_by=(_KEY,))]
         assert "3/3" in _named(validate_corpus(records), "ran instead").measured
+
+    def test_the_collector_s_goldens_and_the_gen3_fixture_agree_with_their_payloads(self):
+        """Every rewrite the collector wrote, the buffered golden's included,
+        is a shape the rule accepts."""
+        from effects.infrastructure.record_codec import record_from_dict
+        from tests.unit.effects.builders import gen3_fixture_records, java_golden_records
+
+        raws = [*java_golden_records(), *gen3_fixture_records()]
+        rewrites = [record_from_dict(raw) for raw in raws if raw["kind"] == "rewrite"]
+        assert any(r.payload.buffered is not None for r in rewrites)
+        finding = _named(validate_corpus(rewrites), "outgoing is null on")
+        assert finding.ok, finding.detail
 
 
 class TestRewritesNameTheAbilityThatRanInstead:

@@ -35,7 +35,7 @@ Each record's board is read just before the moment it describes, and its events 
 
 What the collectors must read of the hooks:
 
-- `onReplacement`'s sixth argument, `buffered`, is the ability a damage replacement set aside. It has not run when the replacement reports and is never `replacedBy`. The rewrite record names it in `buffered` and takes the events of its later run as `buffered_events`.
+- `onReplacement`'s sixth argument, `buffered`, is the ability a damage replacement set aside. It has not run when the replacement reports and is never `replacedBy`; when it is the sub-ability of a `ReplaceDamage`, `ReplaceSplitDamage` or `ReplaceEffect` ability that ran as `replacedBy` (Forcefield), `ProvenanceResolver` keys both to the root's line, so the record's `replaced_by` and `buffered` are equal. The rewrite record names it in `buffered` and takes the events of its later run as `buffered_events`.
 - A null `before` on `onReplacement` means the run parameters could not be copied. The record says `incoming_unknown` and compares nothing.
 - An `AddCounter` replacement over several counter types writes one rewrite record per type whose count it changed. A trigger's counter map stays one summed event.
 - `onTriggerRun` says a trigger ran. `TriggerChannel` holds a firing only once its evaluation is told run, and one never told writes nothing, so a `trigger` record's `fired` is a trigger Forge ran.

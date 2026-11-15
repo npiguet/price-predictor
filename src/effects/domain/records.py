@@ -390,7 +390,9 @@ class RewritePayload(_PayloadQueries):
     names it in ``buffered``, says in ``buffered_ran`` whether Forge ran it,
     and holds its run's events in ``buffered_events``: the outcome of this
     record, which no resolution half holds. Several records waiting on one
-    run: the oldest holds the events, the others ran with none.
+    run: the oldest holds the events, the others ran with none. A
+    ``ReplaceDamage`` run in place whose sub-ability is set aside (Forcefield)
+    names one line in both ``replaced_by`` and ``buffered``.
     """
 
     incoming: Event

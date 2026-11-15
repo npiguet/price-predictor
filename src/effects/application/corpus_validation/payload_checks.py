@@ -248,7 +248,7 @@ class Rewrites:
         self.identity = 0
         self.identity_examples: list[str] = []
         #: ``prevented``/``skipped`` records carrying an ``outgoing`` or a
-        #: ``replaced_by``, buffered records naming their ability as run
+        #: ``replaced_by``, buffered records naming another line as run
         #: instead or holding events of a run that never came, and records
         #: whose unknown incoming event has an outgoing one.
         self.impossible = 0
@@ -350,8 +350,10 @@ class Rewrites:
         Both return before ``executeReplacementUnobserved`` runs any ability, so
         an ``outgoing`` or ``replaced_by`` on one is a listener reading a stale
         argument; a ``Prevent$ True`` rider is set aside (``buffered``), never
-        run instead. ``not_replaced`` is not judged: its prevention branch
-        writes ``PreventedAmount`` before returning.
+        run instead. A buffered ability is also in ``replaced_by`` only as the
+        line whose own ability ran in place (Forcefield). ``not_replaced`` is
+        not judged: its prevention branch writes ``PreventedAmount`` before
+        returning.
         """
         ran = ", ".join(
             f"{name} {counts.with_outgoing}/{counts.seen} with outgoing, "
@@ -364,9 +366,10 @@ class Rewrites:
             ok=self.impossible == 0,
             measured=(
                 f"{self.impossible} records contradict their payload ({'/'.join(cannot)} "
-                f"with an outgoing or a replaced_by, a buffered ability also run "
-                f"instead or with events of a run that never came, an outgoing "
-                f"beside an unknown incoming event), of {self.rewrites} rewrites ({ran})"
+                f"with an outgoing or a replaced_by, a buffered ability of another "
+                f"line than the one run instead or with events of a run that never "
+                f"came, an outgoing beside an unknown incoming event), "
+                f"of {self.rewrites} rewrites ({ran})"
             ),
             detail=tuple(self.impossible_examples),
         )
@@ -403,15 +406,23 @@ class Rewrites:
 def _disagrees(payload: RewritePayload) -> bool:
     """A rewrite whose payload contradicts itself: a ``prevented`` or
     ``skipped`` result with an ``outgoing`` or a ``replaced_by``; an ability
-    set aside (``buffered``) also named as run instead, or events of a run
-    that never came (``buffered_ran`` false); an ``outgoing`` beside an
-    unknown incoming event, which can be compared with nothing."""
+    set aside (``buffered``) beside an ability run instead of another line,
+    or events of a run that never came (``buffered_ran`` false); an
+    ``outgoing`` beside an unknown incoming event, which can be compared with
+    nothing.
+
+    A damage replacement names an ability both ways only when its own
+    ``ReplaceDamage``, ``ReplaceSplitDamage`` or ``ReplaceEffect`` ability ran
+    in the event's place and Forge set that ability's sub-ability aside
+    (Forcefield): one resolver keys a sub-ability to its root's line, so
+    ``replaced_by`` and ``buffered`` then hold the same keys."""
     if payload.result in REWRITE_RESULTS_WITHOUT_ABILITY and (
         payload.outgoing is not None or payload.replaced_by
     ):
         return True
     if payload.buffered is not None and (
-        payload.replaced_by or (not payload.buffered_ran and payload.buffered_events)
+        (payload.replaced_by and payload.replaced_by != payload.buffered)
+        or (not payload.buffered_ran and payload.buffered_events)
     ):
         return True
     return payload.incoming_unknown and payload.outgoing is not None

@@ -87,6 +87,7 @@ A protection copy written by `build-corpus` is a synthetic record `<record_id>~p
 - A gen-3 resolution record in the superseded payload shape is refused only once `record_codec.REFUSE_SUPERSEDED_GEN3_PAYLOADS` is on, which waits for the gen-3 test fixture's regeneration.
 - Decision candidates are enumerated by the collector itself at every priority stop and written as a two-stage sample (`--playability-rate`, then `--zone-candidate-rate` or `--plain-candidate-rate`). The sampling is what keeps a gen-3 game near 350 KB gzipped.
 - Attackers records are one per creature.
+- A rewrite record names one line in both `replaced_by` and `buffered` only when its replacement's own `ReplaceDamage`, `ReplaceSplitDamage` or `ReplaceEffect` ability ran in the event's place and Forge buffered that ability's sub-ability (Forcefield); any other buffered record has `replaced_by: []`. Two different lists, or a non-empty `replaced_by` beside `buffered: []`, is a contradiction `validate-corpus` fails. The shapes: `contracts/record-schema-delta.md` (025), the rewrite-record bullet.
 - `validate-corpus` checks every gen-3 field is on every record that owes it, and `field-coverage` that each varies.
 
 ## Dropped-event counts

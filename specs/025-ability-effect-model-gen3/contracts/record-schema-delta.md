@@ -303,7 +303,7 @@ static, as it writes no `affected`. `line_of`, `line_of_the_same_card`, `mode_of
 | `continuous` | contributions' `abilities`, `hidden_keywords` | after `colors`, on every contribution: `abilities` a token per layer-6 change the static makes to the entity, a granted ability's line key as `ProvenanceKey.describe` spells it (`(cardsfolder/c/cryptolith_rite.txt) face0/static[0]`; `runtime` for one that keys to no line), and `-` before the key of an ability it takes away; `hidden_keywords` the hidden keywords the static grants (`AddHiddenKeyword$`), as Forge writes them. A static whose only change is one of these is a `continuous` record. `keywords` starts with a lone `=` when the static removes every keyword (`RemoveAllAbilities$`), as `types` and `colors` mark a line set outright |
 | `continuous` | contributions' `set_pt`, `controller` | `set_pt` after `pt_boost`: `[power, toughness]`, the base the static sets (layer 7a, then 7b), a half `null` where it sets only the other; `controller` last: the player ref the static gives control to (a `GainControl$` static, when the permanent's controller without it differs). Each present only when set. A static whose only change is one of these is a `continuous` record |
 | `rewrite` | `incoming_unknown` | after `replaced_by`, only when true: Forge could not copy the event as it arrived (`before` null); `incoming` is then the event as it left and `outgoing` is `null`, which says nothing about an in-place edit |
-| `rewrite` | `buffered`, `buffered_ran`, `buffered_events` | after `replaced_by` (and `incoming_unknown`), only on a damage replacement that set an ability aside (Forge's buffered ability: Swans of Bryn Argoll's draw, Rock Hydra's counter removal, a `Prevent$ True` rider): `buffered` the ability's provenance keys (`[]` where it keys to no printed line); `buffered_ran` whether Forge ran it; `buffered_events` the events published during its run that this record took, each with `attributed_to` counted on the buffered ability's chain. Forge sums the damage of several replacements naming one ability into one run: the oldest record waiting on that ability takes the run's events, the others carry `buffered_ran: true` and `buffered_events: []`. A record whose ability never ran carries `buffered_ran: false` and `buffered_events: []` |
+| `rewrite` | `buffered`, `buffered_ran`, `buffered_events` | after `replaced_by` (and `incoming_unknown`), only on a damage replacement that set an ability aside (Forge's buffered ability: Swans of Bryn Argoll's draw, Rock Hydra's counter removal, a `Prevent$ True` rider, the sub-ability of a `ReplaceDamage` run in place such as Forcefield's exile, whose keys are then `replaced_by`'s too): `buffered` the ability's provenance keys (`[]` where it keys to no printed line); `buffered_ran` whether Forge ran it; `buffered_events` the events published during its run that this record took, each with `attributed_to` counted on the buffered ability's chain. Forge sums the damage of several replacements naming one ability into one run: the oldest record waiting on that ability takes the run's events, the others carry `buffered_ran: true` and `buffered_events: []`. A record whose ability never ran carries `buffered_ran: false` and `buffered_events: []` |
 | resolution, mana record | `events` | `tapped` per permanent its cost tapped; then the other events its own payment published (a creature sacrificed for mana: `sacrificed`, `zone_change`); then `mana_produced`; then the events its own sub-abilities published (a pain land's `damage_dealt` and `life_change` to its controller), `attributed_to` counted on the mana ability's chain |
 | `combat`, observed and probe | damage events' `source` | entity ref, after `cause`: the dealer the bus names as `cause`, else the one source in `assignment_choices` that assigned damage to the event's subject, or among several the one that assigned exactly its amount; absent when none can be named. Written on the observed record too, so a probe branch's damage reads as the record it mirrors |
 
@@ -370,7 +370,22 @@ position a card left a library from, and a search of another player's library.
   replacement. A damage replacement whose ability Forge buffers until every replacement of the
   damage event has applied (Swans of Bryn Argoll's draw, Rock Hydra's counter removal, a
   `Prevent$ True` rider such as Gatta and Luzzu's) writes `replaced_by: []` and names the ability in
-  `buffered`. Its record is held until the ability's run ends, or until the state-based loop next
+  `buffered`. A damage replacement whose own `ReplaceDamage`, `ReplaceSplitDamage` or `ReplaceEffect`
+  ability runs in the event's place and has a sub-ability (Forcefield's exile) names the ability that
+  ran in `replaced_by` and the sub-ability, which Forge buffers, in `buffered`: one resolver keys a
+  sub-ability to its root's line, so both lists hold the same keys, and `buffered_ran` is false when
+  the sub-ability did not run. The shapes a rewrite record can carry:
+
+  | `result` | `replaced_by` | `buffered` |
+  |---|---|---|
+  | `prevented`, `skipped` | `[]` | absent, or the `Prevent$ True` rider's keys (`prevented`) |
+  | `replaced`, `updated`, `not_replaced`, buffering a damage ability | `[]` | the buffered ability's keys |
+  | `replaced`, `updated`, `not_replaced`, an ability run in place with its sub-ability buffered | the ability's keys | the same keys |
+  | any other | the ability run in place, or `[]` | absent |
+
+  No other combination is written: a record whose `replaced_by` and `buffered` are both non-empty
+  and differ, or whose `replaced_by` is non-empty beside `buffered: []`, is a contradiction
+  (`validate-corpus`). Its record is held until the ability's run ends, or until the state-based loop next
   begins or the game ends when it never runs; its board is still the one read before the
   replacement ran. The events of the run are the record's `buffered_events` and reach no other
   record.
