@@ -378,8 +378,10 @@ final class InterventionFork implements InterventionScheduler.Forcing {
                 }
             }
         };
-        // The forced line is never a restart (InterventionScheduler), but the
-        // stack it joined is the copy's (FR-010d).
+        // A belt (FR-010d): the copier copies no stack, so the copy's holds
+        // only the forced line, never a restart (InterventionScheduler), and
+        // what its cast triggered; Forge's one restart is Karn Liberated's
+        // loyalty ability.
         Forks.refuseARestart(fork);
         Forks.listeningForHooks(hooks, () -> {
             GameSimulator.resolveStack(fork, actor.getWeakestOpponent());

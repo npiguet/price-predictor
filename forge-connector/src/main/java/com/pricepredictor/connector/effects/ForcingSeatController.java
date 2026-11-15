@@ -67,23 +67,14 @@ final class ForcingSeatController extends PlayerControllerAi {
     }
 
     /**
-     * A "you may pay": a forced no declines; a forced yes is paid as the AI
-     * pays, and a payment the AI does not make flags the refusal.
+     * A "you may pay": a forced no declines; a forced yes pays whenever the
+     * cost can be paid, whatever the AI would choose
+     * ({@link ForcedPlayRun#pay}).
      */
     @Override
     public boolean payCostToPreventEffect(Cost cost, SpellAbility sa, boolean alreadyPaid,
                                           FCollectionView<Player> allPayers) {
-        Boolean answer = forced.answer(player, sa);
-        if (answer == null) {
-            return super.payCostToPreventEffect(cost, sa, alreadyPaid, allPayers);
-        }
-        if (!answer) {
-            return false;
-        }
-        boolean paid = super.payCostToPreventEffect(cost, sa, alreadyPaid, allPayers);
-        if (!paid) {
-            forced.costNotPaid();
-        }
-        return paid;
+        Boolean paid = forced.pay(player, cost, sa);
+        return paid != null ? paid : super.payCostToPreventEffect(cost, sa, alreadyPaid, allPayers);
     }
 }

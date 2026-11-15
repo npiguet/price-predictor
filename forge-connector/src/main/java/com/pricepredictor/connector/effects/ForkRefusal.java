@@ -27,7 +27,13 @@ public final class ForkRefusal extends RuntimeException {
     public static final String FORCED_NO_LINE = "forced play has no legal line";
     /** A directed fork's forced play was not made by the end of its step, or of the turn. */
     public static final String FORCED_NOT_MADE = "forced play not made";
-    /** A directed fork's forced play could not be paid for: the seat's mana payment or a named cost card failed. */
+    /**
+     * A directed fork's forced play could not be paid for: the AI's own check
+     * ({@code ComputerUtilCost.canPayCost}) said no at the first priority
+     * where the rules let the line be played, before any payment was tried;
+     * the seat's mana payment or a named cost card failed; or a "you may pay"
+     * answered yes could not be paid.
+     */
     public static final String FORCED_COST_NOT_PAID = "forced play cost not paid";
 
     /** @param reason why the fork declined, as the refusal tally names it */

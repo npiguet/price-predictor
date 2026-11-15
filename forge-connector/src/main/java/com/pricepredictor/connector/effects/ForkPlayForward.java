@@ -112,8 +112,8 @@ final class ForkPlayForward {
     Played play(Game fork, Consumer<EffectRecord> flags, KeptRecords kept, ForcedPlayRun forced) {
         Random seat = new Random(forkSeeds.nextLong());
         long sampling = forkSeeds.nextLong();
-        // Drawn only by a fork that forces, so the forks that do not draw
-        // their seeds as they did.
+        // Drawn only by a fork that forces: the game's later forks then take
+        // the next seeds of the sequence, shifted by one.
         Random forcing = forced == null ? null : new Random(forkSeeds.nextLong());
         List<String> held = new ArrayList<>();
         GameRecording recording = live.forkRecording(fork, flags, held::add, sampling, kept);

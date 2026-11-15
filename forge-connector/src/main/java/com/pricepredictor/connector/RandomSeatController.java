@@ -24,6 +24,7 @@ import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 import forge.game.spellability.TargetChoices;
 import forge.game.trigger.WrappedAbility;
+import forge.util.collect.FCollectionView;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -582,6 +583,17 @@ public final class RandomSeatController extends PlayerControllerAi implements Fo
                                  List<String> options, Card cardToShow, Map<String, Object> params) {
         Boolean answer = forced == null ? null : forced.answer(player, sa);
         return answer != null ? answer : super.confirmAction(sa, mode, message, options, cardToShow, params);
+    }
+
+    /**
+     * A forced play's answer to its source's "you may pay", paid whenever the
+     * cost can be ({@link ForcedPlayRun#pay}), else the AI's.
+     */
+    @Override
+    public boolean payCostToPreventEffect(Cost cost, SpellAbility sa, boolean alreadyPaid,
+                                          FCollectionView<Player> allPayers) {
+        Boolean paid = forced == null ? null : forced.pay(player, cost, sa);
+        return paid != null ? paid : super.payCostToPreventEffect(cost, sa, alreadyPaid, allPayers);
     }
 
     /** The seat's own declaration, before a forced attack is added. */

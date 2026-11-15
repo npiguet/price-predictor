@@ -479,7 +479,8 @@ final class Forks {
                     R produced;
                     try {
                         // A copy whose stack already holds a restart is refused
-                        // before its body can resolve it (FR-010d).
+                        // before its body can resolve it (FR-010d): a belt, as
+                        // the copier copies no stack.
                         refuseARestart(verified.get().fork());
                         // The fork's own state, read against the live game it came from.
                         SnapshotBuilder snapshots = SnapshotBuilder.forFork(verified.get().fork(), live);
@@ -637,8 +638,13 @@ final class Forks {
      * resolution drains its stack ({@link InterventionFork}). A restart put on
      * the stack resolves at the earliest in the main-loop step after the one
      * that put it there, once every other player has passed, so the check
-     * before each step comes first. {@link LiveMarks} stays the backstop: it
-     * counts a fork whose game was restarted all the same.
+     * before each step comes first, and is the one that acts. The other two
+     * are belts no game reaches: {@code GameCopier} copies no stack
+     * ({@code GameSimulator.COPY_STACK} is off, and copies spells only when
+     * on, while Karn's restart is a loyalty ability), and a forced line is
+     * never a restart ({@link InterventionScheduler}). {@link LiveMarks}
+     * stays the backstop: it counts a fork whose game was restarted all the
+     * same.
      */
     static void refuseARestart(Game fork) {
         for (forge.game.spellability.SpellAbilityStackInstance instance : fork.getStack()) {

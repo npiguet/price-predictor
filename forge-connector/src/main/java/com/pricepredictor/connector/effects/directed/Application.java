@@ -40,9 +40,14 @@ public record Application(
         this(operation, edit, fork -> KeptRecords.NONE, null);
     }
 
-    /** This variant, its fork keeping the records {@code kept} names (FR-010c). */
-    public Application keeping(Function<Binding, KeptRecords> kept) {
-        return new Application(operation, edit, kept, forced);
+    /**
+     * This variant, its fork also keeping the records {@code more} names
+     * (FR-010c), with those it kept already.
+     */
+    public Application keeping(Function<Binding, KeptRecords> more) {
+        Objects.requireNonNull(more, "more");
+        Function<Binding, KeptRecords> already = kept;
+        return new Application(operation, edit, fork -> already.apply(fork).and(more.apply(fork)), forced);
     }
 
     /** This variant, its fork forcing {@code play} (FR-010b). */

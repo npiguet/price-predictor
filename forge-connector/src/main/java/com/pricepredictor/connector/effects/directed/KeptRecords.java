@@ -57,11 +57,6 @@ public record KeptRecords(Set<Integer> candidateHosts, Set<Integer> triggerHosts
                 Stream.concat(triggerHosts.stream(), more.triggerHosts.stream()).collect(Collectors.toSet()));
     }
 
-    /** Whether nothing is kept. */
-    public boolean isEmpty() {
-        return candidateHosts.isEmpty() && triggerHosts.isEmpty();
-    }
-
     /** Whether {@code candidate}'s decision record is written whatever the decision sample draws. */
     public boolean keepsCandidate(SpellAbility candidate) {
         return !candidateHosts.isEmpty() && candidate != null && hostedBy(candidate.getHostCard(), candidateHosts);

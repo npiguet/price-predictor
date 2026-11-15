@@ -17,14 +17,15 @@ import forge.game.card.CardLists;
 import forge.game.card.CardPredicates;
 import forge.game.combat.Combat;
 import forge.game.combat.CombatUtil;
+import forge.game.cost.Cost;
 import forge.game.cost.CostDiscard;
 import forge.game.cost.CostExile;
+import forge.game.cost.CostPayment;
 import forge.game.cost.CostSacrifice;
 import forge.game.cost.PaymentDecision;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.player.PlayerController;
-import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 
@@ -42,20 +43,20 @@ import java.util.Random;
  *
  * <p>Consulted first by the actor's controller in the copy, a
  * {@link ForcingSeatController} or a random seat ({@link ForcedPlaySeat}), at
- * the decisions the play is made in: at a priority of the named step where
+ * the decisions the play is made in: at a priority of the fork's step where
  * the line is playable by the rules ({@link PlayabilityVerdict}) and its named
- * targets are legal, the line; when the line is played, its X, modes and
- * targets, and its cost paid through the engine's own cast path
+ * targets are legal, the line; when the line is played, its X and targets,
+ * and its cost paid through the engine's own cast path
  * ({@link RandomSpellPlayer#play}) with the named cards as what it sacrifices,
- * discards or exiles; a confirmation the source asks, the play's answer; a
- * declaration of attackers, the named attack added to the seat's own. Every
- * other decision is the seat's.
+ * discards or exiles; a confirmation or a "you may pay" the source's named
+ * line asks, the play's answer; a declaration of attackers, the named attack
+ * added to the seat's own. Every other decision is the seat's.
  *
  * <p>It never throws inside the engine: a play that cannot be made flags its
  * refusal, and {@code ForkPlayForward} throws it between main-loop steps
  * ({@link #check}) and after the turn ({@link #finish}), before any line of
- * the fork is written. Its draws (an unnamed clause's targets, X, modes) come
- * from the fork's seed.
+ * the fork is written. Its draws (an unnamed clause's targets, X) come from
+ * the fork's seed.
  */
 public final class ForcedPlayRun {
 
@@ -81,14 +82,11 @@ public final class ForcedPlayRun {
         this.game = game;
         this.actor = fork.player(play.actor());
         this.sourceId = fork.card(play.source()).getId();
-        PhaseType now = game.getPhaseHandler().getPhase();
-        if (play.kind() == ForcedPlay.Kind.ANSWER) {
-            this.step = play.step() == null ? null : PhaseType.valueOf(play.step());
-        } else if (play.kind() == ForcedPlay.Kind.ATTACK) {
-            this.step = PhaseType.COMBAT_DECLARE_ATTACKERS;
-        } else {
-            this.step = play.step() == null ? now : PhaseType.valueOf(play.step());
-        }
+        this.step = switch (play.kind()) {
+            case ANSWER -> null;
+            case ATTACK -> PhaseType.COMBAT_DECLARE_ATTACKERS;
+            case CAST, ACTIVATE -> game.getPhaseHandler().getPhase();
+        };
         this.turn = game.getPhaseHandler().getTurn();
         this.targets = new ArrayList<>();
         for (List<String> clause : play.targets()) {
@@ -184,13 +182,28 @@ public final class ForcedPlayRun {
     private List<SpellAbility> lines(Card source) {
         List<SpellAbility> lines = new ArrayList<>();
         for (PriorityCandidates.Candidate candidate : PriorityCandidates.candidatesOf(game, actor)) {
-            SpellAbility ability = candidate.ability();
-            if (ability.getHostCard() != null && ability.getHostCard().getId() == source.getId()
-                    && play.line().matches(ability)) {
-                lines.add(ability);
+            if (isTheLine(candidate.ability(), source.getId()) && !modal(candidate.ability())) {
+                lines.add(candidate.ability());
             }
         }
         return lines;
+    }
+
+    /** Whether {@code ability} is the play's line: hosted by the source and chosen by its {@link ForcedPlay.Line}. */
+    private boolean isTheLine(SpellAbility ability, int source) {
+        return ability.getHostCard() != null && ability.getHostCard().getId() == source
+                && play.line().matches(ability);
+    }
+
+    /**
+     * Whether {@code ability} is modal, a line no cast or activation is forced
+     * to make: the engine's cast ({@code CharmEffect.makeChoices} in
+     * {@link RandomSpellPlayer#play}) asks a charm's modes afresh, which would
+     * undo the modes and named targets drawn here, so a forced charm has no
+     * legal line.
+     */
+    private static boolean modal(SpellAbility ability) {
+        return ability.getApi() == ApiType.Charm;
     }
 
     /** Whether the line's named targets are legal, tried on a copy with throwaway draws. */
@@ -240,8 +253,7 @@ public final class ForcedPlayRun {
         }
         for (PriorityCandidates.Candidate candidate : PriorityCandidates.candidatesOf(game, actor)) {
             SpellAbility ability = candidate.ability();
-            if (ability.getHostCard() != null && ability.getHostCard().getId() == sourceId
-                    && play.line().matches(ability) && candidate.playable() && aimable(ability)) {
+            if (isTheLine(ability, sourceId) && !modal(ability) && candidate.playable() && aimable(ability)) {
                 ability.setActivatingPlayer(actor);
                 pending = ability;
                 List<SpellAbility> chosen = new ArrayList<>(1);
@@ -253,8 +265,8 @@ public final class ForcedPlayRun {
     }
 
     /**
-     * Play {@code ability} if it is the line this run chose: its X, modes
-     * and targets set, its cost paid through the engine's own cast path.
+     * Play {@code ability} if it is the line this run chose: its X and
+     * targets set, its cost paid through the engine's own cast path.
      *
      * @return whether it was played, or null when it is not the run's
      */
@@ -289,13 +301,56 @@ public final class ForcedPlayRun {
      * answer is, or null when the question is not the play's.
      */
     public Boolean answer(Player player, SpellAbility ability) {
-        if (play.kind() != ForcedPlay.Kind.ANSWER || player != actor || made || refusal != null
-                || ability == null || ability.getHostCard() == null || ability.getHostCard().getId() != sourceId
-                || (step != null && !inStep())) {
+        if (!asks(player, ability)) {
             return null;
         }
         made = true;
         return noted(ability, play.answer());
+    }
+
+    /**
+     * The play's answer to a "you may pay" {@code ability} asks of
+     * {@code player}, or null when the question is not the play's. A no
+     * declines. A yes pays {@code cost} whenever it can be paid, whatever the
+     * AI would have chosen: the AI's own payment, the named cards as what it
+     * sacrifices, discards or exiles; one that cannot be paid, or whose
+     * payment fails, flags {@link ForkRefusal#FORCED_COST_NOT_PAID}. Not
+     * reported through the confirm hook, which the AI's own payment does not
+     * report either.
+     *
+     * @return whether the cost was paid
+     */
+    public Boolean pay(Player player, Cost cost, SpellAbility ability) {
+        if (!asks(player, ability)) {
+            return null;
+        }
+        made = true;
+        if (!play.answer()) {
+            return false;
+        }
+        boolean paid;
+        try {
+            paid = ComputerUtilCost.canPayCost(cost, ability, actor, true)
+                    && new CostPayment(cost, ability).payComputerCosts(
+                            new RoleCostDecision(actor, ability, costs, true));
+        } catch (RuntimeException e) {
+            paid = false;
+        }
+        if (!paid) {
+            refusal = ForkRefusal.FORCED_COST_NOT_PAID;
+        }
+        return paid;
+    }
+
+    /**
+     * Whether {@code ability}'s question to {@code player} is the play's: an
+     * answer not yet given, asked of its actor by its line on its source.
+     * Only the game's own thread asks: Forge's AI evaluates its candidates on
+     * a thread of its own, which resolves, pays and confirms nothing.
+     */
+    private boolean asks(Player player, SpellAbility ability) {
+        return play.kind() == ForcedPlay.Kind.ANSWER && player == actor && !made && refusal == null
+                && ability != null && isTheLine(ability, sourceId);
     }
 
     /**
@@ -329,11 +384,6 @@ public final class ForcedPlayRun {
             }
         }
         made = true;
-    }
-
-    /** A forced yes to a "you may pay" the seat's payment did not make. */
-    public void costNotPaid() {
-        refusal = ForkRefusal.FORCED_COST_NOT_PAID;
     }
 
     // ── the fork's checks ───────────────────────────────────────────────
@@ -373,8 +423,8 @@ public final class ForcedPlayRun {
     // ── choices ─────────────────────────────────────────────────────────
 
     /**
-     * X, modes and targets for {@code ability}: X as named or drawn, modes
-     * drawn, each targeting clause's targets the named objects, checked with
+     * X and targets for {@code ability}, which is not modal: X drawn, each
+     * targeting clause's targets the named objects, checked with
      * {@code canTarget}, or drawn where no role names them.
      *
      * @param pay whether X is drawn against what the actor can pay; a trial
@@ -382,20 +432,7 @@ public final class ForcedPlayRun {
      */
     private boolean aim(SpellAbility ability, RandomChoices draws, boolean pay) {
         ability.setXManaCostPaid(null);
-        if (play.x() != null && ability.costHasX()) {
-            ability.setXManaCostPaid(play.x());
-        } else {
-            draws.announceX(ability, pay ? actor : null, 0);
-        }
-        if (ability.getApi() == ApiType.Charm) {
-            ability.setChosenList(null);
-            ability.setSubAbility(null);
-            List<AbilitySub> modes = draws.drawModes(ability);
-            if (modes == null) {
-                return false;
-            }
-            ability.setChosenList(modes);
-        }
+        draws.announceX(ability, pay ? actor : null, 0);
         List<SpellAbility> clauses = TargetingClauses.chosen(ability);
         if (targets.size() > clauses.size()
                 && targets.subList(clauses.size(), targets.size()).stream().anyMatch(named -> !named.isEmpty())) {
@@ -481,7 +518,12 @@ public final class ForcedPlayRun {
         private final List<Card> named;
 
         RoleCostDecision(Player ai, SpellAbility sa, List<Card> named) {
-            super(ai, sa, false);
+            this(ai, sa, named, false);
+        }
+
+        /** @param effect whether the cost is an effect's ("unless ... pays"), not a play's */
+        RoleCostDecision(Player ai, SpellAbility sa, List<Card> named, boolean effect) {
+            super(ai, sa, effect);
             this.named = Objects.requireNonNull(named, "named");
         }
 

@@ -12,10 +12,15 @@ import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.LifeOperation;
 import com.pricepredictor.connector.effects.directed.operations.RemovePermanentOperation;
 import forge.game.Game;
+import forge.game.ability.AbilityUtils;
 import forge.game.card.Card;
+import forge.game.card.CounterEnumType;
+import forge.game.combat.Combat;
+import forge.game.cost.Cost;
 import forge.game.event.GameEventGameFinished;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
+import forge.game.player.PlayerCollection;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
@@ -237,30 +242,92 @@ class ForcedPlayTest {
         assertTrue(dealt, "the Bears attack in the fork and deal combat damage");
     }
 
-    /** A play named for a later step of the turn: Cached Defenses, with no creature, cast in the second main phase. */
+    /**
+     * Preferred Selection's "you may sacrifice it and pay {2}{G}{G}", which
+     * Forge's AI never pays, answered yes: the fork pays it, the Selection is
+     * sacrificed.
+     */
     @Test
-    void aPlayIsMadeInTheNamedLaterStep() throws Throwable {
-        Game game = bare(PhaseType.MAIN1);
-        for (int i = 0; i < 3; i++) {
+    void aForcedYesToAYouMayPayIsPaidWhateverTheAiWouldChoose() throws Throwable {
+        Game game = bare(PhaseType.UPKEEP);
+        Card selection = permanent(game, you(game), "Preferred Selection");
+        for (int i = 0; i < 4; i++) {
             permanent(game, you(game), "Forest");
         }
-        Card defenses = TestBoard.inHand(game, you(game), "Cached Defenses");
 
-        List<String> fork = forkOf(played(game, PhaseType.MAIN1, rule(PhaseType.MAIN1,
-                live -> Binding.empty().with("spell", defenses),
-                ForcedPlay.cast("player", "spell").at("MAIN2"))));
+        List<String> fork = forkOf(played(game, PhaseType.UPKEEP, rule(PhaseType.UPKEEP,
+                live -> Binding.empty().with("selection", selection),
+                ForcedPlay.answer("player", "selection", true))));
 
-        List<String> phases = new ArrayList<>();
-        for (String record : fork) {
-            Map<String, Object> parsed = parse(record);
-            if ("resolution".equals(parsed.get("kind"))
-                    && ref(defenses).equals(RecordLines.asMap(RecordLines.asMap(parsed.get("state")).get("refs")).get("source"))) {
-                phases.add(String.valueOf(RecordLines.asMap(RecordLines.asMap(parsed.get("state")).get("global"))
-                        .get("phase")));
-            }
+        assertTrue(eventsOn(fork, "zone_change", ref(selection)).stream()
+                        .anyMatch(move -> "graveyard".equals(move.get("to_zone"))),
+                "the Selection is sacrificed in the fork: " + fork.size() + " fork records");
+    }
+
+    /** A random seat pays a forced yes to a "you may pay" too, where its AI would not. */
+    @Test
+    void aRandomSeatPaysAForcedYes() {
+        Game game = bare(PhaseType.UPKEEP);
+        Player you = you(game);
+        Card selection = permanent(game, you, "Preferred Selection");
+        for (int i = 0; i < 4; i++) {
+            permanent(game, you, "Forest");
         }
-        assertFalse(phases.isEmpty(), "Cached Defenses resolves in the fork");
-        assertTrue(phases.stream().allMatch(phase -> phase.equalsIgnoreCase("main2")), phases.toString());
+        RandomSeatController seat = new RandomSeatController(game, you, you.getLobbyPlayer(), 1.0, Random::new);
+        you.dangerouslySetController(seat);
+        seat.attach(game, null, null, new Random(3L));
+        ForcedPlayRun run = ForcedPlayRun.start(new Application(ForkOperation.LIFE,
+                        fork -> new LifeOperation(you, 20)).forcing(ForcedPlay.answer("player", "selection", true)),
+                Binding.empty().with("player", you).with("selection", selection), game);
+        run.attach(new Random(5L));
+        SpellAbility look = selection.getTriggers().get(0).ensureAbility();
+        look.setActivatingPlayer(you);
+        SpellAbility bottom = look.getSubAbility();
+        Cost cost = AbilityUtils.calculateUnlessCost(bottom, bottom.getParam("UnlessCost"), true);
+
+        assertTrue(seat.payCostToPreventEffect(cost, bottom, false, new PlayerCollection(you)), "paid");
+        assertTrue(run.made());
+        assertTrue(game.getCardState(selection).isInZone(ZoneType.Graveyard), "the Selection was sacrificed");
+    }
+
+    /**
+     * An answer matches its line, not only its source: a confirmation another
+     * line of the source asks (Goblin Bombardment's activation, the answer
+     * naming the source's triggers) is not the play's and leaves it unmade.
+     */
+    @Test
+    void anAnswerIsGivenOnlyToItsLine() {
+        Game game = bare(PhaseType.MAIN1);
+        Player you = you(game);
+        Card bombardment = permanent(game, you, "Goblin Bombardment");
+        ForcedPlayRun run = ForcedPlayRun.start(new Application(ForkOperation.LIFE,
+                        fork -> new LifeOperation(you, 20)).forcing(ForcedPlay.answer("player", "outlet", true)),
+                Binding.empty().with("player", you).with("outlet", bombardment), game);
+        SpellAbility activation = bombardment.getSpellAbilities().stream()
+                .filter(SpellAbility::isActivatedAbility).findFirst().orElseThrow();
+
+        assertEquals(null, run.answer(you, activation));
+        assertFalse(run.made());
+    }
+
+    /** The AI aims the forced creature at another defender: the attack is moved to the named one. */
+    @Test
+    void anAttackTheSeatAimsElsewhereIsMovedToTheNamedDefender() {
+        Game game = bare(PhaseType.COMBAT_DECLARE_ATTACKERS);
+        Player you = you(game);
+        Card bears = permanent(game, you, "Grizzly Bears");
+        Card walker = permanent(game, opponent(game), "Ajani Goldmane");
+        walker.setCounters(CounterEnumType.LOYALTY, 4);
+        ForcedPlayRun run = ForcedPlayRun.start(new Application(ForkOperation.LIFE,
+                        fork -> new LifeOperation(you, 20)).forcing(ForcedPlay.attack("player", "bears", "walker")),
+                Binding.empty().with("player", you).with("bears", bears).with("walker", walker), game);
+        Combat combat = new Combat(you);
+        combat.addAttacker(bears, opponent(game));
+
+        run.declared(you, combat);
+
+        assertSame(walker, combat.getDefenderByAttacker(bears));
+        assertTrue(run.made());
     }
 
     // ── refusals ────────────────────────────────────────────────────────
@@ -280,6 +347,60 @@ class ForcedPlayTest {
 
         assertEquals(List.of(), forkOf(records));
         assertTrue(refusals(ForkRefusal.FORCED_NO_LINE) > before, "counted as a refusal");
+    }
+
+    /**
+     * FR-010b's promise for a refusal found before the fork: it spends none of
+     * {@code --directed-forks-per-game}, is tallied as a refusal and not as a
+     * fork, and leaves the rule its one fork of the game, which a later
+     * boundary whose board offers the play takes.
+     */
+    @Test
+    void aRefusalFoundBeforeTheForkSpendsNoBudgetAndLeavesTheRuleItsFork() {
+        Game game = bare(PhaseType.MAIN1);
+        permanent(game, you(game), "Swamp");
+        Card disfigure = TestBoard.inHand(game, you(game), "Disfigure");
+        Card bears = permanent(game, opponent(game), "Grizzly Bears");
+        boolean[] aimable = {false};
+        DirectedRule rule = rule(PhaseType.MAIN1,
+                live -> aimable[0]
+                        ? Binding.empty().with("spell", disfigure).with("victim", bears)
+                        : Binding.empty().with("spell", disfigure).with("victim", opponent(live)),
+                ForcedPlay.cast("player", "spell").targeting("victim"));
+        CollectionCaps caps = TestCaps.caps().interventions(0).probes(0).directed(1, 1.0, rule.rule()).build();
+        ForkBudget budget = new ForkBudget(caps);
+        DirectedForkTally tally = new DirectedForkTally();
+        List<String> forked = new ArrayList<>();
+        DirectedForkScheduler scheduler = new DirectedForkScheduler(game, caps, DirectedRules.of(rule), budget,
+                tally, 7L, (taken, variant, application, binding) -> forked.add(taken.rule()));
+        long before = refusals(ForkRefusal.FORCED_NO_LINE);
+
+        assertEquals(0, scheduler.collect(PhaseType.MAIN1), "no fork where Disfigure cannot take its target");
+        assertEquals(before + 1, refusals(ForkRefusal.FORCED_NO_LINE), "counted as a refusal");
+        assertTrue(budget.mayDirect(), "the budget is untouched");
+        assertEquals(0, tally.taken(rule.rule()), "no fork in the lifetime tally");
+        assertEquals(List.of(), forked);
+
+        aimable[0] = true;
+        assertEquals(1, scheduler.collect(PhaseType.MAIN1), "the rule's one fork is taken later");
+        assertEquals(List.of(rule.rule()), forked);
+    }
+
+    /** A charm is no line a forced play makes (its modes would be asked afresh): refused before the fork. */
+    @Test
+    void aForcedCharmHasNoLegalLine() throws Throwable {
+        Game game = bare(PhaseType.MAIN1);
+        permanent(game, you(game), "Mountain");
+        permanent(game, you(game), "Plains");
+        Card charm = TestBoard.inHand(game, you(game), "Boros Charm");
+        long before = refusals(ForkRefusal.FORCED_NO_LINE);
+
+        List<String> records = played(game, PhaseType.MAIN1, rule(PhaseType.MAIN1,
+                live -> Binding.empty().with("spell", charm),
+                ForcedPlay.cast("player", "spell")));
+
+        assertEquals(List.of(), forkOf(records));
+        assertEquals(before + 1, refusals(ForkRefusal.FORCED_NO_LINE));
     }
 
     /** The edit takes the play's source away: refused on the edited copy, nothing written. */
@@ -313,6 +434,93 @@ class ForcedPlayTest {
 
         assertEquals(List.of(), forkOf(records));
         assertEquals(before + 1, refusals(ForkRefusal.FORCED_NOT_MADE));
+    }
+
+    /**
+     * An answer with no step whose question is never asked (Elfhame
+     * Sanctuary's upkeep search, the fork taken in the first main phase):
+     * refused once the turn is over, nothing written.
+     */
+    @Test
+    void anAnswerNeverAskedIsRefusedOnceTheTurnIsOver() throws Throwable {
+        Game game = bare(PhaseType.MAIN1);
+        Card sanctuary = permanent(game, you(game), "Elfhame Sanctuary");
+        long before = refusals(ForkRefusal.FORCED_NOT_MADE);
+
+        List<String> records = played(game, PhaseType.MAIN1, rule(PhaseType.MAIN1,
+                live -> Binding.empty().with("sanctuary", sanctuary),
+                ForcedPlay.answer("player", "sanctuary", true)));
+
+        assertEquals(List.of(), forkOf(records));
+        assertEquals(before + 1, refusals(ForkRefusal.FORCED_NOT_MADE));
+    }
+
+    /**
+     * A refusal flagged in the turn's last main-loop step (the opponent's
+     * forced activation at its last priority of the end step, its named cost
+     * card one the cost cannot take), after which the fork steps no more:
+     * thrown once the turn is over, nothing written.
+     */
+    @Test
+    void aRefusalFlaggedInTheLastStepIsThrownOnceTheTurnIsOver() throws Throwable {
+        Game game = bare(PhaseType.END_OF_TURN);
+        Card bombardment = permanent(game, opponent(game), "Goblin Bombardment");
+        permanent(game, opponent(game), "Grizzly Bears");
+        Card forest = permanent(game, opponent(game), "Forest");
+        long before = refusals(ForkRefusal.FORCED_COST_NOT_PAID);
+
+        List<String> records = played(game, PhaseType.END_OF_TURN, rule(PhaseType.END_OF_TURN,
+                live -> Binding.empty().with("outlet", bombardment).with("forest", forest),
+                ForcedPlay.activate("opponent", "outlet", ForcedPlay.Line.api("DealDamage")).paying("forest")));
+
+        assertEquals(List.of(), forkOf(records));
+        assertEquals(before + 1, refusals(ForkRefusal.FORCED_COST_NOT_PAID));
+    }
+
+    /**
+     * A forced yes to a "you may pay" whose cost cannot be paid (Preferred
+     * Selection with no land): refused, nothing written.
+     */
+    @Test
+    void aForcedYesThatCannotBePaidIsRefused() throws Throwable {
+        Game game = bare(PhaseType.UPKEEP);
+        Card selection = permanent(game, you(game), "Preferred Selection");
+        long before = refusals(ForkRefusal.FORCED_COST_NOT_PAID);
+
+        List<String> records = played(game, PhaseType.UPKEEP, rule(PhaseType.UPKEEP,
+                live -> Binding.empty().with("selection", selection),
+                ForcedPlay.answer("player", "selection", true)));
+
+        assertEquals(List.of(), forkOf(records));
+        assertEquals(before + 1, refusals(ForkRefusal.FORCED_COST_NOT_PAID));
+    }
+
+    /**
+     * A line the rules let the actor afford but the AI's own check does not
+     * (Disfigure at a creature with ward {2}, one Swamp): refused as not paid
+     * before the card moves, the Disfigure still in hand.
+     */
+    @Test
+    void aLineTheAiCannotPayForIsRefusedBeforeItsCardMoves() {
+        Game game = bare(PhaseType.MAIN1);
+        Player you = you(game);
+        permanent(game, you, "Swamp");
+        Card disfigure = TestBoard.inHand(game, you, "Disfigure");
+        Card prowler = permanent(game, opponent(game), "Cackling Prowler");
+        ForcedPlayRun run = ForcedPlayRun.start(new Application(ForkOperation.LIFE,
+                        fork -> new LifeOperation(you, 20))
+                        .forcing(ForcedPlay.cast("player", "spell").targeting("prowler")),
+                Binding.empty().with("player", you).with("spell", disfigure).with("prowler", prowler), game);
+        run.attach(new Random(5L));
+
+        List<SpellAbility> chosen = you.getController().chooseSpellAbilityToPlay();
+        assertNotNull(chosen, "the rules let the actor cast it");
+        assertFalse(you.getController().playChosenSpellAbility(chosen.get(0)));
+
+        assertEquals(ForkRefusal.FORCED_COST_NOT_PAID, run.refusal());
+        assertFalse(run.made());
+        assertTrue(game.getCardState(disfigure).isInZone(ZoneType.Hand), "the Disfigure never moved");
+        assertTrue(game.getStack().isEmpty());
     }
 
     /** A named cost card the cost cannot take (a land for a creature's sacrifice): the cost is not paid. */
