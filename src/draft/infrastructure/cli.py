@@ -33,12 +33,15 @@ _TRAIN_AGENT_ARCHITECTURE_FLAGS: tuple[str, ...] = (
 # separately (CLI string -> tuple); architecture flags are inherited from the
 # checkpoint's stored config, not train_config.
 _RESUMABLE_TRAIN_FLAGS: tuple[str, ...] = (
-    "drafts_path", "cards_path", "imitation_weight", "critic_weight",
+    "drafts_path", "cards_path", "embeddings_path", "checkpoint_dir",
+    "imitation_weight", "critic_weight",
     "lr", "warmup_frac", "batch_size", "max_grad_norm", "epochs",
     "val_fraction", "evals_per_epoch", "patience",
     "lr_decay_patience", "lr_decay_factor", "min_lr",
 )
-_TRAIN_PATH_FIELDS = frozenset({"drafts_path", "cards_path"})
+_TRAIN_PATH_FIELDS = frozenset({
+    "drafts_path", "cards_path", "embeddings_path", "checkpoint_dir",
+})
 
 
 def _resolve_train_agent_config(
@@ -79,6 +82,26 @@ def _resolve_train_agent_config(
         checkpoint=Path(args.checkpoint) if args.checkpoint else None,
         **resolved,
     )
+
+
+def _add_embeddings_path(parser: argparse.ArgumentParser, *, resumable: bool = False) -> None:
+    """Where the ``.npz`` card embeddings ``sealed encode-cards`` wrote are read."""
+    parser.add_argument(
+        "--embeddings-path", default=None,
+        help=(
+            "Directory of the .npz card embeddings, laid out like --cards-path "
+            "(sealed encode-cards --embeddings-path); default: beside the cards "
+            "in --cards-path." + (" Resumable." if resumable else "")
+        ),
+    )
+
+
+def _add_checkpoint_dir(parser: argparse.ArgumentParser, *, help_text: str) -> None:
+    parser.add_argument("--checkpoint-dir", default=None, help=help_text)
+
+
+def _optional_path(value: str | None) -> Path | None:
+    return Path(value) if value else None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -236,6 +259,12 @@ def _build_train_draft_agent_online_parser(subparsers) -> None:
         "--cards-path", default="output/cardsfolder/",
         help=".npz embedding cache; fixes the model/scorer input width.",
     )
+    _add_embeddings_path(parser)
+    _add_checkpoint_dir(parser, help_text=(
+        "The run directory: latest.pt, the snapshots and best_*.pt, run.json, and "
+        "the worker's stderr log under logs/ (default: checkpoints in "
+        "models/draft/agent/, run.json beside --output-path, the log in output/draft/)."
+    ))
 
     # -- Rollout & optimisation ------------------------------------------------
     parser.add_argument(
@@ -364,6 +393,7 @@ def _build_validate_builder_parser(subparsers) -> None:
         "--cards-path", default="output/cardsfolder/",
         help=".npz cache (default: output/cardsfolder/).",
     )
+    _add_embeddings_path(parser)
 
 
 def _build_generate_draft_data_parser(subparsers) -> None:
@@ -413,9 +443,17 @@ def _build_generate_draft_data_parser(subparsers) -> None:
         "--cards-path", default="output/cardsfolder/",
         help=".npz embedding cache (default: output/cardsfolder/).",
     )
+    _add_embeddings_path(parser)
     parser.add_argument(
         "--output-path", default="output/draft/drafts.jsonl",
         help="Destination JSONL; appended, created if missing.",
+    )
+    parser.add_argument(
+        "--logs-dir", default="output/draft",
+        help=(
+            "Directory of the live-seat worker's stderr log, worker-<run id>.log "
+            "(default: output/draft); under the layout, logs/ in the run directory."
+        ),
     )
     parser.add_argument(
         "--resume", action="store_true",
@@ -458,13 +496,16 @@ def _build_generate_draft_data_parser(subparsers) -> None:
 # RL trainer resumable scalar flags (resolved CLI > resumed train_config >
 # dataclass default). learner_agents / critic_corpus / paths handled specially.
 _RL_RESUMABLE_TRAIN_FLAGS: tuple[str, ...] = (
-    "drafts_path", "cards_path", "rollout_temperature", "gae_lambda",
+    "drafts_path", "cards_path", "embeddings_path", "checkpoint_dir",
+    "rollout_temperature", "gae_lambda",
     "kl_coef", "entropy_coef", "entropy_decay_after", "value_weight",
     "lr", "warmup_frac", "batch_size", "max_grad_norm", "epochs",
     "val_fraction", "evals_per_epoch", "patience",
     "lr_decay_patience", "lr_decay_factor", "min_lr",
 )
-_RL_TRAIN_PATH_FIELDS = frozenset({"drafts_path", "cards_path"})
+_RL_TRAIN_PATH_FIELDS = frozenset({
+    "drafts_path", "cards_path", "embeddings_path", "checkpoint_dir",
+})
 
 
 def _resolve_train_agent_rl_config(
@@ -544,6 +585,11 @@ def _build_train_draft_agent_rl_parser(subparsers) -> None:
         "--cards-path", default=None,
         help=".npz embedding cache (default: output/cardsfolder/). Resumable.",
     )
+    _add_embeddings_path(parser, resumable=True)
+    _add_checkpoint_dir(parser, help_text=(
+        "Directory of latest.pt and <timestamp>.pt, and the run's run.json "
+        "(default: models/draft/agent/). Resumable."
+    ))
     parser.add_argument(
         "--learner-agents", default=None,
         help="Comma-separated whitelist of mix labels whose seats feed the policy "
@@ -637,6 +683,11 @@ def _build_train_draft_agent_parser(subparsers) -> None:
         "--cards-path", default=None,
         help=".npz cache (default: output/cardsfolder/). Resumable.",
     )
+    _add_embeddings_path(parser, resumable=True)
+    _add_checkpoint_dir(parser, help_text=(
+        "Directory of latest.pt and <timestamp>.pt, and the run's run.json "
+        "(default: models/draft/agent/). Resumable."
+    ))
     # Architecture flags: default=None so they can be rejected with --resume/--checkpoint.
     parser.add_argument(
         "--d-model", type=int, default=None, dest="d_model",
@@ -777,6 +828,7 @@ def run_generate_draft_data(args: argparse.Namespace) -> int:
         build_method=args.build_method,
         picker_checkpoint=Path(args.picker_checkpoint),
         cards_path=Path(args.cards_path),
+        embeddings_path=_optional_path(args.embeddings_path),
         output_path=Path(args.output_path),
         resume=args.resume,
         agent_checkpoints=agent_checkpoints,
@@ -784,6 +836,7 @@ def run_generate_draft_data(args: argparse.Namespace) -> int:
         temperature=args.temperature,
         seed=args.seed,
         max_consecutive_faults=args.max_consecutive_faults,
+        worker_log_dir=Path(args.logs_dir),
     )
 
     try:
@@ -944,6 +997,7 @@ def run_train_draft_agent_online(args: argparse.Namespace) -> int:
         build_method=args.build_method,
         picker_checkpoint=Path(args.picker_checkpoint),
         cards_path=Path(args.cards_path),
+        embeddings_path=_optional_path(args.embeddings_path),
         agent_temperatures=agent_temperatures,
         lr=args.lr,
         drafts_per_round=args.drafts_per_round,
@@ -961,6 +1015,7 @@ def run_train_draft_agent_online(args: argparse.Namespace) -> int:
         seed=args.seed,
         output_path=Path(args.output_path),
         max_consecutive_faults=args.max_consecutive_faults,
+        **_online_run_directory(args),
     )
 
     # Every rule runs before the Forge worker launches and before any update
@@ -990,6 +1045,15 @@ def run_train_draft_agent_online(args: argparse.Namespace) -> int:
     return 0
 
 
+def _online_run_directory(args: argparse.Namespace) -> dict[str, Path]:
+    """``--checkpoint-dir`` holds the checkpoints and the worker log's ``logs/``;
+    unset, both keep the config's defaults (``models/draft/agent/``, ``output/draft/``)."""
+    if args.checkpoint_dir is None:
+        return {}
+    run = Path(args.checkpoint_dir)
+    return {"checkpoint_dir": run, "worker_log_dir": run / "logs"}
+
+
 def run_validate_builder(args: argparse.Namespace) -> int:
     """Execute the validate-builder diagnostic (FR-042)."""
     from draft.application.validate_builder import (
@@ -1006,6 +1070,7 @@ def run_validate_builder(args: argparse.Namespace) -> int:
         scorer_checkpoint=Path(args.scorer_checkpoint),
         picker_checkpoint=Path(args.picker_checkpoint),
         cards_path=Path(args.cards_path),
+        embeddings_path=_optional_path(args.embeddings_path),
     )
     try:
         diagnostic = run_validate(config)
@@ -1171,8 +1236,27 @@ def _has_playable_pair(rows, *, include_mirrors: bool) -> bool:
 
 # ── run manifests ─────────────────────────────────────────────────────
 
-#: Where the offline trainers write their checkpoints; no flag moves it.
+#: Where the trainers write their checkpoints unless ``--checkpoint-dir`` says.
 _AGENT_CHECKPOINT_DIR = Path("models") / "draft" / "agent"
+
+
+def _offline_checkpoint_dir(args: argparse.Namespace) -> Path:
+    """An offline trainer's run directory, resolved as the trainer resolves it:
+    ``--checkpoint-dir``, else on ``--resume`` the directory the resumed run
+    recorded, else the default."""
+    if args.checkpoint_dir is not None:
+        return Path(args.checkpoint_dir)
+    if args.resume is not None:
+        from draft.infrastructure.draft_agent_store import DraftAgentStore
+
+        try:
+            recorded = (DraftAgentStore().load_checkpoint(Path(args.resume)).train_config
+                        or {}).get("checkpoint_dir")
+        except (OSError, ValueError, KeyError, RuntimeError):
+            recorded = None  # the trainer reports an unreadable checkpoint itself
+        if recorded:
+            return Path(recorded)
+    return _AGENT_CHECKPOINT_DIR
 
 
 def _offline_training_inputs(args: argparse.Namespace) -> list[str | Path | None]:
@@ -1186,7 +1270,10 @@ def _offline_training_inputs(args: argparse.Namespace) -> list[str | Path | None
             return given
         return dataclass_default(TrainDraftAgentConfig, name)
 
-    return [path("drafts_path"), path("cards_path"), args.resume, args.checkpoint]
+    return [
+        path("drafts_path"), path("cards_path"), args.embeddings_path,
+        args.resume, args.checkpoint,
+    ]
 
 
 #: Each subcommand's run manifest (``.claude/skills/artifact-layout``): the
@@ -1195,25 +1282,25 @@ RUN_MANIFESTS: ManifestTable = {
     "generate-draft-data": Writes(
         "output_path", file=True,
         inputs=(
-            "scorer_checkpoint", "picker_checkpoint", "cards_path",
+            "scorer_checkpoint", "picker_checkpoint", "cards_path", "embeddings_path",
             lambda args: labelled_paths(args.agent_checkpoints),
         ),
     ),
     "train-draft-agent": Writes(
-        lambda _args: _AGENT_CHECKPOINT_DIR, inputs=(_offline_training_inputs,),
+        _offline_checkpoint_dir, inputs=(_offline_training_inputs,),
     ),
     "train-draft-agent-rl": Writes(
-        lambda _args: _AGENT_CHECKPOINT_DIR,
+        _offline_checkpoint_dir,
         inputs=(_offline_training_inputs, "critic_corpus"),
     ),
-    # Its checkpoints go to models/draft/agent/, which no flag moves; the
-    # drafts it streams go to --output-path, its one output argument.
+    # Its run directory is --checkpoint-dir; unset, the directory of the
+    # drafts it streams to --output-path (its checkpoints in models/draft/agent/).
     "train-draft-agent-online": Writes(
-        "output_path", file=True,
+        lambda args: args.checkpoint_dir or Path(args.output_path).parent,
         inputs=(
             lambda args: labelled_paths(args.learner),
             lambda args: labelled_paths(args.frozen),
-            "scorer_checkpoint", "picker_checkpoint", "cards_path",
+            "scorer_checkpoint", "picker_checkpoint", "cards_path", "embeddings_path",
         ),
     ),
     "validate-builder": READ_ONLY,

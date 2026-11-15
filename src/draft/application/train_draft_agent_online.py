@@ -118,6 +118,9 @@ class TrainDraftAgentOnlineConfig:
         default_factory=lambda: Path("models/sealed/picker/latest.pt"),
     )
     cards_path: Path = field(default_factory=lambda: Path("output/cardsfolder/"))
+    #: The ``.npz`` embeddings' tree, laid out like ``cards_path``; None
+    #: reads them beside the cards.
+    embeddings_path: Path | None = None
 
     # Rollout & optimisation (FR-004, FR-006, FR-025)
     agent_temperatures: dict[str, float] | None = None
@@ -145,6 +148,10 @@ class TrainDraftAgentOnlineConfig:
         default_factory=lambda: Path("output/draft/drafts.jsonl"),
     )
     max_consecutive_faults: int = 5
+
+    # Run directory (LAYOUT): checkpoints, and the worker's stderr log.
+    checkpoint_dir: Path = field(default_factory=lambda: CHECKPOINT_DIR)
+    worker_log_dir: Path = field(default_factory=lambda: Path("output/draft"))
 
     @property
     def rollout_temperature(self) -> float | None:
@@ -1218,7 +1225,7 @@ def format_startup_echo(
         ),
         (
             f"  outputs   : corpus {config.output_path} (append) | "
-            f"checkpoints {CHECKPOINT_DIR}/ "
+            f"checkpoints {config.checkpoint_dir}/ "
             f"(snapshot every {config.snapshot_every} rounds)"
         ),
     ]
@@ -1413,7 +1420,9 @@ class TrainDraftAgentOnlineUseCase:
 
         # One memoizing locator for the labeler, every pick service, and the
         # trainer, so each card's .npz is decompressed once for the whole run.
-        locator = ConvertedCardLocator(config.cards_path)
+        locator = ConvertedCardLocator(
+            config.cards_path, embeddings_path=config.embeddings_path,
+        )
         loader = RoundLoader(locator)
 
         generation = base_generation(base.rl_metadata)
@@ -1488,8 +1497,8 @@ class TrainDraftAgentOnlineUseCase:
             config.anchor_window, config.learner_label, anchor,
         )
         config.output_path.parent.mkdir(parents=True, exist_ok=True)
-        CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
-        latest_path = CHECKPOINT_DIR / "latest.pt"
+        config.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        latest_path = config.checkpoint_dir / "latest.pt"
 
         supervisor._install_signal_handlers()
         launch = supervisor._default_launch_worker(registry.external_labels)
@@ -1655,6 +1664,7 @@ class TrainDraftAgentOnlineUseCase:
             build_method=config.build_method,
             picker_checkpoint=config.picker_checkpoint,
             cards_path=config.cards_path,
+            embeddings_path=config.embeddings_path,
             output_path=config.output_path,
             resume=True,
             agent_checkpoints=dict(config.frozen),
@@ -1665,6 +1675,7 @@ class TrainDraftAgentOnlineUseCase:
             # The link that actually arms the Java rule: without it, learner-free
             # pods are drafted and trained on as if valid (FR-003).
             required_agent=config.learner_label,
+            worker_log_dir=config.worker_log_dir,
         )
 
     @staticmethod
@@ -1701,7 +1712,7 @@ class TrainDraftAgentOnlineUseCase:
         rounds: int,
         lr_decay_count: int = 0,
     ) -> Path:
-        path = CHECKPOINT_DIR / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.pt"
+        path = config.checkpoint_dir / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.pt"
         _write_checkpoint(
             store, model, optimizer, config, base, generation, rounds, path,
             lr_decay_count,
@@ -1729,7 +1740,7 @@ class TrainDraftAgentOnlineUseCase:
         lags the policy by about half the window, so the genuinely best weights
         may be a few rounds earlier and the history is worth keeping.
         """
-        path = CHECKPOINT_DIR / f"best_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pt"
+        path = config.checkpoint_dir / f"best_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pt"
         _write_checkpoint(
             store, model, optimizer, config, base, generation, rounds, path,
             lr_decay_count,
@@ -1764,12 +1775,13 @@ def check_embedding_width(
     """
     from draft.application.train_draft_agent import _check_dims
 
-    width = probe_embedding_width(config.cards_path)
+    embeddings = config.embeddings_path or config.cards_path
+    width = probe_embedding_width(embeddings)
     if width is None:
         raise OnlineConfigError(
-            f"no .npz card embeddings found under {config.cards_path}; run "
+            f"no .npz card embeddings found under {embeddings}; run "
             "`python -m sealed encode-cards` with the encoder this agent was "
             "trained on"
         )
-    _check_dims(agent_config, width, config.cards_path)
+    _check_dims(agent_config, width, embeddings)
     return width

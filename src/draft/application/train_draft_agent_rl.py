@@ -102,6 +102,11 @@ class TrainDraftAgentRLConfig:
     drafts_path: Path = field(default_factory=lambda: Path("output/draft/drafts.jsonl"))
     critic_corpus: tuple[Path, ...] = ()
     cards_path: Path = field(default_factory=lambda: Path("output/cardsfolder/"))
+    #: The ``.npz`` embeddings' tree, laid out like ``cards_path``; None
+    #: reads them beside the cards.
+    embeddings_path: Path | None = None
+    #: Where the checkpoints (``latest.pt``, ``<timestamp>.pt``) go.
+    checkpoint_dir: Path = field(default_factory=lambda: Path("models/draft/agent"))
     learner_agents: tuple[str, ...] = ()
     rollout_temperature: float | None = None
     gae_lambda: float = 0.95
@@ -622,7 +627,7 @@ def _resume_or_build(
     source = config.resume if config.resume is not None else config.checkpoint
     assert source is not None  # CLI guarantees exactly one
     ckpt = store.load_checkpoint(source)
-    _check_dims(ckpt.config, embedding_dim, config.cards_path)
+    _check_dims(ckpt.config, embedding_dim, config.embeddings_path or config.cards_path)
     model = DraftAgentModel(ckpt.config)
     model.load_state_dict(ckpt.model_state_dict)
     reference = DraftAgentModel(ckpt.config)
@@ -730,7 +735,9 @@ class TrainDraftAgentRLUseCase:
         for path in config.critic_corpus:
             critic_only.extend(read_records(path))
 
-        locator = ConvertedCardLocator(config.cards_path)
+        locator = ConvertedCardLocator(
+            config.cards_path, embeddings_path=config.embeddings_path,
+        )
         loader = _Loader(locator, set(config.learner_agents))
         examples, trajectories = loader.build(on_policy, critic_only)
         if not examples:
@@ -793,7 +800,7 @@ class TrainDraftAgentRLUseCase:
         entropy_sched = _CoefSchedule(config.entropy_coef, config.entropy_decay_after)
         kl_sched = _CoefSchedule(config.kl_coef, config.entropy_decay_after)
 
-        out_dir = Path("models/draft/agent")
+        out_dir = config.checkpoint_dir
         out_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         latest_path = out_dir / "latest.pt"

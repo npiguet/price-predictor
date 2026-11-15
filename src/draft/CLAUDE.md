@@ -2,7 +2,7 @@
 
 Entry point: `python -m draft <subcommand>` (see `src/draft/__main__.py` and `infrastructure/cli.py`). A draft agent in three generations: gen-1 imitation of Forge's draft AI, gen-2 RL self-play fine-tuning, gen-3 online self-play GRPO. The model is a two-headed Set Transformer, an imitation **policy** over the cards in the current pack plus a Monte-Carlo **critic** on a context token. `draft` **imports from** `sealed` and `price_predictor`, never the reverse, and adds only the genuinely new logic (booster→state geometry, typed-token state, the two-headed model, the Java draft worker).
 
-Every subcommand that writes files keeps a `run.json` run manifest in its run directory (`.claude/skills/artifact-layout/SKILL.md`), declared in `RUN_MANIFESTS` in `infrastructure/cli.py`; the two offline trainers record in `models/draft/agent/`, which no flag moves, and `train-draft-agent-online` in the directory of its `--output-path`.
+Every subcommand that writes files keeps a `run.json` run manifest in its run directory (`.claude/skills/artifact-layout/SKILL.md`), declared in `RUN_MANIFESTS` in `infrastructure/cli.py`; every trainer records in its `--checkpoint-dir` (default `models/draft/agent/`, or on `--resume` the directory the resumed run recorded), except that `train-draft-agent-online` without `--checkpoint-dir` records in the directory of its `--output-path`. Every reader of the `.npz` card embeddings takes `--embeddings-path` (`src/sealed/CLAUDE.md` § The embedding cache fixes every downstream width).
 
 ## Topic files — read on demand
 
@@ -54,4 +54,4 @@ Append-only data contracts spanning the Java writers and the Python readers — 
 
 ## Model artifacts
 
-Checkpoints live under `models/draft/agent/`. The best checkpoint of an offline run is the one with the lowest validation loss; of a gen-3 online run, the one with the highest anchor margin. All three trainers write the gen-1 payload format; the RL trainers add `rl_metadata`.
+Checkpoints live in the trainer's `--checkpoint-dir`, by default `models/draft/agent/`. The best checkpoint of an offline run is the one with the lowest validation loss; of a gen-3 online run, the one with the highest anchor margin. All three trainers write the gen-1 payload format; the RL trainers add `rl_metadata`.

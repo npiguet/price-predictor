@@ -533,7 +533,10 @@ reads there is named by a flag.
 | `scripts/effect_sweep_arm.py` | `--cache-dir DIR` | `abilities/` in `--run-dir` | the arm's ability cache |
 | `scripts/effect_sweep_arm.py` | `--reports-out DIR` | `reports/` in `--run-dir` | the arm's probe reports; when given, the evaluation's files go to `DIR/evaluation/` |
 | `sealed encode-cards` | `--embeddings-path DIR` | beside each card in `--cards-path` | the `.npz` card embeddings, laid out like `--cards-path` (a `cache` run directory); the run directory, made for it; `--clean` deletes the `.npz` files of this directory only |
-| `sealed build-decks`, `pick-decks`, `evaluate-scorer`, `train-scorer`, `train-picker` | `--embeddings-path DIR` | beside the cards in `--cards-path` | where the `.npz` card embeddings are read; resumable on the two trainers |
+| `sealed build-decks`, `pick-decks`, `evaluate-scorer`, `train-scorer`, `train-picker`; `draft generate-draft-data`, `train-draft-agent`, `train-draft-agent-rl`, `train-draft-agent-online`, `validate-builder` | `--embeddings-path DIR` | beside the cards in `--cards-path` | where the `.npz` card embeddings are read; resumable on the four offline trainers |
+| `draft train-draft-agent`, `train-draft-agent-rl` | `--checkpoint-dir DIR` | `models/draft/agent/`; on `--resume`, the directory the resumed run recorded | `latest.pt` and `<timestamp>.pt`; the run directory; resumable |
+| `draft train-draft-agent-online` | `--checkpoint-dir DIR` | checkpoints in `models/draft/agent/`, `run.json` beside `--output-path`, the worker log in `output/draft/` | `latest.pt`, the snapshots and `best_<timestamp>.pt`; the run directory, holding `run.json` and the worker log under `logs/` |
+| `draft generate-draft-data` | `--logs-dir DIR` | `output/draft/` | the live-seat worker's `worker-<run id>.log` |
 
 `scripts/effect_sweep_arm.py` passes its `--probe-set-dir` to `evaluate-effect-model` as
 `--reports-dir`.

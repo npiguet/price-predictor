@@ -68,6 +68,11 @@ def _fmt_dur(seconds: float) -> str:
 class TrainDraftAgentConfig:
     drafts_path: Path = field(default_factory=lambda: Path("output/draft/drafts.jsonl"))
     cards_path: Path = field(default_factory=lambda: Path("output/cardsfolder/"))
+    #: The ``.npz`` embeddings' tree, laid out like ``cards_path``; None
+    #: reads them beside the cards.
+    embeddings_path: Path | None = None
+    #: Where the checkpoints (``latest.pt``, ``<timestamp>.pt``) go.
+    checkpoint_dir: Path = field(default_factory=lambda: Path("models/draft/agent"))
     d_model: int | None = None
     n_layers: int = 4
     n_heads: int = 8
@@ -537,7 +542,7 @@ def _resume_or_build(
     """Return (resume bundle, critic_mean, critic_std) — stats from checkpoint when loading."""
     if config.resume is not None:
         ckpt = store.load_checkpoint(config.resume)
-        _check_dims(ckpt.config, embedding_dim, config.cards_path)
+        _check_dims(ckpt.config, embedding_dim, config.embeddings_path or config.cards_path)
         model = DraftAgentModel(ckpt.config)
         model.load_state_dict(ckpt.model_state_dict)
         # Inherit the annealing position unless --lr was explicitly overridden
@@ -554,7 +559,7 @@ def _resume_or_build(
         )
     if config.checkpoint is not None:
         ckpt = store.load_checkpoint(config.checkpoint)
-        _check_dims(ckpt.config, embedding_dim, config.cards_path)
+        _check_dims(ckpt.config, embedding_dim, config.embeddings_path or config.cards_path)
         model = DraftAgentModel(ckpt.config)
         model.load_state_dict(ckpt.model_state_dict)
         return (
@@ -681,7 +686,9 @@ class TrainDraftAgentUseCase:
         if not records:
             raise ValueError(f"No records in {config.drafts_path}")
 
-        locator = ConvertedCardLocator(config.cards_path)
+        locator = ConvertedCardLocator(
+            config.cards_path, embeddings_path=config.embeddings_path,
+        )
         loader = _Loader(locator, set(config.imitation_agents))
         examples = loader.build(records)
         if not examples:
@@ -726,7 +733,7 @@ class TrainDraftAgentUseCase:
         # epoch count would never reach full LR.
         scheduler = _make_scheduler(optimizer, n_steps, config.warmup_frac, plateau)
 
-        out_dir = Path("models/draft/agent")
+        out_dir = config.checkpoint_dir
         out_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         latest_path = out_dir / "latest.pt"

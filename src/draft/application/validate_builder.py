@@ -107,6 +107,9 @@ class ValidateBuilderConfig:
         default_factory=lambda: Path("models/sealed/picker/latest.pt"),
     )
     cards_path: Path = field(default_factory=lambda: Path("output/cardsfolder/"))
+    #: The ``.npz`` embeddings' tree, laid out like ``cards_path``; None
+    #: reads them beside the cards.
+    embeddings_path: Path | None = None
 
 
 def drafted_pools_from_corpus(path: Path, limit: int) -> list[list[str]]:
@@ -141,7 +144,7 @@ def run_validate(config: ValidateBuilderConfig) -> BuilderDiagnostic:
     from sealed.infrastructure.scorer_store import ScorerStore
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    locator = ConvertedCardLocator(config.cards_path)
+    locator = ConvertedCardLocator(config.cards_path, embeddings_path=config.embeddings_path)
 
     scorer_ckpt = ScorerStore().load_checkpoint(config.scorer_checkpoint)
     scorer = SetTransformerScorer(scorer_ckpt.config)

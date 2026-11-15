@@ -93,6 +93,9 @@ class GenerateDraftDataConfig:
         default_factory=lambda: Path("models/sealed/picker/latest.pt"),
     )
     cards_path: Path = field(default_factory=lambda: Path("output/cardsfolder/"))
+    #: The ``.npz`` embeddings' tree, laid out like ``cards_path``; None
+    #: reads them beside the cards.
+    embeddings_path: Path | None = None
     output_path: Path = field(
         default_factory=lambda: Path("output/draft/drafts.jsonl"),
     )
@@ -107,6 +110,8 @@ class GenerateDraftDataConfig:
     # independent per-seat mix draw produced none (spec 021 FR-003). ``None``
     # leaves sampling byte-for-byte as it was.
     required_agent: str | None = None
+    #: Where a live-seat worker's stderr log (``worker-<run id>.log``) goes.
+    worker_log_dir: Path = field(default_factory=lambda: Path("output/draft"))
 
 
 # --------------------------------------------------------------------------- #
@@ -358,7 +363,9 @@ def build_labeler(
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if locator is None:
-        locator = ConvertedCardLocator(config.cards_path)
+        locator = ConvertedCardLocator(
+            config.cards_path, embeddings_path=config.embeddings_path,
+        )
 
     scorer_ckpt = ScorerStore().load_checkpoint(config.scorer_checkpoint)
     scorer = SetTransformerScorer(scorer_ckpt.config)
@@ -538,7 +545,9 @@ class GenerateDraftDataSupervisor:
         from draft.application.agent_registry import AgentRegistry
         from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
-        locator = ConvertedCardLocator(self._config.cards_path)
+        locator = ConvertedCardLocator(
+            self._config.cards_path, embeddings_path=self._config.embeddings_path,
+        )
         mix_labels = {label for label, _ in self._config.agent_mix}
         return AgentRegistry.build(
             self._config.agent_checkpoints, mix_labels,
@@ -563,7 +572,8 @@ class GenerateDraftDataSupervisor:
                 kwargs["required_agent"] = required_agent
             return connector.start(
                 agent_mix=mix, set_code=self._config.set_code,
-                external_agents=external_labels, run_id=run_id, **kwargs,
+                external_agents=external_labels, run_id=run_id,
+                log_dir=self._config.worker_log_dir, **kwargs,
             )
 
         return launch
