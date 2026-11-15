@@ -5,35 +5,104 @@ Run plan and rationale: [`../../experiments/2026-10-30-effect-model-gen3-design.
 Base walkthroughs: [`../023-ability-effect-model/quickstart.md`](../023-ability-effect-model/quickstart.md),
 [`../024-ability-effect-model-gen2/quickstart.md`](../024-ability-effect-model-gen2/quickstart.md).
 
-Commands below are the ones this feature adds or changes. Paths are the defaults. Python runs with
-`-u`, and long commands print periodic progress.
+The whole chain of commands for generation 3, from an empty `output/` and `models/` to the report.
+Every path follows the artifact layout (`.claude/skills/artifact-layout/SKILL.md`): everything the
+effects work reads or writes is under `output/effects/` and `models/effects/`, each run in its own
+run directory, and no command relies on a default path. Python runs with `-u`, and long commands
+print periodic progress.
+
+## Paths and the launcher
+
+Commands are PowerShell, run from the repository root. The interpreter is
+`.venv\Scripts\python.exe` (a bare `python` is the system interpreter, without the project's
+dependencies). Set these once per session, replacing each `<date>` with the day that run starts
+(`YYYY-MM-DD`); a run that is resumed or restarted keeps the directory it started in.
+
+```powershell
+$env:PYTHONPATH = "src;."
+$py     = ".venv\Scripts\python.exe"
+$gen2   = "output\effects\gen2"
+$gen3   = "output\effects\gen3"
+$models = "models\effects\gen3"
+
+# Inputs every later step reads (stage 0 writes them).
+$cards    = "--cards-folder $gen3\converted\cardsfolder --cards-folder $gen3\converted\tokenscripts"
+$kw       = "$gen3\inputs\<date>-keyword-definitions\keyword-definitions.json"
+$vocab    = "$gen3\inputs\<date>-vocab\vocab.txt"
+$holdout  = "$gen3\inputs\<date>-holdout-cards\holdout-cards.txt"
+$variants = "$gen3\inputs\<date>-variant-scripts"
+$counts   = "$gen3\inputs\<date>-rule-counts\rule-counts.json"
+$tokens   = "--vocab-path $vocab --keyword-definitions $kw"
+
+# The directed-fork list, as the comma-separated value --directed-fork-rules takes.
+$rules = (Get-Content rules\directed-fork-rules.txt | Where-Object { $_.Trim() -and -not $_.StartsWith('#') }) -join ','
+
+# Runs a command with its console in <run>\console.log, the command as the log's first line.
+function Run-Logged($run, $cmd) {
+    New-Item -ItemType Directory -Force $run | Out-Null
+    $cmd | Out-File -Append -Encoding ascii "$run\console.log"
+    cmd /c "$cmd >> `"$run\console.log`" 2>&1"
+}
+```
+
+`Run-Logged` sends the console to the file alone, so that a Ctrl-C reaches the command and
+nothing else. Follow a run from a second window with
+`Get-Content <run>\console.log -Wait -Tail 20`. Each command writes its own `run.json` in its run
+directory; when a run ends, fill `purpose` there and set `status` to `keep`, `scratch` or
+`superseded`.
+
+Three commands write outside the path they are given:
+
+- `sealed match-outcomes` appends `match-outcomes.txt` and `cards-played.txt` to `output/sealed/`
+  whatever `--effect-records` names. It has no flag for them.
+- `effects evaluate-effect-model` writes its pictures to `<checkpoint stem>.evaluation/` beside
+  the checkpoint, inside the model's run directory. It has no flag for them.
+- `scripts/rules_catalogue.py directed-rules` rewrites three files under `rules/`, which are
+  committed.
 
 ## Prerequisites
 
 - `../forge` on `effect-record-hooks` with the gen-3 commits (three hooks, the `GameCopier` copy),
   built with `mvn install -DskipTests`; then `cd forge-connector && mvn install -DskipTests`.
-- Gen-2's raw shards (for stage 1) and `rules/` on master.
+- Gen-2's raw shards and converted trees under `output\effects\gen2\` (for stage 1), and `rules/`
+  on master.
+- `resources\AllPrintings.json`.
+
+## Stage 0 — the generation's converted trees and inputs
+
+```powershell
+Run-Logged "$gen3\converted" "$py -u -m price_predictor convert --cards-path ..\forge\forge-gui\res\cardsfolder --tokens-path ..\forge\forge-gui\res\tokenscripts --output-path $gen3\converted\cardsfolder --tokens-output-path $gen3\converted\tokenscripts"
+Run-Logged (Split-Path $kw)      "$py -u -m effects extract-keyword-definitions --output $kw"
+Run-Logged (Split-Path $vocab)   "$py -u -m effects build-vocab --surface prose $cards --keyword-definitions $kw --vocab-path $vocab"
+Run-Logged (Split-Path $holdout) "$py -u -m effects holdout-cards $cards --printings-path resources\AllPrintings.json --out $holdout"
+```
+
+Check: `$gen3\converted\` holds `run.json`, `console.log`, `cardsfolder\` and `tokenscripts\`, and
+every converted card has its `.provenance.json` sidecar. The generation is converted once, before
+its first record is collected: records name their abilities by provenance keys that join against
+these sidecars.
 
 ## Stage 1 — detectors and per-rule counts on gen-2 (story 1)
 
-```bash
-python scripts/rules_catalogue.py validate
-python -u -m effects rule-counts --records-dir output/effects/records-gen2 --workers 10
-python scripts/rules_catalogue.py directed-rules --counts output/effects/rule-counts.json
+```powershell
+& $py scripts\rules_catalogue.py validate
+Run-Logged "$gen2\inputs\<date>-rule-counts" "$py -u -m effects rule-counts --records-dir $gen2\records --cards-folder $gen2\converted\cardsfolder --cards-folder $gen2\converted\tokenscripts --variant-scripts $gen2\inputs\<gen-2 variant scripts run> --rules-dir rules --workers 10 --output $gen2\inputs\<date>-rule-counts\rule-counts.json"
+& $py scripts\rules_catalogue.py directed-rules --counts $gen2\inputs\<date>-rule-counts\rule-counts.json --cards-folder $gen3\converted\cardsfolder
 ```
 
 Check: `validate` passes with every scenario declaring a detector or `none` and every non-base
-variant classified. The printed table and `output/effects/rule-counts.json` agree. Review the listed
+variant classified. The printed table and the written `rule-counts.json` agree. Review the listed
 records against Forge, starting with `rules/FINDINGS.md`'s suspected departures, and record outcomes
 on the scenarios. The counts decide which rules to enable for directed forks and coverage rounds:
 `directed-rules` writes `rules/directed-fork-rules.txt`, `rules/coverage-wording-cards.txt` and
 the part of the counts they are decided from, `rules/directed-fork-counts.json`, from them; record that choice in the gen-3 record.
+On a machine without the gen-2 shards, `rules/directed-fork-counts.json` serves as `--counts`.
 
 ## Stage 2 — the relation-aware trunk (story 4, no gen-3 data)
 
-```bash
-pytest tests/unit/effects/domain/test_relation_attention.py
-python -u scripts/measure_trunk_step.py --shard <fixed gen-2 curated shard> --batch-size 32
+```powershell
+& $py -m pytest tests\unit\effects\domain\test_relation_attention.py
+Run-Logged "$gen2\reports\<date>-trunk-step" "$py -u scripts\measure_trunk_step.py --shard <fixed gen-2 curated shard> --batch-size 32 --output $gen2\reports\<date>-trunk-step\trunk-step.json"
 ```
 
 Check: the four layer properties pass; the step fits 8 GB; record step time, peak memory and the
@@ -41,12 +110,14 @@ relation-triple count per record in the gen-3 record.
 
 ## Stage 3 — gen-3 collection pilot (story 2)
 
-```bash
-python -u -m sealed match-outcomes --effect-records --count-dropped-events \
-    --directed-fork-rules 704.5f --directed-fork-probability 1 <usual pilot flags>
-python -u -m effects validate-corpus --effect-records output/effects/records
-python -u -m effects field-coverage --effect-records output/effects/records
-python -u -m effects rule-counts --records-dir output/effects/records
+A pilot is a scratch run: nothing outside `scratch\` reads it.
+
+```powershell
+$pilot = "$gen3\scratch\<date>-pilot"
+Run-Logged $pilot "$py -u -m sealed match-outcomes --workers 6 --effect-records $pilot --count-dropped-events --directed-fork-rules 704.5f --directed-fork-probability 1 <usual pilot flags>"
+Run-Logged "$gen3\scratch\<date>-pilot-checks" "$py -u -m effects validate-corpus --effect-records $pilot $cards --variant-scripts $variants"
+Run-Logged "$gen3\scratch\<date>-pilot-checks" "$py -u -m effects field-coverage --effect-records $pilot"
+Run-Logged "$gen3\scratch\<date>-pilot-checks" "$py -u -m effects rule-counts --records-dir $pilot $cards --variant-scripts $variants --rules-dir rules --workers 10 --output $gen3\scratch\<date>-pilot-checks\rule-counts.json"
 ```
 
 Check: every record carries `generation: 3`; every § 8.13 field is non-constant in `field-coverage`
@@ -65,21 +136,13 @@ Read the manifest anyway; the freeze is not run on a pilot.
 After each input or output change lands, update `rules/MODEL-FIELDS.md`, rerun the heads workflow
 (`scripts/rules_heads_workflow.js`), then:
 
-```bash
-python scripts/rules_catalogue.py gen3-fields
+```powershell
+& $py scripts\rules_catalogue.py gen3-fields
 ```
 
 Check: the rules newly learnable are printed and committed with the change.
 
 ## Stage 5 — full collection, coverage and variants
-
-Long runs are launched from PowerShell. There the interpreter is `.venv\Scripts\python.exe` (a bare
-`python` is the system interpreter, without the project's dependencies), and the directed-fork list
-is built first, as its own step, then passed as `--directed-fork-rules $rules`:
-
-```powershell
-$rules = (Get-Content rules/directed-fork-rules.txt | Where-Object { $_.Trim() -and -not $_.StartsWith('#') }) -join ','
-```
 
 Before the first long run, the fork fidelity audit (T181): collect for 20 minutes into a scratch run
 directory, stop the run, and count the `fork fidelity:` lines by field in its `logs/` worker logs
@@ -96,19 +159,34 @@ after that, and it never sees a fork that wrote nothing, which only the refusal 
 failure counts account for.
 
 ```powershell
-.venv\Scripts\python.exe -u -m sealed match-outcomes --workers 6 --effect-records <scratch run dir> --random-seat-share 0.25 --random-seat-probability 0.5 --interventions-per-game 4 --probes-per-game 4 --directed-fork-rules $rules --count-dropped-events
+$audit = "$gen3\scratch\<date>-fork-fidelity"
+Run-Logged $audit "$py -u -m sealed match-outcomes --workers 6 --effect-records $audit --random-seat-share 0.25 --random-seat-probability 0.5 --interventions-per-game 4 --probes-per-game 4 --directed-fork-rules $rules --count-dropped-events"
+Run-Logged "$gen3\scratch\<date>-fork-fidelity-checks" "$py -u -m effects validate-corpus --effect-records $audit $cards --variant-scripts $variants"
 ```
 
-The collection itself:
+The collection itself, one run directory per collecting command under `$gen3\records\`:
 
-```bash
-python -u -m sealed match-outcomes --effect-records --directed-fork-rules "$(paste -sd, rules/directed-fork-rules.txt)" <run flags>
-python -u -m effects collect-coverage --wording-cards <any-target cards> --exclude-cards <holdout list> <run flags>
-python -u -m effects collect-coverage --wording-cards rules/coverage-wording-cards.txt --directed-fork-rules "$(paste -sd, rules/directed-fork-rules.txt)" --exclude-cards <holdout list> <run flags>
-python -u -m effects collect-variants --round untargeted --exclude-cards <holdout list> <run flags>
-python -u -m effects rule-counts --records-dir <the corpus being collected> --output <counts>
-python -u -m effects collect-variants --round steered --rule-counts <counts> --exclude-cards <holdout list> <run flags>
+```powershell
+$full      = "$gen3\records\<date>-full-strength"
+$depleted  = "$gen3\records\<date>-depleted"
+$anytarget = "$gen3\records\<date>-coverage-any-target"
+$wording   = "$gen3\records\<date>-coverage-wording"
+$untarget  = "$gen3\records\<date>-variants-untargeted"
+$steered   = "$gen3\records\<date>-variants-steered"
+
+Run-Logged $full      "$py -u -m sealed match-outcomes --effect-records $full --directed-fork-rules $rules <run flags>"
+Run-Logged $depleted  "$py -u -m sealed match-outcomes --effect-records $depleted --exclude-cards $holdout --directed-fork-rules $rules <run flags>"
+Run-Logged $anytarget "$py -u -m effects collect-coverage --effect-records $anytarget $cards --wording-cards <any-target cards> --exclude-cards $holdout --count-from $depleted <run flags>"
+Run-Logged $wording   "$py -u -m effects collect-coverage --effect-records $wording $cards --wording-cards rules\coverage-wording-cards.txt --directed-fork-rules $rules --exclude-cards $holdout --count-from $depleted --count-from $anytarget <run flags>"
+Run-Logged $untarget  "$py -u -m effects collect-variants --round untargeted --effect-records $untarget --forge-cards-path ..\forge\forge-gui\res\cardsfolder --variant-scripts $variants $cards --exclude-cards $holdout <run flags>"
+Run-Logged (Split-Path $counts) "$py -u -m effects rule-counts --records-dir $gen3\records $cards --variant-scripts $variants --rules-dir rules --workers 10 --output $counts"
+Run-Logged $steered   "$py -u -m effects collect-variants --round steered --rule-counts $counts --effect-records $steered --forge-cards-path ..\forge\forge-gui\res\cardsfolder --variant-scripts $variants $cards --exclude-cards $holdout <run flags>"
 ```
+
+The `match-outcomes` run without `--exclude-cards` plays full-strength pools and feeds the
+card-disjoint stratum; every other run keeps the held-out cards out. `$variants` is one tree shared
+by every variant run (a variant is reused by its digest). Every reader given `$gen3\records` walks
+every run under it.
 
 The steered round runs last, on counts of everything collected before it (FR-058c). Every
 collecting command takes the same three decision-sampling rates (FR-059a).
@@ -145,9 +223,11 @@ many cut games the counts left out (`cut_games`). Before launching a collection,
 
 ## Stage 6 — curate and freeze (story 6, story 8)
 
-```bash
-python -u -m effects build-corpus --records-dir output/effects/records --output output/effects/corpus-gen3
-python -u scripts/effect_knowledge_probes/run.py --freeze-probe-set --corpus output/effects/corpus-gen3
+```powershell
+$corpus = "$gen3\corpus\<date>-curated"
+$freeze = "$gen3\reports\<date>-selection-set"
+Run-Logged $corpus "$py -u -m effects build-corpus --records-dir $gen3\records --output $corpus $cards --variant-scripts $variants $tokens --workers 10"
+Run-Logged $freeze "$py -u scripts\effect_knowledge_probes\run.py --freeze-probe-set --corpus $corpus $cards $tokens --reports-dir $freeze"
 ```
 
 Check: the manifest gives, for every tagged rule in every class, share, written and shortfall per
@@ -157,27 +237,34 @@ its target.
 
 Before stage 7, rerun the trunk measurement on a gen-3 curated shard and confirm it fits 8 GB:
 
-```bash
-python -u scripts/measure_trunk_step.py --shard <gen-3 curated shard> --batch-size 32
+```powershell
+Run-Logged "$gen3\reports\<date>-trunk-step" "$py -u scripts\measure_trunk_step.py --shard <gen-3 curated shard> --batch-size 32 --output $gen3\reports\<date>-trunk-step\trunk-step.json"
 ```
 
 ## Stage 7 — train (story 7)
 
-```bash
-python -u -m effects train-effect-model --corpus output/effects/corpus-gen3 --rule-mask hard
+```powershell
+$train = "$models\effect-model\<date>-rule-mask-hard"
+Run-Logged $train "$py -u -m effects train-effect-model --corpus $corpus $cards --variant-scripts $variants $tokens --reports-dir $freeze --model-output $train --rule-mask hard"
 ```
 
 Check: each epoch line prints both strata's four components and the control score; the best epoch
 saves encoder, trunk and heads together; `resume-best.pt` follows it. A soft-mask run is tried only if
 a comparison shows the hard mask costs the other outputs. A `--relation-values off` run is scored on
-the anthem probe and the combat grids beside the default.
+the anthem probe and the combat grids beside the default. Each such run is a run of its own, in its
+own directory under `$models\effect-model\`, its slug naming the one setting it varies.
 
 ## Stage 8 — report
 
-```bash
-python -u -m effects encode-abilities --checkpoint models/effects/effect-model/latest.pt
-python -u -m effects evaluate-effect-model --checkpoint models/effects/effect-model/latest.pt
-python -u scripts/effect_knowledge_probes/run.py --checkpoint models/effects/effect-model/latest.pt
+The ability cache and the reports computed from a checkpoint take the name of the checkpoint's run.
+
+```powershell
+$ckpt   = "$train\latest.pt"
+$cache  = "$gen3\cache\<date>-rule-mask-hard"
+$report = "$gen3\reports\<date>-rule-mask-hard"
+Run-Logged $cache  "$py -u -m effects encode-abilities --checkpoint $ckpt $cards --variant-scripts $variants $tokens --output-root $cache"
+Run-Logged "$report-evaluation" "$py -u -m effects evaluate-effect-model --checkpoint $ckpt $cards --variant-scripts $variants $tokens --corpus $corpus --abilities-root $cache"
+Run-Logged $report "$py -u scripts\effect_knowledge_probes\run.py --checkpoint $ckpt --corpus $corpus $cards $tokens --abilities-root $cache --probe-set-dir $freeze --reports-dir $report"
 ```
 
 Check: the scorecard reports every probe and the rule tests on the reporting half. Results go into the
