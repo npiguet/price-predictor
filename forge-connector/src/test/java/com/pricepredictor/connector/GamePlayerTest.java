@@ -11,7 +11,10 @@ import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -64,5 +67,34 @@ class GamePlayerTest {
         Field option = LobbyPlayerAi.class.getDeclaredField("option");
         option.setAccessible(true);
         return option.get(player);
+    }
+
+    /**
+     * A recording whose close throws an {@code Error} after its game threw
+     * (an {@code OutOfMemoryError} in the shard writer) leaves the game's
+     * failure the one reported, the close's attached to it as suppressed.
+     * A plain {@code Error} stands in for it: JUnit rethrows an
+     * {@code OutOfMemoryError} as unrecoverable, ending the test JVM.
+     */
+    @Test
+    void aCloseThatThrowsAnErrorAfterTheGameThrewIsKeptWithTheGamesFailure() {
+        IllegalStateException game = new IllegalStateException("the game threw");
+        Error close = new Error("the shard writer ran out of memory");
+
+        GamePlayer.closeRecording(() -> {
+            throw close;
+        }, game);
+
+        assertArrayEquals(new Throwable[] {close}, game.getSuppressed());
+    }
+
+    /** With no game failure to keep, the close's own failure is the one thrown. */
+    @Test
+    void aCloseThatThrowsAfterTheGameEndedThrows() {
+        Error close = new Error("the shard writer ran out of memory");
+
+        assertSame(close, assertThrows(Error.class, () -> GamePlayer.closeRecording(() -> {
+            throw close;
+        }, null)));
     }
 }

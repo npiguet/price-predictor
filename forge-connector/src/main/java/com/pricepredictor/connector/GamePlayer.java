@@ -350,7 +350,7 @@ public class GamePlayer {
             throw failure;
         } finally {
             if (recording != null) {
-                closeRecording(recording, thrown);
+                closeRecording(recording::close, thrown);
             }
         }
         gamesPlayed++;
@@ -371,12 +371,17 @@ public class GamePlayer {
 
     /**
      * Close a game's recording; a close that throws after the game threw is
-     * kept with the game's failure rather than masking it.
+     * kept with the game's failure, as suppressed, rather than masking it:
+     * an {@code Error} too (an {@code OutOfMemoryError} in the shard
+     * writer), since the game's own failure is what the worker reports.
+     *
+     * @param close       closes the recording
+     * @param gameFailure what the game threw, or null when it ended
      */
-    private static void closeRecording(GameRecording recording, Throwable gameFailure) {
+    static void closeRecording(Runnable close, Throwable gameFailure) {
         try {
-            recording.close();
-        } catch (RuntimeException closeFailure) {
+            close.run();
+        } catch (RuntimeException | Error closeFailure) {
             if (gameFailure == null) {
                 throw closeFailure;
             }
