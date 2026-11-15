@@ -90,7 +90,13 @@ leaving the battlefield that was not in combat):
   the Equipment entering with no ``attached`` event): a type, or a map of
   ``event`` and that event's filters (``{"event": "zone_change", "from_zone":
   "battlefield", "to_zone": "graveyard"}``, a sacrifice as a gen-2 record
-  writes one).
+  writes one);
+- ``source_dies``: the event's ``source`` (a ``damage_dealt`` or
+  ``damage_prevented`` event names one; a gen-2 record names only its
+  ``cause``, which for damage is the same object) does (true) or does not (false) move
+  from the battlefield to a graveyard in the same record: a creature dying in
+  a combat damage step that still dealt its damage there (510.2), against one
+  that dealt it and lived (a first striker, whose victim dealt none).
 
 A qualifier cannot be combined with ``absent``.
 
@@ -196,7 +202,7 @@ _CHECKS = {
     "source_token_kind": dv.token_kind, "token_kind": dv.token_kind, "min_count": dv.integer,
     "absent": dv.boolean, "api_in_chain": dv.boolean, "script_param": dv.script_param,
     "chain_param": dv.script_param, "source_type": dv.card_type,
-    "target_face_state": dv.face_state,
+    "target_face_state": dv.face_state, "source_dies": dv.boolean,
 }
 
 
@@ -248,11 +254,13 @@ SUBJECT_QUALIFIER_NEEDS = {
     "subject_designation": "designations",
 }
 _RECORD_QUALIFIERS = frozenset({"with_event", "without_event"})
+#: Qualifiers read off the event itself against the record's other events.
+_EVENT_QUALIFIERS = frozenset({"source_dies"})
 #: The parameters that read the acting line or its source.
 _LINE_PARAMS = frozenset({"api", "keyword", "source_keyword", "script_param", "chain_param",
                           "source_token_kind", "source_type", "acting_face",
                           "target_face_state"})
-_QUALIFIERS = frozenset(SUBJECT_QUALIFIERS) | _RECORD_QUALIFIERS
+_QUALIFIERS = frozenset(SUBJECT_QUALIFIERS) | _RECORD_QUALIFIERS | _EVENT_QUALIFIERS
 #: Record filters read off the acting source and its targets (D4).
 _SOURCE_FILTERS = frozenset({"source_type", "acting_face", "target_face_state",
                              "half_outcome"})
@@ -392,6 +400,9 @@ class OutcomeEvent:
             raise ValueError("outcome_event: token_kind reads a token_created event")
         for name in _RECORD_QUALIFIERS & set(params):
             _event_spec(params[name])  # an unknown type or filter raises
+        if "source_dies" in params and "source" not in EVENT_PARAMS.get(event, ()):
+            raise ValueError(f"outcome_event: source_dies reads an event naming a source, "
+                             f"which {event.value} does not")
         return filters
 
     def validate(self, params: Mapping[str, Any]) -> None:
@@ -477,7 +488,8 @@ class OutcomeEvent:
             "with_event" not in params or _holds(listed, params["with_event"]),
             "without_event" not in params or not _holds(listed, params["without_event"]),
         ))
-        read = [(e, subject_verdict(e.subjects, record.state, params)) for e in wanted]
+        read = [(e, _both(subject_verdict(e.subjects, record.state, params),
+                          _source_verdict(e, listed, params))) for e in wanted]
         read = [(e, verdict) for e, verdict in read if verdict is not None]
         meeting = [e for e, verdict in read if verdict and record_ok]
         condition = _condition(record)
@@ -491,6 +503,30 @@ class OutcomeEvent:
         if scoped:
             return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition)
         return None
+
+
+def _both(first: bool | None, second: bool | None) -> bool | None:
+    """Two verdicts together; None where either cannot be read."""
+    return None if first is None or second is None else first and second
+
+
+def _source_verdict(event: Event, listed: tuple[Event, ...],
+                    params: Mapping[str, Any]) -> bool | None:
+    """Whether ``event``'s ``source`` dies in the record as ``source_dies``
+    says (True when it is not declared); None where the event names none.
+    A gen-2 record writes no ``source``, only the ``cause``, the same object
+    for damage."""
+    if "source_dies" not in params:
+        return True
+    found = event.params or {}
+    source = found.get("source") or found.get("cause")
+    if not source:
+        return None
+    died = any(e.type is EventType.ZONE_CHANGE and source in e.subjects
+               and same_value((e.params or {}).get("from_zone"), "battlefield")
+               and same_value((e.params or {}).get("to_zone"), "graveyard")
+               for e in listed)
+    return died == bool(params["source_dies"])
 
 
 def _source_fits(record: EffectRecord, params: Mapping[str, Any]) -> bool:

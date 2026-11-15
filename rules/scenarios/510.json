@@ -409,16 +409,12 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "combat",
-        "outcome": "A combat damage step deals its damage and a creature it kills dies in the same record's check: a creature dying still dealt its damage.",
-        "near_miss": "A combat damage step where nothing dies.",
+        "outcome": "A creature that deals combat damage in a damage step dies in that step's check: a creature dying still dealt its damage, all of it dealt at once.",
+        "near_miss": "A combat damage step whose damage dealers all survive it, as a first striker does whose victim dies before it can deal damage.",
         "params": {
           "event": "damage_dealt",
           "combat": true,
-          "with_event": {
-            "event": "zone_change",
-            "from_zone": "battlefield",
-            "to_zone": "graveyard"
-          }
+          "source_dies": true
         },
         "needs": []
       }

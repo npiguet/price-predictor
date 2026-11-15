@@ -312,6 +312,76 @@ class TestQualifiers:
                                                  "absent": True, "subject_is_token": True})
 
 
+class TestSourceDies:
+    """``source_dies`` reads whether a damage event's source dies in the same
+    record (510.2: a creature dying in a combat damage step still dealt its
+    damage there), on a real gen-2 combat record, which names the source as
+    the event's ``cause``; a gen-3 record names it ``source`` too."""
+
+    DECLARED = {"event": "damage_dealt", "combat": True, "source_dies": True}
+
+    @staticmethod
+    def _combat(by_kind):
+        """A real combat record holding combat damage, and its damage events."""
+        for record in by_kind("combat"):
+            dealt = [e for e in record.payload.events if e.type is EventType.DAMAGE_DEALT
+                     and e.params.get("combat") and e.params.get("cause")]
+            if dealt:
+                return record, dealt
+        pytest.fail("no combat record in the fixture deals combat damage")
+
+    @staticmethod
+    def _events(record, events):
+        return replace(record, payload=replace(record.payload, events=tuple(events)))
+
+    @staticmethod
+    def _dies(subject):
+        return Event(type=EventType.ZONE_CHANGE, subjects=(subject,),
+                     params={"from_zone": "battlefield", "to_zone": "graveyard"})
+
+    def test_a_source_that_dies_in_the_step_fires(self, by_kind):
+        record, dealt = self._combat(by_kind)
+        source = dealt[0].params["cause"]
+        traded = self._events(record, (*dealt, self._dies(source)))
+        found = FAMILY.match(traded, None, self.DECLARED)
+        assert found.polarity is Polarity.FIRES and found.observed
+
+    def test_a_victim_dying_to_a_source_that_survives_is_the_near_miss(self, by_kind):
+        """The first-strike step: the striker deals its damage and lives, the
+        creature it kills dealt none."""
+        record, dealt = self._combat(by_kind)
+        striker = dealt[0]
+        victim = striker.subjects[0]
+        struck_first = self._events(record, (striker, self._dies(victim)))
+        assert victim != striker.params["cause"]
+        found = FAMILY.match(struck_first, None, self.DECLARED)
+        assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
+
+    def test_false_flips_the_sides(self, by_kind):
+        record, dealt = self._combat(by_kind)
+        striker = dealt[0]
+        declared = {**self.DECLARED, "source_dies": False}
+        died = self._events(record, (striker, self._dies(striker.params["cause"])))
+        assert FAMILY.match(died, None, declared).polarity is Polarity.DOES_NOT_FIRE
+        assert FAMILY.match(self._events(record, (striker,)), None,
+                            declared).polarity is Polarity.FIRES
+
+    def test_a_gen3_source_is_read_before_the_cause(self, by_kind):
+        record, dealt = self._combat(by_kind)
+        named = [replace(e, params={**e.params, "source": e.params["cause"], "cause": "E0"})
+                 for e in dealt]
+        traded = self._events(record, (*named, self._dies(dealt[0].params["cause"])))
+        assert FAMILY.match(traded, None, self.DECLARED).polarity is Polarity.FIRES
+
+    def test_it_reads_an_event_that_names_a_source_only(self):
+        FAMILY.validate({"event": "damage_prevented", "source_dies": True})
+        with pytest.raises(ValueError, match="source_dies"):
+            FAMILY.validate({"event": "zone_change", "source_dies": True})
+        with pytest.raises(ValueError, match="qualifier"):
+            FAMILY.validate({"event": "damage_dealt", "api": "DealDamage", "absent": True,
+                             "source_dies": True})
+
+
 def test_a_combat_records_events_show_too(by_kind):
     record = next(r for r in by_kind("combat") if not r.fork and any(
         e.type is EventType.DAMAGE_DEALT for e in r.payload.events))
