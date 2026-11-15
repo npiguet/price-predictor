@@ -44,9 +44,33 @@ provenance keys that join against these sidecars: a reconversion after records e
 generation, or is archived together with every record that joined against the old one.
 
 A run directory under `models/<module>/<gen>/<model>/` holds the checkpoints (`{timestamp}.pt`,
-`latest.pt`, `resume.pt`, …) of one training run. The ability cache and the reports computed from a
-checkpoint are not inside it: they go to `output/<module>/<gen>/cache/<run>/` and
-`output/<module>/<gen>/reports/<run>/`, under a run name that names the checkpoint's run.
+`latest.pt`, `resume.pt`, …) of one training run. The caches and the reports computed from its
+checkpoints are not inside it: they go to `output/<module>/<gen>/cache/<run>/` and
+`output/<module>/<gen>/reports/<run>/`, where `<run>` is the training run's own name, its date
+included, however much later they are computed. Each of the two is one run, however many commands
+write into it:
+
+```
+output/effects/gen3/reports/2026-11-20-e256-rule-mask/
+  run.json              # one line in commands, one entry in invocations, per report command
+  kept-epoch/           # the checkpoint the training run keeps
+    knowledge-probes/   # one directory per report command, holding its console.log
+    combat-grid/
+  last-epoch/           # the run's final epoch, when it is not the kept one
+    knowledge-probes/
+```
+
+- Each probed checkpoint gets a directory named for which epoch it is: `kept-epoch/`, `last-epoch/`,
+  or `epoch-NN/` (`epoch-52/`) for any other, whatever made that epoch interesting. Each report
+  command on it writes one directory inside that, named for the command (`knowledge-probes/`,
+  `embedding-probes/`, `combat-grid/`), with its own `console.log`.
+- A report command run later on the same training run appends to that reports run's `run.json`
+  (`commands`, `invocations`). It does not start a new dated run.
+- The cache run is a separate run with its own `run.json` and the same epoch directories; each epoch
+  directory holds that checkpoint's cache directly, with the encoding command's `console.log` beside
+  it.
+- An evaluation or analysis that reads checkpoints of more than one training run is a run of its
+  own under `reports/`, named for its own start date and purpose.
 
 ## One module, one tree
 
@@ -75,7 +99,8 @@ or reads lives under that module's own `output/<module>/` and `models/<module>/`
   Suffix chains (`-ext20-last`, `-lr0.1-best`) are not used.
 - Two runs started the same day with the same slug take `-2`, `-3`.
 - One run is one logical job: a collection across all its worker restarts, a training run across its
-  resumes, one evaluation. A resumed or restarted job writes into its existing run directory.
+  resumes, every report on one training run's checkpoints (see "The tree"), one evaluation across
+  several training runs. A resumed or restarted job writes into its existing run directory.
 
 ## What every run directory holds
 
