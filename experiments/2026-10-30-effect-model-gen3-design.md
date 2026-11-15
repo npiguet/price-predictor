@@ -1962,9 +1962,9 @@ how a card is scripted. About 90 need setup state that a starting-state file may
 as a designation or a turn's history. About 75 name a suspected Forge departure from the rules, such
 as connive 0 firing the "connives" trigger. `rules/FINDINGS.md` lists ten to test first.
 
-### Collection keeps nine known limits, in mana counting, fork speed, two constant fields, one kind of cast, two rules the records cannot count, the rules without a detector and the rules no directed fork can record
+### Collection keeps ten known limits, in mana counting, fork speed, games that crawl, two constant fields, one kind of cast, two rules the records cannot count, the rules without a detector and the rules no directed fork can record
 
-**Nine limits of collection were found and left in place.**
+**Ten limits of collection were found and left in place.**
 - The untapped mana production counts a mana ability with a mana cost of its own, such as a filter
   land's, without checking that its {1} can be paid.
 - The affordability check that decides whether a decision candidate's mana cost can be paid counts
@@ -1973,6 +1973,13 @@ as connive 0 firing the "connives" trigger. `rules/FINDINGS.md` lists ten to tes
 - Two stock Forge mechanics make forks slower without changing what they record. A static with
   `IgnoreEffectCost`, such as Lost in Thought's, adds a command on every static check, and
   Reconfigure adds a leaves-play command each time it attaches.
+- The corpus holds no game that crawls to its end. On a board of several dozen permanents,
+  Forge's AI takes seconds for each decision, and the game lasts many minutes. About one game
+  in 400 runs past five minutes. The supervisor kills its
+  longest-running worker once a minute, so a worker lives about one minute for each worker in
+  the pool, and that kill is what ends a crawling game. A game cut this way writes no game-end
+  marker, and `build-corpus` drops it whole. Games that reach a very large board are therefore
+  rarer in the corpus than in self-play.
 - `field-coverage` found two snapshot fields constant on the audit shards. A player's rad counters
   come only from Fallout cards, which sealed pools do not hold, and unlimited land plays are rare.
   Both are checked again after the coverage round.
@@ -2100,8 +2107,7 @@ line gives every field's card-disjoint explained deviance, and each run's "Const
 
 **The next steps turn the catalogue and the map into collection and training.**
 
-- **Review the collection code from scratch**, then collect gen-3's corpus, ending with the two
-  variant rounds of root spec § 8.15.
+- **Collect gen-3's corpus**, ending with the two variant rounds of root spec § 8.15.
 
 - **Rerun the map against master's targets**, then make the input and output changes in the order
   the Description sets, rerunning the map after each to count what it made learnable.
