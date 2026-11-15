@@ -129,27 +129,37 @@ polarity as the base already states, that variant is registered: 701.12g (`oppon
 An `Application` may also name the one play its fork forces (`ForcedPlay`, FR-010b), built from
 the fork's binding after the edit: `ForcedPlay.cast(actor, card)`, `activate(actor, permanent,
 line)`, `answer(actor, source, yes)` or `attack(actor, attacker, defender)`, each argument a
-binding role, refined by `.at(step)` (a `PhaseType` name, a later step of the turn),
-`.targeting(roles...)` (one call per targeting clause, in chain order; a clause named by no call
-is drawn), `.paying(roles...)` (what the cost sacrifices, discards or exiles), `.withX(value)` and
-`.playing(line)`. A line is chosen by `ForcedPlay.Line.SPELL` (the card's own cast, no
-alternative cost), `Line.api(name)`, `Line.keyword(name)` or a test of the rule's own; names are
-strings, read only inside a fork. The fork attaches the play to its actor's seat in the copy only:
-a random seat consults it first (`ForcedPlaySeat`), a plain AI seat is replaced by a
-`ForcingSeatController`. At the actor's first priority in the step where the rules let the line
-be played (`PlayabilityVerdict`) with its named targets legal (`canTarget`), the seat plays it
-through `RandomSpellPlayer.play`, the engine's own paid cast path, its cost decided by the named
-cards and its mana by the AI; the answer is given to the source's optional trigger or
-confirmation and reported through the engine's confirm hook as an AI answer is; the attack is
-added to the seat's own declaration and checked with `CombatUtil.validateAttackers`. A paid
-forced play is written by the fork's recorders as a live play, with no member marking it. The
-controller only flags what fails; `ForkPlayForward` throws the refusal between main-loop steps
-and after the turn, before the fork's lines are written: `forced play has no legal line`
+binding role, refined by `.targeting(roles...)` (one call per targeting clause, in chain order; a
+clause named by no call is drawn), `.paying(roles...)` (what the cost sacrifices, discards or
+exiles) and `.playing(line)`. A cast or activation is made in the fork's own step, an attack in
+the turn's declare-attackers step, an answer whenever its question is asked that turn; X is
+drawn. A line is chosen by `ForcedPlay.Line.SPELL` (the card's own cast, no alternative cost),
+`Line.TRIGGER` (the source's triggered abilities, an answer's default), `Line.api(name)`,
+`Line.keyword(name)` or a test of the rule's own; names are strings, read only inside a fork. A
+modal line (a charm) is no line a forced play makes: `RandomSpellPlayer.play` asks its modes
+afresh (`CharmEffect.makeChoices`), so its forced play has no legal line. The fork attaches the
+play to its actor's seat in the copy only: a random seat consults it first (`ForcedPlaySeat`), a
+plain AI seat is replaced by a `ForcingSeatController`. At the actor's first priority in the step
+where the rules let the line be played (`PlayabilityVerdict`) with its named targets legal
+(`canTarget`), the seat plays it through `RandomSpellPlayer.play`, the engine's own paid cast
+path, its cost decided by the named cards and its mana by the AI. An answer is given only to a
+question its named line of the source asks: to an optional trigger or a confirmation, reported
+through the engine's confirm hook as an AI answer is; to a "you may pay", a no declines and a yes
+pays the cost through `CostPayment.payComputerCosts` whenever `ComputerUtilCost.canPayCost` says
+it can be paid, whatever the AI's `willPayUnlessCost` would choose. The attack is added to the
+seat's own declaration and checked with `CombatUtil.validateAttackers`. A paid forced play is
+written by the fork's recorders as a live play, with no member marking it. The controller only
+flags what fails; `ForkPlayForward` throws the refusal between main-loop steps and after the
+turn, before the fork's lines are written: `forced play has no legal line`
 (`ForcedPlayRun.dryRun` on the live board before the fork is taken, spending no budget, else on
 the edited copy or as the play is made), `forced play not made` (its step passed, or the turn
-ended, unmade), `forced play cost not paid` (the AI's mana payment or a named cost card failed).
-Its unnamed targets, X and modes are drawn from a stream seeded from the game's fork seed, drawn
-only by a fork that forces.
+ended, unmade), `forced play cost not paid` (the AI's own check, `ComputerUtilCost.canPayCost`,
+says the line cannot be paid at the first priority where the rules let it be played, before any
+payment is tried; the AI's mana payment or a named cost card failed; a "you may pay" answered yes
+cannot be paid). Its unnamed targets and X are drawn from a stream of its own, seeded from the
+game's sequence of fork seeds, which only a fork that forces draws from: every later fork of the
+same game takes the next seeds of that sequence, so a forcing fork shifts the seeds of the forks
+after it, the same for a given game seed.
 
 The registry fixes which variants force what. Forced casts: 104.3d (the poison source), 607.2k
 (the champion card), 614.17d (the reanimation spell, under the Cage), 701.24e (the searcher's

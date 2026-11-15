@@ -719,22 +719,27 @@ and that the reporting half never enters the control score.
   `--directed-fork-rules`; each fork taken, kept or discarded, counts against
   `--directed-forks-per-game`, and no rule is tried once the budget is spent.
 - **FR-010b**: A directed rule's variant MAY name one play its fork forces, made by a seat the
-  binding names, at the fork's own step or a later step of the same turn: a cast or activation of a
-  line of a bound source (chosen by API type, keyword or a test of the rule's own: the card's spell,
-  its bestow cast, an activated ability whose cost sacrifices another permanent), at the actor's
-  first priority in that step where the rules let it be played with its named targets, its
-  targets named by binding role clause by clause (a clause left unnamed drawn from its legal
-  targets by the fork's own random stream), X fixed or drawn, modes drawn, its cost paid through
-  the engine's own payment (what a cost sacrifices, discards or exiles named by role, else the
-  seat's choice; a named card the cost cannot take leaves it unpaid); a "you may" of a bound
-  source answered yes or no; or an attack by a bound creature at a bound player or permanent,
-  added to the seat's own declaration. The forcing seat is attached in the fork's copy only.
-  Every other decision in the fork stays the seat's own (FR-010). A forced play is recorded as a
-  live play is, by the fork's own recorders, with no record member marking it forced: a directed
-  fork's records may hold a play its seat was made to make, and which variants force what is
-  fixed per rule in the registry (FR-014a). A fork whose forced play has no legal line or target
-  after the edit, is not made by the end of its step (an answer: of the turn), or whose cost is not
-  paid ends as a counted refusal (`forced play has no legal line`, `forced play not made`,
+  binding names: a cast or activation of a line of a bound source (chosen by API type, keyword or a
+  test of the rule's own: the card's spell, its bestow cast, an activated ability whose cost
+  sacrifices another permanent), at the actor's first priority in the fork's own step where the
+  rules let it be played with its named targets, its targets named by binding role clause by clause
+  (a clause left unnamed drawn from its legal targets by the fork's own random stream), X drawn, its
+  cost paid through the engine's own payment (what a cost sacrifices, discards or exiles named by
+  role, else the seat's choice; a named card the cost cannot take leaves it unpaid); a "you may" or
+  a "you may pay" asked by a named line of a bound source (by default its triggered abilities)
+  answered yes or no, whenever the turn asks it, a yes to a "you may pay" paying the cost whenever
+  it can be paid, whatever the AI would choose; or an attack by a bound creature at a bound player
+  or permanent in the turn's declare-attackers step, added to the seat's own declaration. A modal
+  line (a charm) is no line a forced play makes: the engine's cast asks its modes afresh, so its
+  forced play has no legal line. The forcing seat is attached in the fork's copy only. Every other
+  decision in the fork stays the seat's own (FR-010). A forced play is recorded as a live play is,
+  by the fork's own recorders, with no record member marking it forced: a directed fork's records
+  may hold a play its seat was made to make, and which variants force what is fixed per rule in the
+  registry (FR-014a). A fork whose forced play has no legal line or target after the edit, is not
+  made by the end of its step (an answer: of the turn), or whose cost is not paid (the AI's own
+  check says it cannot pay at the first priority where the rules let the line be played, before any
+  payment is tried; its payment or a named cost card fails; a "you may pay" answered yes cannot be
+  paid) ends as a counted refusal (`forced play has no legal line`, `forced play not made`,
   `forced play cost not paid`) and writes nothing. A forced play whose source, line, named target
   or attack the live board lacks is refused before the fork is taken, spending none of
   `--directed-forks-per-game` and leaving the rule's one fork of the game untaken; the refusal is
