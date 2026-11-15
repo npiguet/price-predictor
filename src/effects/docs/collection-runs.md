@@ -17,9 +17,10 @@ Rules to respect when running, babysitting or changing `collect-coverage`, `coll
 ## Short-lived workers
 
 - Every collecting supervisor runs its Forge workers under `-Xmx1200m` and recycles each one: a worker stops itself at the first game end after `--recycle-seconds` of its JVM's life, and `ForgeWorkerPool` starts a fresh one at once.
-- The heap and the recycle are one measure, and neither is a tuning knob. Forge misbehaves late in a JVM's life, with loops that do not terminate and allocation that grows without bound. The small heap turns a runaway worker into an early, cheap death the pool restarts, where a large one lets one worker drag the machine down hours into a run. The recycle bounds the pathologies that do not allocate.
+- The heap and the recycle are one measure, and neither is a tuning knob. Forge misbehaves late in a JVM's life, with loops that do not terminate and allocation that grows without bound. The small heap turns a runaway worker into an early, cheap death the pool restarts, where a large one lets one worker drag the machine down hours into a run. The recycle, with the kill that backs it, bounds the pathologies that do not allocate.
 - Do not raise the heap, lengthen the recycle or propose removing either without saying what contains Forge instead: either change hides the pathology. The price, a handful of GC crashes per overnight run, each costing the game in flight and nothing else, is paid deliberately.
 - A worker whose game has not ended `--stop-timeout` past its recycle time is killed.
+- The recycle is asked only at a game end, so it never ends a game that crawls. On a large board each Forge AI priority decision can take seconds (the combat prediction under its damage and pump checks, with a mana-payment simulation inside each step), and a game then runs ten minutes or more while its worker log and shard stay silent. Only the kill above ends it, and its records are cut. Such a worker is not hung: a thread dump shows `main` waiting on a "Game AI Eval" thread a second or two old, a new one at each decision, with the heap flat.
 
 ## Stopping a worker
 
