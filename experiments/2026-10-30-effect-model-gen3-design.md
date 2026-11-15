@@ -2014,39 +2014,46 @@ as connive 0 firing the "connives" trigger. `rules/FINDINGS.md` lists ten to tes
   the list shows a Grizzly Bears beside Standard Bearer as a legal target. The scenarios of both
   parts have no detector. A third part of the rule, that one instance of "target" cannot name
   the same object twice, has one.
-- Twenty-three rules have no directed fork, because no single change to a board makes a game record
-  the side of the rule that self-play leaves short. They are left off the list of rules directed
-  forks are aimed at, each with its reason in `NOT_DIRECTED` (`scripts/rules_catalogue.py`), and
-  their scenarios keep their detectors. They fall into four groups.
-  - The short side of five rules is an event that a replacement effect meets without changing
+- Twenty-two rules have no directed fork of their own. For twenty-one of them, no single change
+  to a board makes a game record the side of the rule that self-play leaves short. They are left
+  off the list of rules directed forks are aimed at, each with its reason in `NOT_DIRECTED`
+  (`scripts/rules_catalogue.py`), and their scenarios keep their detectors. They fall into four
+  groups. The twenty-second, 702.19e, needs no fork of its own. Its short side is an attacker
+  with trample over planeswalkers whose planeswalker has left combat. The fork aimed at 702.19f
+  records that side: it puts Thrasta, Tempest's Roar, which has the keyword, in the place of such
+  an attacker without it.
+  - The short side of six rules is an event that a replacement effect meets without changing
     it, or a game restart. Forge reports a replacement to the collector only when it changes the
     event, so no board makes it write the record that Rest in Peace (400.6), Lich's Mirror
     (704.7) or madness (702.35a) met an event and left it alone. The same holds for a creature
     sacrificed as a cost whose move a replacement meets and leaves alone (118.11). A board with
     Rest in Peace added records only the replaced sacrifice, which self-play already records
-    more than twenty thousand times. A restart (104.6, Karn Liberated's ultimate) is refused in
-    every fork, because it resets a counter the live game's triggers take their ids from.
-  - The short side of six rules is out of reach of any edit. Four need a play made in response
+    more than twenty thousand times. A stun counter's replacement changes every untap it meets,
+    so no board shows it leaving one alone (122.1d). A restart (104.6, Karn Liberated's ultimate)
+    is refused in every fork, because it resets a counter the live game's triggers take their ids
+    from.
+  - The short side of five rules is out of reach of any edit. Four need a play made in response
     or a sequence of plays: a battle's defeat trigger countered (704.5v), a spell copied for each
     target while another is on the stack (707.10d), a craft that finds its card gone (702.167a),
-    and a face-down merged permanent built in four casts (730.2g). The short side of 111.10n and
-    111.10p no game shows at all: a Sorcerer Role always gives its +1/+1, and a Virtuous Role
-    always counts itself among the enchantments it gives +1/+1 for. Making the fork cast
-    Ellivere of the Wild Court does not help 111.10p either, because its variant leaves the
-    enters trigger no creature to put the Role on.
-  - Six rules have no variant whose fork the detector can read on the short side. Four have
-    only variants the catalogue marks as making no contrast: removing Aven Mindcensor leaves
-    Archivist of Oghma's search trigger firing as before (701.23f), and 205.1a, 701.12h and
-    702.70b are alike. Replacing Beloved Beggar with a card without disturb leaves no disturb
-    candidate to record (712.11d). The detector of 701.24g counts no near miss at all.
+    and a face-down merged permanent built in four casts (730.2g). The short side of 111.10n no
+    game shows at all, because a Sorcerer Role always gives its +1/+1.
+  - Four rules have no variant whose fork the detector can read on the short side. 701.12h has
+    only variants the catalogue marks as making no contrast. Replacing Beloved Beggar with a card
+    without disturb leaves no disturb candidate to record (712.11d). The detector of 701.24g
+    counts no near miss at all. A meld fails when one of its two permanents is a token (701.42b),
+    and no edit makes a token: an edit puts cards on the battlefield, so its one variant makes the
+    meld that self-play already records.
   - Six rules turn on a fact the records do not hold. Forge casts a cascaded card as a cast of
     its own, after the cascade trigger has resolved, so the trigger's record cannot say whether
-    the cascade found a card (702.85a). Jump-start is an optional cost of the card's own cast, so
-    no decision candidate carries it (702.133a). A fused split card's cast is keyed on its first
-    half's line, so its affordability cannot be told from that half's (702.102c). Enlist is an
-    optional attack cost whose trigger exists only once it is paid, so no record shows an enlist
-    that tapped nothing (702.154a). And no record names the static that forbids a suspend
-    (702.62c) or makes a life payment impossible (119.8).
+    the cascade found a card (702.85a). A fused split card's cast is keyed on its first half's
+    line, so its affordability cannot be told from that half's (702.102c). Enlist is an optional
+    attack cost whose trigger exists only once it is paid, so no record shows an enlist that
+    tapped nothing (702.154a). No record names the static that forbids a suspend (702.62c) or
+    makes a life payment impossible (119.8). No Forge card prints poisonous. Virulent Sliver and
+    Snake Cult Initiation grant it through a static, so a poisonous trigger's record names the
+    static's line. The detector of 702.70b looks for the keyword's own line and tags that record
+    on neither side. A fork that gives Grizzly Bears poisonous and makes it attack does poison the
+    defending player, and its records are tagged on neither side either.
 
 ### The deviance floor is 0.04 nats, where gen-2's output fields turn noisy
 
@@ -2121,8 +2128,8 @@ line gives every field's card-disjoint explained deviance, and each run's "Const
   for each targeting clause of a cast**, in a later generation. The first makes the finality
   counter's rule countable, the second the two uncounted parts of rule 601.2c.
 - **Write a new variant for each rule left without a directed fork**, where a board edit or a
-  forced play can make its short side: a disturb card one land short of its cost for 712.11d, an
-  own search for 701.23f, a block for 702.70b. The rules whose fact the records do not hold need
-  that record field first.
+  forced play can make its short side: a disturb card one land short of its cost for 712.11d. The
+  rules whose fact the records do not hold need that record field first, and 702.70b needs a
+  poisonous trigger's record to name the keyword it comes from.
 - **Draw more of the records a weak output field needs, in gen-4** ([gen-4 record](XXXX-XX-XX-effect-model-gen4-design.md)),
   starting from the fields gen-3's model leaves weak.

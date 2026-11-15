@@ -122,12 +122,16 @@ A registered variant makes the side the rule's counts lack. Where that side need
 registered scenario's base is the common board and its variant adds the fact (104.2b, 104.3d,
 111.10v, 119.7, 608.2p, 614.17d, 701.12e, 701.39a (through 701.39a-2), 701.42a, 702.65a,
 702.103e (through 702.103e-2), 702.124j, 702.131a, 702.170c; 712.4a and 712.14c through
-712.4a-2, 712.4a-1 inverted). Where the lacking side is a fact a contrasting variant of the same
-polarity as the base already states, that variant is registered: 701.12g (`opponent_above`) and
-702.105a (`tied`).
+712.4a-2, 712.4a-1 inverted; 118.12b, 701.23f, 701.44d and 702.19c through a second scenario,
+118.12b-2, 701.23f-2, 701.44d-2 and 702.19c-2, whose base is the common board). Where the lacking
+side is a fact a contrasting variant of the same polarity as the base already states, that variant
+is registered: 701.12g (`opponent_above`) and 702.105a (`tied`). The side a fork makes is what
+the detectors tag its records: 205.1a (`counter-kept`) and 111.10p (`two_enchantments`) register a
+variant of polarity `other` whose forced cast makes the `fires` side.
 
 An `Application` may also name the one play its fork forces (`ForcedPlay`, FR-010b), built from
-the fork's binding after the edit: `ForcedPlay.cast(actor, card)`, `activate(actor, permanent,
+the fork's binding after the edit, which `Application.making(role, find)` extends with a card the
+edit makes, found on the edited copy (`afterEdit`; the live dry run cannot see it): `ForcedPlay.cast(actor, card)`, `activate(actor, permanent,
 line)`, `answer(actor, source, yes)` or `attack(actor, attacker, defender)`, each argument a
 binding role, refined by `.targeting(roles...)` (one call per targeting clause, in chain order; a
 clause named by no call is drawn), `.paying(roles...)` (what the cost sacrifices, discards or
@@ -162,13 +166,18 @@ same game takes the next seeds of that sequence, so a forcing fork shifts the se
 after it, the same for a given game seed.
 
 The registry fixes which variants force what. Forced casts: 104.3d (the poison source), 607.2k
-(the champion card), 614.17d (the reanimation spell, under the Cage), 701.24e (the searcher's
+(the champion card), 614.17d (the reanimation spell, under the Cage), 205.1a (the type-setting
+Aura at the bound creature), 111.10p (the card whose enters trigger makes a Virtuous Role),
+702.133a (the jump-start card, from the hand), 701.24e (the searcher's
 tutor), 701.39a (the bolster spell), 701.44b, 701.50f and 701.57b (the card that explores,
 connives or discovers), 702.103e (bestowed, its target drawn: the battlefield's one creature),
 702.124j (the partner-with card), 702.131a (the ascend spell, sorcery or instant), 702.170c
 (Kellan Joins Up), 704.5f (the -N/-N spell at the bound creature). Forced activations: 111.10v
 (the Mutagen token), 119.7 and 701.12g (the life-exchange tree, at the bound opponent for
-701.12g), 701.12e, 702.65a and 702.65b (Aura swap), 702.53a (transmute), 702.71a (transfigure). A forced answer: 118.12b (Elfhame Sanctuary's search, yes). A forced
+701.12g), 701.12e, 702.65a and 702.65b (Aura swap), 702.53a (transmute), 702.71a (transfigure),
+701.23f (the opponent's library-searching permanent, under the added Aven Mindcensor). A forced
+answer: 118.12b (the added Elfhame Sanctuary's search, yes, the Sanctuary bound through
+`making`). A forced
 attack: 702.105a (the dethrone creature at the bound opponent).
 
 Every fork refuses a game restart (FR-010d, `Forks.refuseARestart`): when its copy is made, before

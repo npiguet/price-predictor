@@ -721,7 +721,8 @@ and that the reporting half never enters the control score.
 - **FR-010b**: A directed rule's variant MAY name one play its fork forces, made by a seat the
   binding names: a cast or activation of a line of a bound source (chosen by API type, keyword or a
   test of the rule's own: the card's spell, its bestow cast, an activated ability whose cost
-  sacrifices another permanent), at the actor's first priority in the fork's own step where the
+  sacrifices another permanent), or of a line of a card the edit puts on the battlefield, bound on
+  the edited copy, at the actor's first priority in the fork's own step where the
   rules let it be played with its named targets, its targets named by binding role clause by clause
   (a clause left unnamed drawn from its legal targets by the fork's own random stream), X drawn, its
   cost paid through the engine's own payment (what a cost sacrifices, discards or exiles named by
@@ -741,7 +742,7 @@ and that the reporting half never enters the control score.
   payment is tried; its payment or a named cost card fails; a "you may pay" answered yes cannot be
   paid) ends as a counted refusal (`forced play has no legal line`, `forced play not made`,
   `forced play cost not paid`) and writes nothing. A forced play whose source, line, named target
-  or attack the live board lacks is refused before the fork is taken, spending none of
+  or attack the live board lacks, other than a card the edit makes, is refused before the fork is taken, spending none of
   `--directed-forks-per-game` and leaving the rule's one fork of the game untaken; the refusal is
   counted at each boundary it is found at.
 - **FR-010c**: A directed rule's variant MAY ask that the records of its bound cards be kept. In
@@ -802,14 +803,19 @@ and that the reporting half never enters the control score.
   AI does not make, the variant forces it (FR-010b): 119.7 adds Leyline of Punishment and forces
   Tree of Redemption's activation; 111.10v adds a land and forces the Mutagen token's activation;
   702.103e puts Skulking Ghost in the place of the battlefield's one creature and forces the
-  bestowed cast, which the Ghost's sacrifice leaves with an illegal target.
+  bestowed cast, which the Ghost's sacrifice leaves with an illegal target; 118.12b adds Elfhame
+  Sanctuary at an upkeep and answers its "you may search" yes. The side a fork makes is what the
+  detectors tag its records, not its variant's polarity label: 205.1a and 111.10p register a
+  variant of polarity `other` whose forced cast makes the `fires` side.
 - **FR-014b**: Board preconditions MUST be registered for 704.5f and 702.98a, listed whatever their
   counts (702.98a's few `does_not_fire` records being one creature in one game), and for every rule that gen-2's
   per-rule counts (`output/effects/rule-counts-gen2.json`) show with fewer than 100 `fires` records
   over all sources, or with no `does_not_fire` record, and that has a non-base variant classified
   into an operation after the rerun of FR-003, except the rules of `NOT_DIRECTED`: 104.2a, 500.11,
   701.12d and 702.62d, whose forks no detector can tell from their live games; 121.4, 122.1g,
-  703.4m and 701.42c, which restate 704.5b, 704.5v, 510.2 and 701.42b, listed in their place;
+  703.4m and 701.42c, which restate 704.5b, 704.5v, 510.2 and 701.42b (704.5b and 510.2 listed in
+  their place, 704.5v and 701.42b left out for their own reasons); 702.19e, whose lacking side
+  702.19f's fork writes;
   505.5, 614.10a, 701.24f and 702.105b, whose fact the record cannot show; 122.1h, whose
   rewrite record names no replacing effect for the replacement Forge builds at runtime from the
   finality counter; 104.4c, whose GameDrawn draw no record shows; 701.10c, 701.11c and 712.4c,
@@ -818,13 +824,16 @@ and that the reporting half never enters the control score.
   boundary; 712.16, whose point no sealed pool holds the cards for; and the rules no single board
   edit yields the lacking side of: 104.6 (a game restart, which every fork refuses, FR-010d),
   400.6, 704.7, 702.35a and 118.11 (a replacement met and not applied, which no hook reports;
-  118.11's variant records the side its counts hold), 701.24g
-  (no near miss declared), 702.167a (a craft returning nothing), 111.10n and 111.10p (a Role's
-  static giving no boost, which no forced play makes either), 704.5v and 707.10d (a play made in response), 730.2g (a sequence of plays), 712.11d
-  (its variant removes the candidate read), 205.1a, 701.12h, 701.23f and 702.70b (variants of
-  polarity `other` alone), and 119.8, 702.62c, 702.85a, 702.102c, 702.133a and 702.154a (a fact
-  the record cannot show) (`directed-rules` names each with its reason). The list is checked in
-  as `rules/directed-fork-rules.txt`, one rule id per line, 48 rules in unit order, and is what
+  118.11's variant records the side its counts hold), 122.1d (a stun counter's replacement, which
+  applies to every untap it meets), 701.24g
+  (no near miss declared), 702.167a (a craft returning nothing), 111.10n (a Sorcerer Role's
+  static giving no boost, which no forced play makes either), 704.5v and 707.10d (a play made in
+  response), 730.2g (a sequence of plays), 712.11d (its variant removes the candidate read),
+  701.12h (a variant of polarity `other` alone), 701.42b (a token partner, which no operation
+  makes), and 119.8, 702.62c, 702.70b, 702.85a, 702.102c and 702.154a (a fact the record cannot
+  show; 702.70b's poisonous trigger names no line of the keyword's own) (`directed-rules` names
+  each with its reason). The list is checked in
+  as `rules/directed-fork-rules.txt`, one rule id per line, 49 rules in unit order, and is what
   the full collection passes to
   `--directed-fork-rules`; `directed-rules` over the gen-2 counts writes it unchanged. Every
   listed rule passes the startup check (FR-014).
