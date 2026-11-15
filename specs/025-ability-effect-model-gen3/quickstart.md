@@ -15,8 +15,24 @@ print periodic progress.
 
 Commands are PowerShell, run from the repository root. The interpreter is
 `.venv\Scripts\python.exe` (a bare `python` is the system interpreter, without the project's
-dependencies). Set these once per session, replacing each `<date>` with the day that run starts
-(`YYYY-MM-DD`); a run that is resumed or restarted keeps the directory it started in.
+dependencies). Paste this block once per session; no command below needs editing.
+
+- `$stage0` is the day the Stage 0 runs started, the date in their `inputs\` directory names, not
+  today: `2026-11-15` for the runs that wrote `output\effects\gen3\inputs\2026-11-15-*`.
+- Every later run's directory is `<parent>\<start>-<slug>`, its start date held in a variable set
+  on the line before its directory's (`$pilotStart` before `$pilot`). A run's start date is the day
+  it started, and a run that is resumed or restarted keeps its directory. `Run-Start` gives the
+  date of the directory of that slug already under the parent, and today when there is none, so a
+  block pasted again, on any day, resumes a run rather than moving it to a new directory. The
+  variable is set only while unset, so a date set by hand is kept. To start a new run of a slug
+  that already has a directory, set its variable to today before pasting
+  (`$pilotStart = "2026-11-20"`); with two directories of one slug, `Run-Start` stops and asks for
+  the date.
+- What a command needs from you and no layout gives (the pilot's flags, a shard path) is a variable
+  you set before pasting the block, named at each stage. `Set-StrictMode -Version 2.0` makes a
+  command naming an unset variable fail before it starts ("The variable '$runFlags' cannot be
+  retrieved because it has not been set"); `Set-StrictMode -Off` lifts it. No `<` or `>` is left
+  in a command: inside `cmd /c` they are redirections.
 
 ```powershell
 $env:PYTHONPATH = "src;."
@@ -24,20 +40,43 @@ $py     = ".venv\Scripts\python.exe"
 $gen2   = "output\effects\gen2"
 $gen3   = "output\effects\gen3"
 $models = "models\effects\gen3"
+Set-StrictMode -Version 2.0
 
-# Inputs every later step reads (stage 0 writes them).
+# The day a run started, for its directory <parent>\<start>-<slug>: the date of the directory of that
+# slug already under <parent> (a resumed or restarted run keeps it), else today.
+function Run-Start($parent, $slug) {
+    $named = '^\d{4}-\d{2}-\d{2}-' + [regex]::Escape($slug) + '$'
+    $runs = @(Get-ChildItem -Directory -Path $parent -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $named })
+    if ($runs.Count -gt 1) {
+        throw "Several '$slug' runs under ${parent}: $(($runs | ForEach-Object { $_.Name }) -join ', '). Set this run's start date variable to the day the one you mean started."
+    }
+    if ($runs.Count -eq 1) {
+        $date = $runs[0].Name.Substring(0, 10)
+        Write-Host "${slug}: the run started on $date"
+        return $date
+    }
+    $date = Get-Date -Format yyyy-MM-dd
+    Write-Host "${slug}: a new run, started on $date"
+    return $date
+}
+
+# Inputs every later step reads. Stage 0 wrote the first three, on the day $stage0 names.
+$stage0   = "2026-11-15"
 $cards    = "--cards-folder $gen3\converted\cardsfolder --cards-folder $gen3\converted\tokenscripts"
-$kw       = "$gen3\inputs\<date>-keyword-definitions\keyword-definitions.json"
-$vocab    = "$gen3\inputs\<date>-vocab\vocab.txt"
-$holdout  = "$gen3\inputs\<date>-holdout-cards\holdout-cards.txt"
-$variants = "$gen3\inputs\<date>-variant-scripts"
-$counts   = "$gen3\inputs\<date>-rule-counts\rule-counts.json"
+$kw       = "$gen3\inputs\$stage0-keyword-definitions\keyword-definitions.json"
+$vocab    = "$gen3\inputs\$stage0-vocab\vocab.txt"
+$holdout  = "$gen3\inputs\$stage0-holdout-cards\holdout-cards.txt"
 $tokens   = "--vocab-path $vocab --keyword-definitions $kw"
+# The variant tree every variant run extends, and stage 5's rule counts the steered round reads.
+if (-not (Test-Path variable:variantsStart)) { $variantsStart = Run-Start "$gen3\inputs" variant-scripts }
+$variants = "$gen3\inputs\$variantsStart-variant-scripts"
+if (-not (Test-Path variable:countsStart)) { $countsStart = Run-Start "$gen3\inputs" rule-counts }
+$counts   = "$gen3\inputs\$countsStart-rule-counts\rule-counts.json"
 
 # The directed-fork list, as the comma-separated value --directed-fork-rules takes.
 $rules = (Get-Content rules\directed-fork-rules.txt | Where-Object { $_.Trim() -and -not $_.StartsWith('#') }) -join ','
 
-# Runs a command with its console in <run>\console.log, the command as the log's first line.
+# Runs a command with its console in its run directory's console.log, the command as its first line.
 function Run-Logged($run, $cmd) {
     New-Item -ItemType Directory -Force $run | Out-Null
     $cmd | Out-File -Append -Encoding ascii "$run\console.log"
@@ -47,7 +86,8 @@ function Run-Logged($run, $cmd) {
 
 `Run-Logged` sends the console to the file alone, so that a Ctrl-C reaches the command and
 nothing else. Follow a run from a second window with
-`Get-Content <run>\console.log -Wait -Tail 20`. Each command writes its own `run.json` in its run
+`Get-Content "$pilot\console.log" -Wait -Tail 20` (any run's directory variable in place of
+`$pilot`). Each command writes its own `run.json` in its run
 directory; when a run ends, fill `purpose` there and set `status` to `keep`, `scratch` or
 `superseded`.
 
@@ -79,10 +119,14 @@ these sidecars.
 
 ## Stage 1 — detectors and per-rule counts on gen-2 (story 1)
 
+Set first: `$gen2Variants`, gen-2's variant-script tree (its run directory under `$gen2\inputs\`).
+
 ```powershell
 & $py scripts\rules_catalogue.py validate
-Run-Logged "$gen2\inputs\<date>-rule-counts" "$py -u -m effects rule-counts --records-dir $gen2\records --cards-folder $gen2\converted\cardsfolder --cards-folder $gen2\converted\tokenscripts --variant-scripts $gen2\inputs\<gen-2 variant scripts run> --rules-dir rules --workers 10 --output $gen2\inputs\<date>-rule-counts\rule-counts.json"
-& $py scripts\rules_catalogue.py directed-rules --counts $gen2\inputs\<date>-rule-counts\rule-counts.json --cards-folder $gen3\converted\cardsfolder
+if (-not (Test-Path variable:gen2CountsStart)) { $gen2CountsStart = Run-Start "$gen2\inputs" rule-counts }
+$gen2Counts = "$gen2\inputs\$gen2CountsStart-rule-counts"
+Run-Logged $gen2Counts "$py -u -m effects rule-counts --records-dir $gen2\records --cards-folder $gen2\converted\cardsfolder --cards-folder $gen2\converted\tokenscripts --variant-scripts $gen2Variants --rules-dir rules --workers 10 --output $gen2Counts\rule-counts.json"
+& $py scripts\rules_catalogue.py directed-rules --counts $gen2Counts\rule-counts.json --cards-folder $gen3\converted\cardsfolder
 ```
 
 Check: `validate` passes with every scenario declaring a detector or `none` and every non-base
@@ -95,9 +139,13 @@ On a machine without the gen-2 shards, `rules/directed-fork-counts.json` serves 
 
 ## Stage 2 — the relation-aware trunk (story 4, no gen-3 data)
 
+Set first: `$gen2Shard`, one fixed gen-2 curated shard (a file under `$gen2\corpus\`).
+
 ```powershell
 & $py -m pytest tests\unit\effects\domain\test_relation_attention.py
-Run-Logged "$gen2\reports\<date>-trunk-step" "$py -u scripts\measure_trunk_step.py --shard <fixed gen-2 curated shard> --batch-size 32 --output $gen2\reports\<date>-trunk-step\trunk-step.json"
+if (-not (Test-Path variable:gen2TrunkStart)) { $gen2TrunkStart = Run-Start "$gen2\reports" trunk-step }
+$gen2Trunk = "$gen2\reports\$gen2TrunkStart-trunk-step"
+Run-Logged $gen2Trunk "$py -u scripts\measure_trunk_step.py --shard $gen2Shard --batch-size 32 --output $gen2Trunk\trunk-step.json"
 ```
 
 Check: the four layer properties pass; the step fits 8 GB; record step time, peak memory and the
@@ -107,12 +155,18 @@ relation-triple count per record in the gen-3 record.
 
 A pilot is a scratch run: nothing outside `scratch\` reads it.
 
+Set first: `$pilotFlags`, the pilot's other `match-outcomes` flags (its decks, match budget and
+sampling rates), `""` for none.
+
 ```powershell
-$pilot = "$gen3\scratch\<date>-pilot"
-Run-Logged $pilot "$py -u -m sealed match-outcomes --workers 6 --effect-records $pilot --outcomes-dir $pilot --count-dropped-events --directed-fork-rules 704.5f --directed-fork-probability 1 <usual pilot flags>"
-Run-Logged "$gen3\scratch\<date>-pilot-checks" "$py -u -m effects validate-corpus --effect-records $pilot $cards --variant-scripts $variants"
-Run-Logged "$gen3\scratch\<date>-pilot-checks" "$py -u -m effects field-coverage --effect-records $pilot"
-Run-Logged "$gen3\scratch\<date>-pilot-checks" "$py -u -m effects rule-counts --records-dir $pilot $cards --variant-scripts $variants --rules-dir rules --workers 10 --output $gen3\scratch\<date>-pilot-checks\rule-counts.json"
+if (-not (Test-Path variable:pilotStart)) { $pilotStart = Run-Start "$gen3\scratch" pilot }
+$pilot = "$gen3\scratch\$pilotStart-pilot"
+if (-not (Test-Path variable:pilotChecksStart)) { $pilotChecksStart = Run-Start "$gen3\scratch" pilot-checks }
+$pilotChecks = "$gen3\scratch\$pilotChecksStart-pilot-checks"
+Run-Logged $pilot "$py -u -m sealed match-outcomes --workers 6 --effect-records $pilot --outcomes-dir $pilot --count-dropped-events --directed-fork-rules 704.5f --directed-fork-probability 1 $pilotFlags"
+Run-Logged $pilotChecks "$py -u -m effects validate-corpus --effect-records $pilot $cards --variant-scripts $variants"
+Run-Logged $pilotChecks "$py -u -m effects field-coverage --effect-records $pilot"
+Run-Logged $pilotChecks "$py -u -m effects rule-counts --records-dir $pilot $cards --variant-scripts $variants --rules-dir rules --workers 10 --output $pilotChecks\rule-counts.json"
 ```
 
 Check: every record carries `generation: 3`; every § 8.13 field is non-constant in `field-coverage`
@@ -154,28 +208,40 @@ after that, and it never sees a fork that wrote nothing, which only the refusal 
 failure counts account for.
 
 ```powershell
-$audit = "$gen3\scratch\<date>-fork-fidelity"
+if (-not (Test-Path variable:auditStart)) { $auditStart = Run-Start "$gen3\scratch" fork-fidelity }
+$audit = "$gen3\scratch\$auditStart-fork-fidelity"
+if (-not (Test-Path variable:auditChecksStart)) { $auditChecksStart = Run-Start "$gen3\scratch" fork-fidelity-checks }
+$auditChecks = "$gen3\scratch\$auditChecksStart-fork-fidelity-checks"
 Run-Logged $audit "$py -u -m sealed match-outcomes --workers 6 --effect-records $audit --outcomes-dir $audit --random-seat-share 0.25 --random-seat-probability 0.5 --interventions-per-game 4 --probes-per-game 4 --directed-fork-rules $rules --count-dropped-events"
-Run-Logged "$gen3\scratch\<date>-fork-fidelity-checks" "$py -u -m effects validate-corpus --effect-records $audit $cards --variant-scripts $variants"
+Run-Logged $auditChecks "$py -u -m effects validate-corpus --effect-records $audit $cards --variant-scripts $variants"
 ```
 
-The collection itself, one run directory per collecting command under `$gen3\records\`:
+The collection itself, one run directory per collecting command under `$gen3\records\`. Set
+first: `$runFlags`, the flags every collecting command shares (workers, budgets, the three
+decision-sampling rates), and `$anyTargetCards`, the any-target coverage round's `--wording-cards`
+file.
 
 ```powershell
-$full      = "$gen3\records\<date>-full-strength"
-$depleted  = "$gen3\records\<date>-depleted"
-$anytarget = "$gen3\records\<date>-coverage-any-target"
-$wording   = "$gen3\records\<date>-coverage-wording"
-$untarget  = "$gen3\records\<date>-variants-untargeted"
-$steered   = "$gen3\records\<date>-variants-steered"
+if (-not (Test-Path variable:fullStart)) { $fullStart = Run-Start "$gen3\records" full-strength }
+$full      = "$gen3\records\$fullStart-full-strength"
+if (-not (Test-Path variable:depletedStart)) { $depletedStart = Run-Start "$gen3\records" depleted }
+$depleted  = "$gen3\records\$depletedStart-depleted"
+if (-not (Test-Path variable:anytargetStart)) { $anytargetStart = Run-Start "$gen3\records" coverage-any-target }
+$anytarget = "$gen3\records\$anytargetStart-coverage-any-target"
+if (-not (Test-Path variable:wordingStart)) { $wordingStart = Run-Start "$gen3\records" coverage-wording }
+$wording   = "$gen3\records\$wordingStart-coverage-wording"
+if (-not (Test-Path variable:untargetStart)) { $untargetStart = Run-Start "$gen3\records" variants-untargeted }
+$untarget  = "$gen3\records\$untargetStart-variants-untargeted"
+if (-not (Test-Path variable:steeredStart)) { $steeredStart = Run-Start "$gen3\records" variants-steered }
+$steered   = "$gen3\records\$steeredStart-variants-steered"
 
-Run-Logged $full      "$py -u -m sealed match-outcomes --effect-records $full --outcomes-dir $full --directed-fork-rules $rules <run flags>"
-Run-Logged $depleted  "$py -u -m sealed match-outcomes --effect-records $depleted --outcomes-dir $depleted --exclude-cards $holdout --directed-fork-rules $rules <run flags>"
-Run-Logged $anytarget "$py -u -m effects collect-coverage --effect-records $anytarget $cards --wording-cards <any-target cards> --exclude-cards $holdout --count-from $depleted <run flags>"
-Run-Logged $wording   "$py -u -m effects collect-coverage --effect-records $wording $cards --wording-cards rules\coverage-wording-cards.txt --directed-fork-rules $rules --exclude-cards $holdout --count-from $depleted --count-from $anytarget <run flags>"
-Run-Logged $untarget  "$py -u -m effects collect-variants --round untargeted --effect-records $untarget --forge-cards-path ..\forge\forge-gui\res\cardsfolder --variant-scripts $variants $cards --exclude-cards $holdout <run flags>"
+Run-Logged $full      "$py -u -m sealed match-outcomes --effect-records $full --outcomes-dir $full --directed-fork-rules $rules $runFlags"
+Run-Logged $depleted  "$py -u -m sealed match-outcomes --effect-records $depleted --outcomes-dir $depleted --exclude-cards $holdout --directed-fork-rules $rules $runFlags"
+Run-Logged $anytarget "$py -u -m effects collect-coverage --effect-records $anytarget $cards --wording-cards $anyTargetCards --exclude-cards $holdout --count-from $depleted $runFlags"
+Run-Logged $wording   "$py -u -m effects collect-coverage --effect-records $wording $cards --wording-cards rules\coverage-wording-cards.txt --directed-fork-rules $rules --exclude-cards $holdout --count-from $depleted --count-from $anytarget $runFlags"
+Run-Logged $untarget  "$py -u -m effects collect-variants --round untargeted --effect-records $untarget --forge-cards-path ..\forge\forge-gui\res\cardsfolder --variant-scripts $variants $cards --exclude-cards $holdout $runFlags"
 Run-Logged (Split-Path $counts) "$py -u -m effects rule-counts --records-dir $gen3\records $cards --variant-scripts $variants --rules-dir rules --workers 10 --output $counts"
-Run-Logged $steered   "$py -u -m effects collect-variants --round steered --rule-counts $counts --effect-records $steered --forge-cards-path ..\forge\forge-gui\res\cardsfolder --variant-scripts $variants $cards --exclude-cards $holdout <run flags>"
+Run-Logged $steered   "$py -u -m effects collect-variants --round steered --rule-counts $counts --effect-records $steered --forge-cards-path ..\forge\forge-gui\res\cardsfolder --variant-scripts $variants $cards --exclude-cards $holdout $runFlags"
 ```
 
 The `match-outcomes` run without `--exclude-cards` plays full-strength pools and feeds the
@@ -220,8 +286,10 @@ many cut games the counts left out (`cut_games`). Before launching a collection,
 ## Stage 6 — curate and freeze (story 6, story 8)
 
 ```powershell
-$corpus = "$gen3\corpus\<date>-curated"
-$freeze = "$gen3\reports\<date>-selection-set"
+if (-not (Test-Path variable:corpusStart)) { $corpusStart = Run-Start "$gen3\corpus" curated }
+$corpus = "$gen3\corpus\$corpusStart-curated"
+if (-not (Test-Path variable:freezeStart)) { $freezeStart = Run-Start "$gen3\reports" selection-set }
+$freeze = "$gen3\reports\$freezeStart-selection-set"
 Run-Logged $corpus "$py -u -m effects build-corpus --records-dir $gen3\records --output $corpus $cards --variant-scripts $variants $tokens --workers 10"
 Run-Logged $freeze "$py -u scripts\effect_knowledge_probes\run.py --freeze-probe-set --corpus $corpus $cards $tokens --reports-dir $freeze"
 ```
@@ -231,16 +299,20 @@ polarity and source, and names one-sided rules and conditions, unbudgeted rules 
 a half. The freeze writes `selection-set-<digest>.json` or exits 1 naming the component that missed
 its target.
 
-Before stage 7, rerun the trunk measurement on a gen-3 curated shard and confirm it fits 8 GB:
+Before stage 7, rerun the trunk measurement on a gen-3 curated shard and confirm it fits 8 GB.
+Set first: `$gen3Shard`, one shard of `$corpus`.
 
 ```powershell
-Run-Logged "$gen3\reports\<date>-trunk-step" "$py -u scripts\measure_trunk_step.py --shard <gen-3 curated shard> --batch-size 32 --output $gen3\reports\<date>-trunk-step\trunk-step.json"
+if (-not (Test-Path variable:gen3TrunkStart)) { $gen3TrunkStart = Run-Start "$gen3\reports" trunk-step }
+$gen3Trunk = "$gen3\reports\$gen3TrunkStart-trunk-step"
+Run-Logged $gen3Trunk "$py -u scripts\measure_trunk_step.py --shard $gen3Shard --batch-size 32 --output $gen3Trunk\trunk-step.json"
 ```
 
 ## Stage 7 — train (story 7)
 
 ```powershell
-$train = "$models\effect-model\<date>-rule-mask-hard"
+if (-not (Test-Path variable:trainStart)) { $trainStart = Run-Start "$models\effect-model" rule-mask-hard }
+$train = "$models\effect-model\$trainStart-rule-mask-hard"
 Run-Logged $train "$py -u -m effects train-effect-model --corpus $corpus $cards --variant-scripts $variants $tokens --reports-dir $freeze --model-output $train --rule-mask hard"
 ```
 
@@ -252,12 +324,13 @@ own directory under `$models\effect-model\`, its slug naming the one setting it 
 
 ## Stage 8 — report
 
-The ability cache and the reports computed from a checkpoint take the name of the checkpoint's run.
+The ability cache and the reports computed from a checkpoint take the name of the checkpoint's
+run, its start date included, so they need no date of their own.
 
 ```powershell
 $ckpt   = "$train\latest.pt"
-$cache  = "$gen3\cache\<date>-rule-mask-hard"
-$report = "$gen3\reports\<date>-rule-mask-hard"
+$cache  = "$gen3\cache\$(Split-Path -Leaf $train)"
+$report = "$gen3\reports\$(Split-Path -Leaf $train)"
 Run-Logged $cache  "$py -u -m effects encode-abilities --checkpoint $ckpt $cards --variant-scripts $variants $tokens --output-root $cache"
 Run-Logged "$report-evaluation" "$py -u -m effects evaluate-effect-model --checkpoint $ckpt $cards --variant-scripts $variants $tokens --corpus $corpus --abilities-root $cache --reports-dir $freeze --output $report-evaluation"
 Run-Logged $report "$py -u scripts\effect_knowledge_probes\run.py --checkpoint $ckpt --corpus $corpus $cards $tokens --abilities-root $cache --probe-set-dir $freeze --output $report"
