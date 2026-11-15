@@ -386,6 +386,38 @@ class ForcedPlayTest {
         assertEquals(List.of(rule.rule()), forked);
     }
 
+    /**
+     * A role the edit makes ({@link Application#making}) is on the copy only:
+     * the live dry run skips what names it, a targeting clause, a cost or the
+     * whole line when it is the source, and still checks the rest of the
+     * play: the source, its line and the other named targets.
+     */
+    @Test
+    void theDryRunSkipsOnlyWhatARoleTheEditMakesNames() {
+        Game game = bare(PhaseType.MAIN1);
+        permanent(game, you(game), "Swamp");
+        Card disfigure = TestBoard.inHand(game, you(game), "Disfigure");
+        Card bears = permanent(game, opponent(game), "Grizzly Bears");
+        Binding live = Binding.empty().with("player", you(game)).with("opponent", opponent(game))
+                .with("spell", disfigure).with("bears", bears);
+        Function<ForcedPlay, Application> made = play -> new Application(ForkOperation.LIFE,
+                fork -> new LifeOperation(fork.player("opponent"), 19)).forcing(play)
+                .making("made", (fork, copy) -> fork.card("bears"));
+
+        assertEquals(Optional.of(ForkRefusal.FORCED_NO_LINE), ForcedPlayRun.dryRun(
+                        made.apply(ForcedPlay.cast("player", "spell").targeting("opponent").paying("made")), live, game),
+                "Disfigure cannot take a player, whatever card the edit makes");
+        assertEquals(Optional.of(ForkRefusal.FORCED_NO_LINE), ForcedPlayRun.dryRun(
+                        made.apply(ForcedPlay.cast("player", "bears").targeting("made")), live, game),
+                "the Bears in play are no spell to cast");
+        assertEquals(Optional.empty(), ForcedPlayRun.dryRun(
+                        made.apply(ForcedPlay.cast("player", "spell").targeting("made")), live, game),
+                "the made target is checked on the copy");
+        assertEquals(Optional.empty(), ForcedPlayRun.dryRun(
+                        made.apply(ForcedPlay.cast("player", "made")), live, game),
+                "the made source's line is checked on the copy");
+    }
+
     /** A charm is no line a forced play makes (its modes would be asked afresh): refused before the fork. */
     @Test
     void aForcedCharmHasNoLegalLine() throws Throwable {

@@ -721,8 +721,7 @@ and that the reporting half never enters the control score.
 - **FR-010b**: A directed rule's variant MAY name one play its fork forces, made by a seat the
   binding names: a cast or activation of a line of a bound source (chosen by API type, keyword or a
   test of the rule's own: the card's spell, its bestow cast, an activated ability whose cost
-  sacrifices another permanent), or of a line of a card the edit puts on the battlefield, bound on
-  the edited copy, at the actor's first priority in the fork's own step where the
+  sacrifices another permanent), at the actor's first priority in the fork's own step where the
   rules let it be played with its named targets, its targets named by binding role clause by clause
   (a clause left unnamed drawn from its legal targets by the fork's own random stream), X drawn, its
   cost paid through the engine's own payment (what a cost sacrifices, discards or exiles named by
@@ -732,7 +731,9 @@ and that the reporting half never enters the control score.
   it can be paid, whatever the AI would choose; or an attack by a bound creature at a bound player
   or permanent in the turn's declare-attackers step, added to the seat's own declaration. A modal
   line (a charm) is no line a forced play makes: the engine's cast asks its modes afresh, so its
-  forced play has no legal line. The forcing seat is attached in the fork's copy only. Every other
+  forced play has no legal line. Any card a play names (its source, a target, a cost card, a
+  defender), whatever the play's kind, may be a card the edit puts on the battlefield, bound on the
+  edited copy. The forcing seat is attached in the fork's copy only. Every other
   decision in the fork stays the seat's own (FR-010). A forced play is recorded as a live play is,
   by the fork's own recorders, with no record member marking it forced: a directed fork's records
   may hold a play its seat was made to make, and which variants force what is fixed per rule in the
@@ -742,9 +743,11 @@ and that the reporting half never enters the control score.
   payment is tried; its payment or a named cost card fails; a "you may pay" answered yes cannot be
   paid) ends as a counted refusal (`forced play has no legal line`, `forced play not made`,
   `forced play cost not paid`) and writes nothing. A forced play whose source, line, named target
-  or attack the live board lacks, other than a card the edit makes, is refused before the fork is taken, spending none of
+  or attack the live board lacks is refused before the fork is taken, spending none of
   `--directed-forks-per-game` and leaving the rule's one fork of the game untaken; the refusal is
-  counted at each boundary it is found at.
+  counted at each boundary it is found at. What a play names of a card the edit makes (the line
+  when that card is the source, a targeting clause, a cost card, the defender) is checked on the
+  edited copy only, and the rest of the play on the live board.
 - **FR-010c**: A directed rule's variant MAY ask that the records of its bound cards be kept. In
   its fork, every decision candidate of a card the variant names (a spell, an activated ability,
   a special action or a land play it hosts) is written whatever `--playability-rate`,
@@ -836,7 +839,11 @@ and that the reporting half never enters the control score.
   as `rules/directed-fork-rules.txt`, one rule id per line, 49 rules in unit order, and is what
   the full collection passes to
   `--directed-fork-rules`; `directed-rules` over the gen-2 counts writes it unchanged. Every
-  listed rule passes the startup check (FR-014).
+  listed rule passes the startup check (FR-014). Three listed rules bind only in a steered
+  `collect-variants` round, whose decks hold their scenarios' cards, never in a `match-outcomes`
+  sealed game: their preconditions need a card no edition with a Draft booster prints, Ellivere
+  of the Wild Court for 111.10p, Hakbal of the Surging Soul for 701.44d, and a "whenever a creature
+  connives" card (Glorious Purpose, Iron Monger, Ultron) for 701.50f.
 
 #### Rules-to-fields map (root § 7)
 

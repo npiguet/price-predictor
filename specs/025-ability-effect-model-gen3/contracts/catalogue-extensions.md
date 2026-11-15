@@ -131,7 +131,7 @@ variant of polarity `other` whose forced cast makes the `fires` side.
 
 An `Application` may also name the one play its fork forces (`ForcedPlay`, FR-010b), built from
 the fork's binding after the edit, which `Application.making(role, find)` extends with a card the
-edit makes, found on the edited copy (`afterEdit`; the live dry run cannot see it): `ForcedPlay.cast(actor, card)`, `activate(actor, permanent,
+edit makes, found on the edited copy (`afterEdit`; `Application.makes` lists those roles, and the live dry run skips what names one of them, the line when it is the source, a targeting clause, a cost card or the defender, and checks the rest of the play): `ForcedPlay.cast(actor, card)`, `activate(actor, permanent,
 line)`, `answer(actor, source, yes)` or `attack(actor, attacker, defender)`, each argument a
 binding role, refined by `.targeting(roles...)` (one call per targeting clause, in chain order; a
 clause named by no call is drawn), `.paying(roles...)` (what the cost sacrifices, discards or

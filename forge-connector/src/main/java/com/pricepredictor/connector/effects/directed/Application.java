@@ -4,7 +4,9 @@ import com.pricepredictor.connector.effects.directed.operations.BoardEdit;
 import forge.game.Game;
 import forge.game.card.Card;
 
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -31,21 +33,24 @@ import java.util.function.Function;
  *                  with the roles of cards the edit made, found on the edited
  *                  copy (the card an {@code add_permanent} put there, which
  *                  no live card maps to), for a forced play to name
+ * @param makes     the roles {@code made} binds: on the edited copy only,
+ *                  never on the live board
  */
 public record Application(
         ForkOperation operation, Function<Binding, BoardEdit> edit, Function<Binding, KeptRecords> kept,
-        ForcedPlay forced, BiFunction<Binding, Game, Binding> made) {
+        ForcedPlay forced, BiFunction<Binding, Game, Binding> made, Set<String> makes) {
 
     public Application {
         Objects.requireNonNull(operation, "operation");
         Objects.requireNonNull(edit, "edit");
         Objects.requireNonNull(kept, "kept");
         Objects.requireNonNull(made, "made");
+        makes = Set.copyOf(makes);
     }
 
     /** A variant whose fork keeps nothing beyond what the samplers draw and forces no play. */
     public Application(ForkOperation operation, Function<Binding, BoardEdit> edit) {
-        this(operation, edit, fork -> KeptRecords.NONE, null, (fork, game) -> fork);
+        this(operation, edit, fork -> KeptRecords.NONE, null, (fork, game) -> fork, Set.of());
     }
 
     /**
@@ -55,28 +60,31 @@ public record Application(
     public Application keeping(Function<Binding, KeptRecords> more) {
         Objects.requireNonNull(more, "more");
         Function<Binding, KeptRecords> already = kept;
-        return new Application(operation, edit, fork -> already.apply(fork).and(more.apply(fork)), forced, made);
+        return new Application(operation, edit, fork -> already.apply(fork).and(more.apply(fork)), forced, made,
+                makes);
     }
 
     /** This variant, its fork forcing {@code play} (FR-010b). */
     public Application forcing(ForcedPlay play) {
-        return new Application(operation, edit, kept, Objects.requireNonNull(play, "play"), made);
+        return new Application(operation, edit, kept, Objects.requireNonNull(play, "play"), made, makes);
     }
 
     /**
      * This variant, the card its edit makes bound as {@code role} once the
      * edit is applied, as {@code find} reads it on the edited copy: a role
-     * no live card maps to, so its forced play is checked on the copy only,
-     * never by the dry run on the live board.
+     * no live card maps to, so what its forced play names of it is checked
+     * on the copy only, never by the dry run on the live board.
      */
     public Application making(String role, BiFunction<Binding, Game, Card> find) {
         Objects.requireNonNull(role, "role");
         Objects.requireNonNull(find, "find");
         BiFunction<Binding, Game, Binding> already = made;
+        Set<String> more = new HashSet<>(makes);
+        more.add(role);
         return new Application(operation, edit, kept, forced, (fork, game) -> {
             Binding found = already.apply(fork, game);
             return found.with(role, find.apply(found, game));
-        });
+        }, more);
     }
 
     /** The fork's binding once its edit is applied to {@code fork}: with the roles of the cards it made. */

@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Random;
+import java.util.Set;
 
 /**
  * One directed fork's {@link ForcedPlay} (FR-010b), as its forcing seat makes
@@ -70,6 +71,12 @@ public final class ForcedPlayRun {
     private final List<List<GameEntity>> targets;
     private final List<Card> costs;
     private final GameEntity defender;
+    /**
+     * The roles the binding cannot hold yet, a dry run's made roles
+     * ({@link Application#makes}): what names them is left unchecked. Empty
+     * in a fork.
+     */
+    private final Set<String> unknown;
     private RandomChoices choices;
     /** The line the actor's last priority chose, until it is played. */
     private SpellAbility pending;
@@ -78,10 +85,15 @@ public final class ForcedPlayRun {
     private String refusal;
 
     private ForcedPlayRun(ForcedPlay play, Binding fork, Game game) {
+        this(play, fork, game, Set.of());
+    }
+
+    private ForcedPlayRun(ForcedPlay play, Binding fork, Game game, Set<String> unknown) {
         this.play = play;
         this.game = game;
+        this.unknown = unknown;
         this.actor = fork.player(play.actor());
-        this.sourceId = fork.card(play.source()).getId();
+        this.sourceId = unknown.contains(play.source()) ? -1 : fork.card(play.source()).getId();
         this.step = switch (play.kind()) {
             case ANSWER -> null;
             case ATTACK -> PhaseType.COMBAT_DECLARE_ATTACKERS;
@@ -90,10 +102,13 @@ public final class ForcedPlayRun {
         this.turn = game.getPhaseHandler().getTurn();
         this.targets = new ArrayList<>();
         for (List<String> clause : play.targets()) {
-            this.targets.add(clause.stream().map(role -> entity(fork, role)).toList());
+            // A clause naming an unknown role is null: left unchecked.
+            this.targets.add(clause.stream().anyMatch(unknown::contains) ? null
+                    : clause.stream().map(role -> entity(fork, role)).toList());
         }
-        this.costs = play.costs().stream().map(fork::card).toList();
-        this.defender = play.defender() == null ? null : entity(fork, play.defender());
+        this.costs = play.costs().stream().filter(role -> !unknown.contains(role)).map(fork::card).toList();
+        this.defender = play.defender() == null || unknown.contains(play.defender()) ? null
+                : entity(fork, play.defender());
     }
 
     /**
@@ -121,20 +136,21 @@ public final class ForcedPlayRun {
      * its source holds the line, the named targets are legal for their
      * clauses (tried on a copy of the line, with throwaway draws for the
      * clauses named by no role), the named attack is legal. Mana is not
-     * asked: a variant may give the mana the play needs.
+     * asked: a variant may give the mana the play needs. A role the edit
+     * makes ({@link Application#makes}) has no live card: what names it (the
+     * line, when it is the source; a targeting clause; a cost; the defender)
+     * is checked on the copy only, and the rest of the play here.
      */
     public static Optional<String> dryRun(Application application, Binding live, Game game) {
         if (application.forced() == null) {
             return Optional.empty();
         }
         try {
-            ForcedPlayRun trial = new ForcedPlayRun(application.forced(), live, game);
+            ForcedPlayRun trial = new ForcedPlayRun(application.forced(), live, game, application.makes());
             return trial.possible() ? Optional.empty() : Optional.of(ForkRefusal.FORCED_NO_LINE);
         } catch (RuntimeException e) {
-            // A role the live binding lacks is a card the edit makes
-            // (Application.making), whose play is checked on the copy only,
-            // or the registry's error, which the fork's own guard reports as
-            // a failure.
+            // A role neither bound nor made is the registry's error, which
+            // the fork's own guard reports as a failure.
             return Optional.empty();
         }
     }
@@ -168,6 +184,9 @@ public final class ForcedPlayRun {
      * named targets legal on a trial copy of the line, or the named attack.
      */
     private boolean possible() {
+        if (unknown.contains(play.source())) {
+            return true;
+        }
         Card source = source();
         if (source == null) {
             return false;
@@ -175,8 +194,9 @@ public final class ForcedPlayRun {
         return switch (play.kind()) {
             case CAST, ACTIVATE -> lines(source).stream().anyMatch(this::aimable);
             case ANSWER -> true;
-            case ATTACK -> defender != null && source.isCreature() && source.isInPlay()
-                    && source.getController() == actor && CombatUtil.canAttack(source, defender);
+            case ATTACK -> source.isCreature() && source.isInPlay() && source.getController() == actor
+                    && (unknown.contains(play.defender())
+                    || defender != null && CombatUtil.canAttack(source, defender));
         };
     }
 
@@ -437,12 +457,16 @@ public final class ForcedPlayRun {
         draws.announceX(ability, pay ? actor : null, 0);
         List<SpellAbility> clauses = TargetingClauses.chosen(ability);
         if (targets.size() > clauses.size()
-                && targets.subList(clauses.size(), targets.size()).stream().anyMatch(named -> !named.isEmpty())) {
+                && targets.subList(clauses.size(), targets.size()).stream()
+                .anyMatch(named -> named == null || !named.isEmpty())) {
             return false;
         }
         for (int i = 0; i < clauses.size(); i++) {
             SpellAbility clause = clauses.get(i);
             List<GameEntity> named = i < targets.size() ? targets.get(i) : List.of();
+            if (named == null) {
+                continue;
+            }
             if (named.isEmpty()) {
                 if (!draws.chooseTargetsFor(clause)) {
                     return false;
