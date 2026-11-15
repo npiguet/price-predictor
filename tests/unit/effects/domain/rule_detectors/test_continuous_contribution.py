@@ -135,6 +135,24 @@ def test_a_type_is_compared_without_case(by_kind):
         assert found.polarity is Polarity.FIRES, spelled
 
 
+def test_a_card_type_set_reads_as_every_card_type_removed(by_kind):
+    """205.1a: Forge sets a card type (Song of the Dryads' ``RemoveCardTypes$``)
+    as a type change removing every card type and adding its own, which the
+    collector writes ``-all-card-types`` (``LayerContributions.typeTokens``,
+    the ``-all-`` spelling of each of Forge's ``RemoveType`` classes)."""
+    record = next(r for r in by_kind("continuous") if r.payload.contributions)
+    declared = {"field": "types", "value": "-all-card-types"}
+    FAMILY.validate(declared)
+    assert FAMILY.match(record, None, declared).polarity is Polarity.DOES_NOT_FIRE
+    contributions = tuple(replace(c, types=("-all-card-types", "-all-land-types", "land", "forest"))
+                          for c in record.payload.contributions)
+    set_type = replace(record, payload=replace(record.payload, contributions=contributions))
+    assert FAMILY.match(set_type, None, declared).polarity is Polarity.FIRES
+    for removed in ("super-types", "sub-types", "land-types", "creature-types", "artifact-types",
+                    "enchantment-types"):
+        FAMILY.validate({"field": "types", "value": f"-all-{removed}"})
+
+
 class TestT030Parameters:
     """Source keyword, script parameter, face state and designation (T030 follow-up)."""
 

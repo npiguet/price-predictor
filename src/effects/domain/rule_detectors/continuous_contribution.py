@@ -121,9 +121,13 @@ def _carries(contribution: Contribution, field: str, value: str | None) -> bool:
 
 
 #: What a contribution's flat lists may name beside a type or colour: a line
-#: set outright, and a whole class at once (``Contribution``'s docstring).
+#: set outright, and a whole class at once (``Contribution``'s docstring): the
+#: connector's ``all-creature-types`` (a changeling's grant) and ``all-`` with
+#: each of Forge's ``RemoveType`` classes, which a static removes (``-all-card-
+#: types`` for ``RemoveCardTypes$``, how Forge sets a card type, 205.1a).
 _LIST_TOKENS = frozenset({"=", "all-creature-types", "all-land-types", "all-artifact-types",
-                          "all-enchantment-types", "all-types"})
+                          "all-enchantment-types", "all-card-types", "all-super-types",
+                          "all-sub-types", "all-types"})
 _COLOURS = frozenset("WUBRGC")
 
 
