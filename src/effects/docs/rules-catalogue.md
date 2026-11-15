@@ -23,7 +23,7 @@ Rules to respect when editing `rules/`, a detector family or rule tagging, and w
 ## Commands to run after a change
 
 - `scripts/rules_catalogue.py validate` checks the declarations.
-- `scripts/rules_catalogue.py directed-rules --counts` writes `rules/directed-fork-rules.txt`, `rules/coverage-wording-cards.txt` and `rules/directed-fork-counts.json`, the counts the list is decided from, so `test_rules_catalogue.py` can regenerate the list from checked-in files.
+- `scripts/rules_catalogue.py directed-rules --counts <counts> --cards-folder <gen>/converted/cardsfolder` writes `rules/directed-fork-rules.txt`, `rules/coverage-wording-cards.txt` and `rules/directed-fork-counts.json`, the counts the list is decided from, so `test_rules_catalogue.py` can regenerate the list from checked-in files.
 - `scripts/rules_catalogue.py gen3-fields` recomputes the learnable rules after a map rerun.
 - `scripts/rule_entity_audit.py` measures, per rule and output, how often the outputs are supervised at each role's entities.
 

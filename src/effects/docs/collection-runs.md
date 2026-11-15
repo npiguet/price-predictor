@@ -40,7 +40,7 @@ Rules to respect when running, babysitting or changing `collect-coverage`, `coll
 - A file boundary is not a game boundary. A kill or a crash cuts a game and its remainder is never written. A game that ended writes a `turn_action` / `game_end` marker as its last record, and a game whose shard holds no marker is a cut one: `build-corpus` drops it whole, and the collectors' counters and `rule-counts` count nothing from it (`domain/game_ends.py`).
 - A worker that stops at a game end closes its shard whole, and the shard writer writes its block in flight at every game end, right after the marker (`RecordShardWriter.endGame`). A killed or crashed worker therefore loses the game in progress only: that game's records in complete 256-record blocks stay in the shard, its last 255 at most are absent, and so are its end-of-game records (fired triggers, mana reservoirs, the outcome, the marker), so it reads as cut.
 - A resume must not assume a clean shutdown left a marker.
-- Run `python -m effects validate-corpus --effect-records <dir>` over the first few minutes of every pass. A defect of this kind shows in the first minute of shards and raises nothing for the rest of the run.
+- Run `python -m effects validate-corpus --effect-records <run dir> --cards-folder <gen>/converted/cardsfolder --cards-folder <gen>/converted/tokenscripts --variant-scripts <variant tree>` over the first few minutes of every pass (quickstart Stage 3 has the command): the key-join checks read the sidecars there, and a variant key in a tree the run was not given fails the keyword-join check as unchecked. A defect of this kind shows in the first minute of shards and raises nothing for the rest of the run.
 
 ## Both collectors
 
