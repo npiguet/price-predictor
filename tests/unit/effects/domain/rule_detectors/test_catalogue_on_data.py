@@ -36,8 +36,6 @@ _MIN_KIND = 20
 GENERAL = {
     # every combat damage step deals damage equal to power (510.1a, 120.2a)
     "510.1a-1",
-    # a combat damage step deals its damage at once, the dying creatures too
-    "510.2-1",
     # combat damage to a player is life lost, unless the source has infect
     "119.2-1", "120.3a-1",
     # a player losing life to combat damage is what 704.5a's check reads: its

@@ -410,7 +410,7 @@
         "family": "outcome_event",
         "record_kind": "combat",
         "outcome": "A creature that deals combat damage in a damage step dies in that step's check: a creature dying still dealt its damage, all of it dealt at once.",
-        "near_miss": "A combat damage step whose damage dealers all survive it, as a first striker does whose victim dies before it can deal damage.",
+        "near_miss": "A creature dealt combat damage in a damage step dies there having dealt none, as a first striker's victim does, which dies before it can deal its damage; a step in which no such creature dies (an ordinary unblocked attack, a block both creatures survive) is neither side.",
         "params": {
           "event": "damage_dealt",
           "combat": true,

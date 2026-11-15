@@ -95,8 +95,11 @@ leaving the battlefield that was not in combat):
   ``damage_prevented`` event names one; a gen-2 record names only its
   ``cause``, which for damage is the same object) does (true) or does not (false) move
   from the battlefield to a graveyard in the same record: a creature dying in
-  a combat damage step that still dealt its damage there (510.2), against one
-  that dealt it and lived (a first striker, whose victim dealt none).
+  a combat damage step that still dealt its damage there (510.2). Declared
+  true, its near miss is narrower than the other qualifiers': a creature
+  such an event deals damage to dies in the record having dealt none of
+  them (a first striker's victim), and a record in which no such creature
+  dies, an ordinary unblocked attack among them, is neither side.
 
 A qualifier cannot be combined with ``absent``.
 
@@ -497,6 +500,12 @@ class OutcomeEvent:
             return FamilyMatch(Polarity.FIRES, True, condition, _outcome(record, meeting))
         if not absence:
             return None
+        if params.get("source_dies") is True:
+            # The contrast 510.2 draws: a creature dying there having dealt
+            # nothing, not every step whose damage dealers all survive.
+            victims = _victims(record, wanted, listed)
+            return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition,
+                               victims) if victims else None
         if read:
             return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition,
                                _outcome(record, [e for e, _ in read if e not in meeting]))
@@ -510,23 +519,46 @@ def _both(first: bool | None, second: bool | None) -> bool | None:
     return None if first is None or second is None else first and second
 
 
-def _source_verdict(event: Event, listed: tuple[Event, ...],
-                    params: Mapping[str, Any]) -> bool | None:
-    """Whether ``event``'s ``source`` dies in the record as ``source_dies``
-    says (True when it is not declared); None where the event names none.
-    A gen-2 record writes no ``source``, only the ``cause``, the same object
-    for damage."""
-    if "source_dies" not in params:
-        return True
+def _source_of(event: Event) -> str | None:
+    """A damage event's ``source``; a gen-2 record writes no ``source``, only
+    the ``cause``, the same object for damage."""
     found = event.params or {}
-    source = found.get("source") or found.get("cause")
-    if not source:
-        return None
-    died = any(e.type is EventType.ZONE_CHANGE and source in e.subjects
+    return found.get("source") or found.get("cause") or None
+
+
+def _dies(entity_id: str, listed: tuple[Event, ...]) -> bool:
+    """Whether the record moves ``entity_id`` from the battlefield to a graveyard."""
+    return any(e.type is EventType.ZONE_CHANGE and entity_id in e.subjects
                and same_value((e.params or {}).get("from_zone"), "battlefield")
                and same_value((e.params or {}).get("to_zone"), "graveyard")
                for e in listed)
-    return died == bool(params["source_dies"])
+
+
+def _source_verdict(event: Event, listed: tuple[Event, ...],
+                    params: Mapping[str, Any]) -> bool | None:
+    """Whether ``event``'s ``source`` dies in the record as ``source_dies``
+    says (True when it is not declared); None where the event names none."""
+    if "source_dies" not in params:
+        return True
+    source = _source_of(event)
+    if source is None:
+        return None
+    return _dies(source, listed) == bool(params["source_dies"])
+
+
+def _victims(record: EffectRecord, wanted: list[Event],
+             listed: tuple[Event, ...]) -> tuple[str, ...]:
+    """The creatures ``wanted``'s events deal damage to that die in the record
+    having dealt none of those events themselves: a first striker's victim."""
+    sources = {_source_of(e) for e in wanted}
+    found = []
+    for event in wanted:
+        for subject in event.subjects:
+            entity = record.state.entity(subject)
+            if (subject not in sources and entity is not None
+                    and has_card_type(entity, "creature") and _dies(subject, listed)):
+                found.append(subject)
+    return tuple(dict.fromkeys(found))
 
 
 def _source_fits(record: EffectRecord, params: Mapping[str, Any]) -> bool:

@@ -312,23 +312,32 @@ class TestQualifiers:
                                                  "absent": True, "subject_is_token": True})
 
 
+def _is_creature(record, entity_id) -> bool:
+    entity = record.state.entity(entity_id)
+    return entity is not None and "creature" in {t.lower() for t in entity.types}
+
+
 class TestSourceDies:
     """``source_dies`` reads whether a damage event's source dies in the same
     record (510.2: a creature dying in a combat damage step still dealt its
     damage there), on a real gen-2 combat record, which names the source as
-    the event's ``cause``; a gen-3 record names it ``source`` too."""
+    the event's ``cause``; a gen-3 record names it ``source`` too. Its near
+    miss is a creature dealt damage there dying having dealt none (a first
+    striker's victim); a step in which no such creature dies is neither side."""
 
     DECLARED = {"event": "damage_dealt", "combat": True, "source_dies": True}
 
     @staticmethod
     def _combat(by_kind):
-        """A real combat record holding combat damage, and its damage events."""
+        """A real combat record holding combat damage to a creature, and its
+        damage events, the first one dealt to that creature."""
         for record in by_kind("combat"):
             dealt = [e for e in record.payload.events if e.type is EventType.DAMAGE_DEALT
                      and e.params.get("combat") and e.params.get("cause")]
-            if dealt:
+            dealt.sort(key=lambda e: not _is_creature(record, e.subjects[0]))
+            if dealt and _is_creature(record, dealt[0].subjects[0]):
                 return record, dealt
-        pytest.fail("no combat record in the fixture deals combat damage")
+        pytest.fail("no combat record in the fixture deals combat damage to a creature")
 
     @staticmethod
     def _events(record, events):
@@ -356,6 +365,22 @@ class TestSourceDies:
         assert victim != striker.params["cause"]
         found = FAMILY.match(struck_first, None, self.DECLARED)
         assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
+        assert victim in found.outcome
+
+    def test_a_damage_step_in_which_no_creature_dies_is_neither_side(self, by_kind):
+        """An ordinary unblocked attack, or a block both creatures survive:
+        no creature dies, so nothing shows whether the damage was dealt at once."""
+        record, dealt = self._combat(by_kind)
+        assert FAMILY.match(self._events(record, dealt), None, self.DECLARED) is None
+
+    def test_a_creature_dying_that_was_dealt_no_damage_there_is_neither_side(self, by_kind):
+        record, dealt = self._combat(by_kind)
+        bystander = next(e.id for e in record.state.entities
+                         if "creature" in {t.lower() for t in e.types}
+                         and all(e.id not in d.subjects and e.id != d.params["cause"]
+                                 for d in dealt))
+        died = self._events(record, (*dealt, self._dies(bystander)))
+        assert FAMILY.match(died, None, self.DECLARED) is None
 
     def test_false_flips_the_sides(self, by_kind):
         record, dealt = self._combat(by_kind)
