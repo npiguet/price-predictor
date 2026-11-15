@@ -121,8 +121,38 @@ record LibraryCapture(
      * advances Forge's global trait id counters, so a build per snapshot —
      * every library's top card, in every record — renumbered every trait
      * the game created afterwards, and cost a script parse each time. The
-     * object is never put in a zone, so nothing changes it. Weak on the game,
-     * so a finished game and its forks take their cards with them.
+     * object is never put in a zone, so nothing changes it.
+     *
+     * <p>Weak keys alone never let a game go: each built card holds its game
+     * and its owner, so the entry's value kept its own key reachable, and
+     * every game and fork a worker recorded stayed in its heap until the
+     * JVM filled it (games slowing tenfold after some thirty, then an
+     * {@code OutOfMemoryError}). An entry is dropped when its game's
+     * recording closes and when its fork ends ({@link #release}).
      */
     private static final Map<Game, Map<Integer, Card>> BUILT = new java.util.WeakHashMap<>();
+
+    /** Forget {@code game}'s built cards: its recording has closed, or its fork has ended. */
+    static void release(Game game) {
+        if (game == null) {
+            return;
+        }
+        synchronized (BUILT) {
+            BUILT.remove(game);
+        }
+    }
+
+    /** Whether cards of {@code game} are held, for a test. */
+    static boolean holds(Game game) {
+        synchronized (BUILT) {
+            return BUILT.containsKey(game);
+        }
+    }
+
+    /** How many games' cards are held, for a test. */
+    static int gamesHeld() {
+        synchronized (BUILT) {
+            return BUILT.size();
+        }
+    }
 }

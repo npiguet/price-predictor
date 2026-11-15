@@ -308,19 +308,33 @@ public final class GameRecording implements AutoCloseable {
             patched.close();
             flushed = true;
         } finally {
-            appendDroppedEvents();
-            if (!fork) {
-                try {
-                    // Last of the game's records, and only for a game that
-                    // ended with all of them written: one that threw
-                    // mid-match, or whose flush threw, gets none (D2).
-                    if (flushed && game.isGameOver()) {
-                        writeMarker(envelope.gameId(), () -> GameEndMarker.write(game, envelope));
-                    }
-                } finally {
-                    envelope.endGame();
-                }
+            try {
+                closeEnvelope(flushed);
+            } finally {
+                // After the marker, whose board is the last snapshot: the
+                // registries keyed by game would otherwise hold it, and with
+                // it every card and fork of it, for the rest of the JVM's life.
+                LibraryCapture.release(game);
+                FloatingEffects.release(game);
             }
+        }
+    }
+
+    /** The dropped-event counts, then a live game's marker and its shard's game end. */
+    private void closeEnvelope(boolean flushed) {
+        appendDroppedEvents();
+        if (fork) {
+            return;
+        }
+        try {
+            // Last of the game's records, and only for a game that ended
+            // with all of them written: one that threw mid-match, or whose
+            // flush threw, gets none (D2).
+            if (flushed && game.isGameOver()) {
+                writeMarker(envelope.gameId(), () -> GameEndMarker.write(game, envelope));
+            }
+        } finally {
+            envelope.endGame();
         }
     }
 

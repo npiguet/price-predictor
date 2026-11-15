@@ -82,6 +82,17 @@ final class FloatingEffects {
         return BY_GAME.computeIfAbsent(fork, g -> new FloatingEffects(of(live), fork.getTimestamp()));
     }
 
+    /**
+     * Forget {@code game}'s notes: its recording has closed, or its fork has
+     * ended. A note still open (a fork whose body threw mid-clause) holds
+     * its clause and so its game, which the weak key alone never lets go.
+     */
+    static void release(Game game) {
+        if (game != null) {
+            BY_GAME.remove(game);
+        }
+    }
+
     /** One live clause's resolution: the timestamps Forge drew while it ran. */
     private static final class Note {
         final long start;

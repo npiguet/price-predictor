@@ -111,6 +111,10 @@ What the collectors must read of the hooks:
 - A share above 0 without a probability is refused.
 - Every real decision is written and no what-if is. The AI re-asks one combat many times while planning, and a query drawn before de-duplication survives in proportion to how often it was asked. Blocks against attacks the AI rejected reach the corpus instead as real decisions against the random seat.
 
+## State kept per game
+
+- A registry the collectors key by game (`LibraryCapture`'s built library cards, `FloatingEffects`' notes) drops a game's entry when its `GameRecording` closes, after the game-end marker, and a fork's when `Forks.ForkRun.take` ends. The maps are weak-keyed, but a built card, and an open note's clause, hold their game: an entry never released keeps its game, every card in it and every fork of it in the worker's heap, until some thirty games into a JVM's life its games slow tenfold and it dies of `OutOfMemoryError` (`GameRetentionTest`).
+
 ## Dead fields
 
 - A collector that writes `"blocking":[]` produces records byte-identical to ones for a creature that genuinely is not blocking. The shape is right, the contract tests pass, and the field is dead. `field-coverage` exists to name every field a corpus never varied.

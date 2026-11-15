@@ -503,7 +503,14 @@ final class Forks {
                     }
                 }));
             } finally {
-                before.compareAfter("fork " + kind + " moved the live game", live, forked[0]);
+                try {
+                    before.compareAfter("fork " + kind + " moved the live game", live, forked[0]);
+                } finally {
+                    // The fork is done with: the registries keyed by game
+                    // would otherwise hold it for the JVM's life.
+                    LibraryCapture.release(forked[0]);
+                    FloatingEffects.release(forked[0]);
+                }
             }
         }
 
