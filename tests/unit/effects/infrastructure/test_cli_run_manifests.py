@@ -133,3 +133,11 @@ class TestTheCollectorsListWhatTheyRead:
         ])
         inputs = cli.RUN_MANIFESTS["collect-coverage"].input_paths(args)
         assert {Path("runs/a"), Path("runs/b")} <= set(inputs)
+
+
+def test_shard_discovery_never_takes_the_sealed_corpora_for_a_shard(tmp_path: Path):
+    """A match-outcomes collection keeps match-outcomes.txt and cards-played.txt
+    in its run directory, beside the shards every reader walks."""
+    (tmp_path / "match-outcomes.txt").write_text("row\n", encoding="utf-8")
+    (tmp_path / "cards-played.txt").write_text("row\n", encoding="utf-8")
+    assert iter_shards(tmp_path) == []

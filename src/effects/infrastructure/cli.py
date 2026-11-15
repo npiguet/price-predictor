@@ -49,6 +49,7 @@ from effects.domain.default_paths import (
     DEFAULT_CHECKPOINT,
     DEFAULT_KEYWORD_DEFINITIONS,
     DEFAULT_RECORDS_DIR,
+    DEFAULT_REPORTS_DIR,
     DEFAULT_SCRIPT_VOCAB_PATH,
     DEFAULT_VARIANT_SCRIPTS,
     DEFAULT_VOCAB_PATH,
@@ -1067,6 +1068,21 @@ def _evaluate_effect_model_parser(subparsers) -> None:
         "--win-rates", type=Path, default=DEFAULT_WIN_RATES,
         help="Per-card win-rate table the decodability battery reads",
     )
+    parser.add_argument(
+        "--reports-dir", type=Path, default=DEFAULT_REPORTS_DIR,
+        help=(
+            "Where the selection set frozen for the corpus is found, by the "
+            "corpus digest, as on train-effect-model (default: %(default)s)"
+        ),
+    )
+    parser.add_argument(
+        "--output", type=_optional_path, default=None,
+        help=(
+            "Directory the files the report names (the UMAP picture and its "
+            "table) are written to (default: <checkpoint stem>.evaluation/ "
+            "beside --checkpoint)"
+        ),
+    )
 
 
 def _baseline_checkpoint(value: str):
@@ -1196,9 +1212,11 @@ def _encoded_checkpoint(args: argparse.Namespace) -> Path:
 
 
 def _evaluation_dir(args: argparse.Namespace) -> Path:
-    """Where the evaluation's pictures go: ``<checkpoint stem>.evaluation/``."""
-    checkpoint = Path(args.checkpoint)
-    return checkpoint.parent / f"{checkpoint.stem}.evaluation"
+    """Where the evaluation's pictures go: ``--output``, else
+    ``<checkpoint stem>.evaluation/`` beside the checkpoint."""
+    from effects.application.evaluation_context import evaluation_dir
+
+    return evaluation_dir(args.checkpoint, args.output)
 
 
 _SOURCE_TREES = ("cards_folders", "variant_scripts")
@@ -1246,6 +1264,7 @@ RUN_MANIFESTS: ManifestTable = {
             "checkpoint",
             lambda args: [path for _name, path in (args.baseline_checkpoints or [])],
             *_SOURCE_TREES, *_TOKENIZER_PATHS, "corpus", "abilities_root", "win_rates",
+            "reports_dir",
         ),
     ),
 }

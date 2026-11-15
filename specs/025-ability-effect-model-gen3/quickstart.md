@@ -51,12 +51,9 @@ nothing else. Follow a run from a second window with
 directory; when a run ends, fill `purpose` there and set `status` to `keep`, `scratch` or
 `superseded`.
 
-Two commands write outside the path they are given:
-
-- `effects evaluate-effect-model` writes its pictures to `<checkpoint stem>.evaluation/` beside
-  the checkpoint, inside the model's run directory. It has no flag for them.
-- `scripts/rules_catalogue.py directed-rules` rewrites three files under `rules/`, which are
-  committed.
+Every command below writes only inside the run directory its flags name.
+`scripts/rules_catalogue.py directed-rules` also rewrites three files under `rules/`, which are
+committed.
 
 ## Prerequisites
 
@@ -262,9 +259,13 @@ $ckpt   = "$train\latest.pt"
 $cache  = "$gen3\cache\<date>-rule-mask-hard"
 $report = "$gen3\reports\<date>-rule-mask-hard"
 Run-Logged $cache  "$py -u -m effects encode-abilities --checkpoint $ckpt $cards --variant-scripts $variants $tokens --output-root $cache"
-Run-Logged "$report-evaluation" "$py -u -m effects evaluate-effect-model --checkpoint $ckpt $cards --variant-scripts $variants $tokens --corpus $corpus --abilities-root $cache"
-Run-Logged $report "$py -u scripts\effect_knowledge_probes\run.py --checkpoint $ckpt --corpus $corpus $cards $tokens --abilities-root $cache --probe-set-dir $freeze --reports-dir $report"
+Run-Logged "$report-evaluation" "$py -u -m effects evaluate-effect-model --checkpoint $ckpt $cards --variant-scripts $variants $tokens --corpus $corpus --abilities-root $cache --reports-dir $freeze --output $report-evaluation"
+Run-Logged $report "$py -u scripts\effect_knowledge_probes\run.py --checkpoint $ckpt --corpus $corpus $cards $tokens --abilities-root $cache --probe-set-dir $freeze --output $report"
 ```
+
+`evaluate-effect-model`'s decodability battery reads a per-card win-rate table (`--win-rates`); no
+stage here writes one under `output/effects/`, and its default is the sealed pipeline's
+`output/sealed/cards-win-rates.txt`, another module's tree.
 
 Check: the scorecard reports every probe and the rule tests on the reporting half. Results go into the
 gen-3 record's Result section only.

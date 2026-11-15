@@ -36,6 +36,28 @@ class TestPlan:
             if step.endswith("probes"):
                 assert command[command.index("--reports-dir") + 1] == str(run_dir / "reports")
 
+    def test_the_evaluation_reads_the_selection_set_the_arm_shares(self, tmp_path):
+        sets = tmp_path / "sets"
+        steps = {s: c for s, c, _ in _plan(
+            ["--run-dir", str(tmp_path / "a"), "--corpus", "c", "--probe-set-dir", str(sets)])}
+        evaluate = steps["evaluate"]
+        assert evaluate[evaluate.index("--reports-dir") + 1] == str(sets)
+        assert "--output" not in evaluate, "its pictures stay beside the checkpoint"
+
+    def test_the_cache_and_the_reports_can_leave_the_run_dir(self, tmp_path):
+        """The layout's places: the cache and the reports computed from a
+        checkpoint live under output/, not in the model's run directory."""
+        cache, reports = tmp_path / "cache" / "run", tmp_path / "reports" / "run"
+        steps = _plan(["--run-dir", str(tmp_path / "a"), "--corpus", "c",
+                       "--cache-dir", str(cache), "--reports-out", str(reports)])
+        for step, command, _ in steps[1:]:
+            assert command[command.index(
+                "--output-root" if step == "encode" else "--abilities-root") + 1] == str(cache)
+            if step.endswith("probes"):
+                assert command[command.index("--reports-dir") + 1] == str(reports)
+        evaluate = next(c for s, c, _ in steps if s == "evaluate")
+        assert evaluate[evaluate.index("--output") + 1] == str(reports / "evaluation")
+
     def test_training_encoding_and_evaluation_read_the_variant_tree(self, tmp_path):
         steps = {s: c for s, c, _ in _plan(["--run-dir", str(tmp_path), "--corpus", "c"])}
         for step in ("train", "encode", "evaluate"):

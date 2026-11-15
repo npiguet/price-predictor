@@ -1600,3 +1600,34 @@ class TestFreezeSelectionSet:
         with pytest.raises(SystemExit, match="no selection set"):
             frozen_grid_records(SimpleNamespace(corpus_digest="other"), "evasion",
                                 reports_dir=tmp_path)
+
+
+# ── where a probing run's report goes ───────────────────────────────────
+
+
+class TestTheReportDirectory:
+    """``--output DIR`` is the report directory itself, its ``run.json``
+    included; without it the report goes to a dated directory under
+    ``--reports-dir``."""
+
+    def test_without_output_the_report_is_dated_under_reports_dir(self, tmp_path):
+        args = run.parse_args(["--checkpoint", "m/run/latest.pt", "--reports-dir", str(tmp_path)])
+        assert args.output is None
+        assert run.output_dir(args, "2026-11-20") == (
+            tmp_path / "knowledge-probes-run-latest-20261120")
+
+    def test_output_names_the_report_directory(self, tmp_path):
+        args = run.parse_args(["--checkpoint", "m/run/latest.pt", "--output", str(tmp_path / "r")])
+        assert run.output_dir(args, "2026-11-20") == tmp_path / "r"
+
+    def test_the_freeze_refuses_it(self):
+        with pytest.raises(SystemExit):
+            run.parse_args(["--freeze-probe-set", "--corpus", "c", "--output", "r"])
+
+    def test_the_manifest_is_kept_in_it(self, tmp_path, monkeypatch):
+        report = tmp_path / "reports" / "2026-11-20-rule-mask-hard"
+        monkeypatch.setattr(run, "_probe_run", lambda args: 0)
+        assert run.main(["--checkpoint", str(tmp_path / "latest.pt"), "--output", str(report),
+                         "--probe-set-dir", str(tmp_path / "sets")]) == 0
+        assert json.loads((report / "run.json").read_text(encoding="utf-8"))["status"] == (
+            "finished")

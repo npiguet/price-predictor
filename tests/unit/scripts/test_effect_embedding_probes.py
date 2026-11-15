@@ -10,6 +10,7 @@ pass by assuming 64.
 
 from __future__ import annotations
 
+import argparse
 import datetime
 import json
 import shutil
@@ -202,6 +203,20 @@ class TestRunManifest:
         ]
         assert manifest["status"] == "finished"
         assert out.name == f"embedding-probes-arm-latest-{datetime.date.today():%Y%m%d}"
+
+    def test_output_names_the_report_directory_itself(self, tmp_path, monkeypatch):
+        """The layout's report run directory, its manifest and files in it."""
+        report = tmp_path / "reports" / "2026-11-20-rule-mask-hard-embedding"
+        argv = ["--checkpoint", str(tmp_path / "arm" / "latest.pt"), "--output", str(report)]
+        monkeypatch.setattr(sys, "argv", ["build_texts.py", *argv])
+
+        with pytest.raises(SystemExit):
+            common.main_with_manifest(lambda: None, "scripts/effect_embedding_probes/x.py")
+
+        assert json.loads((report / "run.json").read_text(encoding="utf-8"))["status"] == (
+            "finished")
+        args = common.add_probe_arguments(argparse.ArgumentParser()).parse_args(argv)
+        assert common.report_dir(args.checkpoint, output=args.output) == report
 
 
 # ── effect profiles ─────────────────────────────────────────────────────

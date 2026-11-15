@@ -126,6 +126,19 @@ class TestDispatch:
 
         assert dispatch(args, {"write": Writes(broken)}, module="toy", argv=[]) == 0
 
+    def test_create_may_depend_on_the_arguments(self, tmp_path: Path):
+        parser = toy_parser()
+        tag_subcommands(parser)
+        out = tmp_path / "run"
+        argv = ["write", "--out", str(out)]
+        args = parser.parse_args(argv)
+        never = {"write": Writes("out", create=lambda _args: False)}
+        assert dispatch(args, never, module="toy", argv=argv) == 0
+        assert not out.exists()
+        always = {"write": Writes("out", create=lambda _args: True)}
+        assert dispatch(args, always, module="toy", argv=argv) == 0
+        assert (out / "run.json").is_file()
+
 
 class TestPricePredictorCli:
     def test_every_subcommand_is_declared(self):
@@ -166,3 +179,34 @@ class TestPricePredictorCli:
 
     def test_predict_writes_none(self):
         assert cli.RUN_MANIFESTS["predict sklearn"] is READ_ONLY
+
+    def test_check_convert_reports_into_the_converted_tree_by_default(self, tmp_path):
+        converted, cards = tmp_path / "cardsfolder", tmp_path / "forge"
+        converted.mkdir()
+        cards.mkdir()
+        args = cli.build_parser().parse_args([
+            "check-convert", "--output-path", str(converted), "--cards-path", str(cards),
+        ])
+        assert args.report is None
+        spec = cli.RUN_MANIFESTS["check-convert"]
+        assert spec.run_dir(args) == converted
+        assert cli.run_check_convert(args) == 0
+        assert (converted / "check_report.txt").is_file()
+
+    def test_report_names_the_report_file_and_its_run_directory(self, tmp_path, monkeypatch):
+        from price_predictor import __main__ as entry
+
+        converted, cards = tmp_path / "cardsfolder", tmp_path / "forge"
+        converted.mkdir()
+        cards.mkdir()
+        report = tmp_path / "reports" / "2026-11-20-convert-check" / "check_report.txt"
+        argv = ["check-convert", "--output-path", str(converted), "--cards-path", str(cards),
+                "--report", str(report)]
+        monkeypatch.setattr(sys, "argv", ["price_predictor", *argv])
+
+        assert entry.main() == 0
+
+        assert report.is_file()
+        assert not (converted / "check_report.txt").exists()
+        assert not (converted / "run.json").exists()
+        assert_well_formed(report.parent, command="python -m price_predictor " + " ".join(argv))

@@ -121,8 +121,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="skip the turn and step conditions, anthem and "
                              "target-legality probes")
     parser.add_argument("--reports-dir", type=Path, default=common.REPORTS,
-                        help="where the report directory goes, and the selection "
-                             "set unless --probe-set-dir is given")
+                        help="where the dated report directory goes unless --output "
+                             "is given, and the selection set unless --probe-set-dir is")
+    parser.add_argument("--output", type=Path, default=None,
+                        help="the report directory itself, its run.json included "
+                             "(default: knowledge-probes-<checkpoint>-<date>/ under "
+                             "--reports-dir); refused with --freeze-probe-set")
     parser.add_argument("--probe-set-dir", type=Path, default=None,
                         help="where the selection set is written and read "
                              "(default: --reports-dir); every arm of a sweep "
@@ -146,6 +150,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                          "model exists: drop --checkpoint")
         if args.corpus is None:
             parser.error("--freeze-probe-set needs --corpus DIR")
+        if args.output is not None:
+            parser.error("--freeze-probe-set writes the selection set into "
+                         "--probe-set-dir (or --reports-dir): drop --output")
     elif args.checkpoint is None:
         parser.error("--checkpoint is required (or --freeze-probe-set --corpus DIR)")
     return args
@@ -814,6 +821,14 @@ def report_dir(reports_dir: Path, checkpoint: Path, date: str) -> Path:
     return Path(reports_dir) / f"knowledge-probes-{label}-{date.replace('-', '')}"
 
 
+def output_dir(args: argparse.Namespace, date: str) -> Path:
+    """A probing run's report directory: ``--output``, else the one dated
+    ``date`` under ``--reports-dir``."""
+    if args.output is not None:
+        return Path(args.output)
+    return report_dir(args.reports_dir, args.checkpoint, date)
+
+
 def freeze_selection(args: argparse.Namespace) -> int:
     """Freeze the corpus's selection set with no checkpoint (research E1): 0
     once written, 1 when a half or a component misses its target."""
@@ -862,7 +877,7 @@ def main(argv: list[str] | None = None) -> int:
     # The report directory is named for today, as the scorecard is dated.
     today = datetime.now(UTC).strftime("%Y-%m-%d")
     return run_script(
-        report_dir(args.reports_dir, args.checkpoint, today), lambda: _probe_run(args),
+        output_dir(args, today), lambda: _probe_run(args),
         script=__file__, argv=argv,
         inputs=[
             args.checkpoint, args.corpus, *(args.cards_folder or ()), args.abilities_root,
@@ -884,7 +899,7 @@ def _probe_run(args: argparse.Namespace) -> int:
         scorecard = probe(args, context, selection)
     except (MixedGenerationsError, UnacceptedGenerationError) as error:
         raise SystemExit(str(error)) from None
-    out_dir = report_dir(args.reports_dir, args.checkpoint, scorecard.date)
+    out_dir = output_dir(args, scorecard.date)
     common.write_json(out_dir / "scorecard.json", scorecard.to_json())
     write_tables(out_dir, scorecard)
     peak = scorecard.runtime["peak_gpu_bytes"] / 2**30

@@ -445,6 +445,7 @@ No new flag. Behaviour:
 | `--corpus DIR` | required | the curated corpus to freeze against |
 | `--checkpoint PATH` | — | refused with `--freeze-probe-set` |
 | `--probe-set-dir DIR` | `--reports-dir` (`output/effects/reports/`) | where the set is written |
+| `--output DIR` | — | refused with `--freeze-probe-set` (exit 2, usage) |
 
 Writes `<probe-set-dir>/selection-set-<corpus digest>.json` ([selection-set.md](selection-set.md)).
 A set already there is never replaced: the same set again leaves the file as it is, another exits 1
@@ -485,9 +486,16 @@ epoch's training seconds. Shard line adds `rel_k_norm` and `rel_v_norm` (pre-cli
 
 ## `python -m effects evaluate-effect-model` and the knowledge probes (existing)
 
-`evaluate-effect-model`: no new flag. Exit 1 unless every record carries `generation: 3`, or when
+`evaluate-effect-model`:
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--reports-dir DIR` | `output/effects/reports/` | where the selection set frozen for the corpus is found, by the corpus digest, as on `train-effect-model` |
+| `--output DIR` | `<checkpoint stem>.evaluation/` beside `--checkpoint` | the directory the files the report names (the UMAP picture and its table) are written to, and the run directory |
+
+Exit 1 unless every record carries `generation: 3`, or when
 the checkpoint's `input_layout` is not `gen-3`. It scores the reporting halves of the selection set
-found by the corpus digest under `output/effects/reports/` (the config's `reports_dir`), under the
+found by the corpus digest under `--reports-dir`, under the
 checkpoint's recorded `--rule-mask`, `--stratum-weight` and `--deviance-floor`, and prints per stratum
 `reporting-half <stratum>` (components and score) with each component's items (the deviance items
 also summed up by head), `rule-tests <stratum> reporting` per rule, and `reporting-half control` beside the checkpoint's `best_control_score`;
@@ -499,6 +507,7 @@ without a set it prints that the reporting half is skipped.
 |---|---|---|
 | `--half both\|selection\|reporting` | both | the selection set's halves read and reported |
 | `--probe-set-dir DIR` | `--reports-dir` | where the selection set is read |
+| `--output DIR` | `<reports-dir>/knowledge-probes-<checkpoint>-<date>/` | the report directory, the run directory |
 | `--probe-records N` | 1000 | qualifying records each gen-3 probe reads per half |
 | `--probe-per-game N` | 3 | of those, at most per game |
 
@@ -516,3 +525,13 @@ reads there is named by a flag.
 | Command | Flag | Default | Meaning |
 |---|---|---|---|
 | `sealed train-encoder` | `--win-rates-output PATH` | `cards-win-rates.txt` in `--model-output` when that is given, else `output/sealed/cards-win-rates.txt` | the per-card win-rate table |
+| `price_predictor check-convert` | `--report PATH` | `check_report.txt` in `--output-path` | the full report; its directory is the run directory |
+| `price_predictor predict sklearn` | `--model-path PATH` | `models/price-predictor/sklearn/latest.joblib` | the model predicted with |
+| `price_predictor predict transformer` | `--model-path DIR` | `models/price-predictor/transformer/` | the directory of the model's `latest.pt` |
+| `price_predictor serve` | `--transformer-path DIR` | `models/price-predictor/transformer/` | the optional transformer's directory |
+| `scripts/effect_embedding_probes/*.py` | `--output DIR` | `<reports-dir>/embedding-probes-<checkpoint>-<date>/` | the battery's report directory, shared by every script given it |
+| `scripts/effect_sweep_arm.py` | `--cache-dir DIR` | `abilities/` in `--run-dir` | the arm's ability cache |
+| `scripts/effect_sweep_arm.py` | `--reports-out DIR` | `reports/` in `--run-dir` | the arm's probe reports; when given, the evaluation's files go to `DIR/evaluation/` |
+
+`scripts/effect_sweep_arm.py` passes its `--probe-set-dir` to `evaluate-effect-model` as
+`--reports-dir`.

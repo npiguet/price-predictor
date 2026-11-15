@@ -83,9 +83,11 @@ class EvaluateEffectModelConfig:
     abilities_root: Path = Path(default_paths.DEFAULT_ABILITIES_ROOT)
     #: The per-card win-rate table the decodability battery reads (FR-070).
     win_rates: Path = Path(default_paths.DEFAULT_WIN_RATES)
-    #: Where the selection set frozen for the corpus is found, by its digest;
-    #: no flag (contracts/cli.md), the default training reads it from.
+    #: Where the selection set frozen for the corpus is found, by its digest:
+    #: ``--reports-dir``, as on ``train-effect-model``.
     reports_dir: Path = Path(default_paths.DEFAULT_REPORTS_DIR)
+    #: ``--output``: the directory the files the report names are written to.
+    output: Path | None = None
 
     @property
     def source_trees(self) -> SourceTrees:
@@ -96,11 +98,19 @@ class EvaluateEffectModelConfig:
 
     @property
     def output_dir(self) -> Path:
-        """Where the files the report names are written: a directory beside
-        ``--checkpoint`` named for it, since the report itself is printed and
-        two checkpoints in one directory must not overwrite each other's."""
-        checkpoint = Path(self.checkpoint)
-        return checkpoint.parent / f"{checkpoint.stem}.evaluation"
+        """Where the files the report names are written: ``--output``, else
+        a directory beside ``--checkpoint`` named for it, since the report
+        itself is printed and two checkpoints in one directory must not
+        overwrite each other's."""
+        return evaluation_dir(self.checkpoint, self.output)
+
+
+def evaluation_dir(checkpoint: Path, output: Path | None) -> Path:
+    """``output``, else ``<checkpoint stem>.evaluation/`` beside ``checkpoint``."""
+    if output is not None:
+        return Path(output)
+    checkpoint = Path(checkpoint)
+    return checkpoint.parent / f"{checkpoint.stem}.evaluation"
 
 
 def parse_baseline_checkpoint(value: str) -> tuple[Baseline, Path]:

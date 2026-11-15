@@ -117,6 +117,8 @@ def build_parser() -> argparse.ArgumentParser:
             p.add_argument("--vocab-path", type=str,
                            default="models/price-predictor/transformer/vocab.txt",
                            help="Path to vocab.txt")
+        p.add_argument("--model-path", type=str, default=_PREDICT_MODEL_PATHS[model_name],
+                       help="The model to predict with (default: %(default)s)")
         p.set_defaults(func=handler)
 
     # ── evaluate {model} ─────────────────────────────────────────
@@ -158,6 +160,10 @@ def build_parser() -> argparse.ArgumentParser:
     serve_parser.add_argument("--vocab-path", type=str,
                               default="models/price-predictor/transformer/vocab.txt",
                               help="Path to vocab.txt for transformer predictions")
+    serve_parser.add_argument("--transformer-path", type=str,
+                              default=_PREDICT_MODEL_PATHS["transformer"],
+                              help="Directory of the optional transformer's latest.pt "
+                                   "(default: %(default)s)")
     serve_parser.set_defaults(func=run_serve)
 
     # ── vocabulary ────────────────────────────────────────────────
@@ -241,6 +247,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--limit", type=int, default=0,
         help="Max number of results to show (0 = all)",
     )
+    check_parser.add_argument(
+        "--report", type=str, default=None,
+        help=(
+            "The full report's file, its directory the run directory "
+            f"(default: {CHECK_REPORT_NAME} in --output-path)"
+        ),
+    )
     check_parser.set_defaults(func=run_check_convert)
 
     return parser
@@ -315,7 +328,7 @@ def run_serve(args: argparse.Namespace) -> int:
     artifact["model_version"] = model_path.stem
 
     transformer_artifact, tokenizer = _load_optional_transformer_bundle(
-        Path(args.vocab_path)
+        Path(args.vocab_path), Path(args.transformer_path),
     )
 
     printing_data_map = None
@@ -392,6 +405,17 @@ def run_convert(args: argparse.Namespace) -> int:
         return 2
 
 
+#: ``check-convert``'s report, by default in the converted tree it checks.
+CHECK_REPORT_NAME = "check_report.txt"
+
+
+def _check_report(args: argparse.Namespace) -> Path:
+    """``--report``, else :data:`CHECK_REPORT_NAME` in ``--output-path``."""
+    if args.report:
+        return Path(args.report)
+    return Path(args.output_path) / CHECK_REPORT_NAME
+
+
 def run_check_convert(args: argparse.Namespace) -> int:
     """Execute the check-convert command."""
     from price_predictor.application.check_convert import check_all, format_report
@@ -408,7 +432,8 @@ def run_check_convert(args: argparse.Namespace) -> int:
 
     results = check_all(output_dir, cards_dir, threshold=args.threshold)
 
-    report_path = output_dir / "check_report.txt"
+    report_path = _check_report(args)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(format_report(results), encoding="utf-8")
     logger.info("Report written to %s (%d cards with issues)", report_path, len(results))
     print(format_report(results, limit=args.limit))
@@ -559,12 +584,20 @@ def _read_card_text(args: argparse.Namespace) -> str | None:
     return args.card
 
 
+#: The model each ``predict`` reads by default: the rolling checkpoint its
+#: trainer writes by default.
+_PREDICT_MODEL_PATHS = {
+    "sklearn": "models/price-predictor/sklearn/latest.joblib",
+    "transformer": "models/price-predictor/transformer/",
+}
+
+
 def _load_optional_transformer_bundle(
-    vocab_path: Path,
+    vocab_path: Path, transformer_dir: Path = Path(_PREDICT_MODEL_PATHS["transformer"]),
 ) -> tuple[dict[str, Any] | None, Any | None]:
     """Load the transformer artifact + tokenizer for `serve`. Either may be None."""
     transformer_artifact: dict[str, Any] | None = None
-    transformer_dir = Path("models/price-predictor/transformer/")
+    transformer_dir = Path(transformer_dir)
     transformer_pt = transformer_dir / "latest.pt"
     if transformer_pt.exists():
         try:
@@ -625,7 +658,7 @@ def run_predict_sklearn(args: argparse.Namespace) -> int:
         from dataclasses import replace
         card = replace(card, printing_data=printing_data)
 
-    model_path = Path("models/price-predictor/sklearn/latest.joblib")
+    model_path = Path(args.model_path)
     try:
         use_case = PredictPriceUseCase()
         result = use_case.execute(card, model_path)
@@ -674,7 +707,7 @@ def run_predict_transformer(args: argparse.Namespace) -> int:
         logger.error("Failed to load tokenizer: %s", e)
         return 1
 
-    model_dir = Path("models/price-predictor/transformer/")
+    model_dir = Path(args.model_path)
     try:
         use_case = PredictTransformerUseCase()
         result = use_case.execute(card_text, model_dir, tokenizer=tokenizer,
@@ -805,6 +838,10 @@ RUN_MANIFESTS: ManifestTable = {
     "serve": READ_ONLY,
     "vocabulary": Writes("output_dir", inputs=("cards_path", "printings_path")),
     "convert": Writes(_converted_root, inputs=("cards_path", "tokens_path")),
-    # Its report lands in the converted tree it checks, which it never creates.
-    "check-convert": Writes("output_path", create=False, inputs=("output_path", "cards_path")),
+    # Its report lands in --report's directory, else in the converted tree it
+    # checks, which it never creates.
+    "check-convert": Writes(
+        _check_report, file=True, create=lambda args: bool(args.report),
+        inputs=("output_path", "cards_path"),
+    ),
 }

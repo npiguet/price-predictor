@@ -41,3 +41,45 @@ class TestPredictParserStructure:
         parser = build_parser()
         with pytest.raises(SystemExit):
             parser.parse_args(["predict", "--types", "Creature"])
+
+
+class TestThePredictorsNameTheirModel:
+    """``--model-path`` names the model a prediction reads, defaulting to the
+    rolling checkpoint each trainer writes by default."""
+
+    def test_the_defaults(self) -> None:
+        parser = build_parser()
+        assert parser.parse_args(["predict", "sklearn", "--card", "x"]).model_path == (
+            "models/price-predictor/sklearn/latest.joblib")
+        assert parser.parse_args(["predict", "transformer", "--card", "x"]).model_path == (
+            "models/price-predictor/transformer/")
+
+    def test_the_sklearn_prediction_reads_the_named_model(self, monkeypatch, tmp_path) -> None:
+        from pathlib import Path
+
+        from price_predictor.application import predict as predict_module
+        from price_predictor.infrastructure import cli
+
+        seen = {}
+
+        class FakeUseCase:
+            def execute(self, card, model_path):
+                seen["model_path"] = model_path
+                from types import SimpleNamespace
+                return SimpleNamespace(predicted_price_eur=1.0, model_version="v")
+
+        monkeypatch.setattr(predict_module, "PredictPriceUseCase", FakeUseCase)
+        monkeypatch.setattr(cli, "_resolve_optional_printing_data", lambda name: None)
+        model = tmp_path / "models" / "run" / "latest.joblib"
+        args = build_parser().parse_args([
+            "predict", "sklearn", "--card", "name: test\ntypes: creature",
+            "--model-path", str(model),
+        ])
+        assert cli.run_predict_sklearn(args) == 0
+        assert seen["model_path"] == Path(model)
+
+    def test_serve_names_its_optional_transformer(self) -> None:
+        args = build_parser().parse_args(["serve"])
+        assert args.transformer_path == "models/price-predictor/transformer/"
+        args = build_parser().parse_args(["serve", "--transformer-path", "m/run/"])
+        assert args.transformer_path == "m/run/"

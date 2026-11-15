@@ -43,14 +43,15 @@ class Writes:
     the dests (or functions) of every path the command reads; a value may be
     a path, a list of paths or None. ``create`` false is for a command whose
     output is a tree it expects to exist (``encode-cards`` writing beside
-    the cards): no directory is created for the manifest. ``when``, given,
+    the cards): no directory is created for the manifest; a function of the
+    parsed arguments decides per invocation. ``when``, given,
     decides whether this invocation writes at all (a ``--verify`` mode).
     """
 
     output: str | ArgumentValue
     file: bool = False
     inputs: tuple[str | ArgumentValue, ...] = ()
-    create: bool = True
+    create: bool | Callable[[argparse.Namespace], bool] = True
     when: Callable[[argparse.Namespace], bool] | None = None
 
     def run_dir(self, args: argparse.Namespace) -> Path | None:
@@ -162,5 +163,6 @@ def dispatch(
     return run_recorded(
         run_dir, lambda: args.func(args),
         command=command_line(sys.argv[1:] if argv is None else argv, module=module),
-        inputs=inputs, create=entry.create,
+        inputs=inputs,
+        create=entry.create(args) if callable(entry.create) else entry.create,
     )

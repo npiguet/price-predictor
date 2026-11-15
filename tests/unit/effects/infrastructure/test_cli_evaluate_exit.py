@@ -60,7 +60,7 @@ def test_a_corpus_not_wholly_gen3_or_a_checkpoint_of_another_layout_exits_one(
 
 
 def test_the_selection_set_is_found_where_training_finds_it() -> None:
-    """No new flag: the reports directory is training's default."""
+    """``--reports-dir`` defaults to the directory training reads it from."""
     from pathlib import Path
 
     from effects.application.evaluation_context import EvaluateEffectModelConfig
@@ -70,4 +70,5 @@ def test_the_selection_set_is_found_where_training_finds_it() -> None:
     args = build_parser().parse_args(["evaluate-effect-model"])
     config = config_from_args(EvaluateEffectModelConfig, args)
     assert config.reports_dir == Path(DEFAULT_REPORTS_DIR)
-    assert not hasattr(args, "reports_dir")
+    train = build_parser().parse_args(["train-effect-model", "--corpus", "c"])
+    assert Path(args.reports_dir) == Path(train.reports_dir)

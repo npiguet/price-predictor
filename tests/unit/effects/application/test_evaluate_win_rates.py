@@ -60,3 +60,40 @@ def test_an_explicit_variant_tree_or_none_recorded_is_kept():
     assert with_corpus_defaults(chosen, recorded).variant_scripts == Path("elsewhere")
     blank = manifest(variant_scripts="")
     assert with_corpus_defaults(EvaluateEffectModelConfig(), blank).variant_scripts is None
+
+
+# ── where the report goes and where the selection set is read ────────────
+
+
+def test_the_pictures_go_beside_the_checkpoint_by_default(monkeypatch, tmp_path):
+    checkpoint = tmp_path / "run" / "latest.pt"
+    config = _config_from(["--checkpoint", str(checkpoint)], monkeypatch)
+    assert config.output is None
+    assert config.output_dir == tmp_path / "run" / "latest.evaluation"
+
+
+def test_output_names_the_report_directory(monkeypatch, tmp_path):
+    report = tmp_path / "reports" / "2026-11-20-rule-mask-hard-evaluation"
+    config = _config_from(["--output", str(report)], monkeypatch)
+    assert config.output_dir == report
+
+
+def test_reports_dir_names_where_the_selection_set_is_read(monkeypatch, tmp_path):
+    assert _config_from([], monkeypatch).reports_dir == Path("output/effects/reports/")
+    frozen = tmp_path / "reports" / "2026-11-18-selection-set"
+    assert _config_from(["--reports-dir", str(frozen)], monkeypatch).reports_dir == frozen
+
+
+def test_the_run_directory_follows_output():
+    from effects.infrastructure import cli
+
+    spec = cli.RUN_MANIFESTS["evaluate-effect-model"]
+    default = build_parser().parse_args(
+        ["evaluate-effect-model", "--checkpoint", "models/effects/gen3/m/run/latest.pt"])
+    assert spec.run_dir(default) == Path("models/effects/gen3/m/run/latest.evaluation")
+    chosen = build_parser().parse_args([
+        "evaluate-effect-model", "--output", "output/effects/gen3/reports/run",
+        "--reports-dir", "output/effects/gen3/reports/frozen",
+    ])
+    assert spec.run_dir(chosen) == Path("output/effects/gen3/reports/run")
+    assert Path("output/effects/gen3/reports/frozen") in spec.input_paths(chosen)

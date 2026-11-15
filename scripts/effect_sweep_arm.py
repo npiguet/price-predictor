@@ -10,8 +10,11 @@ directory then holds:
 
 - ``latest.pt`` and the timestamped checkpoints;
 - ``abilities/``, the ability cache this checkpoint encoded, so one arm's
-  probes never read another arm's cache;
-- ``reports/``, the embedding-probe and knowledge-probe report directories;
+  probes never read another arm's cache, unless ``--cache-dir`` names
+  another directory (the layout's ``output/effects/<gen>/cache/<run>/``);
+- ``reports/``, the embedding-probe and knowledge-probe report directories,
+  unless ``--reports-out`` names another (``output/effects/<gen>/reports/<run>/``),
+  which then holds the evaluation's pictures too, under ``evaluation/``;
 - ``resume.pt``, rewritten after every training epoch, which ``--resume``
   continues from when the training step was interrupted;
 - one log per step (``arm.log``, ``train.log``, ``encode.log``,
@@ -81,9 +84,12 @@ def plan(args: argparse.Namespace, train_args: list[str]) -> list[tuple[str, lis
     python = [sys.executable, "-u"]
     run_dir = args.run_dir
     checkpoint = str(run_dir / "latest.pt")
-    abilities = str(run_dir / "abilities")
-    reports = str(run_dir / "reports")
+    abilities = str(args.cache_dir or run_dir / "abilities")
+    reports = str(args.reports_out or run_dir / "reports")
     probe = ["--checkpoint", checkpoint, "--abilities-root", abilities]
+    # Beside the checkpoint unless the reports leave the run directory.
+    pictures = (["--output", str(args.reports_out / "evaluation")]
+                if args.reports_out is not None else [])
     # Without the variant tree a variant record resolves to no ability text in
     # training, encoding and evaluation alike, and nothing reports it.
     variants = ["--variant-scripts", str(args.variant_scripts)]
@@ -107,7 +113,8 @@ def plan(args: argparse.Namespace, train_args: list[str]) -> list[tuple[str, lis
                              "--checkpoint", checkpoint, *variants,
                              "--output-root", abilities],
          "encode.log"),
-        ("evaluate", python + ["-m", "effects", "evaluate-effect-model", *probe, *variants],
+        ("evaluate", python + ["-m", "effects", "evaluate-effect-model", *probe, *variants,
+                               "--reports-dir", str(args.probe_set_dir), *pictures],
          "evaluate.log"),
     ]
     for script in EMBEDDING_PROBES:
@@ -144,6 +151,13 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
                         help="skip the steps before this one, e.g. after a crash")
     parser.add_argument("--probe-set-dir", type=Path, default=SHARED_REPORTS,
                         help="where the shared selection set lives")
+    parser.add_argument("--cache-dir", type=Path, default=None,
+                        help="the ability cache's directory (default: abilities/ "
+                             "in --run-dir)")
+    parser.add_argument("--reports-out", type=Path, default=None,
+                        help="the probe reports' directory, and the evaluation's "
+                             "under evaluation/ (default: reports/ in --run-dir, the "
+                             "evaluation's pictures beside the checkpoint)")
     parser.add_argument("--freeze-probe-set", action="store_true",
                         help="freeze the corpus's selection set before training "
                              "(first arm on a corpus)")

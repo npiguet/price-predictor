@@ -153,6 +153,14 @@ def add_probe_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentPar
             "goes in (default: output/effects/reports/)"
         ),
     )
+    parser.add_argument(
+        "--output", type=Path, default=None,
+        help=(
+            "The run's report directory itself, its run.json included, shared "
+            "by every script of the battery given it (default: the dated "
+            "folder under --reports-dir)"
+        ),
+    )
     return parser
 
 
@@ -177,6 +185,7 @@ def paths_for(
     cards_folders=None,
     today: datetime.date | None = None,
     reports_dir: Path | None = None,
+    output: Path | None = None,
 ) -> ProbePaths:
     """The run's paths from a checkpoint's recorded provenance.
 
@@ -196,7 +205,7 @@ def paths_for(
     return ProbePaths(
         checkpoint=checkpoint,
         abilities_root=Path(abilities_root),
-        out=report_dir(checkpoint, reports_dir, today),
+        out=report_dir(checkpoint, reports_dir, today, output=output),
         cards_folders=folders,
         surface=surface_of(Path(provenance.vocab_path)),
         e_width=cache_e_width(abilities_root),
@@ -206,8 +215,12 @@ def paths_for(
 
 def report_dir(
     checkpoint: Path, reports_dir: Path | None = None, today: datetime.date | None = None,
+    *, output: Path | None = None,
 ) -> Path:
-    """``<reports-dir>/embedding-probes-<checkpoint>-<date>/``, the run's report directory."""
+    """The run's report directory: ``output`` (``--output``), else
+    ``<reports-dir>/embedding-probes-<checkpoint>-<date>/``."""
+    if output is not None:
+        return Path(output)
     date = (today or datetime.date.today()).strftime("%Y%m%d")
     return (Path(reports_dir) if reports_dir else REPORTS) / (
         f"embedding-probes-{checkpoint_label(Path(checkpoint))}-{date}"
@@ -228,7 +241,7 @@ def main_with_manifest(main: Callable[[], object], script: str) -> None:
         return
     args, _ = add_probe_arguments(argparse.ArgumentParser(add_help=False)).parse_known_args()
     raise SystemExit(run_script(
-        report_dir(args.checkpoint, args.reports_dir), main, script=script,
+        report_dir(args.checkpoint, args.reports_dir, output=args.output), main, script=script,
         inputs=[args.checkpoint, args.abilities_root, *(args.cards_folders or ())],
     ))
 
@@ -244,6 +257,7 @@ def resolve_paths(args: argparse.Namespace) -> ProbePaths:
         recorded_folders=getattr(loaded, "cards_folders", ()),
         cards_folders=getattr(args, "cards_folders", None),
         reports_dir=getattr(args, "reports_dir", None),
+        output=getattr(args, "output", None),
     )
     if loaded.encoder_config.e_dim != paths.e_width:
         raise ValueError(
