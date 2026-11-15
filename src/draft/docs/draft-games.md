@@ -11,7 +11,7 @@ Rules to respect when running or changing `play-draft-games`, comparing agents b
 - `--n-pairings` counts the rows this invocation recorded, not a pre-existing file. Without it the run plays until Ctrl-C.
 - A pairing lost to a failure or a recycle is simply redrawn. Nothing was reserved for it, so there is no skipped count.
 - Progress, restart and recycling come from the shared `ForgeWorkerPool`.
-- Reporting is not part of the command: tally with `python scripts/analyze_winrates.py output/draft/draft-games.txt`.
+- Reporting is not part of the command: tally with `python scripts/analyze_winrates.py <run dir>/draft-games.txt`.
 - The fat JAR must be rebuilt first (`cd forge-connector && mvn install -DskipTests`).
 
 ## `forge-native`

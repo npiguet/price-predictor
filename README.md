@@ -19,7 +19,7 @@ pip install -e ".[dev]" --extra-index-url https://download.pytorch.org/whl/cu126
 (cd ../forge && mvn install -DskipTests)
 (cd forge-connector && mvn install -DskipTests)
 
-pytest                             # fast unit tests
+pytest tests/unit                  # the unit tests; a bare pytest also runs tests/integration, which drives Forge JVMs
 ```
 
 ## Modules

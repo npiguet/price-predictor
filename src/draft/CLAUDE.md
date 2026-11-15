@@ -2,7 +2,7 @@
 
 Entry point: `python -m draft <subcommand>` (see `src/draft/__main__.py` and `infrastructure/cli.py`). A draft agent in three generations: gen-1 imitation of Forge's draft AI, gen-2 RL self-play fine-tuning, gen-3 online self-play GRPO. The model is a two-headed Set Transformer, an imitation **policy** over the cards in the current pack plus a Monte-Carlo **critic** on a context token. `draft` **imports from** `sealed` and `price_predictor`, never the reverse, and adds only the genuinely new logic (booster→state geometry, typed-token state, the two-headed model, the Java draft worker).
 
-Every subcommand that writes files keeps a `run.json` run manifest in its run directory (`.claude/skills/artifact-layout/SKILL.md`), declared in `RUN_MANIFESTS` in `infrastructure/cli.py`; every trainer records in its `--checkpoint-dir` (default `models/draft/agent/`, or on `--resume` the directory the resumed run recorded), except that `train-draft-agent-online` without `--checkpoint-dir` records in the directory of its `--output-path`. Every reader of the `.npz` card embeddings takes `--embeddings-path` (`src/sealed/CLAUDE.md` § The embedding cache fixes every downstream width).
+Every subcommand that writes files keeps a `run.json` run manifest in its run directory (`.claude/skills/artifact-layout/SKILL.md`), declared in `RUN_MANIFESTS` in `infrastructure/cli.py`; every trainer records in its `--checkpoint-dir` (on `--resume`, by default the directory the resumed run recorded), except that `train-draft-agent-online` without `--checkpoint-dir` records in the directory of its `--output-path`. Paths follow the `artifact-layout` skill, every one passed explicitly: the flag defaults (`output/draft/...`, `models/draft/agent/`) predate its generation and run levels. Every reader of the `.npz` card embeddings takes `--embeddings-path` (`src/sealed/docs/embedding-cache.md`).
 
 ## Topic files — read on demand
 
@@ -41,17 +41,17 @@ Where the rest lives:
 
 Append-only data contracts spanning the Java writers and the Python readers — no single source file teaches a whole one, and a mismatch silently corrupts a corpus that cannot easily be rebuilt.
 
-**Drafts** (`output/draft/drafts.jsonl`): one self-contained JSON record per line, append-only; readers tolerate a trailing partial final line. Each record has `draft_id`, `run_id`, `timestamp` (ISO 8601 UTC), `seats` (length `pod_size`; each `{agent, deck (40 names incl. basics, or [] on failed build), deck_score (scorer scalar, or null on failed build)}`), and `boosters` (length `pod_size × packs`; each `{set_code, picks}` where `picks` is the cards drafted from that physical pack in pick order, fully drained to `pack_size`). The booster *ordering* pins all geometry: `pack_number(k)=⌊k/pod_size⌋+1`, `opening_seat(k)=k mod pod_size`, and the pick at offset `j` of `boosters[k]` was made by seat `(opening_seat + j·dir_p) mod pod_size` with `dir_p=+1` for packs 1 & 3 and `−1` for pack 2 — so any seat's full observation history reconstructs from the record alone (`draft/domain/draft_geometry.py`).
+**Drafts** (`drafts.jsonl`, `generate-draft-data --output-path`): one self-contained JSON record per line, append-only; readers tolerate a trailing partial final line. Each record has `draft_id`, `run_id`, `timestamp` (ISO 8601 UTC), `seats` (length `pod_size`; each `{agent, deck (40 names incl. basics, or [] on failed build), deck_score (scorer scalar, or null on failed build)}`), and `boosters` (length `pod_size × packs`; each `{set_code, picks}` where `picks` is the cards drafted from that physical pack in pick order, fully drained to `pack_size`). The booster *ordering* pins all geometry: `pack_number(k)=⌊k/pod_size⌋+1`, `opening_seat(k)=k mod pod_size`, and the pick at offset `j` of `boosters[k]` was made by seat `(opening_seat + j·dir_p) mod pod_size` with `dir_p=+1` for packs 1 & 3 and `−1` for pack 2 — so any seat's full observation history reconstructs from the record alone (`draft/domain/draft_geometry.py`).
 
 - The schema is the same across the three generations. No field says which checkpoint generated a corpus.
 
-**Draft games** (`output/draft/draft-games.txt`): the same ten-field match-outcome format as `output/sealed/match-outcomes.txt` (`src/sealed/CLAUDE.md` § Corpus file formats), one row per match, written by `play-draft-games`.
+**Draft games** (`draft-games.txt`, `play-draft-games --output-path`): the same ten-field match-outcome format as the sealed `match-outcomes.txt` (`src/sealed/CLAUDE.md` § Corpus file formats), one row per match, written by `play-draft-games`.
 
 - `method_A`/`method_B` carry the two seats' labels; `run_id` is the `play-draft-games` invocation.
 - Both decks of a row were drafted in the same pod, but the format has no field for pod identity.
 - It is kept in a separate file from the sealed corpus on purpose: these are draft-pool matches, and `train-scorer` and `train-encoder` must not read them.
-- Tally with `python scripts/analyze_winrates.py output/draft/draft-games.txt`.
+- Tally with `python scripts/analyze_winrates.py <run dir>/draft-games.txt`.
 
 ## Model artifacts
 
-Checkpoints live in the trainer's `--checkpoint-dir`, by default `models/draft/agent/`. The best checkpoint of an offline run is the one with the lowest validation loss; of a gen-3 online run, the one with the highest anchor margin. All three trainers write the gen-1 payload format; the RL trainers add `rl_metadata`.
+Checkpoints live in the trainer's `--checkpoint-dir`, a run directory under `models/draft/<gen>/agent/`. The best checkpoint of an offline run is the one with the lowest validation loss; of a gen-3 online run, the one with the highest anchor margin. All three trainers write the gen-1 payload format; the RL trainers add `rl_metadata`.
