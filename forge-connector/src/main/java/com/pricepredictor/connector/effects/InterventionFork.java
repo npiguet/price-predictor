@@ -32,6 +32,12 @@ final class InterventionFork implements InterventionScheduler.Forcing {
     /** A refusal's reason: the forced ability reached the stack, never began to resolve and did nothing. */
     static final String NEVER_RESOLVED = "never resolved";
 
+    /**
+     * A refusal's reason: the line's resolution reads, unguarded, a cost the
+     * fork does not pay ({@link #readsAnUnpaidCost}).
+     */
+    static final String READS_AN_UNPAID_COST = "reads a cost it never paid";
+
     private final Game game;
     private final CollectorContext context;
     private final ForkBudget budget;
@@ -47,6 +53,31 @@ final class InterventionFork implements InterventionScheduler.Forcing {
         // draw here is a mode or target count, which an unscrambled seed would
         // make nearly the same in every game.
         this.choices = new RandomChoices(new Random(GameRecording.scramble(seed)));
+    }
+
+    /**
+     * Whether {@code line}'s resolution reads what its cost paid where Forge
+     * reads it without a guard, so a forced line, which pays nothing, throws
+     * there: ninjutsu and a sneak cast take the attacker returned to hand
+     * ({@code getPaidList("Returned")}) and the defender it attacked; crewing
+     * or saddling a vehicle or mount already crewed or saddled this turn
+     * adds the creatures tapped to pay to a list it holds. Refused before the
+     * fork is taken, as a line the engine cannot resolve off its normal path.
+     */
+    static boolean readsAnUnpaidCost(SpellAbility line) {
+        if (line == null) {
+            return false;
+        }
+        SpellAbility root = line.getRootAbility();
+        if (root.isNinjutsu() || root.isSneak()) {
+            return true;
+        }
+        forge.game.card.Card host = root.getHostCard();
+        if (host == null) {
+            return false;
+        }
+        return root.isCrew() && host.getCrewedByThisTurn() != null
+                || root.isKeyword(forge.game.keyword.Keyword.SADDLE) && host.getSaddledByThisTurn() != null;
     }
 
     /** Whether the budget lets {@link #intervene} take another fork of this resolution. */
@@ -79,6 +110,12 @@ final class InterventionFork implements InterventionScheduler.Forcing {
 
     private boolean intervene(SpellAbility ability, int realResolutionId, Supplier<Player> perspective) {
         if (!budget.mayIntervene(realResolutionId)) {
+            return false;
+        }
+        if (readsAnUnpaidCost(ability)) {
+            // Before the fork is taken: it would spend the budget and a copy
+            // on a line whose forced resolution throws.
+            ForkRefusals.count("intervention", READS_AN_UNPAID_COST);
             return false;
         }
         Forks.ForkRun run = new Forks.ForkRun(

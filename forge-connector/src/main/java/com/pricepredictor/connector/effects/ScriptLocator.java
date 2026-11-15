@@ -113,9 +113,10 @@ final class ScriptLocator {
      *
      * <p>Two sources, tried in order. A {@link PaperToken} is the token as
      * Forge read it from {@code tokenscripts}, and its image filename starts
-     * with the script stem. A token that was rebuilt by {@code TokenInfo} —
-     * every token in a {@code GameCopier} fork — has no paper card at all, but
-     * {@code TokenInfo.toCard} copies the image key, and a token image key is
+     * with the script stem; a {@code GameCopier} fork's token keeps its
+     * original's. A token that was rebuilt by {@code TokenInfo} without one
+     * has no paper card at all, but {@code TokenInfo.toCard} copies the image
+     * key, and a token image key is
      * {@code t:<stem>[|edition|…]}. The stem read either way is checked
      * against the token database, so a key that names no script (a token copy
      * of a printed card carries the printed card's image key, which is not a

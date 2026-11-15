@@ -15,26 +15,27 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The whole path a forked combat record takes, run once against the real
  * copier.
  *
- * <p>{@code ScriptLocatorTest} reproduces {@code GameCopier}'s shape by hand --
- * a bare {@code Card} carrying the original's name and image key and no paper
- * card -- which is the right unit to pin, and the wrong one to trust alone: it
- * asserts what this project believes the copier does. This test asks the copier
+ * <p>{@code ScriptLocatorTest} pins a token rebuilt by hand -- a bare
+ * {@code Card} carrying the original's name and image key and no paper card --
+ * which is the right unit to pin, and the wrong one to trust alone: it asserts
+ * what this project believes a rebuilt token looks like. This test asks the copier
  * instead. A Food token is put on a real two-player board, the board is forked
  * with {@link GameCopier}, and the fork's copy is rendered by the collectors'
  * own {@link SnapshotBuilder}.
  *
- * <p>The assertion is on the keys of the copy's {@code lines} (FR-150): every
- * ability-bearing token in a forked record arrives without a paper card, and
- * keyed by its name its lines would name {@code cardsfolder/f/food_token.txt}
- * -- a file that does not exist, so the sidecar join would fail loudly and the
- * record carry no ability text at all.
+ * <p>The assertion is on the keys of the copy's {@code lines} (FR-150): an
+ * ability-bearing token in a forked record keyed by its name would name
+ * {@code cardsfolder/f/food_token.txt} -- a file that does not exist, so the
+ * sidecar join would fail loudly and the record carry no ability text at all.
+ * The copier keeps the token's paper card, so the fork keys it as the live
+ * board does.
  *
  * <p>Its own class rather than {@code ForkRecordsTest}, whose class doc says
  * outright that forking a live game is not its job and whose fixture is a
@@ -55,9 +56,8 @@ class CopiedTokenProvenanceTest {
     /**
      * A Food token on a forked board keys its printed line into the token tree.
      *
-     * <p>The end-to-end reading of the unit test: the fork's token really does
-     * arrive with no paper card, and its image key really is what names the
-     * script it came from.
+     * <p>The end-to-end reading of the unit test: the fork's token arrives
+     * with its original's paper card, which names the script it came from.
      */
     @Test
     void aTokenOnAForkedBoardKeysIntoTheTokenTree() {
@@ -78,8 +78,8 @@ class CopiedTokenProvenanceTest {
                 .findFirst().orElseThrow();
 
         assertNotNull(food.getPaperCard(), "the mainline token has its PaperToken");
-        assertNull(copied.getPaperCard(),
-                "GameCopier rebuilds tokens through TokenInfo, without a paper card");
+        assertSame(food.getPaperCard(), copied.getPaperCard(),
+                "GameCopier rebuilds a token through TokenInfo with its original's paper card");
 
         String forked = new SnapshotBuilder(fork).ofBoard().render();
 
