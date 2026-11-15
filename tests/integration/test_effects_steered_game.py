@@ -23,7 +23,7 @@ from effects.infrastructure.one_shot_workers import write_variant_sidecars
 from effects.infrastructure.shard_io import read_records
 from price_predictor.infrastructure.forge_jvm import kill_process_tree
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
-from tests.integration.conftest import POLL_SECONDS, require_jar
+from tests.integration.conftest import POLL_SECONDS, require_jar, stop_file_for, stop_worker
 
 pytestmark = pytest.mark.integration
 
@@ -71,6 +71,7 @@ def test_a_steered_games_records_carry_its_decks_rules(tmp_path: Path) -> None:
     )
     assert all(len(line.split(";")) == 4 for line in decks_file.read_text().splitlines())
 
+    stop_file = stop_file_for(records_dir)
     process = None
     try:
         assert write_variant_sidecars(variants_dir) == 0, "VariantSidecarMain failed"
@@ -89,6 +90,7 @@ def test_a_steered_games_records_carry_its_decks_rules(tmp_path: Path) -> None:
             decks_only=True,
             progress_file=progress_file,
             variant_scripts=variants_dir,
+            stop_file=stop_file,
         )
         deadline = time.monotonic() + _GAME_SECONDS
         while time.monotonic() < deadline:
@@ -99,6 +101,8 @@ def test_a_steered_games_records_carry_its_decks_rules(tmp_path: Path) -> None:
                 break
         else:
             pytest.fail("no game finished inside the window")
+        # The game in progress is played to its end and its marker written.
+        stop_worker(process, stop_file)
     finally:
         if process is not None:
             kill_process_tree(process)

@@ -23,7 +23,7 @@ from effects.domain.records import is_game_end
 from effects.infrastructure.shard_io import read_records
 from price_predictor.infrastructure.forge_jvm import kill_process_tree
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
-from tests.integration.conftest import require_jar
+from tests.integration.conftest import require_jar, stop_file_for, stop_worker
 
 pytestmark = pytest.mark.integration
 
@@ -49,12 +49,14 @@ def _require_patched(
     """
     require_jar()
 
+    stop_file = stop_file_for(records_dir)
     process = MatchWorkerConnector().start(
         None,
         run_id=str(uuid.uuid4()),
         best_of=1,
         effect_records_dir=records_dir,
         worker_index=0,
+        stop_file=stop_file,
     )
     try:
         deadline = time.monotonic() + _COLLECTION_SECONDS
@@ -67,9 +69,11 @@ def _require_patched(
                 continue
             if wants is not None:
                 if sum(r.kind.value == wants for r in records) >= 20:
-                    return records
+                    break
             elif len(records) >= 20:
-                return records
+                break
+        # Stopped at its game's end: the records read then hold every game whole.
+        stop_worker(process, stop_file)
         return list(read_records(records_dir))
     finally:
         kill_process_tree(process)

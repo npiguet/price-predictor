@@ -22,7 +22,7 @@ from effects.infrastructure.deck_file import write_deck_file
 from effects.infrastructure.shard_io import read_records
 from price_predictor.infrastructure.forge_jvm import kill_process_tree
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
-from tests.integration.conftest import POLL_SECONDS, require_jar, run_worker
+from tests.integration.conftest import POLL_SECONDS, require_jar, run_worker, stop_worker
 
 pytestmark = pytest.mark.integration
 
@@ -141,6 +141,7 @@ def test_a_named_deck_reaches_the_records(tmp_path: Path) -> None:
     )
     progress_file = tmp_path / "progress.txt"
     run_id = str(uuid.uuid4())
+    stop_files = [tmp_path / f"worker-{index}.stop" for index in range(_WORKER_COUNT)]
 
     processes = [
         MatchWorkerConnector().start(
@@ -153,6 +154,7 @@ def test_a_named_deck_reaches_the_records(tmp_path: Path) -> None:
             side_b_decks_path=decks_file,
             decks_only=True,
             progress_file=progress_file,
+            stop_file=stop_files[worker_index],
         )
         for worker_index in range(_WORKER_COUNT)
     ]
@@ -176,6 +178,11 @@ def test_a_named_deck_reaches_the_records(tmp_path: Path) -> None:
             )
             if "Llanowar Elves" in names and progress_lines >= 1:
                 break
+        # Each worker plays the game it is in to its end and exits 0.
+        for stop_file in stop_files:
+            stop_file.touch()
+        for process, stop_file in zip(processes, stop_files, strict=True):
+            stop_worker(process, stop_file)
     finally:
         for process in processes:
             kill_process_tree(process)
