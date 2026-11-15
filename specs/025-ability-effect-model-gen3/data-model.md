@@ -329,7 +329,7 @@ stopper kept the loss is refused.
 
 ### SelectionSet (new; replaces the frozen probe set)
 
-File `output/effects/reports/selection-set-<corpus digest>.json`, written by the freeze:
+File `<probe-set-dir>/selection-set-<corpus digest>.json`, written by the freeze:
 
 | Field | Rule |
 |---|---|

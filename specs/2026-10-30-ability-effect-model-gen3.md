@@ -85,7 +85,8 @@ Out of scope
 - Puzzle-style starting states as a source of rule records: considered once detectors and
   directed forks show which rules remain.
 - A larger random-seat share, or a softer random seat.
-- A directed fork that forces a choice, a target or a timing on a seat (§ 6).
+- A directed fork that forces more than one play, a play made in response to a spell on the
+  stack, or a charm's modes (§ 6).
 - Lethality copies for combat: decided once the gen-3 combat changes (§ 8.6) are measured.
 - Rule-labelled copies other than gen-2's lethality copies and the protection copies of
   § 12.3.
@@ -292,11 +293,24 @@ from a real game.
   removed permanent triggers no leaves-the-battlefield ability and goes to no zone, a card
   put onto the battlefield triggers no enters ability and no replacement, and a moved card
   counts as no draw, discard or mill. The per-turn counts stay as the live game left them.
-- No operation forces a choice, a target or a timing on a seat. A variant that differs only
-  by one is unclassifiable.
-- Directed forks are registered for 704.5f and for every rule that gen-2's per-rule counts
-  (§ 5.2) show with fewer than 100 `fires` records or with no `does_not_fire` record, where
-  one of its variants has an operation.
+- No operation forces a choice, a target or a timing on a seat. The one play a variant may
+  force beside its operation is below.
+- A variant may force one play in its fork, made by a seat its precondition binds: a cast or
+  activation of a bound card's line in the fork's own step, its targets, cost cards and X named
+  or drawn from the fork's own random stream; a yes or no to a "you may" or a "you may pay" a
+  bound card's line asks; or a bound creature's attack. A modal line is never forced. A play
+  that cannot be made is a counted refusal and the fork writes nothing. The forcing seat
+  exists in the fork's copy only, and no record member marks a forced play.
+- A variant may keep its bound cards' records: in its fork their decision candidates and
+  their triggers' not-fired evaluations are written without the sampling that drops them.
+- No fork of any kind resolves a restart of the game: it ends as a counted refusal first.
+- Directed forks are registered for 704.5f and 702.98a whatever their counts, and for every
+  rule that gen-2's per-rule counts (§ 5.2) show with fewer than 100 `fires` records or with
+  no `does_not_fire` record, where one of its variants has an operation. A rule no fork can
+  serve is left out with its own reason (`NOT_DIRECTED` in `scripts/rules_catalogue.py`).
+  The list is `rules/directed-fork-rules.txt`.
+- A rule's registered variant makes the side its counts lack, forcing the play that side
+  needs where Forge's AI does not make it.
 - The collector evaluates each enabled rule's board precondition at every phase
   boundary. When it holds, the collector may fork, apply the operation and play the fork
   on to the end of the current turn, recording it. The fork is then discarded, and the
@@ -317,7 +331,7 @@ from a real game.
   order in `--directed-fork-rules`. No rule is tried once the budget is spent.
 - A directed-fork record carries `aimed_at` set to its rule, `fork = true`,
   `interventional = false`, `directed` naming the variant and the operation applied, and
-  `mirror_of` the live record it was forked beside, where one exists (§ 8.1).
+  `mirror_of` null: a phase boundary leaves no live record open (§ 8.1).
 - The base spec's score check against the live game before any change applies.
 
 # 7. Rules-to-fields map
@@ -529,6 +543,9 @@ keyed as `attributed_to` spells the segment; `[]` where none resolved.
 - Turn-based actions get a record of kind `turn_action`, its `subkind` naming the
   action: `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`, `lore_counter`.
   Its payload is the action's events.
+- A game that ends writes a `turn_action` record of subkind `game_end` as its last record,
+  carrying `records_withheld` (§ 8.12). A game whose shard holds no such marker was cut:
+  `build-corpus`, `rule-counts` and the collectors' counters take nothing from it.
 - `turn_action` records are collected only. `build-corpus` writes none of them (§ 12.4),
   and a rule only they show gets the map verdict `recorded` (§ 7).
 - Attackers records are anchored to one attacker, as blockers records are. Beside the
@@ -1267,7 +1284,7 @@ python -m effects rule-counts
     [--cards-folder DIR]                 repeatable; default as build-corpus; sidecars the detectors read
     [--variant-scripts DIR]              default as build-corpus
     [--rules-dir DIR]                    default rules; scenarios and their detectors
-    [--workers N]                        default the CPU count; parallel shard readers
+    [--workers N]                        default 12, 1 to 12, never the CPU count; parallel shard readers
 
 python -m sealed match-outcomes
     [--playability-rate P]               default 0.01; stage 1: share of decision candidates evaluated (§ 8.8)
@@ -1278,6 +1295,10 @@ python -m sealed match-outcomes
     [--directed-fork-rules LIST]         default none; rule ids whose directed forks run
     [--directed-forks-per-game N]        default 2
     [--directed-fork-probability P]      default 0.25, in (0, 1]; chance a matching boundary forks
+    [--outcomes-dir DIR]                 default the --effect-records directory when given; where
+                                         match-outcomes.txt and cards-played.txt are appended
+    [--stop-timeout SECONDS]             default 600, 1 to 3600; with --effect-records only
+    [--recycle-seconds SECONDS]          default 600, 300 to 86400; with --effect-records only
 
 python -m effects collect-coverage
     [--wording-cards PATH]               cards for the "any target" coverage round (§ 8.11)
@@ -1303,6 +1324,12 @@ python -m effects train-effect-model
 `collect-coverage` and `collect-variants` take `--count-dropped-events`, `--max-records-per-game`,
 `--playability-rate`, `--zone-candidate-rate` and `--plain-candidate-rate` as
 `match-outcomes` does, the held-out coverage round included (§ 12.4).
+
+Every command whose workers write effect records (`match-outcomes --effect-records`,
+`collect-coverage`, `collect-variants`, which take the two stop flags too) stops its workers at
+a game end and kills its longest-running worker at every status line, as the 025 contract
+specifies ([cli.md](025-ability-effect-model-gen3/contracts/cli.md) § Match worker stop
+protocol).
 
 ```
 python -m effects collect-variants
@@ -1385,12 +1412,12 @@ Printed output
 | `rules/heads/<unit>.jsonl` | by the map | per-rule verdict, missing facts, gen-3 fields, learnable after gen-3 |
 | `rules/gen3-fields.json`, `rules/GEN3-FIELDS.md` | by the map's merge | gen-3's inputs, outputs, extensions and fixes |
 | effect-record shards | by collection | gen-3 records, `generation: 3`, aimed records marked by `aimed_at` (§ 8.1) |
-| `rules/directed-fork-rules.txt`, `rules/coverage-wording-cards.txt` | by `rules_catalogue.py directed-rules` | the rules the full collection's directed forks run for (§ 6), and the cards of the wording-card coverage round (§ 8.11) |
+| `rules/directed-fork-rules.txt`, `rules/coverage-wording-cards.txt`, `rules/directed-fork-counts.json` | by `rules_catalogue.py directed-rules` | the rules the full collection's directed forks run for (§ 6), the cards of the wording-card coverage round (§ 8.11), and the part of the counts the list is decided from |
 | curated shards | by `build-corpus` | every record carries `curation` (natural share, copies, drawn rule, drawn rules, condition and outcome entities); a protection copy is the synthetic record `<record_id>~pc<i>` (§ 12.1, § 12.3) |
 | `manifest.json` | by `build-corpus` | adds per-rule counts by source (§ 5.2), the map snapshot: each tagged rule's verdict and outputs, with the map's content hash, and each rule's effective outputs (§ 12.1), per-rule budgets per polarity, one-sided rules and unbudgeted rules (§ 12.1), one-sided conditions (§ 12.2), rules left out of a validation half and `turn_action` records left out by subkind (§ 12.4), the closed subtype and keyword lists (§ 11.2, § 11.3), and each validation stratum's selection and reporting halves (§ 14.2) |
-| `output/effects/rule-counts.json` | by `rule-counts` | per-rule counts by source over a records set (§ 5.2), and per rule its carriers with the lines its tags act through (§ 8.15) |
-| `output/effects/variant-scripts/` | by `collect-variants` | variant scripts of both rounds, named by their script's hash, with their sidecars (§ 8.15) |
-| `output/effects/reports/selection-set-<corpus digest>.json` | by the freeze | per validation stratum and half: the probe items, the grid records, the rule tests and the deviance sample; the balance ratio r, each item's standard error, the items left out by the precision target and the thresholds; a content digest (§ 14.2) |
+| the `rule-counts` file (`--output`) | by `rule-counts` | per-rule counts by source over a records set (§ 5.2), and per rule its carriers with the lines its tags act through (§ 8.15) |
+| the variant tree (`--variant-scripts`) | by `collect-variants` | variant scripts of both rounds, named by their script's hash, with their sidecars (§ 8.15) |
+| `selection-set-<corpus digest>.json` in `--probe-set-dir` | by the freeze | per validation stratum and half: the probe items, the grid records, the rule tests and the deviance sample; the balance ratio r, each item's standard error, the items left out by the precision target and the thresholds; a content digest (§ 14.2) |
 | checkpoints | by `train-effect-model` | add the relation tables, the relation type names in table order (§ 10.3), the averaged weights, the best control score, the loss denominators, `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight`, `--relation-values`, the manifest's map content hash and the selection set's digest; record the input layout `gen-3` with the subtype, named-counter and closed output lists, and every loader refuses a checkpoint of any other layout, gen-1 and gen-2 included, or with a different list |
 | `resume.pt` | every epoch | adds the averaged weights, the loss denominators and the best control score |
 | knowledge-probe scorecards | per checkpoint | add the selection set's digest and, per stratum and half, the probes of § 14.5 and the rule tests |

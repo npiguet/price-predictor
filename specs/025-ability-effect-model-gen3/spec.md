@@ -673,8 +673,7 @@ and that the reporting half never enters the control score.
   repeatable, as on `build-corpus`; `--workers` the parallel shard readers) MUST count, per
   rule, the records of each polarity, split into three sources: natural records of random-seat
   games, natural records of games between two Forge AIs, and aimed records (those carrying
-  `aimed_at`, FR-009a, whatever their game). It MUST write them to `--output` (default
-  `output/effects/rule-counts.json`) and print them. It reads gen-2 and gen-3 records; a gen-2
+  `aimed_at`, FR-009a, whatever their game). It MUST write them to `--output` and print them. It reads gen-2 and gen-3 records; a gen-2
   record carries no `aimed_at` and counts as natural. Beside the counts it MUST list the rules a
   taggable declaration speaks for that no record tags (`declared_zero`), the untaggable scenarios
   with their reasons (FR-002c) and the `same_as` scenarios with the scenarios and rules they are
@@ -814,7 +813,8 @@ and that the reporting half never enters the control score.
   variant of polarity `other` whose forced cast makes the `fires` side.
 - **FR-014b**: Board preconditions MUST be registered for 704.5f and 702.98a, listed whatever their
   counts (702.98a's few `does_not_fire` records being one creature in one game), and for every rule that gen-2's
-  per-rule counts (`output/effects/rule-counts-gen2.json`) show with fewer than 100 `fires` records
+  per-rule counts (`rule-counts` over the gen-2 shards; the part the list is decided from is checked
+  in as `rules/directed-fork-counts.json`) show with fewer than 100 `fires` records
   over all sources, or with no `does_not_fire` record, and that has a non-base variant classified
   into an operation after the rerun of FR-003, except the rules of `NOT_DIRECTED`: 104.2a, 500.11,
   701.12d and 702.62d, whose forks no detector can tell from their live games; 121.4, 122.1g,
@@ -1455,7 +1455,7 @@ and that the reporting half never enters the control score.
   selection set it was selected on. The frozen rule
   tests MUST be written with the knowledge-probe set, holding the rule tests' records and their
   halves with a content digest: one selection set per curated corpus,
-  `output/effects/reports/selection-set-<corpus digest>.json`.
+  `selection-set-<corpus digest>.json` in the directory the freeze is given (`--probe-set-dir`).
 
 #### Boundaries
 

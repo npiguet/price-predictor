@@ -293,8 +293,17 @@ $corpus = "$gen3\corpus\$corpusStart-curated"
 if (-not (Test-Path variable:freezeStart)) { $freezeStart = Run-Start "$gen3\reports" selection-set }
 $freeze = "$gen3\reports\$freezeStart-selection-set"
 Run-Logged $corpus "$py -u -m effects build-corpus --records-dir $gen3\records --output $corpus $cards --variant-scripts $variants $tokens --workers 10"
+& $py scripts\scan_output_vocabularies.py --manifest $corpus\manifest.json
+& $py -m pytest tests\unit\effects\domain\test_layout_vocabularies.py
 Run-Logged $freeze "$py -u scripts\effect_knowledge_probes\run.py --freeze-probe-set --corpus $corpus $cards $tokens --reports-dir $freeze"
 ```
+
+`scan_output_vocabularies.py` rewrites `src/effects/domain/output_vocabularies.py`, the head's
+closed subtype and keyword lists, with the lists the manifest recorded. The lists checked in come
+from the 2026-11-15 pilot collections, and a checkpoint loads only against the lists it trained
+on, so this step comes before any training. `test_layout_vocabularies.py` pins the head widths
+those lists give (181 subtypes and 70 keywords, a per-entity head of 1,636 columns): when it
+fails, set its pinned counts and widths to the new lists', then commit both files.
 
 Check: the manifest gives, for every tagged rule in every class, share, written and shortfall per
 polarity and source, and names one-sided rules and conditions, unbudgeted rules and rules left out of
@@ -338,9 +347,12 @@ Run-Logged "$report-evaluation" "$py -u -m effects evaluate-effect-model --check
 Run-Logged $report "$py -u scripts\effect_knowledge_probes\run.py --checkpoint $ckpt --corpus $corpus $cards $tokens --abilities-root $cache --probe-set-dir $freeze --output $report"
 ```
 
-`evaluate-effect-model`'s decodability battery reads a per-card win-rate table (`--win-rates`); no
-stage here writes one under `output/effects/`, and its default is the sealed pipeline's
-`output/sealed/cards-win-rates.txt`, another module's tree.
+`evaluate-effect-model`'s decodability check reads a per-card win-rate table (`--win-rates`). No
+stage here writes one under `output/effects/`, so the command above passes none and the check
+reports itself skipped (`no win-rate table at …`). Its default names a file of the sealed
+module's tree (`output/sealed/cards-win-rates.txt`): once such a file exists, the run reads it,
+which the layout forbids an effects run, so name a table under `$gen3` with `--win-rates` before
+that happens.
 
 Check: the scorecard reports every probe and the rule tests on the reporting half. Results go into the
 gen-3 record's Result section only.

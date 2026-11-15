@@ -7,7 +7,8 @@ probe-set file).
 
 ## File
 
-`output/effects/reports/selection-set-<corpus digest>.json`, canonical JSON, `digest` a sha256 over
+`<probe-set-dir>/selection-set-<corpus digest>.json` (the directory the freeze is given, and every
+reader's `--reports-dir` or `--probe-set-dir`), canonical JSON, `digest` a sha256 over
 everything but itself. Fields as [data-model.md](../data-model.md#selectionset-new-replaces-the-frozen-probe-set).
 A reader refuses a missing file, one frozen for another corpus, or one edited since (`SelectionSetError`).
 A writer never replaces a set already at the path by another (`SelectionSetError`; checkpoints were

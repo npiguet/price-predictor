@@ -731,7 +731,7 @@ and its freeze move into `E`: `domain/probe_readouts.py`, `domain/score_scales.p
 `scripts/effect_knowledge_probes/run.py --freeze-probe-set --corpus DIR`. The combat and evasion grids
 read frozen records instead of scanning 200 shards.
 
-`train-effect-model` finds the frozen set by the corpus digest under `output/effects/reports/` and
+`train-effect-model` finds the frozen set by the corpus digest under `--reports-dir` and
 exits 1 at startup when it is absent. This startup check is added to FR-076 (spec correction S1).
 
 **Rationale**: `src/effects` cannot import `scripts/`, and training scores these every epoch.
