@@ -3,7 +3,11 @@
 ``MatchOutcomeSupervisor`` and its ``ForgeWorkerPool`` run one Forge worker the
 way ``sealed match-outcomes --effect-records`` runs it, inside the command's own
 ``run.json`` (``run_recorded``), except for the recycle time: the command line
-refuses one under 300 s, so the supervisor is handed a short one directly. The
+refuses one under 300 s, so the supervisor is handed a short one directly, and
+for the status interval: the pool's periodic kill of its longest-running
+worker (``ForgeWorkerPool._kill_oldest_worker``, tested on stand-in workers in
+``tests/unit/infrastructure/test_worker_stop_protocol.py``) would end the one
+worker about when its recycle time comes, so the interval outlasts the run. The
 worker stops itself at its first game end past that time, printing the stop
 line; the pool starts its successor, a new JVM lifetime with a shard of its
 own; once that successor has finished a game the run is ended as Ctrl-C ends
@@ -43,6 +47,7 @@ from effects.infrastructure.record_codec import record_from_dict
 from effects.infrastructure.shard_io import ended_games, iter_shard_lines, iter_shards
 from price_predictor.infrastructure.forge_jvm import (
     STOPPED_LINE,
+    ForgeWorkerPool,
     WorkerStopSettings,
 )
 from price_predictor.infrastructure.run_manifest import run_recorded
@@ -88,14 +93,19 @@ def recycled_run(tmp_path_factory):
     # The command's startup check, over the whole list: one DirectedRulesMain run.
     startup_error = directed_fork_error(args.directed_fork_rules, args.directed_fork_probability)
     assert startup_error is None, startup_error
-    supervisor = MatchOutcomeSupervisor(
-        worker_count=1,
-        output_path=root / "match-outcomes.txt",
-        best_of=1,
-        effect_records_dir=run_dir,
-        collection_caps=_effect_collection_caps(args),
-        worker_stop=WorkerStopSettings(timeout=_STOP_TIMEOUT, recycle_seconds=_RECYCLE_SECONDS),
-    )
+    with pytest.MonkeyPatch.context() as patch:
+        # Read by the pool at its construction (module docstring).
+        patch.setattr(ForgeWorkerPool, "STATUS_INTERVAL", 2 * _RUN_SECONDS)
+        supervisor = MatchOutcomeSupervisor(
+            worker_count=1,
+            output_path=root / "match-outcomes.txt",
+            best_of=1,
+            effect_records_dir=run_dir,
+            collection_caps=_effect_collection_caps(args),
+            worker_stop=WorkerStopSettings(
+                timeout=_STOP_TIMEOUT, recycle_seconds=_RECYCLE_SECONDS,
+            ),
+        )
     successor_played = threading.Event()
 
     def end_once_the_successor_played() -> None:

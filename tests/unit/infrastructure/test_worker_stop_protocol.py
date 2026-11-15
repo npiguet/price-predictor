@@ -288,19 +288,62 @@ class TestTheTimeout:
         assert run.pool.stops.killed == 2
 
     def test_a_worker_whose_game_outlasts_its_recycle_is_killed(self, tmp_path, runs, capsys):
-        """The backstop the kill-based recycle was: a game that does not end
-        is killed ``recycle + timeout`` seconds into its worker's life."""
-        run = runs(tmp_path, workers=1, settings=_settings(timeout=0.5, recycle_seconds=1),
+        """A game that does not end is killed ``recycle + timeout`` seconds
+        into its worker's life, when the periodic recycle has not killed its
+        worker first: at the first tick the recycle takes one of the two
+        workers, at the second the other is overdue."""
+        run = runs(tmp_path, settings=_settings(timeout=0.2, recycle_seconds=1),
                    behaviour="ignore", status_interval=1)
+
+        run.run(after=2.5)
+
+        out = capsys.readouterr().out
+        assert "Killing worker " in out
+        assert "its game has not ended 0.2s past its 1s recycle time; the game it was " \
+               "playing is cut" in out
+        assert "Recycled longest-running worker " in out
+        assert len(run.started) >= 4, "the killed workers were restarted"
+        assert run.pool.stops.killed >= 2
+
+
+class TestTheRecycleOfTheLongestRunningWorker:
+    def test_each_status_interval_kills_the_oldest_worker_and_restarts_it(
+        self, tmp_path, runs, capsys,
+    ):
+        """A crawling game holds its worker past every game end the self-
+        recycle waits for: the pool kills its longest-running worker each
+        status interval, cutting the game, and starts a fresh one. Each kill
+        is counted once, as ``killed``."""
+        run = runs(tmp_path, settings=_settings(timeout=0.5), game_seconds=30,
+                   status_interval=1)
 
         run.run(after=3.5)
 
         out = capsys.readouterr().out
-        assert "Killing worker 0 (PID " in out
-        assert "its game has not ended 0.5s past its 1s recycle time; the game it was " \
-               "playing is cut" in out
-        assert len(run.started) >= 2, "the killed worker was restarted"
-        assert run.pool.stops.killed >= 2
+        recycles = out.count("Recycled longest-running worker ")
+        assert recycles >= 2
+        assert out.count("the game it was playing is cut") >= recycles
+        assert len(run.started) == 2 + recycles, "each killed worker was restarted"
+        stops = run.pool.stops
+        # The two workers alive at the end are killed past the stop timeout
+        # (or at once, still starting Forge).
+        assert stops.killed + stops.killed_starting == recycles + 2
+        assert (stops.stopped, stops.recycled, stops.crashed) == (0, 0, 0)
+        assert run.games() == 0, "every game was cut"
+
+    def test_no_worker_is_recycled_while_a_graceful_stop_waits(
+        self, tmp_path, runs, killed_process_trees,
+    ):
+        """Workers asked to finish their game are allowed to, however many
+        status intervals that takes."""
+        run = runs(tmp_path, settings=_settings(timeout=60), game_seconds=2.5,
+                   status_interval=1)
+
+        run.run(after=0.5)
+
+        assert killed_process_trees == []
+        stops = run.pool.stops
+        assert (stops.stopped, stops.killed, stops.killed_starting) == (2, 0, 0)
 
 
 class TestRecycling:

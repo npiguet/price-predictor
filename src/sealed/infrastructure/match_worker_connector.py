@@ -181,8 +181,8 @@ class MatchWorkerConnector:
             # a crashed worker costs the game it was playing (cut, no
             # game-end marker) and nothing else. Raising it hides the
             # pathology rather than containing it, and it is paired with the
-            # pool's recycle (recycle_seconds, or without a stop file
-            # ForgeWorkerPool._kill_oldest_worker) — the two are one measure,
+            # pool's recycle (ForgeWorkerPool._kill_oldest_worker, and with a
+            # stop file recycle_seconds) — the two are one measure,
             # not two knobs.
             xmx="1200m",
         )

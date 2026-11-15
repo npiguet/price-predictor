@@ -262,8 +262,10 @@ interrupted `collect-variants` restarts into the same directory with the same `-
 
 A collector's round end lets every worker finish the game it is playing (at most
 `--stop-timeout`, 600 s, before a kill), and workers recycle themselves at a game end
-(`--recycle-seconds`, 600 s, at least 300), so a run's games are cut only by a crash, a kill
-past the timeout, a game outlasting its worker's recycle time by `--stop-timeout`, or a second
+(`--recycle-seconds`, 600 s, at least 300). A run's games are cut by a crash, by the kill of the
+longest-running worker at every status line (every 60 s; it passes over a worker still starting
+Forge), which ends a game that crawls (about one in 400 lasts 8 to 20 minutes), by a kill past
+the timeout, by a game outlasting its worker's recycle time by `--stop-timeout`, or by a second
 Ctrl-C. Each round's report and `run.json` say how the workers ended (`worker_stops`) and how
 many cut games the counts left out (`cut_games`). Before launching a collection, know that:
 

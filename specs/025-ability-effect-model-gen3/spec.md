@@ -1247,7 +1247,11 @@ and that the reporting half never enters the control score.
   second Ctrl-C kills at once. A worker MUST recycle itself at the first game end after
   `--recycle-seconds` of its JVM's life (default 600, 300 to 86400) and be restarted, unless the
   round's stop condition already holds; one still running `--recycle-seconds` + `--stop-timeout`
-  seconds after its start MUST be killed, its game cut and said so. Exit 0 with the stop line is a
+  seconds after its start MUST be killed, its game cut and said so. At every status line the
+  supervisor MUST also kill and restart the longest-running worker, as without the protocol, its
+  game cut and said so, counted in `worker_stops.killed`; it MUST pass over a worker still
+  starting Forge, one asked to stop and one already killed, and MUST kill none once the workers
+  have been asked to stop. Exit 0 with the stop line is a
   normal end, never a failure; exit 0 without it, or any other code, is a crash; a worker that
   recycled itself having played no game failed to start. A round MUST be counted only after every
   worker of its pool has ended or been killed, and the command MUST NOT exit before. `run.json`

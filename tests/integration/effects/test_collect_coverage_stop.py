@@ -54,6 +54,17 @@ _WORKERS = 2
 _STOP_TIMEOUT = 300
 #: Burn and a creature: a game of a few turns, a record per cast.
 _WORDING_CARDS = ("lightning bolt", "goblin piker")
+#: ``python -m effects``, its pool's status interval outlasting the run: the
+#: periodic kill of the longest-running worker
+#: (``ForgeWorkerPool._kill_oldest_worker``, tested on stand-in workers in
+#: ``tests/unit/infrastructure/test_worker_stop_protocol.py``) would cut a game
+#: of a round slower than a minute, and this module reads the round's end alone.
+_LAUNCHER = (
+    "import runpy\n"
+    "from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool\n"
+    f"ForgeWorkerPool.STATUS_INTERVAL = {2 * _RUN_SECONDS}\n"
+    "runpy.run_module('effects', run_name='__main__', alter_sys=True)\n"
+)
 
 
 def _gen3_lines(run_dir: Path) -> list[tuple[Path, list[dict]]]:
@@ -76,7 +87,7 @@ def coverage_run(tmp_path_factory):
     holdout.write_text("", encoding="utf-8")
     console = root / "console.log"
     command = [
-        sys.executable, "-u", "-m", "effects", "collect-coverage",
+        sys.executable, "-u", "-c", _LAUNCHER, "collect-coverage",
         "--effect-records", str(run_dir),
         "--wording-cards", str(wording),
         "--exclude-cards", str(holdout),

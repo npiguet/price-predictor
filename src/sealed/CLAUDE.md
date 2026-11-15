@@ -65,9 +65,10 @@ This file lists the rules to respect and the file formats. It does not describe 
 - `--best-of` must be a positive odd integer.
 - The supervisor restarts crashed workers. Long Forge AI games can crash the JVM and that is expected. Why the workers are short-lived by design: `src/effects/docs/collection-runs.md` § Short-lived workers.
 - `--workers` is 1 to 12.
+- Every status interval the pool kills the longest-running worker and starts a fresh one; with `--effect-records` it passes over a worker still starting Forge.
 - With `--effect-records DIR` the workers honour the stop protocol (`specs/025-ability-effect-model-gen3/contracts/cli.md` § Match worker stop protocol): each recycles itself at a game end after `--recycle-seconds`, and the run's end or a first Ctrl-C asks each to finish its game, killing one only after `--stop-timeout`. A second Ctrl-C kills any worker still finishing. A match stopped after one of its games is abandoned: no outcome or cards-played row.
 - With `--effect-records DIR` the worker logs go under `DIR/logs/`, never beside the shards, and the supervisor scans them for failure lines at every status line. The run exits 1 when it played matches and wrote no effect record.
-- Without `--effect-records` the workers keep no log, the pool kills the longest-running worker every status interval and every worker at the end, and `--recycle-seconds` or `--stop-timeout` exits 2.
+- Without `--effect-records` the workers keep no log, the pool kills every worker at the end, and `--recycle-seconds` or `--stop-timeout` exits 2.
 - With `--exclude-cards`, no collected game holds a held-out card. Without it, the same command collects the full-strength games that become the effect model's card-disjoint validation stratum.
 - `--effect-records` has no default: collection is an opt-in, and without the flag the two sealed corpora keep their exact format and content.
 - The two sealed corpora are appended to `--outcomes-dir`, by default the `--effect-records` directory when given (a collection writes nothing outside its run directory), else `output/sealed/`.

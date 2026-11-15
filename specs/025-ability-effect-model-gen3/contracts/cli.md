@@ -311,13 +311,23 @@ What the supervisor does (`ForgeWorkerPool` under a `GracefulStop`, `price_predi
   <recycle> recycle time; the game it was playing is cut (no game-end marker: build-corpus drops
   it)`, the worker counts in `worker_stops.killed`, and its game, having no marker, among the
   round's `cut_games`.
+- At every status line (every 60 s) the supervisor also kills the longest-running worker
+  (`taskkill /F /T`), as without the protocol, and restarts it, so a game that crawls past every
+  game end a recycle waits for is cut. It passes over a worker whose log holds no startup line
+  since its spawn (still starting Forge), one asked to stop and one it already tried to kill; when
+  every worker is still starting Forge none is killed. It kills none once a stop has been asked of
+  the workers (a round's end, the run's end, a shutdown, a first Ctrl-C). The overdue check above
+  runs first at the same status line. The supervisor prints `Recycled longest-running worker
+  <slot> (PID <pid>, age <age>s); the game it was playing is cut (no game-end marker: build-corpus
+  drops it)`, the worker counts in `worker_stops.killed`, and its game among the round's
+  `cut_games`.
 - Exit 0 with the stop line is a normal end, never a failure line or a crash. Exit 0 without it,
   or any other code, is a crash: the worker is restarted as before.
 - The pool returns, and a round is counted, only once every worker has exited or been killed;
   the supervisor never exits before (the job object would kill the workers).
 - The workers' ends are counted by how: `stopped` (asked, stop line), `recycled` (unasked, stop
-  line), `killed` (mid-game, by the timeout, the recycle backstop or a second Ctrl-C: a game cut
-  each), `killed_starting` (at a stop, still starting Forge: no game cut), `ended_otherwise`
+  line), `killed` (mid-game, by the status line's recycle of the longest-running worker, the
+  timeout, the recycle backstop or a second Ctrl-C: a game cut each), `killed_starting` (at a stop, still starting Forge: no game cut), `ended_otherwise`
   (asked, no stop line: a crash in the last game), `crashed` (unasked, no stop line), and
   `survived` (the kill could not end it). The round report prints them; `run.json`'s entry records them as
   `worker_stops`, beside the resolved `stop_timeout` and `recycle_seconds`.
@@ -329,8 +339,8 @@ What the supervisor does (`ForgeWorkerPool` under a `GracefulStop`, `price_predi
   `build-corpus` drops the game whole and the collectors' counters credit nothing from it. A
   worker killed between two matches loses nothing.
 - `match-outcomes` without `--effect-records` keeps no worker log, so a stop line cannot be read:
-  its pool kills the longest-running worker every status interval and every worker at the end, as
-  before, and `--stop-timeout` or `--recycle-seconds` without `--effect-records` exits 2.
+  its pool kills the longest-running worker every status interval, whether or not it is still
+  starting Forge, and every worker at the end, as before, and `--stop-timeout` or `--recycle-seconds` without `--effect-records` exits 2.
   `draft play-draft-games`' workers have no stop protocol and are killed the same way.
 
 A round of a collector ends this way: once the round's progress file counts `--decks-per-round`

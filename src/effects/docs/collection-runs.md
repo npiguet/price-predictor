@@ -16,11 +16,12 @@ Rules to respect when running, babysitting or changing `collect-coverage`, `coll
 
 ## Short-lived workers
 
-- Every collecting supervisor runs its Forge workers under `-Xmx1200m` and recycles each one: a worker stops itself at the first game end after `--recycle-seconds` of its JVM's life, and `ForgeWorkerPool` starts a fresh one at once.
-- The heap and the recycle are one measure, and neither is a tuning knob. Forge misbehaves late in a JVM's life, with loops that do not terminate and allocation that grows without bound. The small heap turns a runaway worker into an early, cheap death the pool restarts, where a large one lets one worker drag the machine down hours into a run. The recycle, with the kill that backs it, bounds the pathologies that do not allocate.
-- Do not raise the heap, lengthen the recycle or propose removing either without saying what contains Forge instead: either change hides the pathology. The price, a handful of GC crashes per overnight run, each costing the game in flight and nothing else, is paid deliberately.
-- A worker whose game has not ended `--stop-timeout` past its recycle time is killed.
-- The recycle is asked only at a game end, so it never ends a game that crawls. On a large board each Forge AI priority decision can take seconds (the combat prediction under its damage and pump checks, with a mana-payment simulation inside each step), and a game then runs ten minutes or more while its worker log and shard stay silent. Only the kill above ends it, and its records are cut. Such a worker is not hung: a thread dump shows `main` waiting on a "Game AI Eval" thread a second or two old, a new one at each decision, with the heap flat.
+- Every collecting supervisor runs its Forge workers under `-Xmx1200m` and recycles them: every status interval (`ForgeWorkerPool.STATUS_INTERVAL`, 60 s) `ForgeWorkerPool._kill_oldest_worker` kills the longest-running worker, cutting its game, and the pool starts a fresh one, so a JVM lives about `workers × 60` s. That kill passes over a worker still starting Forge (no startup line in its log), so a pool starting twelve JVMs at once is not killed before its first game.
+- A worker also stops itself at the first game end after `--recycle-seconds` of its JVM's life; with the default, the periodic kill usually comes first.
+- The heap and the recycle are one measure, and neither is a tuning knob. Forge misbehaves late in a JVM's life, with loops that do not terminate and allocation that grows without bound. The small heap turns a runaway worker into an early, cheap death the pool restarts, where a large one lets one worker drag the machine down hours into a run. The recycle bounds the pathologies that do not allocate.
+- Do not raise the heap, lengthen the recycle or propose removing either without saying what contains Forge instead: either change hides the pathology. The price, a handful of GC crashes per overnight run and the games the periodic kill cuts, each costing the game in flight and nothing else, is paid deliberately.
+- A worker still running `--stop-timeout` past its recycle time, such as one that never finishes starting Forge, is killed.
+- A game that crawls ends by the periodic kill, its records cut: a stop asked at a game end never reaches it. On a large board each Forge AI priority decision can take seconds (the combat prediction under its damage and pump checks, with a mana-payment simulation inside each step), and about one game in 400 then runs 8 to 20 minutes while its worker log and shard stay silent. Such a worker is not hung: a thread dump shows `main` waiting on a "Game AI Eval" thread a second or two old, a new one at each decision, with the heap flat.
 
 ## Stopping a worker
 
@@ -28,7 +29,7 @@ Rules to respect when running, babysitting or changing `collect-coverage`, `coll
 - The workers run in process groups of their own (`forge_jvm.graceful_popen_options`), so a console Ctrl-C reaches the supervisor alone and never a worker JVM.
 - A worker still starting Forge, with no startup line in its log, is killed at once: it has no game to cut (`killed_starting`).
 - No worker is restarted once the round's budget is reached, so a round ends at most one game's length, bounded by `--stop-timeout`, after its budget.
-- The kill (`taskkill /F /T`, `ForgeWorkerPool._kill`) is the backstop only. It ends a worker still playing `--stop-timeout` after the request, one overdue past its recycle time by `--stop-timeout`, every worker on a second Ctrl-C, and a survivor of a crash.
+- The kill (`taskkill /F /T`, `ForgeWorkerPool._kill`) ends the longest-running worker every status interval (§ Short-lived workers), a worker still playing `--stop-timeout` after the request, one overdue past its recycle time by `--stop-timeout`, every worker on a second Ctrl-C, and a survivor of a crash. No periodic kill happens while a stop waits for the workers to finish their games.
 - A round is counted only once every worker of its pool has ended.
 - Each round reports, and `run.json` records, how the workers ended (`worker_stops`) and how many games the counts left out as cut (`cut_games`).
 
@@ -48,7 +49,7 @@ Rules to respect when running, babysitting or changing `collect-coverage`, `coll
 - A collector's run directory is its `--effect-records`: shards at the top level, every worker log and progress file under `logs/`, decks files under `decks/`.
 - Each run's decks go to a file of its own (`decks/coverage-decks.<run_id>.txt`, `decks/variant-decks.<run_id>.txt`), because every worker reloads the file at its start.
 - A round ends once its progress file counts `--decks-per-round` matches and every worker has finished the game it was playing. How workers are stopped and recycled: § Stopping a worker.
-- There is one progress file per round, so a worker the backstop kill could not end appends to its own round's file and never to the next round's count.
+- There is one progress file per round, so a worker the kill could not end appends to its own round's file and never to the next round's count.
 - A gen-3 game whose shard holds no game-end marker credits no card, held-out text or variant, as `build-corpus` drops it.
 - A run that plays rounds and writes no record in its own shards exits 1. A run that plays none exits 0 when every unit was already done, and 1 when units remain that no deck could hold.
 - After every round the supervisor scans the worker logs for failure lines, prints them by kind with the hook-failure counts and fork refusals, and writes the run's totals into `run.json`. A fork refusal counts toward no failure threshold or exit code.

@@ -133,9 +133,9 @@ class MatchOutcomeSupervisor:
         """UUID generated once at construction, shared across all worker restarts.
 
         It namespaces a run, not a process: the pool recycles its workers
-        (each stopping itself at a game end after ``--recycle-seconds``, or,
-        without effect records, the longest-running one killed every status
-        interval) and restarts crashed ones, so the JVM behind a slot is
+        (the longest-running one killed every status interval and, with
+        effect records, each stopping itself at a game end after
+        ``--recycle-seconds``) and restarts crashed ones, so the JVM behind a slot is
         replaced hundreds of times while this value
         and the slot index both stay put. Whatever a worker counts from zero
         therefore has to name its own JVM lifetime — the effect-record shard

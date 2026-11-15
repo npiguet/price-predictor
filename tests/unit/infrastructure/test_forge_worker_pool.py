@@ -14,7 +14,13 @@ from unittest.mock import patch
 
 import pytest
 
-from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool, WorkerStartError
+from price_predictor.infrastructure.forge_jvm import (
+    STARTUP_LINE,
+    ForgeWorkerPool,
+    GracefulStop,
+    WorkerStartError,
+    _LogMark,
+)
 from tests.unit.infrastructure.real_processes import SLEEPER
 
 KILL = "price_predictor.infrastructure.forge_jvm.kill_process_tree"
@@ -130,6 +136,116 @@ class TestRecycle:
             _pool(tmp_path / "out.txt", worker_count=1)._kill_oldest_worker()
 
         killer.assert_not_called()
+
+
+class TestRecycleUnderTheStopProtocol:
+    """Effect-record collections: the stop protocol recycles a worker only at
+    a game end, so a crawling game held its worker until ``recycle + stop
+    timeout``. The pool kills its longest-running worker every status
+    interval there too, cutting its game, and passes over the workers whose
+    kill would be wrong: one still starting Forge, one asked to stop, one
+    already killed."""
+
+    @staticmethod
+    def _graceful_pool(tmp_path, procs: dict[_FakeProc, tuple[float, bool]]):
+        """A pool under the protocol whose workers started at the given
+        times, each with a log holding the startup line or not."""
+        logs = tmp_path / "logs"
+        logs.mkdir()
+        graceful = GracefulStop(
+            stop_file_for=lambda slot: logs / f"run.{slot}.stop",
+            log_path_for=lambda slot: logs / f"run.{slot}.log",
+        )
+        pool = _pool(tmp_path / "out.txt", worker_count=len(procs), graceful=graceful)
+        for slot, (proc, (started, past_start)) in enumerate(procs.items()):
+            log = logs / f"run.{slot}.log"
+            log.write_text(f"{STARTUP_LINE}...\n" if past_start else "Forge loading\n",
+                           encoding="utf-8")
+            pool._start_times[proc] = started
+            pool._slots[proc] = slot
+            pool._log_marks[proc] = _LogMark(log, None, 0)
+        return pool
+
+    def test_the_oldest_worker_past_its_forge_start_is_killed(self, tmp_path, capsys):
+        starting, oldest, newest = _FakeProc(1), _FakeProc(2), _FakeProc(3)
+        pool = self._graceful_pool(tmp_path, {
+            starting: (10.0, False), oldest: (20.0, True), newest: (30.0, True),
+        })
+
+        with patch(KILL) as killer:
+            pool._kill_oldest_worker()
+
+        killer.assert_called_once_with(oldest)
+        assert pool._killed == {oldest}
+        assert pool._killed_starting == set()
+        out = capsys.readouterr().out
+        assert "Recycled longest-running worker 1 (PID 2, age " in out
+        assert "the game it was playing is cut" in out
+
+    def test_no_worker_is_killed_while_every_worker_starts_forge(self, tmp_path):
+        """Twelve JVMs starting at once take minutes: killing the oldest each
+        minute regardless could kill every worker before its first game."""
+        pool = self._graceful_pool(tmp_path, {
+            _FakeProc(1): (10.0, False), _FakeProc(2): (20.0, False),
+        })
+
+        with patch(KILL) as killer:
+            pool._kill_oldest_worker()
+
+        killer.assert_not_called()
+
+    def test_a_worker_asked_to_stop_is_left_to_finish_its_game(self, tmp_path):
+        asked, other = _FakeProc(1), _FakeProc(2)
+        pool = self._graceful_pool(tmp_path, {asked: (10.0, True), other: (20.0, True)})
+        pool._deadlines[asked] = time.monotonic() + 600
+
+        with patch(KILL) as killer:
+            pool._kill_oldest_worker()
+
+        killer.assert_called_once_with(other)
+
+    def test_no_worker_is_killed_once_the_pool_shuts_down(self, tmp_path):
+        """The run's or a round's end asks every worker to finish its game."""
+        pool = self._graceful_pool(tmp_path, {_FakeProc(1): (10.0, True)})
+        pool.request_shutdown()
+
+        with patch(KILL) as killer:
+            pool._kill_oldest_worker()
+
+        killer.assert_not_called()
+
+    def test_a_worker_already_killed_is_passed_over_and_killed_once(self, tmp_path):
+        """A survivor of an earlier kill (or one killed by the overdue check
+        at the same tick, its process not yet gone) is no candidate: the next
+        oldest is recycled instead, and each worker is killed once."""
+        first, second = _FakeProc(1), _FakeProc(2)
+        pool = self._graceful_pool(tmp_path, {first: (10.0, True), second: (20.0, True)})
+
+        with patch(KILL) as killer:
+            pool._kill_oldest_worker()
+            pool._kill_oldest_worker()
+            pool._kill_oldest_worker()
+
+        assert [call.args[0] for call in killer.call_args_list] == [first, second]
+
+    def test_each_status_tick_kills_the_overdue_worker_then_the_oldest(self, tmp_path):
+        """The overdue check keeps its line for a worker past ``recycle +
+        timeout`` (one still starting Forge, which the recycle passes over),
+        and the recycle then takes the oldest of the others."""
+        stuck, oldest, newest = _FakeProc(1), _FakeProc(2), _FakeProc(3)
+        now = time.monotonic()
+        pool = self._graceful_pool(tmp_path, {
+            stuck: (now - 5000, False), oldest: (now - 60, True), newest: (now - 30, True),
+        })
+        pool._status_interval = 0
+        ticks = iter([False, False, True])
+        pool._should_stop = lambda count: next(ticks, True)
+        pool._terminate_all = lambda: None
+
+        with patch(KILL) as killer:
+            pool._supervisor_loop()
+
+        assert [call.args[0] for call in killer.call_args_list] == [stuck, oldest]
 
 
 class TestStopCondition:

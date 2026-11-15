@@ -350,8 +350,8 @@ class TestSupervisorBestOf:
 
 
 class TestSupervisorStatusLineFormat:
-    """The status interval is also the recycle of a run without the stop
-    protocol: every interval the pool kills the longest-running worker, which
+    """The status interval is also the recycle of every run, with or without
+    the stop protocol: every interval the pool kills the longest-running worker, which
     bounds how long a stuck match holds a slot (``_kill_oldest_worker`` says not
     to lengthen it). The line's exact shape is pinned on the pool
     (``test_forge_worker_pool.py``)."""
