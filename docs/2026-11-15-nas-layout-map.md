@@ -6,6 +6,9 @@ This maps every folder and loose file on the NAS (`Y:\Nicolas\mtg\mtg-models-dat
 All paths are relative to the NAS root. Current paths use `\`, as they appear on the NAS. Targets use
 `/` and start with `output/` or `models/`, so the NAS root mirrors the repository root.
 
+**Executed 2026-11-15** by `docs/2026-11-15-nas-move.py` (renames only): 2,098 moves, journaled old → new in
+`docs/2026-11-15-nas-move-journal.tsv`. Duplicates marked "delete" went to `_to-delete/` at the NAS root.
+
 Snapshot: 818 directories, 1,023,784 files, 88.2 GB. File modification times run from 2026-03-17 to
 2026-10-21. 945k of the files sit in the effects gen-2 ability caches (see note C1).
 
