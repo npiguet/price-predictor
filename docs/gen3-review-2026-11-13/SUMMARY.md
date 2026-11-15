@@ -88,18 +88,20 @@ Contract: `specs/025-ability-effect-model-gen3/contracts/cli.md`.
    present lists come from pilot data.
 4. The connector is built and installed from the current tree; rebuild it if anything changes.
 
-## Open, for you to decide
+## Open
 
-- The old flat default paths: make output flags required, derive read paths from a generation root,
-  or leave them. Two defaults break the "one module, one tree" rule today:
-  `evaluate-effect-model --win-rates` (reads the sealed tree) and `--output` (inside the model's run
-  directory).
-- The counts the directed-fork list is built from date from 2026-11-06, before the detectors of 23 of
-  the 49 listed rules changed. A gen-2 recount would reshape the list (510.2 and 702.1c are the
-  likely casualties); the alternative is to let the collection's own `rule-counts` show it.
-  `tests/integration/test_directed_fork_counts.py` fails until a gen-2 rule-counts run exists.
-- Whether 118.12b (Elfhame Sanctuary's optional search) and 205.1a (a type-setting Aura) use up each
-  game's directed-fork budget ahead of rarer rules. Not checked.
+- DECIDED 2026-11-15: the flag defaults stay as they are for now (two of `evaluate-effect-model`'s
+  break the "one module, one tree" rule: `--win-rates` reads the sealed tree, `--output` is inside
+  the model's run directory; pass both explicitly).
+- DECIDED 2026-11-15: no gen-2 recount. The directed-fork list stays as generated from the
+  2026-11-06 counts, which predate the detectors of 23 of the 49 listed rules; the collection's own
+  `rule-counts` is what shows which listed rules were misjudged. The integration test that compared
+  the committed counts with a gen-2 run is removed.
+- 118.12b (Elfhame Sanctuary's optional search) forks in 99% of games (517 of 520 pilot games with a
+  directed fork) and 510.2 in 29%, each taking one of a game's two directed forks; every other rule
+  together got 12 forks. Nothing is crowded out in most games, but one fork a game is spent on a rule
+  that needs about a hundred records. Regenerating the list from the collection's own counts after a
+  first few thousand games (`rule-counts`, then `directed-rules --counts`) drops such rules.
 - `play_round` overshooting its match budget: faster polling (cheap, about one extra game per
   worker) or a hard bound (changes the stop protocol).
 - A later review pass over the model, training and evaluation code is still owed (deferred on
@@ -107,8 +109,8 @@ Contract: `specs/025-ability-effect-model-gen3/contracts/cli.md`.
 
 ## Not verified
 
-- The integration suite as a whole on the final tree. Two tests moved there read data that is not on
-  this machine (`test_directed_fork_counts.py`, `test_gen1_corpus_digest.py`, which reads the NAS);
+- The integration suite as a whole on the final tree. One test moved there reads data that is not on
+  this machine (`test_gen1_corpus_digest.py`, which reads the NAS);
   two were adjusted for the periodic kill and two for `--embeddings-path` without being run.
 - Packages without an independent verifier: GAP-5, LAYOUT, LAYOUT-2, FIXTURE, BLINDKILL, WP13, and
   the second rounds of WP5 and WP6.
