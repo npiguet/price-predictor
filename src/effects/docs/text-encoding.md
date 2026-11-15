@@ -29,7 +29,7 @@ How a key resolves, by case:
 
 - `build-corpus` refuses a resolution record acting only through dropped keys, except a permanent spell's, which it keeps keyed to the permanent's card.
 - `build-corpus` refuses an in-range unjoinable record as `unjoinable-key` and fails only past 20 of them and 0.1% of the records read. A charm cast through Flashback produces a few legitimately.
-- The no-sidecar case is mostly token entities: the collector files a token's provenance under `cardsfolder/<letter>/<sanitized token name>.txt` while tokens convert into `output/tokenscripts/` under Forge's own script filenames. The trainer logs the tally; a conversion that broke would raise it without otherwise changing the shape of a run.
+- The no-sidecar case is mostly token entities: the collector files a token's provenance under `cardsfolder/<letter>/<sanitized token name>.txt` while tokens convert into the token tree (`tokenscripts/` beside `cardsfolder/` in a generation's `converted/`) under Forge's own script filenames. The trainer logs the tally; a conversion that broke would raise it without otherwise changing the shape of a run.
 - The collector counts a trait's index over the list as the card prints it, not the live one. A line a static took away stays in its place, and a trait a type change attached (Blood Moon's Mountain mana ability on a nonbasic land) is counted past every printed line and flagged `granted`. Counted over the live list, such a trait would take a printed line's key.
 
 ## The text a line encodes to
@@ -49,7 +49,7 @@ How a key resolves, by case:
 
 ## Keyword definitions
 
-- `output/effects/keyword-definitions.json`, written by `extract-keyword-definitions`, is keyed by display name, because that is what a card's keyword line and the converted text both spell.
+- The keyword-definition file `extract-keyword-definitions --output` writes is keyed by display name, because that is what a card's keyword line and the converted text both spell.
 - The encoder expands an unknown keyword unconditionally. This file is what makes a set the vocabulary predates readable rather than a bare `[UNK]`.
 - Both surfaces expand a keyword to its reminder template. `generated_script` is captured but neither scanned into a vocabulary nor used by any expansion; it is null for the engine-coded minority.
 
@@ -58,11 +58,11 @@ How a key resolves, by case:
 - `build-vocab` scans three sources: converted cards, converted token scripts and the keyword-definition file. Unscanned reminder text would expand to `[UNK]`.
 - `[PAD]`, `[UNK]`, `cardname`, `[MASK]`, `[CLS]` and `[SEG]` are seeded at low ids so `--target-size` cannot truncate them away. On the script surface so are `sv1…svN`, every template word and every key part, and the build fails when a definition would expand to `[UNK]`.
 - Set codes are not seeded: an ability line never names a set.
-- `--surface script` writes `models/effects/vocab-script.txt`, a path of its own, so a script-surface rebuild never overwrites the vocabulary a prose-surface checkpoint recorded and can still load against.
+- The surface is read from the vocabulary's file name and from nothing else (`ability_encoder.surface_of`): a name containing `vocab-script` is the script surface, any other the prose surface. A script vocabulary passed with `--vocab-path` must keep such a name (`vocab-script.txt`), else every command reading it tokenizes on the prose surface. The two surfaces' vocabularies are two files, so a script-surface rebuild never overwrites the vocabulary a prose-surface checkpoint recorded and can still load against.
 
 ## Ability cache
 
-- `output/effects/abilities/<tree>/…` holds one `.npz` per source file, a `float32` array `(n_lines, e_dim)` under the key `e`, row-aligned with that source's sidecar.
+- The cache directory (`encode-abilities --output-root`, a `cache` run named after the checkpoint's run) holds under `<tree>/…` one `.npz` per source file, a `float32` array `(n_lines, e_dim)` under the key `e`, row-aligned with that source's sidecar.
 - `encode-abilities` computes it once, offline; every downstream consumer reads the cache rather than the encoder.
 - `--variant` resolves the checkpoint and the output suffix together, so a baseline is never encoded with another variant's weights and never lands on the shipping cache. A variant writes `<name>.{variant}.npz` beside the shipping file.
 - The `taxonomy` variant has no encoder and emits a hash embedding into the same row layout, so every geometry check reads one file shape.
@@ -70,7 +70,7 @@ How a key resolves, by case:
 
 ## Variant scripts
 
-- `output/effects/variant-scripts/` holds the perturbed Forge source scripts, flat. The filename is the path a variant's provenance key resolves to, so it cannot be derived from the source file's stem. `loadable.lst` is the only file in the tree that is not a variant script.
+- The variant tree (`--variant-scripts`, one `inputs` run directory every variant run of a generation extends) holds the perturbed Forge source scripts, flat. The filename is the path a variant's provenance key resolves to, so it cannot be derived from the source file's stem. `loadable.lst` is the only file in the tree that is not a variant script.
 - Each variant gets its sidecar from `VariantSidecarMain`, which runs the ordinary converter with the text output suppressed. A key's `index_within_kind` is the trait's position in Forge's runtime trait list, so only the parser that builds that list can number it the way a record will.
 - The tree has no prose surface: `SidecarCache.prose_for` returns None for it, and the prose surface falls back to the script.
 - Variants are staged into Forge's custom-cards directory before `FModel.initialize`. The card database is read once at startup, and a script that appears afterwards is invisible for the life of the JVM.

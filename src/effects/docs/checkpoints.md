@@ -4,7 +4,7 @@ Rules to respect when changing what a checkpoint or `resume.pt` holds, a loader,
 
 ## Checkpoints
 
-- Checkpoints live under `models/effects/effect-model/` (`{timestamp}.pt` plus a rolling `latest.pt`). A variant writes to `models/effects/effect-model/{variant}/`, so a baseline run can never overwrite the checkpoint the cache was built from.
+- A training run writes its checkpoints (`{timestamp}.pt` plus a rolling `latest.pt`) to `--model-output`, its run directory under `models/effects/<gen>/effect-model/`. A baseline variant trains into a model directory of its own (`effect-model-identity`, ...; without `--model-output`, a `{variant}/` subdirectory of the default), so a baseline run can never overwrite the checkpoint the cache was built from.
 - A checkpoint records the split it trained against, enumerated rather than derived: the held-out card list and both `game_id` sets. No command recomputes a split, because the corpus is append-only and a recomputed one would score the gates partly on games the model trained on.
 - It also records the vocabulary and keyword-definition paths with their content hashes, the withheld keyword, the curated dataset's manifest path and digest, the sidecar roots, the holdout unit, the encoder size and the training settings.
 - Every inference command re-hashes what it actually loaded and fails fast on a mismatch. Encoding a cache against a different vocabulary produces vectors that look fine and mean nothing.

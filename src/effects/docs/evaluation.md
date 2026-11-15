@@ -51,7 +51,7 @@ Rules to respect when running or changing `evaluate-effect-model`, a gate, the k
 
 ## Selection set
 
-- `selection-set-<corpus digest>.json`: canonical JSON with a `digest` over the rest, frozen once per curated corpus and found by the corpus digest, in the directory every reader is given (`--reports-dir` on `train-effect-model` and `evaluate-effect-model`, `--probe-set-dir` on the probes; by default `output/effects/reports/`).
+- `selection-set-<corpus digest>.json`: canonical JSON with a `digest` over the rest, frozen once per curated corpus and found by the corpus digest, in the directory every reader is given (`--reports-dir` on `train-effect-model` and `evaluate-effect-model`, `--probe-set-dir` on the probes): the freeze's own `reports` run directory, passed to every reader of that corpus.
 - Freeze it with `scripts/effect_knowledge_probes/run.py --freeze-probe-set --corpus DIR`; no checkpoint is needed. The freeze exits 1 when a half holds fewer than 300 games, a component's standard error passes 0.05 or a grid cell is empty.
 - A freeze never replaces a set already there by another: the same set again is a no-op, another exits 1 and leaves the file alone.
 - Its halves (`selection`, `reporting`) are the manifest's and are never reassigned.

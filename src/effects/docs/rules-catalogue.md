@@ -41,7 +41,7 @@ Rules to respect when editing `rules/`, a detector family or rule tagging, and w
 
 ## `rule-counts`
 
-- Writes `rule -> polarity -> source -> records` to `--output` (default `output/effects/rule-counts.json`), with the rules declared without a detector, the uncountable ones, the review list and the per-rule `carriers`.
+- Writes `rule -> polarity -> source -> records` to `--output` (pass it: a file in an `inputs` run directory when a later run reads it, as the steered round does), with the rules declared without a detector, the uncountable ones, the review list and the per-rule `carriers`.
 - A rule with a taggable declaration that no record tags is listed under `declared_zero`. The file also lists `untaggable` (per scenario, why no record can show it) and `same_as`. Only a rule with no declaration is left out silently.
 - A gen-3 game whose shard holds no game-end marker counts toward no rule, review entry or carrier; `cut_games` says how many were left out.
 - It reads gen-2 or gen-3 shards, never mixed. The file's `generation` is what the steered variant round checks.

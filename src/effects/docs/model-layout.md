@@ -11,7 +11,7 @@ Rules to respect when changing the input layout, the relation attention or an ou
 - Those lists are generated, not hand-edited:
   - `domain/kept_keyword_flags.py` by `scripts/scan_keyword_flags.py`; its test fails when the file is stale.
   - `domain/forge_vocabularies.py` by `scripts/scan_forge_vocabularies.py`.
-  - `domain/output_vocabularies.py` by `scripts/scan_output_vocabularies.py --manifest`, from a built manifest.
+  - `domain/output_vocabularies.py` by `scripts/scan_output_vocabularies.py --manifest`, from a built manifest. The lists checked in are provisional, surveyed from pilot collections (the module's docstring names them): before the first gen-3 training, regenerate them from the curated corpus's manifest, and update the head widths `tests/unit/effects/domain/test_layout_vocabularies.py` pins, which follow the lists' lengths. A checkpoint trained on the provisional lists loads against those lists only.
 
 ## Input slots
 
