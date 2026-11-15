@@ -157,11 +157,11 @@ class TestPricePredictorCli:
 
     def test_convert_records_in_the_directory_holding_both_trees(self):
         args = cli.build_parser().parse_args([
-            "convert", "--output-path", "output/price-predictor/gen1/converted/cardsfolder",
-            "--tokens-output-path", "output/price-predictor/gen1/converted/tokenscripts",
+            "convert", "--output-path", "output/effects/gen3/converted/cardsfolder",
+            "--tokens-output-path", "output/effects/gen3/converted/tokenscripts",
         ])
         assert cli.RUN_MANIFESTS["convert"].run_dir(args) == Path(
-            "output/price-predictor/gen1/converted",
+            "output/effects/gen3/converted",
         )
 
     def test_predict_writes_none(self):

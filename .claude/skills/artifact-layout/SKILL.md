@@ -1,6 +1,6 @@
 ---
 name: artifact-layout
-description: Binding rules for where everything under `output/` and `models/` goes and how it is named — module, generation, kind, run directory, run manifest, console and worker logs, scratch, archiving to the NAS. Load BEFORE choosing an output or checkpoint path for any command, starting any run (collection, build, training, evaluation, probe, audit, pilot), writing or moving a log, or cleaning, archiving or deleting anything under `output/` or `models/`.
+description: Use when writing, proposing or handing the user ANY command line that writes files (convert, vocabulary, pool or deck generation, collection, build-corpus, training, evaluation, probe, audit, pilot, a script), including one the user will launch themselves; when choosing or naming a path under `output/` or `models/` for a flag, a brief to a subagent, a spec or a doc; when asked where a file goes or where to find one; when writing or moving a log; and before cleaning, archiving or deleting anything under `output/` or `models/`. Load it BEFORE typing the first path, even for a one-line command and even when the command has a default output path.
 ---
 
 # Artifact layout: `output/` and `models/`
@@ -19,7 +19,7 @@ models/<module>/<gen>/<model>/<run>/...
 
 | level | values | rule |
 |---|---|---|
-| `<module>` | `price-predictor`, `sealed`, `draft`, `effects` | the package that produced it, never the one that reads it |
+| `<module>` | `price-predictor`, `sealed`, `draft`, `effects` | the module whose work the run is part of, whichever package's command writes the files (see "One module, one tree") |
 | `<gen>` | `gen1`, `gen2`, `gen3`, … | the module's own generation (its experiment record and spec name it); a module with no generations yet is `gen1` |
 | `<kind>` | from the kind table below | fixed vocabulary; a new kind needs a line in this skill first |
 | `<model>` | the model's name: `scorer`, `picker`, `encoder`, `agent`, `effect-model`, `transformer`, `sklearn` | one directory per model trained, baselines included (`effect-model-identity`) |
@@ -47,6 +47,23 @@ A run directory under `models/<module>/<gen>/<model>/` holds the checkpoints (`{
 `latest.pt`, `resume.pt`, …) of one training run. The ability cache and the reports computed from a
 checkpoint are not inside it: they go to `output/<module>/<gen>/cache/<run>/` and
 `output/<module>/<gen>/reports/<run>/`, under a run name that names the checkpoint's run.
+
+## One module, one tree
+
+Work on one module is independent of work on every other module: everything that work produces
+or reads lives under that module's own `output/<module>/` and `models/<module>/`.
+
+- The module is the one being worked on, not the package whose command runs. `python -m
+  price_predictor convert` run for the effects module writes `output/effects/<gen>/converted/`;
+  `python -m sealed match-outcomes --effect-records` run for an effects collection writes under
+  `output/effects/<gen>/records/`.
+- A run reads only from its own module's tree. When effects work needs something another package
+  makes (converted cards, a vocabulary, pools, decks, a checkpoint), that thing is produced again
+  under `output/effects/` or `models/effects/`, by a run of its own with its own `run.json`. It is
+  never read from `output/sealed/`, `output/price-predictor/` or another module's `models/` tree.
+- So each module has its own `converted/` trees, and reconverting for one module changes nothing
+  another module reads.
+- Deleting, archiving or rebuilding one module's tree leaves every other module's runs reproducible.
 
 ## Naming a run
 
@@ -79,7 +96,7 @@ checkpoint are not inside it: they go to `output/<module>/<gen>/cache/<run>/` an
   "superseded_by": null,
   "commands": ["python -u -m sealed match-outcomes --workers 6 ..."],
   "commits": {"repo": "7bb254d3", "forge": "d44cf28493c", "dirty": false},
-  "inputs": ["output/price-predictor/gen1/inputs/2026-11-13-convert"],
+  "inputs": ["output/effects/gen3/converted"],
   "continues": [],
   "started": "2026-11-13T09:12:00+01:00",
   "ended": null,
@@ -110,8 +127,8 @@ checkpoint are not inside it: they go to `output/<module>/<gen>/cache/<run>/` an
    directory; a reusable one lives in `scripts/`.
 2. Every input and output path is passed explicitly on the command line, wired to this layout.
    No run relies on a command's default path.
-3. A run reads other runs by their full path and never copies their files. Its `run.json` lists
-   every path it read.
+3. A run reads other runs of its own module by their full path and never copies their files. Its
+   `run.json` lists every path it read. It reads nothing from another module's tree.
 4. Anything a `keep` run reads is `keep` too. Nothing outside `scratch` reads from `scratch`.
 5. A generation's directories are not edited once the next generation starts, except to mark runs
    `superseded`.
@@ -127,10 +144,10 @@ in a `run.json` stays valid by swapping the root. Moving a run never renames it.
 
 ## Checklist before starting a run
 
-1. Module, generation, kind (or model) and slug chosen; the run path is
+1. Module (the one being worked on), generation, kind (or model) and slug chosen; the run path is
    `output/<module>/<gen>/<kind>/<YYYY-MM-DD-slug>/` or `models/<module>/<gen>/<model>/<YYYY-MM-DD-slug>/`.
-2. Every input and output path on the command line points into this layout; the output points into
-   the run directory.
+2. Every input and output path on the command line points into this layout, inside the same
+   module's tree; the output points into the run directory.
 3. The console goes to `console.log` in the run directory (`python -u … 2>&1 | tee …/console.log`),
    other logs under `logs/`.
 4. At the end: in `run.json`, the operator fills `purpose` and sets `keep`, `scratch` or
