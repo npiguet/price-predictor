@@ -215,7 +215,9 @@ class DetectorIndex:
     record kind for an event that kind never lists (``emittable_events``) is
     set aside in ``untaggable`` with its reason, since it would read every
     record of the kind as the event's absence; a ``same_as`` scenario goes to
-    ``duplicates``. Neither tags.
+    ``duplicates``. Neither tags. A ``same_as`` naming a scenario of one of its
+    own rules raises: a duplicate is counted under other rules, and two
+    scenarios of one rule stating one fact each declare it.
     """
 
     by_kind: Mapping[str, tuple[tuple[Scenario, DetectorDeclaration, DetectorFamily], ...]]
@@ -265,6 +267,10 @@ class DetectorIndex:
                 if target is None or not isinstance(target.detector, DetectorDeclaration):
                     raise DeclarationError(
                         f"{scenario.id}: same_as {named!r} names no scenario declaring a detector")
+                if set(target.rules) & set(scenario.rules):
+                    raise DeclarationError(
+                        f"{scenario.id}: same_as {named!r} names a scenario of its own rule; "
+                        "a duplicate is counted under other rules, so declare the detector")
                 under += target.rules
             duplicates[scenario.id] = Duplicate(
                 scenario.rules, scenario.detector.scenarios, tuple(dict.fromkeys(under)))

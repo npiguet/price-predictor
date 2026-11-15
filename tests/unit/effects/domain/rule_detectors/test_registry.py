@@ -197,6 +197,17 @@ def test_a_same_as_scenario_tags_nothing_and_points_at_its_scenario():
         DetectorIndex.of(catalogue(dangling))
 
 
+def test_a_same_as_naming_a_scenario_of_its_own_rule_is_refused():
+    """A duplicate is counted under its targets' rules, never its own: two
+    scenarios of one rule stating one fact each declare it."""
+    first = scenario("702.103e-1", ("702.103e",), "resolution", declaration(
+        "legality_membership", "playability", list="legal_blockers"))
+    second = scenario("702.103e-2", ("702.103e",), "resolution",
+                      SameAs(("702.103e-1",), "the same fact"))
+    with pytest.raises(DeclarationError, match="702.103e-2.*own rule"):
+        DetectorIndex.of(catalogue(first, second))
+
+
 _SCENARIO_SPECIFIC = re.compile(r"card|name|cards|names|entity|object", re.IGNORECASE)
 
 

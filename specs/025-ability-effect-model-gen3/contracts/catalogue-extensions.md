@@ -32,7 +32,8 @@ or, for a scenario stating another's observable fact (FR-002b),
 
 - `family` names a module of `effects.domain.rule_detectors`, which declares its `params`.
 - No two scenarios of different rules share one declaration; a `same_as` names scenarios that
-  declare a detector, and its rules are counted under theirs.
+  declare a detector, of rules other than its own, and its rules are counted under theirs. Two
+  scenarios of one rule stating one fact each declare the detector.
 - `needs` lists gen-3 field names; on a gen-2 record the rule is not countable.
 
 ## Variant `operation`

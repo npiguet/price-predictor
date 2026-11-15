@@ -478,8 +478,17 @@
       ],
       "forge_notes": "MagicStack's fizzle check unanimates a bestowed spell whose target is illegal and resolves it as a creature spell.",
       "detector": {
-        "same_as": "702.103e-1",
-        "reason": "A bestowed Aura spell resolving as a creature because its target became illegal is 702.103e-1's fact."
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A bestowed Aura spell whose target was sacrificed on becoming its target resolves and enters the battlefield as a creature with nothing attached, instead of fizzling.",
+        "near_miss": "A bestow resolution whose spell attaches to its target.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "battlefield",
+          "keyword": "Bestow",
+          "without_event": "attached"
+        },
+        "needs": []
       }
     },
     {
