@@ -217,9 +217,18 @@ Run-Logged $auditChecks "$py -u -m effects validate-corpus --effect-records $aud
 ```
 
 The collection itself, one run directory per collecting command under `$gen3\records\`. Set
-first: `$runFlags`, the flags every collecting command shares (workers, budgets, the three
-decision-sampling rates), and `$anyTargetCards`, the any-target coverage round's `--wording-cards`
-file.
+first:
+
+- `$runFlags`, the flags all six collecting commands take (`--workers`, the three decision-sampling
+  rates, the fork and random-seat flags);
+- `$collectorFlags`, the flags only `collect-coverage` and `collect-variants` take (their budgets:
+  `--decks-per-round`, `--target-records`, `--no-progress-rounds`), `""` for none;
+- `$anyTargetCards`, the any-target coverage round's `--wording-cards` file.
+
+Run the seven commands one at a time, each after the one before it has ended. `match-outcomes` has
+no match budget: it plays until one Ctrl-C, then lets every worker finish its game, and has ended
+when `console.log` shows `Done.` and the prompt is back. A collector ends itself when every card is
+satisfied or retired.
 
 ```powershell
 if (-not (Test-Path variable:fullStart)) { $fullStart = Run-Start "$gen3\records" full-strength }
@@ -237,11 +246,11 @@ $steered   = "$gen3\records\$steeredStart-variants-steered"
 
 Run-Logged $full      "$py -u -m sealed match-outcomes --effect-records $full --outcomes-dir $full --directed-fork-rules $rules $runFlags"
 Run-Logged $depleted  "$py -u -m sealed match-outcomes --effect-records $depleted --outcomes-dir $depleted --exclude-cards $holdout --directed-fork-rules $rules $runFlags"
-Run-Logged $anytarget "$py -u -m effects collect-coverage --effect-records $anytarget $cards --wording-cards $anyTargetCards --exclude-cards $holdout --count-from $depleted $runFlags"
-Run-Logged $wording   "$py -u -m effects collect-coverage --effect-records $wording $cards --wording-cards rules\coverage-wording-cards.txt --directed-fork-rules $rules --exclude-cards $holdout --count-from $depleted --count-from $anytarget $runFlags"
-Run-Logged $untarget  "$py -u -m effects collect-variants --round untargeted --effect-records $untarget --forge-cards-path ..\forge\forge-gui\res\cardsfolder --variant-scripts $variants $cards --exclude-cards $holdout $runFlags"
+Run-Logged $anytarget "$py -u -m effects collect-coverage --effect-records $anytarget $cards --wording-cards $anyTargetCards --exclude-cards $holdout --count-from $depleted $runFlags $collectorFlags"
+Run-Logged $wording   "$py -u -m effects collect-coverage --effect-records $wording $cards --wording-cards rules\coverage-wording-cards.txt --directed-fork-rules $rules --exclude-cards $holdout --count-from $depleted --count-from $anytarget $runFlags $collectorFlags"
+Run-Logged $untarget  "$py -u -m effects collect-variants --round untargeted --effect-records $untarget --forge-cards-path ..\forge\forge-gui\res\cardsfolder --variant-scripts $variants $cards --exclude-cards $holdout $runFlags $collectorFlags"
 Run-Logged (Split-Path $counts) "$py -u -m effects rule-counts --records-dir $gen3\records $cards --variant-scripts $variants --rules-dir rules --workers 10 --output $counts"
-Run-Logged $steered   "$py -u -m effects collect-variants --round steered --rule-counts $counts --effect-records $steered --forge-cards-path ..\forge\forge-gui\res\cardsfolder --variant-scripts $variants $cards --exclude-cards $holdout $runFlags"
+Run-Logged $steered   "$py -u -m effects collect-variants --round steered --rule-counts $counts --effect-records $steered --forge-cards-path ..\forge\forge-gui\res\cardsfolder --variant-scripts $variants $cards --exclude-cards $holdout $runFlags $collectorFlags"
 ```
 
 The `match-outcomes` run without `--exclude-cards` plays full-strength pools and feeds the
