@@ -241,7 +241,7 @@ def test_a_gen3_record_takes_its_family_through_the_gen3_line_model():
     assert {
         (RecordKind.RESOLUTION, "DealDamage"), (RecordKind.RESOLUTION, "Charm"),
         (RecordKind.TRIGGER, "ChangesZone"), (RecordKind.CONTINUOUS, "Continuous"),
-        (RecordKind.REWRITE, "ETBReplacement"), (RecordKind.COMBAT, "first_strike"),
+        (RecordKind.REWRITE, "DamageDone"), (RecordKind.COMBAT, "first_strike"),
         (RecordKind.PLAYABILITY, FamilySentinel.UNAFFORDABLE),
         (RecordKind.TURN_ACTION, FamilySentinel.NO_TEXT),
     } <= seen

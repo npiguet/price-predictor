@@ -12,9 +12,17 @@ The sidecars and converted texts every chosen record names, anywhere in its
 envelope, state or payload, are copied beside it under the same tree layout,
 so a ``SidecarCache`` rooted there resolves every key.
 
-    python scripts/make_fixture_records.py                 # gen-1
-    python scripts/make_fixture_records.py --generation 2  # gen-2
-    python scripts/make_fixture_records.py --generation 3 --per-category 2  # gen-3
+    python scripts/make_fixture_records.py --generation 3 --per-category 2
+        --records-dir output/effects/gen3/scratch/2026-11-15-pilot
+        --cards-folder output/effects/gen3/converted/cardsfolder
+        --cards-folder output/effects/gen3/converted/tokenscripts
+        --output tests/fixtures/effects/gen3-records.jsonl.gz
+        --sidecars-out tests/fixtures/effects/gen3-sidecars
+
+(one command line).
+Every path is named on the command line: the records, the converted trees
+and both outputs (the ``artifact-layout`` skill). Gen-1 and gen-2 are cut the
+same way from their records' NAS copies.
 
 ``--generation 2`` adds the categories the rule detectors are tested on: a
 resolution whose effect half kills a creature at toughness 0 or less in the
@@ -37,9 +45,12 @@ hand, found by reading the shards their ids name. ``--append`` adds the pinned
 records to the fixture already on disk without rescanning, so every record an
 existing test names stays.
 
-``--generation 3`` reads the T079 pilot (``output/effects/records-gen3-pilot``)
-and then the second pilot (``records-gen3-pilot2``, the first collected with
-land-play candidates), each in its own interleaved order, and adds, before
+``--generation 3`` reads each ``--records-dir`` in its own interleaved order,
+a later one filling only what the earlier left, and takes records only from
+games that ended: each game the fixture holds a record of brings its
+game-end marker, and every record sharing a ``link_id`` with a chosen one or
+mirrored by one, wherever it sits in the game. Records are written as the
+collector wrote their lines, in shard order. It adds, before
 gen-2's categories, one per story-2 acceptance scenario (``a1-`` … ``a11-``: a
 permanent with a static, a trigger and a replacement line; a creature stripped
 of every ability; flying granted by another permanent's static; ward and
@@ -51,8 +62,15 @@ check, the anchored legality shapes, and the new snapshot members (floating
 effects of both kinds, delayed triggers, dungeons, day and night, each
 extra-entity role, a face-down card, dice), and land-play candidates: playable,
 past the turn's limit, off their player's turn, and on it at a time no sorcery
-could be cast. Face-down keys name ``variant-scripts/``, so that tree is a
-sidecar root too."""
+could be cast, the combats ``combat_keyword_effect`` reads (a vigilant
+attacker, a first striker in the regular step), a directed fork, a fork
+whose copy dropped something, and the rarer members ``field-coverage`` checks
+vary (the initiative, a land-play limit other than one, a buffered ability's
+events, a blocker required elsewhere or forbidden by its own line), and an
+effect half creating one continuous effect or delayed trigger. Face-down keys
+name ``variant-scripts/``: pass that tree as a ``--cards-folder`` too when the
+records name it. The sidecars directory is emptied first, so it holds exactly
+the sidecars the records name."""
 
 from __future__ import annotations
 
@@ -663,10 +681,26 @@ def _empty_mana(record: dict) -> bool:
         for event in (record["payload"].get("events") or ()))
 
 
-def _gen3_categories(sidecars: _Sidecars) -> dict[str, Callable[[dict], bool]]:
+def _combat_keyword(lookup, keyword: str, polarity: str | None) -> Callable[[dict], bool]:
+    """An observed combat ``combat_keyword_effect`` matches for ``keyword``, on
+    the side ``polarity`` names (either, when None): the detector picks the
+    record, so the fixture holds what the family's real-record tests read."""
+    from effects.domain.rule_detectors.combat_keyword_effect import FAMILY
+
+    def test(record: dict) -> bool:
+        if record["kind"] != "combat" or record["fork"]:
+            return False
+        found = FAMILY.match(record_from_dict(record), lookup, {"keyword": keyword})
+        return found is not None and (polarity is None or found.polarity.value == polarity)
+    return test
+
+
+def _gen3_categories(sidecars: _Sidecars, lookup) -> dict[str, Callable[[dict], bool]]:
     """Gen-3's own categories: story 2's acceptance scenarios, each
-    ``turn_action`` subkind and failed check, the anchored legality records and
-    the new snapshot members. Matched before gen-2's and the shared ones."""
+    ``turn_action`` subkind and failed check, the anchored legality records,
+    the new snapshot members, the combats the keyword detector's real-record
+    tests read and the fork tags. Matched before gen-2's and the shared ones;
+    ``lookup`` is a sidecar cache over the same trees, for the detectors."""
     def turn_action(subkind: str) -> Callable[[dict], bool]:
         def test(record: dict) -> bool:
             if record["kind"] != "turn_action" or record.get("subkind") != subkind:
@@ -736,9 +770,30 @@ def _gen3_categories(sidecars: _Sidecars) -> dict[str, Callable[[dict], bool]]:
                                          for e in r["state"]["entities"]),
         "chosen-color": lambda r: any((e.get("chosen") or {}).get("colors")
                                       for e in r["state"]["entities"]),
+        "chosen-type": lambda r: any((e.get("chosen") or {}).get("type")
+                                     for e in r["state"]["entities"]),
         "keyword-granted-by-effect": lambda r: any(
             line["kind"] == "keyword" and line["granted"] and not line["keys"]
             for e in r["state"]["entities"] for line in _lines(e)),
+        "initiative": lambda r: any(p.get("initiative") for p in r["state"]["players"]),
+        "land-plays-not-one": lambda r: any(
+            "max_land_plays" in p and p["max_land_plays"] != 1 for p in r["state"]["players"]),
+        "rewrite-buffered-events": lambda r: r["kind"] == "rewrite" and bool(
+            r["payload"].get("buffered_events")),
+        "blockers-required-elsewhere": lambda r: r["kind"] == "playability" and r.get(
+            "subkind") == "blockers" and any(
+            f.get("required_elsewhere") for f in r["payload"].get("forbidden") or ()),
+        "blockers-forbidden-own-line": lambda r: r["kind"] == "playability" and r.get(
+            "subkind") == "blockers" and any(
+            f.get("responsible_own") for f in r["payload"].get("forbidden") or ()),
+        "effect-object-created": lambda r: _effect_resolution(r) and sum(
+            e["type"] in ("continuous_effect_created", "delayed_trigger_created")
+            for e in r["payload"].get("events") or ()) == 1,
+        "combat-vigilance-fires": _combat_keyword(lookup, "vigilance", "fires"),
+        "combat-vigilance-near-miss": _combat_keyword(lookup, "vigilance", "does_not_fire"),
+        "combat-first-strike-regular": _combat_keyword(lookup, "first_strike", None),
+        "directed-fork": lambda r: r.get("directed") is not None,
+        "copy-dropped": lambda r: bool(r.get("copy_dropped")),
     }
 
 
@@ -804,44 +859,76 @@ def _read_fixture(path: Path) -> dict[str, dict]:
         return {r["record_id"]: r for r in (json.loads(line) for line in handle if line.strip())}
 
 
+def _ended_games(shard: Path) -> set[str]:
+    """The games of ``shard`` that wrote a game-end marker (gen 3): the rest
+    were cut, and every reader drops them."""
+    ended: set[str] = set()
+    for line in iter_shard_lines(shard):
+        if '"game_end"' in line:
+            record = orjson.loads(line)
+            if record["kind"] == "turn_action" and record.get("subkind") == "game_end":
+                ended.add(record["game_id"])
+    return ended
+
+
+def _joined(shard: Path, shard_no: int, games: set[str], links: set[str],
+            mirrors: set[str]) -> dict[str, dict]:
+    """The records of ``shard`` a chosen record joins with (gen 3): each one
+    sharing a wanted ``link_id``, each mirrored record and each chosen game's
+    marker, wherever it sits in its game, a cost half before its effect half
+    included. A game never spans shards, so its partners are all here."""
+    found: dict[str, dict] = {}
+    needles = [f'"game_id":"{game}"' for game in games]
+    for number, line in enumerate(iter_shard_lines(shard)):
+        if not any(needle in line for needle in needles):
+            continue
+        record = orjson.loads(line)
+        if (record.get("link_id") in links or record["record_id"] in mirrors
+                or (record["kind"] == "turn_action" and record.get("subkind") == "game_end")):
+            record["_line"], record["_shard"], record["_number"] = line, shard_no, number
+            found[record["record_id"]] = record
+    return found
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
-    parser.add_argument("--generation", type=int, choices=(1, 2, 3), default=1)
-    parser.add_argument("--records-dir", type=Path, action="append",
-                        help="repeatable, read in order; default output/effects/records, "
-                             "records-gen2 for --generation 2, records-gen3-pilot then "
-                             "records-gen3-pilot2 for --generation 3")
-    parser.add_argument("--cards-folder", action="append", type=Path,
-                        help="converted roots, named by tree (repeatable); "
-                             "default output/cardsfolder and output/tokenscripts, "
-                             "and output/effects/variant-scripts for --generation 3")
-    parser.add_argument("--output", type=Path,
-                        help="default tests/fixtures/effects/gen<N>-records.jsonl.gz")
-    parser.add_argument("--sidecars-out", type=Path,
-                        help="default tests/fixtures/effects/gen<N>-sidecars")
+    parser.add_argument("--generation", type=int, choices=(1, 2, 3), required=True)
+    parser.add_argument("--records-dir", type=Path, action="append", required=True,
+                        help="a records run directory; repeatable, read in order, a later "
+                             "one filling only the categories the earlier left unfilled")
+    parser.add_argument("--cards-folder", action="append", type=Path, required=True,
+                        help="a converted tree, named by its last path segment "
+                             "(cardsfolder, tokenscripts, variant-scripts); repeatable")
+    parser.add_argument("--output", type=Path, required=True,
+                        help="the fixture, e.g. tests/fixtures/effects/gen3-records.jsonl.gz")
+    parser.add_argument("--sidecars-out", type=Path, required=True,
+                        help="the fixture's sidecar tree, e.g. "
+                             "tests/fixtures/effects/gen3-sidecars")
     parser.add_argument("--per-category", type=int, default=3)
     parser.add_argument("--max-shards", type=int, default=400)
     parser.add_argument("--append", action="store_true",
                         help="gen-2: add the pinned records to the fixture on disk, no scan")
     args = parser.parse_args()
     gen = args.generation
-    records_dirs = args.records_dir or [Path(name) for name in {
-        1: ["output/effects/records"], 2: ["output/effects/records-gen2"],
-        3: ["output/effects/records-gen3-pilot", "output/effects/records-gen3-pilot2"]}[gen]]
+    records_dirs = args.records_dir
+    for directory in records_dirs:
+        if not iter_shards(directory):
+            parser.error(f"--records-dir {directory} holds no shard")
+    for folder in args.cards_folder:
+        if not folder.is_dir():
+            parser.error(f"--cards-folder {folder} is no directory")
     args.records_dir = records_dirs[0]
-    args.output = args.output or Path(f"tests/fixtures/effects/gen{gen}-records.jsonl.gz")
-    args.sidecars_out = args.sidecars_out or Path(f"tests/fixtures/effects/gen{gen}-sidecars")
 
-    folders = args.cards_folder or [
-        Path("output/cardsfolder"), Path("output/tokenscripts"),
-        # A face-down card's keys name its variant script (T071).
-        *([Path("output/effects/variant-scripts")] if gen == 3 else [])]
+    folders = args.cards_folder
     sidecars = _Sidecars({folder.name: folder for folder in folders})
     categories = _categories(sidecars)
     if gen >= 2:
         categories = {**_gen2_categories(sidecars), **categories}
     if gen == 3:
-        categories = {**_gen3_categories(sidecars), **categories}
+        from effects.infrastructure.converted_trees import SourceTrees
+
+        lookup = SourceTrees.of(folders).sidecar_cache()
+        categories = {**_gen3_categories(sidecars, lookup), **categories}
     chosen: dict[str, list[dict]] = defaultdict(list)
     wanted_links: set[str] = set()
     wanted_mirrors: set[str] = set()
@@ -858,13 +945,16 @@ def main() -> int:
     shards = [shard for directory in records_dirs for shard in _interleaved(directory)]
     forge_ai_wanted = gen >= 2
     for shard_no, shard in enumerate(shards[: args.max_shards]):
+        # Gen 3: only games that ended, as every reader keeps only those.
+        ended = _ended_games(shard) if gen == 3 else None
+        shard_games: set[str] = set()
         followers: dict[str, int] = {}
         # The trigger records just written in each game: a dies trigger's record
         # precedes the held effect half of the kill that fired it (acceptance 7).
         recent_triggers: dict[str, deque] = defaultdict(lambda: deque(maxlen=_RECENT_TRIGGERS))
         seat_games: set[str] = set()
         plain: dict[str, list[dict]] = defaultdict(list)
-        for line in iter_shard_lines(shard):
+        for number, line in enumerate(iter_shard_lines(shard)):
             try:
                 # orjson, as the codec reads: a gen-3 shard is tens of
                 # gigabytes of JSON.
@@ -873,12 +963,17 @@ def main() -> int:
                 continue
             record_id = record["record_id"]
             game = record["game_id"]
+            if ended is not None:
+                if game not in ended:
+                    continue
+                record["_line"], record["_shard"], record["_number"] = line, shard_no, number
             if record.get("random_seat"):
                 seat_games.add(game)
             elif forge_ai_wanted and not record["fork"] and len(plain[game]) < 2:
                 plain[game].append(record)
             if followers.get(game) and record["kind"] == "resolution":
                 extras[record_id] = record
+                shard_games.add(game)
                 followers[game] -= 1
             if record.get("link_id") in wanted_links and record_id not in extras:
                 extras[record_id] = record
@@ -890,6 +985,7 @@ def main() -> int:
                 if len(chosen[name]) >= args.per_category or not test(record):
                     continue
                 chosen[name].append(record)
+                shard_games.add(game)
                 if record.get("link_id"):
                     wanted_links.add(record["link_id"])
                 if record.get("mirror_of"):
@@ -909,19 +1005,24 @@ def main() -> int:
             for game, kept in plain.items():
                 if game not in seat_games and len(chosen["forge-ai"]) < args.per_category:
                     chosen["forge-ai"].append(kept[0])
+                    shard_games.add(game)
+        if gen == 3 and shard_games:
+            joined = _joined(shard, shard_no, shard_games, wanted_links, wanted_mirrors)
+            for record_id, record in joined.items():
+                extras.setdefault(record_id, record)
         if all(len(chosen[name]) >= args.per_category for name in categories) and (
                 not forge_ai_wanted or len(chosen["forge-ai"]) >= args.per_category):
             break
-        if shard_no % 25 == 0:
-            filled = sum(len(chosen[name]) >= args.per_category for name in categories)
-            print(f"{shard_no} shards read, {filled}/{len(categories)} categories filled",
-                  file=sys.stderr)
+        filled = sum(len(chosen[name]) >= args.per_category for name in categories)
+        print(f"{shard_no + 1} shards read, {filled}/{len(categories)} categories filled",
+              file=sys.stderr, flush=True)
 
     records: dict[str, dict] = {}
     for name in chosen:
         for record in chosen[name]:
             records[record["record_id"]] = record
-    records.update(extras)
+    for record_id, record in extras.items():
+        records.setdefault(record_id, record)
     if gen == 2:
         records.update(_pinned_records(args.records_dir, _GEN2_PINNED))
     missing = [name for name in [*categories, *(["forge-ai"] if forge_ai_wanted else [])]
@@ -929,37 +1030,53 @@ def main() -> int:
 
     # Every record must parse with the current reader before it is a fixture.
     for record in records.values():
-        record_from_dict(record)
+        record_from_dict({k: v for k, v in record.items() if not k.startswith("_")})
 
     _write_fixture(args.output, records)
-    copied = _copy_sidecars(records, sidecars, args.sidecars_out, keep_existing=False)
+    if gen == 3 and args.sidecars_out.exists():
+        # Exactly the sidecars these records name: none left from an earlier cut.
+        shutil.rmtree(args.sidecars_out)
+    copied, unresolved = _copy_sidecars(records, sidecars, args.sidecars_out,
+                                        keep_existing=False)
 
     for name in chosen:
-        print(f"{name:22s} {len(chosen[name])}", file=sys.stderr)
-    print(f"{len(records)} records ({len(extras)} joined) -> {args.output}; "
+        print(f"{name:30s} {len(chosen[name])}", file=sys.stderr)
+    print(f"{len(records)} records ({len(extras)} joined) in "
+          f"{len({r['game_id'] for r in records.values()})} games -> {args.output}; "
           f"{copied} sidecars -> {args.sidecars_out}", file=sys.stderr)
     if missing:
         print(f"no record found for: {', '.join(missing)}", file=sys.stderr)
+    if unresolved:
+        print(f"no sidecar in the given trees for: {', '.join(unresolved)}", file=sys.stderr)
     return 0
 
 
 def _write_fixture(output: Path, records: dict[str, dict]) -> None:
+    """Gen 3: each record's line as the collector wrote it, in shard order.
+    Earlier generations: re-serialized, by game and timestamp."""
     output.parent.mkdir(parents=True, exist_ok=True)
-    with gzip.open(output, "wt", encoding="utf-8") as out:
+    with gzip.open(output, "wt", encoding="utf-8", newline="\n") as out:
+        if records and all("_line" in record for record in records.values()):
+            for record in sorted(records.values(), key=lambda r: (r["_shard"], r["_number"])):
+                out.write(record["_line"] + "\n")
+            return
         for record in sorted(records.values(), key=lambda r: (r["game_id"], r["timestamp"])):
             out.write(json.dumps(record, separators=(",", ":")) + "\n")
 
 
 def _copy_sidecars(records: dict[str, dict], sidecars: _Sidecars, sidecars_out: Path,
-                   *, keep_existing: bool) -> int:
+                   *, keep_existing: bool) -> tuple[int, list[str]]:
     """Copy every sidecar and converted text the records name; with
-    ``keep_existing``, a file already in the fixture is left as it is."""
+    ``keep_existing``, a file already in the fixture is left as it is. Returns
+    the count copied and the script files no given tree holds."""
     copied = 0
+    unresolved: list[str] = []
     for script_file in sorted({key["script_file"]
                                for record in records.values()
                                for key in _keys_in(record)}):
         source = sidecars.path(script_file)
         if source is None or not source.exists():
+            unresolved.append(script_file)
             continue
         tree, _, relative = script_file.partition("/")
         target = (sidecars_out / tree / relative).with_suffix(".provenance.json")
@@ -971,7 +1088,7 @@ def _copy_sidecars(records: dict[str, dict], sidecars: _Sidecars, sidecars_out: 
         if text.exists():
             shutil.copyfile(text, target.with_name(text.name))
         copied += 1
-    return copied
+    return copied, unresolved
 
 
 def _append_pinned(args, sidecars: _Sidecars) -> int:
@@ -983,7 +1100,7 @@ def _append_pinned(args, sidecars: _Sidecars) -> int:
     added = {rid: r for rid, r in pinned.items() if rid not in records}
     records.update(added)
     _write_fixture(args.output, records)
-    copied = _copy_sidecars(added, sidecars, args.sidecars_out, keep_existing=True)
+    copied, _ = _copy_sidecars(added, sidecars, args.sidecars_out, keep_existing=True)
     missing = sorted(set(_GEN2_PINNED) - set(pinned))
     print(f"{len(added)} pinned records added ({len(records)} in all) -> {args.output}; "
           f"{copied} sidecars -> {args.sidecars_out}", file=sys.stderr)

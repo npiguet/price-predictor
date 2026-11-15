@@ -46,6 +46,8 @@ from effects.domain.stratum_placement import PlacementRule
 from effects.infrastructure.shard_io import list_shards, write_shard
 from effects.infrastructure.sidecar_io import sidecar_path_for
 from tests.unit.effects.builders import (
+    GEN3_FIXTURE_GAMES,
+    GEN3_FIXTURE_RECORDS,
     held_out_cards,
     make_entity,
     make_record,
@@ -78,16 +80,21 @@ def a_record(
     entity_names: tuple[str, ...] = (),
     **overrides,
 ) -> EffectRecord:
-    """A real ``EffectRecord``: ``kind`` picks the discriminator and payload."""
+    """A real ``EffectRecord``: ``kind`` picks the discriminator and payload.
+
+    A gen-2 record unless ``generation=3`` is passed: the survey's shards
+    here hold no game-end marker, which only a gen-3 game owes.
+    """
     record_kind = RecordKind(kind)
     moment, payload = _PAYLOAD_BY_KIND[record_kind]
     entities = tuple(make_entity(f"E-{name}", name) for name in entity_names)
-    extra = {"moment": moment, "payload": payload, **overrides}
+    extra = {"moment": moment, "payload": payload, "generation": None, **overrides}
     if record_id is not None:
         extra["record_id"] = record_id
+    links = () if extra["generation"] == 3 else None
     return make_record(
         record_kind, game_id=game_id, ability=(ability or None),
-        state=make_snapshot(entities=entities), **extra,
+        state=make_snapshot(entities=entities, links=links), **extra,
     )
 
 
@@ -403,11 +410,13 @@ def test_a_training_record_acting_through_a_held_out_text_is_not_supplied(tmp_pa
 def gen3_survey(tmp_path_factory):
     """The gen-3 fixture surveyed with the real catalogue, every pool game a
     candidate (share 0.1, so the pool is every game)."""
+    import shutil
+
     from effects.infrastructure.rules_catalogue_io import load_heads, load_scenarios
-    from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS, copy_gen3_fixture
+    from tests.unit.effects.builders import GEN3_RECORDS, GEN3_SIDECAR_FOLDERS
 
     root = tmp_path_factory.mktemp("gen3-survey")
-    copy_gen3_fixture(root)
+    shutil.copyfile(GEN3_RECORDS, root / GEN3_RECORDS.name)
     heads = load_heads()
     config = SurveyConfig(
         read=ReadConfig(
@@ -428,10 +437,10 @@ def test_turn_action_records_are_counted_by_subkind_and_nothing_else(gen3_survey
     """Story 6 acceptance 8: none is kept, classed or supplied."""
     survey, _config = gen3_survey
     totals = survey.totals
-    # The fixture's 58 games, each ended by the marker its copy appends.
+    # Each of the fixture's games ends in its marker.
     assert totals.turn_actions == Counter({
-        "draw": 2, "untap": 2, "day_night": 2, "cleanup_discard": 2,
-        "lore_counter": 2, "phasing": 2, "game_end": 58})
+        "draw": 7, "untap": 3, "day_night": 2, "cleanup_discard": 2,
+        "lore_counter": 2, "phasing": 2, "game_end": GEN3_FIXTURE_GAMES})
     assert not totals.cut.games
     assert sum(totals.kept.values()) + sum(totals.refusals.by_class.values()) == (
         totals.records - sum(totals.turn_actions.values()))
@@ -440,8 +449,7 @@ def test_turn_action_records_are_counted_by_subkind_and_nothing_else(gen3_survey
 def test_every_record_is_tagged_and_counted_as_rule_counts_counts_it(gen3_survey):
     survey, _config = gen3_survey
     counts = survey.totals.rule_counts
-    # The fixture's 205 records and the 58 markers its copy appends.
-    assert counts.records == survey.totals.records == 205 + 58
+    assert counts.records == survey.totals.records == GEN3_FIXTURE_RECORDS
     assert counts.counts
     assert {source for (_rule, _polarity, source) in counts.counts} <= {
         "forge_ai", "random_seat", "aimed"}
@@ -465,12 +473,13 @@ def test_candidates_are_forge_ai_games_with_their_inventories(gen3_survey):
 
 def test_training_records_kept_for_the_budgets_are_tagged(gen3_survey):
     """Only random-seat games train outright here; each tagged record of one
-    is kept with its tags and the source the rule counts give it."""
+    is kept with its tags and the source the rule counts give it: the random
+    seat, or ``aimed`` for a directed fork such a game took."""
     survey, _config = gen3_survey
     tagged = survey.totals.tagged
     assert tagged
     assert all(record.tags or record.protection for record in tagged)
-    assert {record.source for record in tagged} == {"random_seat"}
+    assert {record.source for record in tagged} == {"random_seat", "aimed"}
 
 
 def test_the_closed_lists_are_what_effects_grant_or_remove(gen3_survey):

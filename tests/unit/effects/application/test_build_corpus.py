@@ -57,7 +57,6 @@ from effects.domain.records import (
     CombatPayload,
     EffectRecord,
     RecordKind,
-    ResolutionPayload,
     RewritePayload,
     TurnActionSubkind,
 )
@@ -272,7 +271,7 @@ class CorpusFixture:
         """
         record = _resolution(record_id, game, ability=ability or None)
         if events:
-            record = replace(record, payload=ResolutionPayload(events=events))
+            record = replace(record, payload=replace(record.payload, events=events))
         return record
 
     def config(
@@ -2147,13 +2146,15 @@ def test_a_decision_whose_candidate_key_is_unjoinable_is_refused(tmp_path, a_cor
 
 
 def _gen3_records(root: Path) -> Path:
-    """The fixture's shard, each game ended by the marker its copy appends
-    (the fixture predates the marker; ``copy_gen3_fixture``)."""
-    from tests.unit.effects.builders import copy_gen3_fixture
+    """A records directory holding the fixture's shard, each of its games
+    ended by its marker."""
+    import shutil
+
+    from tests.unit.effects.builders import GEN3_RECORDS
 
     records = root / "records"
     records.mkdir(parents=True)
-    copy_gen3_fixture(records)
+    shutil.copyfile(GEN3_RECORDS, records / GEN3_RECORDS.name)
     return records
 
 
@@ -2187,9 +2188,11 @@ def _written(store: CorpusStore) -> list[EffectRecord]:
 def test_no_turn_action_record_is_written_and_each_is_counted(gen3_build):
     """Story 6 acceptance 8 (FR-059)."""
     assert not [r for r in _written(gen3_build) if r.kind is RecordKind.TURN_ACTION]
+    from tests.unit.effects.builders import GEN3_FIXTURE_GAMES
+
     assert gen3_build.load().turn_action_left_out == {
-        "cleanup_discard": 2, "day_night": 2, "draw": 2, "game_end": 58, "lore_counter": 2,
-        "phasing": 2, "untap": 2}
+        "cleanup_discard": 2, "day_night": 2, "draw": 7, "game_end": GEN3_FIXTURE_GAMES,
+        "lore_counter": 2, "phasing": 2, "untap": 3}
 
 
 def test_a_permanent_spells_resolution_records_reach_their_strata(gen3_build):
@@ -2260,21 +2263,42 @@ def test_the_manifest_holds_every_gen3_field(gen3_build):
     # rule only a validation game or a turn action shows included.
     assert set(manifest.unbudgeted_rules) == {
         rule for rule, entry in manifest.rule_map.items() if entry.verdict != "trained"}
-    # The fixture's 205 records and the 58 markers its copy appends.
-    assert manifest.rule_counts["records"] == 205 + 58
+    from tests.unit.effects.builders import GEN3_FIXTURE_RECORDS
+
+    # Every record the fixture holds, its markers included.
+    assert manifest.rule_counts["records"] == GEN3_FIXTURE_RECORDS
     assert set(manifest.halves) == {"card-disjoint", "game-disjoint"}
+
+
+def test_a_real_gen3_manifest_keeps_its_digest_when_read_back(gen3_build):
+    """FR-147: a checkpoint pins its corpus by the manifest's digest. A real
+    gen-3 manifest, every gen-3 field filled, reads back to the digest of the
+    JSON as written, by the rule feature 023 fixed, and writes back byte for
+    byte, so loading the manifest a checkpoint names never moves its digest."""
+    import json
+
+    from effects.domain.corpus_manifest import CorpusManifest
+    from tests.unit.effects.domain.test_corpus_manifest import _as_written, _canonical_digest
+
+    raw = json.loads(gen3_build.manifest_path.read_text(encoding="utf-8"))
+    loaded = CorpusManifest.from_dict(raw)
+    assert loaded.digest() == _canonical_digest(raw)
+    assert _as_written(loaded.as_dict()) == _as_written(raw)
+    assert gen3_build.manifest_path.read_text(encoding="utf-8") == _as_written(raw)
 
 
 def test_each_validation_stratum_is_written_in_the_class_mix(tmp_path):
     """FR-059a (T183): the strata's natural copies follow ``--class-mix`` over
     the classes each holds, as training's do; before, a validation stratum
     was written as collected. The reuse cap is lifted so the mix is reachable
-    on the fixture's few records."""
+    on the fixture's few records, and the game-disjoint share raised so that
+    stratum draws games enough to hold several classes."""
     from effects.domain.sampling import DEFAULT_KIND_MIX, sampling_class
 
     root = tmp_path / "gen3"
     output = root / "out"
-    assert build(_gen3_config(_gen3_records(root), output, reuse_cap=100)) == 0
+    assert build(_gen3_config(_gen3_records(root), output, reuse_cap=100,
+                              game_disjoint_share=0.1)) == 0
     store = CorpusStore(output)
     for directory in (store.card_disjoint_dir, store.game_disjoint_dir):
         natural: Counter[str] = Counter(

@@ -344,46 +344,31 @@ class TestTheGen3Fields:
         assert set(GEN3_FIELDS) <= set(walked), sorted(set(GEN3_FIELDS) - set(walked))
 
     def test_the_gen3_fixture_reaches_every_listed_path_and_varies_most(self):
-        """The pilot's records (T079a) reach every root § 8.13 field, a real
-        turn_action included; the ones they hold constant are the ones the
-        pilot's report gave reasons for."""
+        """The fixture's records reach every root § 8.13 field, a real
+        turn_action included, and vary each but the ones the 2026-11-15
+        pilot it was cut from holds constant itself (its ``field-coverage``
+        report): the one generation, and what no pilot game showed."""
         from effects.infrastructure.record_codec import record_from_dict
         from tests.unit.effects.builders import gen3_fixture_records
 
         coverage = field_coverage(record_from_dict(raw) for raw in gen3_fixture_records())
         assert set(GEN3_FIELDS) <= set(coverage), sorted(set(GEN3_FIELDS) - set(coverage))
         constant = {path for path in GEN3_FIELDS if coverage[path].constant}
-        assert constant <= {
-            "record.generation", "record.aimed_at", "record.directed",
+        assert constant == {
+            "record.generation",
+            # No battle, no rad counter in any pilot game.
             "record.state.entities[].printed_defense", "record.state.players[].rad",
-            "record.state.players[].initiative",
-            # Both pilots predate the member (T054a): absent on every player.
-            "record.state.players[].max_land_plays",
-            "record.state.players[].land_plays_unlimited",
-            # Both pilots predate the record moments (FR-042a, FR-042b): no
-            # cost half lists its events, no effect half its outcome.
-            "record.payload<ActivationPayload>.events",
-            "record.payload<ResolutionPayload>.outcome",
-            # Both pilots predate WP7's members: no marker (each turn action
-            # writes no withheld count), no rewrite with an unknown incoming
-            # event or a set-aside ability, no lure-bound blocker.
-            "record.payload<TurnActionPayload>.records_withheld",
-            *(f"record.payload<RewritePayload>.{name}" for name in (
-                "incoming_unknown", "buffered", "buffered_ran", "buffered_events")),
-            "record.payload<PlayabilityBlockersPayload>.forbidden[].required_elsewhere",
-            # ... nor a forbidden creature's own line or an unkeyed one.
-            *(f"record.payload<{payload}>.forbidden[].{name}"
-              for payload in ("PlayabilityAttackersPayload", "PlayabilityBlockersPayload")
-              for name in ("responsible_own", "responsible_unresolved")),
-            # Both pilots predate WP5's copy_dropped: absent on every record.
-            "record.copy_dropped",
+            # No rewrite of an event Forge's bus does not name, and no
+            # attacker forbidden by a line that keys to nothing.
+            "record.payload<RewritePayload>.incoming_unknown",
+            "record.payload<PlayabilityAttackersPayload>.forbidden[].responsible_unresolved",
         }, sorted(constant)
 
-    def test_the_members_the_fixture_predates_are_written_and_vary_on_the_goldens(self):
-        """The test above excuses members as constant because the pilots that
-        cut the fixture predate them; the collector's own records show each
-        is written, and that the ones a record can vary do vary, so an excuse
-        never hides a dead channel."""
+    def test_the_members_the_fixture_holds_constant_are_written_and_vary_on_the_goldens(self):
+        """The collector's own records write and vary the members an earlier
+        fixture held constant, a rewrite's unknown incoming event among them,
+        and write the gen-3 record moments' members, so a constant excused
+        above never hides a dead channel."""
         from effects.infrastructure.record_codec import record_from_dict
         from tests.unit.effects.builders import java_golden_records
 
@@ -424,7 +409,7 @@ class TestTheGen3Fields:
 
     def test_a_corpus_without_gen3_records_gets_no_section(self):
         record = _record(ResolutionPayload(), moment=Moment.RESOLUTION,
-                         kind=RecordKind.RESOLUTION)
+                         kind=RecordKind.RESOLUTION, generation=None)
         assert gen3_report_lines(field_coverage([record])) == []
         assert not any("gen-3 fields" in line for line in report_lines(
             field_coverage([record])))

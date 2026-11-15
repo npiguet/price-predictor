@@ -82,6 +82,7 @@ from tests.unit.effects.builders import (
     _ENVELOPE_ONLY_GOLDENS,
     JAVA_GOLDENS,
     gen3_fixture_records,
+    gen3_payload,
     java_golden_records,
     make_record,
 )
@@ -157,6 +158,9 @@ def _record(**overrides) -> EffectRecord:
         ),
     }
     defaults.update(overrides)
+    if defaults.get("generation") == 3:
+        # Gen-3's effect half carries its outcome: the codec refuses one without.
+        defaults["payload"] = gen3_payload(defaults["payload"])
     return EffectRecord(**defaults)
 
 
@@ -1192,6 +1196,37 @@ class TestTheGen3Fixture:
                    for record in records for entity in record.state.entities)
         assert all(record.state.links is not None for record in records)
 
+    def test_it_is_the_fixture_its_constants_describe(self):
+        """A regeneration moves the digest, the counts and every count a test
+        pins on the fixture together (``builders.GEN3_FIXTURE_*``)."""
+        import gzip
+        import hashlib
+
+        from tests.unit.effects.builders import (
+            GEN3_FIXTURE_GAMES,
+            GEN3_FIXTURE_RECORDS,
+            GEN3_FIXTURE_SHA256,
+            GEN3_RECORDS,
+        )
+
+        assert hashlib.sha256(gzip.decompress(GEN3_RECORDS.read_bytes())).hexdigest() == (
+            GEN3_FIXTURE_SHA256)
+        raws = gen3_fixture_records()
+        assert len(raws) == GEN3_FIXTURE_RECORDS
+        assert len({raw["game_id"] for raw in raws}) == GEN3_FIXTURE_GAMES
+
+    def test_every_game_ends_in_its_marker(self):
+        """Cut from games that ended: each game's last record is its one
+        game-end marker, as every reader needs to keep the game."""
+        last: dict[str, EffectRecord] = {}
+        markers: dict[str, int] = {}
+        for record in self._records():
+            last[record.game_id] = record
+            if record.subkind is TurnActionSubkind.GAME_END:
+                markers[record.game_id] = markers.get(record.game_id, 0) + 1
+        assert markers == dict.fromkeys(last, 1)
+        assert all(r.subkind is TurnActionSubkind.GAME_END for r in last.values())
+
     def test_the_shard_is_gen3(self):
         from effects.domain.shard_generation import ShardGeneration
         from effects.infrastructure.shard_io import shard_generation
@@ -1214,11 +1249,15 @@ class TestTheGen3Fixture:
 
     def test_every_turn_action_subkind_reads_with_its_events(self):
         actions = [r for r in self._records() if r.kind is RecordKind.TURN_ACTION]
-        # The fixture predates the game-end marker (WP7); its regeneration
-        # (D8) brings one per finished game, and this exception goes.
-        assert {r.subkind for r in actions} == set(TurnActionSubkind) - {
-            TurnActionSubkind.GAME_END}
-        assert all(r.ability is None and r.payload.events for r in actions)
+        assert {r.subkind for r in actions} == set(TurnActionSubkind)
+        assert all(r.ability is None for r in actions)
+        # The game-end marker alone holds no event (WP7): its payload is
+        # ``{events: [], records_withheld}``.
+        played = [r for r in actions if r.subkind is not TurnActionSubkind.GAME_END]
+        assert all(r.payload.events and r.payload.records_withheld is None for r in played)
+        markers = [r for r in actions if r.subkind is TurnActionSubkind.GAME_END]
+        assert all(r.payload.events == () and r.payload.records_withheld is not None
+                   for r in markers)
         draws = [r for r in actions if r.subkind is TurnActionSubkind.DRAW]
         assert all({EventType.CARD_DRAWN, EventType.ZONE_CHANGE}
                    <= {e.type for e in r.payload.events} for r in draws)

@@ -38,7 +38,7 @@ from effects.domain.script_variants import (
 )
 from effects.domain.split import HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
-from tests.unit.effects.builders import make_record
+from tests.unit.effects.builders import make_record, make_snapshot
 from tests.unit.effects.domain.test_script_variants import _BOLT_SCRIPT
 
 
@@ -51,8 +51,13 @@ def _no_real_unstaging(monkeypatch):
 
 
 def _record(**overrides) -> EffectRecord:
-    defaults: dict = {"record_id": "r.0.1", "run_id": "r", "game_id": "r.0.1"}
+    """A gen-2 record unless ``generation=3`` is passed: the round shards
+    here end no game with a marker, which only a gen-3 game owes."""
+    defaults: dict = {"record_id": "r.0.1", "run_id": "r", "game_id": "r.0.1",
+                      "generation": None}
     defaults.update(overrides)
+    if defaults["generation"] is None:
+        defaults.setdefault("state", make_snapshot(links=None))
     return make_record(**defaults)
 
 

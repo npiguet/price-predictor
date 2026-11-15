@@ -107,17 +107,18 @@ class TestTheNewEvents:
 
 
 class TestTheSupersededShape:
-    """The refusal of a gen-3 resolution record in the replaced payload shape,
-    behind one switch the fixture's regeneration turns on."""
+    """The refusal of a gen-3 resolution record in the replaced payload shape."""
 
-    @pytest.fixture
-    def refusing(self, monkeypatch):
-        from effects.infrastructure import record_codec
-
-        monkeypatch.setattr(record_codec, "REFUSE_SUPERSEDED_GEN3_PAYLOADS", True)
-
-    def test_every_java_golden_is_in_the_current_shape(self, refusing):
+    def test_every_java_golden_is_in_the_current_shape(self):
         for raw in java_golden_records():
+            record_from_dict(raw)
+
+    def test_every_fixture_record_is_in_the_current_shape(self):
+        from tests.unit.effects.builders import gen3_fixture_records
+
+        halves = [raw for raw in gen3_fixture_records() if raw["kind"] == "resolution"]
+        assert {raw["moment"] for raw in halves} == {"activation", "resolution"}
+        for raw in halves:
             record_from_dict(raw)
 
     @pytest.mark.parametrize(("moment", "payload"), [
@@ -125,18 +126,19 @@ class TestTheSupersededShape:
         ("activation", {"events": [], "costs": {}, "outcome": "resolved"}),
         ("resolution", {"events": []}),
     ])
-    def test_a_superseded_half_is_refused(self, refusing, moment, payload):
+    def test_a_superseded_half_is_refused(self, moment, payload):
         from effects.infrastructure.record_codec import SupersededPayloadError
 
         raw = _golden(lambda r: r.get("moment") == moment) | {"payload": payload}
         with pytest.raises(SupersededPayloadError):
             record_from_dict(raw)
 
-    def test_the_switch_is_off_until_the_fixture_is_regenerated(self):
-        from effects.infrastructure.record_codec import REFUSE_SUPERSEDED_GEN3_PAYLOADS
-
-        raw = _golden(lambda r: r.get("moment") == "resolution") | {
-            "payload": {"events": []}}
-        assert not REFUSE_SUPERSEDED_GEN3_PAYLOADS
-        assert record_from_dict(raw).payload.outcome is None
+    @pytest.mark.parametrize(("moment", "payload"), [
+        ("activation", {"costs": {}, "outcome": "resolved"}),
+        ("resolution", {"events": []}),
+    ])
+    def test_the_same_half_of_an_earlier_generation_reads(self, moment, payload):
+        raw = _golden(lambda r: r.get("moment") == moment) | {"payload": payload}
+        del raw["generation"]
+        assert record_from_dict(raw).generation is None
 

@@ -1160,12 +1160,6 @@ def _curation_from_json(data: dict) -> Curation:
     )
 
 
-#: Whether a gen-3 resolution record in the superseded payload shape is
-#: refused (:func:`check_gen3_payload_shape`). Off until the gen-3 test
-#: fixture is regenerated in the current shape; then on, for good.
-REFUSE_SUPERSEDED_GEN3_PAYLOADS = False
-
-
 class SupersededPayloadError(ValueError):
     """A gen-3 resolution record in the payload shape gen-3 replaced."""
 
@@ -1192,13 +1186,14 @@ def record_from_dict(data: dict) -> EffectRecord:
     """Parse one shard line into an :class:`EffectRecord`.
 
     A ``generation`` other than the integer 3 is refused
-    (:class:`~effects.domain.shard_generation.UnknownGenerationError`).
+    (:class:`~effects.domain.shard_generation.UnknownGenerationError`), and so
+    is a gen-3 resolution half in the payload shape gen 3 replaced
+    (:class:`SupersededPayloadError`).
     """
     generation = data.get("generation")
     if "generation" in data:
         check_generation_member(generation)
-    if REFUSE_SUPERSEDED_GEN3_PAYLOADS:
-        check_gen3_payload_shape(data)
+    check_gen3_payload_shape(data)
     kind = RecordKind(data["kind"])
     moment = Moment(data["moment"]) if data.get("moment") else None
     subkinds = SUBKINDS_OF.get(kind, PlayabilitySubkind)

@@ -225,13 +225,14 @@ class TestLandPlays:
         assert FAMILY.match(land, None, {"bit": "timing", "land_play": False}) is None
 
     def test_a_candidate_that_says_nothing_of_land_plays_is_on_neither_side(self, by_kind):
-        """A gen-2 candidate, and a gen-3 one collected before land candidates."""
-        before = [r for r in self._decisions() if r.payload.candidates[0].land_play is None]
-        assert before
-        for record in (_unaffordable(by_kind), *before):
-            assert all(c.land_play is None for c in record.payload.candidates)
-            for value in (True, False):
-                assert FAMILY.match(record, None, {"bit": "affordable", "land_play": value}) is None
+        """A gen-2 candidate. Every gen-3 candidate the fixture holds says
+        whether it is a land play."""
+        assert all(c.land_play is not None for r in self._decisions()
+                   for c in r.payload.candidates)
+        record = _unaffordable(by_kind)
+        assert all(c.land_play is None for c in record.payload.candidates)
+        for value in (True, False):
+            assert FAMILY.match(record, None, {"bit": "affordable", "land_play": value}) is None
 
     def test_the_land_play_filter_needs_its_field_and_a_check_must_be_one_collected(
             self, by_kind):

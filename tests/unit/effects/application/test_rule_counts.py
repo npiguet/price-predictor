@@ -260,15 +260,15 @@ _CARRIER_CATALOGUE = (
 def _gen3_document(tmp_path, workers=1, copies=1, *, ended=True):
     """The counts file over ``copies`` copies of the gen-3 fixture, each game
     ended by its game-end marker unless ``ended`` is False."""
-    from tests.unit.effects.builders import copy_gen3_fixture
+    from tests.unit.effects.builders import write_cut_gen3_fixture
 
     records = tmp_path / "records"
     for copy in range(copies):
         (records / str(copy)).mkdir(parents=True)
         if ended:
-            copy_gen3_fixture(records / str(copy))
-        else:
             shutil.copyfile(GEN3, records / str(copy) / GEN3.name)
+        else:
+            write_cut_gen3_fixture(records / str(copy) / GEN3.name)
     config = RuleCountsConfig(
         records_dir=records, output=tmp_path / "rule-counts.json",
         rules_dir=_rules_dir(tmp_path, *_CARRIER_CATALOGUE),
@@ -284,14 +284,16 @@ def _gen3_counts(tmp_path, workers=1, copies=1):
 
 
 def test_a_cut_game_is_left_out_of_every_count_and_counted(tmp_path):
-    """The fixture as it stands predates the game-end marker, so every game
-    in it reads as cut: build-corpus drops each, so no record of them may
-    count toward a rule (WP7, P1 #1)."""
+    """The fixture without its game-end markers, as a killed worker leaves a
+    shard: every game in it reads as cut, build-corpus drops each, so no
+    record of them may count toward a rule (WP7, P1 #1)."""
+    from tests.unit.effects.builders import GEN3_FIXTURE_GAMES
+
     ended = _gen3_document(tmp_path / "ended")
     cut = _gen3_document(tmp_path / "cut", ended=False)
 
     assert ended["cut_games"] == 0 and ended["rules"]
-    assert cut["cut_games"] == 58
+    assert cut["cut_games"] == GEN3_FIXTURE_GAMES
     assert cut["rules"] == {} and cut["carriers"] == {} and cut["review"] == []
     # As the build's rule_counts: a cut game's records are read and count
     # nowhere, neither as records nor as rules they could not count.
@@ -312,10 +314,10 @@ def test_a_keyword_rule_s_carrier_acts_through_its_keyword_line(tmp_path):
     """A combat record names no acting line: the deathtouch carrier's own
     deathtouch line is what the rule's tags act through."""
     carriers = _gen3_counts(tmp_path)
-    servant = _carrier(carriers, "702.2b", "cardsfolder/s/servant_of_the_stinger.txt")
-    assert servant["lines"] == [{"key": {"face": 0, "trait_kind": "keyword",
+    viper = _carrier(carriers, "702.2b", "cardsfolder/w/wasteland_viper.txt")
+    assert viper["lines"] == [{"key": {"face": 0, "trait_kind": "keyword",
                                          "index_within_kind": 0},
-                                 "records": servant["records"]}]
+                                 "records": viper["records"]}]
 
 
 def test_a_resolution_rule_s_carrier_acts_through_the_record_s_acting_line(tmp_path):
@@ -336,6 +338,6 @@ def test_carriers_come_most_recorded_first_and_no_line_outcounts_its_card(tmp_pa
 def test_carriers_add_up_across_workers(tmp_path):
     one = _gen3_counts(tmp_path / "a", workers=1)
     two = _gen3_counts(tmp_path / "b", workers=2, copies=2)
-    servant = _carrier(two, "702.2b", "cardsfolder/s/servant_of_the_stinger.txt")
-    assert servant["records"] == 2 * _carrier(
-        one, "702.2b", "cardsfolder/s/servant_of_the_stinger.txt")["records"]
+    viper = _carrier(two, "702.2b", "cardsfolder/w/wasteland_viper.txt")
+    assert viper["records"] == 2 * _carrier(
+        one, "702.2b", "cardsfolder/w/wasteland_viper.txt")["records"]

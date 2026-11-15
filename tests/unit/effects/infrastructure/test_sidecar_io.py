@@ -318,18 +318,32 @@ class TestSidecarCache:
                 assert joined in cache.get(key.script_file).lines, key
 
     def test_a_saga_s_chapter_trigger_joins_its_own_chapter_line(self):
-        """Over the converter's own sidecar of a three-chapter saga: each
-        chapter's trigger joins its own chapter line and no other line holds it."""
+        """Over the converter's own sidecars of every saga the fixture names:
+        each chapter's trigger joins its own chapter line and no other line
+        holds it. A line printing two chapters ("III, IV —", Down, Down to
+        Goblin Town) holds both chapters' triggers, in chapter order."""
         from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS
 
         cache = SidecarCache({folder.name: folder for folder in GEN3_SIDECAR_FOLDERS})
-        script = "cardsfolder/t/the_fall_of_lord_konda_fragment_of_konda.txt"
-        chapters = [line for line in cache.get(script).lines if line.line_kind == "chapter"]
-        assert len(chapters) == 3
-        for chapter, line in enumerate(chapters):
-            assert cache.line_for(ProvenanceKey(script, 0, "trigger", chapter)) == line
-            assert [key for key in line.provenance if key.trait_kind == "trigger"] == [
-                ProvenanceKey(script, 0, "trigger", chapter)]
+        folder = GEN3_SIDECAR_FOLDERS[0]
+        sagas = [f"cardsfolder/{path.relative_to(folder).as_posix()}".replace(
+                     ".provenance.json", ".txt")
+                 for path in sorted(folder.rglob("*.provenance.json"))
+                 if '"chapter"' in path.read_text(encoding="utf-8")]
+        assert len(sagas) >= 2, sagas
+        shared = 0
+        for script in sagas:
+            chapters = [line for line in cache.get(script).lines if line.line_kind == "chapter"]
+            assert len(chapters) >= 2, script
+            held = [(key, line) for line in chapters
+                    for key in line.provenance if key.trait_kind == "trigger"]
+            assert [key for key, _ in held] == [
+                ProvenanceKey(script, 0, "trigger", chapter) for chapter in range(len(held))
+            ], script
+            for key, line in held:
+                assert cache.line_for(key) == line, key
+            shared += len(held) > len(chapters)
+        assert shared, "no saga of the fixture prints two chapters on one line"
 
 
 class TestTheVariantTreeHasNoProse:

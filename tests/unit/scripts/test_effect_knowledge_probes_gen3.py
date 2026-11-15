@@ -311,7 +311,9 @@ def _two_pairs(records, monkeypatch):
                 if e.id == attacker else e for e in entities]
     entities = [replace(e, combat=replace(e.combat, blocking=(attacker,)))
                 if e.id == blocker else e for e in entities]
-    entities += [replace(e, damage=0) for e in copies]
+    # The copies are of the cleared pair: no damage, no damage-step keyword.
+    entities += [replace(e, damage=0, granted_temporary=replace(e.granted_temporary, keywords=()))
+                 for e in copies]
     record = replace(
         record, fork=False, interventional=False, mirror_of=None,
         payload=replace(record.payload, blocks={attacker: (blocker,), a2: (b2,)},

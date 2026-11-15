@@ -626,7 +626,7 @@ def test_deriving_targets_loads_no_torch():
 
 # ── gen-3's outputs (root spec § 11.2-11.4, T119, T121, T122, T123) ──────────
 
-_RUN = "e8aa2e54-4112-425c-a7fa-96c7bb7340db"
+_RUN = "9442f17f-cb56-4893-8d4a-66b5538de180"
 
 
 @functools.cache
@@ -676,12 +676,12 @@ class TestTargetLegalityOnADecisionRecord:
     """Story 5 acceptance 3: ``target_legal`` on every card and player of the
     record, gate-free (root spec section 11.4)."""
 
-    BERSERK = f"{_RUN}.5-mvyv9f2emq04.33592"
+    BERSERK = f"{_RUN}.0-mwhr12znmj0t.705"
 
     def test_it_is_one_inside_the_legal_targets_and_zero_on_every_other_entity(self):
         record = _fixture()[self.BERSERK]
         legal = set(record.payload.candidates[0].legal_targets)
-        assert legal == {"E149", "E19", "E110"}
+        assert legal == {"E122", "E35"}
         targets = derive_targets(record)
         refs = [e.id for e in record.state.entities] + [p.id for p in record.state.players]
         assert {"P0", "P1"} <= set(refs)
@@ -756,12 +756,12 @@ class TestCombatLegality:
             assert entry.affected
 
     def test_a_fixture_attack_that_tapped_its_anchor_reads_tapped(self):
-        record = _fixture()[f"{_RUN}.0-mvyv5jxepqmy.79"]
+        record = _fixture()[f"{_RUN}.0-mwhr12znmj0t.67"]
         assert record.payload.tapped_by_attack is True
-        assert derive_targets(record)["E77"].fields["tap_state"] == 1
+        assert derive_targets(record)["E58"].fields["tap_state"] == 1
 
     def test_a_blockers_record_labels_the_block_requirement_on_every_listed_creature(self):
-        record = _fixture()[f"{_RUN}.1-mvyw1pozylvp.13631"]
+        record = _fixture()[f"{_RUN}.0-mwhr12znmj0t.8781"]
         payload = record.payload
         targets = derive_targets(record)
         must = set(payload.must_block)
@@ -774,9 +774,9 @@ class TestGameLost:
     """Story 5 acceptance 6: the loser 1, the winner 0."""
 
     def test_a_win_is_the_other_players_loss(self):
-        targets = derive_targets(_fixture()[f"{_RUN}.1-mvyw1pozylvp.984"])
-        assert targets["P0"].fields["game_lost"] == 0
-        assert targets["P1"].fields["game_lost"] == 1
+        targets = derive_targets(_fixture()[f"{_RUN}.0-mwhr12znmj0t.283"])
+        assert targets["P0"].fields["game_lost"] == 1
+        assert targets["P1"].fields["game_lost"] == 0
         assert targets["P0"].affected and targets["P1"].affected
 
     def test_a_draw_is_both_players_losing(self):

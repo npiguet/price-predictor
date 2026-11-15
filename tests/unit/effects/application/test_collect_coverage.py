@@ -29,10 +29,10 @@ from effects.domain.records import (
     ResolutionPayload,
 )
 from tests.unit.effects.builders import (
-    copy_gen3_fixture,
     fresh_interpreter_env,
     held_out_cards,
     make_entity,
+    write_cut_gen3_fixture,
     write_plain_shard,
 )
 from tests.unit.effects.domain.test_coverage import _record
@@ -900,20 +900,21 @@ class TestHeldOutTextUnit:
         resolve is not satisfied."""
         from effects.application.collect_coverage import count_text_shard
 
-        shard = copy_gen3_fixture(tmp_path)
         resolutions, everything = _texts_by_game(_GEN3_SHARD)
         assert resolutions and everything != resolutions
-        counted = count_text_shard(shard, roots=_GEN3_ROOTS, held_out=_holding(everything))
+        counted = count_text_shard(_GEN3_SHARD, roots=_GEN3_ROOTS,
+                                   held_out=_holding(everything))
         assert counted.games == resolutions
         assert counted.cut_games == 0
 
     def test_a_cut_game_counts_toward_no_text(self, tmp_path):
-        """The fixture as it stands holds no game-end marker: every game reads
-        as cut (WP7), and build-corpus would drop each."""
+        """The fixture without its game-end markers, as a killed worker leaves
+        a shard: every game reads as cut (WP7), and build-corpus would drop each."""
         from effects.application.collect_coverage import count_text_shard
 
+        cut = write_cut_gen3_fixture(tmp_path / "cut.jsonl.gz")
         resolutions, everything = _texts_by_game(_GEN3_SHARD)
-        counted = count_text_shard(_GEN3_SHARD, roots=_GEN3_ROOTS, held_out=_holding(everything))
+        counted = count_text_shard(cut, roots=_GEN3_ROOTS, held_out=_holding(everything))
         assert counted.games == {}
         assert counted.cut_games >= len(set().union(*resolutions.values())) > 0
 
@@ -1443,8 +1444,7 @@ class TestOnlyGenThreeRecordsCount:
 
         _, everything = _texts_by_game(_GEN3_SHARD)
         held_out = _holding(everything)
-        ended = copy_gen3_fixture(tmp_path)
-        assert count_text_shard(ended, roots=_GEN3_ROOTS, held_out=held_out).games
+        assert count_text_shard(_GEN3_SHARD, roots=_GEN3_ROOTS, held_out=held_out).games
         demoted = [replace(record, generation=None) for record in read_shard(_GEN3_SHARD)]
         import tempfile
 

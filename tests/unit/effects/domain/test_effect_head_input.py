@@ -1070,7 +1070,7 @@ def gen3_records():
             for record in map(record_from_dict, gen3_fixture_records())}
 
 
-_RUN = "e8aa2e54-4112-425c-a7fa-96c7bb7340db"
+_RUN = "9442f17f-cb56-4893-8d4a-66b5538de180"
 
 
 def _relation(family, direction="forward", index=None):
@@ -1109,11 +1109,11 @@ class TestAttachedTo:
     """Story 5 acceptance 1 (T115, T116)."""
 
     def test_an_aura_relates_to_its_creature_and_no_card_input_says_so(self, gen3_records):
-        record = gen3_records[f"{_RUN}.0-mvyv5jxepqmy.516"]
-        aura = record.state.entity("E24")
-        assert "aura" in aura.subtypes and aura.attached_to == "E22"
+        record = gen3_records[f"{_RUN}.0-mwhr12znmj0t.148"]
+        aura = record.state.entity("E2")
+        assert "aura" in aura.subtypes and aura.attached_to == "E1"
         surface = _build(record)
-        assert _linked(surface, _subject_slot(surface, "E24"), _subject_slot(surface, "E22"),
+        assert _linked(surface, _subject_slot(surface, "E2"), _subject_slot(surface, "E1"),
                        "attached_to")
         assert "attached" not in card_segments(aura, record)
         assert card_features(replace(aura, attached_to=None), record) == card_features(
@@ -1190,27 +1190,27 @@ class TestCommandZoneSlots:
             EFFECT_DURATIONS.index("permanent")] == 1.0
 
     def test_a_real_floating_effect_affects_each_creature_it_pumps(self, gen3_records):
-        record = gen3_records[f"{_RUN}.1-mvyw1pozylvp.13630"]
-        floating = next(f for f in record.state.global_.floating_effects if f.id == "F91")
-        rampage = floating.source_lines[0]
+        record = gen3_records[f"{_RUN}.0-mwhr12znmj0t.4891"]
+        floating = next(f for f in record.state.global_.floating_effects if f.id == "F373")
+        source = floating.source_lines[0]
         vector = (0.0, 0.0, 0.0, 1.0)
-        surface = _build(record, e_for=lambda key: vector if key == rampage else None)
-        at = _subject_slot(surface, "F91")
+        surface = _build(record, e_for=lambda key: vector if key == source else None)
+        at = _subject_slot(surface, "F373")
         assert surface.slots[at + 1].e == vector
-        assert floating.affected == ("E6", "E30", "E26", "E22", "E8")
+        assert floating.affected == ("E1", "E2", "E40", "E33")
         for creature in floating.affected:
             assert _linked(surface, at, _subject_slot(surface, creature), "affects")
 
     def test_a_real_delayed_trigger_is_a_card_reading_its_source_line(self, gen3_records):
-        record = gen3_records[f"{_RUN}.6-mvyvq4x9ozb2.53904"]
+        record = gen3_records[f"{_RUN}.0-mwhr12znmj0t.1274"]
         trigger, = record.state.global_.delayed_triggers
         vector = (0.0, 1.0, 1.0, 0.0)
         surface = _build(record, e_for=lambda key: vector if key in trigger.source_lines else None)
         at = _subject_slot(surface, trigger.id)
         assert surface.slots[at + 1].e == vector
-        # Its rebounding card sits in exile, which no tier reaches: the
-        # pending_on link names an object the surface has no slot for.
-        assert record.state.entity("E12") is None
+        # Pending on a card of the board: the record's own link relates them.
+        assert trigger.remembered == ("E82",)
+        assert _linked(surface, at, _subject_slot(surface, "E82"), "pending_on")
 
     def test_a_delayed_trigger_is_pending_on_its_card(self):
         from effects.domain.state_snapshot import CommandZoneObject, Link
@@ -1225,9 +1225,9 @@ class TestCommandZoneSlots:
                        "pending_on")
 
     @pytest.mark.parametrize(("record_id", "family", "a", "b"), [
-        (f"{_RUN}.0-mvyv5jxepqmy.127", "last_known_state_of", "L35", "E35"),
-        (f"{_RUN}.9-mvyw6uvu1ii5.232", "merged_with", "E16", "E15"),
-        (f"{_RUN}.7-mvyvapedpsus.1303", "in_dungeon", "E96", "P1"),
+        (f"{_RUN}.0-mwhr12znmj0t.44", "last_known_state_of", "L70", "E70"),
+        (f"{_RUN}.3-mwhr1318yo3f.3433", "merged_with", "E60", "E70"),
+        (f"{_RUN}.5-mwhr1304zvab.6602", "in_dungeon", "E196", "P0"),
     ])
     def test_the_extra_cards_are_slots_their_links_relate(
         self, gen3_records, record_id, family, a, b,

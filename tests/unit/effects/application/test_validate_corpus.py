@@ -86,6 +86,7 @@ def _snapshot(turn: int = 3, names: tuple[str, ...] = (), tiers=None) -> StateSn
             make_entity(f"E{index}", name) for index, name in enumerate(names)
         ),
         tiers=_STAGE_TWO if tiers is None else tiers,
+        links=None,
     )
 
 
@@ -101,6 +102,8 @@ def _resolution(record_id: str, game_id: str = "run.0-L1.0", **overrides):
         # inheriting the dataclass default: a window of `degraded` records is
         # itself one of the defects under test.
         "mode": CollectionMode.PATCHED,
+        # A gen-2 window, its gen-3 checks each on records that say so.
+        "generation": None,
         "payload": ResolutionPayload(
             events=(
                 Event(

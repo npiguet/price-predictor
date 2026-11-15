@@ -25,8 +25,8 @@ from effects.domain.effect_targets import derive_targets
 from effects.domain.surface_collation import entity_target_tensors
 from tests.unit.effects.builders import fields_everywhere, make_entity_targets
 
-_RUN = "e8aa2e54-4112-425c-a7fa-96c7bb7340db"
-_BERSERK = f"{_RUN}.5-mvyv9f2emq04.33592"
+_RUN = "9442f17f-cb56-4893-8d4a-66b5538de180"
+_BERSERK = f"{_RUN}.0-mwhr12znmj0t.705"
 
 
 @functools.cache
@@ -56,7 +56,7 @@ def _surface_of(record) -> _Surface:
 class TestTheGateMask:
     def test_a_playability_record_trains_no_gate_and_an_effect_record_does(self):
         decision = _fixture()[_BERSERK]
-        resolution = _fixture()[f"{_RUN}.1-mvyw1pozylvp.3920"]
+        resolution = _fixture()[f"{_RUN}.5-mwhr1304zvab.6514"]
         records = [decision, resolution]
         batch = entity_target_tensors(
             [_surface_of(r) for r in records], [derive_targets(r) for r in records],

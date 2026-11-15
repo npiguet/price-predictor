@@ -150,8 +150,10 @@ class TestRecordKindsSuperviseTheirOwnFields:
         assert not _moves(record, "zone_outcome")
 
     def test_a_static_that_sets_a_type_line_says_nothing_about_what_it_removed(self):
+        """Before gen 3, whose board is not the one without the static, so
+        what the static displaced is not on it."""
         record = make_record(
-            RecordKind.CONTINUOUS, state=_SNAPSHOT,
+            RecordKind.CONTINUOUS, state=_SNAPSHOT, generation=None,
             payload=ContinuousPayload(contributions=(
                 Contribution(entity="E1", types=("=", "artifact")),
             )),
