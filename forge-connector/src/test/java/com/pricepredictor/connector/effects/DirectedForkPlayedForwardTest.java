@@ -285,6 +285,34 @@ class DirectedForkPlayedForwardTest {
     }
 
     /**
+     * {@code replace_card}, 702.1c: Concerted Effort beside White Knight and
+     * Grizzly Bears as the upkeep begins. The live trigger gives the Bears the
+     * Knight's first strike and protection from black; the fork's Hill Giant
+     * in the Knight's place has no listed keyword, so the trigger resolves
+     * and grants nothing.
+     */
+    @Test
+    void aGiantInTheKnightsPlaceLeavesConcertedEffortNothingToShare() throws Throwable {
+        Game game = bare(PhaseType.UNTAP);
+        Player active = game.getPlayers().get(0);
+        Card effort = permanent(game, active, "Concerted Effort");
+        permanent(game, active, "White Knight");
+        Card bears = permanent(game, active, "Grizzly Bears");
+
+        // The live game reaches the upkeep itself, so its trigger fires there too.
+        List<String> all = played(game, null, "702.1c", Decisions.SAMPLED);
+
+        List<String> live = all.stream().filter(record -> !Boolean.TRUE.equals(parse(record).get("fork"))).toList();
+        assertFalse(eventsOf(live, "keyword_change", ref(bears)).isEmpty(),
+                "the live Bears share the Knight's keywords");
+        List<String> fork = forkOf(all, "702.1c", "no_keywords");
+        List<String> resolved = resolutionsOf(fork, effort);
+        assertFalse(resolved.isEmpty(), "Concerted Effort's trigger resolves in the fork");
+        assertTrue(resolved.stream().noneMatch(record -> RecordLines.eventTypes(record).contains("keyword_change")),
+                "and grants no keyword there");
+    }
+
+    /**
      * {@code life}, 104.2b, inverted: Felidar Sovereign's controller at 39
      * life as the upkeep begins. The live trigger does not fire; the fork's
      * 40 life fires it, it resolves and wins the game, the {@code player_won}

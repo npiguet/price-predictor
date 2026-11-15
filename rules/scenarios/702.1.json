@@ -223,11 +223,15 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolution grants keyword abilities to creatures, each with its variants and variables: a keyword_change gaining them.",
-        "near_miss": "A resolution of a keyword grant that gives no creature a keyword.",
+        "outcome": "A shared-keyword grant (a PumpAll whose chain names the zone the shared keywords are read from, as Concerted Effort's trigger does) resolves and gives creatures keywords: a keyword_change gaining them.",
+        "near_miss": "A shared-keyword grant resolves and gives no creature a keyword: no creature had any listed keyword to share.",
         "params": {
           "event": "keyword_change",
-          "removed": false
+          "removed": false,
+          "api": "PumpAll",
+          "chain_param": {
+            "SharedKeywordsZone": "*"
+          }
         },
         "needs": []
       }
