@@ -237,6 +237,41 @@ class TestTheHeadTerms:
         assert set(terms) <= {"verdict", "created_objects", "global"}
 
 
+class TestTheApiTargets:
+    """The script-API head's targets of a text are its batch's line's, whatever
+    the preparer prepared before: a run is the same run under any worker count."""
+
+    _TEXT = "Protection from white"
+
+    @staticmethod
+    def _line():
+        from effects.domain.provenance import ProvenanceKey, SidecarLine
+
+        return SidecarLine(
+            line_index=3, line_kind="static",
+            provenance=(ProvenanceKey("cardsfolder/w/white_knight.txt", 0, "keyword", 1),),
+            script_api_type="Keyword", script_text="Protection from white")
+
+    def test_a_text_a_batch_holds_no_line_for_has_no_target_either_way(self, tmp_path):
+        """A granted keyword's text, its line in one batch and none in
+        another: the lineless batch reads no type, first or second."""
+        lined = {self._TEXT: self._line()}
+        for name in ("a", "b"):
+            (tmp_path / name).mkdir()
+        first = make_preparer(tmp_path / "a", api_types=["Keyword"])
+        first._api_batch([self._TEXT], lined)
+        after, _ = first._api_batch([self._TEXT], {})
+        fresh, _ = make_preparer(tmp_path / "b", api_types=["Keyword"])._api_batch(
+            [self._TEXT], {})
+        assert after.tolist() == fresh.tolist() == [-1]
+
+    def test_a_lineless_batch_first_leaves_the_line_s_target_whole(self, tmp_path):
+        preparer = make_preparer(tmp_path, api_types=["Keyword"])
+        preparer._api_batch([self._TEXT], {})
+        types, _ = preparer._api_batch([self._TEXT], {self._TEXT: self._line()})
+        assert types.tolist() == [0]
+
+
 def _fixture_preparer(directory):
     """A preparer over the gen-3 fixture's sidecars, on their script surface."""
     return make_preparer(directory, cards_folders=GEN3_SIDECAR_FOLDERS)

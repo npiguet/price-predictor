@@ -404,11 +404,17 @@ class StepPreparer:
         rows: list[int] = []
         columns: list[int] = []
         for row, text in enumerate(texts):
-            cached = self._api_targets.get(text)
+            line = lines.get(text)
+            # A text no line of this batch renders (a granted keyword's text,
+            # ``Protection from white``, which another batch may hold as a
+            # card's line) has no target in this batch. The memo holds lines'
+            # targets only: read for a lineless text, or filled from one, it
+            # would make a step's targets depend on which shards its preparer
+            # read before, and a run differ by its worker count.
+            cached = (-1, ()) if line is None else self._api_targets.get(text)
             if cached is None:
-                line = lines.get(text)
-                api = line.script_api_type if line is not None else None
-                found = set(line.script_param_keys if line is not None else ())
+                api = line.script_api_type
+                found = set(line.script_param_keys)
                 for segment in segments(_script_of(line) or ""):
                     found.update(params(segment))
                 cached = (
