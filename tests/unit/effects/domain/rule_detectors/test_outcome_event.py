@@ -81,6 +81,24 @@ def test_a_forced_resolution_without_a_hook_event_is_a_near_miss(by_kind, gen2_s
     assert found is not None and found.polarity is Polarity.DOES_NOT_FIRE
 
 
+def test_a_list_of_apis_counts_a_line_of_any_of_them(by_kind, gen2_sidecars):
+    """One mechanic two APIs carry (702.1c's shared keywords, through Pump and
+    PumpAll): either side is read for a line of any API listed, and only those."""
+    record = _token_maker(by_kind, gen2_sidecars)
+    api = acting_api(record, gen2_sidecars)
+    edited = replace(record, payload=ResolutionPayload(events=tuple(
+        e for e in record.payload.events if e.type is not EventType.TOKEN_CREATED)))
+    listed = {"event": "token_created", "api": ["Pump", api]}
+    FAMILY.validate(listed)
+
+    assert FAMILY.match(record, gen2_sidecars, listed).polarity is Polarity.FIRES
+    assert FAMILY.match(edited, gen2_sidecars, listed).polarity is Polarity.DOES_NOT_FIRE
+    assert FAMILY.match(record, gen2_sidecars,
+                        {"event": "token_created", "api": ["Pump", "PumpAll"]}) is None
+    with pytest.raises(ValueError, match="NoSuchApi"):
+        FAMILY.validate({"event": "token_created", "api": ["Pump", "NoSuchApi"]})
+
+
 def test_another_api_shows_nothing(by_kind, gen2_sidecars):
     record = _token_maker(by_kind, gen2_sidecars)
     assert FAMILY.match(record, gen2_sidecars,
@@ -322,8 +340,10 @@ class TestSourceDies:
     record (510.2: a creature dying in a combat damage step still dealt its
     damage there), on a real gen-2 combat record, which names the source as
     the event's ``cause``; a gen-3 record names it ``source`` too. Its near
-    miss is a creature dealt damage there dying having dealt none (a first
-    striker's victim); a step in which no such creature dies is neither side."""
+    miss is a first striker's victim: a creature with power above 0 dealt
+    damage in the first-strike step, dying there having dealt none. A step in
+    which no such creature dies, a 0-power creature dying, and a creature
+    dying in the regular step having dealt none there are neither side."""
 
     DECLARED = {"event": "damage_dealt", "combat": True, "source_dies": True}
 
@@ -348,6 +368,29 @@ class TestSourceDies:
         return Event(type=EventType.ZONE_CHANGE, subjects=(subject,),
                      params={"from_zone": "battlefield", "to_zone": "graveyard"})
 
+    @staticmethod
+    def _in_step(record, step, victim=None, power=None):
+        """``record`` as taken in damage step ``step``, ``victim``'s base power
+        set to ``power`` when given."""
+        state = replace(record.state, global_=replace(record.state.global_, combat_substep=step))
+        if victim is not None:
+            entities = tuple(
+                replace(e, pt=replace(e.pt, base=(power - e.pt.boosts[0] - e.pt.counters[0],
+                                                  e.pt.base[1])))
+                if e.id == victim else e for e in state.entities)
+            state = replace(state, entities=entities)
+        return replace(record, state=state)
+
+    def _struck(self, by_kind, step, power=2):
+        """A real combat record's striker dealing its damage and living, the
+        creature it kills, of power ``power``, having dealt none, in ``step``."""
+        record, dealt = self._combat(by_kind)
+        striker = dealt[0]
+        victim = striker.subjects[0]
+        assert victim != striker.params["cause"]
+        struck = self._events(record, (striker, self._dies(victim)))
+        return self._in_step(struck, step, victim, power), victim
+
     def test_a_source_that_dies_in_the_step_fires(self, by_kind):
         record, dealt = self._combat(by_kind)
         source = dealt[0].params["cause"]
@@ -355,17 +398,29 @@ class TestSourceDies:
         found = FAMILY.match(traded, None, self.DECLARED)
         assert found.polarity is Polarity.FIRES and found.observed
 
-    def test_a_victim_dying_to_a_source_that_survives_is_the_near_miss(self, by_kind):
+    def test_a_first_strikers_victim_is_the_near_miss(self, by_kind):
         """The first-strike step: the striker deals its damage and lives, the
-        creature it kills dealt none."""
-        record, dealt = self._combat(by_kind)
-        striker = dealt[0]
-        victim = striker.subjects[0]
-        struck_first = self._events(record, (striker, self._dies(victim)))
-        assert victim != striker.params["cause"]
+        creature it kills had damage to deal and dealt none."""
+        struck_first, victim = self._struck(by_kind, "first_strike")
         found = FAMILY.match(struck_first, None, self.DECLARED)
         assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
         assert victim in found.outcome
+
+    def test_a_victim_dying_in_the_regular_step_is_neither_side(self, by_kind):
+        """A first striker killed in the regular step dealt its damage in the
+        first-strike step's record, so this one shows it dealing none; a
+        creature without first strike dying there is no first striker's victim."""
+        struck, _victim = self._struck(by_kind, "regular")
+        assert FAMILY.match(struck, None, self.DECLARED) is None
+
+    def test_a_zero_power_victim_is_neither_side(self, by_kind):
+        """A 0-power creature dealt no damage because it had none to deal."""
+        struck_first, _victim = self._struck(by_kind, "first_strike", power=0)
+        assert FAMILY.match(struck_first, None, self.DECLARED) is None
+
+    def test_a_record_naming_no_step_shows_no_victim(self, by_kind):
+        struck, _victim = self._struck(by_kind, None)
+        assert FAMILY.match(struck, None, self.DECLARED) is None
 
     def test_a_damage_step_in_which_no_creature_dies_is_neither_side(self, by_kind):
         """An ordinary unblocked attack, or a block both creatures survive:

@@ -223,12 +223,15 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A shared-keyword grant (a PumpAll whose chain names the zone the shared keywords are read from, as Concerted Effort's trigger does) resolves and gives creatures keywords: a keyword_change gaining them.",
+        "outcome": "A shared-keyword grant (a Pump or PumpAll whose chain names the zone the shared keywords are read from, as the triggers of Concerted Effort, Sproutwatch Dryad and Majestic Myriarch do) resolves and gives creatures keywords: a keyword_change gaining them. Any shared keyword counts, not only one with variants (protection from a colour), which the rule is about: the family's event filters compare a value whole and cannot pick such a keyword out of the keyword_change's list. Kathril, Aspect Warper's keyword counters are not read: its PutCounter writes counters, not a keyword_change.",
         "near_miss": "A shared-keyword grant resolves and gives no creature a keyword: no creature had any listed keyword to share.",
         "params": {
           "event": "keyword_change",
           "removed": false,
-          "api": "PumpAll",
+          "api": [
+            "Pump",
+            "PumpAll"
+          ],
           "chain_param": {
             "SharedKeywordsZone": "*"
           }

@@ -27,7 +27,8 @@ Parameters:
   (``Treasure``, ``Food``: a kind rule 111.10 defines);
 - ``min_count``: how many such events the record must hold, 1 by default;
 - ``api``: the acting line's script API type (``ChangeZone``, ``Token`` …),
-  which restricts both sides to resolutions of that API;
+  which restricts both sides to resolutions of that API; or a list of them,
+  any of which counts (``["Pump", "PumpAll"]``: one mechanic two APIs carry);
 - ``api_in_chain``: true to let ``api`` name any segment of the acting line's
   chain, a sub-ability as well as the root (Aura Graft's ``Attach`` below its
   ``GainControl``); the root alone otherwise, which most declarations want,
@@ -96,10 +97,15 @@ leaving the battlefield that was not in combat):
   ``cause``, which for damage is the same object) does (true) or does not (false) move
   from the battlefield to a graveyard in the same record: a creature dying in
   a combat damage step that still dealt its damage there (510.2). Declared
-  true, its near miss is narrower than the other qualifiers': a creature
-  such an event deals damage to dies in the record having dealt none of
-  them (a first striker's victim), and a record in which no such creature
-  dies, an ordinary unblocked attack among them, is neither side.
+  true, its near miss is narrower than the other qualifiers': a first
+  striker's victim, which dies before it can deal its damage. That is a
+  creature with power above 0 that such an event deals damage to in the
+  first-strike damage step (the snapshot's ``combat_substep``) and that dies
+  in the record having dealt none of them. Every other record is neither
+  side: one in which no such creature dies (an ordinary unblocked attack), a
+  0-power creature dying (it had no damage to deal), and a creature dying in
+  the regular step having dealt none there (a first striker that dealt its
+  damage in the first-strike step's record).
 
 A qualifier cannot be combined with ``absent``.
 
@@ -166,7 +172,12 @@ from effects.domain.rule_detectors.entity_facts import (
 )
 from effects.domain.script_text import api_of, segments
 from effects.domain.script_text import params as params_of
-from effects.domain.state_snapshot import EntityState, StateSnapshot, normalize_counter_type
+from effects.domain.state_snapshot import (
+    CombatSubstep,
+    EntityState,
+    StateSnapshot,
+    normalize_counter_type,
+)
 from effects.domain.wire_closed_lists import DAMAGE_TYPES, GAME_LOSS_REASONS
 
 __all__ = ["EVENT_FILTERS", "FAMILY", "SUBJECT_QUALIFIERS", "SUBJECT_QUALIFIER_NEEDS",
@@ -201,7 +212,7 @@ QUALIFIER_CHECKS = {
 }
 _CHECKS = {
     **EVENT_FILTER_CHECKS, **QUALIFIER_CHECKS,
-    "api": dv.api, "keyword": dv.keyword, "source_keyword": dv.keyword,
+    "api": dv.each(dv.api), "keyword": dv.keyword, "source_keyword": dv.keyword,
     "source_token_kind": dv.token_kind, "token_kind": dv.token_kind, "min_count": dv.integer,
     "absent": dv.boolean, "api_in_chain": dv.boolean, "script_param": dv.script_param,
     "chain_param": dv.script_param, "source_type": dv.card_type,
@@ -280,15 +291,21 @@ def acting_api(record: EffectRecord, lines: SidecarLookup | None) -> str | None:
     return line.script_api_type if line is not None else None
 
 
-def _acts_through(line: SidecarLine | None, api: str, in_chain: bool) -> bool:
-    """Whether ``line``'s root API is ``api``, or under ``in_chain`` any
-    segment's of its chain."""
+def apis_of(api: str | list[str] | tuple[str, ...]) -> tuple[str, ...]:
+    """A declared ``api``'s APIs: the one named, or each of a list."""
+    return (api,) if isinstance(api, str) else tuple(api)
+
+
+def _acts_through(line: SidecarLine | None, api: str | list[str], in_chain: bool) -> bool:
+    """Whether ``line``'s root API is ``api`` (or one of a list), or under
+    ``in_chain`` any segment's of its chain."""
     if line is None:
         return False
-    if line.script_api_type == api:
+    wanted = apis_of(api)
+    if line.script_api_type in wanted:
         return True
     return in_chain and bool(line.script_text) and any(
-        api_of(params_of(segment)) == api for segment in segments(line.script_text))
+        api_of(params_of(segment)) in wanted for segment in segments(line.script_text))
 
 
 def _chain_holds(line: SidecarLine | None, wanted: Any) -> bool:
@@ -501,8 +518,9 @@ class OutcomeEvent:
         if not absence:
             return None
         if params.get("source_dies") is True:
-            # The contrast 510.2 draws: a creature dying there having dealt
-            # nothing, not every step whose damage dealers all survive.
+            # The contrast 510.2 draws: a first striker's victim, dying before
+            # it could deal its damage, not every step whose damage dealers
+            # all survive.
             victims = _victims(record, wanted, listed)
             return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition,
                                victims) if victims else None
@@ -548,15 +566,20 @@ def _source_verdict(event: Event, listed: tuple[Event, ...],
 
 def _victims(record: EffectRecord, wanted: list[Event],
              listed: tuple[Event, ...]) -> tuple[str, ...]:
-    """The creatures ``wanted``'s events deal damage to that die in the record
-    having dealt none of those events themselves: a first striker's victim."""
+    """A first striker's victims: in the first-strike damage step, the
+    creatures with power above 0 that ``wanted``'s events deal damage to and
+    that die in the record having dealt none of those events themselves.
+    None in any other step, or where the snapshot names no step."""
+    if record.state.global_.combat_substep != CombatSubstep.FIRST_STRIKE:
+        return ()
     sources = {_source_of(e) for e in wanted}
     found = []
     for event in wanted:
         for subject in event.subjects:
             entity = record.state.entity(subject)
             if (subject not in sources and entity is not None
-                    and has_card_type(entity, "creature") and _dies(subject, listed)):
+                    and has_card_type(entity, "creature") and entity.power > 0
+                    and _dies(subject, listed)):
                 found.append(subject)
     return tuple(dict.fromkeys(found))
 
