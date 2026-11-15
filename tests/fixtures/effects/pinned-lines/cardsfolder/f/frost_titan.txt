@@ -1,0 +1,6 @@
+name: frost titan
+mana cost: {4}{U}{U}
+types: creature giant
+power toughness: 6/6
+triggered: whenever CARDNAME becomes the target of a spell or ability an opponent controls, counter that spell or ability unless its controller pays {2}.
+triggered: whenever CARDNAME enters or attacks, tap target permanent. it doesn't untap during its controller's next untap step.

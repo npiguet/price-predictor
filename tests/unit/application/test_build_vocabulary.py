@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 
 class TestMultiWordKeywordsConstant:
     def test_has_24_entries(self):
@@ -179,9 +177,6 @@ class TestSC001SC002Validation:
         fixture_corpus = (
             Path(__file__).parent.parent.parent / "fixtures" / "converted_cards_training"
         )
-        if not fixture_corpus.exists():
-            pytest.skip("Fixture corpus not found")
-
         result = build_vocabulary(fixture_corpus, freq_threshold=1)
         assert result.vocab_size < 10000
 

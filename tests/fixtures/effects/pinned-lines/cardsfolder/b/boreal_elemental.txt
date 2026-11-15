@@ -1,0 +1,6 @@
+name: boreal elemental
+mana cost: {4}{U}
+types: creature elemental
+power toughness: 3/4
+static: flying
+static: spells your opponents cast that target CARDNAME cost {2} more to cast.

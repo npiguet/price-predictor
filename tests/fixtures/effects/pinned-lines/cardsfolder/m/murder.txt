@@ -1,0 +1,4 @@
+name: murder
+mana cost: {1}{B}{B}
+types: instant
+spell[1]: destroy target creature.

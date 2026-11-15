@@ -748,13 +748,10 @@ class TestKeywordLines:
 
 # ── SC-002 over the real definitions ────────────────────────────────────
 
-#: Real ``extract-keyword-definitions`` output, with the ``formatter`` field.
+#: Real ``extract-keyword-definitions`` output, with the ``formatter`` field
+#: (byte-identical to gen-3's Stage 0 output of 2026-11-15).
 _FIXTURE_DEFINITIONS = (
     Path(__file__).parents[3] / "fixtures" / "effects" / "keyword-definitions.json"
-)
-#: The working copy, which may predate the field; swept too when present.
-_OUTPUT_DEFINITIONS = (
-    Path(__file__).parents[4] / "output" / "effects" / "keyword-definitions.json"
 )
 _FIXTURE_SIDECARS = (
     Path(__file__).parents[3] / "fixtures" / "effects" / "gen1-sidecars"
@@ -773,8 +770,7 @@ def _fixture_keyword_lines() -> list[str]:
 
 
 @pytest.mark.parametrize("surface", ["prose", "script"])
-@pytest.mark.parametrize("source", ["fixture", "output"])
-def test_no_definition_expands_to_a_percent_or_unk(surface, source):
+def test_no_definition_expands_to_a_percent_or_unk(surface):
     """SC-002 over every real definition and every real fixture keyword line,
     against a vocabulary seeded the way ``build-vocab`` seeds it."""
     from effects.application.build_vocab import (
@@ -787,10 +783,7 @@ def test_no_definition_expands_to_a_percent_or_unk(surface, source):
     )
     from price_predictor.application.build_vocabulary import MULTI_WORD_KEYWORDS
 
-    path = _FIXTURE_DEFINITIONS if source == "fixture" else _OUTPUT_DEFINITIONS
-    if not path.exists():
-        pytest.skip("no keyword-definition file in output/")
-    definitions = load_keyword_definitions(path)
+    definitions = load_keyword_definitions(_FIXTURE_DEFINITIONS)
     staged = _fixture_keyword_lines() if surface == "script" else []
     seeded = seed_tokens(staging_tokenizer(surface, definitions), definitions, staged)
     vocab: dict[str, int] = {}

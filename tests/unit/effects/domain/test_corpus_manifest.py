@@ -184,9 +184,6 @@ def test_a_different_held_out_text_still_moves_the_digest():
 # ── gen-2 fields (FR-053, FR-042; T082, T084) ───────────────────────────
 
 _FIXTURE = Path(__file__).parents[3] / "fixtures" / "effects" / "gen1-manifest-trimmed.json"
-_REAL_GEN1 = Path("output/effects/corpus/manifest.json")
-#: The digest the gen-1 checkpoint (run 09.17f) recorded for that manifest.
-_GEN1_RECORDED_DIGEST = "e3c0c9bb913b9aeda0d07eb587b5445c"
 
 
 def _canonical_digest(raw: dict) -> str:
@@ -231,12 +228,6 @@ def test_a_family_row_keeps_the_columns_its_manifest_was_written_with():
         loaded = CorpusManifest.from_dict(raw)
         assert isinstance(loaded.families["rewrite"]["Moved"], FamilyRow)
         assert _as_written(loaded.as_dict()) == _as_written(raw)
-
-
-@pytest.mark.skipif(not _REAL_GEN1.exists(), reason="the gen-1 corpus is not on this machine")
-def test_the_gen1_corpus_still_matches_the_digest_its_checkpoint_recorded():
-    raw = json.loads(_REAL_GEN1.read_text(encoding="utf-8"))
-    assert CorpusManifest.from_dict(raw).digest() == _GEN1_RECORDED_DIGEST
 
 
 def test_gen2_fields_are_left_out_at_their_gen1_values(manifest_dict):

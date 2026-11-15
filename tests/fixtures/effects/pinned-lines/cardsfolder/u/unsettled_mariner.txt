@@ -1,0 +1,6 @@
+name: unsettled mariner
+mana cost: {W}{U}
+types: creature shapeshifter
+power toughness: 2/2
+static: changeling
+triggered: whenever you or a permanent you control becomes the target of a spell or ability an opponent controls, counter that spell or ability unless its controller pays {1}.

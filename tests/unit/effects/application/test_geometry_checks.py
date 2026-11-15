@@ -37,7 +37,7 @@ from effects.domain.line_query import LineQuery, normalize_prose
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.ward_twins import BARE_KEYWORDS, WARD, WARD_TWINS
 from effects.infrastructure.sidecar_io import sidecar_path_for
-from tests.unit.effects.builders import read_cache, write_sidecar
+from tests.unit.effects.builders import EFFECTS_FIXTURES, read_cache, write_sidecar
 
 
 def _write_source(
@@ -541,13 +541,12 @@ class TestWardCanary:
             assert "(" not in line.prose
             assert not line.prose.endswith(".")
 
-    @pytest.mark.skipif(
-        not Path("output/cardsfolder").is_dir(),
-        reason="needs the converted corpus",
-    )
     def test_every_pinned_line_is_one_its_card_prints(self):
         """Twins and neighbour queries alike: a pin to a card that does not
-        print the line resolves to nothing on the real corpus."""
+        print the line resolves to nothing on the real corpus. Read on
+        ``pinned-lines/``, each pinned card's converted script and sidecar
+        copied from the gen-3 converted tree (``output/effects/gen3/converted``):
+        a new pin needs its card copied there too."""
         from effects.infrastructure.sidecar_io import (
             converted_text_path,
             prose_lines,
@@ -557,7 +556,7 @@ class TestWardCanary:
             ConvertedCardLocator,
         )
 
-        locator = ConvertedCardLocator(Path("output/cardsfolder"))
+        locator = ConvertedCardLocator(EFFECTS_FIXTURES / "pinned-lines" / "cardsfolder")
         for query in (*WARD_TWINS, *NEIGHBOUR_QUERIES):
             path = locator.expected_path(query.card, ".provenance.json")
             sidecar = read_sidecar(path)

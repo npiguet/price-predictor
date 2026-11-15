@@ -1,0 +1,5 @@
+name: artful maneuver
+mana cost: {1}{W}
+types: instant
+static: rebound
+spell[1]: target creature gets +2/+2 until end of turn.

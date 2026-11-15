@@ -1,0 +1,5 @@
+name: think twice
+mana cost: {1}{U}
+types: instant
+alternate cost: flashback {2}{U}
+spell[1]: draw a card.

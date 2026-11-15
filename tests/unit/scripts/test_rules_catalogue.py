@@ -337,17 +337,6 @@ def test_the_regenerated_list_is_the_committed_one():
     assert list(chosen) == listed
 
 
-def test_the_committed_counts_are_the_gen2_counts_cut_down():
-    """The checked-in counts are the part of ``output/effects/rule-counts-gen2.json``
-    the list is decided from; it needs that file, which output/ never commits."""
-    counts_path = rc.OUTPUT / "effects" / "rule-counts-gen2.json"
-    if not counts_path.exists():
-        pytest.skip("needs output/effects/rule-counts-gen2.json (never committed)")
-    counts = json.loads(counts_path.read_text(encoding="utf-8"))
-    committed = json.loads((rc.RULES / rc.DIRECTED_COUNTS).read_text(encoding="utf-8"))
-    assert committed == rc.decided_from(counts)
-
-
 def test_the_subcommand_writes_the_counts_it_decided_from(catalogue, capsys):
     rc.cmd_directed_rules(catalogue)
     written = json.loads((catalogue.rules_dir / rc.DIRECTED_COUNTS).read_text(encoding="utf-8"))
