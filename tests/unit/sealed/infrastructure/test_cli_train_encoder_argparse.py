@@ -91,3 +91,36 @@ class TestTrainEncoderArgs:
         # value, so the pipeline must.
         ns = _parse(["train-encoder", "--n-pool-queries", "5"])
         assert ns.n_pool_queries == 5
+
+
+class TestWhereTheWinRatesGo:
+    """``--win-rates-output`` names the per-card win-rate table's file. Unset,
+    a run given its own ``--model-output`` keeps the table there, and a run
+    on the default directory writes ``output/sealed/cards-win-rates.txt`` as
+    it always did."""
+
+    @pytest.mark.parametrize(("argv", "expected"), [
+        ((), "output/sealed/cards-win-rates.txt"),
+        (("--model-output", "models/effects/gen3/encoder/run"),
+         "models/effects/gen3/encoder/run/cards-win-rates.txt"),
+        (("--win-rates-output", "elsewhere/rates.txt"), "elsewhere/rates.txt"),
+        (("--model-output", "models/x/run", "--win-rates-output", "elsewhere/rates.txt"),
+         "elsewhere/rates.txt"),
+    ])
+    def test_the_pipeline_is_given_the_path_the_flags_name(self, monkeypatch, argv, expected):
+        from pathlib import Path
+
+        import sealed.application.train_encoder as module
+        from sealed.infrastructure.cli import run_train_encoder
+
+        seen = {}
+        monkeypatch.setattr(module, "run", lambda config: seen.setdefault("config", config))
+        assert run_train_encoder(_parse(["train-encoder", *argv])) == 0
+        assert seen["config"].win_rates_path == Path(expected)
+
+    def test_the_config_default_is_the_old_path(self):
+        from pathlib import Path
+
+        from sealed.application.train_encoder import TrainEncoderConfig
+
+        assert TrainEncoderConfig().win_rates_path == Path("output/sealed/cards-win-rates.txt")

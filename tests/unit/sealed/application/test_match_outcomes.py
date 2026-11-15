@@ -444,6 +444,8 @@ class TestTheRunReportsWhatItsWorkersLogged:
         assert entry["worker_stops"]["survived"] == 0
         assert entry["hook_failures"] == {"connector": {}, "forge": {}}
         assert entry["fork_refusals"] == {}
+        # Where its two sealed corpora went, which need not be the run directory.
+        assert entry["match_outcomes"] == str(tmp_path / "match-outcomes.txt")
 
     def test_the_fork_refusal_tally_is_printed_and_kept_and_is_no_failure(
         self, tmp_path, capsys,

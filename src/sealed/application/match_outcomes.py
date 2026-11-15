@@ -211,6 +211,7 @@ class MatchOutcomeSupervisor:
         print(f"Workers: {stops.render()}, {len(survivors)} outlived the kill")
         annotate_run(
             self._effect_records_dir, run_id=self._run_id,
+            match_outcomes=str(self._output_path),
             matches=self._matches,
             matches_played=self._matches_played,
             **self._log_report.manifest_fields(),

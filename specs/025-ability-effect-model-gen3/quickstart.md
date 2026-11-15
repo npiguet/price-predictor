@@ -51,10 +51,8 @@ nothing else. Follow a run from a second window with
 directory; when a run ends, fill `purpose` there and set `status` to `keep`, `scratch` or
 `superseded`.
 
-Three commands write outside the path they are given:
+Two commands write outside the path they are given:
 
-- `sealed match-outcomes` appends `match-outcomes.txt` and `cards-played.txt` to `output/sealed/`
-  whatever `--effect-records` names. It has no flag for them.
 - `effects evaluate-effect-model` writes its pictures to `<checkpoint stem>.evaluation/` beside
   the checkpoint, inside the model's run directory. It has no flag for them.
 - `scripts/rules_catalogue.py directed-rules` rewrites three files under `rules/`, which are
@@ -114,7 +112,7 @@ A pilot is a scratch run: nothing outside `scratch\` reads it.
 
 ```powershell
 $pilot = "$gen3\scratch\<date>-pilot"
-Run-Logged $pilot "$py -u -m sealed match-outcomes --workers 6 --effect-records $pilot --count-dropped-events --directed-fork-rules 704.5f --directed-fork-probability 1 <usual pilot flags>"
+Run-Logged $pilot "$py -u -m sealed match-outcomes --workers 6 --effect-records $pilot --outcomes-dir $pilot --count-dropped-events --directed-fork-rules 704.5f --directed-fork-probability 1 <usual pilot flags>"
 Run-Logged "$gen3\scratch\<date>-pilot-checks" "$py -u -m effects validate-corpus --effect-records $pilot $cards --variant-scripts $variants"
 Run-Logged "$gen3\scratch\<date>-pilot-checks" "$py -u -m effects field-coverage --effect-records $pilot"
 Run-Logged "$gen3\scratch\<date>-pilot-checks" "$py -u -m effects rule-counts --records-dir $pilot $cards --variant-scripts $variants --rules-dir rules --workers 10 --output $gen3\scratch\<date>-pilot-checks\rule-counts.json"
@@ -160,7 +158,7 @@ failure counts account for.
 
 ```powershell
 $audit = "$gen3\scratch\<date>-fork-fidelity"
-Run-Logged $audit "$py -u -m sealed match-outcomes --workers 6 --effect-records $audit --random-seat-share 0.25 --random-seat-probability 0.5 --interventions-per-game 4 --probes-per-game 4 --directed-fork-rules $rules --count-dropped-events"
+Run-Logged $audit "$py -u -m sealed match-outcomes --workers 6 --effect-records $audit --outcomes-dir $audit --random-seat-share 0.25 --random-seat-probability 0.5 --interventions-per-game 4 --probes-per-game 4 --directed-fork-rules $rules --count-dropped-events"
 Run-Logged "$gen3\scratch\<date>-fork-fidelity-checks" "$py -u -m effects validate-corpus --effect-records $audit $cards --variant-scripts $variants"
 ```
 
@@ -174,8 +172,8 @@ $wording   = "$gen3\records\<date>-coverage-wording"
 $untarget  = "$gen3\records\<date>-variants-untargeted"
 $steered   = "$gen3\records\<date>-variants-steered"
 
-Run-Logged $full      "$py -u -m sealed match-outcomes --effect-records $full --directed-fork-rules $rules <run flags>"
-Run-Logged $depleted  "$py -u -m sealed match-outcomes --effect-records $depleted --exclude-cards $holdout --directed-fork-rules $rules <run flags>"
+Run-Logged $full      "$py -u -m sealed match-outcomes --effect-records $full --outcomes-dir $full --directed-fork-rules $rules <run flags>"
+Run-Logged $depleted  "$py -u -m sealed match-outcomes --effect-records $depleted --outcomes-dir $depleted --exclude-cards $holdout --directed-fork-rules $rules <run flags>"
 Run-Logged $anytarget "$py -u -m effects collect-coverage --effect-records $anytarget $cards --wording-cards <any-target cards> --exclude-cards $holdout --count-from $depleted <run flags>"
 Run-Logged $wording   "$py -u -m effects collect-coverage --effect-records $wording $cards --wording-cards rules\coverage-wording-cards.txt --directed-fork-rules $rules --exclude-cards $holdout --count-from $depleted --count-from $anytarget <run flags>"
 Run-Logged $untarget  "$py -u -m effects collect-variants --round untargeted --effect-records $untarget --forge-cards-path ..\forge\forge-gui\res\cardsfolder --variant-scripts $variants $cards --exclude-cards $holdout <run flags>"
@@ -191,7 +189,8 @@ every run under it.
 The steered round runs last, on counts of everything collected before it (FR-058c). Every
 collecting command takes the same three decision-sampling rates (FR-059a).
 
-Each collecting command's run directory is its `--effect-records`: worker logs under `logs/`,
+Each collecting command's run directory is its `--effect-records`: the `match-outcomes` runs keep
+`match-outcomes.txt` and `cards-played.txt` there beside the shards (`--outcomes-dir`), worker logs under `logs/`,
 their failure lines printed as the run goes (after each round on a collector, at each status line
 on `match-outcomes`) and kept in `run.json`. A `collect-coverage` run in a new run
 directory passes each earlier run's directory as `--count-from`, so their coverage counts. An

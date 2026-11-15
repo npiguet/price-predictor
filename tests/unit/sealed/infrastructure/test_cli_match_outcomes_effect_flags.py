@@ -399,3 +399,57 @@ class TestTheWorkerStopFlags:
         monkeypatch.setattr(forge_jvm, "check_worker_prerequisites", lambda **_: None)
         assert run_match_outcomes(parse("match-outcomes", "--workers", "1", *argv)) == 0
         return made["worker_stop"]
+
+
+class TestWhereTheTwoSealedCorporaGo:
+    """``--outcomes-dir`` names the directory ``match-outcomes.txt`` and
+    ``cards-played.txt`` are appended to. Unset, a run collecting effect
+    records keeps them in its own run directory, and a plain run appends to
+    ``output/sealed/`` exactly as it always did."""
+
+    def test_it_has_no_default(self):
+        assert parse("match-outcomes").outcomes_dir is None
+
+    @pytest.mark.parametrize(("argv", "expected"), [
+        ((), "output/sealed/match-outcomes.txt"),
+        (("--effect-records", "records/run"), "records/run/match-outcomes.txt"),
+        (("--outcomes-dir", "sealed/run"), "sealed/run/match-outcomes.txt"),
+        (("--effect-records", "records/run", "--outcomes-dir", "sealed/run"),
+         "sealed/run/match-outcomes.txt"),
+    ])
+    def test_the_supervisor_appends_where_the_flags_say(self, monkeypatch, argv, expected):
+        from pathlib import Path
+
+        assert self._made(monkeypatch, *argv)["output_path"] == Path(expected)
+
+    @pytest.mark.parametrize(("argv", "expected"), [
+        ((), "output/sealed"),
+        (("--outcomes-dir", "sealed/run"), "sealed/run"),
+        (("--effect-records", "records/run"), "records/run"),
+        (("--effect-records", "records/run", "--outcomes-dir", "sealed/run"), "records/run"),
+    ])
+    def test_the_run_directory_follows(self, argv, expected):
+        from pathlib import Path
+
+        from sealed.infrastructure import cli
+
+        args = parse("match-outcomes", *argv)
+        assert cli.RUN_MANIFESTS["match-outcomes"].run_dir(args) == Path(expected)
+
+    @staticmethod
+    def _made(monkeypatch, *argv):
+        from unittest.mock import MagicMock
+
+        import sealed.application.match_outcomes as module
+        from price_predictor.infrastructure import forge_jvm
+
+        made = {}
+
+        def supervisor(**kwargs):
+            made.update(kwargs)
+            return MagicMock(collected_nothing=False)
+
+        monkeypatch.setattr(module, "MatchOutcomeSupervisor", supervisor)
+        monkeypatch.setattr(forge_jvm, "check_worker_prerequisites", lambda **_: None)
+        assert run_match_outcomes(parse("match-outcomes", "--workers", "1", *argv)) == 0
+        return made

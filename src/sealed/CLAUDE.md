@@ -2,7 +2,7 @@
 
 Entry point: `python -m sealed <subcommand>` (see `src/sealed/infrastructure/cli.py`). The package's domain terms are defined in `GLOSSARY.md` beside this file, and the terms it shares with other packages in the root `GLOSSARY.md`. The sealed pipeline is built around a sealed-trained card encoder; the price-predictor transformer is a valid alternate encoder source via `--encoder-checkpoint`.
 
-Every subcommand that writes files keeps a `run.json` run manifest in its run directory (`.claude/skills/artifact-layout/SKILL.md`), declared in `RUN_MANIFESTS` in `infrastructure/cli.py`: `match-outcomes` records in `--effect-records` when given, else in `output/sealed/`, and `encode-cards` in the `--cards-path` tree it writes beside.
+Every subcommand that writes files keeps a `run.json` run manifest in its run directory (`.claude/skills/artifact-layout/SKILL.md`), declared in `RUN_MANIFESTS` in `infrastructure/cli.py`: `match-outcomes` records in `--effect-records` when given, else in `--outcomes-dir` (by default `output/sealed/`), and `encode-cards` in the `--cards-path` tree it writes beside.
 
 This file lists the rules to respect and the file formats. It does not describe the commands:
 
@@ -36,7 +36,7 @@ This file lists the rules to respect and the file formats. It does not describe 
 - `train-encoder` saves only the encoder weights; the regression and MLM heads are filtered out at save time. The pool mode is recorded in the checkpoint's config.
 - Its train/validation split is card-disjoint.
 - A card referenced in `cards-played.txt` with no converted `.txt` is warned about and dropped. It does not block the run.
-- Every `train-encoder` run overwrites `output/sealed/cards-win-rates.txt`.
+- Every `train-encoder` run overwrites its win-rate table, `--win-rates-output` (by default `cards-win-rates.txt` in an explicit `--model-output`, else `output/sealed/cards-win-rates.txt`).
 
 ## The embedding cache fixes every downstream width
 
@@ -69,6 +69,7 @@ This file lists the rules to respect and the file formats. It does not describe 
 - Without `--effect-records` the workers keep no log, the pool kills the longest-running worker every status interval and every worker at the end, and `--recycle-seconds` or `--stop-timeout` exits 2.
 - With `--exclude-cards`, no collected game holds a held-out card. Without it, the same command collects the full-strength games that become the effect model's card-disjoint validation stratum.
 - `--effect-records` has no default: collection is an opt-in, and without the flag the two sealed corpora keep their exact format and content.
+- The two sealed corpora are appended to `--outcomes-dir`, by default the `--effect-records` directory when given (a collection writes nothing outside its run directory), else `output/sealed/`.
 
 ## Scorer and picker training
 
@@ -82,15 +83,15 @@ This file lists the rules to respect and the file formats. It does not describe 
 
 Append-only data contracts spanning the Java writers and the Python readers — no single source file teaches a whole one, and a mismatch silently corrupts a corpus that cannot easily be rebuilt.
 
-**Match outcomes** (`output/sealed/match-outcomes.txt`): one line per match, ten semicolon-separated fields `timestamp;run_id;set_code;method_A;method_B;deck_A;deck_B;games;play;duration_s`. `timestamp` is ISO 8601 UTC, `run_id` is a UUID identifying the supervisor invocation, `set_code` is the MTG set both pools were drawn from, `method_A`/`method_B` are build-method tags (`forge-best`, `forge-3sub`, `forge-8sub`, `random`, or the per-deck label set by `build-decks --label` when the deck came from a generated-decks file), `deck_A`/`deck_B` are pipe-separated lists of 40 Forge canonical card names (duplicates repeat), `games` is the per-game winner sequence (`AA`, `ABA`, `ABABABA`, etc. — length depends on `--best-of`, between `ceil(N/2)` and `N` chars), `play` is the per-game play-first sequence (same length), and `duration_s` is the match wall-clock duration in whole seconds. See `specs/2026-03-28-sealed-deck-picker.md` §Phase 0 Step 4 for full details.
+**Match outcomes** (`match-outcomes.txt` in `match-outcomes --outcomes-dir`, by default `output/sealed/`): one line per match, ten semicolon-separated fields `timestamp;run_id;set_code;method_A;method_B;deck_A;deck_B;games;play;duration_s`. `timestamp` is ISO 8601 UTC, `run_id` is a UUID identifying the supervisor invocation, `set_code` is the MTG set both pools were drawn from, `method_A`/`method_B` are build-method tags (`forge-best`, `forge-3sub`, `forge-8sub`, `random`, or the per-deck label set by `build-decks --label` when the deck came from a generated-decks file), `deck_A`/`deck_B` are pipe-separated lists of 40 Forge canonical card names (duplicates repeat), `games` is the per-game winner sequence (`AA`, `ABA`, `ABABABA`, etc. — length depends on `--best-of`, between `ceil(N/2)` and `N` chars), `play` is the per-game play-first sequence (same length), and `duration_s` is the match wall-clock duration in whole seconds. See `specs/2026-03-28-sealed-deck-picker.md` §Phase 0 Step 4 for full details.
 
-**Cards played** (`output/sealed/cards-played.txt`): one line per played game, eleven semicolon-separated fields `timestamp;run_id;set_code;method_A;method_B;cards_played_A;cards_played_B;cards_not_played_A;cards_not_played_B;winner;starter`. `timestamp`/`run_id`/`set_code`/`method_A`/`method_B` mirror the parent match's row (joinable by `run_id` plus positional offset within a `(run_id, set_code, method_A, method_B)` group). The four card-list columns are pipe-separated **sets** of distinct card names (no duplicates within a column; basic lands excluded by the writer). For a side X, `cards_played_X` and `cards_not_played_X` are disjoint — if any copy of a card was played, the name appears only in `cards_played_X`. `winner` and `starter` are single chars `A`/`B` matching the corresponding chars of the parent's `games`/`play` strings. Trailing partial lines are tolerated by readers (JVM-crash-mid-write recovery).
+**Cards played** (`cards-played.txt`, beside `match-outcomes.txt`): one line per played game, eleven semicolon-separated fields `timestamp;run_id;set_code;method_A;method_B;cards_played_A;cards_played_B;cards_not_played_A;cards_not_played_B;winner;starter`. `timestamp`/`run_id`/`set_code`/`method_A`/`method_B` mirror the parent match's row (joinable by `run_id` plus positional offset within a `(run_id, set_code, method_A, method_B)` group). The four card-list columns are pipe-separated **sets** of distinct card names (no duplicates within a column; basic lands excluded by the writer). For a side X, `cards_played_X` and `cards_not_played_X` are disjoint — if any copy of a card was played, the name appears only in `cards_played_X`. `winner` and `starter` are single chars `A`/`B` matching the corresponding chars of the parent's `games`/`play` strings. Trailing partial lines are tolerated by readers (JVM-crash-mid-write recovery).
 
 **Pools** (`output/sealed/pools/*/pools.txt`): one pool per line, `SET_CODE;Card1|Card2|...|CardN`, basics excluded. The set-code prefix lets downstream tools (`build-decks`, self-play `match-outcomes`) honor same-set constraints.
 
 **Generated decks** (`output/sealed/generated-decks.txt`): one finished 40-card deck per line, `LABEL;SET_CODE;Card1|Card2|...|Card40`. Concatenating several generated-decks files with different labels into one self-play corpus is supported.
 
-**Cards win rates** (`output/sealed/cards-win-rates.txt`): a Python-only snapshot for inspection, with a header row. A cell whose slice denominator is zero is written as the empty string in both its raw and shrunk columns, which distinguishes "no signal" from "neutral signal". Cards never seen in a deck are excluded.
+**Cards win rates** (`train-encoder --win-rates-output`, by default `output/sealed/cards-win-rates.txt`): a Python-only snapshot for inspection, with a header row. A cell whose slice denominator is zero is written as the empty string in both its raw and shrunk columns, which distinguishes "no signal" from "neutral signal". Cards never seen in a deck are excluded.
 
 ## Model artifacts
 

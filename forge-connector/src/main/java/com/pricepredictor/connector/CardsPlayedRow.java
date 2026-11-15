@@ -8,7 +8,8 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Per-game card-play record written to {@code output/sealed/cards-played.txt}
+ * Per-game card-play record written to {@code cards-played.txt}, beside the
+ * match-outcomes file
  * through a {@link CorpusWriter}.
  *
  * <p>Schema (eleven semicolon-separated fields, no trailing {@code ;}):

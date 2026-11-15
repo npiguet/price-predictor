@@ -132,6 +132,7 @@ Every invariant prints the number it measured, passed or not.
 | `--directed-fork-rules LIST` | none | comma-separated rule ids |
 | `--directed-forks-per-game N` | 2 | directed-fork budget per game, beside the existing fork budgets |
 | `--directed-fork-probability P` | 0.25 | chance a matching boundary forks; must be in (0, 1] |
+| `--outcomes-dir DIR` | `--effect-records DIR` when given, else `output/sealed/` | the directory `match-outcomes.txt` and `cards-played.txt` are appended to |
 
 Startup, exit 1 naming the rule when a listed rule:
 
@@ -164,9 +165,13 @@ end it prints the run's totals, the hook-failure counts, the fork refusals and h
 ended, and records in
 its `run.json` entry `run_id`, `matches` (outcome rows), `matches_played` (progress lines),
 `worker_failures`, `worker_failure_examples`, `hook_failures`, `fork_refusals`, `worker_survivors`,
-`worker_stops`, `stop_timeout` and `recycle_seconds`. A run that played matches (outcome rows, progress lines or
+`worker_stops`, `stop_timeout`, `recycle_seconds` and `match_outcomes` (the outcome file's path). A run that played matches (outcome rows, progress lines or
 random-seat match errors, so a run of random-seat matches alone counts) and wrote no effect
-record exits 1. `match-outcomes.txt` and `cards-played.txt` stay at `output/sealed/`.
+record exits 1. `match-outcomes.txt` and `cards-played.txt` go to `--outcomes-dir`, which defaults
+to `DIR`: a collection writes nothing outside its run directory. Their format and content do not
+depend on `--effect-records`. The run directory is `--effect-records` when given, else
+`--outcomes-dir`, else `output/sealed/`. No shard reader takes the two files for shards (each finds
+shards by suffix).
 
 ## `python -m effects collect-coverage` (existing)
 
@@ -502,3 +507,12 @@ without a set it prints that the reporting half is skipped.
 (default reporting) and `--probe-set-dir`; `combat_grid.py` takes `--blocks one|several` (default
 one). Scorecards carry the selection set's digest and, per stratum and half, the probes, grids, rule
 tests and § 14.5 probes.
+
+## Paths every run names (existing commands)
+
+Every file a command writes under `output/` or `models/` goes where a flag says, and every file it
+reads there is named by a flag.
+
+| Command | Flag | Default | Meaning |
+|---|---|---|---|
+| `sealed train-encoder` | `--win-rates-output PATH` | `cards-win-rates.txt` in `--model-output` when that is given, else `output/sealed/cards-win-rates.txt` | the per-card win-rate table |

@@ -11,8 +11,8 @@ weighted MSE + cross-entropy objective and saves only the encoder
 weights to ``models/sealed/encoder/``.
 
 Per FR-013, aggregation is inline: there is no separate
-``aggregate-labels`` subcommand. The human-readable label snapshot lives
-at ``output/sealed/cards-win-rates.txt``.
+``aggregate-labels`` subcommand. The human-readable label snapshot goes
+to ``TrainEncoderConfig.win_rates_path`` (``--win-rates-output``).
 """
 
 from __future__ import annotations
@@ -913,6 +913,11 @@ class TrainEncoderConfig:
     model_output_dir: Path = field(
         default_factory=lambda: Path("models/sealed/encoder/"),
     )
+    #: The per-card label snapshot, a table for inspection that the effects
+    #: package's decodability battery also reads (``--win-rates``).
+    win_rates_path: Path = field(
+        default_factory=lambda: Path("output/sealed") / _WIN_RATES_FILENAME,
+    )
     batch_size: int = 64
     epochs: int = 100
     lr: float = 1e-4
@@ -1489,7 +1494,7 @@ def run(config: TrainEncoderConfig) -> Path:
         f"wins_when_in_deck + losses_when_in_deck > 0",
     )
 
-    win_rates_path = Path("output/sealed") / _WIN_RATES_FILENAME
+    win_rates_path = Path(config.win_rates_path)
     _write_win_rates(labels, win_rates_path)
     _log(f"Wrote per-card label snapshot to {win_rates_path}")
 

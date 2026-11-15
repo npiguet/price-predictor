@@ -10,6 +10,7 @@ Rules to respect when running, babysitting or changing `collect-coverage`, `coll
 ## Collection is an opt-in
 
 - Collection rides a command that already exists: `python -m sealed match-outcomes --effect-records DIR`. `--effect-records` has no default there, because a default would turn every self-play run into a collection run. Without the flag no shard is opened, and `match-outcomes.txt` and `cards-played.txt` keep their exact format and content.
+- With the flag, `match-outcomes.txt` and `cards-played.txt` go to `--outcomes-dir`, by default the `--effect-records` directory, beside the shards: the collection writes nothing outside its run directory. Every shard reader finds shards by suffix, so neither file is read as one.
 - The instrumentation costs no extra simulation: it rides matches that were going to be played anyway.
 - `MatchWorkerMain` has a records-only mode: with `-Deffect.records.dir` set and `-Doutput.file` absent, neither sealed writer is constructed. `collect-coverage` and `collect-variants` run their workers that way. Their decks are built for coverage and not for a fair self-play sample, so their matches in the sealed corpus would corrupt the scorer's training data.
 

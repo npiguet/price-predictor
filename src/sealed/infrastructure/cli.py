@@ -183,8 +183,18 @@ def _build_train_encoder_parser(subparsers) -> None:
         help="Tokenizer vocab file (default: models/sealed/encoder/vocab.txt)",
     )
     parser.add_argument(
-        "--model-output", default="models/sealed/encoder/",
-        help="Output directory for {timestamp}.pt + latest.pt (default: models/sealed/encoder/)",
+        "--model-output", default=_TRAIN_ENCODER_DEFAULT_OUTPUT,
+        help=(
+            "Output directory for {timestamp}.pt + latest.pt (default: "
+            f"{_TRAIN_ENCODER_DEFAULT_OUTPUT})"
+        ),
+    )
+    parser.add_argument(
+        "--win-rates-output", default=None,
+        help=(
+            f"The per-card win-rate table's file (default: {_WIN_RATES_NAME} in "
+            f"--model-output when that is given, else {_DEFAULT_WIN_RATES})"
+        ),
     )
     parser.add_argument(
         "--batch-size", type=int, default=64,
@@ -1004,6 +1014,16 @@ def _build_match_outcomes_parser(subparsers) -> None:
             " Default: 7."
         ),
     )
+    match_parser.add_argument(
+        "--outcomes-dir",
+        default=None,
+        help=(
+            "Directory the two sealed corpora, match-outcomes.txt and"
+            " cards-played.txt, are appended to. Default: the --effect-records"
+            " directory when given, so a collection keeps them in its own run"
+            f" directory; else {DEFAULT_OUTCOMES_DIR}/."
+        ),
+    )
     _add_effect_record_flags(match_parser)
 
 
@@ -1014,6 +1034,22 @@ def _build_match_outcomes_parser(subparsers) -> None:
 # simulation. Absent the flag, nothing changes — no effect records are written
 # and match-outcomes.txt and cards-played.txt keep their exact format and
 # content.
+
+
+#: Where a plain ``match-outcomes`` run appends the two sealed corpora.
+DEFAULT_OUTCOMES_DIR = "output/sealed"
+#: The match-outcomes corpus; the worker writes cards-played.txt beside it.
+MATCH_OUTCOMES_FILE = "match-outcomes.txt"
+
+
+def outcomes_dir(args: argparse.Namespace) -> Path:
+    """The directory ``match-outcomes.txt`` and ``cards-played.txt`` go to:
+    ``--outcomes-dir``, else the ``--effect-records`` run directory, else
+    :data:`DEFAULT_OUTCOMES_DIR`, where a run without either flag always wrote."""
+    for value in (getattr(args, "outcomes_dir", None), getattr(args, "effect_records", None)):
+        if value:
+            return Path(value)
+    return Path(DEFAULT_OUTCOMES_DIR)
 
 
 def _effect_collection_caps(args: argparse.Namespace) -> dict[str, str]:
@@ -1134,6 +1170,22 @@ def check_random_seat_flags(args: argparse.Namespace) -> str | None:
 
 
 _ENCODE_CARDS_DEFAULT_ENCODER = "models/sealed/encoder/latest.pt"
+
+
+_TRAIN_ENCODER_DEFAULT_OUTPUT = "models/sealed/encoder/"
+_WIN_RATES_NAME = "cards-win-rates.txt"
+_DEFAULT_WIN_RATES = f"output/sealed/{_WIN_RATES_NAME}"
+
+
+def _win_rates_output(args: argparse.Namespace) -> Path:
+    """``train-encoder``'s win-rate table: ``--win-rates-output``, else the
+    ``--model-output`` run directory, else, on the default directory, the
+    path every run wrote before the flag existed."""
+    if args.win_rates_output:
+        return Path(args.win_rates_output)
+    if Path(args.model_output) != Path(_TRAIN_ENCODER_DEFAULT_OUTPUT):
+        return Path(args.model_output) / _WIN_RATES_NAME
+    return Path(_DEFAULT_WIN_RATES)
 
 
 def _missing_sealed_encoder_message(path: Path) -> str:
@@ -1777,6 +1829,7 @@ def run_train_encoder(args: argparse.Namespace) -> int:
         cards_folder=Path(args.cards_folder),
         vocab_path=Path(args.vocab_path),
         model_output_dir=Path(args.model_output),
+        win_rates_path=_win_rates_output(args),
         batch_size=args.batch_size,
         epochs=args.epochs,
         lr=args.lr,
@@ -1855,7 +1908,7 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
         print(f"Error: {directed_error}", file=sys.stderr)
         return 1
 
-    output_path = Path("output") / "sealed" / "match-outcomes.txt"
+    output_path = outcomes_dir(args) / MATCH_OUTCOMES_FILE
     side_a_decks = Path(args.side_a_decks) if args.side_a_decks else None
     side_b_decks = Path(args.side_b_decks) if args.side_b_decks else None
     side_b_decks_weight = (
@@ -2009,10 +2062,10 @@ RUN_MANIFESTS: ManifestTable = {
     ),
     # Without --work-dir the evaluation works in a temporary directory.
     "evaluate-scorer": Writes("work_dir", inputs=("checkpoint", "cards_path")),
-    # The match outcomes have no output flag: they append to output/sealed/,
-    # and a collection run's shards go to --effect-records.
+    # A collection run's directory is its --effect-records, which also holds
+    # the two sealed corpora unless --outcomes-dir sends them elsewhere.
     "match-outcomes": Writes(
-        lambda args: args.effect_records or Path("output") / "sealed",
+        lambda args: args.effect_records or outcomes_dir(args),
         inputs=("side_a_decks", "side_b_decks", "exclude_cards"),
     ),
     "train-encoder": Writes(
