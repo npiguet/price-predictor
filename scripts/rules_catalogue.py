@@ -1004,10 +1004,6 @@ NOT_DIRECTED = {
     "111.10n": "its lacking side is a Sorcerer Role's static contributing no boost, which the "
                "Role always gives; its variant creates no Role, so its fork writes no record "
                "of a Role's static",
-    "111.10p": "its lacking side is a Virtuous Role's static contributing no boost, which the "
-               "Role always gives; its variant leaves Ellivere's enters trigger no target, so "
-               "even with Ellivere's cast forced no Role is created and its fork writes no "
-               "record of a Role's static",
     "704.5v": "its lacking side is a battle at zero defense put into the graveyard by the "
               "state-based check, which needs its defeat trigger countered in response (Stifle "
               "after the damage); a defeated Siege's own trigger exiles it",
@@ -1020,18 +1016,15 @@ NOT_DIRECTED = {
     "712.11d": "its only classified variant removes the Disturb candidate its declaration reads "
                "(Hanweir Watchkeep in Beloved Beggar's place), so its fork writes no record of "
                "the rule; a one-land-short variant would make the near miss",
-    "205.1a": "its classified variants are polarity other (a land creature in the Bears' "
-              "place, a kept +1/+1 counter) and its lacking side is the type-setting Aura "
-              "cast at all: no board edit makes a seat cast Song of the Dryads",
     "701.12h": "its classified variant is polarity other (two vanilla creatures) and its near "
                "miss needs the exchange's target destroyed in response; its fires side needs "
                "Exchange of Words's trigger targets chosen, which Forge's AI has no logic for",
-    "701.23f": "its classified variant is polarity other (the search trigger fires with or "
-               "without Aven Mindcensor's limit) and its near miss, the player's own search, "
-               "moves a card between two hands, two facts",
-    "702.70b": "its classified variant is polarity other (one poisonous instance fewer still "
-               "fires once) and its near miss, poisonous meeting damage to a creature, needs "
-               "a block, a seat's choice",
+    "702.70b": "its declaration reads a trigger whose line is poisonous's own, and no record has "
+               "one: no Forge card prints poisonous (Virulent Sliver and Snake Cult Initiation "
+               "grant it through a static, so its trigger is keyed to the static's line), and a "
+               "keyword a fork's keyword edit grants keys to no line; played, a forced attack by "
+               "Grizzly Bears given poisonous 1 fires the trigger and poisons the player, and "
+               "its record is tagged neither side",
     "119.8": "119.8-2's scenario declares no detector, and 119.8-1's declaration reads a "
              "can't-be-cast static the decision candidate names, which a can't-lose-life "
              "static (Platinum Emperion's) never is: the record names no static for a cost the "
@@ -1040,10 +1033,6 @@ NOT_DIRECTED = {
                "static forbids fails only Forge's own restriction check (script_restriction), "
                "and the collector names a prohibiting static for spells and activated "
                "abilities alone, never a special action",
-    "702.133a": "the record cannot show jump-start: Forge's jump-start is an optional cost of "
-                "the card's own cast from the graveyard, so no decision candidate carries the "
-                "keyword or its discard, and the cast's candidate fails its zone check whatever "
-                "the hand holds",
     "702.154a": "the record cannot show the near miss: Forge's enlist is an optional attack "
                 "cost (a static) whose reflexive trigger exists only once the cost is paid, so "
                 "no enlist trigger is evaluated where nothing is enlisted",

@@ -353,6 +353,89 @@
         },
         "needs": []
       }
+    },
+    {
+      "id": "701.23f-2",
+      "rules": [
+        "701.23f"
+      ],
+      "title": "A search limited to the top four cards still triggers an ability watching for a search",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Archivist of Oghma",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Evolving Wilds"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Grizzly Bears",
+            "Grizzly Bears",
+            "Grizzly Bears",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are top first. The directed fork's board: no Aven Mindcensor, which the fork adds under A."
+      },
+      "decisions": [
+        "A passes priority with an empty stack.",
+        "B activates Evolving Wilds, sacrificing it, and searches its library, finding Forest.",
+        "Archivist of Oghma's trigger goes on the stack and resolves."
+      ],
+      "variants": [
+        {
+          "label": "whole_library",
+          "polarity": "other",
+          "delta": "",
+          "expected": "B searches its whole library and puts Forest onto the battlefield tapped. Archivist of Oghma triggers: A gains 1 life (21) and draws Island."
+        },
+        {
+          "label": "mindcensor_added",
+          "polarity": "fires",
+          "delta": "Aven Mindcensor is on A's battlefield.",
+          "expected": "B searches only the top four cards of its library, four Grizzly Bears, and finds no basic land; Forest stays in the library. Archivist of Oghma still triggers: A gains 1 life (21) and draws Island.",
+          "operation": "add_permanent"
+        }
+      ],
+      "cards": [
+        "Archivist of Oghma",
+        "Evolving Wilds",
+        "Aven Mindcensor",
+        "Island",
+        "Grizzly Bears",
+        "Forest"
+      ],
+      "forge_notes": "Aven Mindcensor gives its controller's opponents the LimitSearchLibrary keyword. The fork forces B's activation of Evolving Wilds.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on a player searching a library fires on the search, whatever its limit.",
+        "near_miss": "A search trigger evaluated against a search it does not watch.",
+        "params": {
+          "mode": "SearchedLibrary"
+        },
+        "needs": []
+      }
     }
   ]
 }

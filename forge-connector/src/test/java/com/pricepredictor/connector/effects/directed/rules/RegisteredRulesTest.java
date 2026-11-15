@@ -486,47 +486,267 @@ class RegisteredRulesTest {
         }
     }
 
-    // ── 118.12b, an optional search: move_card ──────────────────────────
+    // ── 118.12b, an optional search: add_permanent ──────────────────────
 
-    /** Elfhame Sanctuary as A's upkeep begins, over A's library listed top card first. */
-    private static Board sanctuaryBoard(String... library) {
+    /** A's upkeep begins over A's library, listed top card first. */
+    private static Board upkeepBoard(String... library) {
         Board board = new Board(PhaseType.UPKEEP);
-        board.card(board.you, "Elfhame Sanctuary");
-        for (String name : library) {
-            Card card = board.game.getAction().moveToLibrary(
-                    TestBoard.card(board.game, board.you, name), -1, null, null);
-            if (name.equals("Forest")) {
-                board.subject = card;
-            }
-        }
+        board.library(board.you, library);
         return board;
     }
 
     @Test
-    void optionalSearchBindsTheOnlyBasicLandInTheLibrary() {
-        Board board = sanctuaryBoard("Shock", "Forest");
-        assertEquals(board.subject, OptionalSearch.bind(board.game).orElseThrow().card("card"));
+    void optionalSearchBindsTheActivePlayerWithABasicLandInItsLibrary() {
+        Board board = upkeepBoard("Shock", "Forest", "Forest");
+        assertEquals(board.you, OptionalSearch.bind(board.game).orElseThrow().player("player"));
     }
 
     @Test
-    void optionalSearchBindsNothingWithTwoBasicLands() {
-        assertTrue(OptionalSearch.bind(sanctuaryBoard("Forest", "Shock", "Forest").game).isEmpty());
+    void optionalSearchBindsNothingWithoutABasicLandToFind() {
+        assertTrue(OptionalSearch.bind(upkeepBoard("Shock", "Lightning Bolt").game).isEmpty());
     }
 
     @Test
-    void optionalSearchForksALightningBoltInTheLandsPlace() {
-        Board board = sanctuaryBoard("Shock", "Forest");
+    void optionalSearchBindsNothingAtAnotherBoundary() {
+        Board board = new Board(PhaseType.MAIN1);
+        board.library(board.you, "Forest");
+        assertTrue(OptionalSearch.bind(board.game).isEmpty());
+    }
+
+    /** The added Sanctuary is bound on the copy for the forced answer, which no live card maps to. */
+    @Test
+    void optionalSearchForksElfhameSanctuaryAndBindsItForTheAnswer() {
+        Board board = upkeepBoard("Shock", "Forest");
         Twin twin = board.twin(OptionalSearch.rule());
-        List<Card> library = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library));
-        assertEquals(List.of("Shock", OptionalSearch.BOLT), library.stream().map(Card::getName).toList());
-        String forest = id(board.subject);
-        String bolt = id(library.get(1));
-        for (String change : twin.changes()) {
-            assertTrue(change.equals("-" + forest) || change.equals("+" + bolt)
-                            || change.startsWith("-link ") && change.contains("=" + forest)
-                            || change.startsWith("+link ") && change.contains("=" + bolt),
-                    "replacing changed " + change + "; all: " + twin.changes());
+        assertOnlyAdded(twin, twin.fork().player("player"), OptionalSearch.SANCTUARY);
+        Application application = OptionalSearch.rule().variants().get(OptionalSearch.SANCTUARY_ADDED);
+        Card sanctuary = application.afterEdit(twin.fork(), twin.forkGame()).card("sanctuary");
+        assertEquals(OptionalSearch.SANCTUARY, sanctuary.getName());
+        assertTrue(sanctuary.isInPlay());
+    }
+
+    // ── 111.10p, a Virtuous Role: add_permanent ─────────────────────────
+
+    /** A's Grizzly Bears and four lands, Ellivere of the Wild Court in hand, as a main phase begins. */
+    private static Board elliveresBoard(PhaseType phase, String... lands) {
+        Board board = new Board(phase);
+        for (String land : lands) {
+            board.card(board.you, land);
         }
+        board.other = board.card(board.you, "Grizzly Bears");
+        board.subject = TestBoard.inHand(board.game, board.you, "Ellivere of the Wild Court");
+        return board;
+    }
+
+    private static Board elliveresBoard() {
+        return elliveresBoard(PhaseType.MAIN1, "Forest", "Forest", "Forest", "Plains");
+    }
+
+    @Test
+    void virtuousRoleBindsTheCasterAndEllivere() {
+        Board board = elliveresBoard();
+        Binding binding = VirtuousRole.bind(board.game).orElseThrow();
+        assertEquals(board.you, binding.player("caster"));
+        assertEquals(board.subject, binding.card("card"));
+    }
+
+    @Test
+    void virtuousRoleBindsNothingWithoutTheLands() {
+        assertTrue(VirtuousRole.bind(elliveresBoard(PhaseType.MAIN1, "Forest", "Plains").game).isEmpty());
+    }
+
+    @Test
+    void virtuousRoleBindsNothingWithoutACreatureForTheRole() {
+        Board board = elliveresBoard();
+        board.game.getAction().moveToGraveyard(board.other, null);
+        assertTrue(VirtuousRole.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void virtuousRoleBindsNothingForACreatureWithoutTheRoleTrigger() {
+        Board board = new Board(PhaseType.MAIN1);
+        for (String land : List.of("Forest", "Forest", "Forest", "Plains")) {
+            board.card(board.you, land);
+        }
+        board.card(board.you, "Grizzly Bears");
+        TestBoard.inHand(board.game, board.you, "Craw Wurm");
+        assertTrue(VirtuousRole.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void virtuousRoleBindsNothingOnTheOpponentsTurn() {
+        assertTrue(VirtuousRole.bind(elliveresBoard(PhaseType.UPKEEP, "Forest", "Forest", "Forest", "Plains").game)
+                .isEmpty());
+    }
+
+    @Test
+    void virtuousRoleForksSealOfFire() {
+        Board board = elliveresBoard();
+        Twin twin = board.twin(VirtuousRole.rule());
+        assertOnlyAdded(twin, twin.fork().player("caster"), VirtuousRole.SEAL_OF_FIRE);
+    }
+
+    // ── 205.1a, a type-setting Aura: counters ───────────────────────────
+
+    /** A's three Forests and Song of the Dryads in hand, B's {@code creature}, as A's first main phase begins. */
+    private static Board songBoard(String creature, int forests) {
+        Board board = new Board(PhaseType.MAIN1);
+        for (int i = 0; i < forests; i++) {
+            board.card(board.you, "Forest");
+        }
+        board.subject = board.card(board.opponent, creature);
+        board.other = TestBoard.inHand(board.game, board.you, "Song of the Dryads");
+        return board;
+    }
+
+    @Test
+    void typeSettingAuraBindsTheAuraAndTheCreature() {
+        Board board = songBoard("Grizzly Bears", 3);
+        Binding binding = TypeSettingAura.bind(board.game).orElseThrow();
+        assertEquals(board.you, binding.player("caster"));
+        assertEquals(board.other, binding.card("aura"));
+        assertEquals(board.subject, binding.card("creature"));
+    }
+
+    @Test
+    void typeSettingAuraBindsNothingWithoutTheLands() {
+        assertTrue(TypeSettingAura.bind(songBoard("Grizzly Bears", 2).game).isEmpty());
+    }
+
+    /** A creature that already has a +1/+1 counter is no board the variant's one counter describes. */
+    @Test
+    void typeSettingAuraBindsNothingOnACreatureWithACounter() {
+        Board board = songBoard("Grizzly Bears", 3);
+        board.subject.setCounters(CounterEnumType.P1P1, 1);
+        assertTrue(TypeSettingAura.bind(board.game).isEmpty());
+    }
+
+    /** Holy Strength adds to its creature's power and toughness and sets no card type. */
+    @Test
+    void typeSettingAuraBindsNothingForAnAuraThatSetsNoType() {
+        Board board = new Board(PhaseType.MAIN1);
+        board.card(board.you, "Plains");
+        board.card(board.opponent, "Grizzly Bears");
+        TestBoard.inHand(board.game, board.you, "Holy Strength");
+        assertTrue(TypeSettingAura.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void typeSettingAuraForksTheCreatureWithACounter() {
+        Board board = songBoard("Grizzly Bears", 3);
+        Twin twin = board.twin(TypeSettingAura.rule());
+        for (String change : twin.changes()) {
+            assertTrue(change.startsWith(id(board.subject) + "."), "the edit changed " + change);
+        }
+        assertEquals(1, twin.fork().card("creature").getCounters(CounterEnumType.P1P1));
+    }
+
+    // ── 701.23f, a search limited to the top cards: add_permanent ───────
+
+    /** A's Archivist of Oghma and B's untapped {@code permanent}, as A's first main phase begins. */
+    private static Board archivistBoard(String watcher, String permanent) {
+        Board board = new Board(PhaseType.MAIN1);
+        board.other = board.card(board.you, watcher);
+        board.subject = board.card(board.opponent, permanent);
+        board.library(board.opponent, "Grizzly Bears", "Forest");
+        return board;
+    }
+
+    @Test
+    void searchUnderMindcensorBindsTheWatcherTheSearcherAndTheFetch() {
+        Board board = archivistBoard("Archivist of Oghma", "Evolving Wilds");
+        Binding binding = SearchUnderMindcensor.bind(board.game).orElseThrow();
+        assertEquals(board.you, binding.player("watcher"));
+        assertEquals(board.opponent, binding.player("searcher"));
+        assertEquals(board.subject, binding.card("permanent"));
+    }
+
+    @Test
+    void searchUnderMindcensorBindsNothingWithoutASearchToWatch() {
+        assertTrue(SearchUnderMindcensor.bind(archivistBoard("Grizzly Bears", "Evolving Wilds").game).isEmpty());
+    }
+
+    @Test
+    void searchUnderMindcensorBindsNothingWithoutASearchingPermanent() {
+        assertTrue(SearchUnderMindcensor.bind(archivistBoard("Archivist of Oghma", "Forest").game).isEmpty());
+    }
+
+    /** A tapped Evolving Wilds cannot pay its own tap, whatever other lands its controller has. */
+    @Test
+    void searchUnderMindcensorBindsNothingForATappedFetch() {
+        Board board = archivistBoard("Archivist of Oghma", "Evolving Wilds");
+        board.card(board.opponent, "Forest");
+        board.subject.setTapped(true);
+        assertTrue(SearchUnderMindcensor.bind(board.game).isEmpty());
+    }
+
+    /** Archivist watches the opponents' searches only: its controller's own fetch is no search it watches. */
+    @Test
+    void searchUnderMindcensorBindsNothingForTheWatchersOwnFetch() {
+        Board board = new Board(PhaseType.MAIN1);
+        board.card(board.you, "Archivist of Oghma");
+        board.card(board.you, "Evolving Wilds");
+        assertTrue(SearchUnderMindcensor.bind(board.game).isEmpty());
+    }
+
+    /**
+     * Besides the Mindcensor, the searcher's Keyword Effects card holds the
+     * limit the Mindcensor's static gives it ({@code LimitSearchLibrary}).
+     */
+    @Test
+    void searchUnderMindcensorForksAvenMindcensor() {
+        Board board = archivistBoard("Archivist of Oghma", "Evolving Wilds");
+        Twin twin = board.twin(SearchUnderMindcensor.rule());
+        Card mindcensor = twin.fork().player("watcher").getCardsIn(ZoneType.Battlefield).stream()
+                .filter(c -> c.getName().equals(SearchUnderMindcensor.MINDCENSOR)).findFirst().orElseThrow();
+        Card effects = twin.fork().player("searcher").getKeywordCard();
+        Set<String> named = Set.of(id(mindcensor), id(effects));
+        for (String change : twin.changes()) {
+            assertTrue(change.equals("global.floating_effects")
+                            || named.stream().anyMatch(id -> change.equals("+" + id) || change.contains("=" + id)),
+                    "adding changed " + change + "; all: " + twin.changes());
+        }
+        assertTrue(twin.changes().contains("+" + id(mindcensor)));
+        assertTrue(twin.fork().player("searcher").hasKeyword("LimitSearchLibrary"));
+    }
+
+    // ── 702.133a, jump-start: move_card ─────────────────────────────────
+
+    /** Radical Idea in A's graveyard and {@code islands} Islands, as A's first main phase begins. */
+    private static Board jumpStartBoard(String card, int islands) {
+        Board board = new Board(PhaseType.MAIN1);
+        for (int i = 0; i < islands; i++) {
+            board.card(board.you, "Island");
+        }
+        board.subject = board.game.getAction().moveToGraveyard(TestBoard.card(board.game, board.you, card), null);
+        return board;
+    }
+
+    @Test
+    void jumpStartFromHandBindsTheCardInTheGraveyard() {
+        Board board = jumpStartBoard("Radical Idea", 2);
+        Binding binding = JumpStartFromHand.bind(board.game).orElseThrow();
+        assertEquals(board.subject, binding.card("card"));
+        assertEquals(board.you, binding.player("caster"));
+    }
+
+    @Test
+    void jumpStartFromHandBindsNothingWithoutTheLands() {
+        assertTrue(JumpStartFromHand.bind(jumpStartBoard("Radical Idea", 1).game).isEmpty());
+    }
+
+    @Test
+    void jumpStartFromHandBindsNothingForACardWithoutJumpStart() {
+        assertTrue(JumpStartFromHand.bind(jumpStartBoard("Divination", 3).game).isEmpty());
+    }
+
+    @Test
+    void jumpStartFromHandForksTheCardInTheHand() {
+        Board board = jumpStartBoard("Radical Idea", 2);
+        Twin twin = board.twin(JumpStartFromHand.rule());
+        assertTrue(twin.fork().player("caster").getCardsIn(ZoneType.Hand).stream()
+                .anyMatch(card -> card.getName().equals("Radical Idea")));
+        assertTrue(twin.fork().player("caster").getCardsIn(ZoneType.Graveyard).isEmpty());
     }
 
     // ── 119.7, an exchange a can't-gain-life effect stops: add_permanent
@@ -1047,10 +1267,13 @@ class RegisteredRulesTest {
         assertEquals(board.subject, SeveralExplore.bind(board.game).orElseThrow().card("creature"));
     }
 
-    /** Two Merfolk already explore two at a time: the side the counts hold. */
+    /** Two Merfolk already explore two at a time, the side the counts hold, whatever else is there. */
     @Test
     void severalExploreBindsNothingWithTwoMerfolk() {
-        assertTrue(SeveralExplore.bind(hakbalBoard("Merfolk Branchwalker").game).isEmpty());
+        Board board = hakbalBoard("Merfolk Branchwalker");
+        assertTrue(SeveralExplore.bind(board.game).isEmpty());
+        board.card(board.you, "Grizzly Bears");
+        assertTrue(SeveralExplore.bind(board.game).isEmpty(), "beside a creature the Branchwalker could replace");
     }
 
     @Test
@@ -2641,7 +2864,7 @@ class RegisteredRulesTest {
                 assertFalse(player.hasLost(), rule.rule() + ": the first state-based check lost " + player);
             }
             assertEquals(real, BoardStates.of(game), "the check reached the live game");
-            assertForcedPlayMayBeMade(rule, application, forked, fork);
+            assertForcedPlayMayBeMade(rule, application, application.afterEdit(forked, fork), fork);
             return new Twin(changes(real, edited), real, edited, forked, fork);
         }
 

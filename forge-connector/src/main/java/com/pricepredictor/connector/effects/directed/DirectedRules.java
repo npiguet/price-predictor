@@ -19,6 +19,7 @@ import com.pricepredictor.connector.effects.directed.rules.ExploreEmptyLibrary;
 import com.pricepredictor.connector.effects.directed.rules.FinalChapterResolves;
 import com.pricepredictor.connector.effects.directed.rules.Improvise;
 import com.pricepredictor.connector.effects.directed.rules.Intimidate;
+import com.pricepredictor.connector.effects.directed.rules.JumpStartFromHand;
 import com.pricepredictor.connector.effects.directed.rules.LifeExchange;
 import com.pricepredictor.connector.effects.directed.rules.LifeTotalWin;
 import com.pricepredictor.connector.effects.directed.rules.Mayhem;
@@ -33,6 +34,7 @@ import com.pricepredictor.connector.effects.directed.rules.PartnerWithSearch;
 import com.pricepredictor.connector.effects.directed.rules.PlottedFromHand;
 import com.pricepredictor.connector.effects.directed.rules.PoisonLoss;
 import com.pricepredictor.connector.effects.directed.rules.Prototype;
+import com.pricepredictor.connector.effects.directed.rules.SearchUnderMindcensor;
 import com.pricepredictor.connector.effects.directed.rules.SeveralExplore;
 import com.pricepredictor.connector.effects.directed.rules.SharedKeywords;
 import com.pricepredictor.connector.effects.directed.rules.SimultaneousDamage;
@@ -43,9 +45,11 @@ import com.pricepredictor.connector.effects.directed.rules.ToughnessZero;
 import com.pricepredictor.connector.effects.directed.rules.TrampleOverPlaneswalkers;
 import com.pricepredictor.connector.effects.directed.rules.Transfigure;
 import com.pricepredictor.connector.effects.directed.rules.Transmute;
+import com.pricepredictor.connector.effects.directed.rules.TypeSettingAura;
 import com.pricepredictor.connector.effects.directed.rules.Unearth;
 import com.pricepredictor.connector.effects.directed.rules.UnleashCantBlock;
 import com.pricepredictor.connector.effects.directed.rules.VanishingInstances;
+import com.pricepredictor.connector.effects.directed.rules.VirtuousRole;
 import com.pricepredictor.connector.effects.directed.rules.WebSlinging;
 
 import java.util.Collection;
@@ -79,9 +83,11 @@ public final class DirectedRules {
             LifeTotalWin.rule(),
             PoisonLoss.rule(),
             SimultaneousLoss.rule(),
+            VirtuousRole.rule(),
             MutagenToken.rule(),
             OptionalSearch.rule(),
             CantGainLifeExchange.rule(),
+            TypeSettingAura.rule(),
             MorphFaceUp.rule(),
             SimultaneousDamage.rule(),
             DistinctTargets.rule(),
@@ -90,6 +96,7 @@ public final class DirectedRules {
             CantEnterBattlefield.rule(),
             AuraSwap.rule(),
             LifeExchange.rule(),
+            SearchUnderMindcensor.rule(),
             SmallLibraryShuffle.rule(),
             Bolster.rule(),
             Meld.rule(),
@@ -116,6 +123,7 @@ public final class DirectedRules {
             Aftermath.rule(),
             Mayhem.rule(),
             AscendBlessing.rule(),
+            JumpStartFromHand.rule(),
             PlottedFromHand.rule(),
             WebSlinging.rule(),
             DrawFromEmptyLibrary.rule(),

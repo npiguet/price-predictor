@@ -1,4 +1,6 @@
 arcanum wings
+archivist of oghma
+aven mindcensor
 blitz automaton
 cached defenses
 centaur courser
@@ -18,8 +20,10 @@ dryad arbor
 echo inspector
 electro's bolt
 elfhame sanctuary
+ellivere of the wild court
 enraged revolutionary
 everlasting torment
+evolving wilds
 exalted angel
 felidar sovereign
 flame rift
@@ -48,15 +52,19 @@ merfolk branchwalker
 midnight scavengers
 mountain
 narci, fable singer
+naturalize
 ornithopter
 pir, imaginative rascal
 plains
+radical idea
 reverse engineer
 runeclaw bear
 savannah lions
+seal of fire
 secrets of the golden city
 shock
 skulking ghost
+song of the dryads
 spider-man, web-slinger
 spirit of the labyrinth
 spiteful blow
@@ -70,6 +78,7 @@ tree of perdition
 tree of redemption
 undo
 val, marooned surveyor
+vampiric tutor
 wall of wood
 white knight
 wild growth

@@ -1122,23 +1122,124 @@ class DirectedForkPlayedForwardTest {
     }
 
     /**
-     * {@code move_card}, 118.12b: Elfhame Sanctuary as the upkeep begins, a
-     * Forest the library's one basic land. The fork's is a Lightning Bolt,
-     * and its A is made to search: nothing is found and the draw step is
-     * skipped all the same.
+     * {@code add_permanent}, 118.12b, inverted, forcing a "you may" answer:
+     * A's upkeep begins with a basic land in its library and no Elfhame
+     * Sanctuary. Live, A draws in its draw step; the fork's Sanctuary
+     * triggers, the forced yes searches, and the draw step is skipped.
      */
     @Test
-    void aSearchThatFindsNothingStillSkipsTheDraw() throws Throwable {
+    void anAddedSanctuarysForcedSearchSkipsTheDraw() throws Throwable {
         Game game = empty(PhaseType.UPKEEP);
         Player active = game.getPlayers().get(0);
-        permanent(game, active, "Elfhame Sanctuary");
         library(game, active, "Shock", "Forest", "Shock", "Shock", "Shock", "Shock");
         library(game, game.getPlayers().get(1), "Shock", "Shock", "Shock");
 
-        List<String> fork = forkOf(game, PhaseType.UPKEEP, "118.12b", "search_finds_nothing");
+        List<String> fork = forkOf(game, PhaseType.UPKEEP, "118.12b", "sanctuary_added");
 
         assertTrue(holding(fork, "phase_skipped").contains("resolution/resolution"),
                 "the search's resolution skips the draw step in the fork");
+    }
+
+    /**
+     * {@code counters}, 205.1a, forcing a cast: A holds Song of the Dryads
+     * and three Forests, and B controls Grizzly Bears, as A's first main
+     * phase begins. The fork's Bears has a +1/+1 counter, and the forced Song
+     * makes it a colorless Forest land: the continuous record of the Song's
+     * static removes every card type it had.
+     */
+    @Test
+    void aForcedSongOfTheDryadsSetsTheBearsType() throws Throwable {
+        Game game = empty(PhaseType.MAIN1);
+        Player active = game.getPlayers().get(0);
+        lands(game, active, "Forest", 3);
+        Card bears = permanent(game, game.getPlayers().get(1), "Grizzly Bears");
+        TestBoard.inHand(game, active, "Song of the Dryads");
+        library(game, active, "Forest", "Forest", "Forest");
+        library(game, game.getPlayers().get(1), "Forest", "Forest", "Forest");
+
+        List<String> fork = forkOf(game, PhaseType.MAIN1, "205.1a", "counter-kept");
+
+        assertTrue(fork.stream().anyMatch(record -> "continuous".equals(parse(record).get("kind"))
+                        && record.contains("-all-card-types") && record.contains(ref(bears))),
+                "the Song's static sets the Bears' card type in the fork: " + holding(fork, "attached"));
+    }
+
+    /**
+     * {@code add_permanent}, 111.10p, forcing a cast: A holds Ellivere of
+     * the Wild Court and four lands, beside its Grizzly Bears, as its first
+     * main phase begins. The fork's A also controls Seal of Fire; the forced
+     * Ellivere's enters trigger attaches a Virtuous Role to the Bears, whose
+     * static boosts it.
+     */
+    @Test
+    void aForcedElliveresRoleBoostsTheBears() throws Throwable {
+        Game game = empty(PhaseType.MAIN1);
+        Player active = game.getPlayers().get(0);
+        lands(game, active, "Forest", 3);
+        lands(game, active, "Plains", 1);
+        permanent(game, active, "Grizzly Bears");
+        TestBoard.inHand(game, active, "Ellivere of the Wild Court");
+        library(game, active, "Forest", "Forest", "Forest");
+        library(game, game.getPlayers().get(1), "Forest", "Forest", "Forest");
+
+        List<String> fork = forkOf(game, PhaseType.MAIN1, "111.10p", "two_enchantments");
+
+        assertTrue(holding(fork, "token_created").contains("resolution/resolution"),
+                "Ellivere's trigger creates the Role in the fork");
+        assertTrue(fork.stream().anyMatch(record -> "continuous".equals(parse(record).get("kind"))
+                && record.contains("Virtuous")), "the Role's static is recorded in the fork");
+    }
+
+    /**
+     * {@code add_permanent}, 701.23f, inverted, forcing an activation: A
+     * controls Archivist of Oghma and B an untapped Evolving Wilds as A's
+     * first main phase begins. The fork's A also controls Aven Mindcensor;
+     * B is made to activate the Wilds, searches the top four cards of its
+     * library, and Archivist's trigger fires.
+     */
+    @Test
+    void aSearchLimitedByTheMindcensorStillFiresArchivist() throws Throwable {
+        Game game = empty(PhaseType.MAIN1);
+        Player active = game.getPlayers().get(0);
+        Player searcher = game.getPlayers().get(1);
+        Card archivist = permanent(game, active, "Archivist of Oghma");
+        permanent(game, searcher, "Evolving Wilds");
+        library(game, active, "Island", "Island", "Island");
+        library(game, searcher, "Grizzly Bears", "Grizzly Bears", "Grizzly Bears", "Grizzly Bears", "Forest");
+
+        List<String> fork = forkOf(game, PhaseType.MAIN1, "701.23f", "mindcensor_added");
+
+        assertFalse(fired(fork, archivist).isEmpty(), "Archivist's trigger fires on the limited search");
+    }
+
+    /**
+     * {@code move_card}, 702.133a, forcing a cast: Radical Idea in A's
+     * graveyard, two Islands, as A's first main phase begins. The fork's
+     * Radical Idea is in A's hand and is cast from there; as it resolves it
+     * goes to the graveyard, not to exile.
+     */
+    @Test
+    void aJumpStartCardCastFromHandGoesToTheGraveyard() throws Throwable {
+        Game game = empty(PhaseType.MAIN1);
+        Player active = game.getPlayers().get(0);
+        lands(game, active, "Island", 2);
+        Card idea = TestBoard.card(game, active, "Radical Idea");
+        game.getAction().moveToGraveyard(idea, null);
+        library(game, active, "Plains", "Plains", "Plains", "Plains", "Plains", "Plains");
+        library(game, game.getPlayers().get(1), "Forest", "Forest", "Forest");
+
+        List<String> fork = forkOf(game, PhaseType.MAIN1, "702.133a", "cast_from_hand");
+
+        List<String> moved = new ArrayList<>();
+        for (String record : fork) {
+            for (Map<String, Object> event : events(record)) {
+                if ("zone_change".equals(event.get("type")) && "stack".equals(params(event).get("from_zone"))) {
+                    moved.add(String.valueOf(params(event).get("to_zone")));
+                }
+            }
+        }
+        assertTrue(moved.contains("graveyard") && !moved.contains("exile"),
+                "the spell cast from hand leaves the stack to the graveyard: " + moved);
     }
 
     /**

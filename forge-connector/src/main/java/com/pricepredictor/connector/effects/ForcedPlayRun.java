@@ -131,8 +131,10 @@ public final class ForcedPlayRun {
             ForcedPlayRun trial = new ForcedPlayRun(application.forced(), live, game);
             return trial.possible() ? Optional.empty() : Optional.of(ForkRefusal.FORCED_NO_LINE);
         } catch (RuntimeException e) {
-            // A role the binding lacks is the registry's error, which the
-            // fork's own guard reports as a failure.
+            // A role the live binding lacks is a card the edit makes
+            // (Application.making), whose play is checked on the copy only,
+            // or the registry's error, which the fork's own guard reports as
+            // a failure.
             return Optional.empty();
         }
     }

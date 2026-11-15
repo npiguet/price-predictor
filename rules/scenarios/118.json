@@ -1271,6 +1271,71 @@
       }
     },
     {
+      "id": "118.12b-2",
+      "rules": [
+        "118.12b"
+      ],
+      "title": "An optional search whose if-you-do skips the draw step, its permanent added to an upkeep's board",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {},
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Shock",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Library is listed top card first. The directed fork's board: Forge's deck builder leaves Elfhame Sanctuary out of every AI deck (AI:RemoveDeck:All), so the fork adds it to an upkeep whose library holds a basic land."
+      },
+      "decisions": [
+        "At the beginning of A's upkeep nothing triggers; play moves on to the draw step, where A draws Shock."
+      ],
+      "variants": [
+        {
+          "label": "no_sanctuary",
+          "polarity": "other",
+          "delta": "",
+          "expected": "No search happens and A draws Shock in its draw step."
+        },
+        {
+          "label": "sanctuary_added",
+          "polarity": "fires",
+          "delta": "Elfhame Sanctuary is on A's battlefield, since before this turn; at the beginning of A's upkeep it triggers and A chooses to search, finding Forest.",
+          "expected": "Forest is put into A's hand, the library is shuffled, and A skips the draw step. A's hand is Forest; Shock stays in the library.",
+          "operation": "add_permanent"
+        }
+      ],
+      "cards": [
+        "Elfhame Sanctuary",
+        "Shock",
+        "Forest"
+      ],
+      "forge_notes": "The fork answers Elfhame Sanctuary's \"you may search\" yes: the AI holds no logic of its own for a card it never puts in a deck.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An optional library search from a trigger is followed by its if-you-do effect (a phase is skipped) because the player chose to search, whatever the search found.",
+        "near_miss": "The search ability resolves without the follow-up effect, as when the player declines to search.",
+        "params": {
+          "event": "phase_skipped",
+          "api": "ChangeZone",
+          "chain_param": {
+            "Origin": "Library"
+          }
+        },
+        "needs": []
+      }
+    },
+    {
       "id": "118.14-1",
       "rules": [
         "118.14"

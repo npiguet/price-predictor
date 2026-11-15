@@ -64,8 +64,9 @@ final class DirectedFork {
             // Named before the edit, which may move a named card: it keeps its id.
             KeptRecords kept = application.kept(forked);
             application.edit(forked).apply(fork);
-            // Its line looked for on the edited copy, which may have given it.
-            ForcedPlayRun forced = ForcedPlayRun.start(application, forked, fork);
+            // Its line looked for on the edited copy, which may have given it
+            // the line or made the card that holds it.
+            ForcedPlayRun forced = ForcedPlayRun.start(application, application.afterEdit(forked, fork), fork);
             return playForward.play(fork, flags.andThen(verified::stamp), kept, forced);
         }, (verified, result) -> result);
         return played != null;
