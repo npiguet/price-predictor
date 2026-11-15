@@ -1,0 +1,4 @@
+name: baldur's gate
+types: legendary land gate
+activated[1]: {T}: add {C}.
+activated[2]: {2}, {T}: add X mana of any one color, where X is the number of other gates you control.

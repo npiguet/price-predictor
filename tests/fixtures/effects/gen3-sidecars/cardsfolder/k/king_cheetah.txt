@@ -1,0 +1,5 @@
+name: king cheetah
+mana cost: {3}{G}
+types: creature cat
+power toughness: 3/2
+static: flash

@@ -1,0 +1,6 @@
+name: phantasmal terrain
+mana cost: {U}{U}
+types: enchantment aura
+static: enchant land
+replacement: as CARDNAME enters, choose a basic land type.
+static: enchanted land is the chosen type.

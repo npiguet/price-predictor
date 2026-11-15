@@ -1,0 +1,5 @@
+name: makindi patrol
+mana cost: {2}{W}
+types: creature human knight ally
+power toughness: 2/3
+triggered: rally — whenever CARDNAME or another ally you control enters, creatures you control gain vigilance until end of turn.

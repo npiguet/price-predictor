@@ -1,0 +1,6 @@
+name: doomskar oracle
+mana cost: {2}{W}
+types: creature human cleric
+power toughness: 3/2
+alternate cost: foretell {W}
+triggered: whenever you cast your second spell each turn, you gain 2 life.

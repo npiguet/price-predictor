@@ -1,0 +1,5 @@
+name: geistwave
+mana cost: {1}{U}
+types: instant
+spell[1]: return target nonland permanent to its owner's hand. if you controlled that permanent, draw a card.
+spell[2]: if you controlled that permanent, draw a card.

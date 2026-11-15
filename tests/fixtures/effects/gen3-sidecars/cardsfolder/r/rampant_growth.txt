@@ -1,0 +1,4 @@
+name: rampant growth
+mana cost: {1}{G}
+types: sorcery
+spell[1]: search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.

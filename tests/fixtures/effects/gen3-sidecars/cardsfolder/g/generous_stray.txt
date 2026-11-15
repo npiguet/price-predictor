@@ -1,0 +1,5 @@
+name: generous stray
+mana cost: {2}{G}
+types: creature cat
+power toughness: 1/2
+triggered: when CARDNAME enters, draw a card.

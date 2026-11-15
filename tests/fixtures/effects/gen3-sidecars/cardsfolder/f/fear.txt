@@ -1,0 +1,5 @@
+name: fear
+mana cost: {B}{B}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature has fear.

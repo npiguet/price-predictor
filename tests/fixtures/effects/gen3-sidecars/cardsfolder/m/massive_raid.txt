@@ -1,0 +1,4 @@
+name: massive raid
+mana cost: {1}{R}{R}
+types: instant
+spell[1]: CARDNAME deals damage to any target equal to the number of creatures you control.

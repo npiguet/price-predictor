@@ -1,0 +1,4 @@
+name: feast of flesh
+mana cost: {B}
+types: sorcery
+spell[1]: CARDNAME deals X damage to target creature and you gain X life, where X is 1 plus the number of cards named feast of flesh in all graveyards.

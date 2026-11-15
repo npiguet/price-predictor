@@ -1,0 +1,6 @@
+name: prompto argentum
+mana cost: {1}{R}
+types: legendary creature human scout
+power toughness: 2/2
+static: haste
+triggered: selfie shot — whenever you cast a noncreature spell, if at least four mana was spent to cast it, create a treasure token.

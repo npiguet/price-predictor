@@ -1,0 +1,5 @@
+name: woolly mammoths
+mana cost: {1}{G}{G}
+types: creature elephant
+power toughness: 3/2
+static: CARDNAME has trample as long as you control a snow land.

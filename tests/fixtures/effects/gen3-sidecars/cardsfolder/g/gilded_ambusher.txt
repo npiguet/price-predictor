@@ -1,0 +1,5 @@
+name: gilded ambusher
+mana cost: {1}{B}{R}
+types: enchantment creature lizard glimmer
+power toughness: 4/2
+triggered: whenever CARDNAME attacks, you may sacrifice another nonland permanent. when you do, each opponent exiles a nonland, nontoken permanent they control and a random nonland card from their library, then CARDNAME deals damage to them equal to the total mana value of the cards exiled this way.

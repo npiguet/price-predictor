@@ -1,0 +1,5 @@
+name: call in a professional
+mana cost: {2}{R}
+types: instant
+spell[1]: players can't gain life this turn. damage can't be prevented this turn.
+spell[2]: CARDNAME deals 3 damage to any target.

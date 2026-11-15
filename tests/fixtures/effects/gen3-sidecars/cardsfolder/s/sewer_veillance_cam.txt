@@ -1,0 +1,6 @@
+name: sewer-veillance cam
+mana cost: {U}
+types: artifact
+static: flash
+activated[1]: {3}{U}, sacrifice this artifact: draw two cards.
+triggered: when this artifact enters or leaves the battlefield, you may tap or untap target creature.

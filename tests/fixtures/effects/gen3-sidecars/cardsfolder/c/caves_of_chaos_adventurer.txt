@@ -1,0 +1,7 @@
+name: caves of chaos adventurer
+mana cost: {3}{R}
+types: creature human barbarian
+power toughness: 5/3
+static: trample
+triggered: when CARDNAME enters, you take the initiative.
+triggered: whenever CARDNAME attacks, exile the top card of your library. if you've completed a dungeon, you may play that card this turn without paying its mana cost. otherwise, you may play that card this turn.

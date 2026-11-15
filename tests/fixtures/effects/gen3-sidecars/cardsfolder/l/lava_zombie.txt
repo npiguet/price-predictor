@@ -1,0 +1,6 @@
+name: lava zombie
+mana cost: {1}{B}{R}
+types: creature zombie
+power toughness: 4/3
+activated[1]: {2}: CARDNAME gets +1/+0 until end of turn.
+triggered: when CARDNAME enters, return a black or red creature you control to its owner's hand.

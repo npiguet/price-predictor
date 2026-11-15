@@ -1,0 +1,5 @@
+name: herald of the dreadhorde
+mana cost: {3}{B}
+types: creature zombie warrior
+power toughness: 3/2
+triggered: when CARDNAME dies, amass zombies 2.

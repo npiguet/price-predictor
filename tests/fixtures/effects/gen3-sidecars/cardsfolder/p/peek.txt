@@ -1,5 +1,0 @@
-name: peek
-mana cost: {U}
-types: instant
-spell[1]: look at target player's hand.
-spell[2]: draw a card.

@@ -1,0 +1,5 @@
+name: dark depths
+types: legendary snow land
+replacement: CARDNAME enters with ten ice counters on it.
+activated[1]: {3}: remove an ice counter from CARDNAME.
+triggered: when CARDNAME has no ice counters on it, sacrifice it. if you do, create marit lage, a legendary 20/20 black avatar creature token with flying and indestructible.

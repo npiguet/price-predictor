@@ -1,0 +1,5 @@
+name: seized from slumber
+mana cost: {4}{W}
+types: instant
+spell[1]: destroy target creature.
+static: this spell costs {3} less to cast if it targets a tapped creature.

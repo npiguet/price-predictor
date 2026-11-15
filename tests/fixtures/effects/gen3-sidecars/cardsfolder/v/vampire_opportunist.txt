@@ -1,0 +1,5 @@
+name: vampire opportunist
+mana cost: {1}{B}
+types: creature vampire
+power toughness: 2/1
+activated[1]: {6}{B}: each opponent loses 2 life and you gain 2 life.

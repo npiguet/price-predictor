@@ -1,0 +1,6 @@
+name: evil eye of orms-by-gore
+mana cost: {4}{B}
+types: creature eye
+power toughness: 3/6
+static: non-eye creatures you control can't attack.
+static: CARDNAME can't be blocked except by walls.

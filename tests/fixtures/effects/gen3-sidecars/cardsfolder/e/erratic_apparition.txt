@@ -1,0 +1,7 @@
+name: erratic apparition
+mana cost: {2}{U}
+types: creature spirit
+power toughness: 1/3
+static: flying
+static: vigilance
+triggered: eerie — whenever an enchantment you control enters and whenever you fully unlock a room, CARDNAME gets +1/+1 until end of turn.

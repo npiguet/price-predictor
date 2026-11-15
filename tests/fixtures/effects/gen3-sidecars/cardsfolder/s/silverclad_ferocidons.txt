@@ -1,0 +1,5 @@
+name: silverclad ferocidons
+mana cost: {5}{R}{R}
+types: creature dinosaur
+power toughness: 8/5
+triggered: enrage — whenever CARDNAME is dealt damage, each opponent sacrifices a permanent.

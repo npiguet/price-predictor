@@ -1,0 +1,6 @@
+name: krovikan fetish
+mana cost: {2}{B}
+types: enchantment aura
+static: enchant creature
+triggered: when CARDNAME enters, draw a card at the beginning of the next turn's upkeep.
+static: enchanted creature gets +1/+1.

@@ -1,0 +1,5 @@
+name: akroan crusader
+mana cost: {R}
+types: creature human soldier
+power toughness: 1/1
+triggered: heroic — whenever you cast a spell that targets CARDNAME, create a 1/1 red soldier creature token with haste.

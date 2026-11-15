@@ -1,0 +1,4 @@
+name: basilisk gate
+types: land gate
+activated[1]: {T}: add {C}.
+activated[2]: {2}, {T}: target creature gets +X/+X until end of turn, where X is the number of gates you control. activate only as a sorcery.

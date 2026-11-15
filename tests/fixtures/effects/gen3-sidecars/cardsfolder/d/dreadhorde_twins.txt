@@ -1,0 +1,6 @@
+name: dreadhorde twins
+mana cost: {3}{R}
+types: creature zombie jackal warrior
+power toughness: 2/2
+triggered: when CARDNAME enters, amass zombies 2.
+static: zombie tokens you control have trample.

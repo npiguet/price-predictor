@@ -1,0 +1,7 @@
+name: skemfar shadowsage
+mana cost: {3}{B}
+types: creature elf cleric
+power toughness: 2/5
+triggered: when CARDNAME enters, choose one
+option[1]: each opponent loses X life, where X is the greatest number of creatures you control that have a creature type in common.
+option[2]: you gain X life, where X is the greatest number of creatures you control that have a creature type in common.

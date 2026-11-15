@@ -1,0 +1,6 @@
+name: wingsteed rider
+mana cost: {1}{W}{W}
+types: creature human knight
+power toughness: 2/2
+static: flying
+triggered: heroic — whenever you cast a spell that targets CARDNAME, put a +1/+1 counter on CARDNAME.

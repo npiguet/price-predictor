@@ -1,0 +1,6 @@
+name: nacatl war-pride
+mana cost: {3}{G}{G}{G}
+types: creature cat warrior
+power toughness: 3/3
+static: CARDNAME must be blocked by exactly one creature if able.
+triggered: whenever CARDNAME attacks, create X tokens that are copies of CARDNAME and that are tapped and attacking, where X is the number of creatures defending player controls. exile the tokens at the beginning of the next end step.

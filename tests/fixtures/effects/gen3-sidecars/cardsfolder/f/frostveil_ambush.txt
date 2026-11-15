@@ -1,0 +1,5 @@
+name: frostveil ambush
+mana cost: {3}{U}{U}
+types: instant
+activated[1]: cycling {1}
+spell[2]: tap up to two target creatures. those creatures don't untap during their controller's next untap step.

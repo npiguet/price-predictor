@@ -1,0 +1,7 @@
+name: spire winder
+mana cost: {3}{U}
+types: creature snake
+power toughness: 2/3
+static: flying
+triggered: ascend
+static: CARDNAME gets +1/+1 as long as you have the city's blessing.

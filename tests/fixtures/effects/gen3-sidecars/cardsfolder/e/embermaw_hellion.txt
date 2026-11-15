@@ -1,0 +1,6 @@
+name: embermaw hellion
+mana cost: {3}{R}{R}
+types: creature hellion
+power toughness: 4/5
+static: trample
+replacement: if another red source you control would deal damage to a permanent or player, it deals that much damage plus 1 to that permanent or player instead.

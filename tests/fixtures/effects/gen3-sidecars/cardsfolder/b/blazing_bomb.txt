@@ -1,0 +1,6 @@
+name: blazing bomb
+mana cost: {R}
+types: creature elemental
+power toughness: 1/1
+activated[1]: blow up — {T}, sacrifice CARDNAME: it deals damage equal to its power to target creature. activate only as a sorcery.
+triggered: whenever you cast a noncreature spell, if at least four mana was spent to cast it, put a +1/+1 counter on this creature.

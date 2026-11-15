@@ -1,0 +1,5 @@
+name: monk of the open hand
+mana cost: {W}
+types: creature elf monk
+power toughness: 1/1
+triggered: flurry of blows — whenever you cast your second spell each turn, put a +1/+1 counter on CARDNAME.

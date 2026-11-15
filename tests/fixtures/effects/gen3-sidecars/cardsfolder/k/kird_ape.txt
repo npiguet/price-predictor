@@ -1,0 +1,5 @@
+name: kird ape
+mana cost: {R}
+types: creature ape
+power toughness: 1/1
+static: CARDNAME gets +1/+2 as long as you control a forest.

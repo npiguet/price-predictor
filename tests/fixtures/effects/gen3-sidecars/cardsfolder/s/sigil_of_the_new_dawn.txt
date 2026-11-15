@@ -1,0 +1,4 @@
+name: sigil of the new dawn
+mana cost: {3}{W}
+types: enchantment
+triggered: whenever a creature is put into your graveyard from the battlefield, you may pay {1}{W}. if you do, return that card to your hand.

@@ -1,0 +1,5 @@
+name: raging ravine
+types: land
+activated[1]: {T}: add {R} or {G}.
+activated[2]: {2}{R}{G}: until end of turn, this land becomes a 3/3 red and green elemental creature with "whenever this creature attacks, put a +1/+1 counter on it." it's still a land.
+replacement: this land enters tapped.

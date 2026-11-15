@@ -1,0 +1,4 @@
+name: dark ritual
+mana cost: {B}
+types: instant
+spell[1]: add {B}{B}{B}.

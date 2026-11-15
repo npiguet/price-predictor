@@ -1,0 +1,4 @@
+name: dryad arbor
+types: creature land forest dryad
+power toughness: 1/1
+activated[1]: {T}: add {G}.

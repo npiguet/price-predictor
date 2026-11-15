@@ -1,0 +1,5 @@
+name: ashiok's skulker
+mana cost: {4}{U}
+types: creature nightmare
+power toughness: 3/5
+activated[1]: {3}{U}: CARDNAME can't be blocked this turn.

@@ -1,0 +1,6 @@
+name: disciple of tevesh szat
+mana cost: {2}{B}{B}
+types: creature human cleric
+power toughness: 3/1
+activated[1]: {T}: target creature gets -1/-1 until end of turn.
+activated[2]: {4}{B}{B}, {T}, sacrifice CARDNAME: target creature gets -6/-6 until end of turn.

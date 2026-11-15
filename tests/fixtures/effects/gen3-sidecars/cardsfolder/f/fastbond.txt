@@ -1,0 +1,5 @@
+name: fastbond
+mana cost: {G}
+types: enchantment
+triggered: whenever you play a land, if it wasn't the first land you played this turn, CARDNAME deals 1 damage to you.
+static: you may play any number of lands on each of your turns.

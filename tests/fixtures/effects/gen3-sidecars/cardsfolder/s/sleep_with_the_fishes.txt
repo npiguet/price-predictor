@@ -1,0 +1,6 @@
+name: sleep with the fishes
+mana cost: {2}{U}{U}
+types: enchantment aura
+static: enchant creature
+triggered: when CARDNAME enters, tap enchanted creature and you create a 1/1 blue fish creature token with "this creature can't be blocked."
+replacement: enchanted creature doesn't untap during its controller's untap step.

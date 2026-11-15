@@ -1,0 +1,6 @@
+name: treetop bracers
+mana cost: {1}{G}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature gets +1/+1 and can't be blocked except by creatures with flying.
+static: enchanted creature can't be blocked except by creatures with flying.

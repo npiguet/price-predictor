@@ -1,0 +1,7 @@
+name: kavu primarch
+mana cost: {3}{G}
+types: creature kavu
+power toughness: 3/3
+cost reduction: convoke
+additional cost: kicker {4}
+replacement: if CARDNAME was kicked, it enters with four +1/+1 counters on it.

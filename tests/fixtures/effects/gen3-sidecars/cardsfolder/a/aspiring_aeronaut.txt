@@ -1,0 +1,6 @@
+name: aspiring aeronaut
+mana cost: {3}{U}
+types: creature human artificer
+power toughness: 1/2
+static: flying
+triggered: when CARDNAME enters, create a 1/1 colorless thopter artifact creature token with flying.

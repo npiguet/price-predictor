@@ -1,0 +1,5 @@
+name: migration path
+mana cost: {3}{G}
+types: sorcery
+activated[1]: cycling {2}
+spell[2]: search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.

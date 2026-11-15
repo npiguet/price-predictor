@@ -1,0 +1,7 @@
+name: beastbreaker of bala ged
+mana cost: {1}{G}
+types: creature human warrior
+power toughness: 2/2
+activated[1]: level up {2}{G}
+static: level 1-3 4/4
+static: level 4+ 6/6 trample

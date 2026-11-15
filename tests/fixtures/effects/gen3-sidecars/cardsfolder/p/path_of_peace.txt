@@ -1,0 +1,4 @@
+name: path of peace
+mana cost: {3}{W}
+types: sorcery
+spell[1]: destroy target creature. its owner gains 4 life.

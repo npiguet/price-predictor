@@ -1,0 +1,6 @@
+name: deadwood treefolk
+mana cost: {5}{G}
+types: creature treefolk
+power toughness: 3/6
+triggered: vanishing 3
+triggered: when CARDNAME enters or leaves the battlefield, return another target creature card from your graveyard to your hand.

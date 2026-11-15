@@ -1,0 +1,5 @@
+name: elvish bard
+mana cost: {3}{G}{G}
+types: creature elf shaman bard
+power toughness: 2/4
+static: all creatures able to block CARDNAME do so.

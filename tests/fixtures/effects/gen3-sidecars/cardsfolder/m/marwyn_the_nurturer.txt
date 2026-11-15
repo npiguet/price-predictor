@@ -1,0 +1,6 @@
+name: marwyn, the nurturer
+mana cost: {2}{G}
+types: legendary creature elf druid
+power toughness: 1/1
+activated[1]: {T}: add an amount of {G} equal to CARDNAME's power.
+triggered: whenever another elf you control enters, put a +1/+1 counter on CARDNAME.

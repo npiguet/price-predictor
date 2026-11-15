@@ -1,0 +1,5 @@
+name: treetop village
+types: land
+activated[1]: {T}: add {G}.
+activated[2]: {1}{G}: CARDNAME becomes a 3/3 green ape creature with trample until end of turn. it's still a land.
+replacement: CARDNAME enters tapped.

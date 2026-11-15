@@ -1,0 +1,5 @@
+name: amorphous axe
+mana cost: {2}
+types: artifact equipment
+activated[1]: equip {3}
+static: equipped creature gets +3/+0 and is every creature type.

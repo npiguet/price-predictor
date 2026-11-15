@@ -1,0 +1,5 @@
+name: dauntless cathar
+mana cost: {2}{W}
+types: creature human soldier
+power toughness: 3/2
+activated[1]: {1}{W}, exile CARDNAME from your graveyard: create a 1/1 white spirit creature token with flying. activate only as a sorcery.

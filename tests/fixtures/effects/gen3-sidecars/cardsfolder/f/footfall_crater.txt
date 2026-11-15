@@ -1,0 +1,6 @@
+name: footfall crater
+mana cost: {R}
+types: enchantment aura
+static: enchant land
+activated[1]: cycling {1}
+static: enchanted land has "{T}: target creature gains trample and haste until end of turn."

@@ -1,0 +1,5 @@
+name: benevolent bodyguard
+mana cost: {W}
+types: creature human cleric
+power toughness: 1/1
+activated[1]: sacrifice CARDNAME: target creature you control gains protection from the color of your choice until end of turn.

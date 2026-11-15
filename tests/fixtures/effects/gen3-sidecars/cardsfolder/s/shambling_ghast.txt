@@ -1,0 +1,7 @@
+name: shambling ghast
+mana cost: {B}
+types: creature zombie
+power toughness: 1/1
+triggered: when CARDNAME dies, choose one
+option[1]: brave the stench — target creature an opponent controls gets -1/-1 until end of turn.
+option[2]: search the body — create a treasure token.

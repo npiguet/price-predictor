@@ -1,0 +1,6 @@
+name: strength of lunacy
+mana cost: {1}{B}
+types: enchantment aura
+alternate cost: madness {B}
+static: enchant creature
+static: enchanted creature gets +2/+1 and has protection from white.

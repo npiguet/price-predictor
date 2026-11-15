@@ -1,0 +1,5 @@
+name: soulknife spy
+mana cost: {2}{U}
+types: creature elf rogue
+power toughness: 3/2
+triggered: whenever CARDNAME deals combat damage to a player, draw a card.

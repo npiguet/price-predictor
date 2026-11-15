@@ -1,0 +1,7 @@
+name: chainer, dementia master
+mana cost: {3}{B}{B}
+types: legendary creature human minion
+power toughness: 3/3
+activated[1]: {B}{B}{B}, pay 3 life: put target creature card from a graveyard onto the battlefield under your control. that creature is black and is a nightmare in addition to its other creature types.
+triggered: when CARDNAME leaves the battlefield, exile all nightmares.
+static: nightmare creatures get +1/+1.

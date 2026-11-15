@@ -1,0 +1,7 @@
+name: fog bank
+mana cost: {1}{U}
+types: creature wall
+power toughness: 0/2
+static: defender
+static: flying
+static: prevent all combat damage that would be dealt to and dealt by CARDNAME.

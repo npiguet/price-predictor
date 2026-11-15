@@ -1,0 +1,6 @@
+name: war oracle
+mana cost: {2}{W}{W}
+types: creature human cleric
+power toughness: 3/3
+static: lifelink
+triggered: renown 1

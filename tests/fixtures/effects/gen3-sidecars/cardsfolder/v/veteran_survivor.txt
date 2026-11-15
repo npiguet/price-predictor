@@ -1,0 +1,6 @@
+name: veteran survivor
+mana cost: {W}
+types: creature human survivor
+power toughness: 2/1
+triggered: survival — at the beginning of your second main phase, if CARDNAME is tapped, exile up to one target card from a graveyard.
+static: as long as there are three or more cards exiled with CARDNAME, it gets +3/+3 and has hexproof.

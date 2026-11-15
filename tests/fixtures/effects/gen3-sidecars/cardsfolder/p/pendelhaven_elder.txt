@@ -1,0 +1,5 @@
+name: pendelhaven elder
+mana cost: {1}{G}
+types: creature elf shaman
+power toughness: 1/1
+activated[1]: {T}: each 1/1 creature you control gets +1/+2 until end of turn.

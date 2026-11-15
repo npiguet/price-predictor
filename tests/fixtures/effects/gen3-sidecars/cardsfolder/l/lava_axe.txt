@@ -1,4 +1,0 @@
-name: lava axe
-mana cost: {4}{R}
-types: sorcery
-spell[1]: CARDNAME deals 5 damage to target player or planeswalker.

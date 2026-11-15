@@ -1,0 +1,5 @@
+name: rocky roads
+types: land
+activated[1]: {T}: add {R}.
+activated[2]: {1}{R}, {T}, sacrifice this land: create a 1/1 colorless pilot creature token with "this token saddles mounts and crews vehicles as though its power were 2 greater." activate only as a sorcery.
+replacement: this land enters tapped unless you control a mount or vehicle.

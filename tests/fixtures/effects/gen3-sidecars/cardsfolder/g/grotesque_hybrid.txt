@@ -1,0 +1,6 @@
+name: grotesque hybrid
+mana cost: {4}{B}
+types: creature zombie
+power toughness: 3/3
+activated[1]: discard a card: CARDNAME gains flying and protection from green and from white until end of turn.
+triggered: whenever CARDNAME deals combat damage to a creature, destroy that creature. it can't be regenerated.

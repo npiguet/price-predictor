@@ -1,0 +1,6 @@
+name: mire boa
+mana cost: {1}{G}
+types: creature snake
+power toughness: 2/1
+static: swampwalk
+activated[1]: {G}: regenerate CARDNAME.

@@ -1,0 +1,4 @@
+name: mugging
+mana cost: {R}
+types: sorcery
+spell[1]: CARDNAME deals 2 damage to target creature. that creature can't block this turn.

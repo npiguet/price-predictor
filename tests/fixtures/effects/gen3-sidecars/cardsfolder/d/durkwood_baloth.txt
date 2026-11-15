@@ -1,5 +1,0 @@
-name: durkwood baloth
-mana cost: {4}{G}{G}
-types: creature beast
-power toughness: 5/5
-alternate cost: suspend 5—{G}

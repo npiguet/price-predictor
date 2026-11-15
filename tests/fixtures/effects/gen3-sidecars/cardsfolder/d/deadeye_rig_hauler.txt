@@ -1,0 +1,5 @@
+name: deadeye rig-hauler
+mana cost: {3}{U}
+types: creature human pirate
+power toughness: 3/2
+triggered: raid — when CARDNAME enters, if you attacked this turn, you may return target creature to its owner's hand.

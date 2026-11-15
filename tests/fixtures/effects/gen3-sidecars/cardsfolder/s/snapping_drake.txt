@@ -1,5 +1,0 @@
-name: snapping drake
-mana cost: {3}{U}
-types: creature drake
-power toughness: 3/2
-static: flying

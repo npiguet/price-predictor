@@ -1,0 +1,5 @@
+name: tel-jilad exile
+mana cost: {3}{G}
+types: creature troll warrior
+power toughness: 2/3
+activated[1]: {1}{G}: regenerate CARDNAME.

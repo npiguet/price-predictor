@@ -1,0 +1,4 @@
+name: shore up
+mana cost: {U}
+types: instant
+spell[1]: target creature you control gets +1/+1 and gains hexproof until end of turn. untap it.

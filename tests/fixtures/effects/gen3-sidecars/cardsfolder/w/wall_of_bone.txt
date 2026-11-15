@@ -1,0 +1,6 @@
+name: wall of bone
+mana cost: {2}{B}
+types: creature skeleton wall
+power toughness: 1/4
+static: defender
+activated[1]: {B}: regenerate CARDNAME.

@@ -1,0 +1,6 @@
+name: phantasmal forces
+mana cost: {3}{U}
+types: creature illusion
+power toughness: 4/1
+static: flying
+triggered: at the beginning of your upkeep, sacrifice CARDNAME unless you pay {U}.

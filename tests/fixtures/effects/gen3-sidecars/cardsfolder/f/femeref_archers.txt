@@ -1,0 +1,5 @@
+name: femeref archers
+mana cost: {2}{G}
+types: creature human archer
+power toughness: 2/2
+activated[1]: {T}: CARDNAME deals 4 damage to target attacking creature with flying.

@@ -1,0 +1,8 @@
+name: fire magic
+mana cost: {R}
+types: instant
+additional cost: tiered
+spell[1]: choose one
+option[2]: {0} — fire — CARDNAME deals 1 damage to each creature.
+option[3]: {2} — fira — CARDNAME deals 2 damage to each creature.
+option[4]: {5} — firaga — CARDNAME deals 3 damage to each creature.

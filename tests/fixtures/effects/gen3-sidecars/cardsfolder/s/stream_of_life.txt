@@ -1,0 +1,4 @@
+name: stream of life
+mana cost: {X}{G}
+types: sorcery
+spell[1]: target player gains X life.

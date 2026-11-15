@@ -1,0 +1,6 @@
+name: entity tracker
+mana cost: {2}{U}
+types: creature human scout
+power toughness: 2/3
+static: flash
+triggered: eerie — whenever an enchantment you control enters and whenever you fully unlock a room, draw a card.

@@ -1,0 +1,5 @@
+name: mesa enchantress
+mana cost: {1}{W}{W}
+types: creature human druid
+power toughness: 0/2
+triggered: whenever you cast an enchantment spell, you may draw a card.

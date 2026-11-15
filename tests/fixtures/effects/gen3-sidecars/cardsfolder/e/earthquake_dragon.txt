@@ -1,0 +1,8 @@
+name: earthquake dragon
+mana cost: {14}{G}
+types: creature elemental dragon
+power toughness: 10/10
+static: flying
+static: trample
+activated[1]: {2}{G}, sacrifice a land: return CARDNAME from your graveyard to your hand.
+static: this spell costs {X} less to cast, where X is the total mana value of dragons you control.

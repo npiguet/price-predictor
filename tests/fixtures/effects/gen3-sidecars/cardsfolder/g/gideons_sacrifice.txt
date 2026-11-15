@@ -1,0 +1,4 @@
+name: gideon's sacrifice
+mana cost: {W}
+types: instant
+spell[1]: choose a creature or planeswalker you control. all damage that would be dealt this turn to you and permanents you control is dealt to the chosen permanent instead.

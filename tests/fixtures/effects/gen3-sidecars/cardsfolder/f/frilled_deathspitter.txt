@@ -1,0 +1,5 @@
+name: frilled deathspitter
+mana cost: {2}{R}
+types: creature dinosaur
+power toughness: 3/2
+triggered: enrage — whenever CARDNAME is dealt damage, it deals 2 damage to target opponent or planeswalker.

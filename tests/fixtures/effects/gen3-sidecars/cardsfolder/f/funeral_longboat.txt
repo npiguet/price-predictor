@@ -1,0 +1,6 @@
+name: funeral longboat
+mana cost: {2}
+types: artifact vehicle
+power toughness: 3/3
+static: vigilance
+activated[1]: crew 1

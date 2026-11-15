@@ -1,0 +1,6 @@
+name: skywing aven
+mana cost: {2}{U}
+types: creature bird soldier
+power toughness: 2/1
+static: flying
+activated[1]: discard a card: return CARDNAME to its owner's hand.

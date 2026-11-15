@@ -1,0 +1,5 @@
+name: jötun grunt
+mana cost: {1}{W}
+types: creature giant soldier
+power toughness: 4/4
+triggered: cumulative upkeep—put two cards from the same graveyard on the bottom of their owner's library

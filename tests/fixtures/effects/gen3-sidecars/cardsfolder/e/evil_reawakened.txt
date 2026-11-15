@@ -1,0 +1,4 @@
+name: evil reawakened
+mana cost: {4}{B}
+types: sorcery
+spell[1]: return target creature card from your graveyard to the battlefield with two additional +1/+1 counters on it.

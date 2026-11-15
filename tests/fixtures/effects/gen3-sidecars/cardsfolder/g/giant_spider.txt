@@ -1,0 +1,5 @@
+name: giant spider
+mana cost: {3}{G}
+types: creature spider
+power toughness: 2/4
+static: reach

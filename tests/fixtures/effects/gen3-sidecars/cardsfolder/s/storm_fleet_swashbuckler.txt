@@ -1,0 +1,6 @@
+name: storm fleet swashbuckler
+mana cost: {1}{R}
+types: creature human pirate
+power toughness: 2/2
+triggered: ascend
+static: CARDNAME has double strike as long as you have the city's blessing.

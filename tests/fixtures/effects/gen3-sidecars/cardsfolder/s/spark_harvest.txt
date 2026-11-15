@@ -1,5 +1,0 @@
-name: spark harvest
-mana cost: {B}
-types: sorcery
-additional cost: sacrifice a creature or pay {3}{B}
-spell[1]: destroy target creature or planeswalker.

@@ -1,0 +1,6 @@
+name: angel of light
+mana cost: {4}{W}
+types: creature angel
+power toughness: 3/3
+static: flying
+static: vigilance

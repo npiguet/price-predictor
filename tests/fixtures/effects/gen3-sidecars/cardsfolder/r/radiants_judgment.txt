@@ -1,0 +1,5 @@
+name: radiant's judgment
+mana cost: {2}{W}
+types: instant
+activated[1]: cycling {2}
+spell[2]: destroy target creature with power 4 or greater.

@@ -1,0 +1,5 @@
+name: jaddi lifestrider
+mana cost: {4}{G}
+types: creature elemental
+power toughness: 2/8
+triggered: when CARDNAME enters, you may tap any number of untapped creatures you control. you gain 2 life for each creature tapped this way.

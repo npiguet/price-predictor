@@ -1,0 +1,6 @@
+name: guardian gladewalker
+mana cost: {1}{G}
+types: creature shapeshifter
+power toughness: 1/1
+static: changeling
+triggered: when CARDNAME enters, put a +1/+1 counter on target creature.

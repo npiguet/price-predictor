@@ -1,0 +1,4 @@
+name: defenestrate
+mana cost: {2}{B}
+types: instant
+spell[1]: destroy target creature without flying.

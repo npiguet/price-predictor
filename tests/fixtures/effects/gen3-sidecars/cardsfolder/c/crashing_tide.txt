@@ -1,0 +1,5 @@
+name: crashing tide
+mana cost: {2}{U}
+types: sorcery
+spell[1]: return target creature to its owner's hand. draw a card.
+static: this spell has flash as long as you control a merfolk.

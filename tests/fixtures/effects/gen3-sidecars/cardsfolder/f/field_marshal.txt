@@ -1,0 +1,5 @@
+name: field marshal
+mana cost: {1}{W}{W}
+types: creature human soldier
+power toughness: 2/2
+static: other soldier creatures get +1/+1 and have first strike.

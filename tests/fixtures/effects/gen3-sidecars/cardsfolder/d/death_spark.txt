@@ -1,0 +1,5 @@
+name: death spark
+mana cost: {R}
+types: instant
+spell[1]: CARDNAME deals 1 damage to any target.
+triggered: at the beginning of your upkeep, if CARDNAME is in your graveyard with a creature card directly above it, you may pay {1}. if you do, return CARDNAME to your hand.

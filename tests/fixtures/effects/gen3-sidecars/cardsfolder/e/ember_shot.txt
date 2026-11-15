@@ -1,0 +1,5 @@
+name: ember shot
+mana cost: {6}{R}
+types: instant
+spell[1]: CARDNAME deals 3 damage to any target.
+spell[2]: draw a card.

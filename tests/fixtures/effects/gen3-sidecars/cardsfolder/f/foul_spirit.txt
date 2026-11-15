@@ -1,0 +1,6 @@
+name: foul spirit
+mana cost: {2}{B}
+types: creature spirit
+power toughness: 3/2
+static: flying
+triggered: when CARDNAME enters, sacrifice a land.

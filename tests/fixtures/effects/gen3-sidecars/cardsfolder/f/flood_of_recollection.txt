@@ -1,0 +1,4 @@
+name: flood of recollection
+mana cost: {U}{U}
+types: sorcery
+spell[1]: return target instant or sorcery card from your graveyard to your hand. exile CARDNAME.

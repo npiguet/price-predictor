@@ -1,0 +1,5 @@
+name: stasis snare
+mana cost: {1}{W}{W}
+types: enchantment
+static: flash
+triggered: when CARDNAME enters, exile target creature an opponent controls until CARDNAME leaves the battlefield.

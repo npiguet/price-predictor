@@ -1,0 +1,5 @@
+name: breath of dreams
+mana cost: {2}{U}{U}
+types: enchantment
+triggered: cumulative upkeep {U}
+static: green creatures have "cumulative upkeep {1}."

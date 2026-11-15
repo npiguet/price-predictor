@@ -1,0 +1,5 @@
+name: sphere of annihilation
+mana cost: {X}{B}
+types: artifact
+replacement: CARDNAME enters with X void counters on it.
+triggered: at the beginning of your upkeep, exile CARDNAME, all creatures and planeswalkers with mana value less than or equal to the number of void counters on it, and all creature and planeswalker cards in graveyards with mana value less than or equal to the number of void counters on it.

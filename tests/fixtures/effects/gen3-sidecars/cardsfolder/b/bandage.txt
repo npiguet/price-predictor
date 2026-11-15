@@ -1,4 +1,0 @@
-name: bandage
-mana cost: {W}
-types: instant
-spell[1]: prevent the next 1 damage that would be dealt to any target this turn. draw a card.

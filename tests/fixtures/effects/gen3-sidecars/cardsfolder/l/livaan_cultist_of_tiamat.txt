@@ -1,0 +1,6 @@
+name: livaan, cultist of tiamat
+mana cost: {2}{R}
+types: legendary creature dragon shaman
+power toughness: 1/3
+static: choose a background
+triggered: whenever you cast a noncreature spell, target creature gets +X/+0 until end of turn, where X is that spell's mana value.

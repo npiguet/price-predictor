@@ -1,0 +1,4 @@
+name: gelatinous genesis
+mana cost: {X}{X}{G}
+types: sorcery
+spell[1]: create X X/X green ooze creature tokens.

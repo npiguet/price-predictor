@@ -1,0 +1,5 @@
+name: sylvan safekeeper
+mana cost: {G}
+types: creature human wizard
+power toughness: 1/1
+activated[1]: sacrifice a land: target creature you control gains shroud until end of turn.

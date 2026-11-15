@@ -1,0 +1,5 @@
+name: swift maneuver
+mana cost: {1}{W}
+types: instant
+spell[1]: prevent the next 2 damage that would be dealt to any target this turn. draw a card at the beginning of the next turn's upkeep.
+spell[2]: draw a card.

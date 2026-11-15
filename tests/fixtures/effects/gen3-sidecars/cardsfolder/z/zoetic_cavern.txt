@@ -1,0 +1,4 @@
+name: zoetic cavern
+types: land
+alternate cost: morph {2}
+activated[1]: {T}: add {C}.

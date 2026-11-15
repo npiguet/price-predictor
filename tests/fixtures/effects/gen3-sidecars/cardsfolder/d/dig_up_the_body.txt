@@ -1,0 +1,5 @@
+name: dig up the body
+mana cost: {2}{B}
+types: instant
+additional cost: casualty 1
+spell[1]: mill two cards, then you may return a creature card from your graveyard to your hand.

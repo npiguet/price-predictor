@@ -1,0 +1,6 @@
+name: ichor slick
+mana cost: {2}{B}
+types: sorcery
+alternate cost: madness {3}{B}
+activated[1]: cycling {2}
+spell[2]: target creature gets -3/-3 until end of turn.

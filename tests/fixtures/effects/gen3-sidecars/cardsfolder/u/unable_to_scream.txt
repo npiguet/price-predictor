@@ -1,0 +1,6 @@
+name: unable to scream
+mana cost: {U}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature loses all abilities and is a toy artifact creature with base power and toughness 0/2 in addition to its other types.
+replacement: as long as enchanted creature is face down, it can't be turned face up.

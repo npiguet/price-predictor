@@ -1,4 +1,0 @@
-name: undo
-mana cost: {1}{U}{U}
-types: sorcery
-spell[1]: return two target creatures to their owners' hands.

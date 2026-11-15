@@ -1,0 +1,6 @@
+name: squadron hawk
+mana cost: {1}{W}
+types: creature bird
+power toughness: 1/1
+static: flying
+triggered: when CARDNAME enters, you may search your library for up to three cards named squadron hawk, reveal them, put them into your hand, then shuffle.

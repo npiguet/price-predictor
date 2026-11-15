@@ -1,0 +1,6 @@
+name: plow through
+mana cost: {G}
+types: sorcery
+spell[1]: choose one
+option[2]: target creature you control fights target creature an opponent controls.
+option[3]: destroy target vehicle.

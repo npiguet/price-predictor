@@ -1,0 +1,5 @@
+name: bound in silence
+mana cost: {2}{W}
+types: kindred enchantment rebel aura
+static: enchant creature
+static: enchanted creature can't attack or block.

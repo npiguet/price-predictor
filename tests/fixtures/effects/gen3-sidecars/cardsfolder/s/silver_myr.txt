@@ -1,0 +1,5 @@
+name: silver myr
+mana cost: {2}
+types: artifact creature myr
+power toughness: 1/1
+activated[1]: {T}: add {U}.

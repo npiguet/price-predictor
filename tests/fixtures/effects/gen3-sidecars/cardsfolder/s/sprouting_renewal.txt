@@ -1,0 +1,7 @@
+name: sprouting renewal
+mana cost: {2}{G}
+types: sorcery
+cost reduction: convoke
+spell[1]: choose one
+option[2]: create a 2/2 green and white elf knight creature token with vigilance.
+option[3]: destroy target artifact or enchantment.

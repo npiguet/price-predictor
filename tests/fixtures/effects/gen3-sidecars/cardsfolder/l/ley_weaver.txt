@@ -1,0 +1,6 @@
+name: ley weaver
+mana cost: {3}{G}
+types: creature human druid
+power toughness: 2/2
+triggered: partner with lore weaver
+activated[1]: {T}: untap two target lands.

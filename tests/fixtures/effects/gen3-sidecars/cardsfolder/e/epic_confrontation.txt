@@ -1,0 +1,4 @@
+name: epic confrontation
+mana cost: {1}{G}
+types: sorcery
+spell[1]: target creature you control gets +1/+2 until end of turn. it fights target creature you don't control.

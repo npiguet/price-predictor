@@ -1,0 +1,4 @@
+name: healing hands
+mana cost: {2}{W}
+types: sorcery
+spell[1]: target player gains 4 life. draw a card.

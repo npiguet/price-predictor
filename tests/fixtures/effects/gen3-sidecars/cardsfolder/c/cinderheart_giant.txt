@@ -1,0 +1,6 @@
+name: cinderheart giant
+mana cost: {5}{R}{R}
+types: creature giant berserker
+power toughness: 7/6
+static: trample
+triggered: when CARDNAME dies, it deals 7 damage to a creature an opponent controls chosen at random.

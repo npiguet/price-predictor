@@ -1,0 +1,4 @@
+name: glimmerburst
+mana cost: {3}{U}
+types: instant
+spell[1]: draw two cards. create a 1/1 white glimmer enchantment creature token.

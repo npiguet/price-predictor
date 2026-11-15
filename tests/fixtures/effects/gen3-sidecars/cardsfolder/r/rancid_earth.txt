@@ -1,0 +1,4 @@
+name: rancid earth
+mana cost: {1}{B}{B}
+types: sorcery
+spell[1]: destroy target land. threshold — if there are seven or more cards in your graveyard, instead destroy that land and CARDNAME deals 1 damage to each creature and each player.

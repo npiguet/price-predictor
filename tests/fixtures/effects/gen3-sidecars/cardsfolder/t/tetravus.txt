@@ -1,0 +1,8 @@
+name: tetravus
+mana cost: {6}
+types: artifact creature construct
+power toughness: 1/1
+replacement: CARDNAME enters with three +1/+1 counters on it.
+static: flying
+triggered: at the beginning of your upkeep, you may remove any number of +1/+1 counters from CARDNAME. if you do, create that many 1/1 colorless tetravite artifact creature tokens. they each have flying and "this creature can't be enchanted."
+triggered: at the beginning of your upkeep, you may exile any number of tokens created with CARDNAME. if you do, put that many +1/+1 counters on CARDNAME.

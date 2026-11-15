@@ -1,0 +1,5 @@
+name: mammoth growth
+mana cost: {2}{G}
+types: instant
+alternate cost: foretell {G}
+spell[1]: target creature gets +4/+4 until end of turn.

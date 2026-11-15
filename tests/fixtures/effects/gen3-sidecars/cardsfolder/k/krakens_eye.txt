@@ -1,0 +1,4 @@
+name: kraken's eye
+mana cost: {2}
+types: artifact
+triggered: whenever a player casts a blue spell, you may gain 1 life.

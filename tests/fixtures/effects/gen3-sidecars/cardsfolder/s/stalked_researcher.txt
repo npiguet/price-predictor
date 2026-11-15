@@ -1,0 +1,6 @@
+name: stalked researcher
+mana cost: {1}{U}
+types: creature human wizard
+power toughness: 3/3
+static: defender
+triggered: eerie — whenever an enchantment you control enters and whenever you fully unlock a room, CARDNAME can attack this turn as though it didn't have defender.

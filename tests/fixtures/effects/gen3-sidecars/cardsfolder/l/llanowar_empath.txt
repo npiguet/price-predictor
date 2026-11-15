@@ -1,0 +1,5 @@
+name: llanowar empath
+mana cost: {3}{G}
+types: creature elf shaman
+power toughness: 2/2
+triggered: when CARDNAME enters, scry 2, then reveal the top card of your library. if it's a creature card, put it into your hand.

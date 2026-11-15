@@ -1,0 +1,4 @@
+name: despark
+mana cost: {W}{B}
+types: instant
+spell[1]: exile target permanent with mana value 4 or greater.

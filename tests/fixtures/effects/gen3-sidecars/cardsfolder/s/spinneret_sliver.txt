@@ -1,0 +1,5 @@
+name: spinneret sliver
+mana cost: {1}{G}
+types: creature sliver
+power toughness: 2/2
+static: all sliver creatures have reach.

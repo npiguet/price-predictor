@@ -1,0 +1,6 @@
+name: filigree familiar
+mana cost: {3}
+types: artifact creature fox
+power toughness: 2/2
+triggered: when CARDNAME enters, you gain 2 life.
+triggered: when CARDNAME dies, draw a card.

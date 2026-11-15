@@ -1,0 +1,6 @@
+name: topiary panther
+mana cost: {4}{G}{G}
+types: creature plant cat
+power toughness: 6/5
+static: trample
+activated[1]: basic landcycling {1}{G}

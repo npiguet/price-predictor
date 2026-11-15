@@ -1,0 +1,5 @@
+name: quirion explorer
+mana cost: {1}{G}
+types: creature elf druid scout
+power toughness: 1/1
+activated[1]: {T}: add one mana of any color that a land an opponent controls could produce.

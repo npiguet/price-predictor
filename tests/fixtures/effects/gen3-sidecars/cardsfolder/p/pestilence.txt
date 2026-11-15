@@ -1,0 +1,5 @@
+name: pestilence
+mana cost: {2}{B}{B}
+types: enchantment
+activated[1]: {B}: CARDNAME deals 1 damage to each creature and each player.
+triggered: at the beginning of the end step, if no creatures are on the battlefield, sacrifice CARDNAME.

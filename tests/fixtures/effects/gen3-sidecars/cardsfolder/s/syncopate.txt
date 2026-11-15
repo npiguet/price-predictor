@@ -1,0 +1,4 @@
+name: syncopate
+mana cost: {X}{U}
+types: instant
+spell[1]: counter target spell unless its controller pays {X}. if that spell is countered this way, exile it instead of putting it into its owner's graveyard.

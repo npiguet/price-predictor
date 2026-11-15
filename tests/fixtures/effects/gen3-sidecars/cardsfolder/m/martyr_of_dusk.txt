@@ -1,0 +1,5 @@
+name: martyr of dusk
+mana cost: {1}{W}
+types: creature vampire soldier
+power toughness: 2/1
+triggered: when CARDNAME dies, create a 1/1 white vampire creature token with lifelink.

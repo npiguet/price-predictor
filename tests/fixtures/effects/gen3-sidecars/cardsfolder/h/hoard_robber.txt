@@ -1,0 +1,5 @@
+name: hoard robber
+mana cost: {1}{B}
+types: creature tiefling rogue
+power toughness: 1/3
+triggered: whenever CARDNAME deals combat damage to a player, create a treasure token.

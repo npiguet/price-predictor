@@ -1,5 +1,0 @@
-name: ogre sentry
-mana cost: {1}{R}
-types: creature ogre warrior
-power toughness: 3/3
-static: defender

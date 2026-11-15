@@ -1,0 +1,8 @@
+name: burnout bashtronaut
+mana cost: {R}
+types: creature goblin warrior
+power toughness: 1/1
+static: menace
+static: start your engines
+activated[1]: {2}: this creature gets +1/+0 until end of turn.
+static: max speed — this creature has double strike.

@@ -1,0 +1,5 @@
+name: emblem of the warmind
+mana cost: {1}{R}
+types: enchantment aura
+static: enchant creature you control
+static: creatures you control have haste.

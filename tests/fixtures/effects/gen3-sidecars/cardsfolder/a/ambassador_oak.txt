@@ -1,0 +1,5 @@
+name: ambassador oak
+mana cost: {3}{G}
+types: creature treefolk warrior
+power toughness: 3/3
+triggered: when CARDNAME enters, create a 1/1 green elf warrior creature token.

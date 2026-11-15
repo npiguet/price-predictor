@@ -1,0 +1,4 @@
+name: staff of zegon
+mana cost: {4}
+types: artifact
+activated[1]: {3}, {T}: target creature gets -2/-0 until end of turn.

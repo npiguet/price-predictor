@@ -1,0 +1,6 @@
+name: ready to rumble
+mana cost: {4}{R}
+types: sorcery
+spell[1]: choose one
+option[2]: CARDNAME deals 5 damage to target creature or planeswalker.
+option[3]: destroy target artifact.

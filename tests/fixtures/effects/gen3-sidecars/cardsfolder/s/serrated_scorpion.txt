@@ -1,0 +1,5 @@
+name: serrated scorpion
+mana cost: {B}
+types: creature scorpion
+power toughness: 1/2
+triggered: when CARDNAME dies, it deals 2 damage to each opponent and you gain 2 life.

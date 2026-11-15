@@ -1,0 +1,5 @@
+name: prism ring
+mana cost: {1}
+types: artifact
+replacement: as CARDNAME enters, choose a color.
+triggered: whenever you cast a spell of the chosen color, you gain 1 life.

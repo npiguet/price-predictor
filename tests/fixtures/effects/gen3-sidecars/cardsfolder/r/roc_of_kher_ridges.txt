@@ -1,0 +1,5 @@
+name: roc of kher ridges
+mana cost: {3}{R}
+types: creature bird
+power toughness: 3/3
+static: flying

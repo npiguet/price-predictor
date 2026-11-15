@@ -1,0 +1,6 @@
+name: baru, fist of krosa
+mana cost: {3}{G}{G}
+types: legendary creature human druid
+power toughness: 4/4
+activated[1]: grandeur — discard another card named baru, fist of krosa: create an X/X green wurm creature token, where X is the number of lands you control.
+triggered: whenever a forest enters, green creatures you control get +1/+1 and gain trample until end of turn.

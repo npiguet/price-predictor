@@ -1,0 +1,6 @@
+name: nightsnare
+mana cost: {3}{B}
+types: sorcery
+spell[1]: target opponent reveals their hand.
+spell[2]: you may choose a nonland card from it.
+spell[3]: if you do, that player discards that card. if you don't, that player discards two cards.

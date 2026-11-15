@@ -1,0 +1,6 @@
+name: shimmer myr
+mana cost: {3}
+types: artifact creature myr
+power toughness: 2/2
+static: flash
+static: you may cast artifact spells as though they had flash.

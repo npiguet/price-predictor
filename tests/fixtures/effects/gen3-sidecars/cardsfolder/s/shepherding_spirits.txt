@@ -1,0 +1,6 @@
+name: shepherding spirits
+mana cost: {4}{W}{W}
+types: creature spirit
+power toughness: 4/5
+static: flying
+activated[1]: plainscycling {2}

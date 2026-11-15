@@ -1,0 +1,6 @@
+name: jennika, bad apple big sister
+mana cost: {4}{W}
+types: legendary creature mutant ninja turtle
+power toughness: 3/3
+activated[1]: plainscycling {2}
+triggered: when CARDNAME enters, create a 2/2 red mutant creature token.

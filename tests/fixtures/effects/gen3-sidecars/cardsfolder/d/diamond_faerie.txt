@@ -1,0 +1,6 @@
+name: diamond faerie
+mana cost: {2}{G}{W}{U}
+types: snow creature faerie
+power toughness: 3/3
+static: flying
+activated[1]: {1}{S}: snow creatures you control get +1/+1 until end of turn.

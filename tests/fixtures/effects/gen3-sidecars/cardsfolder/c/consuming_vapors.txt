@@ -1,0 +1,5 @@
+name: consuming vapors
+mana cost: {3}{B}
+types: sorcery
+static: rebound
+spell[1]: target player sacrifices a creature. you gain life equal to that creature's toughness.

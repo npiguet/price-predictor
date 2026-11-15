@@ -1,0 +1,5 @@
+name: gundabad opportunist
+mana cost: {3}{R}
+types: creature goblin rogue
+power toughness: 4/2
+triggered: when this creature enters, exile the top card of your library. until the end of your next turn, you may play that card.

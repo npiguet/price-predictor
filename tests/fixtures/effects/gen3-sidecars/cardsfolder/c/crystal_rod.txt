@@ -1,0 +1,4 @@
+name: crystal rod
+mana cost: {1}
+types: artifact
+triggered: whenever a player casts a blue spell, you may pay {1}. if you do, you gain 1 life.

@@ -1,0 +1,5 @@
+name: keen sense
+mana cost: {G}
+types: enchantment aura
+static: enchant creature
+triggered: whenever enchanted creature deals damage to an opponent, you may draw a card.

@@ -1,0 +1,6 @@
+name: underdark explorer
+mana cost: {4}{B}
+types: creature lizard warrior
+power toughness: 5/3
+static: menace
+triggered: when CARDNAME enters, you take the initiative.

@@ -1,0 +1,3 @@
+name: plateau
+types: land mountain plains
+activated[1]: {T}: add {W} or {R}.

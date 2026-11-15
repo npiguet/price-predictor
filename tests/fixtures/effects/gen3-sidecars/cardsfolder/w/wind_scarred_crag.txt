@@ -1,0 +1,5 @@
+name: wind-scarred crag
+types: land
+activated[1]: {T}: add {R} or {W}.
+triggered: when CARDNAME enters, you gain 1 life.
+replacement: CARDNAME enters tapped.

@@ -1,0 +1,5 @@
+name: nest invader
+mana cost: {1}{G}
+types: creature eldrazi drone
+power toughness: 2/2
+triggered: when CARDNAME enters, create a 0/1 colorless eldrazi spawn creature token. it has "sacrifice this creature: add {C}."

@@ -1,0 +1,14 @@
+layout: adventure
+name: bilbo baggins, burglar
+mana cost: {2}{U}
+types: legendary creature halfling rogue
+power toughness: 2/1
+triggered: when CARDNAME enters, draw a card.
+
+ALTERNATE
+
+name: take a glance
+mana cost: {U}
+types: sorcery adventure
+spell[1]: scry 2.
+replacement: adventure

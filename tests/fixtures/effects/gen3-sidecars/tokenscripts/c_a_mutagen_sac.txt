@@ -1,0 +1,3 @@
+name: mutagen token
+types: artifact mutagen
+activated[1]: {1}, {T}, sacrifice this token: put a +1/+1 counter on target creature. activate only as a sorcery.

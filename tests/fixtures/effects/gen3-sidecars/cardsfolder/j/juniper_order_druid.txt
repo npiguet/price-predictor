@@ -1,0 +1,5 @@
+name: juniper order druid
+mana cost: {2}{G}
+types: creature human cleric druid
+power toughness: 1/1
+activated[1]: {T}: untap target land.

@@ -1,0 +1,4 @@
+name: death ward
+mana cost: {W}
+types: instant
+spell[1]: regenerate target creature.

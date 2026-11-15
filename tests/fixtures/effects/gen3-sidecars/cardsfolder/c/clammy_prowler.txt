@@ -1,0 +1,5 @@
+name: clammy prowler
+mana cost: {3}{U}
+types: enchantment creature horror
+power toughness: 2/5
+triggered: whenever CARDNAME attacks, another target attacking creature can't be blocked this turn.

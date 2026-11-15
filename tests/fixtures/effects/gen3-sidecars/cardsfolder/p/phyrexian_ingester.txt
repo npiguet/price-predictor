@@ -1,0 +1,6 @@
+name: phyrexian ingester
+mana cost: {6}{U}
+types: creature phyrexian beast
+power toughness: 3/3
+triggered: imprint — when CARDNAME enters, you may exile target nontoken creature.
+static: CARDNAME gets +X/+y, where X is the exiled creature card's power and y is its toughness.

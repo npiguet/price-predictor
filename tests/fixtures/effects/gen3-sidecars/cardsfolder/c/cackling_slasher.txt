@@ -1,0 +1,6 @@
+name: cackling slasher
+mana cost: {3}{B}
+types: creature human assassin
+power toughness: 3/3
+static: deathtouch
+replacement: CARDNAME enters with a +1/+1 counter on it if a creature died this turn.

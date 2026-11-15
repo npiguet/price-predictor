@@ -1,0 +1,6 @@
+name: brago, king eternal
+mana cost: {2}{W}{U}
+types: legendary creature spirit noble
+power toughness: 2/4
+static: flying
+triggered: whenever CARDNAME deals combat damage to a player, exile any number of target nonland permanents you control, then return those cards to the battlefield under their owner's control.

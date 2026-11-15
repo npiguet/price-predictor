@@ -1,0 +1,6 @@
+name: akroan sergeant
+mana cost: {2}{R}
+types: creature human soldier
+power toughness: 2/2
+static: first strike
+triggered: renown 1

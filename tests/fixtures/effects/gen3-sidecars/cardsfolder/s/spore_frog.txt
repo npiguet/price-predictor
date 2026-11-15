@@ -1,0 +1,5 @@
+name: spore frog
+mana cost: {G}
+types: creature frog
+power toughness: 1/1
+activated[1]: sacrifice CARDNAME: prevent all combat damage that would be dealt this turn.

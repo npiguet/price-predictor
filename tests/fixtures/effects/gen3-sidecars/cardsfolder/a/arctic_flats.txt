@@ -1,0 +1,4 @@
+name: arctic flats
+types: snow land
+activated[1]: {T}: add {W} or {G}.
+replacement: CARDNAME enters tapped.

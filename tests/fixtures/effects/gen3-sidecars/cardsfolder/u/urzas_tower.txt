@@ -1,0 +1,3 @@
+name: urza's tower
+types: land urza's tower
+activated[1]: {T}: add {C}. if you control an urza's mine and an urza's power-plant, add {C}{C}{C} instead.

@@ -1,0 +1,7 @@
+name: sylvia brightspear
+mana cost: {2}{W}
+types: legendary creature human knight
+power toughness: 2/2
+triggered: partner with khorvath
+static: double strike
+static: dragons your team controls have double strike.

@@ -1,0 +1,6 @@
+name: slith ascendant
+mana cost: {1}{W}{W}
+types: creature slith
+power toughness: 1/1
+static: flying
+triggered: whenever CARDNAME deals combat damage to a player, put a +1/+1 counter on it.

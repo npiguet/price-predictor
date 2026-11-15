@@ -1,0 +1,6 @@
+name: air-cult elemental
+mana cost: {4}{U}{U}
+types: creature elemental
+power toughness: 2/5
+static: flying
+triggered: whirlwind — when CARDNAME enters, return up to one other target creature to its owner's hand.

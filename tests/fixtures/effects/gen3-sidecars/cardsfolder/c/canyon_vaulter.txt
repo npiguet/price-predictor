@@ -1,0 +1,5 @@
+name: canyon vaulter
+mana cost: {1}{W}
+types: creature kor pilot
+power toughness: 3/1
+triggered: whenever this creature saddles a mount or crews a vehicle during your main phase, that mount or vehicle gains flying until end of turn.

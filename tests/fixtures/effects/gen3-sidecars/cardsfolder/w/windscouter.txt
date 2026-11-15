@@ -1,0 +1,6 @@
+name: windscouter
+mana cost: {3}{U}
+types: creature human scout
+power toughness: 3/3
+static: flying
+triggered: when CARDNAME attacks or blocks, return it to its owner's hand at end of combat.

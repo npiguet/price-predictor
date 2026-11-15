@@ -1,0 +1,5 @@
+name: peace strider
+mana cost: {4}
+types: artifact creature construct
+power toughness: 3/3
+triggered: when CARDNAME enters, you gain 3 life.

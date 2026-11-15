@@ -1,0 +1,5 @@
+name: mind stone
+mana cost: {2}
+types: artifact
+activated[1]: {T}: add {C}.
+activated[2]: {1}, {T}, sacrifice CARDNAME: draw a card.

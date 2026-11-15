@@ -1,0 +1,5 @@
+name: driftgloom coyote
+mana cost: {3}{W}{W}
+types: creature elemental coyote
+power toughness: 3/4
+triggered: when CARDNAME enters, exile target creature an opponent controls until CARDNAME leaves the battlefield. if that creature had power 2 or less, put a +1/+1 counter on CARDNAME.

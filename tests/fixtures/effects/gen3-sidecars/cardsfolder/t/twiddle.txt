@@ -1,4 +1,0 @@
-name: twiddle
-mana cost: {U}
-types: instant
-spell[1]: you may tap or untap target artifact, creature, or land.

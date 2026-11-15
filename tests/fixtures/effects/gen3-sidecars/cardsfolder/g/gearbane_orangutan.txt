@@ -1,0 +1,8 @@
+name: gearbane orangutan
+mana cost: {2}{R}
+types: creature ape
+power toughness: 2/2
+static: reach
+triggered: when CARDNAME enters, choose one
+option[1]: destroy up to one target artifact.
+option[2]: sacrifice an artifact. if you do, put two +1/+1 counters on CARDNAME.

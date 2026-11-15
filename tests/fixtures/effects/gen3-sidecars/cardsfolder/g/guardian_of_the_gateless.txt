@@ -1,0 +1,7 @@
+name: guardian of the gateless
+mana cost: {4}{W}
+types: creature angel
+power toughness: 3/3
+static: flying
+triggered: whenever CARDNAME blocks, it gets +1/+1 until end of turn for each creature it's blocking.
+static: CARDNAME can block any number of creatures.

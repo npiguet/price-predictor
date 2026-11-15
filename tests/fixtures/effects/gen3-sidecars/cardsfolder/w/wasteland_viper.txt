@@ -1,0 +1,6 @@
+name: wasteland viper
+mana cost: {G}
+types: creature snake
+power toughness: 1/2
+static: deathtouch
+activated[1]: bloodrush — {G}, discard CARDNAME: target attacking creature gets +1/+2 and gains deathtouch until end of turn.

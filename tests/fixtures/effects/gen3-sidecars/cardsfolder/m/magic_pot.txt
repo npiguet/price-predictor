@@ -1,0 +1,6 @@
+name: magic pot
+mana cost: {3}
+types: artifact creature goblin construct
+power toughness: 1/4
+activated[1]: {2}, {T}: exile target card from a graveyard.
+triggered: when this creature dies, create a treasure token.

@@ -1,0 +1,5 @@
+name: cabal surgeon
+mana cost: {2}{B}{B}
+types: creature human minion
+power toughness: 2/1
+activated[1]: {2}{B}{B}, {T}, exile two cards from your graveyard: return target creature card from your graveyard to your hand.

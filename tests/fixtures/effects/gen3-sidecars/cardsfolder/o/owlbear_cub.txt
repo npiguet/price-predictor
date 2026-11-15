@@ -1,0 +1,5 @@
+name: owlbear cub
+mana cost: {2}{G}
+types: creature bird bear
+power toughness: 3/3
+triggered: mama's coming — whenever CARDNAME attacks a player who controls eight or more lands, look at the top eight cards of your library. you may put a creature card from among them onto the battlefield tapped and attacking that player. put the rest on the bottom of your library in a random order.

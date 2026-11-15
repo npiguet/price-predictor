@@ -1,0 +1,6 @@
+name: white dragon
+mana cost: {4}{W}{W}
+types: creature dragon
+power toughness: 4/4
+static: flying
+triggered: cold breath — when CARDNAME enters, tap target creature an opponent controls. that creature doesn't untap during its controller's next untap step.

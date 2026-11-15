@@ -1,0 +1,6 @@
+name: sporoloth ancient
+mana cost: {3}{G}{G}
+types: creature fungus
+power toughness: 4/4
+triggered: at the beginning of your upkeep, put a spore counter on CARDNAME.
+static: creatures you control have "remove two spore counters from this creature: create a 1/1 green saproling creature token."

@@ -1,0 +1,5 @@
+name: dwarven reinforcements
+mana cost: {3}{R}
+types: sorcery
+alternate cost: foretell {1}{R}
+spell[1]: create two 2/1 red dwarf berserker creature tokens.

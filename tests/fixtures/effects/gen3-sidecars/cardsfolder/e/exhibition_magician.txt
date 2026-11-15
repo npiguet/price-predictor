@@ -1,0 +1,7 @@
+name: exhibition magician
+mana cost: {2}{R}
+types: creature human wizard
+power toughness: 2/1
+triggered: when CARDNAME enters, choose one
+option[1]: create a 1/1 green and white citizen creature token.
+option[2]: create a treasure token.

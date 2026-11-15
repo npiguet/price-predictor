@@ -1,5 +1,0 @@
-name: dwarven grunt
-mana cost: {R}
-types: creature dwarf
-power toughness: 1/1
-static: mountainwalk

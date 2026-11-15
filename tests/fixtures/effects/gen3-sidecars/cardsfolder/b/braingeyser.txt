@@ -1,0 +1,4 @@
+name: braingeyser
+mana cost: {X}{U}{U}
+types: sorcery
+spell[1]: target player draws X cards.

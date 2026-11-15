@@ -1,0 +1,6 @@
+name: charging tuskodon
+mana cost: {3}{R}{R}
+types: creature dinosaur
+power toughness: 4/4
+static: trample
+replacement: if CARDNAME would deal combat damage to a player, it deals double that damage instead.

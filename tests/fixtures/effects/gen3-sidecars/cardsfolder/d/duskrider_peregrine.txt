@@ -1,0 +1,7 @@
+name: duskrider peregrine
+mana cost: {5}{W}
+types: creature bird
+power toughness: 3/3
+alternate cost: suspend 3—{1}{W}
+static: flying
+static: protection from black

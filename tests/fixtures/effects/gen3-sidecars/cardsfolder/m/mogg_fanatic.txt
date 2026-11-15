@@ -1,0 +1,5 @@
+name: mogg fanatic
+mana cost: {R}
+types: creature goblin
+power toughness: 1/1
+activated[1]: sacrifice CARDNAME: it deals 1 damage to any target.

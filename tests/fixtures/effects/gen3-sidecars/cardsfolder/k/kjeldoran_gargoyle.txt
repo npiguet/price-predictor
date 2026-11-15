@@ -1,0 +1,7 @@
+name: kjeldoran gargoyle
+mana cost: {5}{W}
+types: creature gargoyle
+power toughness: 3/3
+static: flying
+static: first strike
+triggered: whenever CARDNAME deals damage, you gain that much life.

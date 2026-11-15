@@ -1,0 +1,5 @@
+name: grizzly fate
+mana cost: {3}{G}{G}
+types: sorcery
+alternate cost: flashback {5}{G}{G}
+spell[1]: create two 2/2 green bear creature tokens. threshold — create four 2/2 green bear creature tokens instead if there are seven or more cards in your graveyard.

@@ -1,0 +1,6 @@
+name: rabid bloodsucker
+mana cost: {4}{B}
+types: creature vampire
+power toughness: 3/2
+static: flying
+triggered: when CARDNAME enters, each player loses 2 life.

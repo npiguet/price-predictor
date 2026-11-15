@@ -1,0 +1,5 @@
+name: the gold saucer
+types: land town
+activated[1]: {T}: add {C}.
+activated[2]: {2}, {T}: flip a coin. if you win the flip, create a treasure token.
+activated[3]: {3}, {T}, sacrifice two artifacts: draw a card.

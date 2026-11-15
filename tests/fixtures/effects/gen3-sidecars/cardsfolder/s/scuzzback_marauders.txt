@@ -1,0 +1,6 @@
+name: scuzzback marauders
+mana cost: {4}{R/G}
+types: creature goblin warrior
+power toughness: 5/2
+static: trample
+triggered: persist

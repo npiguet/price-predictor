@@ -1,0 +1,5 @@
+name: cutthroat il-dal
+mana cost: {3}{B}
+types: creature human rogue
+power toughness: 4/1
+static: hellbent — CARDNAME has shadow as long as you have no cards in hand.

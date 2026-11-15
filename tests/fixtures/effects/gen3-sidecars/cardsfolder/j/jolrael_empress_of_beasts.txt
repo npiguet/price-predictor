@@ -1,0 +1,5 @@
+name: jolrael, empress of beasts
+mana cost: {3}{G}{G}
+types: legendary creature human spellshaper
+power toughness: 3/3
+activated[1]: {2}{G}, {T}, discard two cards: all lands target player controls become 3/3 creatures until end of turn. they're still lands.

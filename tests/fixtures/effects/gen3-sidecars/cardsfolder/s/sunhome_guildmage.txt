@@ -1,0 +1,6 @@
+name: sunhome guildmage
+mana cost: {R}{W}
+types: creature human wizard
+power toughness: 2/2
+activated[1]: {1}{R}{W}: creatures you control get +1/+0 until end of turn.
+activated[2]: {2}{R}{W}: create a 1/1 red and white soldier creature token with haste.

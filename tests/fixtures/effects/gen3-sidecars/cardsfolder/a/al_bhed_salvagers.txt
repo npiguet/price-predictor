@@ -1,0 +1,5 @@
+name: al bhed salvagers
+mana cost: {2}{B}
+types: creature human artificer warrior
+power toughness: 2/3
+triggered: whenever this creature or another creature or artifact you control dies, target opponent loses 1 life and you gain 1 life.

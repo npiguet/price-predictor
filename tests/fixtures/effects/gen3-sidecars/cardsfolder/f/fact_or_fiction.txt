@@ -1,0 +1,4 @@
+name: fact or fiction
+mana cost: {3}{U}
+types: instant
+spell[1]: reveal the top five cards of your library. an opponent separates those cards into two piles. put one pile into your hand and the other into your graveyard.

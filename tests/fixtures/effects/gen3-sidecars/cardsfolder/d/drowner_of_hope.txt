@@ -1,0 +1,7 @@
+name: drowner of hope
+mana cost: {5}{U}
+types: creature eldrazi
+power toughness: 5/5
+static: devoid
+activated[1]: sacrifice an eldrazi scion: tap target creature.
+triggered: when CARDNAME enters, create two 1/1 colorless eldrazi scion creature tokens. they have "sacrifice this creature: add {C}."

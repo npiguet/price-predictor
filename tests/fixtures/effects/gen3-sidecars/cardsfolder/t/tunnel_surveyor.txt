@@ -1,0 +1,5 @@
+name: tunnel surveyor
+mana cost: {2}{U}
+types: creature human detective
+power toughness: 2/2
+triggered: when CARDNAME enters, create a 1/1 white glimmer enchantment creature token.

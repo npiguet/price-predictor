@@ -1,0 +1,5 @@
+name: geist of the moors
+mana cost: {1}{W}{W}
+types: creature spirit
+power toughness: 3/1
+static: flying

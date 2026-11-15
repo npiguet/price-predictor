@@ -1,0 +1,5 @@
+name: frostpeak yeti
+mana cost: {3}{U}
+types: snow creature yeti
+power toughness: 3/3
+activated[1]: {1}{S}: CARDNAME can't be blocked this turn.

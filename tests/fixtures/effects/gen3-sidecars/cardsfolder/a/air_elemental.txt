@@ -1,0 +1,5 @@
+name: air elemental
+mana cost: {3}{U}{U}
+types: creature elemental
+power toughness: 4/4
+static: flying

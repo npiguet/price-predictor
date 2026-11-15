@@ -1,0 +1,6 @@
+name: allosaurus rider
+mana cost: {5}{G}{G}
+types: creature elf warrior
+power toughness: 1+*/1+*
+static: CARDNAME's power and toughness are each equal to 1 plus the number of lands you control.
+static: you may exile two green cards from your hand rather than pay this spell's mana cost.

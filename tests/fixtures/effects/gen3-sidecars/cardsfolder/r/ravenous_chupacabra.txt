@@ -1,0 +1,5 @@
+name: ravenous chupacabra
+mana cost: {2}{B}{B}
+types: creature beast horror
+power toughness: 2/2
+triggered: when CARDNAME enters, destroy target creature an opponent controls.

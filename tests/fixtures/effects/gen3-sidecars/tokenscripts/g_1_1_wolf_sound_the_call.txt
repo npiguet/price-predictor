@@ -1,0 +1,4 @@
+name: wolf token
+types: creature wolf
+power toughness: 1/1
+static: this creature gets +1/+1 for each card named sound the call in each graveyard.

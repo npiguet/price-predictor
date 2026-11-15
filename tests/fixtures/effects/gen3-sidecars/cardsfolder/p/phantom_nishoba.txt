@@ -1,0 +1,8 @@
+name: phantom nishoba
+mana cost: {5}{G}{W}
+types: creature cat beast spirit
+power toughness: 0/0
+replacement: CARDNAME enters with seven +1/+1 counters on it.
+static: trample
+triggered: whenever CARDNAME deals damage, you gain that much life.
+replacement: if damage would be dealt to CARDNAME, prevent that damage. remove a +1/+1 counter from CARDNAME.

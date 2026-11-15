@@ -1,0 +1,5 @@
+name: sun's bounty
+mana cost: {1}{W}
+types: instant
+triggered: recover {1}{W}
+spell[1]: you gain 4 life.

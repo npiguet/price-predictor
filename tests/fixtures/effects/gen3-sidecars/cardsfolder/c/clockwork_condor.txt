@@ -1,0 +1,7 @@
+name: clockwork condor
+mana cost: {4}
+types: artifact creature bird
+power toughness: 0/0
+static: flying
+replacement: CARDNAME enters with three +1/+1 counters on it.
+triggered: whenever CARDNAME attacks or blocks, remove a +1/+1 counter from it at end of combat.

@@ -1,0 +1,8 @@
+name: clockwork steed
+mana cost: {4}
+types: artifact creature horse
+power toughness: 0/3
+replacement: CARDNAME enters with four +1/+0 counters on it.
+activated[1]: {X}, {T}: put up to X +1/+0 counters on CARDNAME. this ability can't cause the total number of +1/+0 counters on CARDNAME to be greater than four. activate only during your upkeep.
+triggered: at end of combat, if CARDNAME attacked or blocked this combat, remove a +1/+0 counter from it.
+static: CARDNAME can't be blocked by artifact creatures.

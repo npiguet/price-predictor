@@ -1,5 +1,0 @@
-name: canyon wildcat
-mana cost: {1}{R}
-types: creature cat
-power toughness: 2/1
-static: mountainwalk

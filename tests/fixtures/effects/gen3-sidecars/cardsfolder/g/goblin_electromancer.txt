@@ -1,0 +1,5 @@
+name: goblin electromancer
+mana cost: {U}{R}
+types: creature goblin wizard
+power toughness: 2/2
+static: instant and sorcery spells you cast cost {1} less to cast.

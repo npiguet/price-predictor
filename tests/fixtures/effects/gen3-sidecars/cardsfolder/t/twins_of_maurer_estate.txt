@@ -1,0 +1,5 @@
+name: twins of maurer estate
+mana cost: {4}{B}
+types: creature vampire
+power toughness: 3/5
+alternate cost: madness {2}{B}

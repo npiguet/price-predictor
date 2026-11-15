@@ -1,0 +1,6 @@
+name: zombie master
+mana cost: {1}{B}{B}
+types: creature zombie
+power toughness: 2/3
+static: other zombie creatures have swampwalk.
+static: other zombies have "{B}: regenerate this permanent."

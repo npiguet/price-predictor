@@ -1,0 +1,5 @@
+name: grotag siege-runner
+mana cost: {1}{R}
+types: creature goblin rogue
+power toughness: 2/1
+activated[1]: {R}, sacrifice CARDNAME: destroy target creature with defender. CARDNAME deals 2 damage to that creature's controller.

@@ -1,0 +1,7 @@
+name: thunder wall
+mana cost: {1}{U}{U}
+types: creature wall
+power toughness: 0/2
+static: defender
+static: flying
+activated[1]: {U}: CARDNAME gets +1/+1 until end of turn.

@@ -1,0 +1,7 @@
+name: paralyze
+mana cost: {B}
+types: enchantment aura
+static: enchant creature
+triggered: when CARDNAME enters, tap enchanted creature.
+triggered: at the beginning of the upkeep of enchanted creature's controller, that player may pay {4}. if the player does, untap the creature.
+replacement: enchanted creature doesn't untap during its controller's untap step.

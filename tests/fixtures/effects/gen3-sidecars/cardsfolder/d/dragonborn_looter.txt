@@ -1,0 +1,5 @@
+name: dragonborn looter
+mana cost: {1}{U}
+types: creature dragon rogue
+power toughness: 1/2
+activated[1]: {1}, {T}: draw a card, then discard a card.

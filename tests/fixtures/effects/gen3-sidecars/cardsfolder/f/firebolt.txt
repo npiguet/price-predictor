@@ -1,0 +1,5 @@
+name: firebolt
+mana cost: {R}
+types: sorcery
+alternate cost: flashback {4}{R}
+spell[1]: CARDNAME deals 2 damage to any target.

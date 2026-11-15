@@ -1,0 +1,5 @@
+name: death charmer
+mana cost: {2}{B}
+types: creature worm mercenary
+power toughness: 2/2
+triggered: whenever CARDNAME deals combat damage to a creature, that creature's controller loses 2 life unless they pay {2}.

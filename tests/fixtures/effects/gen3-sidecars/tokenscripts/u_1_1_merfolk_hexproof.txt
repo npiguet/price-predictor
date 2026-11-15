@@ -1,4 +1,0 @@
-name: merfolk token
-types: creature merfolk
-power toughness: 1/1
-static: hexproof

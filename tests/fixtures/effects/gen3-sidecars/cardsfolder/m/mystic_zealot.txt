@@ -1,0 +1,5 @@
+name: mystic zealot
+mana cost: {3}{W}
+types: creature human nomad mystic
+power toughness: 2/4
+static: threshold — as long as there are seven or more cards in your graveyard, CARDNAME gets +1/+1 and has flying.

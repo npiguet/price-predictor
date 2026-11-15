@@ -1,5 +1,0 @@
-name: golden-tail disciple
-mana cost: {2}{W}
-types: enchantment creature fox monk
-power toughness: 2/3
-static: lifelink

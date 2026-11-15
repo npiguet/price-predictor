@@ -1,4 +1,0 @@
-name: mind rot
-mana cost: {2}{B}
-types: sorcery
-spell[1]: target player discards two cards.

@@ -1,0 +1,5 @@
+name: scoured barrens
+types: land
+activated[1]: {T}: add {W} or {B}.
+triggered: when CARDNAME enters, you gain 1 life.
+replacement: CARDNAME enters tapped.

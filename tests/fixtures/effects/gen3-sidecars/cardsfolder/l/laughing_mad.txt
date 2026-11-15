@@ -1,0 +1,6 @@
+name: laughing mad
+mana cost: {2}{R}
+types: instant
+alternate cost: flashback {3}{R}
+additional cost: discard a card.
+spell[1]: draw two cards.

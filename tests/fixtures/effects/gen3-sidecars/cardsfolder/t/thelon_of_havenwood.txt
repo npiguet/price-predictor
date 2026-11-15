@@ -1,0 +1,6 @@
+name: thelon of havenwood
+mana cost: {G}{G}
+types: legendary creature elf druid
+power toughness: 2/2
+activated[1]: {B}{G}, exile a fungus card from a graveyard: put a spore counter on each fungus on the battlefield.
+static: each fungus creature gets +1/+1 for each spore counter on it.

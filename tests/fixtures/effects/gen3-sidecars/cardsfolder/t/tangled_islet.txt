@@ -1,0 +1,4 @@
+name: tangled islet
+types: land forest island
+replacement: CARDNAME enters tapped.
+activated[1]: {T}: add {U} or {G}.

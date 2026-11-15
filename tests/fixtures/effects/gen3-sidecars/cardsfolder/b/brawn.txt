@@ -1,0 +1,6 @@
+name: brawn
+mana cost: {3}{G}
+types: creature incarnation
+power toughness: 3/3
+static: trample
+static: as long as CARDNAME is in your graveyard and you control a forest, creatures you control have trample.

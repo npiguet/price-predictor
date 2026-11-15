@@ -1,0 +1,4 @@
+name: elf knight token
+types: creature elf knight
+power toughness: 2/2
+static: vigilance

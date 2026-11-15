@@ -1,5 +1,0 @@
-name: starlit angel
-mana cost: {3}{W}{W}
-types: creature angel
-power toughness: 3/4
-static: flying

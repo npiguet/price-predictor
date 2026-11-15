@@ -1,0 +1,6 @@
+name: greater sandwurm
+mana cost: {5}{G}{G}
+types: creature wurm
+power toughness: 7/7
+activated[1]: cycling {2}
+static: CARDNAME can't be blocked by creatures with power 2 or less.

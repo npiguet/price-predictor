@@ -1,0 +1,7 @@
+name: buzz bots
+mana cost: {1}{U}
+types: artifact creature robot insect
+power toughness: 1/1
+static: flying
+static: vigilance
+triggered: when this creature dies, draw a card.

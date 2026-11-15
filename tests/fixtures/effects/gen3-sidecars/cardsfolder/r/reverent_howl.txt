@@ -1,0 +1,6 @@
+name: reverent howl
+mana cost: {2}{B}
+types: instant
+spell[1]: choose one
+option[2]: target player draws two cards and loses 2 life.
+option[3]: target creature gets +2/+2 and gains lifelink until end of turn.

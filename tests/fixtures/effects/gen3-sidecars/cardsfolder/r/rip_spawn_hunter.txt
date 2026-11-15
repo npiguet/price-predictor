@@ -1,0 +1,5 @@
+name: rip, spawn hunter
+mana cost: {2}{G}{W}
+types: legendary creature human survivor
+power toughness: 4/4
+triggered: survival — at the beginning of your second main phase, if CARDNAME is tapped, reveal the top X cards of your library, where X is its power. put any number of creature and/or vehicle cards with different powers from among them into your hand. put the rest on the bottom of your library in a random order.

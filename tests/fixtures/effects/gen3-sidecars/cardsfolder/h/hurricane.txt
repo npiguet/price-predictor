@@ -1,0 +1,4 @@
+name: hurricane
+mana cost: {X}{G}
+types: sorcery
+spell[1]: CARDNAME deals X damage to each creature with flying and each player.

@@ -1,0 +1,5 @@
+name: duskmantle operative
+mana cost: {1}{B}
+types: creature human rogue
+power toughness: 2/2
+static: CARDNAME can't be blocked by creatures with power 4 or greater.

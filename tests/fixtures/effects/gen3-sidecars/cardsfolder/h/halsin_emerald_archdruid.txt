@@ -1,0 +1,6 @@
+name: halsin, emerald archdruid
+mana cost: {3}{G}
+types: legendary creature elf druid
+power toughness: 2/4
+static: choose a background
+activated[1]: {1}: until end of turn, target token you control becomes a green bear creature with base power and toughness 4/4 in addition to its other types and colors.

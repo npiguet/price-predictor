@@ -1,0 +1,5 @@
+name: icatian scout
+mana cost: {W}
+types: creature human soldier scout
+power toughness: 1/1
+activated[1]: {1}, {T}: target creature gains first strike until end of turn.

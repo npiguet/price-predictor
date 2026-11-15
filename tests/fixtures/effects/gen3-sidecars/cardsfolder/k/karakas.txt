@@ -1,0 +1,4 @@
+name: karakas
+types: legendary land
+activated[1]: {T}: add {W}.
+activated[2]: {T}: return target legendary creature to its owner's hand.

@@ -1,0 +1,4 @@
+name: ritual of hope
+mana cost: {1}{W}
+types: instant
+spell[1]: creatures you control get +1/+1 until end of turn. coven — if you control three or more creatures with different powers, creatures you control get +2/+1 until end of turn instead.

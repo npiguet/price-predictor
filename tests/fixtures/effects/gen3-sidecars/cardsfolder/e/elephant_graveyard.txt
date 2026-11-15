@@ -1,0 +1,4 @@
+name: elephant graveyard
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {T}: regenerate target elephant.

@@ -1,0 +1,5 @@
+name: stampede driver
+mana cost: {G}
+types: creature human spellshaper
+power toughness: 1/1
+activated[1]: {1}{G}, {T}, discard a card: creatures you control get +1/+1 and gain trample until end of turn.

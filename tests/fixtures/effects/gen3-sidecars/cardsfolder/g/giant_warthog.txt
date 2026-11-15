@@ -1,0 +1,5 @@
+name: giant warthog
+mana cost: {5}{G}
+types: creature boar beast
+power toughness: 5/5
+static: trample

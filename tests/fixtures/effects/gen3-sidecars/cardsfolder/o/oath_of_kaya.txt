@@ -1,0 +1,5 @@
+name: oath of kaya
+mana cost: {1}{W}{B}
+types: legendary enchantment
+triggered: when CARDNAME enters, it deals 3 damage to any target and you gain 3 life.
+triggered: whenever an opponent attacks a planeswalker you control with one or more creatures, CARDNAME deals 2 damage to that player and you gain 2 life.

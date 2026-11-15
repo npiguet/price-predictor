@@ -1,0 +1,13 @@
+layout: adventure
+name: lindblum, industrial regency
+types: land town
+activated[1]: {T}: add {R}.
+replacement: this land enters tapped.
+
+ALTERNATE
+
+name: mage siege
+mana cost: {2}{R}
+types: instant adventure
+spell[1]: create a 0/1 black wizard creature token with "whenever you cast a noncreature spell, this token deals 1 damage to each opponent."
+replacement: adventure

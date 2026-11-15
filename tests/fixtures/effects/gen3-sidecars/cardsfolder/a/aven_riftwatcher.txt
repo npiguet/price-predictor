@@ -1,0 +1,7 @@
+name: aven riftwatcher
+mana cost: {2}{W}
+types: creature bird rebel soldier
+power toughness: 2/3
+triggered: vanishing 3
+static: flying
+triggered: when CARDNAME enters or leaves the battlefield, you gain 2 life.

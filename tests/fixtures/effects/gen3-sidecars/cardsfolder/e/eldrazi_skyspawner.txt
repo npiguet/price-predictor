@@ -1,0 +1,7 @@
+name: eldrazi skyspawner
+mana cost: {2}{U}
+types: creature eldrazi drone
+power toughness: 2/1
+static: devoid
+static: flying
+triggered: when CARDNAME enters, create a 1/1 colorless eldrazi scion creature token. it has "sacrifice this creature: add {C}."

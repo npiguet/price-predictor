@@ -1,0 +1,5 @@
+name: threats around every corner
+mana cost: {3}{G}
+types: enchantment
+triggered: when CARDNAME enters, manifest dread.
+triggered: whenever a face-down permanent you control enters, search your library for a basic land card, put it onto the battlefield tapped, then shuffle.

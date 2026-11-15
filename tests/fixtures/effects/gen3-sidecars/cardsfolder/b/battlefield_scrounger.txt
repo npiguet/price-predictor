@@ -1,0 +1,5 @@
+name: battlefield scrounger
+mana cost: {3}{G}{G}
+types: creature centaur
+power toughness: 3/3
+activated[1]: threshold — put three cards from your graveyard on the bottom of your library: CARDNAME gets +3/+3 until end of turn. activate only once each turn and only if there are seven or more cards in your graveyard.

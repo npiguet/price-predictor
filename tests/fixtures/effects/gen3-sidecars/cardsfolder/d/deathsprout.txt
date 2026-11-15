@@ -1,0 +1,4 @@
+name: deathsprout
+mana cost: {1}{B}{B}{G}
+types: instant
+spell[1]: destroy target creature. search your library for a basic land card, put it onto the battlefield tapped, then shuffle.

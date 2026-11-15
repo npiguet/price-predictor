@@ -1,0 +1,5 @@
+name: shatterskull recruit
+mana cost: {3}{R}{R}
+types: creature giant warrior ally
+power toughness: 4/4
+static: menace

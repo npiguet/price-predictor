@@ -1,0 +1,6 @@
+name: leering onlooker
+mana cost: {1}{B}
+types: creature vampire
+power toughness: 1/3
+static: flying
+activated[1]: {2}{B}{B}, exile CARDNAME from your graveyard: create two tapped 1/1 black bat creature tokens with flying.

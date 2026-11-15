@@ -1,0 +1,6 @@
+name: craw giant
+mana cost: {3}{G}{G}{G}{G}
+types: creature giant
+power toughness: 6/4
+static: trample
+triggered: rampage 2

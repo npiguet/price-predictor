@@ -1,0 +1,5 @@
+name: join the maestros
+mana cost: {4}{B}
+types: sorcery
+additional cost: casualty 2
+spell[1]: create a 4/3 black ogre warrior creature token.

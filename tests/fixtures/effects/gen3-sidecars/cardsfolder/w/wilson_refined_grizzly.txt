@@ -1,0 +1,10 @@
+name: wilson, refined grizzly
+mana cost: {1}{G}
+types: legendary creature bear warrior
+power toughness: 2/2
+static: vigilance
+static: reach
+static: trample
+static: ward {2}
+static: choose a background
+replacement: this spell can't be countered.

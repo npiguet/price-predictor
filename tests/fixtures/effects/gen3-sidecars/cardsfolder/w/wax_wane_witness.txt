@@ -1,0 +1,7 @@
+name: wax-wane witness
+mana cost: {3}{W}
+types: creature bat cleric
+power toughness: 2/4
+static: flying
+static: vigilance
+triggered: whenever you gain or lose life during your turn, CARDNAME gets +1/+0 until end of turn.

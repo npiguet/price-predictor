@@ -1,0 +1,5 @@
+name: prowling nightstalker
+mana cost: {3}{B}
+types: creature nightstalker
+power toughness: 2/2
+static: CARDNAME can't be blocked except by black creatures.

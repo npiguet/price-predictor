@@ -1,0 +1,6 @@
+name: sengir autocrat
+mana cost: {3}{B}
+types: creature human
+power toughness: 2/2
+triggered: when CARDNAME enters, create three 0/1 black serf creature tokens.
+triggered: when CARDNAME leaves the battlefield, exile all serf tokens.

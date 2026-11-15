@@ -1,0 +1,4 @@
+name: zombie token
+types: creature zombie
+power toughness: 2/2
+triggered: decayed

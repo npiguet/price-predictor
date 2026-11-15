@@ -1,0 +1,6 @@
+name: april o'neil, kunoichi trainee
+mana cost: {1}{W}
+types: legendary creature human ninja
+power toughness: 2/2
+triggered: when CARDNAME enters, scry 2.
+static: CARDNAME can't be blocked by creatures with power 3 or greater.

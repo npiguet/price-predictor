@@ -1,0 +1,6 @@
+name: ember weaver
+mana cost: {2}{G}
+types: creature spider
+power toughness: 2/3
+static: reach
+static: as long as you control a red permanent, CARDNAME gets +1/+0 and has first strike.

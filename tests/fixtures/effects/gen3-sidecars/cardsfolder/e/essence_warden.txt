@@ -1,0 +1,5 @@
+name: essence warden
+mana cost: {G}
+types: creature elf shaman
+power toughness: 1/1
+triggered: whenever another creature enters, you gain 1 life.

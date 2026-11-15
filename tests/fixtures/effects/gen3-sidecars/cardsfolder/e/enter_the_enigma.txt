@@ -1,0 +1,4 @@
+name: enter the enigma
+mana cost: {U}
+types: sorcery
+spell[1]: target creature can't be blocked this turn. draw a card.

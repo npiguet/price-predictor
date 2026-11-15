@@ -1,0 +1,4 @@
+name: whalebone glider
+mana cost: {2}
+types: artifact
+activated[1]: {2}, {T}: target creature with power 3 or less gains flying until end of turn.

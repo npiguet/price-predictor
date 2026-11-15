@@ -1,0 +1,5 @@
+name: plague fiend
+mana cost: {1}{B}
+types: creature insect
+power toughness: 1/1
+triggered: whenever CARDNAME deals combat damage to a creature, destroy that creature unless its controller pays {2}.

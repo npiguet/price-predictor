@@ -1,0 +1,4 @@
+name: road rage
+mana cost: {R}
+types: instant
+spell[1]: CARDNAME deals X damage to target creature or planeswalker, where X is 2 plus the number of mounts and vehicles you control.

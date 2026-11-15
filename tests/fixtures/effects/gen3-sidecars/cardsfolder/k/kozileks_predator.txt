@@ -1,0 +1,5 @@
+name: kozilek's predator
+mana cost: {3}{G}
+types: creature eldrazi drone
+power toughness: 3/3
+triggered: when CARDNAME enters, create two 0/1 colorless eldrazi spawn creature tokens. they have "sacrifice this creature: add {C}."

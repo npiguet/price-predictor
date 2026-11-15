@@ -1,0 +1,5 @@
+name: dragon engine
+mana cost: {3}
+types: artifact creature construct
+power toughness: 1/3
+activated[1]: {2}: CARDNAME gets +1/+0 until end of turn.

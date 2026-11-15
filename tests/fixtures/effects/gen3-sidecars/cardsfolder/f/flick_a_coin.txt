@@ -1,5 +1,0 @@
-name: flick a coin
-mana cost: {2}{R}
-types: instant
-spell[1]: CARDNAME deals 1 damage to any target. you create a treasure token.
-spell[2]: draw a card.

@@ -1,0 +1,5 @@
+name: behold the multiverse
+mana cost: {3}{U}
+types: instant
+alternate cost: foretell {1}{U}
+spell[1]: scry 2, then draw two cards.

@@ -1,0 +1,4 @@
+name: relentless advance
+mana cost: {3}{U}
+types: sorcery
+spell[1]: amass zombies 3.

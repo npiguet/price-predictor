@@ -1,0 +1,5 @@
+name: valakut predator
+mana cost: {2}{R}
+types: creature elemental
+power toughness: 2/2
+triggered: landfall — whenever a land you control enters, CARDNAME gets +2/+2 until end of turn.

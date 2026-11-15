@@ -1,0 +1,7 @@
+name: lava-field overlord
+mana cost: {7}{R}{R}
+types: creature dragon
+power toughness: 5/4
+cost reduction: assist
+static: flying
+triggered: when CARDNAME enters, it deals 4 damage to target creature an opponent controls.

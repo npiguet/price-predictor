@@ -1,0 +1,5 @@
+name: lost in thought
+mana cost: {1}{U}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature can't attack or block, and its activated abilities can't be activated. its controller may exile three cards from their graveyard for that player to ignore this effect until end of turn.

@@ -1,0 +1,6 @@
+name: bronze walrus
+mana cost: {3}
+types: artifact creature walrus
+power toughness: 2/2
+activated[1]: {T}: add one mana of any color.
+triggered: when CARDNAME enters, scry 2.

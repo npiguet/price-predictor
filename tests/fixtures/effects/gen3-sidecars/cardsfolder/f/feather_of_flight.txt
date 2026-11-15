@@ -1,0 +1,7 @@
+name: feather of flight
+mana cost: {1}{W}
+types: enchantment aura
+static: flash
+static: enchant creature
+triggered: when CARDNAME enters, draw a card.
+static: enchanted creature gets +1/+0 and has flying.

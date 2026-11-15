@@ -1,0 +1,6 @@
+name: bushy bodyguard
+mana cost: {1}{G}
+types: creature squirrel warrior
+power toughness: 2/1
+additional cost: offspring {2}
+triggered: when this creature enters, you may forage. if you do, put two +1/+1 counters on it.

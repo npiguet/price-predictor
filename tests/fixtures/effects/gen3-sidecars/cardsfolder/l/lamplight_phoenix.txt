@@ -1,6 +1,0 @@
-name: lamplight phoenix
-mana cost: {1}{R}{R}
-types: creature phoenix
-power toughness: 3/3
-static: flying
-triggered: when CARDNAME dies, you may exile it and collect evidence 4. if you do, return CARDNAME to the battlefield tapped.

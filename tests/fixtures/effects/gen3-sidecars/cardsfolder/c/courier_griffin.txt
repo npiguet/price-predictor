@@ -1,0 +1,6 @@
+name: courier griffin
+mana cost: {3}{W}
+types: creature griffin
+power toughness: 2/3
+static: flying
+triggered: when CARDNAME enters, you gain 2 life.

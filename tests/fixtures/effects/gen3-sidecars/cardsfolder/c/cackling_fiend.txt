@@ -1,0 +1,5 @@
+name: cackling fiend
+mana cost: {2}{B}{B}
+types: creature zombie
+power toughness: 2/1
+triggered: when CARDNAME enters, each opponent discards a card.

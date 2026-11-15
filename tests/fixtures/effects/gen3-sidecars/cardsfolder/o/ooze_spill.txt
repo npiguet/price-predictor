@@ -1,0 +1,4 @@
+name: ooze spill
+mana cost: {1}{U}{U}
+types: instant
+spell[1]: counter target spell. create a mutagen token.

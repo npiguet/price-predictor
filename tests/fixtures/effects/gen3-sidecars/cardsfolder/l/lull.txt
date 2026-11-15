@@ -1,0 +1,5 @@
+name: lull
+mana cost: {1}{G}
+types: instant
+activated[1]: cycling {2}
+spell[2]: prevent all combat damage that would be dealt this turn.

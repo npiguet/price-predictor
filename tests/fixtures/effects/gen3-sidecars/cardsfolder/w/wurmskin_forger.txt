@@ -1,0 +1,5 @@
+name: wurmskin forger
+mana cost: {5}{G}{G}
+types: creature elf warrior
+power toughness: 2/2
+triggered: when CARDNAME enters, distribute three +1/+1 counters among one, two, or three target creatures.

@@ -1,0 +1,4 @@
+name: rogue's passage
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {4}, {T}: target creature can't be blocked this turn.

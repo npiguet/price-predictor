@@ -1,0 +1,4 @@
+name: command the storm
+mana cost: {4}{R}
+types: instant
+spell[1]: CARDNAME deals 5 damage to target creature.

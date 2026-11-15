@@ -1,0 +1,5 @@
+name: timberwatch elf
+mana cost: {2}{G}
+types: creature elf
+power toughness: 1/2
+activated[1]: {T}: target creature gets +X/+X until end of turn, where X is the number of elves on the battlefield.

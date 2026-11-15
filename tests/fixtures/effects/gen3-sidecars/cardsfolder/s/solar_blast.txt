@@ -1,0 +1,6 @@
+name: solar blast
+mana cost: {3}{R}
+types: instant
+activated[1]: cycling {1}{R}{R}
+spell[2]: CARDNAME deals 3 damage to any target.
+triggered: when you cycle CARDNAME, you may have it deal 1 damage to any target.

@@ -1,0 +1,6 @@
+name: sabotender
+mana cost: {1}{R}
+types: creature plant
+power toughness: 2/1
+static: reach
+triggered: landfall — whenever a land you control enters, this creature deals 1 damage to each opponent.

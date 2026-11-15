@@ -1,4 +1,0 @@
-name: careful study
-mana cost: {U}
-types: sorcery
-spell[1]: draw two cards, then discard two cards.

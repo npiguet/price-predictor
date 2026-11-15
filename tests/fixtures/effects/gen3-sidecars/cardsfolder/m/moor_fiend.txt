@@ -1,0 +1,5 @@
+name: moor fiend
+mana cost: {3}{B}
+types: creature horror
+power toughness: 3/3
+static: swampwalk

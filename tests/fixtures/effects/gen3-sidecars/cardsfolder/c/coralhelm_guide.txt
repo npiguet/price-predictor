@@ -1,0 +1,5 @@
+name: coralhelm guide
+mana cost: {1}{U}
+types: creature merfolk scout ally
+power toughness: 2/1
+activated[1]: {4}{U}: target creature can't be blocked this turn.

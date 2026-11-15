@@ -1,0 +1,5 @@
+name: matoya, archon elder
+mana cost: {2}{U}
+types: legendary creature human warlock
+power toughness: 1/4
+triggered: whenever you scry or surveil, draw a card.

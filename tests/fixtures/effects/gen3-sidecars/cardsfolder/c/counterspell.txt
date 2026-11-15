@@ -1,0 +1,4 @@
+name: counterspell
+mana cost: {U}{U}
+types: instant
+spell[1]: counter target spell.

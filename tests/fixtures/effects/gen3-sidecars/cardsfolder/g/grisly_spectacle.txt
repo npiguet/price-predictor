@@ -1,0 +1,4 @@
+name: grisly spectacle
+mana cost: {2}{B}{B}
+types: instant
+spell[1]: destroy target nonartifact creature. its controller mills cards equal to that creature's power.

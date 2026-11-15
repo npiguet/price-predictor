@@ -1,0 +1,7 @@
+name: arctic nishoba
+mana cost: {5}{G}
+types: creature cat warrior
+power toughness: 6/6
+static: trample
+triggered: cumulative upkeep {G/W}
+triggered: when CARDNAME dies, you gain 2 life for each age counter on it.

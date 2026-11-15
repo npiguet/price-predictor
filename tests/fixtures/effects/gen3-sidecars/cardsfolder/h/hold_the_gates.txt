@@ -1,0 +1,4 @@
+name: hold the gates
+mana cost: {2}{W}
+types: enchantment
+static: creatures you control get +0/+1 for each gate you control and have vigilance.

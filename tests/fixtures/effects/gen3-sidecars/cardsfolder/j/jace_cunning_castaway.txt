@@ -1,0 +1,8 @@
+name: jace, cunning castaway
+mana cost: {1}{U}{U}
+types: legendary planeswalker jace
+loyalty: 3
+planeswalker[1]: [+1]: whenever one or more creatures you control deal combat damage to a player this turn, draw a card, then discard a card.
+planeswalker[2]: [-2]: create a 2/2 blue illusion creature token with "when this token becomes the target of a spell, sacrifice it."
+planeswalker[3]: [-5]: create two tokens that are copies of CARDNAME, except they're not legendary.
+replacement: CARDNAME enters with three loyalty counters on it.

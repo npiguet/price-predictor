@@ -1,0 +1,5 @@
+name: cliffgate
+types: land gate
+replacement: as CARDNAME enters, choose a color other than red.
+activated[1]: {T}: add {R} or one mana of the chosen color.
+replacement: CARDNAME enters tapped.

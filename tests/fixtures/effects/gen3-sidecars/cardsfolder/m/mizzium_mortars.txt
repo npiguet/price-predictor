@@ -1,5 +1,0 @@
-name: mizzium mortars
-mana cost: {1}{R}
-types: sorcery
-alternate cost: overload {3}{R}{R}{R}
-spell[1]: CARDNAME deals 4 damage to target creature you don't control.

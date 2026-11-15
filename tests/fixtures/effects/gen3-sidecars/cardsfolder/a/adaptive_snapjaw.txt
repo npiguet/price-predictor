@@ -1,0 +1,5 @@
+name: adaptive snapjaw
+mana cost: {4}{G}
+types: creature lizard beast
+power toughness: 6/2
+triggered: evolve

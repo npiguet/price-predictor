@@ -1,0 +1,8 @@
+name: karmic guide
+mana cost: {3}{W}{W}
+types: creature angel spirit
+power toughness: 2/2
+static: flying
+static: protection from black
+triggered: echo {3}{W}{W}
+triggered: when CARDNAME enters, return target creature card from your graveyard to the battlefield.

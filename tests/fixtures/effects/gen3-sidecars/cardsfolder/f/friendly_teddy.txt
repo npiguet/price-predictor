@@ -1,0 +1,5 @@
+name: friendly teddy
+mana cost: {2}
+types: artifact creature bear toy
+power toughness: 2/2
+triggered: when CARDNAME dies, each player draws a card.

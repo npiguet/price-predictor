@@ -1,0 +1,5 @@
+name: war mammoth
+mana cost: {3}{G}
+types: creature elephant
+power toughness: 3/3
+static: trample

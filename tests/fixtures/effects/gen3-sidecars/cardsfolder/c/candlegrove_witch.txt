@@ -1,0 +1,5 @@
+name: candlegrove witch
+mana cost: {1}{W}
+types: creature human warlock
+power toughness: 2/2
+triggered: coven — at the beginning of combat on your turn, if you control three or more creatures with different powers, CARDNAME gains flying until end of turn.

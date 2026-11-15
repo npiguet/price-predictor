@@ -1,0 +1,4 @@
+name: izzet guildgate
+types: land gate
+activated[1]: {T}: add {U} or {R}.
+replacement: CARDNAME enters tapped.

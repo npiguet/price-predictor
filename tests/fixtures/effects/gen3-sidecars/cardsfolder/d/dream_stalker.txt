@@ -1,5 +1,0 @@
-name: dream stalker
-mana cost: {1}{U}
-types: creature illusion
-power toughness: 1/5
-triggered: when CARDNAME enters, return a permanent you control to its owner's hand.

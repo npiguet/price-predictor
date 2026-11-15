@@ -1,0 +1,5 @@
+name: ingenuity engine
+mana cost: {7}
+types: artifact
+triggered: cascade
+activated[1]: {1}, {T}, sacrifice an artifact: return target artifact you control to its owner's hand.

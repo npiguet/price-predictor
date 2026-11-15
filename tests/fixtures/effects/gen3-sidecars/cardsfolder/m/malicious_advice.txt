@@ -1,0 +1,4 @@
+name: malicious advice
+mana cost: {X}{U}{B}
+types: instant
+spell[1]: tap X target artifacts, creatures, and/or lands. you lose X life.

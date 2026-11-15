@@ -1,0 +1,5 @@
+name: april, reporter of the weird
+mana cost: {2}{U}
+types: legendary creature human detective
+power toughness: 2/2
+triggered: whenever CARDNAME deals combat damage to a player, draw that many cards, then discard a card.

@@ -1,0 +1,6 @@
+name: deathbloom gardener
+mana cost: {2}{G}
+types: creature elf druid
+power toughness: 1/1
+static: deathtouch
+activated[1]: {T}: add one mana of any color.

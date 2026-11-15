@@ -1,0 +1,6 @@
+name: wall of wonder
+mana cost: {2}{U}{U}
+types: creature wall
+power toughness: 1/5
+static: defender
+activated[1]: {2}{U}{U}: CARDNAME gets +4/-4 until end of turn and can attack this turn as though it didn't have defender. it can attack this turn as though it didn't have defender.

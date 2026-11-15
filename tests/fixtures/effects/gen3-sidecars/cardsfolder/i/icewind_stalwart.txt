@@ -1,0 +1,5 @@
+name: icewind stalwart
+mana cost: {3}{W}
+types: creature tiefling warrior
+power toughness: 3/3
+triggered: protection fighting style — when CARDNAME enters, exile up to one target non-warrior creature you control, then return it to the battlefield under its owner's control.

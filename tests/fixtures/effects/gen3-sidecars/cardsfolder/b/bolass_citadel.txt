@@ -1,0 +1,6 @@
+name: bolas's citadel
+mana cost: {3}{B}{B}{B}
+types: legendary artifact
+activated[1]: {T}, sacrifice ten nonland permanents: each opponent loses 10 life.
+static: you may look at the top card of your library any time.
+static: you may play lands and cast spells from the top of your library. if you cast a spell this way, pay life equal to its mana value rather than pay its mana cost.

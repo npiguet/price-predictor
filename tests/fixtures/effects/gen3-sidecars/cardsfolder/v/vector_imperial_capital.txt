@@ -1,0 +1,4 @@
+name: vector, imperial capital
+types: land town
+activated[1]: {T}: add {B} or {R}.
+replacement: this land enters tapped.

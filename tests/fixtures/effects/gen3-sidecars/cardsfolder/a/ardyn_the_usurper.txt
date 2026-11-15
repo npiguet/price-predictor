@@ -1,0 +1,6 @@
+name: ardyn, the usurper
+mana cost: {5}{B}{B}{B}
+types: legendary creature elder human noble
+power toughness: 4/4
+triggered: starscourge — at the beginning of combat on your turn, exile up to one target creature card from a graveyard. if you exiled a card this way, create a token that's a copy of that card, except it's a 5/5 black demon.
+static: demons you control have menace, lifelink, and haste.

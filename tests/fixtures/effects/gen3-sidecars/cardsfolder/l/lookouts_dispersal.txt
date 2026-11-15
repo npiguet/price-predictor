@@ -1,0 +1,5 @@
+name: lookout's dispersal
+mana cost: {2}{U}
+types: instant
+spell[1]: counter target spell unless its controller pays {4}.
+static: this spell costs {1} less to cast if you control a pirate.

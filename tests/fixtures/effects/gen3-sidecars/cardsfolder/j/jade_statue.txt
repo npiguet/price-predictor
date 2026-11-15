@@ -1,0 +1,4 @@
+name: jade statue
+mana cost: {4}
+types: artifact
+activated[1]: {2}: CARDNAME becomes a 3/6 golem artifact creature until end of combat. activate only during combat.

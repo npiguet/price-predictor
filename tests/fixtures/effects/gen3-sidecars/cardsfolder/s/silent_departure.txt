@@ -1,0 +1,5 @@
+name: silent departure
+mana cost: {U}
+types: sorcery
+alternate cost: flashback {4}{U}
+spell[1]: return target creature to its owner's hand.

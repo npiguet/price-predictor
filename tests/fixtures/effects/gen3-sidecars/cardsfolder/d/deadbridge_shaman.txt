@@ -1,0 +1,5 @@
+name: deadbridge shaman
+mana cost: {2}{B}
+types: creature elf shaman
+power toughness: 3/1
+triggered: when CARDNAME dies, target opponent discards a card.

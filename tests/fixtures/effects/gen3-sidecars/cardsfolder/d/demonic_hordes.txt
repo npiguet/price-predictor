@@ -1,0 +1,6 @@
+name: demonic hordes
+mana cost: {3}{B}{B}{B}
+types: creature demon
+power toughness: 5/5
+activated[1]: {T}: destroy target land.
+triggered: at the beginning of your upkeep, unless you pay {B}{B}{B}, tap CARDNAME and sacrifice a land of an opponent's choice.

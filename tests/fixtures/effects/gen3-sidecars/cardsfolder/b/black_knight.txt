@@ -1,0 +1,6 @@
+name: black knight
+mana cost: {B}{B}
+types: creature human knight
+power toughness: 2/2
+static: first strike
+static: protection from white

@@ -1,0 +1,5 @@
+name: resize
+mana cost: {1}{G}
+types: instant
+triggered: recover {1}{G}
+spell[1]: target creature gets +3/+3 until end of turn.

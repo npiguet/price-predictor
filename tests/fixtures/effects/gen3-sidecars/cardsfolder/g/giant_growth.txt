@@ -1,0 +1,4 @@
+name: giant growth
+mana cost: {G}
+types: instant
+spell[1]: target creature gets +3/+3 until end of turn.

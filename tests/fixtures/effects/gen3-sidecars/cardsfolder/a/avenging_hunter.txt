@@ -1,0 +1,6 @@
+name: avenging hunter
+mana cost: {4}{G}
+types: creature dragon ranger
+power toughness: 5/4
+static: trample
+triggered: when CARDNAME enters, you take the initiative.

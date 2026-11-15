@@ -1,0 +1,6 @@
+name: iron bully
+mana cost: {3}
+types: artifact creature golem
+power toughness: 1/1
+static: menace
+triggered: when CARDNAME enters, put a +1/+1 counter on target creature.

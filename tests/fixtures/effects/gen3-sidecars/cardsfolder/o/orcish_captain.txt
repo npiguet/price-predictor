@@ -1,0 +1,5 @@
+name: orcish captain
+mana cost: {R}
+types: creature orc warrior
+power toughness: 1/1
+activated[1]: {1}: flip a coin. if you win the flip, target orc creature gets +2/+0 until end of turn. if you lose the flip, it gets -0/-2 until end of turn.

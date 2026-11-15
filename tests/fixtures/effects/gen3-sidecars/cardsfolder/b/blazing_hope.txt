@@ -1,0 +1,4 @@
+name: blazing hope
+mana cost: {W}
+types: instant
+spell[1]: exile target creature with power greater than or equal to your life total.

@@ -1,0 +1,5 @@
+name: death's approach
+mana cost: {B}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature gets -X/-X, where X is the number of creature cards in its controller's graveyard.

@@ -1,0 +1,5 @@
+name: bhaal's invoker
+mana cost: {2}{R}
+types: creature dragon shaman
+power toughness: 4/2
+activated[1]: scorching ray — {8}: CARDNAME deals 4 damage to each opponent.

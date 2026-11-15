@@ -1,0 +1,6 @@
+name: gut, true soul zealot
+mana cost: {2}{R}
+types: legendary creature goblin shaman
+power toughness: 2/2
+static: choose a background
+triggered: whenever you attack, you may sacrifice another creature or an artifact. if you do, create a 4/1 black skeleton creature token with menace that's tapped and attacking.

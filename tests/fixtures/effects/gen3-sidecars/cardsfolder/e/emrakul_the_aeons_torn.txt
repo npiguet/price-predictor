@@ -1,0 +1,10 @@
+name: emrakul, the aeons torn
+mana cost: {15}
+types: legendary creature eldrazi
+power toughness: 15/15
+static: flying
+static: protection from colored spells
+triggered: annihilator 6
+triggered: when CARDNAME is put into a graveyard from anywhere, its owner shuffles their graveyard into their library.
+triggered: when you cast CARDNAME, take an extra turn after this one.
+replacement: this spell can't be countered.

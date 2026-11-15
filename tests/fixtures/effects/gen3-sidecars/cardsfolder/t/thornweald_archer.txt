@@ -1,0 +1,6 @@
+name: thornweald archer
+mana cost: {1}{G}
+types: creature elf archer
+power toughness: 2/1
+static: deathtouch
+static: reach

@@ -1,0 +1,4 @@
+name: ral's outburst
+mana cost: {2}{U}{R}
+types: instant
+spell[1]: CARDNAME deals 3 damage to any target. look at the top two cards of your library. put one of them into your hand and the other into your graveyard.

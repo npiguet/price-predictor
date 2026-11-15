@@ -1,0 +1,6 @@
+name: spiketail drake
+mana cost: {3}{U}{U}
+types: creature drake
+power toughness: 3/3
+static: flying
+activated[1]: sacrifice CARDNAME: counter target spell unless its controller pays {3}.

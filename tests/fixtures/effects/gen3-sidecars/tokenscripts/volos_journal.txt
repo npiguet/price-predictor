@@ -1,0 +1,4 @@
+name: volo's journal
+types: legendary artifact book
+static: hexproof
+triggered: whenever you cast a creature spell, note one of its creature types that hasn't been noted for CARDNAME.

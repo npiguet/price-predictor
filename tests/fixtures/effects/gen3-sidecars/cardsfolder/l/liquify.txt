@@ -1,0 +1,4 @@
+name: liquify
+mana cost: {2}{U}
+types: instant
+spell[1]: counter target spell with mana value 3 or less. if that spell is countered this way, exile it instead of putting it into its owner's graveyard.

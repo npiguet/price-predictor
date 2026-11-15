@@ -1,0 +1,6 @@
+name: haunting figment
+mana cost: {1}{U}
+types: creature illusion
+power toughness: 2/1
+static: vigilance
+static: CARDNAME can't be blocked as long as you've cast an instant or sorcery spell this turn.

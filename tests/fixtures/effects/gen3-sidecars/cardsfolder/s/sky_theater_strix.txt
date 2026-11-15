@@ -1,0 +1,6 @@
+name: sky theater strix
+mana cost: {1}{U}
+types: creature bird
+power toughness: 1/2
+static: flying
+triggered: whenever you cast a noncreature spell, CARDNAME gets +1/+0 until end of turn.

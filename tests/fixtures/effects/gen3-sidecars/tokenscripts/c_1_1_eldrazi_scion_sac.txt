@@ -1,0 +1,4 @@
+name: eldrazi scion token
+types: creature eldrazi scion
+power toughness: 1/1
+activated[1]: sacrifice CARDNAME: add {C}.

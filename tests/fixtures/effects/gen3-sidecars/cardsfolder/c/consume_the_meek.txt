@@ -1,0 +1,4 @@
+name: consume the meek
+mana cost: {3}{B}{B}
+types: instant
+spell[1]: destroy each creature with mana value 3 or less. they can't be regenerated.

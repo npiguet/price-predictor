@@ -1,0 +1,4 @@
+name: devil token
+types: creature devil
+power toughness: 1/1
+triggered: when this creature dies, it deals 1 damage to any target.

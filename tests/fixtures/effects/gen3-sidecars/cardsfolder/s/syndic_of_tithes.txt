@@ -1,0 +1,5 @@
+name: syndic of tithes
+mana cost: {1}{W}
+types: creature human cleric
+power toughness: 2/2
+triggered: extort

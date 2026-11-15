@@ -1,0 +1,6 @@
+name: squall drifter
+mana cost: {1}{W}
+types: snow creature elemental
+power toughness: 1/1
+static: flying
+activated[1]: {W}, {T}: tap target creature.

@@ -1,0 +1,5 @@
+name: swaggering corsair
+mana cost: {2}{R}
+types: creature human pirate
+power toughness: 2/2
+replacement: raid — CARDNAME enters with a +1/+1 counter on it if you attacked this turn.

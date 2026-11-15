@@ -1,0 +1,6 @@
+name: echo inspector
+mana cost: {3}{U}
+types: creature bird rogue
+power toughness: 2/3
+static: flying
+triggered: when CARDNAME enters, it connives.

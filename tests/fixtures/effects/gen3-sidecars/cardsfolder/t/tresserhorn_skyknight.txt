@@ -1,0 +1,6 @@
+name: tresserhorn skyknight
+mana cost: {5}{B}{B}
+types: creature zombie knight
+power toughness: 5/3
+static: flying
+replacement: prevent all damage that would be dealt to CARDNAME by creatures with first strike.

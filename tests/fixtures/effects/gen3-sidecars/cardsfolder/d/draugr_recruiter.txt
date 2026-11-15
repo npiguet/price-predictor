@@ -1,0 +1,5 @@
+name: draugr recruiter
+mana cost: {3}{B}
+types: creature zombie cleric
+power toughness: 3/3
+activated[1]: boast —  {3}{B}: return target creature card from your graveyard to your hand.

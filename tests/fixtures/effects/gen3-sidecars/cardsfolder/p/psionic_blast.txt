@@ -1,0 +1,4 @@
+name: psionic blast
+mana cost: {2}{U}
+types: instant
+spell[1]: CARDNAME deals 4 damage to any target and 2 damage to you.
