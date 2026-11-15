@@ -28,6 +28,6 @@ The four Python packages are each laid out in hexagonal (ports-and-adapters) sty
 - `specs/YYYY-MM-DD-<name>.md` — hand-written normative specs (what, not why), in timeless present tense.
 - `specs/NNN-name/` — spec-kit feature directories (`spec.md` → `plan.md` → `research.md` → `tasks.md`) driving implementation. Read the relevant ones before non-trivial work in an area.
 - `diaries/` — dated retrospective diary entries.
-- `docs/`, `docker/` — working plans and the container setup.
+- `docker/` — the container setup.
 
 Load the **feature-workflow** skill before every edit to a file under `experiments/` or `specs/`, including a one-sentence reword: `experiments/*.md` carries a binding prose style that applies to each edit, not just to new documents.

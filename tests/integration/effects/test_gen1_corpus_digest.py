@@ -22,7 +22,7 @@ pytestmark = pytest.mark.integration
 _RUN = Path("output/effects/gen1/corpus/2026-09-17-textless")
 _NAS = Path("Y:/Nicolas/mtg/mtg-models-data")
 #: Where its manifest is: on this machine, on the NAS mirror of the layout,
-#: or where the NAS kept it before the layout (``docs/2026-11-15-nas-layout-map.md``).
+#: or where the NAS kept it before the layout.
 _CANDIDATES = (
     _RUN / "manifest.json",
     _NAS / _RUN / "manifest.json",
