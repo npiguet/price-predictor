@@ -747,7 +747,9 @@ and that the reporting half never enters the control score.
   `--directed-forks-per-game` and leaving the rule's one fork of the game untaken; the refusal is
   counted at each boundary it is found at. What a play names of a card the edit makes (the line
   when that card is the source, a targeting clause, a cost card, the defender) is checked on the
-  edited copy only, and the rest of the play on the live board.
+  edited copy only, and the rest of the play on the live board; when that card is the play's
+  source, the whole play is checked on the edited copy only, since without the line nothing of it
+  can be checked live.
 - **FR-010c**: A directed rule's variant MAY ask that the records of its bound cards be kept. In
   its fork, every decision candidate of a card the variant names (a spell, an activated ability,
   a special action or a land play it hosts) is written whatever `--playability-rate`,

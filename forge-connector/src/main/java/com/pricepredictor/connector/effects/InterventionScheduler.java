@@ -199,6 +199,11 @@ final class InterventionScheduler {
     private final Set<String> interveneSeen = new LinkedHashSet<>();
     /** Lines already forced on another player's turn (FR-057), apart from the above. */
     private final Set<String> offTurnSeen = new LinkedHashSet<>();
+    /**
+     * Lines refused for reading a cost a forced line never pays ({@link
+     * InterventionFork#readsAnUnpaidCost}), so each is counted once a game.
+     */
+    private final Set<String> unpaidCostRefused = new LinkedHashSet<>();
 
     /** An unsteered game's scheduler forcing at every boundary and granting no protection. */
     InterventionScheduler(Game game, Forcing forks) {
@@ -245,7 +250,11 @@ final class InterventionScheduler {
      *
      * <p>A line without the modes or targets its resolution needs on this
      * board is passed over and not marked forced, so a removal spell held
-     * over an empty board is forced once a target has arrived.
+     * over an empty board is forced once a target has arrived. A line whose
+     * resolution reads a cost a forced line never pays (ninjutsu) is passed
+     * over too, counted once a game as {@code intervention reads a cost it
+     * never paid}: it takes neither the boundary nor one of the gate's
+     * planned interventions.
      *
      * <p>A steered game's variants go first because they are what its decks
      * were built for: the rule its decks aim at is short of records, and the
@@ -329,6 +338,15 @@ final class InterventionScheduler {
                     }
                     if (!forks.hasChoices(candidate, holder)) {
                         // Not marked: the board may offer a target later.
+                        continue;
+                    }
+                    if (InterventionFork.readsAnUnpaidCost(candidate)) {
+                        // Refused here, as a game-restart line is, not as a
+                        // fork: the boundary and the gate's planned
+                        // intervention stay for the next line.
+                        if (unpaidCostRefused.add(lineKey(candidate))) {
+                            ForkRefusals.count("intervention", InterventionFork.READS_AN_UNPAID_COST);
+                        }
                         continue;
                     }
                     seen.add(lineKey(candidate));

@@ -296,6 +296,49 @@ class InterventionSchedulerTest {
     }
 
     /**
+     * A ninjutsu line reads the attacker its cost returned, which a forced
+     * line never pays: it is passed over as a game-restart line is, so the
+     * boundary forces the next line and the gate's planned intervention goes
+     * to it; the refusal is counted once a game, however often it is met.
+     */
+    @Test
+    void aLineThatReadsAnUnpaidCostTakesNeitherTheBoundaryNorAPlannedIntervention() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.UPKEEP);
+        Player active = game.getPlayers().get(0);
+        Card ninja = TestBoard.inHand(game, active, "Ninja of the Deep Hours");
+        TestBoard.inHand(game, active, "Lightning Bolt");
+        SpellAbility ninjutsu = ninja.getSpellAbilities().stream()
+                .filter(SpellAbility::isNinjutsu).findFirst().orElseThrow();
+        ninjutsu.setActivatingPlayer(active);
+        assertTrue(InterventionScheduler.playableNow(ninjutsu, active), "ninjutsu is not playable at the upkeep");
+        String refusal = "intervention " + InterventionFork.READS_AN_UNPAID_COST;
+        long refused = ForkRefusals.counts().getOrDefault(refusal, 0L);
+        List<String> forced = new ArrayList<>();
+        int[] planned = {0};
+        InterventionScheduler.Gate gate = new InterventionScheduler.Gate() {
+            @Override
+            public boolean open(int turn, PhaseType phase) {
+                return true;
+            }
+
+            @Override
+            public void forced() {
+                planned[0]++;
+            }
+        };
+        InterventionScheduler scheduler = new InterventionScheduler(
+                game, new Board(game).recording(forced, 10), null, false, gate);
+
+        scheduler.collect();
+        assertEquals(List.of("Lightning Bolt@0"), forced, "the boundary went to the ninjutsu line");
+        assertEquals(1, planned[0], "planned interventions spent");
+        scheduler.collect();
+        assertEquals(List.of("Lightning Bolt@0"), forced, "nothing else to force");
+        assertEquals(1, planned[0], "planned interventions spent");
+        assertEquals(refused + 1, ForkRefusals.counts().getOrDefault(refusal, 0L), ForkRefusals.counts().toString());
+    }
+
+    /**
      * Two players at MAIN1 of the first one's turn: the first holds Lightning
      * Bolt and the variant Volcanic Hammer, the second the variant Searing
      * Spear. Both names are registered as variants here and forgotten after

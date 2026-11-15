@@ -59,25 +59,22 @@ final class InterventionFork implements InterventionScheduler.Forcing {
      * Whether {@code line}'s resolution reads what its cost paid where Forge
      * reads it without a guard, so a forced line, which pays nothing, throws
      * there: ninjutsu and a sneak cast take the attacker returned to hand
-     * ({@code getPaidList("Returned")}) and the defender it attacked; crewing
-     * or saddling a vehicle or mount already crewed or saddled this turn
-     * adds the creatures tapped to pay to a list it holds. Refused before the
-     * fork is taken, as a line the engine cannot resolve off its normal path.
+     * ({@code getPaidList("Returned")}) and the defender it attacked. Refused
+     * before the fork is taken, as a line the engine cannot resolve off its
+     * normal path.
+     *
+     * <p>Crewing and saddling are forced: each adds its paid list of tapped
+     * creatures to the vehicle's or mount's list for the turn, and a forced
+     * line's list is null, which Forge stores into an empty list and adds to
+     * a held one as nothing ({@code FCollection.addAll} ignores a null), so
+     * neither a first nor a second crew or saddle in a turn throws.
      */
     static boolean readsAnUnpaidCost(SpellAbility line) {
         if (line == null) {
             return false;
         }
         SpellAbility root = line.getRootAbility();
-        if (root.isNinjutsu() || root.isSneak()) {
-            return true;
-        }
-        forge.game.card.Card host = root.getHostCard();
-        if (host == null) {
-            return false;
-        }
-        return root.isCrew() && host.getCrewedByThisTurn() != null
-                || root.isKeyword(forge.game.keyword.Keyword.SADDLE) && host.getSaddledByThisTurn() != null;
+        return root.isNinjutsu() || root.isSneak();
     }
 
     /** Whether the budget lets {@link #intervene} take another fork of this resolution. */
@@ -114,7 +111,8 @@ final class InterventionFork implements InterventionScheduler.Forcing {
         }
         if (readsAnUnpaidCost(ability)) {
             // Before the fork is taken: it would spend the budget and a copy
-            // on a line whose forced resolution throws.
+            // on a line whose forced resolution throws. The scheduler passes
+            // such a line over before it asks (InterventionScheduler.force).
             ForkRefusals.count("intervention", READS_AN_UNPAID_COST);
             return false;
         }
