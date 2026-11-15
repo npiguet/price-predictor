@@ -278,6 +278,80 @@
       }
     },
     {
+      "id": "702.19c-2",
+      "rules": [
+        "702.19c"
+      ],
+      "title": "An attacker without trample over planeswalkers keeps all its damage on the planeswalker; one with it assigns the excess to the controller",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "beginning_of_combat",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Colossal Dreadmaw",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Jace Beleren",
+              "counters": {
+                "loyalty": 3
+              }
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The directed fork's board: the common attack on a planeswalker, its attacker without trample over planeswalkers."
+      },
+      "decisions": [
+        "A attacks Jace Beleren with Colossal Dreadmaw.",
+        "B declares no blockers.",
+        "A assigns all 6 damage to Jace Beleren.",
+        "No spells or abilities are used; combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "dreadmaw",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Jace Beleren is dealt 6 damage and goes to B's graveyard. B's life stays 20: Colossal Dreadmaw cannot assign damage to B."
+        },
+        {
+          "label": "thrasta_in_the_dreadmaws_place",
+          "polarity": "fires",
+          "delta": "A's attacker is Thrasta, Tempest's Roar (7/7, trample over planeswalkers), in Colossal Dreadmaw's place in combat; A assigns 3 damage to Jace Beleren and 4 to player B.",
+          "expected": "Jace Beleren is dealt 3 damage, loses all loyalty and goes to B's graveyard. B takes 4 damage (life 16).",
+          "operation": "replace_card"
+        }
+      ],
+      "cards": [
+        "Colossal Dreadmaw",
+        "Thrasta, Tempest's Roar",
+        "Jace Beleren"
+      ],
+      "forge_notes": "Thrasta carries both Trample and Trample:Planeswalker in Forge. The damage assignment is the attacking player's choice; the declaration's side is read off the keyword, its observation off the damage reaching B.",
+      "detector": {
+        "family": "combat_keyword_effect",
+        "record_kind": "combat",
+        "outcome": "An unblocked attacker with trample over planeswalkers whose power exceeds the attacked planeswalker's loyalty assigns the excess to that planeswalker's controller.",
+        "near_miss": "The same attack by a creature without trample over planeswalkers, whose damage stays on the planeswalker.",
+        "params": {
+          "keyword": "trample_over_planeswalkers"
+        },
+        "needs": []
+      }
+    },
+    {
       "id": "702.19d-1",
       "rules": [
         "702.19d"

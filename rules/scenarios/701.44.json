@@ -362,6 +362,83 @@
         },
         "needs": []
       }
+    },
+    {
+      "id": "701.44d-2",
+      "rules": [
+        "701.44d"
+      ],
+      "title": "An instruction for each permanent of a kind to explore makes one exploration per permanent, one at a time",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Hakbal of the Surging Soul",
+              "summoning_sick": false
+            },
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Shock"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top card first. The directed fork's board: Hakbal is A's only Merfolk."
+      },
+      "decisions": [
+        "A moves to the beginning of combat. Hakbal's trigger (each Merfolk creature A controls explores) resolves.",
+        "After each reveal, if the revealed card is not a land, A puts it into the graveyard."
+      ],
+      "variants": [
+        {
+          "label": "hakbal_alone",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Only Hakbal explores: Forest is revealed and goes to A's hand, so Hakbal gets no counter (3/3). Grizzly Bears does not explore and Shock stays on top of A's library."
+        },
+        {
+          "label": "branchwalker_in_the_bears_place",
+          "polarity": "fires",
+          "delta": "A's Grizzly Bears is Merfolk Branchwalker, which has been on the battlefield since before this turn.",
+          "expected": "Hakbal and Merfolk Branchwalker explore one at a time, in the order A chooses: the first reveals Forest, which goes to A's hand, and gets no counter; the second reveals Shock, which A puts into its graveyard, and gets a +1/+1 counter.",
+          "operation": "replace_card"
+        }
+      ],
+      "cards": [
+        "Hakbal of the Surging Soul",
+        "Grizzly Bears",
+        "Merfolk Branchwalker",
+        "Forest",
+        "Shock"
+      ],
+      "forge_notes": "Forge sorts the exploring permanents by owner and lets the controller order them.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An Explore resolution instructing several permanents to explore reveals two or more cards, one exploration at a time.",
+        "near_miss": "An Explore resolution reveals fewer than two cards.",
+        "params": {
+          "event": "card_revealed",
+          "min_count": 2,
+          "api": "Explore"
+        },
+        "needs": []
+      }
     }
   ]
 }

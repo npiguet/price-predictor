@@ -39,10 +39,7 @@ import com.pricepredictor.connector.effects.directed.rules.SimultaneousDamage;
 import com.pricepredictor.connector.effects.directed.rules.SimultaneousLoss;
 import com.pricepredictor.connector.effects.directed.rules.SkulkBlocker;
 import com.pricepredictor.connector.effects.directed.rules.SmallLibraryShuffle;
-import com.pricepredictor.connector.effects.directed.rules.StunCounter;
-import com.pricepredictor.connector.effects.directed.rules.TokenMeldPartner;
 import com.pricepredictor.connector.effects.directed.rules.ToughnessZero;
-import com.pricepredictor.connector.effects.directed.rules.TrampleOverAGonePlaneswalker;
 import com.pricepredictor.connector.effects.directed.rules.TrampleOverPlaneswalkers;
 import com.pricepredictor.connector.effects.directed.rules.Transfigure;
 import com.pricepredictor.connector.effects.directed.rules.Transmute;
@@ -85,7 +82,6 @@ public final class DirectedRules {
             MutagenToken.rule(),
             OptionalSearch.rule(),
             CantGainLifeExchange.rule(),
-            StunCounter.rule(),
             MorphFaceUp.rule(),
             SimultaneousDamage.rule(),
             DistinctTargets.rule(),
@@ -97,7 +93,6 @@ public final class DirectedRules {
             SmallLibraryShuffle.rule(),
             Bolster.rule(),
             Meld.rule(),
-            TokenMeldPartner.rule(),
             ExploreEmptyLibrary.rule(),
             SeveralExplore.rule(),
             ConniveWithoutDraw.rule(),
@@ -105,7 +100,6 @@ public final class DirectedRules {
             SharedKeywords.rule(),
             Intimidate.rule(),
             TrampleOverPlaneswalkers.rule(),
-            TrampleOverAGonePlaneswalker.rule(),
             NoDamageToAGonePlaneswalker.rule(),
             Transmute.rule(),
             VanishingInstances.rule(),

@@ -3,7 +3,6 @@ blitz automaton
 cached defenses
 centaur courser
 changeling hero
-clone
 colossal dreadmaw
 concerted effort
 cosi's trickster
@@ -71,7 +70,6 @@ tree of perdition
 tree of redemption
 undo
 val, marooned surveyor
-vitalize
 wall of wood
 white knight
 wild growth

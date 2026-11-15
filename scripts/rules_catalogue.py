@@ -929,7 +929,9 @@ NOT_DIRECTED = {
                "no playability record exists for it",
     **{rule: f"restates {other}, which is listed in its place (the user's decision of "
              "2026-11-14): its scenario declares the same fact as " + other + "'s"
-       for rule, other in {"121.4": "704.5b", "703.4m": "510.2", "701.42c": "701.42b"}.items()},
+       for rule, other in {"121.4": "704.5b", "703.4m": "510.2"}.items()},
+    "701.42c": "restates 701.42b (the user's decision of 2026-11-14): its scenario declares the "
+               "same fact as 701.42b's, which is left out for its own reason",
     "122.1g": "restates 704.5v (the user's decision of 2026-11-14): its scenario declares the "
               "same fact as 704.5v's, which is left out for its own reason",
     **dict.fromkeys(("505.5", "614.10a", "701.24f", "702.105b"),
@@ -974,6 +976,19 @@ NOT_DIRECTED = {
               "not replaced: Forge's hooks fire only for a replacement that applies, so no board "
               "edit writes that rewrite record; its variant, Rest in Peace added, writes the fires "
               "side, which the counts already hold (the user's decision of 2026-11-15)",
+    "122.1d": "its lacking side is an untap that meets a stun counter's replacement and is not "
+              "replaced, which never happens: the replacement applies to every untap of a "
+              "permanent with a stun counter; its variant, no stun counter, writes no rewrite at "
+              "all, and a second stun counter is still replaced",
+    "702.19e": "its lacking side, an attacker with trample over planeswalkers whose planeswalker "
+               "left combat, is what 702.19f's directed fork writes (Thrasta, Tempest's Roar in "
+               "the place of an attacker without the keyword, on the same boards), whose combat "
+               "records its declaration tags fires; a fork of its own would fork those boards "
+               "twice",
+    "701.42b": "its lacking side is a meld that fails because a partner is a token, and no "
+               "operation makes a token or a copy (replace_card and add_permanent put cards, so "
+               "its one classified variant, the card in the token's place, makes the meld the "
+               "counts hold)",
     "704.7": "its lacking side is a game loss that meets a replacement and is not replaced: "
              "Forge's hooks fire only for a replacement that applies, so no board edit writes "
              "that rewrite record; its variant, no Lich's Mirror, writes no rewrite at all",

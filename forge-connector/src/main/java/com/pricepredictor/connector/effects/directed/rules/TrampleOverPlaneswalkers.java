@@ -15,38 +15,40 @@ import java.util.Optional;
 
 /**
  * 702.19c, trample over planeswalkers lets the damage beyond an attacked
- * planeswalker's loyalty reach its controller, on scenario
- * {@code 702.19c-1}: Thrasta, Tempest's Roar attacks Jace Beleren (3
- * loyalty) unblocked and assigns 3 damage to Jace and 4 to B.
+ * planeswalker's loyalty reach its controller, inverted (FR-014a) on scenario
+ * {@code 702.19c-2}: Colossal Dreadmaw attacks Jace Beleren (3 loyalty)
+ * unblocked and all its damage stays on Jace; Thrasta, Tempest's Roar in its
+ * place assigns the excess to B.
  *
  * <p>The base board, read at a boundary: the regular combat damage step
- * begins, before its damage is dealt, with an unblocked attacker that has
- * trample over planeswalkers of its own text, strikes in this step and
- * attacks a planeswalker whose loyalty is below its power, so there is
- * excess to assign. Its damage is the step's turn-based action. It binds the
- * attacker.
+ * begins, before its damage is dealt, with an unblocked attacker without
+ * trample over planeswalkers that strikes in this step and attacks a
+ * planeswalker whose loyalty is below the power Thrasta would have in its
+ * place, so the fork's attack has excess to assign: the common board, whose
+ * records are the rule's near miss where the attacker's own power is above
+ * the loyalty too (the fork's side does not ask it). Its damage is the
+ * step's turn-based action. It binds the attacker.
  *
- * <p>Variant {@code plain_trample} ({@code replace_card}): the attacker is
- * Colossal Dreadmaw, which has trample but not trample over planeswalkers,
- * so all its damage stays on the planeswalker. The precondition binds only an
- * attacker whose Dreadmaw would keep a power above the loyalty, so the
- * fork's attack is still one the rule judges, and would survive what it
- * carries.
+ * <p>Variant {@code thrasta_in_the_dreadmaws_place} ({@code replace_card}):
+ * the attacker is Thrasta, which has trample over planeswalkers, carrying the
+ * old attacker's place in combat: the rule's {@code fires} side, which the
+ * counts lack. The precondition binds only an attacker whose Thrasta would
+ * survive what it carries.
  */
 public final class TrampleOverPlaneswalkers {
 
     public static final String RULE = "702.19c";
-    static final String SCENARIO = "702.19c-1";
-    static final String PLAIN_TRAMPLE = "plain_trample";
-    static final String DREADMAW = "Colossal Dreadmaw";
+    static final String SCENARIO = "702.19c-2";
+    static final String THRASTA_IN_PLACE = "thrasta_in_the_dreadmaws_place";
+    static final String THRASTA = "Thrasta, Tempest's Roar";
 
     private TrampleOverPlaneswalkers() {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, TrampleOverPlaneswalkers::bind, PLAIN_TRAMPLE,
+        return DirectedRule.of(RULE, SCENARIO, TrampleOverPlaneswalkers::bind, THRASTA_IN_PLACE,
                 new Application(ForkOperation.REPLACE_CARD,
-                        fork -> new ReplaceCardOperation(fork.card("attacker"), DREADMAW)));
+                        fork -> new ReplaceCardOperation(fork.card("attacker"), THRASTA)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -55,7 +57,7 @@ public final class TrampleOverPlaneswalkers {
             return Optional.empty();
         }
         for (Card attacker : Boards.unblockedRegularStrikers(combat)) {
-            if (!Boards.tramplesOverPlaneswalkers(attacker) || !Boards.ownTrampleOverPlaneswalkersOnly(attacker)) {
+            if (Boards.tramplesOverPlaneswalkers(attacker)) {
                 continue;
             }
             Optional<Card> planeswalker = Boards.attackedPlaneswalker(combat, attacker);
@@ -63,9 +65,8 @@ public final class TrampleOverPlaneswalkers {
                 continue;
             }
             int loyalty = planeswalker.get().getCounters(CounterEnumType.LOYALTY);
-            if (attacker.getNetCombatDamage() > loyalty
-                    && ReplaceCardOperation.replacementPower(attacker, DREADMAW) > loyalty
-                    && Boards.replacementSurvives(attacker, DREADMAW)) {
+            if (ReplaceCardOperation.replacementPower(attacker, THRASTA) > loyalty
+                    && Boards.replacementSurvives(attacker, THRASTA)) {
                 return Optional.of(Binding.empty().with("attacker", attacker));
             }
         }

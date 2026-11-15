@@ -293,4 +293,4 @@ def test_the_startup_check_passes_over_the_whole_list():
         if error is not None:
             refused[rule] = error
     assert refused == {}
-    assert len(listed) == len(set(listed)) == 48
+    assert len(listed) == len(set(listed)) == 45

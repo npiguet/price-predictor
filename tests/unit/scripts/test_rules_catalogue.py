@@ -297,9 +297,11 @@ def test_the_rules_always_listed_are_704_5f_and_702_98a_each_with_a_reason():
 #: either (DF-B), and 118.11, whose variant writes the side its counts hold
 #: (the user's decision of 2026-11-15): each has its own reason.
 NO_EDIT_YIELDS_THEM = [
-    "104.6", "111.10n", "111.10p", "118.11", "119.8", "205.1a", "400.6", "701.12h", "701.23f",
-    "701.24g", "702.102c", "702.133a", "702.154a", "702.167a", "702.35a", "702.62c", "702.70b",
-    "702.85a", "704.5v", "704.7", "707.10d", "712.11d", "730.2g"]
+    "104.6", "111.10n", "111.10p", "118.11", "119.8", "122.1d", "205.1a", "400.6", "701.12h",
+    "701.23f", "701.24g", "701.42b", "702.102c", "702.133a", "702.154a", "702.167a", "702.35a",
+    "702.62c", "702.70b", "702.85a", "704.5v", "704.7", "707.10d", "712.11d", "730.2g"]
+#: Left out because another listed rule's fork writes their lacking side.
+ANOTHER_FORK_YIELDS_THEM = ["702.19e"]
 
 
 def test_the_rules_left_out_are_those_the_user_dropped_each_with_a_reason():
@@ -309,14 +311,18 @@ def test_the_rules_left_out_are_those_the_user_dropped_each_with_a_reason():
     after the list was first fixed, each with its own reason (no detector reads
     it, its variant's edit is refused, its point needs a choice no boundary
     foresees, or no sealed pool makes it happen); and the rules no single board
-    edit yields the lacking side of."""
+    edit yields the lacking side of; 2026-11-15, 702.19e, whose lacking side
+    702.19f's fork writes."""
     assert sorted(rc.NOT_DIRECTED) == sorted([
         "104.2a", "104.4c", "115.7a", "121.4", "122.1g", "122.1h", "500.11", "505.5",
         "614.10a", "701.10c", "701.11c", "701.12d", "701.24f", "701.40c", "701.40d",
-        "701.42c", "702.105b", "702.62d", "703.4m", "712.16", "712.4c", *NO_EDIT_YIELDS_THEM])
+        "701.42c", "702.105b", "702.62d", "703.4m", "712.16", "712.4c", *NO_EDIT_YIELDS_THEM,
+        *ANOTHER_FORK_YIELDS_THEM])
     assert all(reason.strip() for reason in rc.NOT_DIRECTED.values())
-    reasons = {rc.NOT_DIRECTED[rule] for rule in NO_EDIT_YIELDS_THEM}
-    assert len(reasons) == len(NO_EDIT_YIELDS_THEM), "each with a reason of its own"
+    own = [*NO_EDIT_YIELDS_THEM, *ANOTHER_FORK_YIELDS_THEM]
+    reasons = {rc.NOT_DIRECTED[rule] for rule in own}
+    assert len(reasons) == len(own), "each with a reason of its own"
+    assert "702.19f" in rc.NOT_DIRECTED["702.19e"]
     for rule, other in {"121.4": "704.5b", "122.1g": "704.5v", "703.4m": "510.2",
                         "701.42c": "701.42b"}.items():
         assert other in rc.NOT_DIRECTED[rule], rule

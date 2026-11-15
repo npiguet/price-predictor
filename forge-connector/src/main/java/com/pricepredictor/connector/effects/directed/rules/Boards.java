@@ -112,21 +112,6 @@ final class Boards {
     }
 
     /**
-     * Whether every instance of trample over planeswalkers the card has is
-     * its own text's, as {@link #ownKeywordOnly} reads a keyword: none is
-     * granted by a static ability or a resolved effect.
-     */
-    static boolean ownTrampleOverPlaneswalkersOnly(Card card) {
-        for (KeywordsChange change : card.getChangedCardKeywords().values()) {
-            if (change.getKeywords().stream()
-                    .anyMatch(granted -> TRAMPLE_OVER_PLANESWALKERS.equals(granted.getOriginal()))) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
      * The attackers of the live combat that deal their combat damage in the
      * regular damage step and none blocks: neither first strike nor double
      * strike, power above 0, and no blocker declared against them.

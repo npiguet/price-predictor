@@ -262,24 +262,6 @@ class DirectedForkPlayedForwardTest {
     }
 
     /**
-     * {@code counters}, 122.1d: a tapped Grizzly Bears with a stun counter
-     * as the untap step begins. The fork takes the counter away, so the
-     * step untaps the Bears, where the live game removes the counter instead.
-     */
-    @Test
-    void aStunCounterTakenAwayLetsThePermanentUntap() throws Throwable {
-        Game game = board(PhaseType.UNTAP);
-        Card bears = game.getCardsIn(forge.game.zone.ZoneType.Battlefield).stream()
-                .filter(card -> card.getName().equals("Grizzly Bears")).findFirst().orElseThrow();
-        bears.setTapped(true);
-        bears.setCounters(CounterEnumType.STUN, 1);
-
-        List<String> fork = forkOf(game, PhaseType.UNTAP, "122.1d", "no_stun");
-
-        assertFalse(eventsOf(fork, "untapped", ref(bears)).isEmpty(), "the Bears untap in the fork");
-    }
-
-    /**
      * {@code keyword}, 702.63c: Maelstrom Djinn with vanishing twice and two
      * time counters as the upkeep begins. The live game's two triggers take
      * both counters and sacrifice it; the fork's one instance takes one, and
@@ -719,6 +701,9 @@ class DirectedForkPlayedForwardTest {
                 && !blockers.contains(ref(courser)), "the Elves, a new card, may block: " + legal);
     }
 
+    /** The Grizzly Bears attacking B beside the attacker of {@link #goneWalkerTurn}. */
+    private String bearsRef;
+
     /**
      * Every record of a live turn whose {@code attacker} attacks B's Jace
      * Beleren unblocked beside a Grizzly Bears attacking B, Jace having left
@@ -727,9 +712,6 @@ class DirectedForkPlayedForwardTest {
      * leaves the declare-blockers step and begins the damage step itself,
      * {@code rule}'s directed fork taken at that boundary.
      */
-    /** The Grizzly Bears attacking B beside the attacker of {@link #goneWalkerTurn}. */
-    private String bearsRef;
-
     private List<String> goneWalkerTurn(String attackerName, String rule) throws Throwable {
         Game game = board(PhaseType.COMBAT_DECLARE_BLOCKERS);
         Player active = game.getPlayers().get(0);
@@ -776,25 +758,42 @@ class DirectedForkPlayedForwardTest {
     }
 
     /**
-     * {@code replace_card}, 702.19e: Thrasta, Tempest's Roar attacks a
-     * planeswalker that has left combat and deals its 7 to B; the fork's
-     * Colossal Dreadmaw, with plain trample, deals none.
+     * {@code replace_card}, 702.19c, inverted: Colossal Dreadmaw attacks B's
+     * Jace Beleren (3 loyalty) unblocked, and all its damage stays on Jace;
+     * the fork's Thrasta, Tempest's Roar, in its place, has trample over
+     * planeswalkers, and its damage beyond Jace's loyalty reaches B.
      */
     @Test
-    void aDreadmawInThrastasPlaceDealsNothingOnceThePlaneswalkerIsGone() throws Throwable {
-        List<String> records = goneWalkerTurn("Thrasta, Tempest's Roar", "702.19e");
+    void thrastaInTheDreadmawsPlaceTramplesOverThePlaneswalker() throws Throwable {
+        Game game = board(PhaseType.COMBAT_DECLARE_BLOCKERS);
+        Player active = game.getPlayers().get(0);
+        Player defending = game.getPlayers().get(1);
+        Card dreadmaw = permanent(game, active, "Colossal Dreadmaw");
+        Card bears = game.getCardsIn(forge.game.zone.ZoneType.Battlefield).stream()
+                .filter(card -> card.getName().equals("Grizzly Bears")).findFirst().orElseThrow();
+        bearsRef = ref(bears);
+        Card jace = permanent(game, defending, "Jace Beleren");
+        jace.setCounters(CounterEnumType.LOYALTY, 3);
+        Combat combat = new Combat(active);
+        combat.addAttacker(dreadmaw, jace);
+        combat.setBlocked(dreadmaw, false);
+        game.getPhaseHandler().setCombat(combat);
+
+        List<String> records = played(game, null, "702.19c", Decisions.SAMPLED);
 
         assertTrue(hasCombat(records, true) && hasCombat(records, false), "both games recorded the step");
-        List<Map<String, Object>> live = combatDamageToB(records, false);
-        assertEquals(1, live.size(), "Thrasta's damage reaches B live: " + live);
-        assertEquals(7, ((Number) params(live.get(0)).get("amount")).intValue());
-        assertEquals(List.of(), combatDamageToB(records, true), "the Dreadmaw's reaches nobody");
+        assertEquals(List.of(), combatDamageToB(records, false), "the Dreadmaw's damage stays on Jace live");
+        List<Map<String, Object>> fork = combatDamageToB(records, true);
+        assertEquals(1, fork.size(), "Thrasta's excess reaches B in the fork: " + fork);
+        assertEquals(4, ((Number) params(fork.get(0)).get("amount")).intValue());
     }
 
     /**
      * {@code replace_card}, 702.19f: Craw Wurm attacks a planeswalker that
      * has left combat and deals no combat damage; the fork's Thrasta,
-     * Tempest's Roar deals its 7 to B.
+     * Tempest's Roar deals its 7 to B. The same fork is 702.19e's
+     * {@code fires} side (an attacker with trample over planeswalkers whose
+     * planeswalker left combat), which is why 702.19e has no fork of its own.
      */
     @Test
     void thrastaInTheWurmsPlaceHitsBOnceThePlaneswalkerIsGone() throws Throwable {
@@ -808,6 +807,45 @@ class DirectedForkPlayedForwardTest {
     }
 
     // ── inverted variants (DF-A item 3) ─────────────────────────────────
+
+    /**
+     * {@code replace_card}, 701.44d, inverted: Hakbal of the Surging Soul is
+     * A's only Merfolk as its first main phase begins, beside A's Grizzly
+     * Bears. Live, Hakbal's beginning-of-combat trigger has Hakbal alone
+     * explore and reveal one card; the fork's Merfolk Branchwalker in the
+     * Bears' place explores too, so the trigger's resolution reveals two.
+     */
+    @Test
+    void aBranchwalkerInTheBearsPlaceExploresBesideHakbal() throws Throwable {
+        Game game = board(PhaseType.MAIN1);
+        Player active = game.getPlayers().get(0);
+        permanent(game, active, "Hakbal of the Surging Soul");
+
+        List<String> records = played(game, PhaseType.MAIN1, "701.44d", Decisions.SAMPLED);
+
+        assertEquals(List.of(1), revealsOfExplores(records, false), "Hakbal explores alone live");
+        assertEquals(List.of(2), revealsOfExplores(records, true), "two explore in the fork");
+    }
+
+    /**
+     * Per resolution revealing cards among the fork's or the live game's
+     * records (on this board only Hakbal's trigger reveals), the cards it
+     * revealed.
+     */
+    private static List<Integer> revealsOfExplores(List<String> records, boolean fork) {
+        List<Integer> found = new ArrayList<>();
+        for (String record : records) {
+            Map<String, Object> parsed = parse(record);
+            if (Boolean.TRUE.equals(parsed.get("fork")) != fork || !"resolution".equals(parsed.get("moment"))) {
+                continue;
+            }
+            List<String> types = RecordLines.eventTypes(record);
+            if (types.contains("card_revealed")) {
+                found.add((int) types.stream().filter("card_revealed"::equals).count());
+            }
+        }
+        return found;
+    }
 
     /** The fork's records among {@code records} holding an event of {@code type}, as kind/moment. */
     private static List<String> holding(List<String> records, String type) {

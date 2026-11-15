@@ -117,36 +117,6 @@ class RegisteredRulesTest {
         assertEquals(1, skeletons.getNetPower());
     }
 
-    // ── 122.1d, stun counter: counters ──────────────────────────────────
-
-    private static Board stunBoard(boolean tapped) {
-        Board board = new Board(PhaseType.UNTAP);
-        board.subject = board.card(board.you, "Grizzly Bears");
-        board.subject.setTapped(tapped);
-        board.subject.setCounters(CounterEnumType.STUN, 1);
-        return board;
-    }
-
-    @Test
-    void stunCounterBindsATappedPermanentWithAStunCounterAsTheUntapStepBegins() {
-        Board board = stunBoard(true);
-        assertEquals(board.subject, StunCounter.bind(board.game).orElseThrow().card("permanent"));
-    }
-
-    @Test
-    void stunCounterBindsNothingOnAnUntappedPermanent() {
-        assertTrue(StunCounter.bind(stunBoard(false).game).isEmpty());
-    }
-
-    @Test
-    void stunCounterForksThePermanentWithoutItsStunCounter() {
-        Board board = stunBoard(true);
-        Twin twin = board.twin(StunCounter.rule());
-        // The stun counter carries its untap replacement as a line of its own.
-        assertEquals(Set.of(id(board.subject) + ".counters", id(board.subject) + ".lines"), twin.changes());
-        assertEquals(0, twin.fork().card("permanent").getCounters(CounterEnumType.STUN));
-    }
-
     // ── 701.12g, a life exchange: life ──────────────────────────────────
 
     private static Board treeBoard(int opponentLife) {
@@ -963,7 +933,7 @@ class RegisteredRulesTest {
         assertOnlyAdded(twin, twin.fork().player("player"), Bolster.BEARS);
     }
 
-    // ── 701.42a-b, meld: replace_card ───────────────────────────────────
+    // ── 701.42a, meld: replace_card ─────────────────────────────────────
 
     /**
      * A's {@code host} beside A's {@code partner}, a card or a token copy of
@@ -1025,27 +995,6 @@ class RegisteredRulesTest {
         assertOnlyReplaced(board.twin(Meld.rule()), board.subject, "Midnight Scavengers");
     }
 
-    @Test
-    void tokenMeldPartnerBindsTheTokenPartnerOfATriggeredMeld() {
-        Board board = meldBoard("Graf Rats", "Midnight Scavengers", true, 0);
-        assertEquals(board.subject, TokenMeldPartner.bind(board.game).orElseThrow().card("partner"));
-    }
-
-    @Test
-    void tokenMeldPartnerBindsNothingForACardPartnerOrAnActivatedMeld() {
-        assertTrue(TokenMeldPartner.bind(meldBoard("Graf Rats", "Midnight Scavengers", false, 0).game).isEmpty());
-        assertTrue(TokenMeldPartner.bind(
-                meldBoard("Hanweir Battlements", "Hanweir Garrison", true, 5).game).isEmpty());
-    }
-
-    @Test
-    void tokenMeldPartnerForksTheCardInTheTokensPlace() {
-        Board board = meldBoard("Graf Rats", "Midnight Scavengers", true, 0);
-        Card card = assertOnlyReplaced(board.twin(TokenMeldPartner.rule()), board.subject, "Midnight Scavengers",
-                "token_script_id");
-        assertFalse(card.isToken());
-    }
-
     // ── 701.44b, exploring with an empty library: move_card ─────────────
 
     /** A's Merfolk Branchwalker in hand over two Forests, Wildgrowth Walker, a Forest in A's graveyard. */
@@ -1093,20 +1042,55 @@ class RegisteredRulesTest {
     }
 
     @Test
-    void severalExploreBindsTheOtherMerfolk() {
-        Board board = hakbalBoard("Merfolk Branchwalker");
-        assertEquals(board.subject, SeveralExplore.bind(board.game).orElseThrow().card("explorer"));
+    void severalExploreBindsTheCreatureBesideTheOnlyMerfolk() {
+        Board board = hakbalBoard("Grizzly Bears");
+        assertEquals(board.subject, SeveralExplore.bind(board.game).orElseThrow().card("creature"));
+    }
+
+    /** Two Merfolk already explore two at a time: the side the counts hold. */
+    @Test
+    void severalExploreBindsNothingWithTwoMerfolk() {
+        assertTrue(SeveralExplore.bind(hakbalBoard("Merfolk Branchwalker").game).isEmpty());
     }
 
     @Test
-    void severalExploreBindsNothingWithOneMerfolk() {
-        assertTrue(SeveralExplore.bind(hakbalBoard("Grizzly Bears").game).isEmpty());
+    void severalExploreBindsNothingWithoutACreatureToReplace() {
+        Board board = new Board(PhaseType.MAIN1);
+        board.card(board.you, "Hakbal of the Surging Soul");
+        board.library(board.you, "Forest", "Shock");
+        assertTrue(SeveralExplore.bind(board.game).isEmpty());
     }
 
     @Test
-    void severalExploreForksGrizzlyBearsInTheMerfolksPlace() {
-        Board board = hakbalBoard("Merfolk Branchwalker");
-        assertOnlyReplaced(board.twin(SeveralExplore.rule()), board.subject, SeveralExplore.BEARS);
+    void severalExploreBindsNothingWithOneCardInTheLibrary() {
+        Board board = new Board(PhaseType.MAIN1);
+        board.card(board.you, "Hakbal of the Surging Soul");
+        board.card(board.you, "Grizzly Bears");
+        board.library(board.you, "Forest");
+        assertTrue(SeveralExplore.bind(board.game).isEmpty());
+    }
+
+    /** Two damage marked on the Bears would kill a 2/1 Branchwalker in its place. */
+    @Test
+    void severalExploreBindsNothingWhenTheBranchwalkerWouldDie() {
+        Board board = hakbalBoard("Grizzly Bears");
+        board.subject.setDamage(1);
+        assertTrue(SeveralExplore.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void severalExploreBindsNothingAtAnotherBoundary() {
+        Board board = new Board(PhaseType.MAIN2);
+        board.card(board.you, "Hakbal of the Surging Soul");
+        board.card(board.you, "Grizzly Bears");
+        board.library(board.you, "Forest", "Shock");
+        assertTrue(SeveralExplore.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void severalExploreForksAMerfolkBranchwalkerInTheBearsPlace() {
+        Board board = hakbalBoard("Grizzly Bears");
+        assertOnlyReplaced(board.twin(SeveralExplore.rule()), board.subject, SeveralExplore.BRANCHWALKER);
     }
 
     // ── 701.50f, conniving when drawing is impossible: move_card ────────
@@ -1781,25 +1765,37 @@ class RegisteredRulesTest {
     }
 
     @Test
-    void trampleOverPlaneswalkersBindsAnUnblockedAttackerAboveTheLoyalty() {
-        Board board = planeswalkerBoard("Thrasta, Tempest's Roar", 3);
+    void trampleOverPlaneswalkersBindsAnUnblockedAttackerWithoutTheKeyword() {
+        Board board = planeswalkerBoard("Colossal Dreadmaw", 3);
         assertEquals(board.subject, TrampleOverPlaneswalkers.bind(board.game).orElseThrow().card("attacker"));
     }
 
+    /** Thrasta's own attack is the side the counts hold already. */
     @Test
-    void trampleOverPlaneswalkersBindsNothingWithoutTheKeyword() {
-        assertTrue(TrampleOverPlaneswalkers.bind(planeswalkerBoard("Craw Wurm", 3).game).isEmpty());
+    void trampleOverPlaneswalkersBindsNothingWithTheKeyword() {
+        assertTrue(TrampleOverPlaneswalkers.bind(planeswalkerBoard("Thrasta, Tempest's Roar", 3).game).isEmpty());
     }
 
-    /** Thrasta's 7 tops a loyalty of 6, the Dreadmaw's 6 does not: the fork's attack would have no excess. */
+    /** A granted trample over planeswalkers is the keyword already, and stays on the Thrasta in its place. */
     @Test
-    void trampleOverPlaneswalkersBindsNothingWhenTheDreadmawWouldHaveNoExcess() {
-        assertTrue(TrampleOverPlaneswalkers.bind(planeswalkerBoard("Thrasta, Tempest's Roar", 6).game).isEmpty());
+    void trampleOverPlaneswalkersBindsNothingForAGrantedKeyword() {
+        Board board = planeswalkerBoard("Colossal Dreadmaw", 3);
+        board.subject.addChangedCardKeywords(List.of("Trample:Planeswalker"), null, false,
+                board.game.getNextTimestamp(), null);
+        assertTrue(Boards.tramplesOverPlaneswalkers(board.subject));
+        assertTrue(TrampleOverPlaneswalkers.bind(board.game).isEmpty());
+    }
+
+    /** Thrasta's 7 does not top a loyalty of 7: the fork's attack would have no excess. */
+    @Test
+    void trampleOverPlaneswalkersBindsNothingWhenThrastaWouldHaveNoExcess() {
+        assertTrue(TrampleOverPlaneswalkers.bind(planeswalkerBoard("Colossal Dreadmaw", 7).game).isEmpty());
+        assertTrue(TrampleOverPlaneswalkers.bind(planeswalkerBoard("Colossal Dreadmaw", 6).game).isPresent());
     }
 
     @Test
     void trampleOverPlaneswalkersBindsNothingOnABlockedAttacker() {
-        Board board = planeswalkerBoard("Thrasta, Tempest's Roar", 3);
+        Board board = planeswalkerBoard("Colossal Dreadmaw", 3);
         Card bears = board.card(board.opponent, "Grizzly Bears");
         board.game.getCombat().addBlocker(board.subject, bears);
         board.game.getCombat().setBlocked(board.subject, true);
@@ -1808,60 +1804,46 @@ class RegisteredRulesTest {
 
     @Test
     void trampleOverPlaneswalkersBindsNothingAtAnotherBoundary() {
-        assertTrue(TrampleOverPlaneswalkers.bind(planeswalkerBoard("Thrasta, Tempest's Roar", 3,
+        assertTrue(TrampleOverPlaneswalkers.bind(planeswalkerBoard("Colossal Dreadmaw", 3,
                 PhaseType.COMBAT_DECLARE_BLOCKERS).game).isEmpty());
     }
 
-    /** A granted trample over planeswalkers would stay on the Dreadmaw put in the Wurm's place. */
+    /** The Dreadmaw's 7 marked damage would kill a 7/7 Thrasta. */
     @Test
-    void trampleOverPlaneswalkersBindsNothingForAGrantedKeyword() {
-        Board board = planeswalkerBoard("Craw Wurm", 3);
-        board.subject.addChangedCardKeywords(List.of("Trample:Planeswalker"), null, false,
-                board.game.getNextTimestamp(), null);
-        assertTrue(Boards.tramplesOverPlaneswalkers(board.subject));
-        assertTrue(TrampleOverPlaneswalkers.bind(board.game).isEmpty());
-    }
-
-    /** Thrasta's 6 marked damage would kill a 6/6 Dreadmaw. */
-    @Test
-    void trampleOverPlaneswalkersBindsNothingWhenTheDreadmawWouldDie() {
-        Board board = planeswalkerBoard("Thrasta, Tempest's Roar", 3);
-        board.subject.setDamage(6);
+    void trampleOverPlaneswalkersBindsNothingWhenThrastaWouldDie() {
+        Board board = planeswalkerBoard("Colossal Dreadmaw", 3);
+        board.subject.setDamage(5);
+        assertTrue(TrampleOverPlaneswalkers.bind(board.game).isPresent());
+        board.subject.setDamage(7);
         assertTrue(TrampleOverPlaneswalkers.bind(board.game).isEmpty());
     }
 
     /** A first striker deals its damage in the first-strike step, not in the regular one the rule forks at. */
     @Test
     void trampleOverPlaneswalkersBindsNothingForAFirstStriker() {
-        Board board = planeswalkerBoard("Thrasta, Tempest's Roar", 3);
+        Board board = planeswalkerBoard("Colossal Dreadmaw", 3);
         board.subject.addChangedCardKeywords(List.of("First Strike"), null, false,
                 board.game.getNextTimestamp(), null);
         assertTrue(TrampleOverPlaneswalkers.bind(board.game).isEmpty());
     }
 
     @Test
-    void trampleOverPlaneswalkersForksAColossalDreadmawAttackingTheSamePlaneswalker() {
-        Board board = planeswalkerBoard("Thrasta, Tempest's Roar", 3);
+    void trampleOverPlaneswalkersForksThrastaAttackingTheSamePlaneswalker() {
+        Board board = planeswalkerBoard("Colossal Dreadmaw", 3);
         Twin twin = board.twin(TrampleOverPlaneswalkers.rule());
-        Card dreadmaw = twin.forkGame().getCardsIn(ZoneType.Battlefield).stream()
-                .filter(card -> card.getName().equals(TrampleOverPlaneswalkers.DREADMAW)).findFirst().orElseThrow();
-        // Thrasta's own hexproof static, which affects Thrasta alone, goes
-        // with it; a Dreadmaw is no legend.
-        String thrastaLink = "-link {from={entity=" + id(dreadmaw) + ", key={face=0, trait_kind=static";
-        Set<String> identity = Set.of("name", "colors", "subtypes", "supertypes", "mana_value", "mana_cost",
-                "base_pt", "lines", "granted_temporary");
-        for (String change : changes(renamed(twin.real(), id(board.subject), id(dreadmaw)), twin.forked())) {
-            assertTrue(change.startsWith(thrastaLink) && change.endsWith("to=" + id(dreadmaw) + ", type=affects}")
-                            || change.startsWith(id(dreadmaw) + ".")
-                            && identity.contains(change.substring(change.indexOf('.') + 1)),
+        Card thrasta = twin.forkGame().getCardsIn(ZoneType.Battlefield).stream()
+                .filter(card -> card.getName().equals(TrampleOverPlaneswalkers.THRASTA)).findFirst().orElseThrow();
+        for (String change : changes(renamed(twin.real(), id(board.subject), id(thrasta)), twin.forked())) {
+            assertTrue(change.startsWith(id(thrasta) + ".") || change.contains(id(thrasta)),
                     "replacing changed " + change);
         }
-        assertTrue(dreadmaw.hasKeyword(Keyword.TRAMPLE));
-        assertFalse(Boards.tramplesOverPlaneswalkers(dreadmaw));
-        assertEquals(twin.forkGame().getCombat().getDefenderByAttacker(dreadmaw).getId(), board.other.getId());
+        assertTrue(Boards.tramplesOverPlaneswalkers(thrasta));
+        Combat combat = twin.forkGame().getCombat();
+        assertFalse(combat.isBlocked(thrasta));
+        assertEquals(combat.getDefenderByAttacker(thrasta).getId(), board.other.getId());
     }
 
-    // ── 702.19e and 702.19f, a planeswalker gone from combat: replace_card
+    // ── 702.19f, a planeswalker gone from combat: replace_card ─────────
 
     /**
      * Your {@code attacker} attacks B's Jace Beleren unblocked, and Jace has
@@ -1883,58 +1865,44 @@ class RegisteredRulesTest {
     }
 
     @Test
-    void aGoneWalkersTramplerBindsWithItsOwnTrampleOverPlaneswalkers() {
-        Board board = goneWalkerBoard("Thrasta, Tempest's Roar");
-        assertEquals(board.subject, TrampleOverAGonePlaneswalker.bind(board.game).orElseThrow().card("attacker"));
+    void aGoneWalkersAttackerWithoutTheKeywordBindsTheNoDamageRule() {
+        Board board = goneWalkerBoard("Craw Wurm");
+        assertEquals(board.subject, NoDamageToAGonePlaneswalker.bind(board.game).orElseThrow().card("attacker"));
+    }
+
+    /** Thrasta's own attack is the side 702.19f's counts hold already. */
+    @Test
+    void aGoneWalkersTramplerBindsNothing() {
+        assertTrue(NoDamageToAGonePlaneswalker.bind(goneWalkerBoard("Thrasta, Tempest's Roar").game).isEmpty());
+    }
+
+    @Test
+    void theGoneWalkerRuleBindsNothingWhileThePlaneswalkerStays() {
+        assertTrue(NoDamageToAGonePlaneswalker.bind(planeswalkerBoard("Craw Wurm", 3).game).isEmpty());
+    }
+
+    /** Alone in the step, the attacker would deal no damage in the live game, which then writes no combat record. */
+    @Test
+    void theGoneWalkerRuleBindsNothingWithoutAnotherCombatantsDamage() {
+        Board board = goneWalkerBoard("Craw Wurm");
+        Card bears = board.game.getCombat().getAttackers().stream()
+                .filter(card -> card.getName().equals("Grizzly Bears")).findFirst().orElseThrow();
+        board.game.getCombat().removeFromCombat(bears);
         assertTrue(NoDamageToAGonePlaneswalker.bind(board.game).isEmpty());
     }
 
     @Test
-    void aGoneWalkersAttackerWithoutTheKeywordBindsTheNoDamageRule() {
-        Board board = goneWalkerBoard("Craw Wurm");
-        assertEquals(board.subject, NoDamageToAGonePlaneswalker.bind(board.game).orElseThrow().card("attacker"));
-        assertTrue(TrampleOverAGonePlaneswalker.bind(board.game).isEmpty());
-    }
-
-    @Test
-    void neitherGoneWalkerRuleBindsWhileThePlaneswalkerStays() {
-        for (String attacker : List.of("Thrasta, Tempest's Roar", "Craw Wurm")) {
-            Board board = planeswalkerBoard(attacker, 3);
-            assertTrue(TrampleOverAGonePlaneswalker.bind(board.game).isEmpty(), attacker);
-            assertTrue(NoDamageToAGonePlaneswalker.bind(board.game).isEmpty(), attacker);
-        }
-    }
-
-    /** Alone in the step, the attacker would deal no damage in one of the two games, which then writes no combat record. */
-    @Test
-    void neitherGoneWalkerRuleBindsWithoutAnotherCombatantsDamage() {
-        for (String attacker : List.of("Thrasta, Tempest's Roar", "Craw Wurm")) {
-            Board board = goneWalkerBoard(attacker);
-            Card bears = board.game.getCombat().getAttackers().stream()
-                    .filter(card -> card.getName().equals("Grizzly Bears")).findFirst().orElseThrow();
-            board.game.getCombat().removeFromCombat(bears);
-            assertTrue(TrampleOverAGonePlaneswalker.bind(board.game).isEmpty(), attacker);
-            assertTrue(NoDamageToAGonePlaneswalker.bind(board.game).isEmpty(), attacker);
-        }
-    }
-
-    @Test
-    void neitherGoneWalkerRuleBindsAtAnotherBoundary() {
-        assertTrue(TrampleOverAGonePlaneswalker.bind(goneWalkerBoard("Thrasta, Tempest's Roar",
-                PhaseType.COMBAT_DECLARE_BLOCKERS).game).isEmpty());
+    void theGoneWalkerRuleBindsNothingAtAnotherBoundary() {
         assertTrue(NoDamageToAGonePlaneswalker.bind(goneWalkerBoard("Craw Wurm",
                 PhaseType.COMBAT_DECLARE_BLOCKERS).game).isEmpty());
     }
 
     @Test
-    void aGoneWalkersTramplerBindsNothingForAGrantedKeywordOrADyingDreadmaw() {
+    void theGoneWalkerRuleBindsNothingForAGrantedKeyword() {
         Board granted = goneWalkerBoard("Craw Wurm");
         granted.subject.addChangedCardKeywords(List.of("Trample:Planeswalker"), null, false,
                 granted.game.getNextTimestamp(), null);
-        assertTrue(TrampleOverAGonePlaneswalker.bind(granted.game).isEmpty(), "granted");
-        Board damaged = goneWalkerBoard("Thrasta, Tempest's Roar");
-        damaged.subject.setDamage(6);
-        assertTrue(TrampleOverAGonePlaneswalker.bind(damaged.game).isEmpty(), "a 6/6 with 6 damage");
+        assertTrue(NoDamageToAGonePlaneswalker.bind(granted.game).isEmpty());
     }
 
     /** Ghalta's 8 marked damage would kill a 7/7 Thrasta. */
@@ -1958,13 +1926,6 @@ class RegisteredRulesTest {
             assertTrue(change.startsWith(id(replacement) + ".") || change.contains(id(replacement)),
                     "replacing changed " + change);
         }
-    }
-
-    @Test
-    void aGoneWalkersTramplerForksAColossalDreadmaw() {
-        Board board = goneWalkerBoard("Thrasta, Tempest's Roar");
-        assertReplacedAttackingTheGoneWalker(board, board.twin(TrampleOverAGonePlaneswalker.rule()),
-                TrampleOverAGonePlaneswalker.DREADMAW);
     }
 
     @Test
