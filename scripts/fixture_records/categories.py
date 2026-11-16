@@ -1,0 +1,98 @@
+"""The categories a fixture is filled with, most specific first: a record
+lands in the first category it fits. Each generation's own categories are
+matched before those every generation shares."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from pathlib import Path
+
+from effects.infrastructure.converted_trees import SourceTrees
+from fixture_records.gen2 import gen2_categories
+from fixture_records.gen3 import gen3_categories
+from fixture_records.shapes import acting_key
+from fixture_records.sidecars import Sidecars
+
+Test = Callable[[dict], bool]
+
+
+def _is_kind(kind: str, discriminator: str | None = None) -> Test:
+    """A record of ``kind`` whose moment or subkind is ``discriminator``, if given."""
+    def test(record: dict) -> bool:
+        if record["kind"] != kind:
+            return False
+        return discriminator is None or (
+            record.get("moment") or record.get("subkind")) == discriminator
+    return test
+
+
+_OBSERVED_EFFECT = _is_kind("resolution", "resolution")
+
+
+def _modal(sidecars: Sidecars) -> Test:
+    """A resolution of a ``Charm`` (a modal spell or ability)."""
+    def test(record: dict) -> bool:
+        key = acting_key(record)
+        return (record["kind"] == "resolution" and key is not None
+                and sidecars.api_type(key) == "Charm")
+    return test
+
+
+def _interventional(record: dict) -> bool:
+    return _OBSERVED_EFFECT(record) and record["interventional"]
+
+
+def _combat_probe(record: dict) -> bool:
+    return record["kind"] == "combat" and bool(record["payload"].get("probed_keyword"))
+
+
+def _blockers_forbidden(record: dict) -> bool:
+    return _is_kind("playability", "blockers")(record) and bool(
+        record["payload"].get("forbidden"))
+
+
+def _linked_effect(record: dict) -> bool:
+    return _OBSERVED_EFFECT(record) and not record["fork"] and bool(record.get("link_id"))
+
+
+def _trigger(fired: bool) -> Test:
+    return lambda record: record["kind"] == "trigger" and bool(
+        record["payload"].get("fired")) == fired
+
+
+def _observed_combat(record: dict) -> bool:
+    return record["kind"] == "combat" and not record["fork"]
+
+
+def shared_categories(sidecars: Sidecars) -> dict[str, Test]:
+    """The categories every generation fills, in the order they are matched."""
+    return {
+        "modal": _modal(sidecars),
+        "interventional": _interventional,
+        "combat-probe": _combat_probe,
+        "blockers-forbidden": _blockers_forbidden,
+        "activation": _is_kind("resolution", "activation"),
+        "effect": _linked_effect,
+        "trigger-fired": _trigger(True),
+        "trigger-unfired": _trigger(False),
+        "continuous": _is_kind("continuous"),
+        "rewrite": _is_kind("rewrite"),
+        "combat": _observed_combat,
+        "decision": _is_kind("playability", "decision"),
+        "attackers": _is_kind("playability", "attackers"),
+        "blockers": _is_kind("playability", "blockers"),
+    }
+
+
+def categories_for(generation: int, sidecars: Sidecars,
+                   folders: list[Path]) -> dict[str, Test]:
+    """A generation's categories, in the order they are matched; ``folders``
+    are the converted trees, which gen 3's detectors read through a sidecar
+    cache of their own."""
+    categories = shared_categories(sidecars)
+    if generation >= 2:
+        categories = {**gen2_categories(sidecars), **categories}
+    if generation == 3:
+        lookup = SourceTrees.of(folders).sidecar_cache()
+        categories = {**gen3_categories(sidecars, lookup), **categories}
+    return categories

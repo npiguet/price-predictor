@@ -240,7 +240,7 @@ def test_two_legends_the_record_touches_neither_of_show_no_legend_rule(gen2_reco
 
 
 #: Real gen-2 records the review list held before T036, each read by hand
-#: (``scripts/make_fixture_records.py``'s ``_GEN2_PINNED``), and what the
+#: (``scripts/fixture_records/pinned.py``'s ``GEN2_PINNED``), and what the
 #: family now says of them: ``(check, polarity, observed)``, or None for a
 #: record the check cannot read.
 _REVIEWED = {
