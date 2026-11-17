@@ -27,13 +27,21 @@ import java.util.Objects;
  * carrying it is a different key from the root's. It is null on every other
  * trait, and absent from the JSON then, which is what keeps a gen-1 key
  * readable unchanged.
+ *
+ * <p>{@code built} is set only on a {@link TraitKind#KEYWORD} key, and names
+ * which of the traits that keyword instance built the key is about: a saga's
+ * chapter triggers, haunt's two triggers, a Class level's statics. A keyword
+ * that renders several lines gives each line one of its traits, so the bare
+ * keyword key cannot say which line acted. It is null on every other key, and
+ * absent from the JSON then.
  */
 public record ProvenanceKey(
         String scriptFile,
         int face,
         TraitKind traitKind,
         int indexWithinKind,
-        Integer option
+        Integer option,
+        Built built
 ) {
 
     public ProvenanceKey {
@@ -42,21 +50,62 @@ public record ProvenanceKey(
         if (option != null && option < 0) {
             throw new IllegalArgumentException("option must be a Choices$ position: " + option);
         }
+        if (built != null && traitKind != TraitKind.KEYWORD) {
+            throw new IllegalArgumentException("only a keyword key has a built trait: " + traitKind);
+        }
     }
 
     /** A root key: the trait itself rather than one of its modes. */
     public ProvenanceKey(String scriptFile, int face, TraitKind traitKind, int indexWithinKind) {
-        this(scriptFile, face, traitKind, indexWithinKind, null);
+        this(scriptFile, face, traitKind, indexWithinKind, null, null);
+    }
+
+    /** A key with a mode, or none, and no built trait. */
+    public ProvenanceKey(
+            String scriptFile, int face, TraitKind traitKind, int indexWithinKind, Integer option) {
+        this(scriptFile, face, traitKind, indexWithinKind, option, null);
+    }
+
+    /**
+     * The trait a keyword instance built: its kind, and its position in that
+     * instance's list of that kind ({@code KeywordInterface.getTriggers()},
+     * {@code getReplacements()}, {@code getStaticAbilities()},
+     * {@code getAbilities()}). Never itself a keyword.
+     */
+    public record Built(TraitKind kind, int index) {
+
+        public Built {
+            Objects.requireNonNull(kind, "kind");
+            if (kind == TraitKind.KEYWORD || index < 0) {
+                throw new IllegalArgumentException("a built trait is a non-keyword kind at a position: "
+                        + kind + " " + index);
+            }
+        }
+
+        String toJson() {
+            return Json.object().value("kind", kind).value("index", index).render();
+        }
     }
 
     /** This key's mode at {@code option}, the 0-based {@code Choices$} position. */
     public ProvenanceKey withOption(int option) {
-        return new ProvenanceKey(scriptFile, face, traitKind, indexWithinKind, option);
+        return new ProvenanceKey(scriptFile, face, traitKind, indexWithinKind, option, built);
+    }
+
+    /** This keyword key naming the trait of {@code kind} at {@code index} it built. */
+    public ProvenanceKey withBuilt(TraitKind kind, int index) {
+        return new ProvenanceKey(scriptFile, face, traitKind, indexWithinKind, option, new Built(kind, index));
+    }
+
+    /** The keyword's own key for a built key; this key otherwise. */
+    public ProvenanceKey withoutBuilt() {
+        return built == null ? this : new ProvenanceKey(scriptFile, face, traitKind, indexWithinKind, option, null);
     }
 
     /**
      * The key for a report a person reads, such as an undefined SVar's:
-     * {@code (cardsfolder/a/abrade.txt) face0/spell[0]/option1}.
+     * {@code (cardsfolder/a/abrade.txt) face0/spell[0]/option1}, or
+     * {@code (cardsfolder/b/binding_the_old_gods.txt) face0/keyword[0]/built trigger[2]}.
      */
     public String describe() {
         StringBuilder sb = new StringBuilder()
@@ -65,12 +114,15 @@ public record ProvenanceKey(
         if (option != null) {
             sb.append("/option").append(option);
         }
+        if (built != null) {
+            sb.append("/built ").append(built.kind().wireName()).append('[').append(built.index()).append(']');
+        }
         return sb.toString();
     }
 
     /** The root this key names: itself, or the charm a mode key belongs to. */
     ProvenanceKey root() {
-        return option == null ? this : new ProvenanceKey(scriptFile, face, traitKind, indexWithinKind);
+        return option == null ? this : new ProvenanceKey(scriptFile, face, traitKind, indexWithinKind, null, built);
     }
 
     /**
@@ -135,7 +187,8 @@ public record ProvenanceKey(
      *
      * <p>The {@code option} member is written only on a mode key: the Python
      * reader spells the member the same way and omits it on a root key, so a
-     * gen-1 sidecar and a gen-2 root key serialize byte for byte alike.
+     * gen-1 sidecar and a gen-2 root key serialize byte for byte alike. The
+     * {@code built} member, likewise, only on a key naming a built trait.
      */
     private Json.ObjectWriter withFields(Json.ObjectWriter json) {
         json.value("face", face)
@@ -143,6 +196,9 @@ public record ProvenanceKey(
                 .value("index_within_kind", indexWithinKind);
         if (option != null) {
             json.value("option", option);
+        }
+        if (built != null) {
+            json.raw("built", built.toJson());
         }
         return json;
     }

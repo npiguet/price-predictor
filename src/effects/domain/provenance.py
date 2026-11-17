@@ -8,7 +8,7 @@ rendered lines and aligns the ability cache. Pure dataclasses; the JSON is
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Protocol
 
@@ -96,14 +96,39 @@ class KeyResolution(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class BuiltTrait:
+    """The trait a keyword instance built, by its kind and position.
+
+    ``index`` is the trait's position in that instance's list of ``kind``
+    (``KeywordInterface.getTriggers()``, ``getReplacements()``,
+    ``getStaticAbilities()``, ``getAbilities()``): a saga's chapter III is
+    ``trigger`` 2. ``kind`` is never ``keyword``, since a keyword builds the
+    other four kinds of trait.
+    """
+
+    kind: str
+    index: int
+
+    def as_dict(self) -> dict:
+        return {"kind": self.kind, "index": self.index}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> BuiltTrait:
+        return cls(kind=str(data["kind"]), index=int(data["index"]))
+
+
+@dataclass(frozen=True, slots=True)
 class ProvenanceKey:
-    """``(script_file, face, trait_kind, index_within_kind, option?)``.
+    """``(script_file, face, trait_kind, index_within_kind, option?, built?)``.
 
     ``script_file`` includes its tree. ``index_within_kind`` indexes that
     kind's slice of the face's raw trait list, not a global ordinal.
     ``option`` is a charm mode's 0-based position in the root's ``Choices$`` —
     Forge gives a mode no identity of its own, so the position is the one both
     converter and collector can compute. A key without it names the root.
+    ``built`` is set only on a ``keyword`` key, and names which of the traits
+    that keyword instance built the key is about; a key without it names the
+    keyword itself.
     """
 
     script_file: str
@@ -111,6 +136,11 @@ class ProvenanceKey:
     trait_kind: str
     index_within_kind: int
     option: int | None = None
+    built: BuiltTrait | None = None
+
+    def __post_init__(self) -> None:
+        if self.built is not None:
+            _check_built(self.trait_kind, self.built)
 
     @property
     def tree(self) -> str:
@@ -121,6 +151,8 @@ class ProvenanceKey:
     def label(self) -> str:
         """The key as a report names it."""
         suffix = f" option {self.option}" if self.option is not None else ""
+        if self.built is not None:
+            suffix += f" built {self.built.kind}[{self.built.index}]"
         return (
             f"{self.script_file} face {self.face} {self.trait_kind}"
             f"[{self.index_within_kind}]{suffix}"
@@ -131,9 +163,13 @@ class ProvenanceKey:
         """The charm's own key for a mode key; the key itself otherwise."""
         if self.option is None:
             return self
-        return ProvenanceKey(
-            self.script_file, self.face, self.trait_kind, self.index_within_kind,
-        )
+        return replace(self, option=None)
+
+    def without_built(self) -> ProvenanceKey:
+        """The keyword's own key for a built key; the key itself otherwise."""
+        if self.built is None:
+            return self
+        return replace(self, built=None)
 
     def as_dict(self) -> dict:
         out = {
@@ -144,6 +180,8 @@ class ProvenanceKey:
         }
         if self.option is not None:
             out["option"] = self.option
+        if self.built is not None:
+            out["built"] = self.built.as_dict()
         return out
 
     def sidecar_dict(self) -> dict:
@@ -167,7 +205,18 @@ class ProvenanceKey:
             trait_kind=str(data["trait_kind"]),
             index_within_kind=int(data["index_within_kind"]),
             option=None if data.get("option") is None else int(data["option"]),
+            built=None if data.get("built") is None else BuiltTrait.from_dict(data["built"]),
         )
+
+
+def _check_built(trait_kind: str, built: BuiltTrait) -> None:
+    """Refuse a ``built`` member outside its contract."""
+    if trait_kind != TraitKind.KEYWORD:
+        raise ValueError(f"only a keyword key has a built trait, not a {trait_kind} key")
+    if built.kind == TraitKind.KEYWORD:
+        raise ValueError("a built trait is never itself a keyword")
+    if built.index < 0:
+        raise ValueError(f"a built trait's index is a position: {built.index}")
 
 
 @dataclass(frozen=True, slots=True)

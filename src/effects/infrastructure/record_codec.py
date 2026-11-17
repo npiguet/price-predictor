@@ -108,12 +108,17 @@ _INTERNED_KEYS: dict[tuple, ProvenanceKey] = {}
 def _key_from_json(item: dict) -> ProvenanceKey:
     raw = (
         item.get("script_file"), item.get("face"), item.get("trait_kind"),
-        item.get("index_within_kind"), item.get("option"),
+        item.get("index_within_kind"), item.get("option"), _built_identity(item.get("built")),
     )
     key = _INTERNED_KEYS.get(raw)
     if key is None:
         key = _INTERNED_KEYS[raw] = ProvenanceKey.from_dict(item)
     return key
+
+
+def _built_identity(built: dict | None) -> tuple | None:
+    """A key's ``built`` member as part of its interning identity; a dict is unhashable."""
+    return None if built is None else (built.get("kind"), built.get("index"))
 
 
 def _keys_from_json(data: Any) -> tuple[ProvenanceKey, ...]:

@@ -17,7 +17,7 @@ different things on the two sides. The stable key is **printed provenance**.
 ## Key
 
 ```
-ProvenanceKey = (script_file, face, trait_kind, index_within_kind, option?)
+ProvenanceKey = (script_file, face, trait_kind, index_within_kind, option?, built?)
 ```
 
 - `script_file` includes its tree **and that tree's own layout**, which differ: `cardsfolder/` is
@@ -31,6 +31,14 @@ ProvenanceKey = (script_file, face, trait_kind, index_within_kind, option?)
   `Choices$`. It is written only when set (`{"face":0,"trait_kind":"spell","index_within_kind":0,
   "option":2}`), and a key carrying it never equals the root key without it. Records' `ability`
   lists and sidecars' `provenance` lists both carry it.
+- `built` (feature 025) names one trait a keyword instance built: `{"kind", "index"}`, the trait's
+  kind (`trigger`, `static`, `replacement` or `spell`, never `keyword`) and its 0-based position in
+  that instance's list of that kind (`KeywordInterface.getTriggers()`, `getReplacements()`,
+  `getStaticAbilities()`, `getAbilities()`). It is set only on a key whose `trait_kind` is
+  `keyword`, and written only when set, after `option`
+  (`{"face":0,"trait_kind":"keyword","index_within_kind":0,"built":{"kind":"trigger","index":2}}`,
+  a saga's chapter III). A key carrying it never equals the keyword's own key without it, nor a key
+  with another `built`. Records and sidecars carry it wherever they carry a key.
 
 ## File
 
@@ -77,7 +85,14 @@ join — and the mismatch is the one condition that must fail loudly.
 | Rule | Consequence |
 |---|---|
 | A rendered line merged from several runtime traits carries **several** provenance keys | the join is many-to-one, never assumed one-to-one |
-| A trait whose text a rendered line carries — merged, deduplicated, a secondary of a pair, keyword-derived, or a Class level — is claimed by that line | the join is many-to-one; `dropped_keys` holds only traits with no text, such as the implicit permanent spell on every permanent |
+| A trait whose text a rendered line carries — merged, deduplicated, a secondary of a pair, keyword-derived, or a Class level — is claimed by that line | the join is many-to-one; `dropped_keys` holds only traits with no text, such as the implicit permanent spell on every permanent. A keyword-built trait is claimed through its keyword's key, by the rows below |
+| No key is declared by two lines of one face | a key names at most one line; a join never picks among lines |
+| A keyword that renders one line declares its bare keyword key on that line | its built traits join that line through the bare key |
+| A keyword that renders several lines (a saga's chapters, haunt's two lines, a Class level with continuation text) declares on each line the `built` keys of the traits that line renders, and its bare keyword key on no line | each chapter joins its own line |
+| The kind-indexed keys (`trigger n`, `static n`, `spell n`, `replacement n`) of keyword-built traits | declared on no line and in no `dropped_keys`, and never emitted by the collector: a keyword-built trait is named only through its keyword's key |
+| A key a line declares | resolves to that line |
+| A `built` key no line declares | resolves as the same key without `built`: the keyword renders one line, and that line holds its text |
+| A bare keyword key no line declares, on a keyword whose lines declare `built` keys | on a board line, resolves to all of those lines in line order, one slot each; as an acting key, resolves as `AMBIGUOUS`: no text, and counted |
 | A record whose acting keys all sit in `dropped_keys` (or name an unconverted script) | `build-corpus` refuses it as `no-acting-text`; on the board, the surface builder emits no token for such a key. A runtime-only key is neither: it keeps the record and gets no token |
 | A key names a script file with **no sidecar at all** under its tree | not an error: the converted corpus never held that card, and the ability contributes no text. Token entities do this — the collector files a token's provenance as `cardsfolder/<letter>/<sanitized token name>.txt` while tokens convert into `output/tokenscripts/` under Forge's own script filenames, so the path resolves to nothing. Readers raise `UnconvertedScript` and count it; `SidecarCache.line_for` returns None. Distinct from the row below, where the sidecar exists and disagrees |
 | A record names a provenance key **inside** a declared `(face, trait_kind)` range that is in neither `lines` nor `dropped_keys` | fail loudly — the sidecar does not describe the card the record was collected against, i.e. a reconversion between collection and training. `dropped_keys` is declared-minus-claimed, so every index the converter parsed sits in one of the two lists and a gap between them can only come from a different trait list |

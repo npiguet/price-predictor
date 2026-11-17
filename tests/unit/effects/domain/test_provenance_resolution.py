@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from effects.domain.provenance import (
+    BuiltTrait,
     KeyResolution,
     ProvenanceKey,
     ProvenanceSidecar,
@@ -152,3 +155,57 @@ def test_a_key_round_trips_with_and_without_option():
 def test_a_key_s_label_names_a_mode_only_when_it_is_one():
     assert _CHARM_ROOT.label == f"{_CHARM_SCRIPT} face 0 spell[0]"
     assert _mode(2).label == f"{_CHARM_SCRIPT} face 0 spell[0] option 2"
+
+
+# ── the trait a keyword built ───────────────────────────────────────────
+
+_SAGA_SCRIPT = "cardsfolder/b/binding_the_old_gods.txt"
+#: Binding the Old Gods' saga keyword, which builds one trigger per chapter.
+_SAGA = ProvenanceKey(_SAGA_SCRIPT, 0, "keyword", 0)
+
+
+def _chapter(index: int) -> ProvenanceKey:
+    return ProvenanceKey(_SAGA_SCRIPT, 0, "keyword", 0, built=BuiltTrait("trigger", index))
+
+
+def test_keys_differing_only_in_built_are_unequal():
+    assert _chapter(2) != _SAGA
+    assert _chapter(2) != _chapter(1)
+    assert _chapter(2) != replace(_chapter(2), built=BuiltTrait("static", 2))
+    assert _chapter(2) == _chapter(2)
+    assert len({_SAGA, _chapter(0), _chapter(1), _chapter(2), _chapter(2)}) == 4
+
+
+def test_without_built_is_the_keyword_s_own_key():
+    assert _chapter(2).without_built() == _SAGA
+    assert _SAGA.without_built() is _SAGA
+
+
+def test_a_built_key_round_trips_in_both_forms_and_a_bare_one_writes_no_member():
+    chapter = _chapter(2)
+    assert chapter.as_dict()["built"] == {"kind": "trigger", "index": 2}
+    assert ProvenanceKey.from_dict(chapter.as_dict()) == chapter
+    assert ProvenanceKey.from_dict(chapter.sidecar_dict(), script_file=_SAGA_SCRIPT) == chapter
+    assert "built" not in _SAGA.as_dict()
+    assert ProvenanceKey.from_dict(_SAGA.as_dict()).built is None
+
+
+def test_a_built_key_s_label_names_the_built_trait():
+    assert _chapter(2).label == f"{_SAGA_SCRIPT} face 0 keyword[0] built trigger[2]"
+
+
+def test_a_mode_s_root_keeps_the_built_trait():
+    mode = replace(_chapter(2), option=1)
+    assert mode.root == _chapter(2)
+
+
+@pytest.mark.parametrize(("trait_kind", "built"), [
+    ("spell", BuiltTrait("trigger", 0)),
+    ("keyword", BuiltTrait("keyword", 0)),
+    ("keyword", BuiltTrait("trigger", -1)),
+])
+def test_a_built_member_outside_its_contract_is_refused(trait_kind, built):
+    """Only a keyword builds traits, a built trait is never a keyword, and its
+    position is an index."""
+    with pytest.raises(ValueError, match="built"):
+        ProvenanceKey(_SAGA_SCRIPT, 0, trait_kind, 0, built=built)

@@ -17,6 +17,27 @@ within gen-3. Relative to gen-2 a field may change meaning or go away.
 - `build-corpus`, `train-effect-model`, `evaluate-effect-model` and the probes accept gen-3 only.
   `rule-counts` accepts gen-2 or gen-3, not mixed.
 
+## Provenance key
+
+A gen-3 key is `(script_file, face, trait_kind, index_within_kind[, option][, built])`. The member
+`built` is new; the others are as in the base contract.
+
+| Member | Shape | Present on |
+|---|---|---|
+| `built` | `{"kind": "trigger", "index": 2}`: `kind` one of `trigger`, `static`, `replacement`, `spell`; `index` the trait's 0-based position in the keyword instance's list of that kind (`KeywordInterface.getTriggers()`, `getReplacements()`, `getStaticAbilities()`, `getAbilities()`) | a key of `trait_kind` `keyword` that names a trait the keyword instance built; absent on every other key |
+
+- The member is written after `option`, in records and in sidecars alike:
+  `{"script_file":"cardsfolder/b/binding_the_old_gods.txt","face":0,"trait_kind":"keyword","index_within_kind":0,"built":{"kind":"trigger","index":2}}`
+  is that saga's chapter III trigger. Java `ProvenanceKey.toJson` and Python `ProvenanceKey.as_dict`
+  write this string byte for byte, and a record without the member reads `built` as absent.
+- Two keys differing only in `built` are different keys. `ProvenanceKey.withoutBuilt()` (Java) and
+  `ProvenanceKey.without_built()` (Python) give the keyword's own key.
+- A record names a keyword-built trait by its keyword's key with `built`, and never by the
+  kind-indexed key (`trigger n`, `static n`, `spell n`, `replacement n`) the trait occupies in the
+  card's runtime lists: those keys are declared by no sidecar and emitted by no collector.
+- Which lines a sidecar declares `built` keys on, and how a `built` key and a bare keyword key
+  join: [`../../023-ability-effect-model/contracts/provenance-sidecar.md`](../../023-ability-effect-model/contracts/provenance-sidecar.md) § Rules.
+
 ## Envelope
 
 | Field | Shape | Present on |
