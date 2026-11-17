@@ -124,15 +124,6 @@ REWRITE_RESULTS_RUNNING_AN_ABILITY: frozenset[RewriteResult] = frozenset({
     RewriteResult.UPDATED,
 })
 
-#: Outcomes whose gen-1/gen-2 cost half has no linked effect half, so it
-#: carries no ``link_id``. Only ``resolved`` and ``partially_fizzled`` reach
-#: resolution there; a gen-3 cost half carries no outcome and always links.
-PARTNERLESS_OUTCOMES: frozenset[ResolutionOutcome] = frozenset({
-    ResolutionOutcome.FIZZLED,
-    ResolutionOutcome.DECLINED,
-    ResolutionOutcome.COUNTERED,
-})
-
 #: The legality subkinds, the ones that carry ``what_if`` (FR-031) up to
 #: gen-2; gen-3 writes it on ``blockers`` alone. A ``decision`` is always a
 #: real evaluation.
@@ -142,37 +133,24 @@ LEGALITY_SUBKINDS: frozenset[PlayabilitySubkind] = frozenset({
 
 
 class LegalityDecision(StrEnum):
-    """Whether a legality record is the declaration actually made (FR-033).
-
-    ``unknown`` is a gen-1 record, collected before ``what_if`` existed; it is
-    never a real decision.
-    """
+    """Whether a legality record is the declaration actually made (FR-033)."""
 
     REAL = "real"
     WHAT_IF = "what-if"
-    UNKNOWN = "unknown"
 
     @classmethod
     def of(cls, record) -> LegalityDecision:
-        """``record`` is anything carrying ``what_if``, ``generation`` and
-        ``subkind``: a record or a result row.
+        """``record`` is anything carrying ``what_if``: a record or a result row.
 
-        A gen-3 attackers record carries no ``what_if``: the collector writes
-        one per creature of the declaration actually made, and none for a
-        query, so every one is real.
+        An attackers record carries no ``what_if``: the collector writes one
+        per creature of the declaration actually made, and none for a query,
+        so every one is real.
         """
-        if record.what_if is None:
-            gen3_attackers = (record.generation is not None and record.generation >= 3
-                              and record.subkind == PlayabilitySubkind.ATTACKERS)
-            return cls.REAL if gen3_attackers else cls.UNKNOWN
         return cls.WHAT_IF if record.what_if else cls.REAL
 
 
 class SeatPolicy(StrEnum):
-    """Whether the acting seat was Forge's AI or the random seat (FR-030).
-
-    A gen-1 record carries no ``random_seat`` and reads as on-policy.
-    """
+    """Whether the acting seat was Forge's AI or the random seat (FR-030)."""
 
     ON_POLICY = "on_policy"
     OFF_POLICY = "off_policy"
@@ -304,31 +282,23 @@ class Costs:
 class ActivationPayload(_PayloadQueries):
     """``resolution`` / ``activation``: the cost half of a resolution pair.
 
-    Gen-3 (root spec § 8.14, FR-042a) writes ``{events, costs}``: what casting
-    did — a spell card's ``zone_change`` to the stack, ``[]`` for an activated
-    ability — and what was paid, with no ``outcome``, which is the effect
-    half's. Gen-1 and gen-2 wrote ``{costs, outcome}``. The cast's events are
-    listed, not happened: they describe the cast itself, which no per-entity
-    output supervises, so :func:`events_of` gives none.
+    ``{events, costs}`` (root spec § 8.14, FR-042a): what casting did — a
+    spell card's ``zone_change`` to the stack, ``[]`` for an activated ability
+    — and what was paid. It carries no ``outcome``, which is the effect
+    half's: written at the cast, before the item's fate, it always links. The
+    cast's events are listed, not happened: they describe the cast itself,
+    which no per-entity output supervises, so :func:`events_of` gives none.
     """
 
     costs: Costs
-    #: Gen-1/gen-2 only: the stack item's fate. None on gen-3.
-    outcome: ResolutionOutcome | None = None
-    #: Gen-3 only: what casting did. None on gen-1 and gen-2.
-    events: tuple[Event, ...] | None = None
-
-    @property
-    def has_partner(self) -> bool:
-        """Whether an effect half may share this half's ``link_id``: always on
-        gen-3, written at the cast before the item's fate is known."""
-        return self.outcome is None or self.outcome not in PARTNERLESS_OUTCOMES
+    #: What casting did.
+    events: tuple[Event, ...] = ()
 
     def listed_events(self) -> tuple[Event, ...]:
-        return self.events or ()
+        return self.events
 
     def all_events(self) -> tuple[Event, ...]:
-        return self.events or ()
+        return self.events
 
 
 @dataclass(frozen=True, slots=True)
@@ -856,12 +826,10 @@ class EffectRecord:
     interventional: bool = False
     fork: bool = False
     synthetic: bool = False
-    #: ``actor_player`` is the random seat (FR-030). None on a gen-1 record:
-    #: falsy, so on-policy, but kept apart from False so a rewritten record
-    #: stays the generation it was collected in (FR-033).
-    random_seat: bool | None = False
-    #: ``attackers``/``blockers`` only: False for the declaration actually made,
-    #: True for an AI query about a hypothetical (FR-031); None on gen-1.
+    #: ``actor_player`` is the random seat (FR-030).
+    random_seat: bool = False
+    #: ``blockers`` only: False for the declaration actually made, True for an
+    #: AI query about a hypothetical (FR-031).
     what_if: bool | None = None
     #: The acting line, several keys where the line merged several traits; on a
     #: modal resolution, the chosen ``option`` line's key (FR-017).
@@ -869,9 +837,8 @@ class EffectRecord:
     #: Set only where a line was looked for and none found; a reason given as
     #: its string is read as the member.
     ability_unresolved: UnresolvedReason | None = None
-    #: The record generation, 3 on a gen-3 record; None on gen-1 and gen-2,
-    #: which are told apart by ``random_seat`` (FR-018).
-    generation: int | None = None
+    #: The record generation, 3: the decode refuses every other (FR-018).
+    generation: int = 3
     #: The rules the run or fork aimed at (FR-009a); None on every record of a
     #: run that aimed at none. Collection metadata.
     aimed_at: tuple[str, ...] | None = None
@@ -895,7 +862,6 @@ class EffectRecord:
         self._check_discriminators()
         self._check_ability()
         self._check_flags()
-        self._check_link_id()
 
     def _check_discriminators(self) -> None:
         if (self.moment is not None) != (self.kind is RecordKind.RESOLUTION):
@@ -975,16 +941,6 @@ class EffectRecord:
             raise ValueError(
                 "what_if classes a legality record; "
                 f"kind={self.kind.value} subkind={self.subkind} carries it"
-            )
-
-    def _check_link_id(self) -> None:
-        if self.link_id is None:
-            return
-        payload = self.payload
-        if isinstance(payload, ActivationPayload) and not payload.has_partner:
-            raise ValueError(
-                f"a {payload.outcome} activation never reaches resolution, "
-                "so it has no linked effect half"
             )
 
     @property

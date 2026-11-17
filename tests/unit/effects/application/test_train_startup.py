@@ -26,7 +26,7 @@ from effects.domain.selection_set import (
     selection_set_path,
     write_selection_set,
 )
-from effects.domain.shard_generation import MixedGenerationsError
+from effects.domain.shard_generation import UnacceptedGenerationError
 from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.shard_io import write_shard
@@ -224,16 +224,29 @@ def test_the_loop_is_handed_the_frozen_set_and_a_reader_of_each_stratum(
     assert started[-1].spec.facts.selection_set_digest == selection.digest
 
 
-def test_a_record_lacking_generation_three_is_refused(corpus, config, started, make_record):
-    from effects.domain.shard_generation import UnacceptedGenerationError
+def _write_older_shard(path, record, *, drop) -> None:
+    """``record`` as an older generation wrote it: a gen-3 line less ``drop``
+    (``generation``: gen-2; ``random_seat`` too: gen-1)."""
+    import gzip
+    import json
 
-    write_shard(corpus.training_dir / "t.jsonl.gz",
-                [make_record(record_id="t0", game_id="tg", generation=None, random_seat=False)])
+    from effects.infrastructure.record_codec import record_to_dict
+
+    data = record_to_dict(record)
+    for member in drop:
+        del data[member]
+    with gzip.open(path, "wt", encoding="utf-8") as out:
+        out.write(json.dumps(data) + "\n")
+
+
+def test_a_gen2_record_is_refused_naming_its_generation(corpus, config, started, make_record):
+    _write_older_shard(corpus.training_dir / "t.jsonl.gz",
+                       make_record(record_id="t0", game_id="tg"), drop=("generation",))
     for stratum in ("card-disjoint", "game-disjoint"):
-        write_shard(corpus.sample_path(stratum), [make_record(
-            record_id=stratum, game_id=stratum, generation=None, random_seat=False,
-        )])
-    with pytest.raises(UnacceptedGenerationError):
+        _write_older_shard(corpus.sample_path(stratum),
+                           make_record(record_id=stratum, game_id=stratum),
+                           drop=("generation",))
+    with pytest.raises(UnacceptedGenerationError, match="the record is gen-2"):
         run(config)
     assert not started
 
@@ -325,7 +338,7 @@ def test_a_width_not_divisible_by_the_head_count_is_refused_before_training(
 @pytest.mark.parametrize("failure, code", [
     ("MissingTrainingInputError", 1),
     ("HoldoutMismatchError", 1),
-    ("MixedGenerationsError", 1),
+    ("UnacceptedGenerationError", 1),
     ("ValidationGameInTrainingError", 1),
     ("ResumeMismatchError", 1),
     ("SelectionSetError", 1),
@@ -343,7 +356,7 @@ def test_an_operator_error_out_of_training_exits_with_its_code(
     kind = {
         "MissingTrainingInputError": train_effect_model.MissingTrainingInputError,
         "HoldoutMismatchError": train_effect_model.HoldoutMismatchError,
-        "MixedGenerationsError": MixedGenerationsError,
+        "UnacceptedGenerationError": UnacceptedGenerationError,
         "ValidationGameInTrainingError": train_effect_model.ValidationGameInTrainingError,
         "ResumeMismatchError": effect_model_store.ResumeMismatchError,
         "SelectionSetError": SelectionSetError,
@@ -417,16 +430,11 @@ def test_a_recomputed_holdout_that_disagrees_is_refused(corpus, config):
         run(config)
 
 
-def test_a_records_set_mixing_generations_is_refused(corpus, config, make_record):
+def test_a_gen1_shard_among_gen3_ones_is_refused_naming_it(corpus, config, make_record):
     """FR-033: refused before any record is read."""
-    from effects.infrastructure.record_codec import record_to_dict
-
-    gen1 = record_to_dict(make_record(record_id="old", game_id="og"))
-    del gen1["random_seat"], gen1["generation"]
-    import gzip
-    import json
-
-    with gzip.open(corpus.training_dir / "gen1.jsonl.gz", "wt", encoding="utf-8") as out:
-        out.write(json.dumps(gen1) + "\n")
-    with pytest.raises(MixedGenerationsError, match="mixes gen-1 shards"):
+    _write_older_shard(corpus.training_dir / "gen1.jsonl.gz",
+                       make_record(record_id="old", game_id="og"),
+                       drop=("generation", "random_seat"))
+    with pytest.raises(UnacceptedGenerationError,
+                       match=r"gen1\.jsonl\.gz, line 1: the record is gen-1"):
         run(config)

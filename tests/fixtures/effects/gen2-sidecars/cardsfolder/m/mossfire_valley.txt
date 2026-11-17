@@ -1,3 +1,0 @@
-name: mossfire valley
-types: land
-activated[1]: {1}, {T}: add {R}{G}.

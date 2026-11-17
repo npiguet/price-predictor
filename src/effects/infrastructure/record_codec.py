@@ -54,7 +54,7 @@ from effects.domain.records import (
     TriggerPayload,
     TurnActionPayload,
 )
-from effects.domain.shard_generation import check_generation_member
+from effects.domain.shard_generation import require_gen3
 from effects.domain.state_snapshot import (
     CardChoices,
     CardHistory,
@@ -160,29 +160,13 @@ def _optional[T, R](convert: Callable[[T], R], value: T | None) -> R | None:
     return convert(value) if value else None
 
 
-def _pt_to_json(pt: PowerToughness) -> dict:
-    return {
-        "base": list(pt.base),
-        "boosts": list(pt.boosts),
-        "counters": list(pt.counters),
-    }
-
-
-def _pt_from_json(data: dict) -> PowerToughness:
-    return PowerToughness(
-        base=tuple(data["base"]),
-        boosts=tuple(data.get("boosts", (0, 0))),
-        counters=tuple(data.get("counters", (0, 0))),
-    )
-
-
 def _pt_boosts_to_json(pt: PowerToughness) -> dict:
-    """Gen-3's ``pt_boosts``; ``base_pt`` is ``pt.base`` written alone."""
+    """An entity's ``pt_boosts``; ``base_pt`` is ``pt.base`` written alone."""
     return {"temporary": list(pt.boosts), "counters": list(pt.counters)}
 
 
-def _gen3_pt_from_json(data: dict) -> PowerToughness | None:
-    """Gen-3's ``base_pt`` and ``pt_boosts``, both null on a non-creature."""
+def _pt_from_json(data: dict) -> PowerToughness | None:
+    """An entity's ``base_pt`` and ``pt_boosts``, both null on a non-creature."""
     base = data.get("base_pt")
     if base is None:
         return None
@@ -195,7 +179,7 @@ def _gen3_pt_from_json(data: dict) -> PowerToughness | None:
 
 
 def _line_to_json(line: CardLine) -> dict:
-    """One gen-3 line; the optional members only where set, as Java writes them."""
+    """One line; the optional members only where set, as Java writes them."""
     out: dict = {"keys": _keys_to_json(line.keys), "kind": line.kind,
                  "granted": line.granted}
     if line.grant is not None:
@@ -367,55 +351,25 @@ def _stack_extras_from_json(data: dict) -> StackExtras:
 
 
 def _entity_to_json(entity: EntityState) -> dict:
-    """One entity in the shape it was read in: gen-3 (``lines`` set) as the
-    gen-3 collector writes it, else gen-2's, byte for byte."""
-    head = {
-        "id": entity.id, "name": entity.name, "zone": entity.zone,
-        "controller": entity.controller, "face": entity.face,
-        "copy_source": entity.copy_source,
-        "token_script_id": entity.token_script_id,
-        "types": list(entity.types), "subtypes": list(entity.subtypes),
-        "supertypes": list(entity.supertypes), "colors": list(entity.colors),
-        "mana_value": entity.mana_value,
-    }
-    status = {
-        "tapped": entity.tapped, "sick": entity.sick, "damage": entity.damage,
-        "counters": dict(entity.counters),
-        "combat": _optional(_combat_status_to_json, entity.combat),
-        "attached_to": entity.attached_to,
-        "face_down": entity.face_down,
-    }
-    stack_extras = _optional(_stack_extras_to_json, entity.stack_extras)
-    if entity.lines is not None:
-        return _gen3_entity_to_json(entity, head, status, stack_extras)
-    return {
-        **head,
-        "pt": _optional(_pt_to_json, entity.pt),
-        **status,
-        "granted_attached": _keys_to_json(entity.granted_attached),
-        "granted_temporary": _granted_temporary_to_json(entity.granted_temporary),
-        "printed": _keys_to_json(entity.printed),
-        "stack_extras": stack_extras,
-    }
-
-
-def _gen3_entity_to_json(entity: EntityState, head: dict, status: dict,
-                         stack_extras: dict | None) -> dict:
-    """A gen-3 entity, its members in the order ``FE/EntityJson.java`` writes them."""
+    """One entity, its members in the order ``FE/EntityJson.java`` writes them."""
     pt = entity.pt
     return {
-        "id": head["id"], "name": head["name"], "zone": head["zone"],
-        "owner": entity.owner, "controller": head["controller"], "face": head["face"],
-        "face_state": entity.face_state, "copy_source": head["copy_source"],
-        "token_script_id": head["token_script_id"], "types": head["types"],
-        "subtypes": head["subtypes"], "supertypes": head["supertypes"],
-        "colors": head["colors"], "mana_value": head["mana_value"],
+        "id": entity.id, "name": entity.name, "zone": entity.zone,
+        "owner": entity.owner, "controller": entity.controller, "face": entity.face,
+        "face_state": entity.face_state, "copy_source": entity.copy_source,
+        "token_script_id": entity.token_script_id, "types": list(entity.types),
+        "subtypes": list(entity.subtypes), "supertypes": list(entity.supertypes),
+        "colors": list(entity.colors), "mana_value": entity.mana_value,
         "mana_cost": _absent_or(dict, entity.mana_cost),
         "base_pt": list(pt.base) if pt is not None else None,
         "pt_boosts": _pt_boosts_to_json(pt) if pt is not None else None,
         "printed_loyalty": entity.printed_loyalty,
         "printed_defense": entity.printed_defense,
-        **status,
+        "tapped": entity.tapped, "sick": entity.sick, "damage": entity.damage,
+        "counters": dict(entity.counters),
+        "combat": _optional(_combat_status_to_json, entity.combat),
+        "attached_to": entity.attached_to,
+        "face_down": entity.face_down,
         "real_face": _absent_or(_real_face_to_json, entity.real_face),
         "designations": list(entity.designations),
         "x_paid": entity.x_paid,
@@ -425,41 +379,34 @@ def _gen3_entity_to_json(entity: EntityState, head: dict, status: dict,
         "order_rank": entity.order_rank,
         "granted_temporary": _granted_temporary_to_json(entity.granted_temporary),
         "lines": [_line_to_json(line) for line in entity.lines],
-        "stack_extras": stack_extras,
+        "stack_extras": _optional(_stack_extras_to_json, entity.stack_extras),
         "role": entity.role,
     }
 
 
 def _entity_from_json(data: dict) -> EntityState:
-    """One entity of either shape; a ``lines`` member makes it gen-3, whose
-    ``printed`` :class:`EntityState` derives from the lines."""
-    lines = data.get("lines")
-    if lines is not None:
-        return _entity(
-            data, pt=_gen3_pt_from_json(data),
-            lines=tuple(_line_from_json(line) for line in lines),
-            owner=data.get("owner"), face_state=data.get("face_state"),
-            mana_cost=_absent_or(dict, data.get("mana_cost")),
-            printed_loyalty=data.get("printed_loyalty"),
-            printed_defense=data.get("printed_defense"),
-            real_face=_absent_or(_real_face_from_json, data.get("real_face")),
-            designations=tuple(data.get("designations", ())),
-            x_paid=data.get("x_paid"),
-            chosen=_absent_or(_choices_from_json, data.get("chosen")),
-            costs_paid=_absent_or(_costs_paid_from_json, data.get("costs_paid")),
-            history=_absent_or(_history_from_json, data.get("history")),
-            order_rank=data.get("order_rank"),
-            role=data.get("role"),
-        )
+    """One entity, whose ``printed`` :class:`EntityState` derives from its
+    ``lines``."""
     return _entity(
-        data, pt=_optional(_pt_from_json, data.get("pt")),
-        granted_attached=_keys_from_json(data.get("granted_attached")),
-        printed=_keys_from_json(data.get("printed")),
+        data, pt=_pt_from_json(data),
+        lines=tuple(_line_from_json(line) for line in data.get("lines", ())),
+        owner=data.get("owner"), face_state=data.get("face_state"),
+        mana_cost=_absent_or(dict, data.get("mana_cost")),
+        printed_loyalty=data.get("printed_loyalty"),
+        printed_defense=data.get("printed_defense"),
+        real_face=_absent_or(_real_face_from_json, data.get("real_face")),
+        designations=tuple(data.get("designations", ())),
+        x_paid=data.get("x_paid"),
+        chosen=_absent_or(_choices_from_json, data.get("chosen")),
+        costs_paid=_absent_or(_costs_paid_from_json, data.get("costs_paid")),
+        history=_absent_or(_history_from_json, data.get("history")),
+        order_rank=data.get("order_rank"),
+        role=data.get("role"),
     )
 
 
-def _entity(data: dict, **shaped) -> EntityState:
-    """The members both entity shapes share, plus the ``shaped`` ones."""
+def _entity(data: dict, **facts) -> EntityState:
+    """An entity's identity, characteristics and status, plus its ``facts``."""
     return EntityState(
         id=data["id"], name=data["name"], zone=data["zone"],
         controller=data["controller"], face=data.get("face", 0),
@@ -479,7 +426,7 @@ def _entity(data: dict, **shaped) -> EntityState:
             data.get("granted_temporary") or {}
         ),
         stack_extras=_optional(_stack_extras_from_json, data.get("stack_extras")),
-        **shaped,
+        **facts,
     )
 
 
@@ -508,8 +455,8 @@ def _dungeon_from_json(data: dict) -> Dungeon:
     return Dungeon(player=data["player"], dungeon=data["dungeon"], room=data.get("room"))
 
 
-def _global_to_json(global_: GlobalState, gen3: bool) -> dict:
-    out = {
+def _global_to_json(global_: GlobalState) -> dict:
+    return {
         "turn": global_.turn,
         "phase": global_.phase,
         "active": global_.active,
@@ -517,17 +464,13 @@ def _global_to_json(global_: GlobalState, gen3: bool) -> dict:
         "stack_size": global_.stack_size,
         "combat_substep": global_.combat_substep,
         "emblems": _keys_to_json(global_.emblems),
+        "day_night": global_.day_night,
+        "floating_effects": [
+            _command_zone_object_to_json(made) for made in global_.floating_effects],
+        "delayed_triggers": [
+            _command_zone_object_to_json(made) for made in global_.delayed_triggers],
+        "dungeons": [_dungeon_to_json(dungeon) for dungeon in global_.dungeons],
     }
-    if gen3:
-        out |= {
-            "day_night": global_.day_night,
-            "floating_effects": [
-                _command_zone_object_to_json(made) for made in global_.floating_effects],
-            "delayed_triggers": [
-                _command_zone_object_to_json(made) for made in global_.delayed_triggers],
-            "dungeons": [_dungeon_to_json(dungeon) for dungeon in global_.dungeons],
-        }
-    return out
 
 
 def _global_from_json(data: dict) -> GlobalState:
@@ -558,29 +501,25 @@ def _turn_counts_from_json(data: dict) -> TurnCounts:
     return TurnCounts(**{name: data.get(name, 0) for name in _TURN_COUNTS})
 
 
-def _player_to_json(player: PlayerState, gen3: bool) -> dict:
+def _player_to_json(player: PlayerState) -> dict:
     out = {
         "id": player.id, "life": player.life, "hand": player.hand,
         "library": player.library, "graveyard": player.graveyard,
         "poison": player.poison, "energy": player.energy,
         "this_turn": dict(player.this_turn),
     }
-    # Right after this_turn, on a gen-3 player that carried it: a gen-3
-    # record collected before the member existed writes back without it.
-    if gen3 and (player.max_land_plays is not None or player.land_plays_unlimited):
+    # Right after this_turn, on a player that carried it: a record collected
+    # before the member existed writes back without it.
+    if player.max_land_plays is not None or player.land_plays_unlimited:
         out["max_land_plays"] = player.max_land_plays
-    out |= {
+    return out | {
         "floating_mana": dict(player.floating_mana),
         "untapped_production": dict(player.untapped_production),
+        "speed": player.speed, "city_blessing": player.city_blessing,
+        "rad": player.rad, "monarch": player.monarch,
+        "initiative": player.initiative,
+        "turn_counts": _absent_or(_turn_counts_to_json, player.turn_counts),
     }
-    if gen3:
-        out |= {
-            "speed": player.speed, "city_blessing": player.city_blessing,
-            "rad": player.rad, "monarch": player.monarch,
-            "initiative": player.initiative,
-            "turn_counts": _absent_or(_turn_counts_to_json, player.turn_counts),
-        }
-    return out
 
 
 def _player_from_json(data: dict) -> PlayerState:
@@ -612,21 +551,19 @@ def _random_from_json(data: dict) -> RandomResults:
                          coin_flips_lost=flips.get("lost", 0))
 
 
-def _refs_to_json(refs: Refs, gen3: bool) -> dict:
+def _refs_to_json(refs: Refs) -> dict:
     out: dict = {"targets": list(refs.targets)}
     # Both or neither, as the collector writes them since it wrote either.
     if refs.targets_on_stack is not None or refs.targets_at_cast is not None:
         out["targets_at_cast"] = _list_or_none(refs.targets_at_cast)
         out["targets_on_stack"] = list(refs.targets_on_stack or ())
-    out |= {
+    return out | {
         "source": refs.source,
         "modes": list(refs.modes),
         "x": refs.x,
         "choices": dict(refs.choices),
+        "random": _absent_or(_random_to_json, refs.random),
     }
-    if gen3:
-        out["random"] = _absent_or(_random_to_json, refs.random)
-    return out
 
 
 def _refs_from_json(data: dict) -> Refs:
@@ -668,19 +605,15 @@ def _link_from_json(data: dict) -> Link:
 
 
 def _snapshot_to_json(state: StateSnapshot) -> dict:
-    """A snapshot in the shape it was read in: ``links`` set makes it gen-3,
-    which also writes the gen-3 members of the global block, the players and
-    the refs."""
-    gen3 = state.links is not None
     out: dict = {
-        "global": _global_to_json(state.global_, gen3),
-        "players": [_player_to_json(player, gen3) for player in state.players],
+        "global": _global_to_json(state.global_),
+        "players": [_player_to_json(player) for player in state.players],
         "entities": [_entity_to_json(e) for e in state.entities],
     }
     if state.links is not None:
         out["links"] = [_link_to_json(link) for link in state.links]
     return out | {
-        "refs": _refs_to_json(state.refs, gen3),
+        "refs": _refs_to_json(state.refs),
         "pending_event": (
             state.pending_event.as_dict() if state.pending_event else None
         ),
@@ -728,22 +661,15 @@ def _costs_from_json(data: dict) -> Costs:
 
 
 def _activation_to_json(payload: ActivationPayload) -> dict:
-    out: dict = {}
-    if payload.events is not None:
-        out["events"] = _events_to_json(payload.events)
-    out["costs"] = _costs_to_json(payload.costs)
-    if payload.outcome is not None:
-        out["outcome"] = payload.outcome.value
-    return out
+    return {"events": _events_to_json(payload.events),
+            "costs": _costs_to_json(payload.costs)}
 
 
 def _activation_from_json(data: dict) -> ActivationPayload:
-    """A cost half: gen-3's ``{events, costs}`` or gen-1/gen-2's ``{costs, outcome}``."""
-    outcome = data.get("outcome")
+    """A cost half, ``{events, costs}``."""
     return ActivationPayload(
         costs=_costs_from_json(data.get("costs") or {}),
-        outcome=ResolutionOutcome(outcome) if outcome is not None else None,
-        events=_events_from_json(data["events"]) if "events" in data else None,
+        events=_events_from_json(data["events"]),
     )
 
 
@@ -1093,11 +1019,9 @@ def _payload_from_json(
 
 def record_to_dict(record: EffectRecord) -> dict:
     """One record's JSON-serializable dict form, envelope keys first."""
-    out: dict = {"record_id": record.record_id}
-    # First after record_id where set: its value names a gen-3 shard (FR-018).
-    if record.generation is not None:
-        out["generation"] = record.generation
-    out |= {
+    out: dict = {
+        "record_id": record.record_id,
+        "generation": record.generation,
         "run_id": record.run_id,
         "timestamp": record.timestamp,
         "game_id": record.game_id,
@@ -1111,11 +1035,9 @@ def record_to_dict(record: EffectRecord) -> dict:
         "interventional": record.interventional,
         "fork": record.fork,
         "synthetic": record.synthetic,
+        "random_seat": record.random_seat,
     }
-    # Written only where the source carried it: its presence makes a shard
-    # gen-2 (``shard_generation``), so a rewritten gen-1 record stays gen-1.
-    if record.random_seat is not None:
-        out["random_seat"] = record.random_seat
+    # On a blockers record alone, the one kind that carries it.
     if record.what_if is not None:
         out["what_if"] = record.what_if
     if record.aimed_at is not None:
@@ -1136,10 +1058,8 @@ def record_to_dict(record: EffectRecord) -> dict:
         "state": _snapshot_to_json(record.state),
         "payload": _payload_to_json(record.payload),
     }
-    if record.generation is not None and _is_observed_combat(record.payload):
-        # The gen-3 collector writes no probe member on an observed combat.
-        # Earlier generations keep the nulls this codec has always written,
-        # which the pinned bytes of their fixtures hold.
+    if _is_observed_combat(record.payload):
+        # The collector writes no probe member on an observed combat.
         del out["payload"]["probed_keyword"], out["payload"]["probed_entity"]
     for key, value in record.extra_fields.items():
         out.setdefault(key, value)
@@ -1173,10 +1093,10 @@ class SupersededPayloadError(ValueError):
 
 
 def check_gen3_payload_shape(data: dict) -> None:
-    """Refuse a gen-3 resolution half in the superseded shape: a cost half
-    holds ``events`` and no ``outcome`` (``{events, costs}``), an effect half
+    """Refuse a resolution half in the superseded shape: a cost half holds
+    ``events`` and no ``outcome`` (``{events, costs}``), an effect half
     carries ``outcome`` (null on a mana record and the rescue record)."""
-    if data.get("generation") != 3 or data.get("kind") != RecordKind.RESOLUTION:
+    if data.get("kind") != RecordKind.RESOLUTION:
         return
     payload = data.get("payload") or {}
     moment = data.get("moment")
@@ -1193,14 +1113,14 @@ def check_gen3_payload_shape(data: dict) -> None:
 def record_from_dict(data: dict) -> EffectRecord:
     """Parse one shard line into an :class:`EffectRecord`.
 
-    A ``generation`` other than the integer 3 is refused
-    (:class:`~effects.domain.shard_generation.UnknownGenerationError`), and so
-    is a gen-3 resolution half in the payload shape gen 3 replaced
+    A record of an older generation, with no ``generation`` member, is refused
+    naming it (:class:`~effects.domain.shard_generation.OlderGenerationError`),
+    and so is a ``generation`` other than the integer 3
+    (:class:`~effects.domain.shard_generation.UnknownGenerationError`) and a
+    resolution half in the payload shape gen 3 replaced
     (:class:`SupersededPayloadError`).
     """
-    generation = data.get("generation")
-    if "generation" in data:
-        check_generation_member(generation)
+    require_gen3(data)
     check_gen3_payload_shape(data)
     kind = RecordKind(data["kind"])
     moment = Moment(data["moment"]) if data.get("moment") else None
@@ -1229,9 +1149,9 @@ def record_from_dict(data: dict) -> EffectRecord:
         interventional=data.get("interventional", False),
         fork=data.get("fork", False),
         synthetic=data.get("synthetic", False),
-        random_seat=data.get("random_seat"),
+        random_seat=bool(data.get("random_seat", False)),
         what_if=data.get("what_if"),
-        generation=generation,
+        generation=data["generation"],
         aimed_at=tuple(aimed_at) if aimed_at is not None else None,
         directed=(DirectedTag(directed["variant"], ForkOperation(directed["operation"]))
                   if directed is not None else None),

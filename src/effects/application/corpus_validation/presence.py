@@ -1,10 +1,11 @@
 """Which envelope, snapshot and payload members each shard's raw lines carry.
 
 Read from the raw lines rather than the parsed records, since a parsed record
-cannot say whether a field was on the wire: three findings, one for gen-2's
-envelope fields (FR-033), one for the members every gen-3 record owes (root
-§ 8.13 and § 8.4), and one refusing the ``curation`` member a collected shard
-never carries.
+cannot say whether a field was on the wire: three findings, one for
+``what_if``, which blockers records alone carry (FR-033), one for the members
+every gen-3 record owes (root § 8.13 and § 8.4), and one refusing the
+``curation`` member a collected shard never carries. A record of an older
+generation is refused, named, as every reader refuses it.
 """
 
 from __future__ import annotations
@@ -19,13 +20,12 @@ from effects.application.corpus_validation.findings import (
     histogram,
 )
 from effects.domain.records import (
-    LEGALITY_SUBKINDS,
     Moment,
     PlayabilitySubkind,
     RecordKind,
     TurnActionSubkind,
 )
-from effects.domain.shard_generation import ShardGeneration
+from effects.domain.shard_generation import UnacceptedGenerationError, require_gen3
 
 #: The member only ``build-corpus`` writes, on every record of a curated shard.
 CURATION_MEMBER = "curation"
@@ -33,6 +33,7 @@ CURATION_MEMBER = "curation"
 #: What every gen-3 record owes where it applies, by where it sits: the
 #: members of root § 8.13 and the snapshot facts of § 8.4, all written on
 #: every record of their site (null or empty where there is nothing to say).
+GEN3_ENVELOPE_MEMBERS = ("random_seat",)
 GEN3_STATE_MEMBERS = ("links",)
 GEN3_GLOBAL_MEMBERS = ("day_night", "floating_effects", "delayed_triggers", "dungeons")
 GEN3_PLAYER_MEMBERS = ("max_land_plays", "speed", "city_blessing", "rad", "monarch",
@@ -55,6 +56,7 @@ GEN3_GAME_END_MEMBERS = ("records_withheld",)
 
 def _owed(data: Mapping) -> Iterator[tuple[str, bool]]:
     """Each member site a gen-3 record owes, and whether it carries it."""
+    yield from _members("record", data, GEN3_ENVELOPE_MEMBERS)
     state = data.get("state") or {}
     yield from _members("state", state, GEN3_STATE_MEMBERS)
     yield from _members("state.global", state.get("global") or {}, GEN3_GLOBAL_MEMBERS)
@@ -88,21 +90,21 @@ def _members(site: str, block: Mapping, members: tuple[str, ...]) -> Iterator[tu
         yield f"{site}.{member}", member in block
 
 
-def _owes_what_if(data: Mapping, generation: ShardGeneration) -> bool:
-    """Whether a record is of the kinds that carry ``what_if``; one that is
-    not must not carry it.
+def _owes_what_if(data: Mapping) -> bool:
+    """Whether a record is of the kind that carries ``what_if``, a blockers
+    record; one that is not must not carry it. An attackers record carries
+    none, being one creature of the declaration made."""
+    return (data.get("kind") == RecordKind.PLAYABILITY
+            and data.get("subkind") == PlayabilitySubkind.BLOCKERS)
 
-    Both legality subkinds carry it up to gen-2 (a gen-1 shard on none of
-    them, which the shard's own ``random_seat`` tells); gen-3 writes it on
-    blockers alone, an attackers record being one creature of the
-    declaration made.
-    """
-    subkind = data.get("subkind")
-    if data.get("kind") != RecordKind.PLAYABILITY or subkind not in LEGALITY_SUBKINDS:
-        return False
-    if generation is ShardGeneration.GEN_3:
-        return subkind == PlayabilitySubkind.BLOCKERS
-    return True
+
+def _require_gen3(shard: str, data: Mapping) -> None:
+    """Refuse a raw line of an older generation, naming its shard and record:
+    it is seen here before it is decoded."""
+    try:
+        require_gen3(data)
+    except UnacceptedGenerationError as exc:
+        raise type(exc)(f"{shard}, record {data.get('record_id')}: {exc}") from exc
 
 
 @dataclass(slots=True)
@@ -110,12 +112,10 @@ class _ShardPresence:
     """One shard's raw lines, and how many carry each member."""
 
     records: int = 0
-    with_random_seat: int = 0
-    #: The legality records that owe ``what_if``, and how many carry it.
-    legality: int = 0
-    legality_with_what_if: int = 0
-    #: Records carrying a ``what_if`` they must not: any non-legality record,
-    #: a gen-3 attackers record.
+    #: The blockers records, which owe ``what_if``, and how many carry it.
+    blockers: int = 0
+    blockers_with_what_if: int = 0
+    #: Records carrying a ``what_if`` they must not: any but a blockers record.
     stray_what_if: int = 0
     curated: int = 0
 
@@ -124,9 +124,9 @@ class _ShardPresence:
 class FieldPresence:
     """Which members each shard's raw lines carry (FR-033, root § 8.13).
 
-    Per shard for the gen-2 envelope, because a shard is one collector build:
-    one where only some records carry ``random_seat`` came from a collector
-    stamping it on some paths only.
+    Per shard for ``what_if``, because a shard is one collector build: one
+    where only some blockers records carry it came from a collector stamping
+    it on some paths only.
     """
 
     shards: dict[str, _ShardPresence] = field(default_factory=dict)
@@ -139,19 +139,16 @@ class FieldPresence:
     short_examples: list[str] = field(default_factory=list)
 
     def observe(self, shard: str, data: dict) -> None:
+        _require_gen3(shard, data)
         counts = self.shards.setdefault(shard, _ShardPresence())
         counts.records += 1
-        counts.with_random_seat += "random_seat" in data
         counts.curated += CURATION_MEMBER in data
-        generation = ShardGeneration.of(data)
-        owes = _owes_what_if(data, generation)
-        if owes:
-            counts.legality += 1
-            counts.legality_with_what_if += "what_if" in data
+        if _owes_what_if(data):
+            counts.blockers += 1
+            counts.blockers_with_what_if += "what_if" in data
         elif "what_if" in data:
             counts.stray_what_if += 1
-        if generation is ShardGeneration.GEN_3:
-            self._observe_gen3(data)
+        self._observe_gen3(data)
 
     def _observe_gen3(self, data: dict) -> None:
         self.gen3_records += 1
@@ -171,34 +168,23 @@ class FieldPresence:
         yield self._curation_finding()
 
     def _envelope_finding(self) -> Finding:
-        partial_seat, partial_what_if, stray = [], [], []
+        partial, stray = [], []
         for shard, counts in sorted(self.shards.items()):
-            records, seats = counts.records, counts.with_random_seat
-            legality, what_ifs = counts.legality, counts.legality_with_what_if
-            if 0 < seats < records:
-                partial_seat.append(f"{shard}: random_seat on {seats} of {records} records")
-            # A gen-2 or gen-3 shard owes what_if on every legality record
-            # that carries it; a gen-1 one on none, so only a partial set is
-            # wrong there.
-            if what_ifs < legality and (seats or what_ifs):
-                partial_what_if.append(
-                    f"{shard}: what_if on {what_ifs} of {legality} legality records"
-                )
+            blockers, what_ifs = counts.blockers, counts.blockers_with_what_if
+            if what_ifs < blockers:
+                partial.append(f"{shard}: what_if on {what_ifs} of {blockers} blockers records")
             if counts.stray_what_if:
                 stray.append(
                     f"{shard}: what_if on {counts.stray_what_if} record(s) "
-                    "that carry none (another kind, or a gen-3 attackers record)"
+                    "that carry none (another kind than blockers)"
                 )
-        seated = sum(1 for counts in self.shards.values() if counts.with_random_seat)
-        bad = partial_seat + partial_what_if + stray
+        bad = partial + stray
         return Finding(
-            name="gen-2 envelope fields are on every record of the kinds that carry them",
+            name="what_if is on every blockers record and on no other",
             ok=not bad,
             measured=(
-                f"{len(self.shards)} shard(s), {seated} carrying random_seat; "
-                f"{len(partial_seat)} with random_seat on some records only, "
-                f"{len(partial_what_if)} with what_if on some legality records "
-                f"only, {len(stray)} with what_if where none belongs"
+                f"{len(self.shards)} shard(s): {len(partial)} with what_if on some "
+                f"blockers records only, {len(stray)} with what_if where none belongs"
             ),
             detail=tuple(bad[:EXAMPLES]),
         )

@@ -68,7 +68,7 @@ def verdict_targets(record: EffectRecord) -> HeadRow | None:
     checks and cost adjustment; a cost half the mana it paid by colour; an
     effect half the effect objects and delayed triggers it created and the
     stack item's resolution outcome (FR-052: supervised on effect halves
-    only, a gen-3 cost half carrying none); a ``rewrite`` record the
+    only, a cost half carrying none); a ``rewrite`` record the
     replacement's result; a
     ``trigger`` record whether it fired. Every other field is masked out,
     since a cost half is no evidence of playability.

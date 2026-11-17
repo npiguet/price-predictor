@@ -1,4 +1,4 @@
-"""``LegalityDecision``: one spelling of real / what-if / unknown."""
+"""``LegalityDecision``: one spelling of real / what-if."""
 
 from __future__ import annotations
 
@@ -13,21 +13,17 @@ from tests.unit.effects.builders import java_golden_records
 @pytest.mark.parametrize(("what_if", "decision"), [
     (False, LegalityDecision.REAL),
     (True, LegalityDecision.WHAT_IF),
-    (None, LegalityDecision.UNKNOWN),
 ])
-def test_a_records_what_if_decides_it(what_if, decision):
-    record = SimpleNamespace(what_if=what_if, generation=None, subkind="blockers")
+def test_a_blockers_records_what_if_decides_it(what_if, decision):
+    record = SimpleNamespace(what_if=what_if, subkind=PlayabilitySubkind.BLOCKERS)
     assert LegalityDecision.of(record) is decision
 
 
-def test_a_gen3_attackers_record_is_a_real_declaration():
-    """Gen-3 writes no ``what_if`` on attackers: one record per creature of
-    the declaration made, none for a query."""
-    attackers = SimpleNamespace(what_if=None, generation=3,
-                                subkind=PlayabilitySubkind.ATTACKERS)
+def test_an_attackers_record_is_a_real_declaration():
+    """No ``what_if`` on attackers: one record per creature of the
+    declaration made, none for a query."""
+    attackers = SimpleNamespace(what_if=None, subkind=PlayabilitySubkind.ATTACKERS)
     assert LegalityDecision.of(attackers) is LegalityDecision.REAL
-    gen1 = SimpleNamespace(what_if=None, generation=None, subkind="attackers")
-    assert LegalityDecision.of(gen1) is LegalityDecision.UNKNOWN
 
 
 def test_a_golden_attackers_record_reads_real():

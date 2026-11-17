@@ -190,7 +190,6 @@ def read_games(
     for, and parsing them would cost most of the read. ``record_ids`` narrows
     it further to the records a probing run actually reads.
     """
-    from effects.domain.shard_generation import ACCEPTED_GENERATIONS
     from effects.infrastructure.record_codec import parse_record_line, record_from_dict
     from effects.infrastructure.shard_io import (
         iter_shard_lines,
@@ -202,7 +201,7 @@ def read_games(
         return game_id in game_ids and (record_ids is None or record_id in record_ids)
 
     shards = list(shards)
-    require_generation(shards, *ACCEPTED_GENERATIONS)
+    require_generation(shards)
     for shard in shards:
         for line in iter_shard_lines(shard):
             head = peek_envelope(line)

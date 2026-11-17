@@ -1,4 +1,0 @@
-name: stone rain
-mana cost: {2}{R}
-types: sorcery
-spell[1]: destroy target land.

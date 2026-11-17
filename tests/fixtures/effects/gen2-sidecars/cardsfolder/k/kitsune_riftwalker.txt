@@ -1,6 +1,0 @@
-name: kitsune riftwalker
-mana cost: {1}{W}{W}
-types: creature fox wizard
-power toughness: 2/1
-static: protection from spirit
-static: protection from arcane

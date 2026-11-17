@@ -19,7 +19,6 @@ from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import Baseline
 from effects.domain.corpus_manifest import CorpusManifest
 from effects.domain.rule_mask import RuleMask
-from effects.domain.shard_generation import ACCEPTED_GENERATIONS
 from effects.domain.split import CorpusSplit, HoldoutRule
 from effects.domain.strata import VALIDATION_STRATA, Stratum
 from effects.domain.text_holdout import normalize_script_text
@@ -498,7 +497,7 @@ def run(config: TrainEffectModelConfig) -> int:
             "validation/samples/."
         )
     # Before any record is read (FR-020, FR-033).
-    require_generation(iter_shards(Path(config.corpus)), *ACCEPTED_GENERATIONS)
+    require_generation(iter_shards(Path(config.corpus)))
     if not manifest.rule_counts:
         raise MissingTrainingInputError(
             f"The manifest of the corpus at {config.corpus} has no per-rule "

@@ -20,7 +20,6 @@ from effects.application.parallel_map import run_parallel
 from effects.application.rule_counts import CountContext
 from effects.domain.rule_breadth import BreadthRow, breadth_counts, breadth_rows
 from effects.domain.rule_detectors import DetectorIndex
-from effects.domain.shard_generation import ACCEPTED_GENERATIONS
 from effects.domain.tally_merge import merge_into
 
 logger = logging.getLogger(__name__)
@@ -54,8 +53,8 @@ def breadth(records_dir: Path, rules_dir: Path, sidecar_roots: dict,
     shards = iter_shards(records_dir)
     if not shards:
         raise NoShardsError(f"no shards under {records_dir}")
-    generation = require_generation(shards, *ACCEPTED_GENERATIONS)
-    logger.info("Breadth over %d %s shard(s) under %s", len(shards), generation, records_dir)
+    require_generation(shards)
+    logger.info("Breadth over %d gen-3 shard(s) under %s", len(shards), records_dir)
     total = BreadthTally()
     for found in run_parallel(
         shards, breadth_shard, workers=workers, label="Breadth", progress_every=20,

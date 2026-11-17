@@ -559,14 +559,13 @@ def _run_sweeps(reads: list[halves.HalfRead], probe_model) -> dict:
 
 def _validation_samples(context: common.ProbeContext, limit: int) -> list:
     """The first ``limit`` distinct records of each stratum's fixed validation sample."""
-    from effects.domain.shard_generation import ACCEPTED_GENERATIONS
     from effects.infrastructure.shard_io import read_shard, require_generation
 
     samples = []
     for stratum in common.STRATA:
         path = Path(context.corpus) / "validation" / "samples" / f"{stratum}.jsonl.gz"
         if path.exists():
-            require_generation([path], *ACCEPTED_GENERATIONS)
+            require_generation([path])
             for count, record in enumerate(halves.distinct(read_shard(path))):
                 if count >= limit:
                     break
@@ -871,17 +870,14 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _probe_run(args: argparse.Namespace) -> int:
-    from effects.domain.shard_generation import (
-        MixedGenerationsError,
-        UnacceptedGenerationError,
-    )
+    from effects.domain.shard_generation import UnacceptedGenerationError
 
     context = common.probe_context(
         args.checkpoint, corpus=args.corpus, cards_folders=args.cards_folder)
     selection = halves.load_selection(context, args.probe_set_dir or args.reports_dir)
     try:
         scorecard = probe(args, context, selection)
-    except (MixedGenerationsError, UnacceptedGenerationError) as error:
+    except UnacceptedGenerationError as error:
         raise SystemExit(str(error)) from None
     out_dir = output_dir(args, scorecard.date)
     common.write_json(out_dir / "scorecard.json", scorecard.to_json())

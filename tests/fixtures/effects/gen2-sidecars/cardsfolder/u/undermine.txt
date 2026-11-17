@@ -1,4 +1,0 @@
-name: undermine
-mana cost: {U}{U}{B}
-types: instant
-spell[1]: counter target spell. its controller loses 3 life.

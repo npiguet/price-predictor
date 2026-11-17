@@ -1,6 +1,0 @@
-name: chained throatseeker
-mana cost: {5}{U}
-types: creature phyrexian horror
-power toughness: 5/5
-static: infect
-static: CARDNAME can't attack unless defending player is poisoned.

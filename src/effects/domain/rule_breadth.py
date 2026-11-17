@@ -13,7 +13,7 @@ about a rare situation of a common subject looks the same, so a flag is a
 question for the reviewer rather than a verdict.
 
 Prior art: :func:`effects.domain.rule_detectors.tag_record`, whose per-kind
-index and generation rule this follows scenario by scenario.
+index this follows scenario by scenario.
 """
 
 from __future__ import annotations
@@ -48,21 +48,13 @@ def breadth_counts(record: EffectRecord, index: DetectorIndex,
                    lines: SidecarLookup | None = None) -> Counter:
     """``(scenario, POOL | TAGGED) -> 1`` for each declared scenario of the
     record's kind whose pool, or whose own detector, finds a ``fires`` side.
-
-    A scenario whose detector needs a field the record's generation lacks is
-    skipped, as :func:`tag_record` skips it.
     """
     found: Counter = Counter()
     if is_game_end(record):
         return found  # no detector reads the game-end marker, as tag_record says
-    gen3 = record.generation == 3
     for scenario, declaration, family in index.by_kind.get(record.kind.value, ()):
-        if not gen3 and (declaration.needs or family.needs(declaration.params)):
-            continue
-        general = pool_params(declaration, family)
-        if gen3 or not family.needs(general):
-            if _fires(family, record, lines, general):
-                found[(scenario.id, POOL)] += 1
+        if _fires(family, record, lines, pool_params(declaration, family)):
+            found[(scenario.id, POOL)] += 1
         if _fires(family, record, lines, declaration.params):
             found[(scenario.id, TAGGED)] += 1
     return found

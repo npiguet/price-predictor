@@ -23,11 +23,7 @@ from typing import IO, NamedTuple
 from effects.domain.corpus_curation import record_hash
 from effects.domain.corpus_manifest import SourceShard
 from effects.domain.records import EffectRecord, RecordKind
-from effects.domain.shard_generation import (
-    MixedGenerationsError,
-    ShardGeneration,
-    UnacceptedGenerationError,
-)
+from effects.domain.shard_generation import UnacceptedGenerationError, require_gen3
 from effects.domain.wire_closed_lists import off_list_values
 from effects.infrastructure.record_codec import (
     format_record_line,
@@ -473,7 +469,7 @@ def _record_at(path: Path, number: int, line: str) -> EffectRecord:
 def iter_record_dicts(path: Path) -> Iterator[dict]:
     """Every complete record of one shard, as the dict its line parses to.
 
-    For a caller that needs the raw JSON, such as a generation check.
+    For a caller that needs the raw JSON; a record of any generation reads.
     """
     for number, line in _numbered_lines(path):
         yield _decode(path, number, line, _parse_object)
@@ -601,8 +597,8 @@ _GAME_END = re.compile(r'"subkind"\s*:\s*"game_end"')
 
 def ended_games(path: Path) -> frozenset[str]:
     """The games of one shard that wrote their game-end marker
-    (``turn_action`` / ``game_end``, WP7): a gen-3 game of the shard missing
-    from them was cut. Reads each line's head, parsing only a turn action's
+    (``turn_action`` / ``game_end``, WP7): a game of the shard missing from
+    them was cut. Reads each line's head, parsing only a turn action's
     or a line whose head is in another shape. A damaged last member ends the
     read as it ends every read, but goes unreported here: the read of the
     shard's records reports it, once."""
@@ -702,46 +698,16 @@ def count_shard_records(shard: Path) -> int:
 
 # ── shard generation (FR-033) ───────────────────────────────────────────
 
-def shard_generation(path: Path) -> ShardGeneration | None:
-    """The shard's generation by its first complete record; None if empty.
+def require_generation(paths: Iterable[Path]) -> None:
+    """Refuse a records set before reading it whole if a shard's first
+    record is not gen-3, naming the shard, the line and the generation.
 
-    One record speaks for its shard: ``validate-corpus`` fails a shard whose
-    records disagree.
+    Every reader of a records set calls this first (FR-020, FR-033): one
+    record speaks for its shard, and an older record later in a shard is
+    refused where it is decoded (``record_codec.record_from_dict``).
     """
-    for number, line in _numbered_lines(path):
-        data = _decode(path, number, line, _parse_object)
-        return _decode(path, number, data, ShardGeneration.of)
-    return None
-
-
-def require_generation(paths: Iterable[Path], *allowed: ShardGeneration) -> ShardGeneration | None:
-    """The one generation ``paths`` hold; raise on a mix or on one outside ``allowed``.
-
-    Every reader of a records set calls this first (FR-020, FR-033): gen-2
-    redefined ``actor_player`` on playability records and gen-3 redefines
-    several fields again, with no per-field version to tell them apart. None
-    when no shard holds a record.
-    """
-    seen: dict[ShardGeneration, Path] = {}
     for path in paths:
-        generation = shard_generation(path)
-        if generation is not None:
-            seen.setdefault(generation, Path(path))
-    if len(seen) > 1:
-        ordered = sorted(seen)
-        raise MixedGenerationsError(
-            f"this records set mixes {ordered[0]} shards with "
-            + " and ".join(f"{g} shards" for g in ordered[1:])
-            + ", e.g. " + " and ".join(str(seen[g]) for g in ordered)
-            + ". Generations read several fields differently (FR-030a, FR-018); "
-            "keep them in separate directories and read one at a time."
-        )
-    if not seen:
-        return None
-    (generation, example), = seen.items()
-    if allowed and generation not in allowed:
-        raise UnacceptedGenerationError(
-            f"{example} holds {generation} records; this command reads "
-            + " or ".join(str(g) for g in allowed) + " only."
-        )
-    return generation
+        for number, line in _numbered_lines(path):
+            data = _decode(path, number, line, _parse_object)
+            _decode(path, number, data, require_gen3)
+            break

@@ -1,3 +1,0 @@
-name: clue token
-types: artifact clue
-activated[1]: {2}, sacrifice this token: draw a card.

@@ -1,4 +1,0 @@
-name: golgari guildgate
-types: land gate
-activated[1]: {T}: add {B} or {G}.
-replacement: CARDNAME enters tapped.

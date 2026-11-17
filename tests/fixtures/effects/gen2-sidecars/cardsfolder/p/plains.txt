@@ -1,3 +1,0 @@
-name: plains
-types: basic land plains
-activated[1]: {T}: add {W}

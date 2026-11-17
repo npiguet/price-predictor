@@ -1,4 +1,0 @@
-name: torpor orb
-mana cost: {2}
-types: artifact
-static: creatures entering don't cause abilities to trigger.

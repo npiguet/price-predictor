@@ -137,8 +137,11 @@ class TestTheSupersededShape:
         ("activation", {"costs": {}, "outcome": "resolved"}),
         ("resolution", {"events": []}),
     ])
-    def test_the_same_half_of_an_earlier_generation_reads(self, moment, payload):
+    def test_the_same_half_of_an_earlier_generation_is_refused_as_that(self, moment, payload):
+        from effects.domain.shard_generation import OlderGenerationError
+
         raw = _golden(lambda r: r.get("moment") == moment) | {"payload": payload}
         del raw["generation"]
-        assert record_from_dict(raw).generation is None
+        with pytest.raises(OlderGenerationError, match="the record is gen-2 "):
+            record_from_dict(raw)
 

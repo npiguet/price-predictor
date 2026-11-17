@@ -82,7 +82,7 @@ What the collectors must read of the hooks:
 - Continuous records are read at every phase boundary but the untap step's. No player gets priority there, and the live game has not yet re-applied its statics for the new turn, so a record there could describe a board the rules do not hold.
 - `types` and `colors` are each one flat token list: a bare token is added, `-x` removed, and a lone `=` marks a line the static sets outright.
 - Subtypes and supertypes are recorded and then dropped at target derivation, because `types_gained` and `types_lost` cover the core types only. The record is the archive; a head reads a subset.
-- A `=` on a gen-1 or gen-2 record leaves `types_lost` unset. On a gen-3 record the lost fields are the entity's own types and colours on the board without the static, less what the `=` sets.
+- Under a `=` the lost fields are the entity's own types and colours on the board without the static, less what the `=` sets; an entity not on that board leaves them unknown (`effect_targets.py`).
 
 ## Token script ids
 

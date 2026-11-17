@@ -1,3 +1,0 @@
-name: swamp
-types: basic land swamp
-activated[1]: {T}: add {B}

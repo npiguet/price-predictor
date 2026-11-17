@@ -381,8 +381,9 @@ class TestTheGen3Fields:
             *(f"record.payload<PlayabilityBlockersPayload>.forbidden[].{name}"
               for name in ("required_elsewhere", "responsible_own", "responsible_unresolved")),
         ]
-        written = [*varying, "record.payload<ActivationPayload>.events",
-                   "record.payload<TurnActionPayload>.records_withheld",
+        # A cost half's events are no optional member: the goldens' empty
+        # lists are their default, so they read unpopulated here.
+        written = [*varying, "record.payload<TurnActionPayload>.records_withheld",
                    "record.state.players[].max_land_plays"]
         assert [path for path in written if not coverage[path].populated] == []
         assert [path for path in varying if coverage[path].constant] == []
@@ -407,12 +408,9 @@ class TestTheGen3Fields:
             "record.payload<PlayabilityBlockersPayload>.forbidden[].responsible_own"] == "varies"
         assert status["record.state.global_.dungeons"] == "const"
 
-    def test_a_corpus_without_gen3_records_gets_no_section(self):
-        record = _record(ResolutionPayload(), moment=Moment.RESOLUTION,
-                         kind=RecordKind.RESOLUTION, generation=None)
-        assert gen3_report_lines(field_coverage([record])) == []
-        assert not any("gen-3 fields" in line for line in report_lines(
-            field_coverage([record])))
+    def test_an_empty_read_gets_no_section(self):
+        assert gen3_report_lines(field_coverage([])) == []
+        assert not any("gen-3 fields" in line for line in report_lines(field_coverage([])))
 
     def test_the_section_follows_the_constant_fields(self):
         """After every constant-field row, set off by a blank line, and

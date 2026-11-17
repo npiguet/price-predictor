@@ -52,6 +52,7 @@ from tests.unit.effects.builders import (
     make_entity,
     make_record,
     make_snapshot,
+    write_ended_shard,
     write_sidecar,
 )
 
@@ -80,21 +81,16 @@ def a_record(
     entity_names: tuple[str, ...] = (),
     **overrides,
 ) -> EffectRecord:
-    """A real ``EffectRecord``: ``kind`` picks the discriminator and payload.
-
-    A gen-2 record unless ``generation=3`` is passed: the survey's shards
-    here hold no game-end marker, which only a gen-3 game owes.
-    """
+    """A real ``EffectRecord``: ``kind`` picks the discriminator and payload."""
     record_kind = RecordKind(kind)
     moment, payload = _PAYLOAD_BY_KIND[record_kind]
     entities = tuple(make_entity(f"E-{name}", name) for name in entity_names)
-    extra = {"moment": moment, "payload": payload, "generation": None, **overrides}
+    extra = {"moment": moment, "payload": payload, **overrides}
     if record_id is not None:
         extra["record_id"] = record_id
-    links = () if extra["generation"] == 3 else None
     return make_record(
         record_kind, game_id=game_id, ability=(ability or None),
-        state=make_snapshot(entities=entities, links=links), **extra,
+        state=make_snapshot(entities=entities), **extra,
     )
 
 
@@ -163,13 +159,13 @@ def a_config(
 
 
 def _survey_one(tmp_path, records, **config):
-    write_shard(tmp_path / "records" / "run.0-a.jsonl.gz", records)
+    write_ended_shard(tmp_path / "records" / "run.0-a.jsonl.gz", records)
     worker = SurveyWorker(a_config(tmp_path / "records", **config))
     return worker.survey(list_shards(tmp_path / "records")[0])
 
 
 def test_survey_counts_records_classes_and_games(tmp_path):
-    write_shard(tmp_path / "run.0-a.jsonl.gz", [
+    write_ended_shard(tmp_path / "run.0-a.jsonl.gz", [
         a_record(record_id="run.0-a.0", game_id="g1", kind="rewrite"),
         a_record(record_id="run.0-a.1", game_id="g1", kind="rewrite"),
         a_record(record_id="run.0-a.2", game_id="g2", kind="combat", ability=()),
@@ -177,7 +173,8 @@ def test_survey_counts_records_classes_and_games(tmp_path):
 
     survey = run_survey(tmp_path, config=a_config(tmp_path), workers=1)
 
-    assert survey.totals.records == 3
+    # The three records and the two games' markers.
+    assert survey.totals.records == 5
     assert survey.totals.games.games == {"g1", "g2"}
     assert survey.totals.games.held_out == set()
 
@@ -188,7 +185,7 @@ def test_survey_marks_every_game_naming_a_held_out_card(tmp_path):
     # still marked held out -- a game naming a held-out card is marked before
     # any of its records is judged, so no quality rule can unmark its game.
     keys = (ProvenanceKey("cardsfolder/b/bear.txt", 0, "spell", 0),)
-    write_shard(tmp_path / "run.0-a.jsonl.gz", [
+    write_ended_shard(tmp_path / "run.0-a.jsonl.gz", [
         a_record(record_id="run.0-a.0", game_id="g1", ability=keys,
                  entity_names=("Soul Echo",)),
         a_record(record_id="run.0-a.1", game_id="g2", ability=keys,
@@ -207,7 +204,7 @@ def test_survey_marks_every_game_naming_a_held_out_card(tmp_path):
 def test_survey_counts_games_not_records_for_rarity(tmp_path):
     # One ability, three records, two games: rarity must read 2.
     keys = (ProvenanceKey("cardsfolder/b/bear.txt", 0, "spell", 0),)
-    write_shard(tmp_path / "run.0-a.jsonl.gz", [
+    write_ended_shard(tmp_path / "run.0-a.jsonl.gz", [
         a_record(record_id="run.0-a.0", game_id="g1", ability=keys),
         a_record(record_id="run.0-a.1", game_id="g1", ability=keys),
         a_record(record_id="run.0-a.2", game_id="g2", ability=keys),
@@ -224,7 +221,7 @@ def test_survey_counts_games_not_records_for_rarity(tmp_path):
 
 def test_survey_records_each_shards_name_relative_to_the_corpus_root(tmp_path):
     (tmp_path / "depleted").mkdir()
-    write_shard(tmp_path / "depleted" / "run.0-a.jsonl.gz", [a_record()])
+    write_ended_shard(tmp_path / "depleted" / "run.0-a.jsonl.gz", [a_record()])
 
     survey = run_survey(tmp_path, config=a_config(tmp_path), workers=1)
 
@@ -283,7 +280,7 @@ def test_a_defective_record_is_counted_and_otherwise_ignored(tmp_path):
     ], sidecar_roots=converted_tree(tmp_path, *_BOLT))
 
     assert out.refusals.by_reason == {QualityDefect.NO_ABILITY: 1}
-    assert out.records == 2
+    assert out.records == 4  # and each game's marker
     assert out.games.games == {"g1"}
 
 
@@ -506,8 +503,7 @@ class TestACutGame:
 
     @staticmethod
     def _gen3(record_id: str, game_id: str, **overrides) -> EffectRecord:
-        return a_record(record_id=record_id, game_id=game_id, kind="rewrite",
-                        generation=3, **overrides)
+        return a_record(record_id=record_id, game_id=game_id, kind="rewrite", **overrides)
 
     def _shard(self, tmp_path, name: str, records) -> None:
         write_shard(tmp_path / name, records)
@@ -538,10 +534,3 @@ class TestACutGame:
         survey = run_survey(tmp_path, config=a_config(tmp_path), workers=1)
         assert survey.shard_cut == {"run.0-a.jsonl.gz": frozenset({"g1"}),
                                     "run.0-b.jsonl.gz": frozenset()}
-
-    def test_an_older_generation_s_game_is_never_cut(self, tmp_path):
-        """Gen-1 and gen-2 shards carry no marker at all."""
-        self._shard(tmp_path, "run.0-a.jsonl.gz", [
-            a_record(record_id="run.0-a.0", game_id="g1", kind="rewrite")])
-        survey = run_survey(tmp_path, config=a_config(tmp_path), workers=1)
-        assert survey.totals.games.games == {"g1"} and not survey.totals.cut.games

@@ -84,16 +84,15 @@ _FROZEN_ENVELOPE: dict[str, str] = {
     # is still one of those strings or null.
     "ability_unresolved": "UnresolvedReason | None",
     # Gen-2 (feature 024), both under rule 1 and both collection metadata:
-    # whether the acting player was the random seat, and whether a legality
-    # record is a real declaration or a what-if query. Absent on gen-1 shards,
-    # which both read as None in memory, so a rewritten record keeps its
-    # generation; on the wire each is still a bool or absent.
-    "random_seat": "bool | None",
+    # whether the acting player was the random seat, on every gen-3 record,
+    # and whether a blockers record is a real declaration or a what-if query,
+    # None on every other record.
+    "random_seat": "bool",
     "what_if": "bool | None",
     # Gen-3 (feature 025), all three collection metadata: the generation marker
-    # (FR-018), the rules a run or fork aimed at (FR-009a) and a directed
-    # fork's change. Absent on gen-1 and gen-2 lines, read as None.
-    "generation": "int | None",
+    # (FR-018), 3 on every record a reader accepts, the rules a run or fork
+    # aimed at (FR-009a) and a directed fork's change.
+    "generation": "int",
     "aimed_at": "tuple[str, ...] | None",
     "directed": "DirectedTag | None",
     # What a fork's copy left out (WP5), by kind; None on live records.
@@ -332,8 +331,6 @@ class TestRuleFourMetadataNeverBecomesAModelInput:
         {"fork": True},
         {"synthetic": True},
         {"random_seat": True},
-        {"random_seat": None},
-        {"generation": None},
         {"aimed_at": ()},
         {"aimed_at": ("704.5f",)},
         {"curation": Curation(
@@ -341,7 +338,7 @@ class TestRuleFourMetadataNeverBecomesAModelInput:
             drawn_rules=("704.5f",), condition_entities=("E1",), outcome_entities=("E2",))},
     ])
     def test_a_resolution_s_surface_ignores_the_flag(self, flip):
-        base = make_record(state=_board(), ability=(_ACTING,), generation=3)
+        base = make_record(state=_board(), ability=(_ACTING,))
         assert _surface(replace(base, **flip)) == _surface(base)
 
     def test_an_intervention_s_surface_is_its_fork_s(self):

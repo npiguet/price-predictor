@@ -109,7 +109,7 @@ def off_list_values(raw: Mapping) -> Iterator[tuple[str, object]]:
 
 
 def _envelope(raw: Mapping) -> Iterator[tuple[str, object]]:
-    if raw.get("generation") == 3 and "mode" not in raw:
+    if "mode" not in raw:
         yield "mode", ABSENT
     for kind in raw.get("copy_dropped") or ():
         if _outside(kind, _COPY_DROPPED_KINDS):

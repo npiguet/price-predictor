@@ -47,6 +47,7 @@ from effects.domain.records import (
     Costs,
     EffectRecord,
     Moment,
+    PlayabilitySubkind,
     RecordKind,
     ResolutionOutcome,
     ResolutionPayload,
@@ -86,7 +87,6 @@ def _snapshot(turn: int = 3, names: tuple[str, ...] = (), tiers=None) -> StateSn
             make_entity(f"E{index}", name) for index, name in enumerate(names)
         ),
         tiers=_STAGE_TWO if tiers is None else tiers,
-        links=None,
     )
 
 
@@ -102,8 +102,6 @@ def _resolution(record_id: str, game_id: str = "run.0-L1.0", **overrides):
         # inheriting the dataclass default: a window of `degraded` records is
         # itself one of the defects under test.
         "mode": CollectionMode.PATCHED,
-        # A gen-2 window, its gen-3 checks each on records that say so.
-        "generation": None,
         "payload": ResolutionPayload(
             events=(
                 Event(
@@ -125,12 +123,12 @@ def _mode(option: int) -> ProvenanceKey:
     )
 
 
-def _activation(record_id: str, outcome=ResolutionOutcome.RESOLVED, **overrides):
+def _activation(record_id: str, **overrides):
+    """A cost half: written at the cast, its events and costs (FR-042a)."""
     fields: dict = {
         "moment": Moment.ACTIVATION,
         "payload": ActivationPayload(
-            costs=overrides.pop("costs", Costs(mana_by_color={"R": 1})),
-            outcome=outcome,
+            costs=overrides.pop("costs", Costs(mana_by_color={"R": 1})), events=(),
         ),
     }
     fields.update(overrides)
@@ -166,7 +164,9 @@ def _mana(record_id: str, turn: int, **overrides):
     """
     fields: dict = {
         "state": _snapshot(turn=turn),
+        # A mana record resolves no stack item: its outcome is written null.
         "payload": ResolutionPayload(
+            outcome=None, outcome_written=True, conditions_met=(),
             events=(
                 Event(
                     type=EventType.MANA_PRODUCED,
@@ -253,8 +253,11 @@ def _healthy() -> list[EffectRecord]:
     """A window nothing is wrong with, for every test to perturb.
 
     Deliberately varied where a defect would show as sameness: two outcomes,
-    two games, paid costs, distinct payloads.
+    two games, paid costs, distinct payloads. Each game ends with its
+    game-end marker.
     """
+    from tests.unit.effects.builders import game_end_marker
+
     records: list[EffectRecord] = []
     for game in (0, 1):
         gid = f"run.0-L1.{game}"
@@ -263,8 +266,12 @@ def _healthy() -> list[EffectRecord]:
             _activation(f"run.0-L1.{base}", link_id=f"link.{game}", game_id=gid),
             _resolution(f"run.0-L1.{base + 1}", link_id=f"link.{game}", game_id=gid),
             _activation(
-                f"run.0-L1.{base + 2}", outcome=ResolutionOutcome.FIZZLED,
+                f"run.0-L1.{base + 2}", link_id=f"fizzle.{game}",
                 game_id=gid, costs=Costs(mana_by_color={"U": 2}, tapped=("E4",)),
+            ),
+            _resolution(
+                f"run.0-L1.{base + 7}", link_id=f"fizzle.{game}", game_id=gid,
+                payload=ResolutionPayload(outcome=ResolutionOutcome.FIZZLED),
             ),
             _trigger(f"run.0-L1.{base + 3}", game_id=gid, state=_snapshot(turn=4)),
             # The negative half of the trigger sample. Without it every window
@@ -274,7 +281,8 @@ def _healthy() -> list[EffectRecord]:
                 state=_snapshot(turn=4),
             ),
             _rewrite(f"run.0-L1.{base + 4}", game_id=gid, state=_snapshot(turn=5)),
-            _combat(f"run.0-L1.{base + 5}", game_id=gid, state=_snapshot(turn=6)),
+            last := _combat(f"run.0-L1.{base + 5}", game_id=gid, state=_snapshot(turn=6)),
+            game_end_marker(last),
         ]
     return records
 
@@ -382,9 +390,9 @@ class TestValidateDirectory:
         assert report.shards == 2
         assert _named(report.findings, "record_id is unique").ok
         # The per-shard check runs over both shards, the nested one included.
-        envelope = _named(report.findings, "gen-2 envelope")
+        envelope = _named(report.findings, "what_if is on every blockers record")
         assert envelope.ok, envelope.detail
-        assert envelope.measured.startswith("2 shard(s), 2 carrying random_seat")
+        assert envelope.measured.startswith("2 shard(s): 0 with")
 
 class TestGameIdNamesOneGame:
     def test_a_backward_turn_jump_inside_one_game_id_fails(self):
@@ -434,7 +442,7 @@ class TestGameIdNamesOneGame:
 class TestLinkHalvesPair:
     def test_an_unpaired_half_fails(self):
         records = _healthy() + [
-            _activation(f"run.0-L1.{index}", link_id=f"lonely.{index}")
+            _resolution(f"run.0-L1.{index}", link_id=f"lonely.{index}")
             for index in range(200, 210)
         ]
         finding = _named(validate_corpus(records), "link_id")
@@ -443,30 +451,32 @@ class TestLinkHalvesPair:
 
     @staticmethod
     def _cast(index: int, source: str = "E7", game: str = "run.0-L1.0"):
-        """A gen-3 cost half: written at the cast, no outcome (FR-042a)."""
+        """A cost half: written at the cast, no outcome (FR-042a)."""
         snapshot = replace(_snapshot(), refs=replace(_snapshot().refs, source=source))
-        return _activation(f"run.0-L1.{index}", outcome=None, link_id=f"cast.{index}",
-                           game_id=game, state=snapshot, generation=3)
+        return _activation(f"run.0-L1.{index}", link_id=f"cast.{index}",
+                           game_id=game, state=snapshot)
 
-    def test_gen3_cost_halves_none_of_which_meets_its_effect_half_fail(self):
+    def test_cost_halves_none_of_which_meets_its_effect_half_fail(self):
         """V5 #18: a lone cost half is a paired link (its item countered, or on
         the stack at the game's end), so 500 of them read 500/500 paired; a
         window where no cost half meets its effect half is the collector."""
-        records = _healthy() + [self._cast(300 + i) for i in range(200)]
-        finding = _named(validate_corpus(records), "gen-3 cost half")
+        records = [r for r in _healthy() if r.link_id is None] + [
+            self._cast(300 + i) for i in range(200)]
+        finding = _named(validate_corpus(records), "every cost half")
         assert not finding.ok
         assert "0/200" in finding.measured and "200 alone" in finding.measured
 
     def test_a_lone_cost_half_whose_item_was_countered_is_explained(self):
-        countered = _resolution("run.0-L1.990", game_id="run.0-L1.0", generation=3,
+        countered = _resolution("run.0-L1.990", game_id="run.0-L1.0",
                                 payload=ResolutionPayload(events=(Event(
                                     type=EventType.SPELL_COUNTERED, subjects=("E7",),
                                     attributed_to=AttributionKind.ROOT),)))
         paired = [half for i in range(5) for half in (
             self._cast(400 + i, source=f"E{40 + i}"),
-            _resolution(f"run.0-L1.{500 + i}", link_id=f"cast.{400 + i}", generation=3))]
-        records = _healthy() + paired + [self._cast(300), countered]
-        finding = _named(validate_corpus(records), "gen-3 cost half")
+            _resolution(f"run.0-L1.{500 + i}", link_id=f"cast.{400 + i}"))]
+        records = [r for r in _healthy() if r.link_id is None] + paired + [
+            self._cast(300), countered]
+        finding = _named(validate_corpus(records), "every cost half")
         assert finding.ok and finding.watched
         assert "5/6" in finding.measured and "1 alone, 1 of them countered" in finding.measured
 
@@ -597,7 +607,7 @@ class TestOutcome:
         records = [
             record for record in _healthy()
             if not (
-                isinstance(record.payload, ActivationPayload)
+                isinstance(record.payload, ResolutionPayload)
                 and record.payload.outcome is ResolutionOutcome.FIZZLED
             )
         ]
@@ -612,12 +622,12 @@ class TestOutcome:
         assert "fizzled 2" in finding.measured
         assert "resolved 2" in finding.measured
 
-    def test_on_gen3_the_effect_halves_carry_it(self):
-        """Gen-3 writes the outcome on the effect half (FR-042b), the cost half
+    def test_the_effect_halves_carry_it(self):
+        """The outcome is on the effect half (FR-042b), the cost half carries
         none: one value over effect halves fails, two pass."""
         def halves(*outcomes):
             return [
-                _resolution(f"run.0-L1.{900 + i}", generation=3, payload=ResolutionPayload(
+                _resolution(f"run.0-L1.{900 + i}", payload=ResolutionPayload(
                     events=(), outcome=outcome, outcome_written=True))
                 for i, outcome in enumerate(outcomes)
             ]
@@ -791,7 +801,8 @@ class TestTheCli:
             for record in _healthy():
                 writer.write(record)
         bad = tmp_path / "run.1-L1.jsonl"
-        bad.write_text('{"record_id": "x", "kind": "nonesuch"}\n', encoding="utf-8")
+        bad.write_text('{"record_id": "x", "generation": 3, "kind": "nonesuch"}\n',
+                       encoding="utf-8")
         assert self._run(tmp_path) == 1
         out = capsys.readouterr().out
         assert "[FAIL] every shard line decodes" in out
@@ -805,7 +816,7 @@ class TestTheCli:
         with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
             for record in _healthy():
                 writer.write(record)
-        raw = record_to_dict(_resolution("run.0-L1.950", generation=3))
+        raw = record_to_dict(_resolution("run.0-L1.950"))
         raw.pop("mode")
         (tmp_path / "run.1-L1.jsonl").write_text(json.dumps(raw) + "\n", encoding="utf-8")
         self._run(tmp_path)
@@ -1220,7 +1231,7 @@ class TestCollectionMode:
     def test_a_patched_window_passes_and_reports_the_count(self):
         finding = _named(validate_corpus(_healthy()), "patched mode")
         assert finding.ok
-        assert "0/14 not patched" in finding.measured
+        assert "0/18 not patched" in finding.measured
 
 
 class TestDuplicateEventsInsideOneRecord:
@@ -1584,7 +1595,7 @@ class TestEveryRecordKindIsPresent:
 
     @staticmethod
     def _window(records: int):
-        return [_resolution(f"run.0-L1.{index}", generation=3) for index in range(records)]
+        return [_resolution(f"run.0-L1.{index}") for index in range(records)]
 
     def test_a_long_window_missing_kinds_every_game_writes_fails(self):
         finding = _named(validate_corpus(self._window(1000), playability_rate=0.01),
@@ -1631,9 +1642,10 @@ class TestTriggerNegatives:
 
     @staticmethod
     def _ended(game_id: str):
-        won = Event(type=EventType.PLAYER_WON, subjects=("P0",), attributed_to="unresolved")
-        return _combat(f"{game_id}.999", game_id=game_id, state=_snapshot(turn=30),
-                       payload=CombatPayload(events=(won,)))
+        from tests.unit.effects.builders import game_end_marker
+
+        return game_end_marker(_combat(f"{game_id}.999", game_id=game_id,
+                                       state=_snapshot(turn=30)))
 
     def test_a_finished_game_s_negatives_only_fail(self):
         """V5 #19: the ceiling alone let 0% fired pass, the positives the
@@ -1642,7 +1654,8 @@ class TestTriggerNegatives:
         game = "run.0-L1.0"
         negatives = [_trigger(f"run.0-L1.{index}", fired=False, game_id=game,
                               state=_snapshot(turn=7)) for index in range(900, 960)]
-        records = [r for r in _healthy() if r.kind is not RecordKind.TRIGGER] + negatives
+        records = [r for r in _healthy() if r.kind not in (RecordKind.TRIGGER,
+                                                           RecordKind.TURN_ACTION)] + negatives
         unfinished = _named(validate_corpus(records), "trigger records hold positives")
         assert unfinished.ok and unfinished.watched
         assert "0 trigger records of games that ended" in unfinished.measured
@@ -2142,12 +2155,12 @@ class TestEventTypeCoverage:
 _EVERY_CHECK = (
     "record_id is unique across the run's shards",
     'each game_id names one game',
-    'gen-3 games end with their game-end marker',
+    'games end with their game-end marker',
     'records the per-game cap withheld',
     'every record kind a game writes is present',
     ("every link_id joins one activation to its resolution(s): one, or one per chosen "
-     "mode of a charm, or none for a gen-3 activation whose item never resolved"),
-    'every gen-3 cost half is met by its effect half unless its item never resolved',
+     "mode of a charm, or none for an activation whose item never resolved"),
+    'every cost half is met by its effect half unless its item never resolved',
     'trigger and rewrite records name an acting line',
     'resolution records name an acting line',
     'continuous records name an acting line',
@@ -2185,61 +2198,53 @@ def test_every_named_invariant_is_reported():
     assert tuple(f.name for f in validate_corpus(_healthy())) == _EVERY_CHECK
 
 
-class TestGen2FieldPresence:
-    """FR-033: a shard carries each gen-2 field on all of its records or none."""
+class TestWhatIfPresence:
+    """FR-033: every blockers record of a shard carries ``what_if``, and no
+    other record does."""
 
     def _write(self, path: Path, rows: list[dict]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
 
-    def _rows(self, *, seat: bool, what_if: bool | None) -> list[dict]:
+    def _rows(self, *, what_if: bool | None) -> list[dict]:
         from effects.infrastructure.record_codec import record_to_dict
 
-        blockers = _resolution("run.0-L1.1")
-        rows = [record_to_dict(_resolution("run.0-L1.0")), record_to_dict(blockers)]
-        rows[1].update(kind="playability", moment=None, subkind="blockers",
-                       ability=None, payload={"anchor_attacker": "E1"})
-        for row in rows:
-            if not seat:
-                row.pop("random_seat", None)
-        if what_if is not None:
-            rows[1]["what_if"] = what_if
+        rows = [record_to_dict(_resolution("run.0-L1.0")),
+                record_to_dict(make_record(
+                    RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.BLOCKERS,
+                    record_id="run.0-L1.1", game_id="run.0-L1.0", what_if=what_if))]
+        if what_if is None:
+            rows[1].pop("what_if", None)
         return rows
 
-    def _finding(self, tmp_path: Path):
+    def _finding(self, tmp_path: Path, name: str = "what_if is on every blockers record"):
         presence = FieldPresence()
         findings = validate_corpus(
             read_window(tmp_path, observe=presence.observe), presence=presence,
         )
-        return _named(findings, "gen-2 envelope")
+        return _named(findings, name)
 
-    def test_a_gen1_shard_passes(self, tmp_path):
-        self._write(tmp_path / "a.jsonl", self._rows(seat=False, what_if=None))
+    def test_a_shard_with_what_if_on_its_blockers_passes(self, tmp_path):
+        self._write(tmp_path / "a.jsonl", self._rows(what_if=False))
         finding = self._finding(tmp_path)
-        assert finding.ok and finding.measured.startswith("1 shard(s), 0 carrying random_seat; 0 ")
+        assert finding.ok and finding.measured.startswith("1 shard(s): 0 with"), finding.measured
 
-    def test_a_gen2_shard_with_both_fields_passes(self, tmp_path):
-        self._write(tmp_path / "a.jsonl", self._rows(seat=True, what_if=False))
+    def test_a_blockers_record_without_what_if_fails(self, tmp_path):
+        self._write(tmp_path / "a.jsonl", self._rows(what_if=None))
         finding = self._finding(tmp_path)
-        assert finding.ok and finding.measured.startswith("1 shard(s), 1 carrying random_seat; 0 ")
+        assert not finding.ok
+        assert "1 with what_if on some blockers records only" in finding.measured, finding.measured
 
-    def test_random_seat_on_some_records_only_fails(self, tmp_path):
-        rows = self._rows(seat=True, what_if=False)
+    def test_a_record_without_random_seat_is_short(self, tmp_path):
+        rows = self._rows(what_if=False)
         rows[0].pop("random_seat")
         self._write(tmp_path / "a.jsonl", rows)
-        finding = self._finding(tmp_path)
-        assert not finding.ok
-        assert "random_seat on 1 of 2" in " ".join(finding.detail)
-
-    def test_a_gen2_legality_record_without_what_if_fails(self, tmp_path):
-        self._write(tmp_path / "a.jsonl", self._rows(seat=True, what_if=None))
-        finding = self._finding(tmp_path)
-        assert not finding.ok
-        assert "1 with what_if on some legality records only" in finding.measured, finding.measured
+        finding = self._finding(tmp_path, "gen-3 fields")
+        assert not finding.ok and "record.random_seat 1" in finding.detail[0]
 
     def test_what_if_on_another_kind_is_refused_by_the_reader(self, tmp_path):
         """The record model rejects it outright, so it never reaches a tally."""
-        rows = self._rows(seat=True, what_if=True)
+        rows = self._rows(what_if=True)
         rows[0]["what_if"] = True
         self._write(tmp_path / "a.jsonl", rows)
         with pytest.raises(ValueError, match="what_if"):
@@ -2271,7 +2276,7 @@ class TestGen3FieldPresence:
         gen3 = _named(findings, "gen-3 fields")
         assert gen3.ok, gen3.detail
         assert gen3.measured.startswith(f"0/{len(self._golden())} gen-3 records")
-        assert _named(findings, "gen-2 envelope").ok
+        assert _named(findings, "what_if is on every blockers record").ok
         assert _named(findings, "curation").ok
 
     def test_an_effect_half_without_conditions_met_is_short(self, tmp_path):
@@ -2372,16 +2377,17 @@ class TestGen3FieldPresence:
         rows[0]["state"]["players"][0]["max_land_plays"] = None
         assert _named(self._findings(tmp_path, rows), "gen-3 fields").ok
 
-    def test_a_gen3_attackers_record_carrying_what_if_fails(self, tmp_path):
+    def test_an_attackers_record_carrying_what_if_fails(self, tmp_path):
         rows = self._golden()
         next(row for row in rows if row.get("subkind") == "attackers")["what_if"] = False
-        finding = _named(self._findings(tmp_path, rows), "gen-2 envelope")
-        assert not finding.ok and "gen-3 attackers" in " ".join(finding.detail)
+        finding = _named(self._findings(tmp_path, rows), "what_if is on every blockers record")
+        assert not finding.ok and "another kind than blockers" in " ".join(finding.detail)
 
-    def test_a_gen3_blockers_record_without_what_if_fails(self, tmp_path):
+    def test_a_blockers_record_without_what_if_fails(self, tmp_path):
         rows = self._golden()
         next(row for row in rows if row.get("subkind") == "blockers").pop("what_if")
-        assert not _named(self._findings(tmp_path, rows), "gen-2 envelope").ok
+        assert not _named(self._findings(tmp_path, rows),
+                          "what_if is on every blockers record").ok
 
     def test_a_curation_member_is_refused(self, tmp_path):
         rows = self._golden()
@@ -2391,14 +2397,21 @@ class TestGen3FieldPresence:
         finding = _named(self._findings(tmp_path, rows), "curation")
         assert not finding.ok and finding.measured.startswith("1 record(s) in 1 of 1")
 
-    def test_a_gen2_shard_owes_no_gen3_member(self, tmp_path):
-        from effects.infrastructure.shard_io import iter_shard_lines
+    @pytest.mark.parametrize(("dropped", "named"), [
+        (("generation",), "gen-2"),
+        (("generation", "random_seat"), "gen-1"),
+    ])
+    def test_a_record_of_an_older_generation_is_refused_naming_it(
+        self, tmp_path, dropped, named,
+    ):
+        from effects.domain.shard_generation import OlderGenerationError
 
-        fixture = Path(__file__).parents[3] / "fixtures" / "effects" / "gen2-records.jsonl.gz"
-        rows = [json.loads(line) for line in iter_shard_lines(fixture)]
-        findings = self._findings(tmp_path, rows)
-        assert _named(findings, "gen-3 fields").measured.startswith("0/0 gen-3 records")
-        assert _named(findings, "gen-2 envelope").ok
+        rows = self._golden()
+        for member in dropped:
+            del rows[1][member]
+        with pytest.raises(OlderGenerationError,
+                           match=rf"a\.jsonl, record .*: the record is {named} "):
+            self._findings(tmp_path, rows)
 
 
 class TestEmptyMana:
@@ -2435,7 +2448,7 @@ class TestACopyKeysItsLinesIntoTheCopiedCard:
         clone = make_entity("E2", "serra angel", copy_source="E1", lines=(
             CardLine(keys=(copy_key,), kind="keyword", granted=False),))
         state = replace(_snapshot(), entities=(original, clone))
-        return _resolution("run.0-L1.960", state=state, generation=3)
+        return _resolution("run.0-L1.960", state=state)
 
     def test_a_copy_keying_into_the_copied_card_holds(self):
         record = self._board("cardsfolder/s/serra_angel.txt")
@@ -2455,7 +2468,7 @@ class TestGameEndMarkers:
 
     @staticmethod
     def _record(game_id: str, index: int, **overrides):
-        return _resolution(f"{game_id}.r{index}", game_id=game_id, generation=3, **overrides)
+        return _resolution(f"{game_id}.r{index}", game_id=game_id, **overrides)
 
     @staticmethod
     def _marker(game_id: str, withheld: int = 0):
@@ -2469,7 +2482,7 @@ class TestGameEndMarkers:
                    self._record("run.0-L1.1", 1)]
         finding = _named(validate_corpus(records), "game-end marker")
         assert finding.ok and finding.watched
-        assert "1 of 2 gen-3 game(s) have no game-end marker (50.0%)" in finding.measured
+        assert "1 of 2 game(s) have no game-end marker (50.0%)" in finding.measured
 
     def test_no_marker_at_all_fails_once_a_later_game_closed_an_earlier_one(self):
         """A JVM plays its games one after another: an earlier game of a
@@ -2480,10 +2493,6 @@ class TestGameEndMarkers:
         closed = [*running, self._record("run.0-L1.1", 1)]
         finding = _named(validate_corpus(closed), "game-end marker")
         assert not finding.ok and not finding.watched
-
-    def test_an_older_generation_owes_no_marker(self):
-        finding = _named(validate_corpus(_healthy()), "game-end marker")
-        assert finding.ok and "0 gen-3 game(s)" in finding.measured
 
     def test_the_records_the_cap_withheld_are_summed(self):
         records = [self._marker("run.0-L1.0", 3), self._marker("run.0-L1.1", 4)]
@@ -2499,10 +2508,10 @@ class TestGameEndMarkers:
         """The trigger floor's finished games: a gen-3 record holding the
         outcome is no longer read as the game's end; the marker is."""
         game = "run.0-L1.0"
-        negatives = [_trigger(f"{game}.t{index}", fired=False, game_id=game, generation=3,
+        negatives = [_trigger(f"{game}.t{index}", fired=False, game_id=game,
                               state=_snapshot(turn=7)) for index in range(60)]
         won = Event(type=EventType.PLAYER_WON, subjects=("P0",), attributed_to="unresolved")
-        outcome = _combat(f"{game}.999", game_id=game, generation=3, state=_snapshot(turn=30),
+        outcome = _combat(f"{game}.999", game_id=game, state=_snapshot(turn=30),
                           payload=CombatPayload(events=(won,)))
         unfinished = _named(validate_corpus([*negatives, outcome]),
                             "trigger records hold positives")

@@ -477,10 +477,9 @@ def _log_counts(manifest: CorpusManifest) -> None:
         logger.info("%-22s %9d record(s)", stratum, manifest.per_stratum[stratum])
     for subkind, counts in sorted(manifest.legality_counts.items()):
         logger.info(
-            "%-22s real %9d  what-if %9d  unknown %9d",
+            "%-22s real %9d  what-if %9d",
             f"legality {subkind}", counts.get(LegalityDecision.REAL, 0),
             counts.get(LegalityDecision.WHAT_IF, 0),
-            counts.get(LegalityDecision.UNKNOWN, 0),
         )
 
 

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
@@ -73,13 +72,13 @@ from effects.infrastructure.record_codec import (
     record_to_dict,
 )
 from effects.infrastructure.shard_io import (
-    iter_shard_lines,
     read_records,
     read_shard,
     write_shard,
 )
 from tests.unit.effects.builders import (
     _ENVELOPE_ONLY_GOLDENS,
+    GEN3_RECORDS,
     JAVA_GOLDENS,
     gen3_fixture_records,
     gen3_payload,
@@ -92,7 +91,7 @@ _DONOR = ProvenanceKey("cardsfolder/a/anthem.txt", 0, "static", 1)
 
 
 def _rich_snapshot() -> StateSnapshot:
-    """A snapshot exercising every optional block, so nothing round-trips by luck."""
+    """A gen-3 snapshot exercising every optional block, so nothing round-trips by luck."""
     return StateSnapshot(
         global_=GlobalState(
             turn=7, phase="combat_damage", active="P0", priority="P1",
@@ -115,14 +114,17 @@ def _rich_snapshot() -> StateSnapshot:
                 tapped=True, damage=2, counters={"P1P1": 1},
                 combat=CombatStatus(attacking="P1", blocked_by=("E20",),
                                     became_blocked=True),
-                granted_attached=(_DONOR,),
                 granted_temporary=GrantedTemporary(
                     keywords=("flying",), abilities=(_DONOR,),
                 ),
-                printed=(_KEY,),
+                lines=(
+                    CardLine(keys=(_KEY,), kind="trigger", granted=False),
+                    CardLine(keys=(_DONOR,), kind="static", granted=True,
+                             grant="static", active=True),
+                ),
             ),
             EntityState(
-                id="S1", name="Fireball", zone="stack", controller="P1",
+                id="S1", name="Fireball", zone="stack", controller="P1", lines=(),
                 stack_extras=StackExtras(
                     targets=("E12",), per_target_amounts={"E12": 3},
                     up_to_counts={"E12": 1},
@@ -134,6 +136,7 @@ def _rich_snapshot() -> StateSnapshot:
             choices={"color": "red"},
         ),
         tiers=frozenset({InclusionTier.REFERENCED, InclusionTier.CORE}),
+        links=(),
     )
 
 
@@ -143,6 +146,7 @@ def _record(**overrides) -> EffectRecord:
         "run_id": "run-uuid",
         "timestamp": "2026-09-06T15:31:12.152018Z",
         "game_id": "run-uuid.4.812",
+        "generation": 3,
         "kind": RecordKind.RESOLUTION,
         "actor_player": "P0",
         "state": _rich_snapshot(),
@@ -158,9 +162,8 @@ def _record(**overrides) -> EffectRecord:
         ),
     }
     defaults.update(overrides)
-    if defaults.get("generation") == 3:
-        # Gen-3's effect half carries its outcome: the codec refuses one without.
-        defaults["payload"] = gen3_payload(defaults["payload"])
+    # A gen-3 effect half carries its outcome: the codec refuses one without.
+    defaults["payload"] = gen3_payload(defaults["payload"])
     return EffectRecord(**defaults)
 
 
@@ -172,7 +175,7 @@ ALL_KINDS = {
                 mana_by_color={"R": 1}, tapped=("E12",), life=2,
                 sacrificed=("E13",), discarded=("E14",), exiled=("E15",),
             ),
-            outcome=ResolutionOutcome.RESOLVED,
+            events=(),
         ),
         link_id="pair-7",
     ),
@@ -282,7 +285,8 @@ class TestRoundTrip:
         """The writer is ``orjson``, which does not escape; the reader decodes
         a ``\\u`` escape and the raw character alike."""
         record = _record(state=replace(_rich_snapshot(), entities=(
-            EntityState(id="E1", name="Lim-Dûl's Vault", zone="hand", controller="P0"),
+            EntityState(id="E1", name="Lim-Dûl's Vault", zone="hand", controller="P0",
+                        lines=()),
         )))
         line = format_record_line(record)
         assert "Lim-Dûl's Vault" in line
@@ -304,7 +308,7 @@ class TestRoundTrip:
 
 class TestRecordMoments:
     """The record-moment payloads (root spec § 8.14, FR-042a, FR-042b) keep
-    their bytes through a read and a write, the generations before them too."""
+    their bytes through a read and a write."""
 
     @staticmethod
     def _payload(record_payload) -> dict:
@@ -320,11 +324,6 @@ class TestRecordMoments:
             moment=Moment.ACTIVATION, payload=ActivationPayload(costs=Costs(), events=()),
         ))).payload == ActivationPayload(costs=Costs(), events=())
 
-    def test_a_gen2_cost_half_keeps_its_outcome_and_no_events(self):
-        payload = ActivationPayload(costs=Costs(), outcome=ResolutionOutcome.COUNTERED)
-        data = self._payload({"moment": Moment.ACTIVATION, "payload": payload})
-        assert list(data) == ["costs", "outcome"]
-
     def test_an_effect_halfs_outcome_and_a_written_null_survive(self):
         for outcome in (ResolutionOutcome.FIZZLED, None):
             data = record_to_dict(_record())
@@ -333,12 +332,6 @@ class TestRecordMoments:
             restored = record_from_dict(data)
             assert restored.payload.outcome == outcome
             assert record_to_dict(restored)["payload"] == data["payload"]
-
-    def test_an_effect_half_written_before_the_outcome_writes_none(self):
-        data = record_to_dict(_record())
-        data["payload"].pop("outcome", None)
-        assert "outcome" not in record_to_dict(record_from_dict(data))["payload"]
-
 
 class TestForwardCompatibility:
     def test_an_unknown_envelope_field_is_preserved_on_read(self):
@@ -397,26 +390,13 @@ class TestTheProbedPerturbation:
             ),
         )
 
-    def test_a_gen3_observed_combat_record_is_written_without_them(self):
-        """As the gen-3 collector writes it; an earlier generation keeps the
-        nulls its pinned bytes hold."""
-        observed = dict(kind=RecordKind.COMBAT, moment=None, ability=None,
-                        payload=CombatPayload(attackers=("E12",)))
-        gen3 = record_to_dict(_record(generation=3, **observed))
-        assert not {"probed_keyword", "probed_entity"} & gen3["payload"].keys()
-        gen2 = record_to_dict(_record(**observed))
-        assert (gen2["payload"]["probed_keyword"], gen2["payload"]["probed_entity"]) == (
-            None, None)
-
-    def test_a_record_written_before_the_fields_existed_still_reads(self):
-        """Compatibility rule 1: the corpus is append-only, and a shard
-        collected before the probe existed cannot be regenerated."""
+    def test_an_observed_combat_record_is_written_without_them_and_reads(self):
+        """As the collector writes it: an observed combat names no probe."""
         wire = record_to_dict(
             _record(kind=RecordKind.COMBAT, moment=None, ability=None,
                     payload=CombatPayload(attackers=("E12",)))
         )
-        del wire["payload"]["probed_keyword"]
-        del wire["payload"]["probed_entity"]
+        assert not {"probed_keyword", "probed_entity"} & wire["payload"].keys()
         loaded = record_from_dict(wire)
         assert loaded.payload.probed_keyword is None
         assert loaded.payload.attackers == ("E12",)
@@ -561,43 +541,8 @@ class TestARewriteShardCollectedBeforeTheResult:
         }
 
 
-_GEN1_FIXTURE = (
-    Path(__file__).parents[3] / "fixtures" / "effects" / "gen1-records.jsonl.gz"
-)
-
-
-class TestGen2EnvelopeFields:
+class TestTheRandomSeatAndWhatIf:
     """``random_seat`` and ``what_if`` (FR-030, FR-031, FR-033)."""
-
-    def test_every_gen1_record_reads_with_the_defaults(self):
-        records = list(read_shard(_GEN1_FIXTURE))
-        assert len(records) > 40
-        for record in records:
-            assert record.random_seat is None
-            assert not record.random_seat
-            assert record.what_if is None
-            assert record.extra_fields == {}
-
-    def test_a_rewritten_gen1_shard_stays_gen1(self, tmp_path):
-        """A curated shard is gen-1 or gen-2 as its source was (FR-033).
-
-        Written with ``random_seat`` on every record whatever the source held,
-        a dataset built from gen-1 shards read as gen-2, and the mixed-
-        generation guard on ``--corpus`` could never fire.
-        """
-        from effects.domain.shard_generation import ShardGeneration
-        from effects.infrastructure.shard_io import shard_generation, write_shard
-
-        rewritten = tmp_path / "curated.jsonl.gz"
-        write_shard(rewritten, read_shard(_GEN1_FIXTURE))
-        assert shard_generation(rewritten) is ShardGeneration.GEN_1
-        for line in iter_shard_lines(rewritten):
-            assert "random_seat" not in json.loads(line)
-
-    def test_a_gen1_line_carries_neither_field(self):
-        for line in iter_shard_lines(_GEN1_FIXTURE):
-            data = json.loads(line)
-            assert "random_seat" not in data and "what_if" not in data
 
     def test_what_if_round_trips_on_a_legality_record(self):
         for value in (True, False):
@@ -624,7 +569,7 @@ class TestInternedProvenanceKeys:
     def test_an_equal_key_parses_to_the_same_object(self, tmp_path):
         directory = tmp_path / "records"
         directory.mkdir()
-        (directory / _GEN1_FIXTURE.name).write_bytes(_GEN1_FIXTURE.read_bytes())
+        (directory / GEN3_RECORDS.name).write_bytes(GEN3_RECORDS.read_bytes())
         seen: dict[ProvenanceKey, ProvenanceKey] = {}
         repeats = 0
         for record in read_records(directory):
@@ -650,8 +595,8 @@ class TestTheWireFormIsPinned:
     A round trip alone cannot catch a codec change that alters encoder and
     decoder together — a renamed key, a reordered field — and the corpus is
     append-only, so a shard written under the changed form would no longer
-    read the way the shards beside it do. The digests were taken from the
-    serializer before its codecs were regrouped.
+    read the way the shards beside it do. The digest was taken when the codec
+    came to write gen 3 alone.
     """
 
     @staticmethod
@@ -664,22 +609,14 @@ class TestTheWireFormIsPinned:
             digest.update(b"\n")
         return digest.hexdigest()
 
-    def test_the_gen1_fixture_serializes_to_the_pinned_bytes(self):
-        """Without ``random_seat``, which a gen-1 line never carried."""
-        records = list(read_shard(_GEN1_FIXTURE))
-        assert len(records) == 53
-        assert self._digest(records) == (
-            "588245c598027912271025c937270892f62d31cfb9e8346c4d142ea00a5ea266"
-        )
-
     def test_every_kind_serializes_to_the_pinned_bytes(self):
         records = [_record(**ALL_KINDS[name]) for name in sorted(ALL_KINDS)]
         assert self._digest(records) == (
-            "c8736a4d14319f0512573a25c3b307f355d52b16062e6c2c8768c667c1161a83"
+            "b76bd16928f86a1e15f74f84239b0534f3bf6be4c5d689fafd2ba35370afd72c"
         )
 
     def test_the_fixture_round_trips_through_its_own_wire_form(self):
-        for record in read_shard(_GEN1_FIXTURE):
+        for record in read_shard(GEN3_RECORDS):
             line = format_record_line(record)
             again = record_from_dict(parse_record_line(line))
             assert again == record
@@ -734,19 +671,19 @@ class TestGen3EnvelopeFields:
     """``generation``, ``aimed_at``, ``directed`` and the ``turn_action`` kind (FR-018, T014)."""
 
     def test_generation_is_first_after_the_record_id(self):
-        keys = list(record_to_dict(_record(generation=3)))
+        keys = list(record_to_dict(_record()))
         assert keys[:2] == ["record_id", "generation"]
 
-    def test_the_gen3_members_are_written_only_when_set(self):
+    def test_aimed_at_and_directed_are_written_only_when_set(self):
         data = record_to_dict(_record())
-        assert not {"generation", "aimed_at", "directed"} & data.keys()
+        assert not {"aimed_at", "directed"} & data.keys()
 
     def test_a_gen3_envelope_round_trips(self):
         from effects.domain.fork_operation import ForkOperation
         from effects.domain.records import DirectedTag
 
         record = make_record(
-            RecordKind.COMBAT, generation=3, fork=True, aimed_at=("704.5f",),
+            RecordKind.COMBAT, fork=True, aimed_at=("704.5f",),
             directed=DirectedTag("tougher", ForkOperation.PT))
         data = record_to_dict(record)
         assert data["aimed_at"] == ["704.5f"]
@@ -757,8 +694,8 @@ class TestGen3EnvelopeFields:
         """Written by ``build-corpus`` alone (research T1); absent elsewhere."""
         from effects.domain.records import Curation
 
-        assert "curation" not in record_to_dict(_record(generation=3))
-        record = _record(generation=3, curation=Curation(
+        assert "curation" not in record_to_dict(_record())
+        record = _record(curation=Curation(
             natural_share=1, copies=3, drawn_rule="704.5f",
             drawn_rules=("704.5f", "704.5g"), condition_entities=("E1",),
             outcome_entities=("E2",)))
@@ -770,14 +707,14 @@ class TestGen3EnvelopeFields:
         assert record_from_dict(json.loads(json.dumps(data))) == record
 
     def test_an_empty_aimed_at_is_kept_apart_from_none(self):
-        record = _record(generation=3, aimed_at=())
+        record = _record(aimed_at=())
         data = record_to_dict(record)
         assert data["aimed_at"] == []
         assert record_from_dict(data).aimed_at == ()
 
     @pytest.mark.parametrize("subkind", list(TurnActionSubkind))
     def test_a_turn_action_record_round_trips(self, subkind):
-        record = make_record(RecordKind.TURN_ACTION, subkind=subkind, generation=3)
+        record = make_record(RecordKind.TURN_ACTION, subkind=subkind)
         data = record_to_dict(record)
         assert (data["kind"], data["subkind"]) == ("turn_action", subkind.value)
         assert record_from_dict(data) == record
@@ -788,76 +725,58 @@ class TestGen3EnvelopeFields:
         value names none is refused rather than read as another generation."""
         from effects.domain.shard_generation import UnknownGenerationError
 
-        data = record_to_dict(_record(generation=3)) | {"generation": value}
+        data = record_to_dict(_record()) | {"generation": value}
         with pytest.raises(UnknownGenerationError):
             record_from_dict(data)
 
     def test_an_unknown_generation_in_a_shard_names_the_shard_and_line(self, tmp_path):
         from effects.domain.shard_generation import UnknownGenerationError
-        from effects.infrastructure.shard_io import shard_generation
+        from effects.infrastructure.shard_io import require_generation
 
         path = tmp_path / "g4.jsonl"
         path.write_text(json.dumps(record_to_dict(_record()) | {"generation": 4}) + "\n",
                         encoding="utf-8")
-        for read in (lambda: list(read_shard(path)), lambda: shard_generation(path)):
+        for read in (lambda: list(read_shard(path)), lambda: require_generation([path])):
             with pytest.raises(UnknownGenerationError, match=r"g4\.jsonl, line 1: .*4"):
                 read()
 
-    def test_a_gen3_shard_reads_as_gen3(self, tmp_path):
-        from effects.domain.shard_generation import ShardGeneration
-        from effects.infrastructure.shard_io import shard_generation, write_shard
 
-        path = tmp_path / "g3.jsonl.gz"
-        write_shard(path, [replace(r, generation=3) for r in read_shard(_GEN1_FIXTURE)])
-        assert shard_generation(path) is ShardGeneration.GEN_3
+class TestAnOlderRecordIsRefused:
+    """A record of an older generation, with no ``generation`` member, is
+    refused where it is decoded, naming its generation (FR-033). Built from a
+    real gen-3 record less what the older generation did not write."""
 
+    @staticmethod
+    def _older(*dropped: str) -> dict:
+        raw = gen3_fixture_records()[0]
+        for member in dropped:
+            del raw[member]
+        return raw
 
-_GEN2_FIXTURE = _GEN1_FIXTURE.with_name("gen2-records.jsonl.gz")
+    @pytest.mark.parametrize(("dropped", "named"), [
+        (("generation",), "gen-2"),
+        (("generation", "random_seat"), "gen-1"),
+    ])
+    def test_its_decode_is_refused_naming_its_generation(self, dropped, named):
+        from effects.domain.shard_generation import OlderGenerationError
 
+        with pytest.raises(OlderGenerationError, match=f"the record is {named} "):
+            record_from_dict(self._older(*dropped))
 
-class TestTheGen2Fixture:
-    """The gen-2 fixture cut from real shards reads whole and stays gen-2 (T002, T014)."""
+    @pytest.mark.parametrize(("dropped", "named"), [
+        (("generation",), "gen-2"),
+        (("generation", "random_seat"), "gen-1"),
+    ])
+    def test_in_a_shard_it_names_the_shard_and_line(self, tmp_path, dropped, named):
+        from effects.domain.shard_generation import OlderGenerationError
+        from effects.infrastructure.shard_io import require_generation
 
-    def test_every_record_reads_and_carries_random_seat(self):
-        records = list(read_shard(_GEN2_FIXTURE))
-        assert len(records) > 40
-        assert all(record.random_seat is not None for record in records)
-        assert any(record.random_seat for record in records)
-        assert all(record.generation is None for record in records)
-
-    def test_the_shard_is_gen2(self):
-        from effects.domain.shard_generation import ShardGeneration
-        from effects.infrastructure.shard_io import shard_generation
-
-        assert shard_generation(_GEN2_FIXTURE) is ShardGeneration.GEN_2
-
-    def test_every_entity_reads_and_writes_in_the_gen2_shape(self):
-        """Gen-2 entities keep reading exactly as before (T074): no lines, and
-        written back with the members they were read with, in their order."""
-        for line in iter_shard_lines(_GEN2_FIXTURE):
-            raw = parse_record_line(line)
-            written = record_to_dict(record_from_dict(raw))
-            for before, after in zip(raw["state"]["entities"], written["state"]["entities"],
-                                     strict=True):
-                assert list(after) == list(before)
-                assert {k: v for k, v in after.items() if k != "granted_temporary"} == {
-                    k: v for k, v in before.items() if k != "granted_temporary"}
-        assert all(entity.lines is None for record in read_shard(_GEN2_FIXTURE)
-                   for entity in record.state.entities)
-
-    def test_every_gen2_record_writes_back_as_it_was_read(self):
-        """Every member in its order, no gen-3 member added: gen-2 shards stay
-        gen-2 through a read and a write (T074). An observed combat gains the
-        null probe members this codec has always written for it."""
-        for line in iter_shard_lines(_GEN2_FIXTURE):
-            raw = parse_record_line(line)
-            written = record_to_dict(record_from_dict(raw))
-            if raw["kind"] == "combat" and not raw["fork"]:
-                assert written["payload"].pop("probed_keyword") is None
-                assert written["payload"].pop("probed_entity") is None
-            assert json.dumps(_spelling_free(written)) == json.dumps(
-                _spelling_free(raw)), (
-                raw["record_id"])
+        path = tmp_path / "old.jsonl"
+        path.write_text(json.dumps(self._older(*dropped)) + "\n", encoding="utf-8")
+        for read in (lambda: list(read_shard(path)), lambda: require_generation([path])):
+            with pytest.raises(OlderGenerationError,
+                               match=rf"old\.jsonl, line 1: the record is {named} "):
+                read()
 
 
 def _spelling_free(value):
@@ -1120,10 +1039,6 @@ class TestTheGen3EntityShape:
         assert "max_land_plays" not in record_to_dict(
             record_from_dict(before))["state"]["players"][0]
 
-    def test_a_gen2_player_writes_no_land_plays(self):
-        player = record_to_dict(_record())["state"]["players"][0]
-        assert "max_land_plays" not in player
-
     def test_an_attackers_record_carries_no_what_if(self):
         attackers = [raw for raw in java_golden_records()
                      if raw["kind"] == "playability" and raw["subkind"] == "attackers"]
@@ -1259,12 +1174,10 @@ class TestTheGen3Fixture:
         assert markers == dict.fromkeys(last, 1)
         assert all(r.subkind is TurnActionSubkind.GAME_END for r in last.values())
 
-    def test_the_shard_is_gen3(self):
-        from effects.domain.shard_generation import ShardGeneration
-        from effects.infrastructure.shard_io import shard_generation
-        from tests.unit.effects.builders import GEN3_RECORDS
+    def test_the_shard_passes_the_generation_check(self):
+        from effects.infrastructure.shard_io import require_generation
 
-        assert shard_generation(GEN3_RECORDS) is ShardGeneration.GEN_3
+        require_generation([GEN3_RECORDS])
 
     def test_every_record_writes_back_as_the_collector_wrote_it(self):
         for raw in gen3_fixture_records():

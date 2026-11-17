@@ -55,7 +55,7 @@ from effects.domain.default_paths import (
     DEFAULT_VOCAB_PATH,
     DEFAULT_WIN_RATES,
 )
-from effects.domain.shard_generation import MixedGenerationsError, UnacceptedGenerationError
+from effects.domain.shard_generation import UnacceptedGenerationError
 from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
 from price_predictor.domain.dataclass_defaults import field_default
@@ -614,11 +614,12 @@ def _collector_runner(command: str, config_type: type, module: str) -> Callable:
     ``module`` is imported when the command runs, as every other ``run_*``
     imports its application module, so ``--help`` never pays for it. A
     ValueError out of the collection itself is not a refusal and keeps its
-    traceback.
+    traceback; a record of an older generation met counting the shards
+    already there is a refusal, as every reader's.
     """
 
     @exits_with({
-        CollectorRefusal: 1, _LAYOUT_REFUSED: 1,
+        CollectorRefusal: 1, _LAYOUT_REFUSED: 1, UnacceptedGenerationError: 1,
         "price_predictor.infrastructure.forge_jvm.WorkerStartError": 1,
     })
     def run(args: argparse.Namespace) -> int:
@@ -823,8 +824,7 @@ def _rule_counts_parser(subparsers) -> None:
     )
 
 
-@exits_with({_NO_SHARDS: 1, MixedGenerationsError: 1, UnacceptedGenerationError: 1,
-             **_SHARD_REFUSED})
+@exits_with({_NO_SHARDS: 1, UnacceptedGenerationError: 1, **_SHARD_REFUSED})
 def run_rule_counts(args: argparse.Namespace) -> int:
     from effects.application.rule_counts import RuleCountsConfig
     from effects.application.rule_counts import run as rule_counts
@@ -960,7 +960,6 @@ def _train_effect_model_parser(subparsers) -> None:
     HoldoutMismatchError: 1,
     # Raised in a prefetch worker too, which hands the exception itself over.
     ValidationGameInTrainingError: 1,
-    MixedGenerationsError: 1,
     UnacceptedGenerationError: 1,
     **_SHARD_REFUSED,
     SurfaceMismatchError: 2,
@@ -1090,7 +1089,6 @@ def _baseline_checkpoint(value: str):
     # A checkpoint of another input layout, a corpus not wholly gen-3 (FR-076).
     _LAYOUT_REFUSED: 1,
     _MANIFEST_REFUSED: 1,
-    MixedGenerationsError: 1,
     UnacceptedGenerationError: 1,
     **_SHARD_REFUSED,
 })

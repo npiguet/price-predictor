@@ -31,6 +31,7 @@ from effects.domain.records import (
 )
 from effects.domain.split import HeldOutCards
 from effects.domain.state_snapshot import (
+    CardLine,
     EntityState,
     GlobalState,
     InclusionTier,
@@ -128,14 +129,12 @@ def game_end_marker(last: EffectRecord, *, records_withheld: int = 0) -> EffectR
 
 
 def with_game_end_markers(records) -> list[EffectRecord]:
-    """``records`` with a game-end marker after each gen-3 game's last record,
-    as a collection that ended every game writes its shard; an older
-    generation's games get none, as theirs never had one."""
+    """``records`` with a game-end marker after each game's last record, as
+    a collection that ended every game writes its shard."""
     records = list(records)
     last: dict[str, int] = {}
     for index, record in enumerate(records):
-        if record.generation == 3:
-            last[record.game_id] = index
+        last[record.game_id] = index
     ends = {index: game for game, index in last.items()}
     out: list[EffectRecord] = []
     for index, record in enumerate(records):
@@ -146,7 +145,7 @@ def with_game_end_markers(records) -> list[EffectRecord]:
 
 
 def write_ended_shard(path: Path, records) -> int:
-    """``write_shard`` of ``records`` with every gen-3 game ended by its marker."""
+    """``write_shard`` of ``records`` with every game ended by its marker."""
     from effects.infrastructure.shard_io import write_shard
 
     return write_shard(path, with_game_end_markers(records))
@@ -194,8 +193,6 @@ def make_snapshot(**overrides) -> StateSnapshot:
         "players": (),
         "entities": (),
         "tiers": STAGE_ONE_TIERS,
-        # A gen-3 snapshot: ``links`` set, so the codec writes the global,
-        # player and refs members gen 3 owes. ``links=None`` builds gen-2's.
         "links": (),
     }
     defaults.update(overrides)
@@ -203,44 +200,49 @@ def make_snapshot(**overrides) -> StateSnapshot:
 
 
 def make_entity(entity_id: str, name: str, **overrides) -> EntityState:
-    """A battlefield permanent controlled by ``P0``."""
+    """A battlefield permanent controlled by ``P0``, in gen 3's shape: unless
+    ``lines`` is given, a ``printed`` key is a printed line and a
+    ``granted_attached`` one a line a static grants, each of its key's trait
+    kind (:func:`lines_of`)."""
     defaults: dict = {
         "id": entity_id, "name": name, "zone": "battlefield", "controller": "P0",
     }
+    if "lines" not in overrides:
+        overrides["lines"] = lines_of(overrides.pop("printed", ()),
+                                      overrides.pop("granted_attached", ()))
     defaults.update(overrides)
     return EntityState(**defaults)
 
 
-#: The generation :func:`make_record` builds unless a test passes another
-#: (``generation=None`` builds a gen-2 record, gen-2 snapshot and payloads).
-GENERATION = 3
+def lines_of(printed=(), granted=()) -> tuple[CardLine, ...]:
+    """A gen-3 entity's lines for its ``printed`` keys and the keys a static
+    grants it, one line per key, of the key's trait kind."""
+    return (
+        *(CardLine(keys=(key,), kind=key.trait_kind, granted=False) for key in printed),
+        *(CardLine(keys=(key,), kind=key.trait_kind, granted=True, grant="static")
+          for key in granted),
+    )
 
 
-def _default_payload(kind: RecordKind, moment, subkind, gen3: bool):
+def _default_payload(kind: RecordKind, moment, subkind):
     if kind is RecordKind.RESOLUTION:
         if moment is Moment.ACTIVATION:
-            if gen3:
-                # Gen-3's cost half: ``{events, costs}``, its outcome on the effect half.
-                return ActivationPayload(costs=Costs(), events=())
-            return ActivationPayload(
-                costs=Costs(), outcome=ResolutionOutcome.RESOLVED,
-            )
-        if gen3:
-            return ResolutionPayload(conditions_met=(), outcome=ResolutionOutcome.RESOLVED)
-        return ResolutionPayload()
+            # The cost half: ``{events, costs}``, its outcome on the effect half.
+            return ActivationPayload(costs=Costs(), events=())
+        return ResolutionPayload(conditions_met=(), outcome=ResolutionOutcome.RESOLVED)
     if kind is RecordKind.PLAYABILITY:
         return {
             PlayabilitySubkind.DECISION: PlayabilityDecisionPayload,
-            # Gen-3 attackers records are one per creature, each anchored.
+            # Attackers records are one per creature, each anchored.
             PlayabilitySubkind.ATTACKERS: lambda: PlayabilityAttackersPayload(
-                anchor_attacker="E1" if gen3 else None,
+                anchor_attacker="E1",
             ),
             PlayabilitySubkind.BLOCKERS: lambda: PlayabilityBlockersPayload(
-                anchor_attacker="E1", must_block=() if gen3 else None,
+                anchor_attacker="E1", must_block=(),
             ),
         }[subkind]()
     if kind is RecordKind.TURN_ACTION:
-        if gen3 and subkind is TurnActionSubkind.GAME_END:
+        if subkind is TurnActionSubkind.GAME_END:
             return TurnActionPayload(records_withheld=0)
         return TurnActionPayload()
     return {
@@ -254,15 +256,11 @@ def _default_payload(kind: RecordKind, moment, subkind, gen3: bool):
 
 
 def gen3_payload(payload):
-    """A resolution half in gen-3's shape, which the codec refuses otherwise:
-    a cost half lists its events (none by default) and carries no outcome; an
-    effect half carries its outcome (``resolved`` by default) and its
-    conditions. Any other payload, and a half already so, as given."""
+    """An effect half in the shape the codec reads: it carries its outcome
+    (``resolved`` by default) and its conditions. Any other payload, and a
+    half already so, as given."""
     from dataclasses import replace
 
-    if isinstance(payload, ActivationPayload) and (
-            payload.events is None or payload.outcome is not None):
-        return replace(payload, events=payload.events or (), outcome=None)
     if isinstance(payload, ResolutionPayload) and (
             payload.conditions_met is None
             or (payload.outcome is None and not payload.outcome_written)):
@@ -274,29 +272,19 @@ def gen3_payload(payload):
 
 
 def make_record(kind: RecordKind = RecordKind.RESOLUTION, **overrides) -> EffectRecord:
-    """A valid record of ``kind`` with every envelope field defaulted, of
-    generation :data:`GENERATION` (3) with the members gen 3 owes unless a
-    test passes ``generation`` (``None``: a gen-2 record).
+    """A valid gen-3 record of ``kind`` with every envelope field defaulted.
 
     ``moment`` (resolution) and ``subkind`` (playability) select the default
-    payload; any field, ``payload`` included, can be overridden. A cost half
-    passed with an ``outcome`` and no ``generation`` is a gen-2 record, as
-    only gen 1 and gen 2 write one. A gen-3 resolution half passed in gen-2's
-    shape is completed into gen-3's (:func:`gen3_payload`); the other gen-3
-    members of a passed payload, state or entity are the test's to give.
+    payload; any field, ``payload`` included, can be overridden. A resolution
+    half passed in the superseded shape is completed into the current one
+    (:func:`gen3_payload`); the other members of a passed payload, state or
+    entity are the test's to give.
     """
     game_id = overrides.get("game_id", "g1")
-    if "generation" not in overrides:
-        payload = overrides.get("payload")
-        overrides["generation"] = None if (
-            isinstance(payload, ActivationPayload) and payload.outcome is not None
-        ) else GENERATION
-    generation = overrides["generation"]
-    gen3 = generation == 3
     defaults: dict = {
         "record_id": f"{game_id}.1", "run_id": "run", "timestamp": "t",
         "game_id": game_id, "kind": kind, "actor_player": "P0",
-        "state": make_snapshot() if gen3 else make_snapshot(links=None),
+        "state": make_snapshot(), "generation": 3,
     }
     moment = overrides.pop("moment", None)
     subkind = overrides.pop("subkind", None)
@@ -313,8 +301,8 @@ def make_record(kind: RecordKind = RecordKind.RESOLUTION, **overrides) -> Effect
     if subkind is not None:
         defaults["subkind"] = subkind
     if "payload" not in overrides:
-        defaults["payload"] = _default_payload(kind, moment, subkind, gen3)
-    elif gen3:
+        defaults["payload"] = _default_payload(kind, moment, subkind)
+    else:
         overrides["payload"] = gen3_payload(overrides["payload"])
     defaults.update(overrides)
     return EffectRecord(**defaults)
@@ -327,10 +315,9 @@ def named_entity(name: str, **overrides) -> EntityState:
 
 def record_on_board(game_id: str, entities=(), ability=None, **overrides) -> EffectRecord:
     """A record of game ``game_id`` whose board holds ``entities``."""
-    links = () if overrides.get("generation", GENERATION) == 3 else None
     return make_record(
         game_id=game_id, ability=ability,
-        state=make_snapshot(entities=tuple(entities), links=links), **overrides,
+        state=make_snapshot(entities=tuple(entities)), **overrides,
     )
 
 

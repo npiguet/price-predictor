@@ -1,4 +1,0 @@
-name: disallow
-mana cost: {1}{U}{U}
-types: instant
-spell[1]: counter target spell, activated ability, or triggered ability.

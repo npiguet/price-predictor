@@ -59,5 +59,5 @@ def test_a_set_of_an_older_generation_exits_1_naming_it(tmp_path, caplog):
             "--records-dir", str(records), "--rules-dir", str(_rules(tmp_path)),
             "--cards-folder", str(SIDECARS / "cardsfolder"), "--workers", "1",
             "--output", str(tmp_path / "breadth.json")]) == 1
-    assert any("holds gen-2 records; this command reads gen-3 only" in r.getMessage()
+    assert any("gen2.jsonl, line 1: the record is gen-2 " in r.getMessage()
                for r in caplog.records)

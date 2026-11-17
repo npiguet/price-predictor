@@ -1,4 +1,0 @@
-name: razia's purification
-mana cost: {4}{R}{W}
-types: sorcery
-spell[1]: each player chooses three permanents they control, then sacrifices the rest.

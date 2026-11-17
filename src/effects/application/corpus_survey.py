@@ -24,14 +24,13 @@ game:
 ``turn_action`` records are written to no stratum (FR-059): the survey counts
 them by subkind and reads nothing else of them but their game's properties.
 
-A gen-3 game whose shard holds no game-end marker (``turn_action`` /
+A game whose shard holds no game-end marker (``turn_action`` /
 ``game_end``, WP7) was cut: a killed worker, a game or an end-of-game write
 that threw. Its records are incomplete (no fired-trigger or mana record, maybe
 a missing tail), so the survey drops it whole before any tally reads it,
 counting it in :class:`CutTally`, and the write pass drops the same games
 (:attr:`Survey.shard_cut`). The shard is read for its markers first
-(``shard_io.ended_games``). Gen-1 and gen-2 games have no marker and are never
-cut.
+(``shard_io.ended_games``).
 Both passes read through one :class:`WorkerContext`, so the refusal rule, the
 held-out test, the tags and a record's cell cannot drift apart.
 """
@@ -550,9 +549,8 @@ class _ShardSurveyor:
         self.pending.append(self._kept(record, klass, found))
 
     def _cut(self, record: EffectRecord) -> bool:
-        """A gen-3 record of a game with no game-end marker in the shard."""
-        return (self.ended is not None and record.generation == 3
-                and record.game_id not in self.ended)
+        """A record of a game with no game-end marker in the shard."""
+        return self.ended is not None and record.game_id not in self.ended
 
     def _runtime_only(self, record: EffectRecord) -> bool:
         """A kept resolution acting only through keys the join reads as

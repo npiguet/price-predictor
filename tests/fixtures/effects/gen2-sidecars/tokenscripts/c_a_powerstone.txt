@@ -1,3 +1,0 @@
-name: powerstone token
-types: artifact powerstone
-activated[1]: {T}: add {C}. this mana can't be spent to cast a nonartifact spell.

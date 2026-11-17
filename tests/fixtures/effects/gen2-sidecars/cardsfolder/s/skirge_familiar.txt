@@ -1,6 +1,0 @@
-name: skirge familiar
-mana cost: {4}{B}
-types: creature phyrexian imp
-power toughness: 3/2
-static: flying
-activated[1]: discard a card: add {B}.

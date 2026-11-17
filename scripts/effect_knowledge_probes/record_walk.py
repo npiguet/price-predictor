@@ -25,13 +25,12 @@ def records(directories: Iterable[Path], *, shards: int | None = None,
     curation wrote of it; ``distinct`` (the default) yields each record once,
     as every probe reads it (FR-070), and False every row, as training does.
     """
-    from effects.domain.shard_generation import ACCEPTED_GENERATIONS
     from effects.infrastructure.shard_io import iter_shards, read_shard, require_generation
 
     seen: set[str] = set()
     for directory in directories:
         chosen = iter_shards(Path(directory))[:shards]
-        require_generation(chosen, *ACCEPTED_GENERATIONS)
+        require_generation(chosen)
         for shard in chosen:
             for record in read_shard(shard):
                 if distinct:

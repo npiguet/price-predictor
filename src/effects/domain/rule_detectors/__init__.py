@@ -80,8 +80,7 @@ class RuleTag:
 class RuleSource(StrEnum):
     """Where a tagged record came from, which decides what it can be trusted
     for (FR-008): aimed collection, or a natural record of a game with or
-    without a random seat. A gen-2 record carries no ``aimed_at``, so it is
-    natural."""
+    without a random seat."""
 
     RANDOM_SEAT = "random_seat"
     FORGE_AI = "forge_ai"
@@ -99,8 +98,7 @@ class RuleSource(StrEnum):
 class FamilyMatch:
     """What a family finds in one record for one scenario, before the rule is attached.
 
-    ``observed`` is None where the record cannot show the outcome at all, as
-    a gen-2 resolution cannot show the game ending in the check after it.
+    ``observed`` is None where the record cannot show the outcome at all.
     """
 
     polarity: Polarity
@@ -131,7 +129,7 @@ class DetectorFamily(Protocol):
     general: frozenset[str]
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
-        """The gen-3 fields the family reads under ``params``; empty on gen-2 records."""
+        """The gen-3 fields the family reads under ``params``."""
         ...
 
     def validate(self, params: Mapping[str, Any]) -> None:
@@ -183,7 +181,8 @@ class TagResult:
 
     tags: tuple[RuleTag, ...] = ()
     #: Rules a declared scenario of the record's kind needs a field for that
-    #: the record's generation lacks (FR-007): not countable, never zero.
+    #: the record lacks (FR-007): not countable, never zero. A gen-3 record
+    #: carries every field a declaration needs, so :func:`tag_record` names none.
     not_countable: frozenset[str] = frozenset()
     #: Each tag's per-scenario findings that disagree with their polarity.
     review: tuple[RuleTag, ...] = ()
@@ -341,13 +340,8 @@ def tag_record(record: EffectRecord, index: DetectorIndex,
     its kind (an absence's least of all) may read it."""
     if is_game_end(record):
         return TagResult()
-    gen3 = record.generation == 3
     per_rule: dict[str, list[RuleTag]] = {}
-    not_countable: set[str] = set()
     for scenario, declaration, family in index.by_kind.get(record.kind.value, ()):
-        if not gen3 and (declaration.needs or family.needs(declaration.params)):
-            not_countable.update(scenario.rules)
-            continue
         found = family.match(record, lines, declaration.params)
         if found is None:
             continue
@@ -357,4 +351,4 @@ def tag_record(record: EffectRecord, index: DetectorIndex,
                 scenario.id))
     tags = tuple(_merge(rule, found) for rule, found in sorted(per_rule.items()))
     review = tuple(tag for found in per_rule.values() for tag in found if tag.needs_review)
-    return TagResult(tags, frozenset(not_countable - set(per_rule)), review)
+    return TagResult(tags, review=review)

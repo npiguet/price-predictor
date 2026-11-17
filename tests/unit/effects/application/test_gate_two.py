@@ -76,6 +76,7 @@ from effects.domain.state_snapshot import (
 from effects.domain.surface_collation import gather_entities
 from tests.unit.effects.builders import (
     keyword_score,
+    lines_of,
     make_batcher,
     make_entity,
     make_record,
@@ -138,7 +139,7 @@ def _creature(
     return EntityState(
         id=entity_id, name=entity_id, zone="battlefield", controller=controller,
         types=("creature",), pt=PowerToughness(base=(power, toughness)),
-        combat=combat, printed=printed,
+        combat=combat, lines=lines_of(printed),
         granted_temporary=GrantedTemporary(keywords=keywords),
     )
 

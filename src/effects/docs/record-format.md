@@ -4,14 +4,14 @@ What a reader or writer of effect records has to know that no single source file
 
 - `specs/023-ability-effect-model/contracts/record-schema.md` (base schema).
 - `specs/024-ability-effect-model-gen2/contracts/record-schema-delta.md` and `specs/025-ability-effect-model-gen3/contracts/record-schema-delta.md` (each generation's changes).
-- Python side: `domain/records.py`, `infrastructure/record_codec.py`, and `domain/shard_generation.py` for generations.
+- Python side: `domain/records.py`, `infrastructure/record_codec.py`, and `domain/shard_generation.py` for the generation check.
 
 ## Shards
 
 - `{run_id}.{worker}-{lifetime}.jsonl.gz` at the top level of the collecting run's directory (its `--effect-records`, a `records` or `scratch` run of the layout), one JSON record per line, append-only.
 - One shard per worker JVM lifetime, not per worker slot and not one shared file. Records are large enough that concurrent appends would interleave mid-record, and the supervisor replaces worker JVMs hundreds of times per run.
 - Each file is a concatenation of complete gzip members, one per block of 256 records and one more at each game's end, after its game-end marker. A worker killed mid-write truncates the last member and the reader stops there, so a killed worker loses only the game in progress.
-- A game that ended writes a `turn_action` / `game_end` marker as its last record. A gen-3 game whose shard holds no marker was cut; `build-corpus`, the collectors' counters and `rule-counts` take nothing from it (`domain/game_ends.py`).
+- A game that ended writes a `turn_action` / `game_end` marker as its last record. A game whose shard holds no marker was cut; `build-corpus`, the collectors' counters and `rule-counts` take nothing from it (`domain/game_ends.py`).
 - Damage is located, never skipped silently:
   - A last member that does not decompress ends the read with a warning naming the shard and byte.
   - A damaged member with another after it stops the read with `CorruptShardError`, because reading on would drop every later member unsaid.
@@ -29,7 +29,7 @@ The envelope is frozen within a generation: a later capability makes new `kind` 
 | Member | Notes |
 |---|---|
 | `record_id`, `run_id`, `timestamp`, `game_id` | ids as above; timestamp ISO 8601 UTC |
-| `generation` | `3` on gen-3, absent before; any other value is refused at decode (`UnknownGenerationError`) |
+| `generation` | `3` on every record; see § Generations |
 | `kind` | `resolution`, `rewrite`, `continuous`, `combat`, `trigger`, `playability`, gen-3 `turn_action` |
 | `moment` | resolution kind only |
 | `subkind` | playability kind; on `turn_action` one of `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`, `lore_counter`, `game_end` (the game-end marker, which carries `records_withheld`) |
@@ -37,12 +37,12 @@ The envelope is frozen within a generation: a later capability makes new `kind` 
 | `mirror_of`, `variant_of` | the live record a fork mirrors; the variant source |
 | `mode` | `patched` or `degraded` |
 | `interventional`, `fork`, `synthetic` | flags; signatures below |
-| `random_seat` | gen-2 on: `actor_player` is the random seat |
-| `what_if` | gen-2 `attackers`/`blockers` only; gen-3 `attackers` records carry none |
+| `random_seat` | every record: `actor_player` is the random seat |
+| `what_if` | `blockers` records only; an `attackers` record carries none |
 | `aimed_at` | gen-3: the rule ids a record was collected for |
 | `directed` | gen-3 directed forks only: `{variant, operation}` |
 | `copy_dropped` | gen-3 fork records only: what the copier left out of the fork's copy, by kind; absent on a live record and on a lossless copy; it gates nothing |
-| `actor_player` | on `playability` records of gen-2 on, the deciding player |
+| `actor_player` | on `playability` records, the deciding player |
 | `ability` | provenance keys, a charm mode's with an `option`; absent for `combat` and `playability` |
 | `state`, `payload` | the board snapshot and the kind's payload |
 | `curation` | curated shards only, written by `build-corpus` |
@@ -52,16 +52,16 @@ The envelope is frozen within a generation: a later capability makes new `kind` 
 
 ## Generations
 
-- A reader takes a record's generation from `generation`, else from the presence of `random_seat` (gen-2), else gen-1. A gen-1 record reads `random_seat = false` and `what_if` unknown.
-- Every reader refuses a records set mixing generations. `build-corpus`, `train-effect-model`, `evaluate-effect-model`, the probes, `rule-counts` and `scripts/rule_breadth.py` read gen-3 only.
-- A curated shard keeps its source's generation, because the codec writes a record back as it read it.
-- `actor_player` on a `playability` record is the one named exception to the frozen schema: gen-1 wrote the active or attacking player, later generations the deciding player.
-- Relative to gen-2, a gen-3 field may change meaning or go away; the 025 contract's Gen-3 section lists each.
+- Every reader reads gen-3 records only. The decode (`record_codec.record_from_dict`, which every reader goes through) refuses a record with no `generation` member as `OlderGenerationError`, naming it gen-2 when it carries `random_seat` and gen-1 otherwise, and a `generation` other than the integer 3 as `UnknownGenerationError`; `shard_io` prefixes the shard and line. Both are `UnacceptedGenerationError`, which every command maps to exit 1. Gen-1 and gen-2 read several fields differently (`actor_player` on a `playability` record among them), with no per-field version to tell them apart.
+- `shard_io.require_generation` checks each shard's first record before a command reads the set, so `build-corpus`, `train-effect-model`, `evaluate-effect-model`, the probes, `rule-counts` and `scripts/rule_breadth.py` refuse an older set before any work; an older record further into a shard is refused where it is decoded. `validate-corpus` refuses it on the raw line (`corpus_validation/presence.py`).
+- The collectors refuse an older record met counting the shards already in their run directory or a `--count-from` one, with exit 1 before any game is played: it is no damage to count past, since every reader refuses the set it is in.
+- A curated shard is gen-3, because the codec writes `generation` and `random_seat` on every record.
+- What each field means in gen 3, where it differs from the earlier generations: the 025 contract's Gen-3 section.
 
 ## Links and halves
 
 - A resolution is a cost half and an effect half sharing a `link_id`.
-- `link_id` is absent where a half has no partner: a mana record, the rescue record, an interventional half, and on gen-3 a triggered ability's or a copy's effect half, which nobody cast.
+- `link_id` is absent where a half has no partner: a mana record, the rescue record, an interventional half, and a triggered ability's or a copy's effect half, which nobody cast.
 - A gen-3 cost half always carries one, and has no effect half when its item was countered.
 - On a patched worker a modal resolution writes one cost half through the charm's root key and one effect half per chosen mode through root key + `option`, all sharing one `link_id`. A fizzled or declined charm writes one empty half per chosen mode. A degraded worker writes one root effect half.
 
@@ -85,7 +85,7 @@ A protection copy written by `build-corpus` is a synthetic record `<record_id>~p
 - `refs.x` is the paid X, else an `SVar:X` the acting chain names, read once before the resolution and never a `Count$Random`.
 - `refs.targets` holds every target of the acting chain, root first; on an effect half, those left after Forge's illegal-target check. `refs.targets_at_cast` holds the same links' targets before that check, a target gone since as an `L<id>` entity of role `last_known`. `refs.targets_on_stack` names the refs that are a spell or ability on the stack, by its card.
 - A provenance key's face is numbered over the converter's faces, never a face-down or empty-room state.
-- A gen-3 resolution half in the superseded payload shape (a cost half without `events` or with an `outcome`, an effect half without `outcome`) is refused at decode (`record_codec.SupersededPayloadError`); the same shape on a gen-1 or gen-2 record reads. A hand-built gen-3 test record is in the current shape: `tests/unit/effects/builders.make_record` builds gen 3 by default.
+- A resolution half in the superseded payload shape (a cost half without `events` or with an `outcome`, an effect half without `outcome`) is refused at decode (`record_codec.SupersededPayloadError`). A hand-built test record is in the current shape: `tests/unit/effects/builders.make_record` builds a gen-3 record and completes an effect half's `outcome` and `conditions_met`.
 - Decision candidates are enumerated by the collector itself at every priority stop and written as a two-stage sample (`--playability-rate`, then `--zone-candidate-rate` or `--plain-candidate-rate`). The sampling is what keeps a gen-3 game near 350 KB gzipped.
 - Attackers records are one per creature.
 - A rewrite record names one line in both `replaced_by` and `buffered` only when its replacement's own `ReplaceDamage`, `ReplaceSplitDamage` or `ReplaceEffect` ability ran in the event's place and Forge buffered that ability's sub-ability (Forcefield); any other buffered record has `replaced_by: []`. Two different lists, or a non-empty `replaced_by` beside `buffered: []`, is a contradiction `validate-corpus` fails. The shapes: `contracts/record-schema-delta.md` (025), the rewrite-record bullet.

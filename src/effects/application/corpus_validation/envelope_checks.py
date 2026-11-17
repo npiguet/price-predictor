@@ -83,20 +83,17 @@ def _is_deferred_mana_record(record: EffectRecord) -> bool:
     Its snapshot is from when the mana ability was activated, so it lands
     after later turns and would read as a backward turn jump. Recognised by
     the payload rather than the acting card: a ``mana_produced`` in an effect
-    half that resolved no stack item (a gen-3 ``outcome`` written null, which
+    half that resolved no stack item (an ``outcome`` written null, which
     only a mana record and the rescue record write), whatever else the mana
-    ability's payment and sub-abilities did (a pain land's damage, WP7);
-    before gen-3's outcome, a ``mana_produced`` and otherwise only the
-    ``tapped`` events of the permanents its cost tapped (FR-042c). Nothing
-    defers an activation half, so a jump on one is still a game boundary.
+    ability's payment and sub-abilities did (a pain land's damage, WP7).
+    Nothing defers an activation half, so a jump on one is still a game
+    boundary.
     """
     payload = record.payload
     if not (record.moment is Moment.RESOLUTION and isinstance(payload, ResolutionPayload)
             and any(event.type is EventType.MANA_PRODUCED for event in payload.events)):
         return False
-    if payload.outcome_written:
-        return payload.outcome is None
-    return all(event.type in _MANA_RECORD_EVENTS for event in payload.events)
+    return payload.outcome is None
 
 
 def _is_deferred_trigger_record(record: EffectRecord) -> bool:
@@ -118,7 +115,6 @@ def _is_deferred(record: EffectRecord) -> bool:
 
 
 #: The events a mana record holds: what its cost tapped, then the mana.
-_MANA_RECORD_EVENTS = frozenset({EventType.MANA_PRODUCED, EventType.TAPPED})
 
 
 class RecordIds:
@@ -213,7 +209,7 @@ class GameBoundaries:
 
 
 class KindPresence:
-    """V5 #19: whether a gen-3 window holds every record kind a game writes.
+    """V5 #19: whether a window holds every record kind a game writes.
     Each per-kind check reads an absent kind as holding, so a collector that
     stopped writing one kind passed every check."""
 
@@ -226,15 +222,13 @@ class KindPresence:
 
     def __init__(self, playability_rate: float | None = None) -> None:
         self.labels: Counter[str] = Counter()
-        self.gen3 = 0
+        self.records = 0
         #: The run's ``--playability-rate`` from its manifest; decision records
         #: are judged only where it is known and above 0.
         self.playability_rate = playability_rate
 
     def add(self, record: EffectRecord) -> None:
-        if record.generation != 3:
-            return
-        self.gen3 += 1
+        self.records += 1
         label = _kind_label(record)
         if record.kind is RecordKind.TURN_ACTION and record.subkind is not None:
             label = f"{record.kind.value}/{record.subkind.value}"
@@ -244,13 +238,13 @@ class KindPresence:
         expected = [label for label in self.EXPECTED if label != "playability/decision"
                     or (self.playability_rate is not None and self.playability_rate > 0)]
         missing = [label for label in expected if not self.labels[label]]
-        judged = self.gen3 >= limits.min_presence_records
+        judged = self.records >= limits.min_presence_records
         # The game-end marker has a check of its own (GameEnds).
         others = sorted(set(_all_labels()) - set(expected) - set(self.labels) - {_GAME_END})
         if not missing:
-            measured = f"every kind a game writes is present over {self.gen3} gen-3 records"
+            measured = f"every kind a game writes is present over {self.records} records"
         else:
-            measured = (f"{self.gen3} gen-3 records hold no {', '.join(missing)}"
+            measured = (f"{self.records} records hold no {', '.join(missing)}"
                         + ("" if judged else f" (under the {limits.min_presence_records} "
                            "records this is judged at)"))
         yield Finding(
@@ -265,7 +259,7 @@ _GAME_END = f"{RecordKind.TURN_ACTION.value}/{TurnActionSubkind.GAME_END.value}"
 
 
 class GameEnds:
-    """WP7: which gen-3 games ended with their ``turn_action`` / ``game_end``
+    """WP7: which games ended with their ``turn_action`` / ``game_end``
     marker, and what the per-game cap withheld from them.
 
     A game without one was cut (a killed worker, a game or an end-of-game
@@ -284,8 +278,6 @@ class GameEnds:
         self.markers = 0
 
     def add(self, record: EffectRecord) -> None:
-        if record.generation != 3:
-            return
         self.games.add(record.game_id)
         if is_game_end(record):
             self.ended.add(record.game_id)
@@ -307,10 +299,10 @@ class GameEnds:
                 if counter < latest[lifetime]}
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
-        name = "gen-3 games end with their game-end marker"
+        name = "games end with their game-end marker"
         games, without = len(self.games), self.games - self.ended
         share = len(without) / games if games else 0.0
-        measured = (f"{len(without)} of {games} gen-3 game(s) have no game-end marker "
+        measured = (f"{len(without)} of {games} game(s) have no game-end marker "
                     f"({share:.1%}): cut, or still running at the window's end")
         closed = self._closed()
         if games and not self.ended and closed:
@@ -326,7 +318,7 @@ class GameEnds:
 
 
 def _all_labels() -> tuple[str, ...]:
-    """Every kind label a gen-3 window can hold, turn actions by subkind."""
+    """Every kind label a window can hold, turn actions by subkind."""
     from effects.domain.records import TurnActionSubkind
 
     labels = [label for label in _labels_of(*RecordKind) if not label.startswith("turn_action")]
@@ -339,20 +331,19 @@ class _LinkHalf(NamedTuple):
     #: None on a record of a kind with no halves, which never pairs.
     moment: Moment | None
     keys: tuple[ProvenanceKey, ...]
-    #: A gen-3 cost half (no ``outcome``): written at the cast, before the
-    #: item's fate, so it may stand alone where the item was countered or the
-    #: game ended with it on the stack (FR-042a, FR-042b).
-    written_at_cast: bool = False
 
 
 def _joined(halves: list[_LinkHalf]) -> bool:
     """Whether one link's halves form a valid resolution (FR-029d): one cost
     half and one effect half, or several effect halves all acting through mode
-    keys (``option`` set) of one charm root."""
+    keys (``option`` set) of one charm root, or a cost half alone. A cost half
+    is written at the cast, before the item's fate, so it stands alone where
+    the item was countered or the game ended with it on the stack (FR-042a,
+    FR-042b)."""
     costs = [half.keys for half in halves if half.moment is Moment.ACTIVATION]
     effects = [half.keys for half in halves if half.moment is Moment.RESOLUTION]
     if len(costs) == 1 and len(halves) == 1:
-        return halves[0].written_at_cast
+        return True
     if len(costs) != 1 or not effects or len(costs) + len(effects) != len(halves):
         return False
     if len(effects) == 1:
@@ -371,7 +362,7 @@ class Links:
     def __init__(self) -> None:
         #: link_id -> every half carrying it.
         self.links: dict[str, list[_LinkHalf]] = defaultdict(list)
-        #: link_id -> ``(game_id, source)`` of each gen-3 cost half.
+        #: link_id -> ``(game_id, source)`` of each cost half.
         self.casts: dict[str, tuple[str, str | None]] = {}
         #: ``(game_id, subject)`` of every ``spell_countered`` an effect half holds.
         self.countered: set[tuple[str, str]] = set()
@@ -382,11 +373,9 @@ class Links:
                 (record.game_id, subject) for event in record.payload.listed_events()
                 if event.type is EventType.SPELL_COUNTERED for subject in event.subjects)
         if record.link_id is not None:
-            at_cast = (isinstance(record.payload, ActivationPayload)
-                       and record.payload.outcome is None)
             self.links[record.link_id].append(_LinkHalf(
-                record.moment, tuple(record.ability or ()), at_cast))
-            if at_cast:
+                record.moment, tuple(record.ability or ())))
+            if isinstance(record.payload, ActivationPayload):
                 self.casts[record.link_id] = (record.game_id, record.state.refs.source)
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
@@ -398,7 +387,7 @@ class Links:
         yield ceiling_finding(
             name=(
                 "every link_id joins one activation to its resolution(s): one, "
-                "or one per chosen mode of a charm, or none for a gen-3 "
+                "or one per chosen mode of a charm, or none for an "
                 "activation whose item never resolved"
             ),
             ceiling=limits.max_unpaired_link_rate,
@@ -415,7 +404,7 @@ class Links:
         yield self._casts_met(limits)
 
     def _casts_met(self, limits: Thresholds) -> Finding:
-        """V5 #18: a gen-3 cost half standing alone pairs (its item was
+        """V5 #18: a cost half standing alone pairs (its item was
         countered, or still on the stack at the game's end), so the pairing
         check cannot see a collector writing no effect half at all. Judged
         only at the degenerate end: at least ``min_cost_evidence`` cost halves
@@ -424,10 +413,10 @@ class Links:
         countered = sum(1 for link in alone if self.casts[link] in self.countered)
         met = len(self.casts) - len(alone)
         degenerate = len(self.casts) >= limits.min_cost_evidence and met == 0
-        measured = (f"{met}/{len(self.casts)} gen-3 cost halves met by an effect half; "
+        measured = (f"{met}/{len(self.casts)} cost halves met by an effect half; "
                     f"{len(alone)} alone, {countered} of them countered by a "
                     "spell_countered in their game")
-        name = "every gen-3 cost half is met by its effect half unless its item never resolved"
+        name = "every cost half is met by its effect half unless its item never resolved"
         if degenerate:
             return Finding(name=name, ok=False, measured=measured + (
                 f" (none met over {len(self.casts)}: the collector writes no effect half)"))

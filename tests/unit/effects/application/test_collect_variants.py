@@ -38,7 +38,7 @@ from effects.domain.script_variants import (
 )
 from effects.domain.split import HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
-from tests.unit.effects.builders import make_record, make_snapshot
+from tests.unit.effects.builders import make_record
 from tests.unit.effects.domain.test_script_variants import _BOLT_SCRIPT
 
 
@@ -51,13 +51,8 @@ def _no_real_unstaging(monkeypatch):
 
 
 def _record(**overrides) -> EffectRecord:
-    """A gen-2 record unless ``generation=3`` is passed: the round shards
-    here end no game with a marker, which only a gen-3 game owes."""
-    defaults: dict = {"record_id": "r.0.1", "run_id": "r", "game_id": "r.0.1",
-                      "generation": None}
+    defaults: dict = {"record_id": "r.0.1", "run_id": "r", "game_id": "r.0.1"}
     defaults.update(overrides)
-    if defaults["generation"] is None:
-        defaults.setdefault("state", make_snapshot(links=None))
     return make_record(**defaults)
 
 
@@ -518,19 +513,23 @@ def _variant_record(script_file: str, game: str, n: int, **overrides) -> EffectR
     )
 
 
-def _round_writes(directory: Path, *rounds: list[EffectRecord], run: str = _RUN):
+def _round_writes(directory: Path, *rounds: list[EffectRecord], run: str = _RUN,
+                  ended: bool = True):
     """A stand-in for the workers: the n-th round writes ``rounds[n]`` as a
-    shard of this run's, and a round past the last writes nothing."""
+    shard of this run's, every game ended by its marker unless ``ended`` is
+    False, and a round past the last writes nothing."""
     from effects.infrastructure.shard_io import write_shard
+    from tests.unit.effects.builders import write_ended_shard
 
     played = iter(rounds)
+    writer = write_ended_shard if ended else write_shard
 
     def write(*_args, **_kwargs) -> None:
         records = next(played, None)
         if records:
             directory.mkdir(parents=True, exist_ok=True)
             index = len(list(directory.glob(f"{run}.*")))
-            write_shard(directory / f"{run}.0-{index}.jsonl.gz", records)
+            writer(directory / f"{run}.0-{index}.jsonl.gz", records)
 
     return write
 
@@ -542,10 +541,13 @@ def test_a_damaged_variant_shard_is_counted_up_to_the_damage_once(tmp_path):
     from effects.application.collect_variants import VariantGameCounter
     from effects.domain.variant_rounds import VariantGames
     from effects.infrastructure.record_codec import format_record_line
+    from tests.unit.effects.builders import with_game_end_markers
 
     bolt = "variant-scripts/bolt_variant_0a1b2c3d.txt"
-    members = [gzip.compress((format_record_line(_variant_record(bolt, game, 1)) + "\n")
-                             .encode("utf-8")) for game in ("g1", "g2", "g3")]
+    members = [gzip.compress("".join(
+        format_record_line(record) + "\n"
+        for record in with_game_end_markers([_variant_record(bolt, game, 1)])).encode("utf-8"))
+        for game in ("g1", "g2", "g3")]
     members[1] = b"XX" + members[1][2:]
     shard = tmp_path / f"{_RUN}.0-a.jsonl.gz"
     shard.write_bytes(b"".join(members))
@@ -566,7 +568,7 @@ class TestTheUntargetedRound:
     BOLT = "variant-scripts/bolt_variant_0a1b2c3d.txt"
     SHOCK = "variant-scripts/shock_variant_99aa00ff.txt"
 
-    def _fixture(self, tmp_path, monkeypatch, supervisor, *rounds, **config):
+    def _fixture(self, tmp_path, monkeypatch, supervisor, *rounds, ended=True, **config):
         import effects.application.collect_variants as collect_variants
 
         variants = []
@@ -590,7 +592,7 @@ class TestTheUntargetedRound:
         records = tmp_path / "records"
         records.mkdir()
         supervisor.run_id = _RUN
-        supervisor.play_round.side_effect = _round_writes(records, *rounds)
+        supervisor.play_round.side_effect = _round_writes(records, *rounds, ended=ended)
         forge_cards = tmp_path / "forge-cards"
         forge_cards.mkdir()
         config.setdefault("cards_folders", (tmp_path / "no-converted-cards",))
@@ -617,7 +619,8 @@ class TestTheUntargetedRound:
             assert collect_variants.run(config) == 0
 
         assert fake_supervisor.play_round.call_count == 2
-        assert "Collected 4 new effect records; 2 of 2 variants played" in caplog.text
+        # Four records and the three games' markers.
+        assert "Collected 7 new effect records; 2 of 2 variants played" in caplog.text
 
     def test_each_round_weights_a_variant_by_the_games_it_lacks(
         self, tmp_path, monkeypatch, fake_supervisor,
@@ -673,9 +676,9 @@ class TestTheUntargetedRound:
         from effects.infrastructure.shard_io import write_shard
         from tests.unit.effects.builders import with_game_end_markers
 
-        ended = with_game_end_markers([_variant_record(self.BOLT, "g1", 0, generation=3)])
-        cut = [_variant_record(self.BOLT, "g2", 0, generation=3),
-               _variant_record(self.SHOCK, "g2", 1, generation=3)]
+        ended = with_game_end_markers([_variant_record(self.BOLT, "g1", 0)])
+        cut = [_variant_record(self.BOLT, "g2", 0),
+               _variant_record(self.SHOCK, "g2", 1)]
         shard = tmp_path / f"{_RUN}.0-a.jsonl.gz"
         write_shard(shard, ended + cut)
 
@@ -689,14 +692,14 @@ class TestTheUntargetedRound:
         from tests.unit.effects.builders import with_game_end_markers
 
         records = with_game_end_markers([
-            _variant_record(self.BOLT, "g1", 0, generation=3),
-            _variant_record(self.BOLT, "g2", 0, generation=3),
-            _variant_record(self.SHOCK, "g3", 0, generation=3),
-            _variant_record(self.SHOCK, "g4", 0, generation=3),
+            _variant_record(self.BOLT, "g1", 0),
+            _variant_record(self.BOLT, "g2", 0),
+            _variant_record(self.SHOCK, "g3", 0),
+            _variant_record(self.SHOCK, "g4", 0),
         ])
-        cut = _variant_record(self.SHOCK, "g5", 0, generation=3)
+        cut = _variant_record(self.SHOCK, "g5", 0)
         collect_variants, config = self._fixture(
-            tmp_path, monkeypatch, fake_supervisor, [*records, cut],
+            tmp_path, monkeypatch, fake_supervisor, [*records, cut], ended=False,
         )
 
         assert collect_variants.run(config) == 0
@@ -709,12 +712,12 @@ class TestTheUntargetedRound:
     ):
         """python, two runs on one directory: only this run's shards say what
         its variants played."""
-        from effects.infrastructure.shard_io import write_shard
+        from tests.unit.effects.builders import write_ended_shard
 
         collect_variants, config = self._fixture(
             tmp_path, monkeypatch, fake_supervisor, no_progress_rounds=1,
         )
-        write_shard(
+        write_ended_shard(
             config.effect_records / "other-run.0-a.jsonl.gz",
             self._games(self.BOLT, "x1", "x2") + self._games(self.SHOCK, "x1", "x2"),
         )
@@ -726,13 +729,13 @@ class TestTheUntargetedRound:
         """V4 #6: an interrupted run restarted with the same seed replayed
         every variant it had finished, doubling their games. ``--continues``
         counts the earlier run's shards first."""
-        from effects.infrastructure.shard_io import write_shard
+        from tests.unit.effects.builders import write_ended_shard
 
         rounds = [self._games(self.SHOCK, "g1", "g2")]
         collect_variants, config = self._fixture(
             tmp_path, monkeypatch, fake_supervisor, *rounds, continues=("earlier",),
         )
-        write_shard(
+        write_ended_shard(
             config.effect_records / "earlier.0-a.jsonl.gz", self._games(self.BOLT, "x1", "x2"),
         )
 
@@ -759,12 +762,12 @@ class TestTheUntargetedRound:
     def test_a_continued_run_with_nothing_left_plays_no_round_and_succeeds(
         self, tmp_path, monkeypatch, fake_supervisor,
     ):
-        from effects.infrastructure.shard_io import write_shard
+        from tests.unit.effects.builders import write_ended_shard
 
         collect_variants, config = self._fixture(
             tmp_path, monkeypatch, fake_supervisor, continues=("earlier",),
         )
-        write_shard(
+        write_ended_shard(
             config.effect_records / "earlier.0-a.jsonl.gz",
             self._games(self.BOLT, "x1", "x2") + self._games(self.SHOCK, "x1", "x2"),
         )

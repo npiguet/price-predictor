@@ -209,13 +209,11 @@ def test_the_phases_are_forge_s_phase_types_lower_cased():
     assert sorted(FORGE_PHASES) == sorted(name.lower() for name in names)
 
 
-def test_a_gen3_record_without_a_mode_is_named():
-    """Absent, the decoder reads it as ``degraded``; every gen-3 writer sets it."""
+def test_a_record_without_a_mode_is_named():
+    """Absent, the decoder reads it as ``degraded``; every writer sets it."""
     raw = _record()
     del raw["mode"]
     assert list(off_list_values(raw)) == [("mode", ABSENT)]
-    del raw["generation"]
-    assert list(off_list_values(raw)) == []
 
 
 def test_a_list_where_a_string_belongs_is_named_not_raised_on():

@@ -42,7 +42,6 @@ from effects.domain.records import (
     RecordKind,
 )
 from tests.unit.effects.builders import (
-    EFFECTS_FIXTURES,
     GEN3_SIDECAR_FOLDERS,
     curated_fixture_records,
 )
@@ -1041,14 +1040,20 @@ class TestGen3Only:
         assert common.load_checkpoint(checkpoint_path).training_settings
 
     def test_gen2_records_are_refused(self, tmp_path):
-        import shutil
+        """A gen-3 fixture record less ``generation`` is gen-2's."""
+        import gzip
+        import json
 
-        from effects.domain.shard_generation import UnacceptedGenerationError
+        from effects.domain.shard_generation import OlderGenerationError
+        from tests.unit.effects.builders import gen3_fixture_records
 
         directory = tmp_path / "game-disjoint"
         directory.mkdir()
-        shutil.copy(EFFECTS_FIXTURES / "gen2-records.jsonl.gz", directory / "shard-00000.jsonl.gz")
-        with pytest.raises(UnacceptedGenerationError):
+        with gzip.open(directory / "shard-00000.jsonl.gz", "wt", encoding="utf-8") as out:
+            for data in gen3_fixture_records():
+                del data["generation"]
+                out.write(json.dumps(data) + "\n")
+        with pytest.raises(OlderGenerationError, match="the record is gen-2 "):
             next(record_walk.records([directory]))
-        with pytest.raises(UnacceptedGenerationError):
+        with pytest.raises(OlderGenerationError, match="the record is gen-2 "):
             next(common.read_games(sorted(directory.iterdir()), {"any"}))

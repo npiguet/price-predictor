@@ -1,4 +1,0 @@
-name: killing wave
-mana cost: {X}{B}
-types: sorcery
-spell[1]: for each creature, its controller sacrifices it unless they pay X life.

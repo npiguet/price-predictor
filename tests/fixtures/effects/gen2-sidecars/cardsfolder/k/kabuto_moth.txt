@@ -1,6 +1,0 @@
-name: kabuto moth
-mana cost: {2}{W}
-types: creature spirit
-power toughness: 1/2
-static: flying
-activated[1]: {T}: target creature gets +1/+2 until end of turn.

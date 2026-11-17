@@ -1,6 +1,0 @@
-name: nezumi cutthroat
-mana cost: {1}{B}
-types: creature rat warrior
-power toughness: 2/1
-static: fear
-static: CARDNAME can't block.

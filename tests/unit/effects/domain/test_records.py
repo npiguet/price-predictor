@@ -30,7 +30,6 @@ from effects.domain.records import (
     PlayabilityCheck,
     PlayabilitySubkind,
     RecordKind,
-    ResolutionOutcome,
     ResolutionPayload,
     RewritePayload,
     RewriteResult,
@@ -81,43 +80,15 @@ class TestFlagSignatures:
 class TestLinkId:
     """``link_id`` joins the two halves of a resolution pair, where there is one."""
 
-    @pytest.mark.parametrize(
-        "outcome",
-        [
-            ResolutionOutcome.FIZZLED,
-            ResolutionOutcome.DECLINED,
-            ResolutionOutcome.COUNTERED,
-        ],
-    )
-    def test_a_partnerless_outcome_carries_no_link_id(self, make_record, outcome):
-        with pytest.raises(ValueError, match="no linked effect half"):
-            make_record(
-                moment=Moment.ACTIVATION,
-                payload=ActivationPayload(costs=Costs(), outcome=outcome),
-                link_id="pair-1",
-            )
-
-    @pytest.mark.parametrize(
-        "outcome",
-        [ResolutionOutcome.RESOLVED, ResolutionOutcome.PARTIALLY_FIZZLED],
-    )
-    def test_a_resolving_outcome_may_carry_one(self, make_record, outcome):
-        record = make_record(
-            moment=Moment.ACTIVATION,
-            payload=ActivationPayload(costs=Costs(), outcome=outcome),
-            link_id="pair-1",
-        )
-        assert record.link_id == "pair-1"
-
     def test_a_protection_fork_links_its_cost_half_as_a_live_one(self, make_record):
         record = make_record(
             moment=Moment.ACTIVATION,
-            payload=ActivationPayload(costs=Costs(), outcome=ResolutionOutcome.RESOLVED),
+            payload=ActivationPayload(costs=Costs()),
             interventional=True, fork=True, link_id="pair-1",
         )
         assert record.link_id == "pair-1"
 
-    def test_a_gen3_cost_half_carries_no_outcome_and_always_links(self, make_record):
+    def test_a_cost_half_always_links(self, make_record):
         """Written at the cast, before the item's fate (FR-042a): its link
         promises an effect half that a countered item never writes."""
         record = make_record(
@@ -125,19 +96,7 @@ class TestLinkId:
             payload=ActivationPayload(costs=Costs(), events=()),
             link_id="pair-1",
         )
-        assert record.payload.has_partner
-        assert record.payload.outcome is None
-
-    def test_a_partnerless_outcome_without_a_link_id_is_fine(self, make_record):
-        record = make_record(
-            moment=Moment.ACTIVATION,
-            payload=ActivationPayload(
-                costs=Costs(), outcome=ResolutionOutcome.COUNTERED,
-            ),
-        )
-        assert record.link_id is None
-        assert not record.payload.has_partner
-
+        assert record.link_id == "pair-1"
 
 class TestActingAbility:
     """``ability`` names the acting line, where one line acts."""

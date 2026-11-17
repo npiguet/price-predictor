@@ -154,10 +154,6 @@ def no_converted_cards(trees: ConvertedTrees) -> str:
     )
 
 
-#: The record generation coverage counts: the corpus build-corpus reads.
-COUNTED_GENERATION = 3
-
-
 @dataclass(frozen=True)
 class ShardCoverage:
     """What one shard adds to the card run: each card's credited records,
@@ -170,7 +166,7 @@ class ShardCoverage:
     #: What ended the shard's read early (a damaged member or line), its
     #: records before the damage counted; None for a whole shard.
     damaged: str | None = None
-    #: Gen-3 games without a game-end marker, whose records credit nothing.
+    #: Games without a game-end marker, whose records credit nothing.
     cut_games: int = 0
 
 
@@ -192,9 +188,9 @@ def _card_of_script(sidecars: SidecarLookup | None) -> CardOfScript | None:
 
 
 def _kept(record: EffectRecord, sidecars: SidecarLookup | None) -> bool:
-    """Whether build-corpus would keep the record: gen-3, not a
-    ``turn_action``, and not refused (its quality rule alone without sidecars)."""
-    if record.generation != COUNTED_GENERATION or record.kind is RecordKind.TURN_ACTION:
+    """Whether build-corpus would keep the record: not a ``turn_action``, and
+    not refused (its quality rule alone without sidecars)."""
+    if record.kind is RecordKind.TURN_ACTION:
         return False
     if sidecars is None:
         return quality_defect(record) is None
@@ -205,11 +201,13 @@ def count_shard(shard: Path, *, roots: Mapping[str, Path] | None = None) -> Shar
     """One shard's qualifying records, keyed by folded card name to match the
     converted (lowercase) unit names. Top-level so a process pool can pickle it.
 
-    Only the records build-corpus keeps count (python D1): gen-3, no
+    Only the records build-corpus keeps count (python D1): no
     ``turn_action`` (a draw or an untap is no record of the card), none it
     refuses, and none of a game its shard holds no game-end marker for (a
     cut game, which build-corpus drops whole; credits are held per game
-    until the shard is read). Under ``roots`` an entity counts as the
+    until the shard is read). A record of an older generation stops the
+    count with :class:`~effects.domain.shard_generation.OlderGenerationError`,
+    as it stops every reader: it is no damage to count past. Under ``roots`` an entity counts as the
     converted card its printed script is (python D6), and a static's host
     through its script (python D5). The cards shown are every game's, a cut
     one's too: its games showed them.
@@ -228,8 +226,6 @@ def count_shard(shard: Path, *, roots: Mapping[str, Path] | None = None) -> Shar
         for record in read_shard(shard):
             records += 1
             ends.note(record)
-            if record.generation != COUNTED_GENERATION:
-                continue
             seen.update(fold_card_name(name) for name in cards_shown(record, card_of))
             if not _kept(record, sidecars):
                 continue
@@ -777,7 +773,7 @@ def count_text_shard(
     """``held-out text -> the game ids it resolved in``, over one shard.
 
     Counted as build-corpus counts a held-out text's games (FR-053): from the
-    gen-3 resolution records its refusal rule keeps, through
+    resolution records its refusal rule keeps, through
     :meth:`HeldOutCards.text_acted_through`. A random-seat game counts: it
     goes to the card-disjoint stratum like any game naming a held-out card
     (FR-059). A game its shard holds no game-end marker for is cut and
@@ -810,8 +806,6 @@ def count_text_shard(
         for record in iter_shard_matching(shard, where=every_record):
             ends.note(record)
             if record.kind is not RecordKind.RESOLUTION:
-                continue
-            if record.generation != COUNTED_GENERATION:
                 continue
             seen.update(fold_card_name(name) for name in cards_shown(record, card_of))
             if record_refusal(record, sidecars.resolution_of) is not None:

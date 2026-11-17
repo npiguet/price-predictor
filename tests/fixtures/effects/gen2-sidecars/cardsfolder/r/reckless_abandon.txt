@@ -1,4 +1,0 @@
-name: reckless abandon
-mana cost: {R}
-types: sorcery
-spell[1]: as an additional cost to cast this spell, sacrifice a creature. CARDNAME deals 4 damage to any target.

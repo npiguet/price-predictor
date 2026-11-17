@@ -274,7 +274,7 @@ def test_validate_corpus_reports_on_the_java_written_shards(recycled_run) -> Non
     assert result.returncode in (0, 1), printed[-4000:]
     assert "[PASS] every shard line decodes" in printed, printed[-4000:]
     # Watched, so never failed by the check itself; every game here ended.
-    assert "gen-3 games end with their game-end marker: 0 of " in printed, printed[-4000:]
+    assert "games end with their game-end marker: 0 of " in printed, printed[-4000:]
 
 
 #: build-corpus's refusals of a corpus a few games cannot fill: the two

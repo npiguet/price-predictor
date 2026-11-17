@@ -36,19 +36,15 @@ from effects.domain.event_schema import Event, EventType
 from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
-    ActivationPayload,
     Candidate,
     CombatPayload,
     ContinuousPayload,
     Contribution,
-    Costs,
     EffectRecord,
-    Moment,
     PlayabilityBlockersPayload,
     PlayabilityDecisionPayload,
     PlayabilitySubkind,
     RecordKind,
-    ResolutionOutcome,
     TriggerPayload,
 )
 from effects.domain.state_snapshot import (
@@ -276,22 +272,6 @@ class TestActSlot:
         missing = ProvenanceKey("cardsfolder/x/absent.txt", 0, "spell", 0)
         assert _build(_record(ability=(missing,))).slots[1].e == _ZERO
 
-    def test_the_cost_halfs_outcome_is_no_input(self):
-        """Whether the spell resolved is what a cost half predicts (T115)."""
-        resolved = _record(
-            moment=Moment.ACTIVATION,
-            payload=ActivationPayload(
-                costs=Costs(), outcome=ResolutionOutcome.RESOLVED,
-            ),
-        )
-        countered = _record(
-            moment=Moment.ACTIVATION,
-            payload=ActivationPayload(
-                costs=Costs(), outcome=ResolutionOutcome.COUNTERED,
-            ),
-        )
-        assert act_features(resolved) == act_features(countered)
-
 
 class TestAbilityTokens:
     def test_printed_and_attachment_granted_lines_become_tokens(self):
@@ -300,20 +280,9 @@ class TestAbilityTokens:
         vectors = [s.e for s in slots_of_kind(surface, SlotKind.ABILITY)]
         assert vectors == [_VECTORS[_ANTHEM], _VECTORS[_WARD]]
 
-    def test_gen2_temporary_grants_become_tokens_flagged_granted_by_an_effect(self):
-        """Root spec § 9.2: a temporary grant is a line, in place of a count."""
-        entity = _entity(
-            "E1", printed=(_ANTHEM,),
-            granted_temporary=GrantedTemporary(abilities=(_WARD,)),
-        )
-        surface = _build(_record(state=_snapshot(entities=(entity,))))
-        abilities = slots_of_kind(surface, SlotKind.ABILITY)
-        assert [slot.e for slot in abilities] == [_VECTORS[_ANTHEM], _VECTORS[_WARD]]
-        assert [_flags(slot)["by_effect"] for slot in abilities] == [0.0, 1.0]
-
-    def test_a_gen3_entity_builds_the_surface_its_gen2_twin_builds(self):
-        """The lines in force read as the gen-2 twin's tokens, printed or
-        attached; an unmet static is one more token, flagged inactive (T074)."""
+    def test_an_unmet_static_is_one_more_token_flagged_inactive(self):
+        """The lines in force read as tokens, printed or granted; an unmet
+        static is one more token, flagged inactive (T074)."""
         from effects.domain.state_snapshot import CardLine
 
         lines = (
@@ -321,11 +290,11 @@ class TestAbilityTokens:
             CardLine(keys=(_WARD,), kind="static", granted=True, active=True),
             CardLine(keys=(_BOLT,), kind="static", granted=False, active=False),
         )
-        gen3 = _build(_record(state=_snapshot(entities=(_entity("E1", lines=lines),))))
-        gen2 = _build(_record(state=_snapshot(entities=(
+        unmet = _build(_record(state=_snapshot(entities=(_entity("E1", lines=lines),))))
+        met = _build(_record(state=_snapshot(entities=(
             _entity("E1", printed=(_ANTHEM,), granted_attached=(_WARD,)),))))
-        assert gen3.slots[:-1] == gen2.slots
-        inactive = gen3.slots[-1]
+        assert unmet.slots[:-1] == met.slots
+        inactive = unmet.slots[-1]
         assert inactive.e == _VECTORS[_BOLT] and _flags(inactive)["active"] == 0.0
 
     def test_context_dropout_can_drop_a_context_ability(self):

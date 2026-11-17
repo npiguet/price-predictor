@@ -152,7 +152,7 @@ def test_an_empty_directory_exits_1(tmp_path):
     assert _run(tmp_path, empty) == 1
 
 
-def test_a_mix_of_generations_exits_1(tmp_path):
+def test_an_older_shard_beside_a_gen3_one_exits_1(tmp_path):
     records = tmp_path / "records"
     records.mkdir()
     shutil.copyfile(GEN3, records / "gen3.jsonl.gz")
@@ -170,7 +170,7 @@ def test_an_older_generation_s_set_exits_1_naming_it(tmp_path, caplog, generatio
         encoding="utf-8")
     with caplog.at_level("ERROR"):
         assert _run(tmp_path, records) == 1
-    assert any(f"holds {generation} records; this command reads gen-3 only" in r.getMessage()
+    assert any(f"old.jsonl, line 1: the record is {generation} " in r.getMessage()
                for r in caplog.records)
 
 

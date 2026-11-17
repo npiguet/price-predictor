@@ -1742,7 +1742,7 @@ def test_a_display_name_match_on_a_non_keyword_line_fails_the_build(tmp_path, a_
         a_corpus.build(tmp_path / "out", rules=_GEN2_RULES, keyword_definitions=definitions)
 
 
-def test_a_records_set_mixing_generations_is_refused(tmp_path, a_corpus):
+def test_a_gen1_shard_among_gen3_ones_is_refused_naming_it(tmp_path, a_corpus):
     """FR-033: before any record is read."""
     import gzip
     import json
@@ -1755,7 +1755,7 @@ def test_a_records_set_mixing_generations_is_refused(tmp_path, a_corpus):
     with gzip.open(path, "wt", encoding="utf-8") as handle:
         handle.write(json.dumps(gen1) + "\n")
 
-    with pytest.raises(BuildCorpusError, match="mixes gen-1 shards"):
+    with pytest.raises(BuildCorpusError, match=r"old\.jsonl\.gz, line 1: the record is gen-1 "):
         a_corpus.build(tmp_path / "out", rules=_GEN2_RULES)
 
 
@@ -2330,13 +2330,17 @@ def test_the_game_disjoint_stratum_holds_forge_ai_games_only(gen3_build):
 
 def test_a_gen2_record_stops_the_build_before_any_record_is_read(tmp_path):
     """Story 6 acceptance 6 (FR-018): the CLI maps the refusal to exit 1."""
-    import shutil
+    import gzip
+    import json
 
-    from tests.unit.effects.builders import EFFECTS_FIXTURES
+    from tests.unit.effects.builders import gen3_fixture_records
 
     records = _gen3_records(tmp_path)
-    shutil.copy(EFFECTS_FIXTURES / "gen2-records.jsonl.gz", records / "old.jsonl.gz")
-    with pytest.raises(BuildCorpusError, match="gen-2"):
+    with gzip.open(records / "old.jsonl.gz", "wt", encoding="utf-8") as handle:
+        for data in gen3_fixture_records():
+            del data["generation"]
+            handle.write(json.dumps(data) + "\n")
+    with pytest.raises(BuildCorpusError, match="the record is gen-2 "):
         build(_gen3_config(records, tmp_path / "out"))
     assert not (tmp_path / "out" / "manifest.json").exists()
 

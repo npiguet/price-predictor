@@ -1,4 +1,0 @@
-name: golgari signet
-mana cost: {2}
-types: artifact
-activated[1]: {1}, {T}: add {B}{G}.

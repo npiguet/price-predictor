@@ -1,3 +1,0 @@
-name: elf warrior token
-types: creature elf warrior
-power toughness: 1/1

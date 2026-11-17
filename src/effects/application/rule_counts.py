@@ -48,7 +48,7 @@ from effects.domain.provenance import ProvenanceKey, SidecarLookup
 from effects.domain.records import EffectRecord, acting_keys
 from effects.domain.rule_catalogue import NoDetector, Polarity
 from effects.domain.rule_detectors import DetectorIndex, RuleSource, RuleTag, tag_record
-from effects.domain.shard_generation import ACCEPTED_GENERATIONS
+from effects.domain.shard_generation import ShardGeneration
 from effects.domain.tally_merge import NOT_MERGED, merge_into
 from effects.infrastructure.shard_io import DecodeTally
 from effects.infrastructure.sidecar_io import JoinGaps
@@ -353,10 +353,9 @@ def count(config: RuleCountsConfig) -> tuple[RuleCounts, CatalogueStanding]:
     shards = iter_shards(config.records_dir)
     if not shards:
         raise NoShardsError(f"no shards under {config.records_dir}")
-    generation = require_generation(shards, *ACCEPTED_GENERATIONS)
-    logger.info("Counting %d %s shard(s) under %s", len(shards), generation,
-                config.records_dir)
-    total = RuleCounts(generation=str(generation))
+    require_generation(shards)
+    logger.info("Counting %d gen-3 shard(s) under %s", len(shards), config.records_dir)
+    total = RuleCounts(generation=str(ShardGeneration.GEN_3))
     for found in run_parallel(
         shards, count_shard, workers=config.workers, label="Counted",
         progress_every=50, context=CountContext(config.rules_dir, config.sidecar_roots),

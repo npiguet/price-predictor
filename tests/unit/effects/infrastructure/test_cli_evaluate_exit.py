@@ -44,12 +44,12 @@ def test_a_corpus_not_wholly_gen3_or_a_checkpoint_of_another_layout_exits_one(
     gen-3 checkpoint only (FR-076)."""
     from effects.domain.effect_head_input import CheckpointLayoutError
     from effects.domain.shard_generation import (
-        MixedGenerationsError,
-        UnacceptedGenerationError,
+        OlderGenerationError,
+        UnknownGenerationError,
     )
 
-    for error in (UnacceptedGenerationError("gen-2 shards"),
-                  MixedGenerationsError("gen-2 and gen-3 shards"),
+    for error in (OlderGenerationError("the record is gen-2"),
+                  UnknownGenerationError("generation 4"),
                   CheckpointLayoutError("gen-2 layout")):
         def refuse(config, error=error):
             raise error

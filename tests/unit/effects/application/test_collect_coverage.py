@@ -1421,38 +1421,48 @@ class TestOnlyWhatBuildCorpusKeepsCounts:
         assert count_shard(shard).credits == {"shock": 1}
 
 
-class TestOnlyGenThreeRecordsCount:
-    """The counters ignored ``generation``, so a gen-2 shard under the records
-    tree would have counted toward a gen-3 corpus's coverage."""
+class TestAnOlderRecordStopsTheCount:
+    """A record of an older generation met counting a run's shards is a
+    refusal, not damage to count past: every reader refuses the set it is in,
+    so the collector exits 1 before playing a game (FR-033)."""
 
-    def test_a_gen_two_record_credits_nothing(self, tmp_path):
-        from dataclasses import replace
+    @staticmethod
+    def _older_shard(tmp_path: Path) -> Path:
+        """The gen-3 fixture's records less ``generation``: gen-2's."""
+        import gzip
+        import json
 
+        from tests.unit.effects.builders import gen3_fixture_records
+
+        path = tmp_path / "old.jsonl.gz"
+        with gzip.open(path, "wt", encoding="utf-8") as out:
+            for data in gen3_fixture_records():
+                del data["generation"]
+                out.write(json.dumps(data) + "\n")
+        return path
+
+    def test_the_card_count_refuses_it_naming_its_generation(self, tmp_path):
         from effects.application.collect_coverage import count_shard
+        from effects.domain.shard_generation import OlderGenerationError
 
-        record = replace(
-            _record([make_entity("E1", "shock")], source="E1"), generation=None,
-        )
-        shard = write_plain_shard(tmp_path, "x", [record])
+        with pytest.raises(OlderGenerationError, match=r"line 1: the record is gen-2 "):
+            count_shard(self._older_shard(tmp_path))
 
-        assert count_shard(shard).credits == {}
-
-    def test_a_gen_two_record_counts_toward_no_held_out_text(self, tmp_path):
-        from dataclasses import replace
-
+    def test_the_held_out_text_count_refuses_it(self, tmp_path):
         from effects.application.collect_coverage import count_text_shard
-        from effects.infrastructure.shard_io import read_shard
+        from effects.domain.shard_generation import OlderGenerationError
 
         _, everything = _texts_by_game(_GEN3_SHARD)
-        held_out = _holding(everything)
-        assert count_text_shard(_GEN3_SHARD, roots=_GEN3_ROOTS, held_out=held_out).games
-        demoted = [replace(record, generation=None) for record in read_shard(_GEN3_SHARD)]
-        import tempfile
+        with pytest.raises(OlderGenerationError, match="the record is gen-2 "):
+            count_text_shard(self._older_shard(tmp_path), roots=_GEN3_ROOTS,
+                             held_out=_holding(everything))
 
-        with tempfile.TemporaryDirectory() as directory:
-            written = write_plain_shard(Path(directory), "x", demoted)
-            counted = count_text_shard(written, roots=_GEN3_ROOTS, held_out=held_out)
-        assert counted.games == {}
+    def test_the_collectors_exit_1_on_it(self):
+        from effects.domain.shard_generation import OlderGenerationError
+        from effects.infrastructure import cli
+
+        for run in (cli.run_collect_coverage, cli.run_collect_variants):
+            assert cli._exit_code(run.exit_codes, OlderGenerationError("gen-2")) == 1
 
 
 class TestTheCountersUseTheRunsWorkers:

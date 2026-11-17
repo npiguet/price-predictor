@@ -23,9 +23,8 @@ from effects.infrastructure.shard_io import (
     read_shard,
     read_window,
 )
-from tests.unit.effects.builders import RawShardWriter
+from tests.unit.effects.builders import GEN3_RECORDS, RawShardWriter, gen3_fixture_records
 from tests.unit.effects.infrastructure.test_record_codec import (
-    _GEN1_FIXTURE,
     ALL_KINDS,
     _record,
 )
@@ -490,91 +489,51 @@ def test_write_shard_writes_a_readable_empty_shard_for_no_records(tmp_path):
     assert list(read_shard(path)) == []
 
 
-class TestShardGeneration:
-    """FR-033: a shard's generation by its first record; mixed sets refused (T069)."""
+#: What each older generation's records lack of a gen-3 one's: gen-2 wrote
+#: no ``generation``, gen-1 no ``random_seat`` either.
+_EARLIER = {
+    "gen-1": ("generation", "random_seat"),
+    "gen-2": ("generation",),
+}
 
-    def _gen2_shard(self, path: Path) -> Path:
-        with gzip.open(path, "wt", encoding="utf-8") as out:
-            for line in iter_shard_lines(_GEN1_FIXTURE):
-                data = json.loads(line)
-                data["random_seat"] = False
-                if data.get("subkind") in ("attackers", "blockers"):
-                    data["what_if"] = True
-                out.write(json.dumps(data) + "\n")
-        return path
 
-    def test_the_real_gen1_fixture_is_gen1(self):
-        from effects.domain.shard_generation import ShardGeneration
-        from effects.infrastructure.shard_io import shard_generation
+def _older_shard(path: Path, generation: str) -> Path:
+    """The gen-3 fixture's records as ``generation`` wrote them: the real
+    records less the members it lacked."""
+    with gzip.open(path, "wt", encoding="utf-8") as out:
+        for data in gen3_fixture_records():
+            for member in _EARLIER[generation]:
+                del data[member]
+            out.write(json.dumps(data) + "\n")
+    return path
 
-        assert shard_generation(_GEN1_FIXTURE) is ShardGeneration.GEN_1
 
-    def test_a_shard_carrying_random_seat_is_gen2(self, tmp_path):
-        from effects.domain.shard_generation import ShardGeneration
-        from effects.infrastructure.shard_io import shard_generation
+class TestTheGenerationCheck:
+    """FR-033: a records set of gen-3 shards passes; a shard whose first record
+    is older is refused naming it, its shard and its line (T069)."""
 
-        assert shard_generation(self._gen2_shard(tmp_path / "g2.jsonl.gz")) is ShardGeneration.GEN_2
-
-    def test_an_empty_shard_has_no_generation(self, tmp_path):
-        from effects.infrastructure.shard_io import shard_generation
+    def test_an_empty_shard_passes(self, tmp_path):
+        from effects.infrastructure.shard_io import require_generation
 
         empty = tmp_path / "e.jsonl"
         empty.write_text("", encoding="utf-8")
-        assert shard_generation(empty) is None
+        require_generation([empty])
+        require_generation([])
 
-    def _gen3_shard(self, path: Path) -> Path:
-        with gzip.open(path, "wt", encoding="utf-8") as out:
-            for line in iter_shard_lines(self._gen2_shard(path.with_name("src.jsonl.gz"))):
-                data = json.loads(line)
-                out.write(json.dumps({"record_id": data["record_id"], "generation": 3, **data})
-                          + "\n")
-        return path
-
-    def test_a_shard_carrying_generation_3_is_gen3(self, tmp_path):
-        from effects.domain.shard_generation import ShardGeneration
-        from effects.infrastructure.shard_io import shard_generation
-
-        assert shard_generation(self._gen3_shard(tmp_path / "g3.jsonl.gz")) is ShardGeneration.GEN_3
-
-    @pytest.mark.parametrize("pair", [("gen1", "gen2"), ("gen2", "gen3"), ("gen1", "gen3")])
-    def test_a_set_holding_two_generations_is_refused(self, tmp_path, pair):
-        from effects.domain.shard_generation import MixedGenerationsError
+    def test_a_gen3_shard_passes(self):
         from effects.infrastructure.shard_io import require_generation
 
-        shards = {"gen1": lambda: _GEN1_FIXTURE,
-                  "gen2": lambda: self._gen2_shard(tmp_path / "g2.jsonl.gz"),
-                  "gen3": lambda: self._gen3_shard(tmp_path / "g3.jsonl.gz")}
-        first, second = pair
-        with pytest.raises(MixedGenerationsError,
-                           match=f"mixes gen-{first[-1]} shards with gen-{second[-1]}"):
-            require_generation([shards[first](), shards[second]()])
+        require_generation([GEN3_RECORDS, GEN3_RECORDS])
 
-    def test_a_single_generation_set_passes_and_names_its_generation(self, tmp_path):
-        from effects.domain.shard_generation import ShardGeneration
+    @pytest.mark.parametrize("generation", sorted(_EARLIER))
+    def test_an_older_shard_beside_a_gen3_one_is_refused_naming_it(self, tmp_path, generation):
+        from effects.domain.shard_generation import OlderGenerationError
         from effects.infrastructure.shard_io import require_generation
 
-        gen2 = self._gen2_shard(tmp_path / "g2.jsonl.gz")
-        assert require_generation([gen2, gen2]) is ShardGeneration.GEN_2
-        assert require_generation([]) is None
-
-    def test_a_generation_outside_the_accepted_ones_is_refused_naming_the_shard(self, tmp_path):
-        from effects.domain.shard_generation import ShardGeneration, UnacceptedGenerationError
-        from effects.infrastructure.shard_io import require_generation
-
-        gen2 = self._gen2_shard(tmp_path / "g2.jsonl.gz")
-        with pytest.raises(UnacceptedGenerationError, match=r"g2\.jsonl\.gz holds gen-2"):
-            require_generation([gen2], ShardGeneration.GEN_3)
-        gen3 = self._gen3_shard(tmp_path / "g3.jsonl.gz")
-        assert require_generation(
-            [gen3], ShardGeneration.GEN_2, ShardGeneration.GEN_3) is ShardGeneration.GEN_3
-
-
-#: A real shard of each generation the gen-3 readers refuse.
-_EARLIER = {
-    "gen-1": _GEN1_FIXTURE,
-    "gen-2": _GEN1_FIXTURE.with_name("gen2-records.jsonl.gz"),
-}
-_GEN3_FIXTURE = _GEN1_FIXTURE.with_name("gen3-records.jsonl.gz")
+        older = _older_shard(tmp_path / "old.jsonl.gz", generation)
+        with pytest.raises(OlderGenerationError,
+                           match=rf"old\.jsonl\.gz, line 1: the record is {generation} "):
+            require_generation([GEN3_RECORDS, older])
 
 
 def _curated(root: Path, shard: Path) -> Path:
@@ -658,8 +617,7 @@ def _probe(root: Path, corpus: Path) -> None:
 class TestEveryConsumerReadsGen3Only:
     """FR-020: ``build-corpus``, ``train-effect-model``,
     ``evaluate-effect-model`` and the knowledge probes refuse a gen-1 and a
-    gen-2 records set before reading a record; ``rule-counts`` alone still
-    reads gen-2 (``test_rule_counts.py``)."""
+    gen-2 records set before reading a record, naming its generation."""
 
     _CONSUMERS = {"build-corpus": _build_corpus, "train": _train,
                   "evaluate": _evaluate, "probes": _probe}
@@ -680,19 +638,16 @@ class TestEveryConsumerReadsGen3Only:
         from effects.domain.corpus_plan import BuildCorpusError
         from effects.domain.shard_generation import UnacceptedGenerationError
 
-        corpus = _curated(tmp_path, _EARLIER[generation])
+        corpus = _curated(tmp_path, _older_shard(tmp_path / "old.jsonl.gz", generation))
         with pytest.raises((UnacceptedGenerationError, BuildCorpusError),
-                           match=rf"holds {generation} records; this command reads gen-3 only"):
+                           match=rf"line 1: the record is {generation} \(it carries no "
+                                 r"generation member\); every reader reads gen-3 records only"):
             self._CONSUMERS[consumer](tmp_path, corpus)
 
     def test_a_gen3_set_passes_the_check(self, tmp_path):
-        from effects.domain.shard_generation import ACCEPTED_GENERATIONS, ShardGeneration
         from effects.infrastructure.shard_io import require_generation
 
-        corpus = _curated(tmp_path, _GEN3_FIXTURE)
-        assert ACCEPTED_GENERATIONS == (ShardGeneration.GEN_3,)
-        assert require_generation(iter_shards(corpus), *ACCEPTED_GENERATIONS) is (
-            ShardGeneration.GEN_3)
+        require_generation(iter_shards(_curated(tmp_path, GEN3_RECORDS)))
 
 
 class TestReadRecordsMatching:
@@ -701,7 +656,7 @@ class TestReadRecordsMatching:
     def _copy(self, tmp_path: Path) -> Path:
         target = tmp_path / "records"
         target.mkdir()
-        (target / _GEN1_FIXTURE.name).write_bytes(_GEN1_FIXTURE.read_bytes())
+        (target / GEN3_RECORDS.name).write_bytes(GEN3_RECORDS.read_bytes())
         return target
 
     def test_it_matches_a_filter_over_every_parsed_record(self, tmp_path):
@@ -748,7 +703,7 @@ class TestReadRecordsMatching:
         from effects.infrastructure.shard_io import iter_shard_matching
 
         directory = self._copy(tmp_path)
-        shard = directory / _GEN1_FIXTURE.name
+        shard = directory / GEN3_RECORDS.name
         combats = [r.record_id for r in read_records(directory) if r.kind is RecordKind.COMBAT]
         seen: list[str] = []
 
@@ -823,7 +778,7 @@ class TestValuesOutsideTheClosedLists:
     def test_it_is_counted_and_reported_once(self, tmp_path, caplog):
         from effects.infrastructure import shard_io
 
-        raw = record_to_dict(_record(record_id="r.1", generation=3))
+        raw = record_to_dict(_record(record_id="r.1"))
         raw["state"]["entities"][0]["zone"] = "nowhere-zone"
         line = json.dumps(raw)
         path = tmp_path / "run.0-L1.jsonl"
@@ -841,7 +796,7 @@ class TestValuesOutsideTheClosedLists:
         to its own: the tally is per process, emptied when taken."""
         from effects.infrastructure import shard_io
 
-        raw = record_to_dict(_record(record_id="r.1", generation=3))
+        raw = record_to_dict(_record(record_id="r.1"))
         raw["state"]["entities"][0]["zone"] = "elsewhere-zone"
         path = tmp_path / "run.0-L1.jsonl"
         path.write_text(json.dumps(raw) + "\n", encoding="utf-8")
@@ -864,9 +819,9 @@ def test_ended_games_are_the_games_whose_marker_the_shard_holds(tmp_path):
     from effects.infrastructure.shard_io import ended_games, write_shard
     from tests.unit.effects.builders import game_end_marker
 
-    ended = replace(_record(), game_id="g1", generation=3)
-    cut = replace(_record(), record_id="run-uuid.4.2", game_id="g2", generation=3)
-    reordered = replace(_record(), record_id="run-uuid.4.3", game_id="g3", generation=3)
+    ended = replace(_record(), game_id="g1")
+    cut = replace(_record(), record_id="run-uuid.4.2", game_id="g2")
+    reordered = replace(_record(), record_id="run-uuid.4.3", game_id="g3")
     shard = tmp_path / "run.0-a.jsonl.gz"
     write_shard(shard, [ended, game_end_marker(ended), cut, reordered])
     marker = record_to_dict(game_end_marker(reordered))

@@ -1,3 +1,0 @@
-name: elemental token
-types: creature elemental
-power toughness: 5/5

@@ -1,3 +1,0 @@
-name: the tabernacle at pendrell vale
-types: legendary land
-static: all creatures have "at the beginning of your upkeep, destroy this creature unless you pay {1}."

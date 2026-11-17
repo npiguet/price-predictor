@@ -77,11 +77,7 @@ from effects.domain.rule_catalogue import (
     ScenarioCatalogue,
 )
 from effects.domain.sampling import DEFAULT_KIND_MIX
-from effects.domain.shard_generation import (
-    MixedGenerationsError,
-    ShardGeneration,
-    UnacceptedGenerationError,
-)
+from effects.domain.shard_generation import UnacceptedGenerationError
 from effects.domain.split import HeldOutCards, HoldoutRule
 from effects.domain.strata import OUTPUT_STRATA, Stratum
 from effects.domain.stratum_placement import (
@@ -830,24 +826,21 @@ def _require_generation(records_dir: Path) -> None:
     from effects.infrastructure.shard_io import iter_shards, require_generation
 
     with _unreadable_shards("nothing under --output was touched"):
-        try:
-            require_generation(iter_shards(records_dir), ShardGeneration.GEN_3)
-        except (MixedGenerationsError, UnacceptedGenerationError) as exc:
-            raise BuildCorpusError(str(exc)) from exc
+        require_generation(iter_shards(records_dir))
 
 
 @contextlib.contextmanager
 def _unreadable_shards(consequence: str) -> Iterator[None]:
     """A shard that cannot be read whole (a corrupt gzip member before the
-    last, a line that does not decode, a ``generation`` naming none) makes the
-    dataset unusable: the build stops with exit 1, naming the shard and line
-    the error names, and saying what became of ``--output``."""
-    from effects.domain.shard_generation import UnknownGenerationError
+    last, a line that does not decode, a record of an older generation or a
+    ``generation`` naming none) makes the dataset unusable: the build stops
+    with exit 1, naming the shard and line the error names, and saying what
+    became of ``--output``."""
     from effects.infrastructure.shard_io import SHARD_DAMAGE
 
     try:
         yield
-    except (*SHARD_DAMAGE, UnknownGenerationError) as exc:
+    except (*SHARD_DAMAGE, UnacceptedGenerationError) as exc:
         raise BuildCorpusError(f"a raw shard cannot be read: {exc}; {consequence}.") from exc
 
 

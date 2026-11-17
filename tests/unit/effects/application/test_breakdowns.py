@@ -134,7 +134,7 @@ class TestPolicyAndDecisionSlices:
         assert groups[bd.OFF_POLICY].per_record.records == off
         assert groups[bd.ON_POLICY].per_record.records == len(rows) - off
 
-    def test_legality_records_split_into_real_what_if_and_unknown(self, rows):
+    def test_legality_records_split_into_real_and_what_if(self, rows):
         legality = [r for r in rows if r.subkind in LEGALITY_SUBKINDS]
         assert len(legality) >= 3
         marked = [
@@ -143,9 +143,8 @@ class TestPolicyAndDecisionSlices:
             replace(legality[2], what_if=None),
         ]
         groups = bd.decision_slice(marked)
-        assert groups[LegalityDecision.REAL].per_record.records == 1
+        assert groups[LegalityDecision.REAL].per_record.records == 2
         assert groups[LegalityDecision.WHAT_IF].per_record.records == 1
-        assert LegalityDecision.UNKNOWN in groups
 
     def test_decision_records_never_enter_the_legality_slice(self, rows):
         decisions = [r for r in rows if r.subkind == "decision"]
@@ -187,7 +186,7 @@ class TestTheReport:
         assert all(check.status is not CheckStatus.FAIL for check in checks)
 
     def test_a_set_with_no_random_seat_or_real_decision_skips_those_slices(self, rows):
-        rows = [replace(row, random_seat=False, what_if=None) for row in rows]
+        rows = [replace(row, random_seat=False, what_if=True) for row in rows]
         checks = {c.name: c for c in breakdown_checks(
             {Stratum.CARD_DISJOINT: rows, Stratum.GAME_DISJOINT: rows},
             games_by_text={}, withheld_keyword="flying",

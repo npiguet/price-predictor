@@ -1,4 +1,0 @@
-name: prey upon
-mana cost: {G}
-types: sorcery
-spell[1]: target creature you control fights target creature you don't control.

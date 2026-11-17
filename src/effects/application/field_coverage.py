@@ -191,14 +191,13 @@ def event_param_lines(coverage: dict[str, FieldCoverage]) -> list[str]:
 
 
 def gen3_report_lines(coverage: dict[str, FieldCoverage]) -> list[str]:
-    """One row per :data:`GEN3_FIELDS` path, when the corpus holds gen-3 records.
+    """One row per :data:`GEN3_FIELDS` path; none when no record was read.
 
     ``absent`` is a path no record reached (no record of its kind, or no
     instance of its block); ``const`` one that never varied, ``known`` when
     :data:`KNOWN_CONSTANT_FIELDS` lists it.
     """
-    generation = coverage.get("record.generation")
-    if generation is None or not generation.populated:
+    if "record.generation" not in coverage:
         return []
     rows, tally = [], {"varies": 0, "const": 0, "absent": 0}
     for path in GEN3_FIELDS:

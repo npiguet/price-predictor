@@ -1,4 +1,0 @@
-name: fateful handoff
-mana cost: {3}{B}
-types: sorcery
-spell[1]: draw cards equal to the mana value of target artifact or creature you control. an opponent gains control of that permanent.

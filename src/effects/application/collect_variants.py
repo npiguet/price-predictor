@@ -580,7 +580,7 @@ def _keep_unheld(
 
 def count_variant_shard(shard: Path) -> VariantShardGames:
     """One shard's variant games: every record read once, a damaged shard's
-    up to the damage, which it names, and a gen-3 game without a game-end
+    up to the damage, which it names, and a game without a game-end
     marker (cut; build-corpus drops it) left out."""
     from effects.infrastructure.shard_io import SHARD_DAMAGE, read_shard
 

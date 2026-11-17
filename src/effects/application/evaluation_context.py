@@ -177,7 +177,6 @@ def with_corpus_defaults(
 
 def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
     """The main checkpoint, hash-checked, with its corpus verified (FR-147)."""
-    from effects.domain.shard_generation import ACCEPTED_GENERATIONS
     from effects.infrastructure.corpus_store import CorpusStore
     from effects.infrastructure.effect_model_store import (
         inference_files,
@@ -196,7 +195,7 @@ def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
     manifest = CorpusStore(corpus_path).load()
     check_corpus(main.provenance, actual_digest=manifest.digest())
     # Before any record is read (FR-020, FR-033).
-    require_generation(iter_shards(Path(corpus_path)), *ACCEPTED_GENERATIONS)
+    require_generation(iter_shards(Path(corpus_path)))
     return EvaluationContext(
         with_corpus_defaults(config, manifest), main, files,
         corpus_path=corpus_path, manifest=manifest,

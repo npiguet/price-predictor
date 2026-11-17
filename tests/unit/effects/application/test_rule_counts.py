@@ -236,7 +236,8 @@ def test_one_and_several_workers_count_alike(tmp_path, gen3_dir):
 
 def test_a_gen2_set_is_refused_naming_its_generation(tmp_path):
     """A shard whose records carry no ``generation`` member and a
-    ``random_seat`` one is gen-2: ``count`` refuses it, naming the generation."""
+    ``random_seat`` one is gen-2: ``count`` refuses it, naming the generation,
+    the shard and the line."""
     from effects.domain.shard_generation import UnacceptedGenerationError
 
     records = tmp_path / "records"
@@ -245,7 +246,8 @@ def test_a_gen2_set_is_refused_naming_its_generation(tmp_path):
         data = json.loads(next(source))
     del data["generation"]
     (records / "gen2.jsonl").write_text(json.dumps(data) + "\n", encoding="utf-8")
-    with pytest.raises(UnacceptedGenerationError, match=r"gen2\.jsonl holds gen-2 records"):
+    with pytest.raises(UnacceptedGenerationError,
+                       match=r"gen2\.jsonl, line 1: the record is gen-2 "):
         count(_config(tmp_path, records))
 
 

@@ -1,3 +1,0 @@
-name: forest
-types: basic land forest
-activated[1]: {T}: add {G}

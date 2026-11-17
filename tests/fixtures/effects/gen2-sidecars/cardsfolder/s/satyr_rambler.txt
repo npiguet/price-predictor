@@ -1,5 +1,0 @@
-name: satyr rambler
-mana cost: {1}{R}
-types: creature satyr
-power toughness: 2/1
-static: trample

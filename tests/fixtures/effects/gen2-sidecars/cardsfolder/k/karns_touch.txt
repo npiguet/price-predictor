@@ -1,4 +1,0 @@
-name: karn's touch
-mana cost: {U}{U}
-types: instant
-spell[1]: target noncreature artifact becomes an artifact creature with power and toughness each equal to its mana value until end of turn.
