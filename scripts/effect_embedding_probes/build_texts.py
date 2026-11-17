@@ -12,10 +12,12 @@ duration, length), the facts of the first card carrying it (type line, mana
 value, colours), how many cards carry it, whether the curated corpus holds it
 out, and the corpus's rarity count.
 
-It also writes ``cache/keymap.pkl``: every provenance key (including the
-perturbed-variant tree's) mapped to its encoding text, which
+It also writes ``cache/keymap.pkl``: every provenance key a line declares
+(including the perturbed-variant tree's), a ``ProvenanceKey``, mapped to its
+encoding text through the join (``ability_text.texts_by_key``), which
 ``effect_profiles.py`` uses to name a record's acting text without building a
-``SidecarCache`` per worker.
+``SidecarCache`` per worker. A saga's chapter keys, which differ only in
+``built``, are one entry each.
 
 It checks, and reports, that every card carrying a text got the same vector
 for it: the cache is computed per card, so a disagreement would mean the
@@ -50,21 +52,26 @@ from effect_embedding_probes.common import (  # noqa: E402
     resolve_paths,
     target_type,
 )
-from effects.domain.ability_encoder import encoding_text  # noqa: E402
+from effects.application.ability_text import texts_by_key  # noqa: E402
 from effects.domain.baselines import Baseline  # noqa: E402
+from effects.domain.provenance import ProvenanceKey  # noqa: E402
 from effects.domain.script_text import params, root  # noqa: E402
 from effects.infrastructure.ability_cache_store import AbilityCacheStore  # noqa: E402
 from effects.infrastructure.sidecar_io import (  # noqa: E402
     converted_text_path,
     encoded_lines,
     iter_sidecars,
-    read_sidecar,
+    sidecar_roots,
     tree_of_folder,
 )
 
 
-def key_tuple(script_file: str, key) -> tuple[str, int, str, int, int | None]:
-    return (script_file, key.face, key.trait_kind, key.index_within_kind, key.option)
+def keymap_of(paths: ProbePaths) -> dict[ProvenanceKey, str]:
+    """Every key a line under the checkpoint's trees or the variant tree
+    declares, to its encoding text through the join; a line with no text is
+    left out, so a record acting through it names none."""
+    roots = sidecar_roots(paths.cards_folders, VARIANT_TREE)
+    return {key: text for key, text in texts_by_key(roots, paths.surface).items() if text}
 
 
 def main() -> None:
@@ -78,7 +85,6 @@ def build(paths: ProbePaths) -> pd.DataFrame:
     """Write the text table and keymap for ``paths``'s checkpoint, and return it."""
     held_out, rarity = load_manifest_sets(paths)
     rows: dict[str, dict] = {}
-    keymap: dict[tuple, str] = {}
     mismatch_max = 0.0
     skipped = {"no_cache": 0, "row_mismatch": 0, "no_text": 0, "no_taxonomy": 0}
     empty = np.zeros(0, dtype=np.float32)
@@ -108,8 +114,6 @@ def build(paths: ProbePaths) -> pd.DataFrame:
                 if not text:
                     skipped["no_text"] += 1
                     continue
-                for key in line.provenance:
-                    keymap[key_tuple(sidecar.script_file, key)] = text
                 existing = rows.get(text)
                 if existing is not None:
                     mismatch_max = max(
@@ -133,15 +137,7 @@ def build(paths: ProbePaths) -> pd.DataFrame:
                     "e_full": row_full.astype(np.float32),
                     "e_tax": row_tax.astype(np.float32),
                 }
-    # Variant keys: only the keymap, for joining records to their text.
-    for sidecar_path in sorted(VARIANT_TREE.glob("*.provenance.json")):
-        sidecar = read_sidecar(sidecar_path)
-        for line in sidecar.lines:
-            text = encoding_text(line, None, paths.surface)
-            if text:
-                for key in line.provenance:
-                    keymap[key_tuple(sidecar.script_file, key)] = text
-
+    keymap = keymap_of(paths)
     table = pd.DataFrame(list(rows.values()))
     table["n_carriers"] = table.carriers.map(lambda c: len(set(c)))
     # CV group: the alphabetically first carrying card, so texts from one

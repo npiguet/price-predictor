@@ -38,7 +38,7 @@ Rules to respect when running or changing `build-corpus` or `holdout-cards`, or 
 
 - `--holdout-permille`, `--holdout-max-carriers` and `--holdout-unit` must be passed with the same values to `holdout-cards`, `build-corpus`, `collect-variants` and `collect-coverage --only-cards`. A depleted corpus was composed against them and a checkpoint records them. All four select through the one rule (`HeldOutCards`), so they agree whenever the values do.
 - `--vocab-path` decides the encoding surface the rarity table keys its texts on. Built on the other surface, the table keys every text differently while looking exactly as valid, which is why `train-effect-model --corpus` refuses a `--vocab-path` on the other one.
-- `--variant-scripts` names the perturbed-script tree. Without it a variant line resolves to no ability text, and a resolution record acting through it is refused as `no-acting-text`. Every key read as no line for want of its tree's root is counted by tree (`SidecarCache.unconfigured`).
+- `--variant-scripts` names the perturbed-script tree. Without it a variant line resolves to no ability text, and a resolution record acting through it is refused as `no-acting-text`. Every key read as no line for want of its tree's root is counted by tree (`JoinGaps.unconfigured`).
 
 ## The holdout
 

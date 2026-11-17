@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
-from typing import Protocol
+from typing import NamedTuple, Protocol
 
 from effects.domain.keyword_names import display_name_of, normalize_keyword
 from effects.domain.script_text import is_bare_keyword
@@ -500,19 +500,33 @@ class ProvenanceSidecar:
         )
 
 
+class Joined(NamedTuple):
+    """The join's answer for one key: its resolution, and the line it names,
+    None wherever it names none (every resolution but ``LINE``)."""
+
+    resolution: KeyResolution
+    line: SidecarLine | None
+
+
 class SidecarLookup(Protocol):
     """The sidecar join as its readers use it, by provenance key.
 
     ``infrastructure.sidecar_io.SidecarCache`` implements it over the converted
-    trees; a test double need implement only what its caller reads.
+    trees, every lookup below reading through :meth:`join`; a test double need
+    implement only what its caller reads.
     """
 
     def get(self, script_file: str) -> ProvenanceSidecar:
         """The sidecar of one script file; ``KeyError`` where none was written."""
         ...
 
+    def join(self, key: ProvenanceKey) -> Joined:
+        """The key's resolution and line, every no-line answer counted;
+        ``KeyError`` on a key the sidecar does not describe."""
+        ...
+
     def line_for(self, key: ProvenanceKey) -> SidecarLine | None:
-        """The line a key names, None where there is none; ``KeyError`` on a key
+        """:meth:`join`'s line: None where there is none; ``KeyError`` on a key
         the sidecar does not describe."""
         ...
 

@@ -136,7 +136,8 @@ class TestABareKeyOfAKeywordOfSeveralLines:
         assert cache.resolution_of(key) is KeyResolution.AMBIGUOUS
         assert KeyResolver(cache, Surface.SCRIPT).acting_text(record) is None
         assert acting_line(record, cache) is None
-        assert cache.join_gaps().ambiguous == {key.script_file: 2}
+        # Three lookups, each through the join: the resolution, the text, the line.
+        assert cache.join_gaps().ambiguous == {key.script_file: 3}
         assert any("ambiguous" in line for line in cache.join_gaps().report_lines())
 
 
@@ -157,3 +158,52 @@ class TestNoKeyIsDeclaredByTwoLines:
         data = _fixture_json(_SAGA)
         data["lines"][0]["provenance"] *= 2
         assert sidecar_from_dict(data).line_for(_chapter(0)).line_index == 3
+
+
+class TestOneJoinAnswersEveryLookup:
+    """``SidecarCache.join`` is the one key-to-line lookup: every other
+    reader's answer, and every tally of a key with no text, comes from it."""
+
+    def test_the_join_gives_a_key_its_resolution_and_line(self):
+        cache = _cache()
+        joined = cache.join(_chapter(2))
+        assert joined.resolution is KeyResolution.LINE
+        assert joined.line == cache.line_for(_chapter(2))
+        assert cache.join(_SAGA_KEY) == (KeyResolution.AMBIGUOUS, None)
+
+    def test_an_unconfigured_tree_is_counted_and_warned_once(self, caplog):
+        """A variant key on a run given no ``--variant-scripts``: every reader,
+        the trainer's text included, counts it, and the run says so once."""
+        cache = _cache()
+        key = ProvenanceKey("variant-scripts/binding_the_old_gods_v1.txt", 0, "keyword", 0)
+        with caplog.at_level("WARNING", logger="effects.infrastructure.sidecar_io"):
+            assert cache.join(key) == (KeyResolution.UNCONFIGURED_TREE, None)
+            assert cache.line_for(key) is None
+            assert KeyResolver(cache, Surface.SCRIPT).text_of(key) is None
+        assert cache.join_gaps().unconfigured == {"variant-scripts": 3}
+        warned = [r for r in caplog.records if "variant-scripts" in r.getMessage()]
+        assert len(warned) == 1
+
+    def test_an_unconverted_script_is_counted_by_the_join_alone(self):
+        """A token keyed under the wrong tree: counted per lookup through the
+        join; reading the sidecar itself is not a lookup and counts nothing."""
+        cache = _cache()
+        key = ProvenanceKey("cardsfolder/b/bird_token.txt", 0, "spell", 0)
+        with pytest.raises(KeyError, match="never converted"):
+            cache.get(key.script_file)
+        assert cache.join(key) == (KeyResolution.UNCONVERTED, None)
+        assert cache.resolution_of(key) is KeyResolution.UNCONVERTED
+        assert cache.join_gaps().unresolved == {key.script_file: 2}
+
+
+class TestOneFolderPerTree:
+    def test_two_cards_folders_of_one_tree_are_refused_naming_both(self):
+        """A fixture's gen-3 and gen-2 card trees: both key as
+        ``cardsfolder/...``, so one would silently shadow the other."""
+        from effects.infrastructure.sidecar_io import sidecar_roots
+
+        gen3, gen2 = GEN3_SIDECAR_FOLDERS[0], _GEN2_FOLDERS[0]
+        with pytest.raises(ValueError, match="cardsfolder") as raised:
+            sidecar_roots([gen3, gen2])
+        assert str(gen3) in str(raised.value)
+        assert str(gen2) in str(raised.value)

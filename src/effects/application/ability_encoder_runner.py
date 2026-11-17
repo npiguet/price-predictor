@@ -114,5 +114,5 @@ class AbilityEncoderRunner:
         """``(text, role spans)`` one sidecar line is encoded from, given its
         converted prose."""
         surface = self.stager.surface
-        text = encoding_text(line, prose, surface) or ""
+        text = encoding_text(line, prose, surface)
         return text, encoding_role_spans(line, text, surface)

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
 from effects.domain.provenance import (
+    Joined,
     KeyResolution,
     ProvenanceKey,
     ProvenanceSidecar,
@@ -54,11 +55,26 @@ def tree_of_folder(folder: Path) -> str:
 def sidecar_roots(
     folders, variant_scripts: Path | None = None,
 ) -> dict[str, Path]:
-    """``tree -> folder`` for a ``SidecarCache``, from ``--cards-folder`` values."""
-    roots = {tree_of_folder(folder): Path(folder) for folder in folders}
+    """``tree -> folder`` for a ``SidecarCache``, from ``--cards-folder`` values.
+
+    Two folders of one tree are refused: keyed alike, one would shadow the
+    other's every card.
+    """
+    roots: dict[str, Path] = {}
+    for folder in folders:
+        _add_root(roots, tree_of_folder(folder), Path(folder))
     if variant_scripts:
-        roots[SourceTree.VARIANT_SCRIPTS] = Path(variant_scripts)
+        _add_root(roots, SourceTree.VARIANT_SCRIPTS, Path(variant_scripts))
     return roots
+
+
+def _add_root(roots: dict[str, Path], tree: str, folder: Path) -> None:
+    if tree in roots:
+        raise ValueError(
+            f"--cards-folder {roots[tree]} and {folder} both hold source tree "
+            f"{tree!r}; give one folder per tree"
+        )
+    roots[tree] = folder
 
 
 def script_vocabularies(folders) -> tuple[list[str], list[str]]:
@@ -273,7 +289,8 @@ class LineText(NamedTuple):
 
     line: SidecarLine
     prose: str | None
-    text: str | None
+    #: Empty for a line with neither surface (``encoding_text``).
+    text: str
 
 
 def encoded_lines(
@@ -310,11 +327,14 @@ class UnconfiguredTree(KeyError):
 
 @dataclass
 class JoinGaps:
-    """Keys a sidecar cache read as no line, by why: a script never converted
-    (``unresolved``, by script file), a key its sidecar does not describe
-    (``undescribed``, by script file), a source tree the run has no root for
-    (``unconfigured``, by tree), a keyword's bare key naming several lines
-    (``ambiguous``, by script file), each with how often it was asked.
+    """Keys :meth:`SidecarCache.join` read as no line where a line was
+    expected, by why, one field per such resolution: a script never converted
+    (``unresolved``, ``UNCONVERTED``, by script file), a source tree the run
+    has no root for (``unconfigured``, ``UNCONFIGURED_TREE``, by tree), a
+    keyword's bare key naming several lines (``ambiguous``, ``AMBIGUOUS``, by
+    script file), and a key its sidecar does not describe (``undescribed``,
+    the join's raising case, by script file), each with how often it was
+    asked. ``DROPPED`` and ``RUNTIME_ONLY`` are answers, not gaps.
 
     A cache's are cumulative (:meth:`SidecarCache.join_gaps`); a pool worker
     hands back what each shard added (:meth:`SidecarCache.take_join_gaps`),
@@ -325,6 +345,9 @@ class JoinGaps:
     undescribed: Counter = field(default_factory=Counter)
     unconfigured: Counter = field(default_factory=Counter)
     ambiguous: Counter = field(default_factory=Counter)
+
+    def copy(self) -> JoinGaps:
+        return JoinGaps(*(Counter(gaps) for gaps in self._kinds()))
 
     def merge(self, other: JoinGaps) -> None:
         self.unresolved.update(other.unresolved)
@@ -362,7 +385,8 @@ class JoinGaps:
 class SidecarCache:
     """Sidecars held by script file, read once per card.
 
-    Per run, holding only what the corpus names.
+    Per run, holding only what the corpus names. :meth:`join` is the one
+    key-to-line lookup; every other one reads through it.
     """
 
     def __init__(self, roots: dict[str, Path]) -> None:
@@ -373,18 +397,9 @@ class SidecarCache:
         self._missing: set[str] = set()
         self._prose: dict[str, list[str]] = {}
         self._script_texts: dict[ProvenanceKey, str | None] = {}
-        #: ``script_file -> times asked`` for keys naming an unconverted script,
-        #: counted so a broken conversion shows.
-        self.unresolved: dict[str, int] = {}
-        #: ``script_file -> times asked`` for keys :meth:`line_or_none` read as
-        #: no line although the sidecar exists and does not describe them.
-        self.undescribed: dict[str, int] = {}
-        #: ``tree -> times asked`` for keys :meth:`line_or_none` read as no
-        #: line because this run configured no root for their source tree.
-        self.unconfigured: dict[str, int] = {}
-        #: ``script_file -> times asked`` for keys that resolved ``AMBIGUOUS``:
-        #: a keyword's bare key acting where the keyword prints several lines.
-        self.ambiguous: dict[str, int] = {}
+        #: Every key :meth:`join` read as no line, by why, counted so a broken
+        #: conversion or a missing tree shows.
+        self._gaps = JoinGaps()
         #: What :meth:`take_join_gaps` last handed out.
         self._taken = JoinGaps()
 
@@ -398,38 +413,66 @@ class SidecarCache:
         return sidecar_path_for(self._roots[tree] / relative)
 
     def get(self, script_file: str) -> ProvenanceSidecar:
+        """One script's sidecar; ``UnconfiguredTree`` or ``UnconvertedScript``
+        where there is none. Not a lookup of a key, so it counts nothing."""
         cached = self._cache.get(script_file)
         if cached is not None:
             return cached
         path = self.path_for(script_file)
         if script_file in self._missing or not path.exists():
             self._missing.add(script_file)
-            self.unresolved[script_file] = self.unresolved.get(script_file, 0) + 1
             raise UnconvertedScript(
                 f"{script_file} was never converted: no sidecar at {path}"
             )
         cached = self._cache[script_file] = read_sidecar(path)
         return cached
 
-    def line_for(self, key: ProvenanceKey) -> SidecarLine | None:
-        """The rendered line a record's key names, or None where there is none.
+    def join(self, key: ProvenanceKey) -> Joined:
+        """The key's resolution and the line it names: the one lookup.
 
-        None also for a script never converted; an unconfigured tree still
-        raises, being a misconfigured run. A key resolving ``AMBIGUOUS`` is
-        tallied in :attr:`ambiguous`.
+        A script with no sidecar is ``UNCONVERTED``, one of a source tree this
+        run has no root for ``UNCONFIGURED_TREE`` (the first of each tree
+        logged); both, and ``AMBIGUOUS``, are counted in :meth:`join_gaps`. A
+        key inside a declared range in neither list is counted as
+        ``undescribed`` and raises ``KeyError``: the sidecar does not describe
+        the card the record was collected against.
         """
+        sidecar = self._sidecar_of(key)
+        if isinstance(sidecar, KeyResolution):
+            return Joined(sidecar, None)
         try:
-            sidecar = self.get(key.script_file)
+            resolution = sidecar.resolution_of(key)
+        except KeyError:
+            self._gaps.undescribed[key.script_file] += 1
+            raise
+        if resolution is KeyResolution.AMBIGUOUS:
+            self._gaps.ambiguous[key.script_file] += 1
+        line = sidecar.line_for(key) if resolution is KeyResolution.LINE else None
+        return Joined(resolution, line)
+
+    def _sidecar_of(self, key: ProvenanceKey) -> ProvenanceSidecar | KeyResolution:
+        """The sidecar a key's script names, else the resolution, counted,
+        that says why there is none."""
+        try:
+            return self.get(key.script_file)
+        except UnconfiguredTree:
+            self._note_unconfigured(key.tree)
+            return KeyResolution.UNCONFIGURED_TREE
         except UnconvertedScript:
-            return None
-        if sidecar.resolution_of(key) is KeyResolution.AMBIGUOUS:
-            self.ambiguous[key.script_file] = self.ambiguous.get(key.script_file, 0) + 1
-        return sidecar.line_for(key)
+            self._gaps.unresolved[key.script_file] += 1
+            return KeyResolution.UNCONVERTED
+
+    def _note_unconfigured(self, tree: str) -> None:
+        if tree not in self._gaps.unconfigured:
+            logger.warning(
+                "keys under source tree %r read as no line: this run configured "
+                "no root for it (known trees: %s); later ones only counted",
+                tree, sorted(self._roots))
+        self._gaps.unconfigured[tree] += 1
 
     def join_gaps(self) -> JoinGaps:
-        """Every key this cache read as no line so far, by why."""
-        return JoinGaps(Counter(self.unresolved), Counter(self.undescribed),
-                        Counter(self.unconfigured), Counter(self.ambiguous))
+        """Every key :meth:`join` read as no line so far, by why."""
+        return self._gaps.copy()
 
     def take_join_gaps(self) -> JoinGaps:
         """What :meth:`join_gaps` gained since the last take: a pool worker,
@@ -438,29 +481,18 @@ class SidecarCache:
         gained, self._taken = now - self._taken, now
         return gained
 
-    def line_or_none(self, key: ProvenanceKey) -> SidecarLine | None:
-        """The line a key names, or None wherever the join gives none.
+    def line_for(self, key: ProvenanceKey) -> SidecarLine | None:
+        """:meth:`join`'s line: None where the key names none, ``KeyError``
+        on a key the sidecar does not describe."""
+        return self.join(key).line
 
-        For readers that read keys off a board rather than train on them. A
-        key the sidecar does not describe, which :meth:`line_for` raises on, is
-        tallied in :attr:`undescribed`; one of a source tree this run has no
-        root for in :attr:`unconfigured`, the first of each tree logged.
-        """
+    def line_or_none(self, key: ProvenanceKey) -> SidecarLine | None:
+        """:meth:`line_for`, with a key the sidecar does not describe read as
+        no line too (still counted), for readers that read keys off a board
+        rather than train on them."""
         try:
             return self.line_for(key)
-        except UnconfiguredTree:
-            tree, _ = split_script_file(key.script_file)
-            if tree not in self.unconfigured:
-                logger.warning(
-                    "keys under source tree %r read as no line: this run configured "
-                    "no root for it (known trees: %s); later ones only counted",
-                    tree, sorted(self._roots))
-            self.unconfigured[tree] = self.unconfigured.get(tree, 0) + 1
-            return None
         except KeyError:
-            self.undescribed[key.script_file] = (
-                self.undescribed.get(key.script_file, 0) + 1
-            )
             return None
 
     def first_line(self, keys) -> SidecarLine | None:
@@ -484,7 +516,7 @@ class SidecarCache:
         return self._script_texts[key]
 
     def prose_for(self, key: ProvenanceKey) -> str | None:
-        """The converted prose of the line a key names.
+        """The converted prose of the line a key names, under :meth:`line_for`.
 
         None for a variant: the ``.txt`` beside its sidecar is the Forge
         source script, so the prose surface falls back to the script.
@@ -503,13 +535,6 @@ class SidecarCache:
         return line.prose_in(rendered)
 
     def resolution_of(self, key: ProvenanceKey) -> KeyResolution:
-        """The join's answer for a key, with the two no-sidecar cases folded in
-        as values: ``UNCONVERTED`` and ``UNCONFIGURED_TREE``. A mismatch inside
-        an existing sidecar still raises.
-        """
-        try:
-            return self.get(key.script_file).resolution_of(key)
-        except UnconfiguredTree:
-            return KeyResolution.UNCONFIGURED_TREE
-        except UnconvertedScript:
-            return KeyResolution.UNCONVERTED
+        """:meth:`join`'s resolution; a mismatch inside an existing sidecar
+        still raises."""
+        return self.join(key).resolution

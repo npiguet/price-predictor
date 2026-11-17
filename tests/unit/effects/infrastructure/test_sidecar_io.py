@@ -206,12 +206,11 @@ class TestSidecarCache:
         # would raise that share without changing the shape of a run, so the
         # count is what an operator has to be able to see.
         cache = self._write_trees(tmp_path)
+        bird = ProvenanceKey("cardsfolder/b/bird_token.txt", 0, "spell", 0)
         for _ in range(3):
-            with pytest.raises(KeyError):
-                cache.get("cardsfolder/b/bird_token.txt")
-        with pytest.raises(KeyError):
-            cache.get("cardsfolder/c/clue_token.txt")
-        assert cache.unresolved == {
+            assert cache.line_for(bird) is None
+        assert cache.line_for(ProvenanceKey("cardsfolder/c/clue_token.txt", 0, "spell", 0)) is None
+        assert cache.join_gaps().unresolved == {
             "cardsfolder/b/bird_token.txt": 3,
             "cardsfolder/c/clue_token.txt": 1,
         }
@@ -244,7 +243,7 @@ class TestSidecarCache:
         with caplog.at_level("WARNING"):
             for _ in range(3):
                 assert cache.line_or_none(key) is None
-        assert cache.unconfigured == {"variant-scripts": 3}
+        assert cache.join_gaps().unconfigured == {"variant-scripts": 3}
         warned = [r.getMessage() for r in caplog.records if "variant-scripts" in r.getMessage()]
         assert len(warned) == 1
 
@@ -278,7 +277,7 @@ class TestSidecarCache:
         for _ in range(2):
             cache.line_or_none(_ABSENT)
         cache.line_or_none(_DROPPED)
-        assert cache.undescribed == {_SCRIPT: 2}
+        assert cache.join_gaps().undescribed == {_SCRIPT: 2}
 
     def test_script_text_is_the_line_s_normalized_script(self, tmp_path):
         """Normalized, the form the holdout hashes; None wherever the join

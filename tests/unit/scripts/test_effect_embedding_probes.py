@@ -22,6 +22,8 @@ import numpy as np
 import pytest
 from effect_embedding_probes import build_texts, common, effect_profiles
 
+from effects.domain.provenance import BuiltTrait, ProvenanceKey
+
 _FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "effects"
 
 _WIDTH = 12
@@ -159,7 +161,38 @@ class TestTheTextTable:
         with open(paths.keymap, "rb") as handle:
             keymap = pickle.load(handle)
         assert keymap
-        assert all(key[0].startswith("cardsfolder/") for key in keymap)
+        assert all(key.script_file.startswith("cardsfolder/") for key in keymap)
+
+
+class TestTheKeymap:
+    """The keymap reads through the one join, so keys differing only in
+    ``built`` are distinct entries (finding 19.1)."""
+
+    _SAGA = "cardsfolder/b/binding_the_old_gods.txt"
+
+    @pytest.fixture
+    def keymap(self, tmp_path, monkeypatch):
+        """The real gen-3 sidecars, Binding the Old Gods among them."""
+        monkeypatch.setattr(build_texts, "VARIANT_TREE", tmp_path / "no-variants")
+        gen3 = _FIXTURES / "gen3-sidecars"
+        paths = SimpleNamespace(cards_folders=[gen3 / "cardsfolder", gen3 / "tokenscripts"],
+                                surface="script")
+        return build_texts.keymap_of(paths)
+
+    def test_each_chapter_of_a_saga_is_its_own_entry(self, keymap):
+        chapters = [keymap[ProvenanceKey(self._SAGA, 0, "keyword", 0,
+                                         built=BuiltTrait("trigger", n))] for n in range(3)]
+        assert [text.split(" |")[0] for text in chapters] == [
+            "Chapter$ 1", "Chapter$ 2", "Chapter$ 3"]
+        assert ProvenanceKey(self._SAGA, 0, "keyword", 0) not in keymap
+
+    def test_a_record_acting_through_chapter_ii_reads_chapter_ii(self, keymap, monkeypatch):
+        monkeypatch.setattr(effect_profiles, "_KEYMAP", keymap)
+        chapter = {"script_file": self._SAGA, "face": 0, "trait_kind": "keyword",
+                   "index_within_kind": 0, "built": {"kind": "trigger", "index": 1}}
+        bare = {key: value for key, value in chapter.items() if key != "built"}
+        assert effect_profiles.acting_text({"ability": [chapter]}).startswith("Chapter$ 2 |")
+        assert effect_profiles.acting_text({"ability": [bare]}) is None
 
 
 class TestToMarkdown:
@@ -246,7 +279,7 @@ class TestEffectProfiles:
 
         profiles = effect_profiles
         monkeypatch.setattr(profiles, "_KEYMAP", {
-            ("cardsfolder/d/divination.txt", 0, "spell", 0, None): "draw two"})
+            ProvenanceKey("cardsfolder/d/divination.txt", 0, "spell", 0): "draw two"})
         shard = tmp_path / name
         opener = gzip.open if name.endswith(".gz") else open
         with opener(shard, "wt", encoding="utf-8") as handle:

@@ -136,9 +136,11 @@ def test_a_key_in_neither_list_raises_rather_than_reading_as_no_text(tmp_path):
         text_for_key(ProvenanceKey(script, 0, "static", 1), sidecars, "script")
 
 
-def test_an_unconfigured_tree_still_reads_as_no_text(tmp_path):
-    """A variant key without ``--variant-scripts`` resolves to nothing, as pinned
-    by ``test_without_the_variant_tree_a_variant_text_resolves_to_nothing``."""
+def test_an_unconfigured_tree_reads_as_no_text_and_is_counted(tmp_path):
+    """A variant key without ``--variant-scripts`` has no text, as pinned by
+    ``test_without_the_variant_tree_a_variant_text_resolves_to_nothing``, and
+    is counted by tree rather than swallowed: a run missing a tree's root reads
+    every text of it as none."""
     from effects.application.ability_text import text_for_key
 
     sidecars = SidecarCache({"cardsfolder": tmp_path})
@@ -146,6 +148,40 @@ def test_an_unconfigured_tree_still_reads_as_no_text(tmp_path):
     with pytest.raises(UnconfiguredTree):
         sidecars.path_for(key.script_file)
     assert text_for_key(key, sidecars, "script") is None
+    assert text_for_key(key, sidecars, "prose") is None
+    assert sidecars.join_gaps().unconfigured == {"variant-scripts": 2}
+
+
+@pytest.mark.parametrize("surface", ["script", "prose"])
+def test_a_textless_line_reads_the_same_empty_text_in_training_and_the_cache(
+        tmp_path, surface):
+    """A line with neither a script nor prose: Ajani's Pridemate token's
+    keyword line, written as the gen-1 converter wrote it. Training's text
+    for its key and the text the cache encodes its row from are both the
+    empty string, never the key spelled out."""
+    from types import SimpleNamespace
+
+    from effects.application.ability_encoder_runner import AbilityEncoderRunner
+    from effects.application.ability_text import text_for_key
+    from effects.infrastructure.sidecar_io import encoded_lines, read_sidecar, sidecar_path_for
+
+    script = "tokenscripts/ajanis_pridemate.txt"
+    key = ProvenanceKey(script, 0, "static", 0)
+    txt = tmp_path / "tokenscripts" / "ajanis_pridemate.txt"
+    txt.parent.mkdir(parents=True)
+    txt.write_text("name: ajani's pridemate\n", encoding="utf-8")
+    path = sidecar_path_for(txt)
+    write_sidecar(ProvenanceSidecar(
+        card="Ajani's Pridemate token", script_file=script,
+        lines=(SidecarLine(line_index=1, line_kind="keyword", provenance=(key,)),),
+    ), path)
+    sidecars = SidecarCache({"tokenscripts": tmp_path / "tokenscripts"})
+    line = read_sidecar(path).lines[0]
+    runner = SimpleNamespace(stager=SimpleNamespace(surface=surface))
+
+    training = text_for_key(key, sidecars, surface)
+    cached = AbilityEncoderRunner.unit_of(runner, line, None)[0]
+    assert training == cached == encoded_lines(path, read_sidecar(path), surface)[0].text == ""
 
 
 def test_an_unconverted_script_reads_as_no_text(tmp_path):

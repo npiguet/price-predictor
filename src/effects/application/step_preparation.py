@@ -524,13 +524,9 @@ class StepPreparer:
 
     def steps(self, task: ShardTask, records: list) -> Iterator:
         """``shard_steps``, then a ``ShardClosed``: a worker's whole shard."""
-        before = dict(self.sidecars.unresolved)
+        before = self.sidecars.join_gaps().unresolved
         yield from self.shard_steps(task, records)
-        unresolved = {
-            name: count - before.get(name, 0)
-            for name, count in self.sidecars.unresolved.items()
-            if count != before.get(name, 0)
-        }
+        unresolved = dict(self.sidecars.join_gaps().unresolved - before)
         truncated, self.truncated = tuple(self.truncated), []
         yield ShardClosed(unresolved=unresolved, truncated=truncated)
 

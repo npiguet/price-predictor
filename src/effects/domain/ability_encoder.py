@@ -161,14 +161,15 @@ def surface_of(vocab_path) -> Surface:
     )
 
 
-def encoding_text(line: SidecarLine | None, prose: str | None, surface: Surface) -> str | None:
+def encoding_text(line: SidecarLine | None, prose: str | None, surface: Surface) -> str:
     """The text a line is encoded from on ``surface``, falling back to the
     other surface's where its own is missing (a keyword-derived line has no
-    script, a variant script no prose)."""
+    script, a variant script no prose), and to the empty string where both
+    are: the one no-text fallback, training's and the cache's alike."""
     script = line.script_text if line is not None else None
     if surface == Surface.SCRIPT:
-        return script or prose
-    return prose or script
+        return script or prose or ""
+    return prose or script or ""
 
 
 def encoding_role_spans(
@@ -176,7 +177,7 @@ def encoding_role_spans(
 ) -> tuple[RoleSpan, ...]:
     """The role spans a line's encoding text is tokenized with (FR-069): only
     on a prose text, since the spans index the converted prose."""
-    if surface != Surface.PROSE or line is None or text is None:
+    if surface != Surface.PROSE or line is None or not text:
         return ()
     if text == line.script_text:
         return ()

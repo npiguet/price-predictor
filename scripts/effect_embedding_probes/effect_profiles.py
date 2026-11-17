@@ -13,7 +13,9 @@ share.
 The acting text follows ``effects.domain.provenance.first_text``: the
 first key of ``record.ability`` that resolves to a sidecar line, encoded on
 the checkpoint's surface. The key → text map comes from ``cache/keymap.pkl``
-(written by ``build_texts.py``), so no worker builds a ``SidecarCache``.
+(written by ``build_texts.py``, ``ProvenanceKey`` to text, the keys lines
+declare), so no worker builds a ``SidecarCache``; a ``built`` key no line
+declares reads as its keyword's bare key, the join's rule 2.
 Records are parsed as raw JSON and never held: each worker folds one shard
 into one row of sums per record and returns them.
 
@@ -48,6 +50,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from effect_embedding_probes.common import add_probe_arguments, resolve_paths  # noqa: E402
+from effects.domain.provenance import ProvenanceKey, first_text  # noqa: E402
 
 _KEYMAP: dict | None = None
 
@@ -86,12 +89,14 @@ def _init(keymap_path: str) -> None:
 
 
 def acting_text(record: dict) -> str | None:
-    for key in record.get("ability") or ():
-        text = _KEYMAP.get((key["script_file"], key["face"], key["trait_kind"],
-                            key["index_within_kind"], key.get("option")))
-        if text is not None:
-            return text
-    return None
+    keys = (ProvenanceKey.from_dict(key) for key in record.get("ability") or ())
+    return first_text(keys, _text_of)
+
+
+def _text_of(key: ProvenanceKey) -> str | None:
+    """A declared key's text; a ``built`` key no line declares as its
+    keyword's bare key (rule 2), which a saga's chapters never declare."""
+    return _KEYMAP.get(key, _KEYMAP.get(key.without_built()))
 
 
 def _side(subject: str, actor: str, entities: dict) -> str | None:

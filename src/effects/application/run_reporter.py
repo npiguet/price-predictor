@@ -236,7 +236,7 @@ class RunReporter:
 
     def unresolved(self, preparer: StepPreparer) -> None:
         """Scripts the converted corpus does not hold, asked for by any process."""
-        unresolved = Counter(preparer.sidecars.unresolved) + self._unresolved_elsewhere
+        unresolved = preparer.sidecars.join_gaps().unresolved + self._unresolved_elsewhere
         if not unresolved:
             return
         logger.info(

@@ -16,7 +16,6 @@ from effects.domain.provenance import ProvenanceKey, SidecarLine, SidecarLookup,
 from effects.domain.records import EffectRecord, acting_keys
 from effects.infrastructure.sidecar_io import (
     SidecarCache,
-    UnconfiguredTree,
     converted_text_path,
     sidecar_paths,
 )
@@ -25,24 +24,18 @@ from effects.infrastructure.sidecar_io import (
 def resolve_key(
     key: ProvenanceKey, sidecars: SidecarLookup, surface: Surface,
 ) -> tuple[str | None, SidecarLine | None]:
-    """``(text, line)`` for one provenance key on ``surface``; ``(None, None)``
-    where the key names no line.
+    """``(text, line)`` for one provenance key on ``surface``, read through
+    the join (``SidecarCache.join``, which counts every key it reads as no
+    line); ``(None, None)`` where the key names no line.
 
-    A line with neither surface falls back to the key itself, so it stays a
-    distinct unit for rarity weighting. A key the sidecar does not describe
+    A line with neither surface reads as the empty string, as the ability
+    cache encodes it (``encoding_text``). A key the sidecar does not describe
     raises ``KeyError`` (the contract's fail-loudly case).
     """
-    try:
-        line = sidecars.line_for(key)
-    except UnconfiguredTree:
-        return None, None
+    line = sidecars.line_for(key)
     if line is None:
         return None, None
-    text = encoding_text(line, sidecars.prose_for(key), surface)
-    return (
-        text or f"{key.script_file}:{key.trait_kind}:{key.index_within_kind}",
-        line,
-    )
+    return encoding_text(line, sidecars.prose_for(key), surface), line
 
 
 def text_for_key(key: ProvenanceKey, sidecars: SidecarLookup, surface: Surface) -> str | None:
@@ -50,21 +43,29 @@ def text_for_key(key: ProvenanceKey, sidecars: SidecarLookup, surface: Surface) 
     return resolve_key(key, sidecars, surface)[0]
 
 
-def known_texts(roots: Mapping[str, Path], surface: Surface) -> list[str]:
-    """Every distinct text a line under ``roots`` (tree name -> folder) encodes
-    as on ``surface``, sorted, spelled as a training batch looks it up."""
+def texts_by_key(roots: Mapping[str, Path], surface: Surface) -> dict[ProvenanceKey, str]:
+    """``key -> text`` for every key a line under ``roots`` (tree name ->
+    folder) declares, through the join, spelled as a training batch looks it
+    up; a line with neither surface reads as the empty string."""
     sidecars = SidecarCache(roots)
-    texts: set[str] = set()
+    return {key: text_for_key(key, sidecars, surface)
+            for key in _declared_keys(roots, sidecars)}
+
+
+def _declared_keys(roots: Mapping[str, Path], sidecars: SidecarCache):
+    """Every key a line declares, tree by tree, in path and line order."""
     for tree, root in roots.items():
         root = Path(root)
         for path in sidecar_paths(root):
             relative = converted_text_path(path).relative_to(root).as_posix()
             for line in sidecars.get(f"{tree}/{relative}").lines:
-                if line.provenance:
-                    text = resolve_key(line.provenance[0], sidecars, surface)[0]
-                    if text is not None:
-                        texts.add(text)
-    return sorted(texts)
+                yield from line.provenance
+
+
+def known_texts(roots: Mapping[str, Path], surface: Surface) -> list[str]:
+    """Every distinct text a line under ``roots`` (tree name -> folder) encodes
+    as on ``surface``, sorted, spelled as a training batch looks it up."""
+    return sorted(set(texts_by_key(roots, surface).values()))
 
 
 class KeyResolver:
