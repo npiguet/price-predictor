@@ -4,13 +4,14 @@ Feature 024 changes the sidecar's `script_text` to the whole chained ability (FR
 charm modes (FR-005a) while leaving the converted `.txt` byte-identical (FR-004, SC-001).
 This directory holds a fixed set of card scripts and the converted text expected of them, so
 the byte-identity test (`BatchConverterTest`) has something fixed to compare against, and the
-tests that read the sidecar side of a conversion (`TraitScriptChainTest`,
+tests that read the sidecar side of a conversion (`TraitScriptChainTest`, `KeywordLineKeysTest`,
 `ProvenanceSidecarTest`) run on scripts an upstream card edit cannot move.
 
 Layout:
 
 - `cardsfolder/<letter>/<name>.txt` — source scripts; copies of `../forge/forge-gui/res/cardsfolder/`
-  as of 2026-10-07, plus the four synthetic scripts marked below. The tree is letter-keyed
+  as of 2026-10-07 (History of Benalia, Blind Hunter, Censor, Ranger Class and Balloon
+  Stand as of 2026-11-17), plus the four synthetic scripts marked below. The tree is letter-keyed
   like Forge's so every provenance key reads `cardsfolder/<letter>/<name>.txt`.
 - `tokenscripts/<name>.txt` — one token script, flat like Forge's token tree.
 - `expected/cardsfolder/…`, `expected/tokenscripts/…` — the `.txt` that `python -m price_predictor convert`
@@ -63,6 +64,11 @@ end in a period, when the synthesized land-mana line took the shape of a scripte
 | `f/fire_ice.txt` | split card |
 | `p/paralyze.txt` | aura with a trigger and a replacement |
 | `m/mountain.txt`, `t/tundra.txt` | synthetic land mana line claiming runtime mana abilities |
+| `h/history_of_benalia.txt` | saga whose "I, II" line prints two chapter triggers (keys of a multi-line keyword) |
+| `b/blind_hunter.txt` | haunt creature: five haunt triggers over two lines |
+| `c/censor.txt` | `Cycling`: a single-line keyword that builds a spell |
+| `r/ranger_class.txt` | Class level 3 with a continuation line |
+| `b/balloon_stand.txt` | Attraction `Visit` charm: a single-line keyword whose built trigger has modes |
 | `tokenscripts/c_a_food_sac.txt` | token script, flat tree |
 | `u/undefined_svar.txt` | **synthetic** — `TrigDraw` names `SubAbility$ DBMissing`, which no `SVar:` defines (FR-003). The task asked for an undefined `Execute$`, but Forge fails the whole card at parse for that shape (`Error in Trigger for Card`), so no converter can produce output for it; `SubAbility$` is the one undefined reference Forge tolerates |
 | `l/label_a.txt`, `l/label_b.txt` | **synthetic** — identical chains naming their sub-ability `DBDraw` and `DBDrawCard` (scenario 12) |

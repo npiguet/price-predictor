@@ -387,7 +387,7 @@ public final class ProvenanceResolver {
      * the bare keyword key, which joins the keyword's one line, and no index
      * is guessed.
      */
-    private static ProvenanceKey.Built builtOf(CardTraitBase trait) {
+    static ProvenanceKey.Built builtOf(CardTraitBase trait) {
         TraitKind kind = TraitKind.of(trait);
         if (kind == null) return null;
         Iterable<? extends CardTraitBase> built = kind.builtBy(trait.getKeyword());

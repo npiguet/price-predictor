@@ -1,0 +1,6 @@
+name: history of benalia
+mana cost: {1}{W}{W}
+types: enchantment saga
+chapter: I, II — create a 2/2 white knight creature token with vigilance.
+chapter: III — knights you control get +2/+1 until end of turn.
+replacement: CARDNAME enters with a lore counter on it.

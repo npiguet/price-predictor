@@ -3,11 +3,11 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.ability.OptionAbility;
 import forge.game.CardTraitBase;
+import forge.game.keyword.KeywordInterface;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +32,11 @@ import java.util.Set;
  * text, because it is still live at runtime and a record naming it must reach
  * the words it produced. A mode key is never declared: it is claimed by the
  * mode's line or it does not exist, so it can never be dropped.
+ *
+ * <p>A trait a keyword built is named through its keyword's key, never by its
+ * kind-indexed key, which is declared nowhere: a keyword printing one line
+ * declares its bare key there, one printing several declares on each line the
+ * keys with {@code built} of the traits that line prints.
  */
 public final class ProvenanceRecorder {
 
@@ -70,15 +75,9 @@ public final class ProvenanceRecorder {
     private final Map<Ability, Source> byAbility = new IdentityHashMap<>();
     private final Set<ProvenanceKey> declared = new LinkedHashSet<>();
     /**
-     * The abilities each keyword rendered, kept so a trait Forge derived from
-     * that keyword can be claimed by the keyword's own line: the derived trait
-     * is walked long after the keyword loop has moved on.
-     */
-    private final Map<String, List<Ability>> byKeyword = new LinkedHashMap<>();
-    /**
      * The one line a keyword rendered for one of the traits it generates,
      * where the keyword renders a line per trait (a saga's chapters, haunt's
-     * two halves): such a trait is claimed by its own line alone.
+     * two halves): that line alone declares the trait's {@code built} key.
      */
     private final Map<CardTraitBase, Ability> renderedFor = new IdentityHashMap<>();
     /** Where a chain's undefined SVars go; shared across every face of a run. */
@@ -151,42 +150,75 @@ public final class ProvenanceRecorder {
         if (ability != null) attribute(List.of(ability), key, trait);
     }
 
-    /** Attribute abilities to a keyword, which carries a script but no trait. */
+    /**
+     * Attribute the lines a keyword rendered to it, under {@code key}, the
+     * keyword's own key.
+     *
+     * <p>A keyword rendering one line declares {@code key} on it, and the
+     * traits it built join that line through it. A keyword rendering several
+     * — several abilities, or one whose text runs onto continuation lines —
+     * declares {@code key} on none: each trait it built is claimed under
+     * {@code key} with its {@code built}, by the line {@link #rendered} named
+     * for it, or by the keyword's one ability. A trait with no such line is
+     * declared nowhere, and a record naming it falls back to the bare key.
+     * Where no built trait has a line, the keyword's first line declares the
+     * bare key, as if the keyword printed that line alone; a keyword
+     * rendering no line has its bare key in {@code dropped_keys}.
+     */
     public void attributeKeyword(List<Ability> abilities, ProvenanceKey key,
-                                 String original) {
+                                 KeywordInterface keyword) {
         if (key == null) return;
+        if (rendersSeveralLines(abilities) && attributeBuiltTraits(abilities, key, keyword)) return;
         declare(key);
-        for (Ability ability : abilities) {
-            byKeyword.computeIfAbsent(original, k -> new ArrayList<>()).add(ability);
-        }
-        TraitScript script = TraitScript.ofKeyword(original);
-        for (Ability ability : abilities) {
-            claim(ability, key, script);
+        if (abilities.isEmpty()) return;
+        Ability line = abilities.get(0);
+        claim(line, key, TraitScript.ofKeyword(keyword.getOriginal()));
+        // Each built trait again under the bare key: the line holds that key
+        // already, and a charm's mode lines (an Attraction's visit) take it
+        // with the mode's option.
+        for (TraitKind kind : TraitKind.values()) {
+            for (CardTraitBase trait : kind.builtBy(keyword)) {
+                attribute(List.of(line), key, trait);
+            }
         }
     }
 
-    /**
-     * Attribute a runtime trait to the abilities its keyword rendered.
-     *
-     * <p>A keyword-derived trigger, static, replacement effect or spell returns
-     * no entry of its own — its text is the keyword line — but Forge gives it a
-     * trait index, and a record fired by it names that key. Claiming the key
-     * on the keyword's abilities is what keeps such a record joinable instead
-     * of leaving it pointing at a dropped key with nothing to say about the
-     * ability.
-     */
-    public void attributeToKeyword(ProvenanceKey key, CardTraitBase trait,
-                                   String original) {
-        if (key == null) return;
-        declare(key);
-        Ability own = renderedFor.get(trait);
-        if (own != null) {
-            attribute(List.of(own), key, trait);
-            return;
+    private static boolean rendersSeveralLines(List<Ability> abilities) {
+        return abilities.size() > 1 || (abilities.size() == 1 && spansLines(abilities.get(0)));
+    }
+
+    private static boolean spansLines(Ability ability) {
+        return String.valueOf(ability.descriptionText()).contains("\n");
+    }
+
+    /** Claim each built trait's key on its line; whether any trait had one. */
+    private boolean attributeBuiltTraits(List<Ability> abilities, ProvenanceKey key,
+                                         KeywordInterface keyword) {
+        boolean claimed = false;
+        for (TraitKind kind : TraitKind.values()) {
+            int index = 0;
+            for (CardTraitBase trait : kind.builtBy(keyword)) {
+                Ability line = abilities.size() == 1 ? abilities.get(0) : renderedFor.get(trait);
+                if (line != null) {
+                    attribute(List.of(line), key.withBuilt(kind, index), trait);
+                    claimed = true;
+                }
+                index++;
+            }
         }
-        List<Ability> abilities = byKeyword.get(original);
-        if (abilities == null || abilities.isEmpty()) return;
-        attribute(abilities, key, trait);
+        return claimed;
+    }
+
+    /**
+     * Attribute {@code entry}, the line a keyword-built trait rendered of its
+     * own (Tribute's unpaid-tribute trigger), to the trait's keyword key
+     * with its {@code built}. A trait that rendered no line of its own has
+     * its text on its keyword's lines, which carry its key already.
+     */
+    public void attributeBuilt(Ability entry, ProvenanceKey keywordKey, CardTraitBase trait) {
+        if (entry == null || keywordKey == null) return;
+        ProvenanceKey.Built built = ProvenanceResolver.builtOf(trait);
+        if (built != null) attribute(entry, keywordKey.withBuilt(built.kind(), built.index()), trait);
     }
 
     /**

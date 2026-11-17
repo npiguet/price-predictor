@@ -151,6 +151,15 @@ final class FaceParser {
                 : new ProvenanceKey(scriptFile, faceIndex, kind, index);
     }
 
+    /**
+     * The key of {@code ki}'s line, or null when not recording or when the
+     * keyword has no intrinsic ordinal (a granted one).
+     */
+    private ProvenanceKey keywordKey(KeywordInterface ki) {
+        int keywordIndex = FaceOrder.keywordIndex(card.getCurrentState(), ki);
+        return keywordIndex < 0 ? null : key(TraitKind.KEYWORD, keywordIndex);
+    }
+
     /** The abilities appended since the list had {@code before} of them. */
     private List<Ability> since(int before) {
         return List.copyOf(abilities.subList(before, abilities.size()));
@@ -171,6 +180,10 @@ final class FaceParser {
      * keywords — a silent wrong join rather than a loud failure. A keyword
      * with no intrinsic ordinal (a granted one) records no key at all,
      * which is the honest answer and the one the collector gives for it.
+     *
+     * <p>The traits a keyword built are named through this key alone: the
+     * recorder declares it, or the {@code built} keys of those traits, on the
+     * keyword's lines, and the later phases skip the traits' kind-indexed keys.
      */
     private void parseKeywords() {
         for (KeywordInterface ki : card.getKeywords()) {
@@ -187,10 +200,7 @@ final class FaceParser {
             } else {
                 abilities.add(StandardKeyword.of(ki, kw));
             }
-            int keywordIndex = FaceOrder.keywordIndex(card.getCurrentState(), ki);
-            recorder.attributeKeyword(since(before),
-                    keywordIndex < 0 ? null : key(TraitKind.KEYWORD, keywordIndex),
-                    ki.getOriginal());
+            recorder.attributeKeyword(since(before), keywordKey(ki), ki);
         }
     }
 
@@ -332,8 +342,8 @@ final class FaceParser {
     /** Where the spell phase sends one of a face's spell abilities. */
     private enum SpellRoute {
         /**
-         * A keyword's own spell. It renders as the keyword line, so that line
-         * claims this trait's key rather than dropping it.
+         * A keyword's own spell. It renders as the keyword line, and is named
+         * through that line's key: its own key is declared nowhere.
          */
         KEYWORD_SPELL,
         /**
@@ -369,16 +379,15 @@ final class FaceParser {
         int spellIndex = -1;
         for (SpellAbility sa : card.getSpellAbilities()) {
             spellIndex++;
-            // Declared before any route skips the trait, so a trait the parser
-            // passes over lands in dropped_keys rather than failing the join:
-            // it is still live at runtime and a record can still name it.
+            SpellRoute route = classifySpell(sa, isAlternateFace);
+            if (route == SpellRoute.KEYWORD_SPELL) continue;
+            // Declared before any other route skips the trait, so a trait the
+            // parser passes over lands in dropped_keys rather than failing the
+            // join: it is still live at runtime and a record can still name it.
             ProvenanceKey spellKey = key(TraitKind.SPELL, spellIndex);
             recorder.declare(spellKey);
-            SpellRoute route = classifySpell(sa, isAlternateFace);
             switch (route) {
-                case KEYWORD_SPELL ->
-                        recorder.attributeToKeyword(spellKey, sa, sa.getKeyword().getOriginal());
-                case OTHER_FACE, DUPLICATE_TRAIT -> { }
+                case KEYWORD_SPELL, OTHER_FACE, DUPLICATE_TRAIT -> { }
                 case LAND_MANA -> landManaTraits.add(new LandManaTrait(sa, spellKey));
                 case CHARM, ALT_COST, ACTIVATED, SPELL, UNRENDERED -> {
                     int before = abilities.size();
@@ -445,22 +454,32 @@ final class FaceParser {
         int triggerIndex = -1;
         for (Trigger t : card.getTriggers()) {
             triggerIndex++;
-            ProvenanceKey key = key(TraitKind.TRIGGER, triggerIndex);
-            recorder.declare(key);
-            String exec = t.getParam("Execute");
-            boolean secondary = t.isSecondary();
-            if (secondary && exec != null && primaryExecuteSVars.contains(exec)) {
-                recorder.attribute(primaryByExecute.get(exec), key, t);
-                continue;
+            if (t.getKeyword() != null) {
+                addBuiltTrait(TriggeredAbilityEntry.of(t), t);
+            } else {
+                parseOwnTrigger(t, key(TraitKind.TRIGGER, triggerIndex),
+                        primaryExecuteSVars, primaryByExecute);
             }
-            if (exec != null && !secondary) {
-                primaryExecuteSVars.add(exec);
-            }
-            Ability triggered = TriggeredAbilityEntry.of(t);
-            addIfNotNull(abilities, triggered);
-            attributeTrait(triggered, key, t);
-            if (triggered != null && exec != null) primaryByExecute.put(exec, triggered);
         }
+    }
+
+    /** A trigger the face states itself, under its kind-indexed {@code key}. */
+    private void parseOwnTrigger(Trigger t, ProvenanceKey key, Set<String> primaryExecuteSVars,
+                                 Map<String, Ability> primaryByExecute) {
+        recorder.declare(key);
+        String exec = t.getParam("Execute");
+        boolean secondary = t.isSecondary();
+        if (secondary && exec != null && primaryExecuteSVars.contains(exec)) {
+            recorder.attribute(primaryByExecute.get(exec), key, t);
+            return;
+        }
+        if (exec != null && !secondary) {
+            primaryExecuteSVars.add(exec);
+        }
+        Ability triggered = TriggeredAbilityEntry.of(t);
+        addIfNotNull(abilities, triggered);
+        recorder.attribute(triggered, key, t);
+        if (triggered != null && exec != null) primaryByExecute.put(exec, triggered);
     }
 
     /** Wrap each static or replacement trait directly in its entry. */
@@ -469,24 +488,27 @@ final class FaceParser {
         int index = -1;
         for (T trait : traits) {
             index++;
+            Ability entry = factory.apply(trait);
+            if (trait.getKeyword() != null) {
+                addBuiltTrait(entry, trait);
+                continue;
+            }
             ProvenanceKey key = key(kind, index);
             recorder.declare(key);
-            Ability entry = factory.apply(trait);
             addIfNotNull(abilities, entry);
-            attributeTrait(entry, key, trait);
+            recorder.attribute(entry, key, trait);
         }
     }
 
     /**
-     * Record what a trait rendered: its own entry, or — for a keyword-derived
-     * trait that renders none of its own — the keyword's line.
+     * A trait a keyword built. Its kind-indexed key is declared nowhere: its
+     * text is its keyword's line, keyed in the keyword phase, or, as with
+     * Tribute's unpaid-tribute trigger, a line of its own, which declares the
+     * keyword's key with the trait's {@code built}.
      */
-    private void attributeTrait(Ability entry, ProvenanceKey key, CardTraitBase trait) {
-        if (entry == null && trait.getKeyword() != null) {
-            recorder.attributeToKeyword(key, trait, trait.getKeyword().getOriginal());
-        } else {
-            recorder.attribute(entry, key, trait);
-        }
+    private void addBuiltTrait(Ability entry, CardTraitBase trait) {
+        addIfNotNull(abilities, entry);
+        recorder.attributeBuilt(entry, keywordKey(trait.getKeyword()), trait);
     }
 
     // -- land mana ---------------------------------------------------------

@@ -204,13 +204,17 @@ class ProvenanceSidecarTest {
     }
 
     @Test
-    void aKeywordDerivedTriggerIsClaimedByTheKeywordLine() {
-        // Echo's upkeep trigger is a runtime Trigger object with a key of its
-        // own; its text is the keyword line.
+    void aKeywordDerivedTriggerIsNamedThroughTheKeywordLinesBareKey() {
+        // Echo's upkeep trigger is a runtime Trigger object; its text is the
+        // keyword's one line, which declares the keyword's bare key alone. A
+        // record names the trigger by that key plus built, which joins the
+        // same line; the trigger's own kind-indexed key is declared nowhere.
         Converted marshal = convert("m/mogg_war_marshal.txt");
         List<ProvenanceKey> keys = claimedBy(marshal, "triggered", "echo");
-        assertTrue(keys.stream().anyMatch(k -> k.traitKind().equals(TraitKind.KEYWORD)), keys.toString());
-        assertTrue(keys.stream().anyMatch(k -> k.traitKind().equals(TraitKind.TRIGGER)), keys.toString());
+        assertEquals(List.of(new ProvenanceKey(
+                "cardsfolder/m/mogg_war_marshal.txt", 0, TraitKind.KEYWORD, 0)), keys);
+        assertFalse(marshal.sidecar().droppedKeys().stream().anyMatch(
+                k -> k.traitKind().equals(TraitKind.TRIGGER)), marshal.sidecar().droppedKeys().toString());
     }
 
     @Test
@@ -233,34 +237,38 @@ class ProvenanceSidecarTest {
     void aClassCardsLevelLinesCarryTheirTraitsKeys() {
         // Class post-processing rebuilds level lines as fresh objects; the
         // attribution has to move with them or every ability on the card is
-        // textless to the model.
+        // textless to the model. Level 1 is the card's own trigger; levels 2
+        // and 3 are each one line of a Class keyword, which declares its bare
+        // key alone: the level-up ability and the level's static it built are
+        // named through it, and their kind-indexed keys nowhere.
+        String file = "cardsfolder/h/hunters_talent.txt";
         Converted talent = convert("h/hunters_talent.txt");
-        List<ProvenanceKey> levelKeys = talent.sidecar().lines().stream()
+        List<List<ProvenanceKey>> levelKeys = talent.sidecar().lines().stream()
                 .filter(line -> line.lineKind().equals("level"))
-                .flatMap(line -> line.provenance().stream())
+                .map(ProvenanceSidecar.Line::provenance)
                 .toList();
-        assertTrue(levelKeys.stream().anyMatch(k -> k.traitKind().equals(TraitKind.TRIGGER)), levelKeys.toString());
-        assertTrue(levelKeys.stream().anyMatch(k -> k.traitKind().equals(TraitKind.STATIC)), levelKeys.toString());
-        for (ProvenanceKey dropped : talent.sidecar().droppedKeys()) {
-            assertFalse(dropped.traitKind().equals(TraitKind.TRIGGER)
-                    || dropped.traitKind().equals(TraitKind.STATIC),
-                    dropped + " has text on a level line and must not be dropped");
-        }
+        assertEquals(List.of(
+                        List.of(new ProvenanceKey(file, 0, TraitKind.TRIGGER, 0)),
+                        List.of(new ProvenanceKey(file, 0, TraitKind.KEYWORD, 0)),
+                        List.of(new ProvenanceKey(file, 0, TraitKind.KEYWORD, 1))),
+                levelKeys);
+        assertEquals(List.of(new ProvenanceKey(file, 0, TraitKind.SPELL, 0)),
+                talent.sidecar().droppedKeys(), "only the implicit permanent spell");
     }
 
     @Test
-    void aKeywordDerivedReplacementIsClaimedByTheLineItPrints() {
-        // Bard Class prints its level-1 ability from an ETBReplacement keyword.
+    void aKeywordDerivedReplacementIsNamedThroughTheLineItPrints() {
+        // Bard Class prints its level-1 ability from an etbCounter keyword.
         // Forge also registers the replacement effect itself, and that object
-        // is the one a record about the counter names.
+        // is the one a record about the counter names: by the keyword's key
+        // plus built, which joins the keyword's one line through its bare key.
         Converted bard = convert("b/bard_class.txt");
         List<ProvenanceKey> levelOne = claimedBy(bard, "level", "additional +1/+1 counter");
-        assertTrue(levelOne.stream().anyMatch(
-                        k -> k.traitKind().equals(TraitKind.REPLACEMENT)),
-                levelOne.toString());
+        assertEquals(List.of(new ProvenanceKey(
+                "cardsfolder/b/bard_class.txt", 0, TraitKind.KEYWORD, 2)), levelOne);
         for (ProvenanceKey dropped : bard.sidecar().droppedKeys()) {
             assertFalse(dropped.traitKind().equals(TraitKind.REPLACEMENT),
-                    dropped + " prints the level 1 line and must not be dropped");
+                    dropped + " is built by the level 1 keyword and is declared nowhere");
         }
     }
 

@@ -321,56 +321,55 @@ class TraitScriptChainTest {
         assertEquals(3, options.size(), saga.lines().toString());
         List<String> apis = List.of("Pump", "Pump", "GainLife");
 
-        // Each mode is claimed under every key of the chapter line: the
-        // chapter's trigger and the Chapter keyword that generated it, since
-        // a chapter's mode resolves through either.
+        // Each mode is claimed under every key of the chapter line: chapter
+        // I's and chapter II's, both built by the Chapter keyword, since the
+        // mode resolves through whichever chapter fired.
         String file = "cardsfolder/l/life_of_toshiro_umezawa_memory_of_toshiro.txt";
         for (int i = 0; i < options.size(); i++) {
             List<ProvenanceKey> keys = options.get(i).provenance();
             for (ProvenanceKey key : keys) {
                 assertEquals(Integer.valueOf(i), key.option(), "mode " + i + ": " + keys);
             }
-            assertTrue(keys.contains(new ProvenanceKey(file, 0, TraitKind.TRIGGER, 0, i)), keys.toString());
-            assertTrue(keys.contains(new ProvenanceKey(file, 0, TraitKind.KEYWORD, 0, i)), keys.toString());
+            assertEquals(List.of(builtTrigger(file, 0).withOption(i), builtTrigger(file, 1).withOption(i)),
+                    keys);
             assertEquals(apis.get(i), options.get(i).script().apiType());
         }
     }
 
     // ── a keyword rendering one line per trait it generates (WP12 N1) ───
 
-    /** The keys of the line whose text starts with {@code prefix}, ignoring the card-wide keyword's. */
+    /** The keys of the line whose text starts with {@code prefix}. */
     private static List<ProvenanceKey> keysOfLine(Converted converted, String prefix) {
         List<ProvenanceSidecar.Line> lines = converted.sidecar().lines().stream()
                 .filter(line -> converted.lines().get(line.lineIndex()).startsWith(prefix))
                 .toList();
         assertEquals(1, lines.size(), prefix + " in " + converted.lines());
-        return lines.get(0).provenance().stream()
-                .filter(key -> key.traitKind() != TraitKind.KEYWORD).toList();
+        return lines.get(0).provenance();
     }
 
-    private static ProvenanceKey trigger(String file, int index) {
-        return new ProvenanceKey(file, 0, TraitKind.TRIGGER, index);
+    /** The {@code index}-th trigger the card's first keyword built, as its line declares it. */
+    private static ProvenanceKey builtTrigger(String file, int index) {
+        return new ProvenanceKey(file, 0, TraitKind.KEYWORD, 0).withBuilt(TraitKind.TRIGGER, index);
     }
 
     /**
      * The Chapter keyword generates one trigger per chapter and the converter
-     * one line per distinct chapter ability: each line carries its own
-     * chapters' triggers and no other, so a chapter II record reads chapter
-     * II's text (the join takes the first line holding a key). A line
-     * printed for two chapters ("I, II —") carries both, and its mode lines
-     * the modes of both and of no third.
+     * one line per distinct chapter ability: each line declares its own
+     * chapters' {@code built} keys and no other, so a chapter II record reads
+     * chapter II's text. A line printed for two chapters ("I, II —") declares
+     * both, and its mode lines the modes of both and of no third.
      */
     @Test
     void eachChapterLineCarriesItsOwnChaptersTriggersAlone() {
         Converted saga = convert("l/life_of_toshiro_umezawa_memory_of_toshiro.txt");
         String file = "cardsfolder/l/life_of_toshiro_umezawa_memory_of_toshiro.txt";
 
-        assertEquals(List.of(trigger(file, 0), trigger(file, 1)),
+        assertEquals(List.of(builtTrigger(file, 0), builtTrigger(file, 1)),
                 keysOfLine(saga, "chapter: I, II "));
-        assertEquals(List.of(trigger(file, 2)), keysOfLine(saga, "chapter: III "));
+        assertEquals(List.of(builtTrigger(file, 2)), keysOfLine(saga, "chapter: III "));
         for (ProvenanceSidecar.Line option : linesOfKind(saga, "option")) {
             assertFalse(option.provenance().stream().anyMatch(
-                    key -> key.traitKind() == TraitKind.TRIGGER && key.indexWithinKind() == 2),
+                    key -> builtTrigger(file, 2).equals(key.root())),
                     "chapter III has no modes: " + option.provenance());
         }
     }
@@ -395,9 +394,9 @@ class TraitScriptChainTest {
                         "Oracle:Exile."));
         String file = "cardsfolder/t/the_fall_of_lord_konda_fragment_of_konda.txt";
 
-        assertEquals(List.of(trigger(file, 0)), keysOfLine(konda, "chapter: I "));
-        assertEquals(List.of(trigger(file, 1)), keysOfLine(konda, "chapter: II "));
-        assertEquals(List.of(trigger(file, 2)), keysOfLine(konda, "chapter: III "));
+        assertEquals(List.of(builtTrigger(file, 0)), keysOfLine(konda, "chapter: I "));
+        assertEquals(List.of(builtTrigger(file, 1)), keysOfLine(konda, "chapter: II "));
+        assertEquals(List.of(builtTrigger(file, 2)), keysOfLine(konda, "chapter: III "));
     }
 
     /**
@@ -417,9 +416,9 @@ class TraitScriptChainTest {
                 "Oracle:Haunt"));
         String file = "cardsfolder/a/absolver_thrull.txt";
 
-        assertEquals(List.of(trigger(file, 2), trigger(file, 4)),
+        assertEquals(List.of(builtTrigger(file, 2), builtTrigger(file, 4)),
                 keysOfLine(thrull, "triggered: when "));
-        assertEquals(List.of(trigger(file, 0), trigger(file, 1), trigger(file, 3)),
+        assertEquals(List.of(builtTrigger(file, 0), builtTrigger(file, 1), builtTrigger(file, 3)),
                 keysOfLine(thrull, "triggered: haunt"));
     }
 
@@ -437,11 +436,11 @@ class TraitScriptChainTest {
                 "Oracle:You gain 1 life for each player."));
         String file = "cardsfolder/b/benediction_of_moons.txt";
 
-        assertEquals(List.of(new ProvenanceKey(file, 0, TraitKind.SPELL, 0)),
+        assertEquals(List.of(new ProvenanceKey(file, 0, TraitKind.KEYWORD, 0).withBuilt(TraitKind.SPELL, 0)),
                 keysOfLine(moons, "spell"));
-        assertEquals(List.of(trigger(file, 0), trigger(file, 1), trigger(file, 2)),
+        assertEquals(List.of(builtTrigger(file, 0), builtTrigger(file, 1), builtTrigger(file, 2)),
                 keysOfLine(moons, "triggered: haunt"));
-        assertEquals(List.of(trigger(file, 3)), keysOfLine(moons, "triggered: when "));
+        assertEquals(List.of(builtTrigger(file, 3)), keysOfLine(moons, "triggered: when "));
     }
 
     @Test

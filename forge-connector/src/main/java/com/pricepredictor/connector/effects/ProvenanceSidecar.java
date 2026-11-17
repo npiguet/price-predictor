@@ -109,7 +109,7 @@ public record ProvenanceSidecar(
                     // the file agree word for word.
                     owner.type().getOutputPrefix(),
                     rendered.prefix().length(),
-                    source == null ? List.of() : List.copyOf(source.keys()),
+                    keysOf(rendered, source),
                     source == null ? TraitScript.EMPTY : source.script(),
                     // Over the prose alone: the prefix is structure rather
                     // than card text, and the tokenizer does not see it.
@@ -121,5 +121,19 @@ public record ProvenanceSidecar(
             dropped.addAll(recorder.droppedKeys(seen));
         }
         return new ProvenanceSidecar(cardName, scriptFile, lines, dropped);
+    }
+
+    /**
+     * The keys {@code rendered} declares: its ability's, except that a
+     * continuation line of a multi-line text repeats no keyword key, which
+     * the text's first line declares (a Class level with continuation text).
+     */
+    private static List<ProvenanceKey> keysOf(RenderedLine rendered,
+                                              ProvenanceRecorder.Source source) {
+        if (source == null) return List.of();
+        if (!rendered.prefix().isEmpty()) return List.copyOf(source.keys());
+        return source.keys().stream()
+                .filter(key -> key.traitKind() != TraitKind.KEYWORD)
+                .toList();
     }
 }
