@@ -270,7 +270,7 @@ final class FaceParser {
         KeywordRendering.Builder rendering = new KeywordRendering.Builder();
         rendering.add(level);
         ki.getAbilities().forEach(levelUp -> rendering.printed(levelUp, level));
-        ki.getStaticAbilities().forEach(grant -> rendering.printed(grant, level));
+        ki.getStaticAbilities().forEach(grant -> rendering.chained(grant, level));
         return rendering.build();
     }
 

@@ -92,6 +92,16 @@ class GrantedTraitScriptTest {
         assertNothingMissing(ranger);
     }
 
+    /** Chapters printing one line alike give the first chapter's chain, not one per chapter. */
+    @Test
+    void aSagaLinePrintedByEveryChapterCarriesTheFirstChaptersChainAlone() {
+        String text = linesOfKind(convert("d/day_of_the_moon.txt"), "chapter").get(0)
+                .script().scriptText();
+
+        assertTrue(text.startsWith("Chapter$ 1 | "), text);
+        assertFalse(text.contains("Chapter$ 2"), text);
+    }
+
     @Test
     void anAnthemGrantingATriggerCarriesThatTriggersEffect() {
         Converted retaliation = convert("r/retaliation.txt");

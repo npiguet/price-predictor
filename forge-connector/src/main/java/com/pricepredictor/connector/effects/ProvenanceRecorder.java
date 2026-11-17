@@ -191,7 +191,7 @@ public final class ProvenanceRecorder {
      */
     private TraitScript lineScript(KeywordRendering rendering, Ability line, ProvenanceKey key,
                                    KeywordInterface keyword) {
-        List<CardTraitBase> traits = rendering.traitsOf(line);
+        List<CardTraitBase> traits = rendering.scriptTraitsOf(line);
         return traits.isEmpty() ? TraitScript.ofKeyword(keyword.getOriginal())
                 : TraitScript.ofTraits(traits, key, missingSVars);
     }
