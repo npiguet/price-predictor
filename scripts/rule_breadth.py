@@ -29,7 +29,6 @@ from effects.infrastructure.cli import exits_with
 from effects.infrastructure.converted_trees import SourceTrees
 from price_predictor.infrastructure.run_manifest import run_script
 
-
 #: The refusals ``rule-counts`` exits 1 on: no shards, a set that is not gen-3,
 #: a damaged shard or a line that does not decode.
 _REFUSED = {
