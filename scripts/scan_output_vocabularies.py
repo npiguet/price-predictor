@@ -73,8 +73,10 @@ def render(lists: dict[str, tuple[str, ...]], sources: list[str]) -> str:
     lines = [
         '"""The head\'s closed output lists (FR-052, FR-053): generated, do not edit.',
         "",
-        "Written by ``python scripts/scan_output_vocabularies.py`` from the records under",
-        ", ".join(f"``{source}``" for source in sources) + ".",
+        "Written by ``python scripts/scan_output_vocabularies.py`` from the records under:",
+        "",
+        *(f"- ``{source}``" for source in sources),
+        "",
         "A checkpoint records both lists and a loader refuses another, so rewriting this",
         "module means retraining.",
         '"""',

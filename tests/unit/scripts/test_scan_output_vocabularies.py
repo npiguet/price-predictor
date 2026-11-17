@@ -85,6 +85,14 @@ class TestTheScan:
         exec(target.read_text(encoding="utf-8"), namespace)
         assert {name: namespace[name] for name in lists} == lists
 
+    def test_the_written_module_keeps_to_the_line_length_with_many_sources(self):
+        """The sources go one per line, so ruff's E501 holds however many there are."""
+        lists = {"SUBTYPES_CHANGED": ("goblin",), "KEYWORDS_CHANGED": ("flying",)}
+        sources = [f"output/effects/gen3/scratch/2026-11-15-stall-{n}" for n in range(5)]
+        rendered = sov.render(lists, sources)
+        assert max(len(line) for line in rendered.splitlines()) <= 100
+        assert all(f"``{source}``" in rendered for source in sources)
+
     def test_forge_keywords_are_read_in_the_normalized_spelling(self, tmp_path):
         definitions = tmp_path / "keywords.json"
         definitions.write_text(json.dumps({"First Strike": {}, "Ward": {}}), encoding="utf-8")

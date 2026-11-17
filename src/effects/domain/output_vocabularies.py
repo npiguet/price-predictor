@@ -1,7 +1,13 @@
 """The head's closed output lists (FR-052, FR-053): generated, do not edit.
 
-Written by ``python scripts/scan_output_vocabularies.py`` from the records under
-``output/effects/gen3/scratch/2026-11-15-pilot``, ``output/effects/gen3/scratch/2026-11-15-stall-1``, ``output/effects/gen3/scratch/2026-11-15-stall-2``, ``output/effects/gen3/scratch/2026-11-15-stall-3``, ``tests/fixtures/effects/gen3-records.jsonl.gz``.
+Written by ``python scripts/scan_output_vocabularies.py`` from the records under:
+
+- ``output/effects/gen3/scratch/2026-11-15-pilot``
+- ``output/effects/gen3/scratch/2026-11-15-stall-1``
+- ``output/effects/gen3/scratch/2026-11-15-stall-2``
+- ``output/effects/gen3/scratch/2026-11-15-stall-3``
+- ``tests/fixtures/effects/gen3-records.jsonl.gz``
+
 A checkpoint records both lists and a loader refuses another, so rewriting this
 module means retraining.
 """
