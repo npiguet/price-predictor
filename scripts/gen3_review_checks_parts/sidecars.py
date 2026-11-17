@@ -6,9 +6,13 @@ import json
 from collections import Counter
 from pathlib import Path
 
+from effects.domain.provenance import ProvenanceKey
+from effects.infrastructure.sidecar_io import SidecarCache
+
 from .model import Line, key_tuple
 
 TREES = ("cardsfolder", "tokenscripts")
+UNDESCRIBED = "undescribed"
 
 
 class Sidecars:
@@ -17,6 +21,7 @@ class Sidecars:
     def __init__(self, root: Path) -> None:
         self.root = root
         self._cache: dict[str, dict | None] = {}
+        self.cache = SidecarCache({tree: root / tree for tree in TREES})
 
     def get(self, script_file: str) -> dict | None:
         if script_file not in self._cache:
@@ -33,45 +38,27 @@ class Sidecars:
         data["_text"] = text.split("\n")
         return data
 
-    def rows_holding(self, key: dict) -> list[dict] | None:
-        """Every sidecar line declaring ``key``; ``None`` when its script has no sidecar."""
-        data = self.get(key["script_file"])
-        if data is None:
-            return None
-        wanted = key_tuple(key)
-        return [
-            line
-            for line in data["lines"]
-            if any(key_tuple(p) == wanted for p in line["provenance"])
-        ]
+    def resolution_of(self, key: dict) -> str:
+        """The join's answer for a record's key (``KeyResolution`` value), or
+        ``undescribed`` where the sidecar does not describe it."""
+        try:
+            return self.cache.join(ProvenanceKey.from_dict(key)).resolution.value
+        except KeyError:
+            return UNDESCRIBED
 
-    def is_dropped(self, key: dict) -> bool:
-        data = self.get(key["script_file"])
-        if data is None:
-            return False
-        return any(key_tuple(k) == key_tuple(key) for k in data["dropped_keys"])
-
-    def has_declared_slot(self, key: dict) -> bool:
-        """Whether ``key``'s (face, trait kind) slot reaches its index in the sidecar."""
-        data = self.get(key["script_file"])
-        slot = (key["face"], key["trait_kind"])
-        indices = [
-            k["index_within_kind"]
-            for k in _declared_keys(data)
-            if (k["face"], k["trait_kind"]) == slot
-        ]
-        return bool(indices) and key["index_within_kind"] <= max(indices)
+    def board_slots(self, key: dict) -> list[dict]:
+        """The keys a board line of ``key`` reads as slots (``board_keys``)."""
+        provenance = ProvenanceKey.from_dict(key)
+        try:
+            slots = self.cache.get(key["script_file"]).board_keys(provenance)
+        except KeyError:
+            return [key]
+        return [slot.as_dict() for slot in slots]
 
     def line_text(self, script_file: str, line: dict) -> str:
         data = self.get(script_file)
         index = line["line_index"]
         return data["_text"][index] if data and 0 <= index < len(data["_text"]) else ""
-
-
-def _declared_keys(data: dict | None) -> list[dict]:
-    if data is None:
-        return []
-    return [k for line in data["lines"] for k in line["provenance"]] + list(data["dropped_keys"])
 
 
 def _has_doubly_declared_key(data: dict) -> bool:

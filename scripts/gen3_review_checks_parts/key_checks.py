@@ -1,27 +1,21 @@
-"""Keys the records name against the converted sidecars: which resolve to one line."""
+"""Keys the records name against the converted sidecars, read through the effects join."""
 
 from __future__ import annotations
 
+from effects.domain.provenance import KeyResolution
+
 from .model import TallyCheck, entities_of
-from .sidecars import Sidecars
+from .sidecars import UNDESCRIBED, Sidecars
 
 POSITIONS = ("acting-keys", "board-lines")
-KINDS = ("keyword", "spell", "trigger", "static", "replacement")
+OUTCOMES = (*(resolution.value for resolution in KeyResolution), UNDESCRIBED)
 
 
 def classify(sidecars: Sidecars, key: dict) -> str:
-    """``line`` (exactly one), ``ambiguous``, ``dropped``, ``runtime-only``, ``undescribed``
-    or ``unconverted``."""
-    rows = sidecars.rows_holding(key)
-    if rows is None:
-        return "unconverted"
-    if len(rows) > 1:
-        return "ambiguous"
-    if rows:
-        return "line"
-    if sidecars.is_dropped(key):
-        return "dropped"
-    return "runtime-only" if not sidecars.has_declared_slot(key) else "undescribed"
+    """What the join answers for ``key``: a ``KeyResolution`` value (``line``,
+    ``ambiguous``, ``dropped``, ``runtime-only``, ``unconverted``, ``unconfigured-tree``),
+    or ``undescribed``."""
+    return sidecars.resolution_of(key)
 
 
 def _board_keys(record: dict) -> list[dict]:
@@ -33,12 +27,10 @@ def _board_keys(record: dict) -> list[dict]:
     ]
 
 
-class AmbiguousKeys(TallyCheck):
-    """Acting and board keys that do not resolve to exactly one line, by key kind."""
+class JoinedKeys(TallyCheck):
+    """Acting and board keys by the join's answer; a board key counts once per slot."""
 
-    NAMES = tuple(f"{p}-ambiguous[{k}]" for p in POSITIONS for k in KINDS) + tuple(
-        f"{p}-undescribed-or-unconverted" for p in POSITIONS
-    )
+    NAMES = tuple(f"{p}-{o}" for p in POSITIONS for o in OUTCOMES)
 
     def __init__(self, sidecars: Sidecars) -> None:
         super().__init__()
@@ -46,11 +38,11 @@ class AmbiguousKeys(TallyCheck):
 
     def feed(self, record: dict) -> None:
         self._tally("acting-keys", record.get("ability") or ())
-        self._tally("board-lines", _board_keys(record))
+        slots = [slot for key in _board_keys(record) for slot in self.sidecars.board_slots(key)]
+        self._tally("board-lines", slots)
 
     def _tally(self, position: str, keys) -> None:
         for key in keys:
-            outcome = classify(self.sidecars, key)
-            self.add(f"{position}-ambiguous[{key['trait_kind']}]", outcome == "ambiguous")
-            unjoined = outcome in ("undescribed", "unconverted")
-            self.add(f"{position}-undescribed-or-unconverted", unjoined)
+            answer = classify(self.sidecars, key)
+            for outcome in OUTCOMES:
+                self.add(f"{position}-{outcome}", answer == outcome)

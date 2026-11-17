@@ -18,7 +18,7 @@ from .event_checks import (
 from .forced_checks import ForcedHalves, ForcedUnattached
 from .game_checks import LethalCombat, MarkedGames, RescueRecords
 from .half_checks import EquipHalves, FizzledHalves
-from .key_checks import AmbiguousKeys
+from .key_checks import JoinedKeys
 from .model import Check, Line
 from .protection import ProtectionForks
 from .sidecars import Sidecars, keys_declared_by_two_lines
@@ -28,7 +28,7 @@ from .tree_checks import tree_lines
 
 def build_checks(sidecars: Sidecars) -> list[Check]:
     return [
-        AmbiguousKeys(sidecars),
+        JoinedKeys(sidecars),
         EquipHalves(),
         CounterHalves(sidecars),
         FizzledHalves(),

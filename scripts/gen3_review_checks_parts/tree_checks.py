@@ -87,13 +87,18 @@ def tally_meld(tally: TreeTally, data: dict, text_lines: list[str]) -> None:
     tally.add(MELD, all(k["face"] != 1 for k in keys))
 
 
+def declares_built_trait(key: dict) -> bool:
+    return key["trait_kind"] != "keyword" or key.get("built") is not None
+
+
 def tally_class_levels(tally: TreeTally, data: dict, text_lines: list[str]) -> None:
-    """Levels 2 and up declare the bare ``Class:N`` keyword key and no key it built."""
+    """Levels 2 and up declare the bare ``Class:N`` keyword key and no key it built: no
+    other kind of key, and no ``built`` key of the keyword."""
     for line in data["lines"]:
         if line["line_kind"] != "level":
             continue
         match = LEVEL_PREFIX.match(text_lines[line["line_index"]])
-        indexed = any(k["trait_kind"] != "keyword" for k in line["provenance"])
+        indexed = any(declares_built_trait(k) for k in line["provenance"])
         tally.add(CLASS_LEVEL, bool(match) and int(match.group(1)) >= 2 and indexed)
 
 

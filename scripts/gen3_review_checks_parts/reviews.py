@@ -10,11 +10,6 @@ from __future__ import annotations
 REVIEW_COUNTS = {
     # report-slice-19.md, Q1 answer: keys declared by more than one line of one face, in cards.
     "keys-declared-by-two-lines": "451 cards",
-    # report-slice-19.md: 25 acting keys and 3,379 board lines of the additional-cost class
-    # (189 cards); 2,912 board lines of sagas over 4 shards.
-    "acting-keys-ambiguous[spell]": "25",
-    "board-lines-ambiguous[spell]": "3379",
-    "board-lines-ambiguous[keyword]": "2912 (4 shards)",
     # report-verify-01.md, claims table and claim 1: live Equip halves holding `attached`.
     "equip-halves-without-stat-change": "356",
     "equip-halves-with-stat-change": "16",

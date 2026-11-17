@@ -8,7 +8,9 @@ from pathlib import Path
 
 import gen3_review_checks as grc
 from gen3_review_checks_parts.convoke import is_convoke_row, mana_value, reduction
+from gen3_review_checks_parts.key_checks import JoinedKeys
 from gen3_review_checks_parts.model import Line
+from gen3_review_checks_parts.sidecars import Sidecars
 from gen3_review_checks_parts.tree_checks import tree_lines
 
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "effects"
@@ -17,9 +19,10 @@ RECORDS = FIXTURES / "gen3-records.jsonl.gz"
 
 CHECK_NAMES = (
     "keys-declared-by-two-lines",
-    "acting-keys-ambiguous[spell]",
-    "board-lines-ambiguous[spell]",
-    "board-lines-undescribed-or-unconverted",
+    "acting-keys-line",
+    "acting-keys-ambiguous",
+    "board-lines-line",
+    "board-lines-undescribed",
     "equip-halves-without-stat-change",
     "equip-halves-with-stat-change",
     "counter-halves-random-seat-countered[spell-target]",
@@ -224,3 +227,44 @@ def test_the_script_runs_the_tree_checks_alone_without_records(capsys) -> None:
     assert "meld-halves-without-face-1" in out
     assert "keys-declared-by-two-lines" in out
     assert "equip-halves" not in out
+
+
+def _key(script_file: str, kind: str = "keyword", index: int = 0, **extra) -> dict:
+    return {"script_file": script_file, "face": 0, "trait_kind": kind,
+            "index_within_kind": index, **extra}
+
+
+def _joined(acting: list[dict], board: list[dict]) -> dict[str, tuple[int, int]]:
+    check = JoinedKeys(Sidecars(SIDECARS))
+    entity = {"lines": [{"keys": [key]} for key in board]}
+    check.feed({"ability": acting, "state": {"entities": [entity]}})
+    return {line.name: (line.count, line.total) for line in check.lines() if line.total}
+
+
+AIR_ELEMENTAL = "cardsfolder/a/air_elemental.txt"
+SAGA = "cardsfolder/b/binding_the_old_gods.txt"
+
+
+def test_a_built_key_of_a_one_line_keyword_resolves_to_its_line() -> None:
+    built = _key(AIR_ELEMENTAL, built={"kind": "trigger", "index": 0})
+    counts = _joined([built], [])
+    assert counts["acting-keys-line"] == (1, 1)
+    assert counts["acting-keys-undescribed"] == (0, 1)
+
+
+def test_a_sagas_bare_key_is_ambiguous_acting_and_a_line_per_chapter_on_the_board() -> None:
+    bare = _key(SAGA)
+    counts = _joined([bare], [bare])
+    assert counts["acting-keys-ambiguous"] == (1, 1)
+    assert counts["board-lines-line"] == (3, 3)
+    assert counts["board-lines-ambiguous"] == (0, 3)
+
+
+def test_a_class_level_line_declaring_a_built_key_is_flagged(tmp_path: Path) -> None:
+    root = _tree_copy(tmp_path)
+
+    def build_level_2(data: dict) -> None:
+        data["lines"][1]["provenance"][0]["built"] = {"kind": "static", "index": 0}
+
+    _edit_sidecar(root, "r/ranger_class", build_level_2)
+    assert _tree_counts(root)["class-level-lines-with-kind-indexed-key"] == (1, 3)
