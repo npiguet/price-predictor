@@ -1,4 +1,4 @@
-"""``rule-counts`` over the real gen-2 fixture (T033).
+"""``rule-counts`` over the real gen-3 fixture (T033).
 
 The catalogue is a small ``rules/scenarios`` tree written per test, declaring
 detectors the fixture's records show; the records are the real ones.
@@ -22,8 +22,8 @@ from effects.application.rule_counts import (
 )
 
 FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
-GEN2 = FIXTURES / "gen2-records.jsonl.gz"
-SIDECARS = FIXTURES / "gen2-sidecars"
+GEN3 = FIXTURES / "gen3-records.jsonl.gz"
+SIDECARS = FIXTURES / "gen3-sidecars"
 
 
 def _scenario(sid, rules, kind, detector):
@@ -80,69 +80,74 @@ def _config(tmp_path, records_dir, workers=1):
 
 
 @pytest.fixture
-def gen2_dir(tmp_path):
+def gen3_dir(tmp_path):
     directory = tmp_path / "records"
     directory.mkdir()
-    shutil.copyfile(GEN2, directory / GEN2.name)
+    shutil.copyfile(GEN3, directory / GEN3.name)
     return directory
 
 
-def test_the_fixture_s_deaths_are_counted_per_side(tmp_path, gen2_dir):
-    counts, _ = count(_config(tmp_path, gen2_dir))
+def test_the_fixture_s_deaths_are_counted_per_side(tmp_path, gen3_dir):
+    counts, _ = count(_config(tmp_path, gen3_dir))
     document = counts.to_json({})
-    fires = sum(document["rules"]["704.5f"]["fires"].values())
-    near = sum(document["rules"]["704.5f"]["does_not_fire"].values())
-    assert fires >= 3 and near >= 3
-    assert sum(document["rules"]["704.5g"]["fires"].values()) >= 3
+    assert document["records"] == 314
+    assert document["generation"] == "gen-3"
+    assert document["rules"]["704.5f"] == {
+        "fires": {"random_seat": 2}, "does_not_fire": {"random_seat": 3}}
+    assert document["rules"]["704.5g"] == {"fires": {"forge_ai": 6, "random_seat": 5}}
+    assert document["rules"]["702.2b"] == {"does_not_fire": {"random_seat": 2}}
+    assert document["rules"]["601.2"] == {
+        "fires": {"aimed": 1, "forge_ai": 4, "random_seat": 18},
+        "does_not_fire": {"aimed": 2, "forge_ai": 12, "random_seat": 10}}
 
 
-def test_a_gen2_record_is_natural_and_a_forge_ai_game_counts_as_forge_ai(tmp_path, gen2_dir):
-    counts, _ = count(_config(tmp_path, gen2_dir))
+def test_the_fixture_holds_every_source(tmp_path, gen3_dir):
+    counts, _ = count(_config(tmp_path, gen3_dir))
     sources = {source for (_, _, source) in counts.counts}
-    assert str(RuleSource.AIMED) not in sources
-    assert str(RuleSource.FORGE_AI) in sources
+    assert sources == {str(s) for s in RuleSource}
 
 
-_DECREE = "50e3aa10-aa8d-4153-a614-e786a1dc6a6d.0-mv5fnkmsv6yb.1019"
+_FIRST_DEATH_GAME = "9442f17f-cb56-4893-8d4a-66b5538de180.0-mwhr12znmj0t.0"
 
 
-def test_a_game_s_source_follows_any_of_its_records(tmp_path, gen2_dir):
-    """The fixture's three 704.5f deaths are all in random-seat games, the
-    random seat named by another record of each. Clearing the random seat from
-    Decree of Pain's whole game moves its death, and no other, to ``forge_ai``.
+def test_a_game_s_source_follows_any_of_its_records(tmp_path, gen3_dir):
+    """The fixture's two 704.5f deaths and the first of its three non-deaths
+    are in one game, a random-seat game by another record of it. Clearing the
+    random seat from that whole game moves its three tags, and no other, to
+    ``forge_ai``.
     """
-    original, _ = count(_config(tmp_path / "a", gen2_dir))
+    original, _ = count(_config(tmp_path / "a", gen3_dir))
     assert original.to_json({})["rules"]["704.5f"]["fires"] == {
-        str(RuleSource.RANDOM_SEAT): 3}
-    path = gen2_dir / GEN2.name
+        str(RuleSource.RANDOM_SEAT): 2}
+    path = gen3_dir / GEN3.name
     records = [json.loads(line) for line in gzip.open(path, "rt", encoding="utf-8")]
-    game = next(r["game_id"] for r in records if r["record_id"] == _DECREE)
+    assert any(r["random_seat"] for r in records if r["game_id"] == _FIRST_DEATH_GAME)
     for record in records:
-        if record["game_id"] == game:
+        if record["game_id"] == _FIRST_DEATH_GAME:
             record["random_seat"] = False
     with gzip.open(path, "wt", encoding="utf-8") as out:
         out.write("".join(json.dumps(r) + "\n" for r in records))
-    counts, _ = count(_config(tmp_path / "b", gen2_dir))
-    assert counts.to_json({})["rules"]["704.5f"]["fires"] == {
-        str(RuleSource.RANDOM_SEAT): 2, str(RuleSource.FORGE_AI): 1}
+    counts, _ = count(_config(tmp_path / "b", gen3_dir))
+    rule = counts.to_json({})["rules"]["704.5f"]
+    assert rule["fires"] == {str(RuleSource.FORGE_AI): 2}
+    assert rule["does_not_fire"] == {str(RuleSource.RANDOM_SEAT): 2, str(RuleSource.FORGE_AI): 1}
 
 
-def test_a_rule_needing_a_gen3_field_is_listed_not_countable(tmp_path, gen2_dir):
-    counts, standing = count(_config(tmp_path, gen2_dir))
+def test_every_declared_rule_is_countable_on_gen3_records(tmp_path, gen3_dir):
+    counts, standing = count(_config(tmp_path, gen3_dir))
     document = counts.to_json(standing)
-    assert document["not_countable"] == ["601.2"]
-    assert "601.2" not in document["declared_zero"]
-    assert "601.2" not in document["rules"]
+    assert document["not_countable"] == []
+    assert "601.2" in document["rules"]
 
 
-def test_a_none_rule_is_listed_with_its_reason(tmp_path, gen2_dir):
-    counts, standing = count(_config(tmp_path, gen2_dir))
+def test_a_none_rule_is_listed_with_its_reason(tmp_path, gen3_dir):
+    counts, standing = count(_config(tmp_path, gen3_dir))
     assert standing.none == {"613.1": "layer order is in no field"}
 
 
-def test_a_declared_rule_no_record_tags_is_listed_with_zero_records(tmp_path, gen2_dir):
+def test_a_declared_rule_no_record_tags_is_listed_with_zero_records(tmp_path, gen3_dir):
     """D3(d), V5 #22: absent is no longer silent."""
-    counts, standing = count(_config(tmp_path, gen2_dir))
+    counts, standing = count(_config(tmp_path, gen3_dir))
     document = counts.to_json(standing)
     assert "704.5k" not in document["rules"]
     assert document["declared_zero"] == ["704.5k"]
@@ -150,11 +155,11 @@ def test_a_declared_rule_no_record_tags_is_listed_with_zero_records(tmp_path, ge
     assert "  704.5k" in report_lines(document)
 
 
-def test_untaggable_and_same_as_scenarios_are_reported(tmp_path, gen2_dir):
+def test_untaggable_and_same_as_scenarios_are_reported(tmp_path, gen3_dir):
     """V5 #14 and D4: a declaration asking a Draw resolution for the game's
     end tags nothing and is named with its reason; a same_as scenario is reported
     under the one it points at and counted nowhere else."""
-    counts, standing = count(_config(tmp_path, gen2_dir))
+    counts, standing = count(_config(tmp_path, gen3_dir))
     document = counts.to_json(standing)
     assert "121.4" not in document["rules"] and "121.4" not in document["declared_zero"]
     assert document["untaggable"]["121.4-1"]["rules"] == ["121.4"]
@@ -166,41 +171,42 @@ def test_untaggable_and_same_as_scenarios_are_reported(tmp_path, gen2_dir):
     assert "  704.5f-2 (704.3) -> 704.5f-1 (704.5f)" in lines
 
 
-def test_the_review_list_names_record_and_scenario(tmp_path, gen2_dir):
+_NON_DEATH = "9442f17f-cb56-4893-8d4a-66b5538de180.0-mwhr12znmj0t.130"
+
+
+def test_the_review_list_names_record_and_scenario(tmp_path, gen3_dir):
     """On a shard holding one record whose outcome disagrees with its side
     (a creature left at toughness 1 that dies anyway, 704.5f): the fixture
     alone holds none, so the list was never read."""
     from dataclasses import replace
 
     from effects.domain.event_schema import EventType
-    from effects.domain.records import ResolutionPayload
     from effects.infrastructure.shard_io import read_shard, write_shard
 
-    grind_dust = "50e3aa10-aa8d-4153-a614-e786a1dc6a6d.1-mv5eiqndmfap.8695"
-    counts, _ = count(_config(tmp_path / "plain", gen2_dir))
+    counts, _ = count(_config(tmp_path / "plain", gen3_dir))
     assert counts.review == set()
 
     records = []
-    for record in read_shard(gen2_dir / GEN2.name):
-        if record.record_id == grind_dust:
+    for record in read_shard(gen3_dir / GEN3.name):
+        if record.record_id == _NON_DEATH:
             shrink = next(e for e in record.payload.events if e.type is EventType.PT_CHANGE)
             death = replace(shrink, type=EventType.ZONE_CHANGE, attributed_to="unresolved",
                             params={"from_zone": "battlefield", "to_zone": "graveyard"})
-            record = replace(record, payload=ResolutionPayload(
-                events=(*record.payload.events, death)))
+            record = replace(record, payload=replace(
+                record.payload, events=(*record.payload.events, death)))
         records.append(record)
     planted = tmp_path / "planted"
-    write_shard(planted / GEN2.name, records)
+    write_shard(planted / GEN3.name, records)
 
     counts, _ = count(_config(tmp_path / "counted", planted))
-    assert counts.review == {(grind_dust, "704.5f-1")}
+    assert counts.review == {(_NON_DEATH, "704.5f-1")}
 
 
 @pytest.mark.parametrize(("aimed_at", "source"), [
     (("704.5f",), "aimed"), ((), "aimed"), (None, "forge_ai"),
 ])
 def test_a_record_carrying_aimed_at_counts_as_aimed_even_when_empty(
-    tmp_path, gen2_dir, aimed_at, source,
+    tmp_path, gen3_dir, aimed_at, source,
 ):
     """The member's presence is the source (FR-009a): a coverage or variant
     run writes ``[]`` where it names no rule, and its records are aimed; a
@@ -209,21 +215,38 @@ def test_a_record_carrying_aimed_at_counts_as_aimed_even_when_empty(
 
     from effects.infrastructure.shard_io import read_shard, write_shard
 
-    records = [replace(record, aimed_at=aimed_at) for record in read_shard(gen2_dir / GEN2.name)
-               if not record.random_seat]
-    shard = tmp_path / "aimed" / GEN2.name
+    every = list(read_shard(gen3_dir / GEN3.name))
+    seat_games = {record.game_id for record in every if record.random_seat}
+    records = [replace(record, aimed_at=aimed_at) for record in every
+               if record.game_id not in seat_games and record.directed is None]
+    shard = tmp_path / "aimed" / GEN3.name
     write_shard(shard, records)
 
     counts, _ = count(_config(tmp_path, shard.parent))
     assert counts.counts and {found for (_rule, _side, found) in counts.counts} == {source}
 
 
-def test_one_and_several_workers_count_alike(tmp_path, gen2_dir):
-    second = gen2_dir / "copy.jsonl.gz"
-    shutil.copyfile(gen2_dir / GEN2.name, second)
-    one, _ = count(_config(tmp_path, gen2_dir, workers=1))
-    two, _ = count(_config(tmp_path / "b", gen2_dir, workers=2))
+def test_one_and_several_workers_count_alike(tmp_path, gen3_dir):
+    second = gen3_dir / "copy.jsonl.gz"
+    shutil.copyfile(gen3_dir / GEN3.name, second)
+    one, _ = count(_config(tmp_path, gen3_dir, workers=1))
+    two, _ = count(_config(tmp_path / "b", gen3_dir, workers=2))
     assert one.counts == two.counts and one.records == two.records
+
+
+def test_a_gen2_set_is_refused_naming_its_generation(tmp_path):
+    """A shard whose records carry no ``generation`` member and a
+    ``random_seat`` one is gen-2: ``count`` refuses it, naming the generation."""
+    from effects.domain.shard_generation import UnacceptedGenerationError
+
+    records = tmp_path / "records"
+    records.mkdir()
+    with gzip.open(GEN3, "rt", encoding="utf-8") as source:
+        data = json.loads(next(source))
+    del data["generation"]
+    (records / "gen2.jsonl").write_text(json.dumps(data) + "\n", encoding="utf-8")
+    with pytest.raises(UnacceptedGenerationError, match=r"gen2\.jsonl holds gen-2 records"):
+        count(_config(tmp_path, records))
 
 
 def test_the_report_groups_rules_by_unit():
@@ -243,9 +266,6 @@ def test_unit_of(rule, unit):
 
 
 # --- carriers (T185, FR-058f) ---------------------------------------------------------------
-
-GEN3 = FIXTURES / "gen3-records.jsonl.gz"
-GEN3_SIDECARS = FIXTURES / "gen3-sidecars"
 
 _CARRIER_CATALOGUE = (
     _scenario("702.2b-1", ["702.2b"], "combat", {
@@ -272,8 +292,8 @@ def _gen3_document(tmp_path, workers=1, copies=1, *, ended=True):
     config = RuleCountsConfig(
         records_dir=records, output=tmp_path / "rule-counts.json",
         rules_dir=_rules_dir(tmp_path, *_CARRIER_CATALOGUE),
-        sidecar_roots={"cardsfolder": GEN3_SIDECARS / "cardsfolder",
-                       "tokenscripts": GEN3_SIDECARS / "tokenscripts"},
+        sidecar_roots={"cardsfolder": SIDECARS / "cardsfolder",
+                       "tokenscripts": SIDECARS / "tokenscripts"},
         workers=workers)
     counts, standing = count(config)
     return counts.to_json(standing)
@@ -299,11 +319,6 @@ def test_a_cut_game_is_left_out_of_every_count_and_counted(tmp_path):
     # nowhere, neither as records nor as rules they could not count.
     assert cut["records"] == 0 and ended["records"] > 0
     assert cut["not_countable"] == []
-
-
-def test_a_gen2_game_is_never_cut(tmp_path, gen2_dir):
-    counts, standing = count(_config(tmp_path, gen2_dir))
-    assert counts.cut_games == 0 and counts.counts
 
 
 def _carrier(carriers, rule, script_file):

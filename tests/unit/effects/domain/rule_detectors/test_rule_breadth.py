@@ -1,8 +1,9 @@
-"""The breadth check: the pool a detector's rule is cut from, on real gen-2 records (T036)."""
+"""The breadth check: the pool a detector's rule is cut from, on real gen-3 records (T036)."""
 
 from __future__ import annotations
 
 from collections import Counter
+from pathlib import Path
 
 import pytest
 
@@ -18,7 +19,23 @@ from effects.domain.rule_breadth import (
 )
 from effects.domain.rule_detectors import DetectorIndex, families
 from effects.domain.rule_detectors.acting_line import acting_line
+from effects.infrastructure.shard_io import read_shard
 from tests.unit.effects.domain.rule_detectors.builders import catalogue, declaration, scenario
+
+_FIXTURES = Path(__file__).parents[4] / "fixtures" / "effects"
+
+
+@pytest.fixture(scope="module")
+def gen3_records():
+    return list(read_shard(_FIXTURES / "gen3-records.jsonl.gz"))
+
+
+@pytest.fixture(scope="module")
+def gen3_sidecars():
+    from effects.infrastructure.converted_trees import SourceTrees
+
+    root = _FIXTURES / "gen3-sidecars"
+    return SourceTrees.of([root / "cardsfolder", root / "tokenscripts"]).sidecar_cache()
 
 
 def test_every_family_s_general_parameters_are_its_own():
@@ -34,17 +51,18 @@ def test_the_pool_keeps_the_rule_s_subject_and_drops_its_situation():
     assert pool_params(narrowed, family) == {"event": "zone_change", "api": "OpenAttraction"}
 
 
-def _zone_change_effect(gen2_records, gen2_sidecars):
-    """A real effect half moving a card, its acting line's API and the zone
-    the first move went to."""
-    for record in gen2_records:
+def _zone_change_effect(gen3_records, gen3_sidecars):
+    """A real effect half moving cards to one zone only, its acting line's
+    API and that zone."""
+    for record in gen3_records:
         if record.kind is not RecordKind.RESOLUTION or record.moment is not Moment.RESOLUTION:
             continue
-        line = acting_line(record, gen2_sidecars)
+        line = acting_line(record, gen3_sidecars)
         moves = [e for e in record.payload.listed_events() if e.type.value == "zone_change"
                  and (e.params or {}).get("to_zone")]
-        if line is not None and line.script_api_type and moves:
-            return record, line.script_api_type, moves[0].params["to_zone"]
+        zones = {move.params["to_zone"] for move in moves}
+        if line is not None and line.script_api_type and len(zones) == 1:
+            return record, line.script_api_type, zones.pop()
     pytest.fail("no effect half in the fixture moves a card")
 
 
@@ -54,8 +72,8 @@ def _index(*declared):
         for sid, detector in declared)))
 
 
-def test_a_move_to_another_zone_is_in_the_pool_and_not_tagged(gen2_records, gen2_sidecars):
-    record, api, zone = _zone_change_effect(gen2_records, gen2_sidecars)
+def test_a_move_to_another_zone_is_in_the_pool_and_not_tagged(gen3_records, gen3_sidecars):
+    record, api, zone = _zone_change_effect(gen3_records, gen3_sidecars)
     elsewhere = "command" if zone != "command" else "ante"
     index = _index(
         ("1.1-1", declaration("outcome_event", "resolution", event="zone_change", api=api,
@@ -64,17 +82,10 @@ def test_a_move_to_another_zone_is_in_the_pool_and_not_tagged(gen2_records, gen2
                               to_zone=elsewhere)),
         ("1.3-1", declaration("outcome_event", "resolution", event="zone_change",
                               api="Mill" if api != "Mill" else "Draw")))
-    found = breadth_counts(record, index, gen2_sidecars)
+    found = breadth_counts(record, index, gen3_sidecars)
     assert found[("1.1-1", POOL)] == found[("1.1-1", TAGGED)] == 1
     assert found[("1.2-1", POOL)] == 1 and found[("1.2-1", TAGGED)] == 0
     assert not found[("1.3-1", POOL)]  # another rule's subject
-
-
-def test_a_declaration_needing_a_gen3_field_is_skipped_on_gen2(gen2_records, gen2_sidecars):
-    record, _, _ = _zone_change_effect(gen2_records, gen2_sidecars)
-    index = _index(("1.1-1", declaration("outcome_event", "resolution", needs=("owner",),
-                                         event="zone_change")))
-    assert not breadth_counts(record, index, gen2_sidecars)
 
 
 def test_rows_carry_every_declared_scenario_and_what_it_dropped():

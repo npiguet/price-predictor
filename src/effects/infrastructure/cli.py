@@ -814,7 +814,7 @@ def _rule_counts_parser(subparsers) -> None:
     parser.set_defaults(func=run_rule_counts)
     parser.add_argument(
         "--records-dir", type=Path, required=True,
-        help="Shards to count: gen-2 or gen-3, never a mix",
+        help="Shards to count: gen-3 records only",
     )
     parser.add_argument(
         "--output", type=Path, default=Path(DEFAULT_RULE_COUNTS),

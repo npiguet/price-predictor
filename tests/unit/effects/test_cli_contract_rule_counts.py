@@ -2,7 +2,8 @@
 
 Flags and defaults as the contract lists them; the counts file and the
 printed table say the same thing; an empty directory and a mix of
-generations each exit 1.
+generations each exit 1. Only gen-3 records are read: a set of an older
+generation exits 1, naming it.
 """
 
 from __future__ import annotations
@@ -18,7 +19,8 @@ from effects.domain.default_paths import DEFAULT_CARDS_FOLDER_PATHS, DEFAULT_VAR
 from effects.infrastructure.cli import build_parser
 
 FIXTURES = Path(__file__).parents[2] / "fixtures" / "effects"
-SIDECARS = FIXTURES / "gen2-sidecars"
+GEN3 = FIXTURES / "gen3-records.jsonl.gz"
+SIDECARS = FIXTURES / "gen3-sidecars"
 
 
 def parse(*argv: str):
@@ -72,9 +74,19 @@ def _run(tmp_path, records: Path, workers: int = 1):
     return args.func(args)
 
 
-def _gen2_lines() -> list[str]:
-    with gzip.open(FIXTURES / "gen2-records.jsonl.gz", "rt", encoding="utf-8") as source:
+def _gen3_lines() -> list[str]:
+    with gzip.open(GEN3, "rt", encoding="utf-8") as source:
         return [line.rstrip("\n") for line in source if line.strip()]
+
+
+def _older(line: str, generation: str) -> str:
+    """A record of an older generation, made of a real gen-3 one: gen-2 has
+    no ``generation`` member, gen-1 no ``random_seat`` either."""
+    data = json.loads(line)
+    del data["generation"]
+    if generation == "gen-1":
+        del data["random_seat"]
+    return json.dumps(data)
 
 
 @pytest.mark.parametrize("workers", [1, 2])
@@ -82,8 +94,8 @@ def test_a_line_that_does_not_decode_exits_1_naming_shard_and_line(tmp_path, cap
     """Raised in a pool worker too: the location crosses the process boundary."""
     records = tmp_path / "records"
     records.mkdir()
-    lines = _gen2_lines()
-    shutil.copyfile(FIXTURES / "gen2-records.jsonl.gz", records / "a.jsonl.gz")
+    lines = _gen3_lines()
+    shutil.copyfile(GEN3, records / "a.jsonl.gz")
     broken = json.loads(lines[1])
     broken["kind"] = "no_such_kind"
     (records / "b.jsonl").write_text(
@@ -97,7 +109,7 @@ def test_a_line_that_does_not_decode_exits_1_naming_shard_and_line(tmp_path, cap
 def test_a_shard_damaged_before_its_last_member_exits_1(tmp_path, caplog):
     records = tmp_path / "records"
     records.mkdir()
-    first, second = (gzip.compress((line + "\n").encode("utf-8")) for line in _gen2_lines()[:2])
+    first, second = (gzip.compress((line + "\n").encode("utf-8")) for line in _gen3_lines()[:2])
     (records / "c.jsonl.gz").write_bytes(first + b"XX" + first[2:] + second)
     with caplog.at_level("ERROR"):
         assert _run(tmp_path, records, workers=2) == 1
@@ -109,7 +121,7 @@ def test_the_values_outside_the_closed_lists_are_printed_summed(tmp_path, capsys
     """Counted in each worker, handed back with its shard's counts, printed once."""
     records = tmp_path / "records"
     records.mkdir()
-    lines = _gen2_lines()
+    lines = _gen3_lines()
     for name in ("a", "b"):
         odd = json.loads(lines[0])
         odd["state"]["global"]["phase"] = "teatime"
@@ -122,7 +134,7 @@ def test_the_values_outside_the_closed_lists_are_printed_summed(tmp_path, capsys
 def test_the_file_and_the_table_agree(tmp_path, capsys):
     records = tmp_path / "records"
     records.mkdir()
-    shutil.copyfile(FIXTURES / "gen2-records.jsonl.gz", records / "gen2.jsonl.gz")
+    shutil.copyfile(GEN3, records / "gen3.jsonl.gz")
     assert _run(tmp_path, records) == 0
     document = json.loads((tmp_path / "counts.json").read_text(encoding="utf-8"))
     sides = document["rules"]["704.5f"]
@@ -143,20 +155,23 @@ def test_an_empty_directory_exits_1(tmp_path):
 def test_a_mix_of_generations_exits_1(tmp_path):
     records = tmp_path / "records"
     records.mkdir()
-    shutil.copyfile(FIXTURES / "gen2-records.jsonl.gz", records / "gen2.jsonl.gz")
-    with gzip.open(FIXTURES / "gen2-records.jsonl.gz", "rt", encoding="utf-8") as source, \
-            gzip.open(records / "gen3.jsonl.gz", "wt", encoding="utf-8") as out:
-        for line in source:
-            data = json.loads(line)
-            out.write(json.dumps({"record_id": data["record_id"], "generation": 3, **data}) + "\n")
+    shutil.copyfile(GEN3, records / "gen3.jsonl.gz")
+    (records / "gen2.jsonl").write_text(_older(_gen3_lines()[0], "gen-2") + "\n",
+                                        encoding="utf-8")
     assert _run(tmp_path, records) == 1
 
 
-def test_a_gen1_set_exits_1(tmp_path):
+@pytest.mark.parametrize("generation", ["gen-1", "gen-2"])
+def test_an_older_generation_s_set_exits_1_naming_it(tmp_path, caplog, generation):
     records = tmp_path / "records"
     records.mkdir()
-    shutil.copyfile(FIXTURES / "gen1-records.jsonl.gz", records / "gen1.jsonl.gz")
-    assert _run(tmp_path, records) == 1
+    (records / "old.jsonl").write_text(
+        "".join(_older(line, generation) + "\n" for line in _gen3_lines()[:3]),
+        encoding="utf-8")
+    with caplog.at_level("ERROR"):
+        assert _run(tmp_path, records) == 1
+    assert any(f"holds {generation} records; this command reads gen-3 only" in r.getMessage()
+               for r in caplog.records)
 
 
 def test_the_counts_file_lists_each_rule_s_carriers(tmp_path):
@@ -165,7 +180,7 @@ def test_the_counts_file_lists_each_rule_s_carriers(tmp_path):
     tags act through, each with its own."""
     records = tmp_path / "records"
     records.mkdir()
-    shutil.copyfile(FIXTURES / "gen2-records.jsonl.gz", records / "gen2.jsonl.gz")
+    shutil.copyfile(GEN3, records / "gen3.jsonl.gz")
     assert _run(tmp_path, records) == 0
     document = json.loads((tmp_path / "counts.json").read_text(encoding="utf-8"))
     carriers = document["carriers"]
@@ -181,13 +196,13 @@ def test_the_counts_file_lists_each_rule_s_carriers(tmp_path):
 
 
 def test_the_counts_file_names_its_records_generation(tmp_path):
-    """The steered variant round refuses counts of gen-2 records (FR-058g)."""
+    """The steered variant round refuses counts of any other generation (FR-058g)."""
     records = tmp_path / "records"
     records.mkdir()
-    shutil.copyfile(FIXTURES / "gen2-records.jsonl.gz", records / "gen2.jsonl.gz")
+    shutil.copyfile(GEN3, records / "gen3.jsonl.gz")
     assert _run(tmp_path, records) == 0
     document = json.loads((tmp_path / "counts.json").read_text(encoding="utf-8"))
-    assert document["generation"] == "gen-2"
+    assert document["generation"] == "gen-3"
 
 
 def test_cut_games_are_left_out_and_reported(tmp_path, capsys):

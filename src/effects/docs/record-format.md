@@ -53,7 +53,7 @@ The envelope is frozen within a generation: a later capability makes new `kind` 
 ## Generations
 
 - A reader takes a record's generation from `generation`, else from the presence of `random_seat` (gen-2), else gen-1. A gen-1 record reads `random_seat = false` and `what_if` unknown.
-- Every reader refuses a records set mixing generations. `build-corpus`, `train-effect-model`, `evaluate-effect-model` and the probes read gen-3 only; `rule-counts` reads gen-2 or gen-3.
+- Every reader refuses a records set mixing generations. `build-corpus`, `train-effect-model`, `evaluate-effect-model`, the probes, `rule-counts` and `scripts/rule_breadth.py` read gen-3 only.
 - A curated shard keeps its source's generation, because the codec writes a record back as it read it.
 - `actor_player` on a `playability` record is the one named exception to the frozen schema: gen-1 wrote the active or attacking player, later generations the deciding player.
 - Relative to gen-2, a gen-3 field may change meaning or go away; the 025 contract's Gen-3 section lists each.

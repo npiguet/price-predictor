@@ -9,8 +9,6 @@ came from, which decides what it can be trusted for:
 - ``random_seat``: a natural record of a game with a random seat;
 - ``forge_ai``: a natural record of a game the Forge AI played on both seats.
 
-Gen-2 records carry no ``aimed_at``, so all of them are natural.
-
 Per rule the counts also list its carriers (FR-058f), the cards the steered
 variant round edits: the script file of every card that is a condition entity
 of the rule's tags, with the lines the tags act through on it and the records
@@ -23,8 +21,8 @@ nothing.
 
 Shards are read once each, in parallel; a game never spans shards (a shard is
 one worker JVM's lifetime), so whether a game has a random seat, and whether a
-gen-3 game ended (its game-end marker read), is decided at the end of its
-shard. A gen-3 game without a marker was cut and ``build-corpus`` drops it
+game ended (its game-end marker read), is decided at the end of its
+shard. A game without a marker was cut and ``build-corpus`` drops it
 whole: its records are read but count toward nothing (no tag, review,
 carrier, ``records`` or ``not_countable``, as the build's ``rule_counts``),
 and the counts say how many such games were left out (``cut_games``). Each worker builds the
@@ -50,16 +48,12 @@ from effects.domain.provenance import ProvenanceKey, SidecarLookup
 from effects.domain.records import EffectRecord, acting_keys
 from effects.domain.rule_catalogue import NoDetector, Polarity
 from effects.domain.rule_detectors import DetectorIndex, RuleSource, RuleTag, tag_record
-from effects.domain.shard_generation import ShardGeneration
+from effects.domain.shard_generation import ACCEPTED_GENERATIONS
 from effects.domain.tally_merge import NOT_MERGED, merge_into
 from effects.infrastructure.shard_io import DecodeTally
 from effects.infrastructure.sidecar_io import JoinGaps
 
 logger = logging.getLogger(__name__)
-
-#: The generations ``rule-counts`` reads: gen-2's corpus before any gen-3
-#: collection, and gen-3's; never a mix (FR-008).
-COUNTED_GENERATIONS = (ShardGeneration.GEN_2, ShardGeneration.GEN_3)
 
 
 @dataclass
@@ -75,7 +69,7 @@ class RuleCounts:
     #: ``(rule, script file, key) -> records``: a carrier's own count under
     #: key None, each line its tags act through under the line's key.
     carriers: Counter = field(default_factory=Counter)
-    #: The records' generation (``gen-2``, ``gen-3``), which the steered
+    #: The records' generation (``gen-3``), which the steered
     #: variant round checks (FR-058g); set once over the whole set.
     generation: str = field(default="", metadata=NOT_MERGED)
     #: What reading the shards met without stopping, handed back by each
@@ -86,7 +80,7 @@ class RuleCounts:
     #: Shards a damaged member or line ended early, under ``salvage`` alone:
     #: each one's message, its records before the damage counted.
     damaged: list = field(default_factory=list)
-    #: Gen-3 games without a game-end marker, left out of every count.
+    #: Games without a game-end marker, left out of every count.
     cut_games: int = 0
 
     def to_json(self, standing: CatalogueStanding | Mapping[str, str] | None = None) -> dict:
@@ -245,7 +239,7 @@ def _sidecar_keyword_keys(
 
 def count_shard(built, shard: Path, *, salvage: bool = False) -> RuleCounts:
     """One shard's counts. Tags, review entries and carriers are held per game
-    until the shard ends, when each game's source is known and a cut gen-3
+    until the shard ends, when each game's source is known and a cut
     game (no game-end marker) is left out. ``salvage`` counts a damaged shard
     up to the damage and names it in ``damaged`` (a collection run must not
     stop on one); otherwise the damage raises, located."""
@@ -352,14 +346,14 @@ class RuleCountsConfig:
 
 
 def count(config: RuleCountsConfig) -> tuple[RuleCounts, CatalogueStanding]:
-    """Count every shard under ``config.records_dir``; refuse a mix of generations."""
+    """Count every shard under ``config.records_dir``; refuse a set that is not gen-3."""
     from effects.infrastructure.rules_catalogue_io import load_scenarios
     from effects.infrastructure.shard_io import NoShardsError, iter_shards, require_generation
 
     shards = iter_shards(config.records_dir)
     if not shards:
         raise NoShardsError(f"no shards under {config.records_dir}")
-    generation = require_generation(shards, *COUNTED_GENERATIONS)
+    generation = require_generation(shards, *ACCEPTED_GENERATIONS)
     logger.info("Counting %d %s shard(s) under %s", len(shards), generation,
                 config.records_dir)
     total = RuleCounts(generation=str(generation))

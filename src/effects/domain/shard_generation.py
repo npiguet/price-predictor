@@ -50,8 +50,8 @@ def check_generation_member(value: object) -> None:
 
 
 #: The generations the corpus, training, evaluation and probe readers accept:
-#: gen-3 alone, the one the gen-3 input layout reads (FR-020). ``rule-counts``
-#: keeps its own list, which still reads gen-2.
+#: gen-3 alone, the one the gen-3 input layout reads (FR-020); ``rule-counts``
+#: and ``rule-breadth`` read it too.
 ACCEPTED_GENERATIONS: tuple[ShardGeneration, ...] = (ShardGeneration.GEN_3,)
 
 

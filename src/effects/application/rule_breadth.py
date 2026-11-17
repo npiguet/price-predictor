@@ -17,9 +17,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from effects.application.parallel_map import run_parallel
-from effects.application.rule_counts import COUNTED_GENERATIONS, CountContext
+from effects.application.rule_counts import CountContext
 from effects.domain.rule_breadth import BreadthRow, breadth_counts, breadth_rows
 from effects.domain.rule_detectors import DetectorIndex
+from effects.domain.shard_generation import ACCEPTED_GENERATIONS
 from effects.domain.tally_merge import merge_into
 
 logger = logging.getLogger(__name__)
@@ -46,14 +47,14 @@ def breadth_shard(built, shard: Path) -> BreadthTally:
 def breadth(records_dir: Path, rules_dir: Path, sidecar_roots: dict,
             workers: int | None) -> tuple[list[BreadthRow], int]:
     """Every declared scenario's breadth row over the shards under
-    ``records_dir``, and the records read; refuses a mix of generations."""
+    ``records_dir``, and the records read; refuses a set that is not gen-3."""
     from effects.infrastructure.rules_catalogue_io import load_scenarios
     from effects.infrastructure.shard_io import NoShardsError, iter_shards, require_generation
 
     shards = iter_shards(records_dir)
     if not shards:
         raise NoShardsError(f"no shards under {records_dir}")
-    generation = require_generation(shards, *COUNTED_GENERATIONS)
+    generation = require_generation(shards, *ACCEPTED_GENERATIONS)
     logger.info("Breadth over %d %s shard(s) under %s", len(shards), generation, records_dir)
     total = BreadthTally()
     for found in run_parallel(

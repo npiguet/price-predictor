@@ -14,7 +14,7 @@ Subcommands:
             verdict is not `recorded`
   directed-rules --counts FILE
             write rules/directed-fork-rules.txt (the rules enabled for directed forks) and
-            rules/coverage-wording-cards.txt (the cards of their scenarios) from gen-2's
+            rules/coverage-wording-cards.txt (the cards of their scenarios) from gen-3's
             per-rule counts, and rules/directed-fork-counts.json (the part of the counts
             the list is decided from)
 
@@ -1064,32 +1064,27 @@ def load_scenarios_by_rule(rules_dir):
     return by_rule
 
 
-def counted_on_gen2(scenario):
-    """Whether the scenario's detector tags gen-2 records: a family declared
-    over a record kind gen-2 writes, and no gen-3 field read, by the
-    declaration or by the family's params."""
-    from effects.domain.records import RecordKind
+def has_detector(scenario):
+    """Whether the scenario's detector is a registered family: on gen-3
+    records every such detector tags what its record kind carries."""
     from effects.domain.rule_detectors import families
 
     declaration = scenario.get("detector") or {}
-    family = families().get(declaration.get("family"))
-    return (family is not None and declaration.get("record_kind") != RecordKind.TURN_ACTION
-            and not declaration.get("needs")
-            and not family.needs(declaration.get("params") or {}))
+    return declaration.get("family") in families()
 
 
 def rule_counts(counts, rule, scenarios):
     """``(fires, does_not_fire)`` over all sources, or None where the counts
     cannot speak for the rule. The counts list only rules some record tagged,
-    so a rule they omit has none of either when a detector of its tags gen-2
-    records; one not countable there, declared ``none``, or with no gen-2
-    detector is not shown by them at all."""
+    so a rule they omit has none of either when a detector of its tags
+    records; one not countable, declared ``none``, or with no detector is
+    not shown by them at all."""
     found = counts["rules"].get(rule)
     if found is not None:
         return (sum(found.get(FIRES, {}).values()), sum(found.get(DOES_NOT_FIRE, {}).values()))
     if rule in counts["not_countable"] or rule in counts["none"]:
         return None
-    return (0, 0) if any(counted_on_gen2(s) for s in scenarios) else None
+    return (0, 0) if any(has_detector(s) for s in scenarios) else None
 
 
 def lacking_polarities(fires, does_not_fire):
@@ -1251,7 +1246,7 @@ def main():
                        "the cards of their scenarios and the counts they were decided from "
                        "(FR-014b, FR-038a)")
     p.add_argument("--counts", type=Path, required=True,
-                   help="gen-2's per-rule counts, as `effects rule-counts` writes them")
+                   help="gen-3's per-rule counts, as `effects rule-counts` writes them")
     p.add_argument("--cards-folder", type=Path, default=OUTPUT / "cardsfolder",
                    help="the converted card tree whose names the wording list uses "
                    "(default: %(default)s)")

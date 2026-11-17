@@ -1,15 +1,19 @@
-"""``scripts/rule_breadth.py`` over the real gen-2 fixture (T036)."""
+"""``scripts/rule_breadth.py`` over the real gen-3 fixture (T036)."""
 
 from __future__ import annotations
 
+import gzip
 import json
 import shutil
 from pathlib import Path
 
+import pytest
 import rule_breadth
 
+from effects.domain.shard_generation import UnacceptedGenerationError
+
 FIXTURES = Path(__file__).parents[2] / "fixtures" / "effects"
-SIDECARS = FIXTURES / "gen2-sidecars"
+SIDECARS = FIXTURES / "gen3-sidecars"
 
 
 def _rules(tmp_path: Path) -> Path:
@@ -32,7 +36,7 @@ def _rules(tmp_path: Path) -> Path:
 def test_a_detector_cut_to_nothing_of_a_large_pool_is_flagged(tmp_path, capsys):
     records = tmp_path / "records"
     records.mkdir()
-    shutil.copyfile(FIXTURES / "gen2-records.jsonl.gz", records / "gen2.jsonl.gz")
+    shutil.copyfile(FIXTURES / "gen3-records.jsonl.gz", records / "gen3.jsonl.gz")
     out = tmp_path / "breadth.json"
     assert rule_breadth.main([
         "--records-dir", str(records), "--rules-dir", str(_rules(tmp_path)),
@@ -44,3 +48,17 @@ def test_a_detector_cut_to_nothing_of_a_large_pool_is_flagged(tmp_path, capsys):
     assert rows["1.2-1"]["pool"] == rows["1.1-1"]["pool"] and rows["1.2-1"]["tagged"] == 0
     assert document["flagged"] == ["1.2-1"]
     assert "1.2-1" in capsys.readouterr().out
+
+
+def test_a_set_of_an_older_generation_is_refused_naming_it(tmp_path):
+    records = tmp_path / "records"
+    records.mkdir()
+    with gzip.open(FIXTURES / "gen3-records.jsonl.gz", "rt", encoding="utf-8") as source:
+        data = json.loads(next(source))
+    del data["generation"]
+    (records / "gen2.jsonl").write_text(json.dumps(data) + "\n", encoding="utf-8")
+    with pytest.raises(UnacceptedGenerationError, match="holds gen-2 records"):
+        rule_breadth.main([
+            "--records-dir", str(records), "--rules-dir", str(_rules(tmp_path)),
+            "--cards-folder", str(SIDECARS / "cardsfolder"), "--workers", "1",
+            "--output", str(tmp_path / "breadth.json")])
