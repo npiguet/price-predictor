@@ -90,11 +90,11 @@ leaving the battlefield that was not in combat):
   an event of this type as well (the sacrifice beside the counters it pays for,
   the Equipment entering with no ``attached`` event): a type, or a map of
   ``event`` and that event's filters (``{"event": "zone_change", "from_zone":
-  "battlefield", "to_zone": "graveyard"}``, a sacrifice as a gen-2 record
-  writes one);
+  "battlefield", "to_zone": "graveyard"}``, a sacrifice as a record writes
+  one);
 - ``source_dies``: the event's ``source`` (a ``damage_dealt`` or
-  ``damage_prevented`` event names one; a gen-2 record names only its
-  ``cause``, which for damage is the same object) does (true) or does not (false) move
+  ``damage_prevented`` event names one, a non-combat one by its ``cause``,
+  which for damage is the same object) does (true) or does not (false) move
   from the battlefield to a graveyard in the same record: a creature dying in
   a combat damage step that still dealt its damage there (510.2). Declared
   true, its near miss is narrower than the other qualifiers': a first
@@ -239,7 +239,7 @@ def _is_token(entity: EntityState, state: StateSnapshot) -> bool | None:
 
 
 def _controller_is_owner(entity: EntityState, state: StateSnapshot) -> bool | None:
-    # None on a gen-1 or gen-2 snapshot, which records no owner.
+    # None where the snapshot records no owner.
     return None if entity.owner is None else entity.owner == entity.controller
 
 
@@ -538,8 +538,8 @@ def _both(first: bool | None, second: bool | None) -> bool | None:
 
 
 def _source_of(event: Event) -> str | None:
-    """A damage event's ``source``; a gen-2 record writes no ``source``, only
-    the ``cause``, the same object for damage."""
+    """A damage event's ``source``; a damage event outside combat writes no
+    ``source``, only the ``cause``, the same object for damage."""
     found = event.params or {}
     return found.get("source") or found.get("cause") or None
 

@@ -21,7 +21,7 @@ attack requirement applies to it (gen-3's anchored attackers record: goad,
 "attacks each combat if able"), and leaves it outside where none does.
 ``min_blockers`` holds it where it can be blocked only by ``at_least``
 creatures or more (menace, 702.111b), and leaves it outside where fewer
-suffice; a blockers record of any generation writes it.
+suffice; a blockers record writes it.
 
 Parameters:
 
@@ -88,8 +88,7 @@ Without ``universe`` only an entity the record lists counts: the legal list's
 members are inside, the forbidden entities outside, and a decision record,
 which lists no outside, speaks for its ``legal_targets``' inside alone. With
 it, a decision record speaks for a candidate that targets, one listing a legal
-target or having none; a gen-2 candidate listing 32 targets is skipped, since
-the collector capped the list there and its outside is unknown.
+target or having none.
 """
 
 from __future__ import annotations
@@ -126,8 +125,6 @@ from effects.domain.rule_detectors.legality_restrictions import (
 from effects.domain.state_snapshot import normalize_counter_type
 
 UNIVERSES = frozenset({"battlefield", "battlefield_and_players"})
-#: The gen-2 collector's cap on a candidate's ``legal_targets``.
-GEN2_TARGET_CAP = 32
 
 _SUBKIND_OF = {
     "legal_attackers": PlayabilitySubkind.ATTACKERS,
@@ -185,7 +182,7 @@ def _anchor_sides(record: EffectRecord, listed: str, at_least: int):
     """The anchor attacker inside or outside an anchor list."""
     payload = record.payload
     anchor = payload.anchor_attacker
-    if anchor is None or (listed == "must_attack" and record.generation != 3):
+    if anchor is None:
         return (), ()
     inside = (payload.must_attack if listed == "must_attack"
               else payload.min_blockers >= at_least)
@@ -221,8 +218,7 @@ def _sides(record: EffectRecord, listed: str, statics_only: bool, universe: str 
         candidates = payload.candidates
         if universe is not None:
             candidates = [c for c in candidates
-                          if (c.legal_targets or not c.has_legal_target)
-                          and (record.generation == 3 or len(c.legal_targets) < GEN2_TARGET_CAP)]
+                          if c.legal_targets or not c.has_legal_target]
             if not candidates:
                 return (), ()
         inside = tuple(dict.fromkeys(t for c in candidates for t in c.legal_targets))
@@ -266,8 +262,7 @@ def _restricted(record: EffectRecord, lines: SidecarLookup | None,
     if listed == "legal_attackers":
         return sides(attacker_judgements(record, lines, restriction), fires_when)
     candidates = [c for c in record.payload.candidates
-                  if (c.legal_targets or not c.has_legal_target)
-                  and (record.generation == 3 or len(c.legal_targets) < GEN2_TARGET_CAP)]
+                  if c.legal_targets or not c.has_legal_target]
     if "source_keyword" in params:
         candidates = [c for c in candidates
                       if card_has_keyword(c.ability, lines, params["source_keyword"])]

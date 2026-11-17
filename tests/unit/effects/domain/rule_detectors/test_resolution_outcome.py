@@ -1,4 +1,4 @@
-"""``resolution_outcome`` on real gen-2 cost halves, and on gen-3 effect halves."""
+"""``resolution_outcome`` on real gen-3 effect halves, which carry the outcome (FR-042b)."""
 
 from __future__ import annotations
 
@@ -11,8 +11,10 @@ from effects.domain.rule_detectors.resolution_outcome import FAMILY
 
 
 def _resolved(by_kind):
-    return next(r for r in by_kind("resolution") if r.moment.value == "activation"
-                and r.payload.outcome is ResolutionOutcome.RESOLVED)
+    """A real effect half of a spell or ability that resolved with a target."""
+    return next(r for r in by_kind("resolution") if r.moment.value == "resolution"
+                and r.ability and r.payload.outcome is ResolutionOutcome.RESOLVED
+                and r.state.refs.targets_at_cast)
 
 
 def test_a_resolved_spell_is_the_near_miss_of_a_fizzle_rule(by_kind):
@@ -22,7 +24,7 @@ def test_a_resolved_spell_is_the_near_miss_of_a_fizzle_rule(by_kind):
 
 def test_the_same_spell_edited_to_fizzle_fires(by_kind):
     record = _resolved(by_kind)
-    fizzled = replace(record, link_id=None,
+    fizzled = replace(record,
                       payload=replace(record.payload, outcome=ResolutionOutcome.FIZZLED))
     found = FAMILY.match(fizzled, None, {"outcome": "fizzled"})
     assert found.polarity is Polarity.FIRES and found.observed
@@ -34,31 +36,23 @@ def test_the_same_spell_edited_to_fizzle_fires(by_kind):
 def test_targeted_counts_only_stack_objects_that_had_a_target(by_kind):
     record = _resolved(by_kind)
     untargeted = replace(record, state=replace(
-        record.state, refs=replace(record.state.refs, targets=())))
+        record.state, refs=replace(record.state.refs, targets=(), targets_at_cast=())))
     assert FAMILY.match(untargeted, None, {"outcome": "fizzled", "targeted": True}) is None
 
 
 def test_an_outcome_outside_both_sides_shows_nothing(by_kind):
     record = _resolved(by_kind)
-    declined = replace(record, link_id=None,
+    declined = replace(record,
                        payload=replace(record.payload, outcome=ResolutionOutcome.DECLINED))
     assert FAMILY.match(declined, None, {"outcome": "countered"}) is None
 
 
-def test_effect_halves_show_nothing(by_kind):
-    effect = next(r for r in by_kind("resolution") if r.moment.value == "resolution")
-    assert FAMILY.match(effect, None, {"outcome": "fizzled"}) is None
-
-
-# -- gen-3: the outcome is the effect half's (FR-042b) ------------------------
-
-
 def _effect_half(by_kind, **payload):
-    effect = next(r for r in by_kind("resolution") if r.moment.value == "resolution")
+    effect = _resolved(by_kind)
     return replace(effect, payload=replace(effect.payload, **payload))
 
 
-def test_a_gen3_effect_half_carries_its_outcome(by_kind):
+def test_an_effect_half_carries_its_outcome(by_kind):
     fizzled = _effect_half(by_kind, events=(), outcome=ResolutionOutcome.FIZZLED)
     found = FAMILY.match(fizzled, None, {"outcome": "fizzled", "targeted": True})
     assert found.polarity is Polarity.FIRES and found.observed
@@ -80,10 +74,10 @@ def test_a_countering_half_shows_the_countered_object(by_kind):
     assert near.polarity is Polarity.DOES_NOT_FIRE and near.outcome == ("E99",)
 
 
-def test_a_gen3_cost_half_shows_nothing(by_kind):
+def test_a_cost_half_shows_nothing(by_kind):
     cost = next(r for r in by_kind("resolution") if r.moment.value == "activation")
-    gen3 = replace(cost, payload=ActivationPayload(costs=Costs(), events=()))
-    assert FAMILY.match(gen3, None, {"outcome": "resolved", "near": ["fizzled"]}) is None
+    stripped = replace(cost, payload=ActivationPayload(costs=Costs(), events=()))
+    assert FAMILY.match(stripped, None, {"outcome": "resolved", "near": ["fizzled"]}) is None
 
 
 def test_a_fizzled_half_reads_its_targets_as_cast():

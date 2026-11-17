@@ -1,4 +1,4 @@
-"""``verdict_bit`` on real gen-2 decision records (T028)."""
+"""``verdict_bit`` on real gen-3 decision records (T028)."""
 
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ def test_the_gen3_bits_need_their_gen3_fields():
 
 
 def test_a_failed_check_reads_the_named_identifier(by_kind):
-    """A gen-2 candidate edited to carry gen-3's ``failed_checks``."""
+    """A real candidate edited to carry, or lack, the named failed check."""
     record = _unaffordable(by_kind)
     candidate = record.payload.candidates[0]
     failing = replace(candidate, failed_checks=(FailedCheck("casting_speed"),))
@@ -67,8 +67,9 @@ def test_a_failed_check_reads_the_named_identifier(by_kind):
     for edited, polarity in ((failing, Polarity.FIRES), (passing, Polarity.DOES_NOT_FIRE)):
         one = replace(record, payload=PlayabilityDecisionPayload(candidates=(edited,)))
         assert FAMILY.match(one, None, params).polarity is polarity
-    unread = replace(record, payload=PlayabilityDecisionPayload(candidates=(candidate,)))
-    assert FAMILY.match(unread, None, params) is None
+    other = replace(candidate, failed_checks=(FailedCheck("whose_turn"),))
+    elsewhere = replace(record, payload=PlayabilityDecisionPayload(candidates=(other,)))
+    assert FAMILY.match(elsewhere, None, params).polarity is Polarity.DOES_NOT_FIRE
 
 
 def test_a_golden_candidate_reads_its_timing_bit():
@@ -92,46 +93,49 @@ def _line(record, sidecars):
 
 
 class TestCandidateFilters:
-    def test_a_keyword_ability_shows_by_its_keyword(self, by_kind, gen2_sidecars):
-        record = next(r for r in _decisions(by_kind) if _line(r, gen2_sidecars) is not None
-                      and _line(r, gen2_sidecars).keyword_display_name)
-        name = _line(record, gen2_sidecars).keyword_display_name
+    def test_a_keyword_ability_shows_by_its_keyword(self, by_kind, gen3_sidecars):
+        record = next(r for r in _decisions(by_kind) if _line(r, gen3_sidecars) is not None
+                      and _line(r, gen3_sidecars).keyword_display_name)
+        name = _line(record, gen3_sidecars).keyword_display_name
         for spelled in (name, name.lower().replace(" ", "_")):
-            assert FAMILY.match(record, gen2_sidecars,
+            assert FAMILY.match(record, gen3_sidecars,
                                 {"bit": "can_play", "keyword": spelled}) is not None
-        assert FAMILY.match(record, gen2_sidecars,
+        assert FAMILY.match(record, gen3_sidecars,
                             {"bit": "can_play", "keyword": "no such keyword"}) is None
         assert FAMILY.match(record, None, {"bit": "can_play", "keyword": name}) is None
 
     def test_a_spell_of_a_card_printing_a_keyword_shows_by_its_source(
-            self, by_kind, gen2_sidecars):
+            self, by_kind, gen3_sidecars):
         def printed(record):
             keys = record.payload.candidates[0].ability
             return [line.keyword_display_name
-                    for line in gen2_sidecars.get(keys[0].script_file).lines
+                    for line in gen3_sidecars.get(keys[0].script_file).lines
                     if line.keyword_display_name]
         record = next(r for r in _decisions(by_kind)
                       if r.payload.candidates[0].ability
                       and r.payload.candidates[0].ability[0].trait_kind == "spell"
                       and printed(r))
         name = printed(record)[0]
-        assert FAMILY.match(record, gen2_sidecars,
+        assert FAMILY.match(record, gen3_sidecars,
                             {"bit": "affordable", "source_keyword": name}) is not None
-        assert FAMILY.match(record, gen2_sidecars,
+        assert FAMILY.match(record, gen3_sidecars,
                             {"bit": "affordable", "source_keyword": "no such keyword"}) is None
 
-    def test_the_tap_symbol_reads_off_the_lines_cost(self, by_kind, gen2_sidecars):
+    def test_the_tap_symbol_reads_off_the_lines_cost(self, by_kind, gen3_sidecars):
         record = next(r for r in _decisions(by_kind)
-                      if "T" in (cost_of(r.payload.candidates[0], gen2_sidecars)[0] or ()))
-        assert FAMILY.match(record, gen2_sidecars,
+                      if "T" in (cost_of(r.payload.candidates[0], gen3_sidecars)[0] or ()))
+        assert FAMILY.match(record, gen3_sidecars,
                             {"bit": "affordable", "cost_symbol": "T"}) is not None
-        assert FAMILY.match(record, gen2_sidecars,
+        assert FAMILY.match(record, gen3_sidecars,
                             {"bit": "affordable", "cost_symbol": "Q"}) is None
 
     def test_a_mana_symbol_reads_off_the_adjusted_cost_whatever_the_line(self, by_kind):
-        """No sidecar at all: a spell's mana cost is the candidate's own."""
-        record = next(r for r in _decisions(by_kind)
-                      if "/" in r.payload.candidates[0].cost_after_adjustment.get("mana", ""))
+        """No sidecar at all: a spell's mana cost is the candidate's own. The
+        fixture holds no hybrid cost, so a real decision's cost is edited into one."""
+        base = _decisions(by_kind)[0]
+        hybrid_cost = replace(base.payload.candidates[0],
+                              cost_after_adjustment={"mana": "{2/W}{G}"})
+        record = replace(base, payload=replace(base.payload, candidates=(hybrid_cost,)))
         symbols, parts = cost_of(record.payload.candidates[0], None)
         assert parts is None
         hybrid = next(s for s in symbols if "/" in s)
@@ -141,21 +145,21 @@ class TestCandidateFilters:
         assert FAMILY.match(record, None, {"bit": "affordable", "cost_symbol": kind})
         assert FAMILY.match(record, None, {"bit": "affordable", "cost_part": "Sac"}) is None
 
-    def test_a_cost_part_reads_by_its_name(self, by_kind, gen2_sidecars):
+    def test_a_cost_part_reads_by_its_name(self, by_kind, gen3_sidecars):
         record, part = next(
             (r, sorted(parts)[0]) for r in _decisions(by_kind)
-            for parts in [cost_of(r.payload.candidates[0], gen2_sidecars)[1]] if parts)
-        assert FAMILY.match(record, gen2_sidecars,
+            for parts in [cost_of(r.payload.candidates[0], gen3_sidecars)[1]] if parts)
+        assert FAMILY.match(record, gen3_sidecars,
                             {"bit": "affordable", "cost_part": part.title()}) is not None
-        assert FAMILY.match(record, gen2_sidecars,
+        assert FAMILY.match(record, gen3_sidecars,
                             {"bit": "affordable", "cost_part": "Forage"}) is None
 
-    def test_a_script_parameter_reads_off_the_candidates_line(self, by_kind, gen2_sidecars):
+    def test_a_script_parameter_reads_off_the_candidates_line(self, by_kind, gen3_sidecars):
         record = next(r for r in _decisions(by_kind)
-                      if "Cost" in (root_params_of(_line(r, gen2_sidecars)) or {}))
-        assert FAMILY.match(record, gen2_sidecars,
+                      if "Cost" in (root_params_of(_line(r, gen3_sidecars)) or {}))
+        assert FAMILY.match(record, gen3_sidecars,
                             {"bit": "affordable", "script_param": "Cost"}) is not None
-        assert FAMILY.match(record, gen2_sidecars,
+        assert FAMILY.match(record, gen3_sidecars,
                             {"bit": "affordable", "script_param": "NoSuchParam"}) is None
 
 
@@ -223,16 +227,6 @@ class TestLandPlays:
             assert FAMILY.match(record, None, {"bit": "timing", "land_play": False}) is not None
         land = self._land(lambda c: True)[0]
         assert FAMILY.match(land, None, {"bit": "timing", "land_play": False}) is None
-
-    def test_a_candidate_that_says_nothing_of_land_plays_is_on_neither_side(self, by_kind):
-        """A gen-2 candidate. Every gen-3 candidate the fixture holds says
-        whether it is a land play."""
-        assert all(c.land_play is not None for r in self._decisions()
-                   for c in r.payload.candidates)
-        record = _unaffordable(by_kind)
-        assert all(c.land_play is None for c in record.payload.candidates)
-        for value in (True, False):
-            assert FAMILY.match(record, None, {"bit": "affordable", "land_play": value}) is None
 
     def test_the_land_play_filter_needs_its_field_and_a_check_must_be_one_collected(
             self, by_kind):

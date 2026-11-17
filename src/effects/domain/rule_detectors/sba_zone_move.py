@@ -1,11 +1,10 @@
 """Detector family ``sba_zone_move``: a permanent put into the graveyard by the state-based check.
 
 Rule 704.5 lists the state-based actions that move a permanent from the
-battlefield to the graveyard. Gen-2 already files every such move made in the
+battlefield to the graveyard. The record files every such move made in the
 check after a resolution in that resolution's effect half, as a
-``zone_change`` attributed ``unresolved``, so the family runs on gen-2
-records and needs no gen-3 field. A combat damage step's record holds its
-own check the same way (its deaths, attributed ``unresolved``), and the
+``zone_change`` attributed ``unresolved``. A combat damage step's record
+holds its own check the same way (its deaths, attributed ``unresolved``), and the
 family reads it too; a damage-step probe, whose snapshot still shows the
 keyword it stripped, it leaves out. Indestructible is read off the snapshot
 and off the keywords the record itself grants.
@@ -55,12 +54,12 @@ so a record where Forge disagrees with the rule is the one
 record cannot say which rule moved them:
 
 - a permanent the record shows no change of the check's kind for: a death
-  alone names no cause, since gen-2 attributes a sacrifice, a death trigger's
-  damage and a static's -X/-X kill ``unresolved`` too, and writes no P/T change
-  for a creature the check removed;
+  alone names no cause, since a sacrifice, a death trigger's damage and a
+  static's -X/-X kill are attributed ``unresolved`` too, and none writes a
+  P/T change for a creature the check removed;
 - a permanent the resolution moved itself (an event attributed to its chain);
 - an Aura that is the record's source or target: its move is the ability's
-  own (a sacrifice, a destroy), which gen-2 may attribute ``unresolved``; a
+  own (a sacrifice, a destroy), which may be attributed ``unresolved``; a
   bestowed Aura, which becomes a creature when its host leaves (702.103e);
   and an Aura whose host stops being a creature or gains a protection other
   than from a colour, against which the record does not say what the Aura
@@ -153,7 +152,7 @@ def _touched(record: EffectRecord) -> dict[str, _Touched]:
                 t.lowered = t.lowered or delta < 0
             elif kind is EventType.DAMAGE_DEALT:
                 t.damage_dealt += int(params.get("amount") or 0)
-                # Gen-2 names a damage event's source as its ``cause``.
+                # A damage event outside combat names its source as its ``cause`` only.
                 source = params.get("source") or params.get("cause")
                 if source:
                     t.damage_sources.append(source)
@@ -364,9 +363,9 @@ def _aura_checks(record, touched, keywords, cause: str | None = None
         protected = _protection_side(
             aura, [k for k in host.gained if k.startswith("protection")])
         if protected is None or host.left_creatures:
-            # What the Aura may enchant is not on the record (gen-2 spells
-            # every enchant keyword ``enchant``), so a host changing types or
-            # gaining an unnamed protection says nothing of its legality.
+            # What the Aura may enchant is not on the record, so a host
+            # changing types or gaining an unnamed protection says nothing of
+            # its legality.
             continue
         if cause == "left" and not host.left and protected:
             continue

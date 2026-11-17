@@ -61,6 +61,9 @@ BROAD_NEAR_MISS = {
     "306.6-1", "506.3-1", "506.3-3", "508.1a-1", "508.1c-2", "508.1d-1",
     # An attacker with or without vigilance: every attack is one or the other.
     "508.1f-1", "702.20b-1",
+    # A non-land-play candidate that does not fail the named check
+    # (``verdict_bit``): most candidates pass the split-second check.
+    "702.61a-1",
 }
 
 
@@ -72,16 +75,13 @@ def _label(record) -> str:
 @pytest.fixture(scope="module")
 def tagged():
     """Per scenario its fires and near-miss record ids, and per kind label its
-    records, over the gen-2 and gen-3 fixtures and the Java goldens."""
+    records, over the gen-3 fixture and the Java goldens."""
     from effects.infrastructure.converted_trees import SourceTrees
     from effects.infrastructure.record_codec import record_from_dict
     from effects.infrastructure.shard_io import read_shard
     from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS, java_golden_records
 
     sets = [
-        (read_shard(FIXTURES / "gen2-records.jsonl.gz"),
-         SourceTrees.of([FIXTURES / "gen2-sidecars" / "cardsfolder",
-                         FIXTURES / "gen2-sidecars" / "tokenscripts"]).sidecar_cache()),
         (read_shard(FIXTURES / "gen3-records.jsonl.gz"),
          SourceTrees.of(list(GEN3_SIDECAR_FOLDERS)).sidecar_cache()),
         ([record_from_dict(raw) for raw in java_golden_records()], None),
@@ -95,9 +95,6 @@ def tagged():
             rid = f"{number}:{record.record_id}"
             kinds[_label(record)].add(rid)
             for scenario, declaration, family in index.by_kind.get(record.kind.value, ()):
-                if record.generation != 3 and (declaration.needs
-                                               or family.needs(declaration.params)):
-                    continue
                 found = family.match(record, lines, declaration.params)
                 if found is not None:
                     sides[scenario.id][found.polarity].add(rid)

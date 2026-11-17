@@ -17,8 +17,7 @@ Parameters:
 The candidates a rule speaks for, each filter narrowing both sides:
 
 - ``land_play``: true for land-play candidates only (FR-033a), false for
-  every other; read off the gen-3 candidate, so a gen-2 candidate, or one
-  collected before land plays were candidates, is unreadable;
+  every other;
 - ``keyword``: the candidate is the line this keyword produced (a Crew,
   Cycling, Flashback, Dash or Disguise ability, which acts through the
   keyword's own line), compared in ``keyword_names``' spelling;
@@ -118,8 +117,7 @@ from effects.domain.rule_outcomes import PHASE_ORDER, forge_phases
 from effects.domain.script_text import params as segment_params
 from effects.domain.script_text import segments
 
-GEN2_BITS = frozenset({"can_play", "affordable", "has_legal_target"})
-GEN3_BITS = frozenset({"timing", "failed_check"})
+BITS = frozenset({"can_play", "affordable", "has_legal_target", "timing", "failed_check"})
 FILTERS = frozenset({"keyword", "source_keyword", "cost_symbol", "cost_part", "script_param",
                      "land_play", "candidate_face", "candidate", "source_type",
                      "source_designation", "sorcery_speed", "phase_list_first",
@@ -340,7 +338,7 @@ class VerdictBit:
 
     def validate(self, params: Mapping[str, Any]) -> None:
         bit = params.get("bit")
-        if bit not in GEN2_BITS | GEN3_BITS:
+        if bit not in BITS:
             raise ValueError(f"verdict_bit: unknown bit {bit!r}")
         if bit == "failed_check" and params.get("check") not in CHECKS:
             raise ValueError(f"verdict_bit: a failed_check declaration names its check, "

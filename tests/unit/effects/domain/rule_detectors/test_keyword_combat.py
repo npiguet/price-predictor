@@ -1,4 +1,4 @@
-"""``keyword_combat`` on real gen-2 combat records and probes (T027, story 1 acceptance 2)."""
+"""``keyword_combat`` on real gen-3 combat records and probes (T027, story 1 acceptance 2)."""
 
 from __future__ import annotations
 
@@ -10,9 +10,9 @@ from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors.keyword_combat import FAMILY
 
 
-def test_a_deathtouch_probe_is_the_near_miss_naming_its_carrier(by_kind, gen2_sidecars):
+def test_a_deathtouch_probe_is_the_near_miss_naming_its_carrier(by_kind, gen3_sidecars):
     probe = next(r for r in by_kind("combat") if r.payload.probed_keyword == "deathtouch")
-    found = FAMILY.match(probe, gen2_sidecars, {"keyword": "deathtouch"})
+    found = FAMILY.match(probe, gen3_sidecars, {"keyword": "deathtouch"})
     assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
     assert found.condition == (probe.payload.probed_entity,)
     # The stripped keyword's outcome falls on the creature the carrier fights.
@@ -21,33 +21,38 @@ def test_a_deathtouch_probe_is_the_near_miss_naming_its_carrier(by_kind, gen2_si
     assert found.outcome == fought[:1]
 
 
-def test_a_probe_of_another_keyword_shows_nothing(by_kind, gen2_sidecars):
+def test_a_probe_of_another_keyword_shows_nothing(by_kind, gen3_sidecars):
     probe = next(r for r in by_kind("combat") if r.payload.probed_keyword == "trample")
-    assert FAMILY.match(probe, gen2_sidecars, {"keyword": "deathtouch"}) is None
+    assert FAMILY.match(probe, gen3_sidecars, {"keyword": "deathtouch"}) is None
 
 
-def test_a_real_combat_with_a_qualifying_carrier_fires(by_kind, gen2_sidecars):
+def _probe_and_firing_combat(by_kind, sidecars):
+    """A probe of ``first_strike`` and its real combat, in which the carrier
+    kept the keyword and the keyword's effect was observable."""
+    combats = by_kind("combat")
+    probes = [r for r in combats if r.payload.probed_keyword == "first_strike"]
+    for probe in probes:
+        real = next((r for r in combats if r.record_id == probe.mirror_of), None)
+        if real is not None and FAMILY.match(real, sidecars, {"keyword": "first_strike"}):
+            return probe, real
+    pytest.fail("no first strike probe in the fixture has a real combat the keyword shows in")
+
+
+def test_a_real_combat_with_a_qualifying_carrier_fires(by_kind, gen3_sidecars):
     """The probe's mirror is a real combat in which the carrier kept the keyword."""
-    probe = next(r for r in by_kind("combat") if r.payload.probed_keyword == "trample")
-    real = next((r for r in by_kind("combat") if r.record_id == probe.mirror_of), None)
-    if real is None:
-        pytest.fail("the probe's real combat is not in the fixture")
-    found = FAMILY.match(real, gen2_sidecars, {"keyword": "trample"})
+    probe, real = _probe_and_firing_combat(by_kind, gen3_sidecars)
+    found = FAMILY.match(real, gen3_sidecars, {"keyword": "first_strike"})
     assert found.polarity is Polarity.FIRES and probe.payload.probed_entity in found.condition
-    # Trample's outcome is the defending player's life, never the carrier.
-    assert found.outcome and all(e.startswith("P") for e in found.outcome)
+    assert found.outcome
 
 
-def test_the_carrier_edited_out_of_combat_shows_nothing(by_kind, gen2_sidecars):
-    probe = next(r for r in by_kind("combat") if r.payload.probed_keyword == "trample")
-    real = next((r for r in by_kind("combat") if r.record_id == probe.mirror_of), None)
-    if real is None:
-        pytest.fail("the probe's real combat is not in the fixture")
+def test_the_carrier_edited_out_of_combat_shows_nothing(by_kind, gen3_sidecars):
+    probe, real = _probe_and_firing_combat(by_kind, gen3_sidecars)
     carrier = probe.payload.probed_entity
     state = replace(real.state, entities=tuple(
         replace(e, combat=None) if e.id == carrier else e for e in real.state.entities))
-    found = FAMILY.match(replace(real, state=state), gen2_sidecars, {"keyword": "trample"})
-    assert found is None or carrier not in found.entities
+    found = FAMILY.match(replace(real, state=state), gen3_sidecars, {"keyword": "first_strike"})
+    assert found is None or carrier not in found.condition
 
 
 def test_a_keyword_outside_gate_two_s_table_is_refused(by_kind):

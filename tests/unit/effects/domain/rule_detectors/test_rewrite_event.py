@@ -1,4 +1,4 @@
-"""``rewrite_event`` on real gen-2 rewrite records (T029)."""
+"""``rewrite_event`` on real gen-3 rewrite records (T029)."""
 
 from __future__ import annotations
 
@@ -17,14 +17,16 @@ from effects.domain.rule_detectors.rewrite_event import (
 
 
 def _entering(by_kind):
+    """A real zone change a replacement effect replaced with another event."""
     return next(r for r in by_kind("rewrite")
                 if r.payload.incoming.type.value == "zone_change"
-                and r.payload.result is RewriteResult.UPDATED)
+                and r.payload.result is RewriteResult.REPLACED)
 
 
-def test_an_updated_zone_change_fires_an_enters_replacement_rule(by_kind):
-    params = {"event": "zone_change", "result": "updated", "to_zone": "battlefield"}
+def test_a_replaced_zone_change_fires_a_zone_replacement_rule(by_kind):
     record = _entering(by_kind)
+    params = {"event": "zone_change", "result": "replaced",
+              "to_zone": record.payload.incoming.params["to_zone"]}
     found = FAMILY.match(record, None, params)
     assert found.polarity is Polarity.FIRES and found.observed
     # The entering object is both what the replacement reads and where its
@@ -39,7 +41,7 @@ def test_the_same_record_edited_to_not_replaced_is_the_near_miss(by_kind):
     record = _entering(by_kind)
     edited = replace(record, payload=replace(record.payload, result=RewriteResult.NOT_REPLACED,
                                              outgoing=None, replaced_by=()))
-    found = FAMILY.match(edited, None, {"event": "zone_change", "result": "updated"})
+    found = FAMILY.match(edited, None, {"event": "zone_change", "result": "replaced"})
     assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
 
 
@@ -49,7 +51,7 @@ def test_the_mode_and_any_incoming_parameter_narrow_the_event(by_kind):
     mode = incoming.params["mode"]
     for declared in ({"mode": mode}, {"mode": mode.lower()},
                      {"to_zone": incoming.params["to_zone"].upper()}):
-        found = FAMILY.match(record, None, {"event": "zone_change", "result": "updated",
+        found = FAMILY.match(record, None, {"event": "zone_change", "result": "replaced",
                                             **declared})
         assert found.polarity is Polarity.FIRES, declared
     assert FAMILY.match(record, None, {"event": "zone_change", "mode": "BeginPhase"}) is None
@@ -63,7 +65,7 @@ def test_a_result_list_names_every_fires_result(by_kind):
                          {"event": "zone_change", "result": ["replaced", "updated"]})
     assert found.polarity is Polarity.FIRES
     found = FAMILY.match(record, None,
-                         {"event": "zone_change", "result": ["replaced", "skipped"]})
+                         {"event": "zone_change", "result": ["updated", "skipped"]})
     assert found.polarity is Polarity.DOES_NOT_FIRE
 
 
@@ -72,15 +74,15 @@ def _keyword_rewrite(by_kind, sidecars):
                 and acting_line(r, sidecars).keyword_display_name)
 
 
-def test_a_keyword_replacement_shows_by_its_keyword(by_kind, gen2_sidecars):
-    record = _keyword_rewrite(by_kind, gen2_sidecars)
-    name = acting_line(record, gen2_sidecars).keyword_display_name
+def test_a_keyword_replacement_shows_by_its_keyword(by_kind, gen3_sidecars):
+    record = _keyword_rewrite(by_kind, gen3_sidecars)
+    name = acting_line(record, gen3_sidecars).keyword_display_name
     event = record.payload.incoming.type.value
     result = record.payload.result.value
-    found = FAMILY.match(record, gen2_sidecars,
+    found = FAMILY.match(record, gen3_sidecars,
                          {"event": event, "result": result, "keyword": name.lower()})
     assert found.polarity is Polarity.FIRES
-    assert FAMILY.match(record, gen2_sidecars, {"event": event, "keyword": "Madness"}) is None
+    assert FAMILY.match(record, gen3_sidecars, {"event": event, "keyword": "Equip"}) is None
 
 
 class TestPrevention:
@@ -92,33 +94,33 @@ class TestPrevention:
                     and is_prevention_line(acting_line(r, sidecars)))
 
     def test_a_shield_replacing_damage_fires_whatever_result_it_reports(
-            self, by_kind, gen2_sidecars):
-        record = self._shield(by_kind, gen2_sidecars)
-        found = FAMILY.match(record, gen2_sidecars,
+            self, by_kind, gen3_sidecars):
+        record = self._shield(by_kind, gen3_sidecars)
+        found = FAMILY.match(record, gen3_sidecars,
                              {"event": "damage_dealt", "prevention": True})
         assert found.polarity is Polarity.FIRES and found.observed
 
-    def test_a_shield_preventing_nothing_is_the_near_miss(self, by_kind, gen2_sidecars):
-        record = self._shield(by_kind, gen2_sidecars)
+    def test_a_shield_preventing_nothing_is_the_near_miss(self, by_kind, gen3_sidecars):
+        record = self._shield(by_kind, gen3_sidecars)
         edited = replace(record, payload=replace(
             record.payload, result=RewriteResult.NOT_REPLACED, outgoing=None, replaced_by=()))
-        found = FAMILY.match(edited, gen2_sidecars, {"event": "damage_dealt", "prevention": True})
+        found = FAMILY.match(edited, gen3_sidecars, {"event": "damage_dealt", "prevention": True})
         assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
-        found = FAMILY.match(edited, gen2_sidecars, {"event": "damage_dealt",
+        found = FAMILY.match(edited, gen3_sidecars, {"event": "damage_dealt",
                                                      "prevention": True,
                                                      "result": "not_replaced"})
         assert found.polarity is Polarity.FIRES
 
     def test_another_replacement_is_no_prevention_but_a_prevented_result_is(
-            self, by_kind, gen2_sidecars):
-        record = _keyword_rewrite(by_kind, gen2_sidecars)
-        assert not is_prevention_line(acting_line(record, gen2_sidecars))
+            self, by_kind, gen3_sidecars):
+        record = _keyword_rewrite(by_kind, gen3_sidecars)
+        assert not is_prevention_line(acting_line(record, gen3_sidecars))
         event = record.payload.incoming.type.value
         declared = {"event": event, "prevention": True}
-        assert FAMILY.match(record, gen2_sidecars, declared) is None
+        assert FAMILY.match(record, gen3_sidecars, declared) is None
         prevented = replace(record, payload=replace(record.payload,
                                                     result=RewriteResult.PREVENTED))
-        assert FAMILY.match(prevented, gen2_sidecars, declared).polarity is Polarity.FIRES
+        assert FAMILY.match(prevented, gen3_sidecars, declared).polarity is Polarity.FIRES
 
 
 def test_another_event_or_destination_shows_nothing(by_kind):
@@ -147,13 +149,11 @@ class TestSubjectQualifiers:
 
         def subject_as(face_state):
             return replace(record, state=replace(record.state, entities=tuple(
-                replace(e, lines=(), face_state=face_state) if e.id == subject else e
+                replace(e, face_state=face_state) if e.id == subject else e
                 for e in record.state.entities)))
         found = FAMILY.match(subject_as("melded"), None, declared)
         assert found.polarity is Polarity.FIRES and subject in found.outcome
         assert FAMILY.match(subject_as("front"), None, declared) is None
-        # A gen-2 subject has no face state: the record speaks for nothing.
-        assert FAMILY.match(record, None, declared) is None
 
     def test_a_merged_subject_and_its_need(self, by_kind):
         from effects.domain.state_snapshot import Link
@@ -171,7 +171,7 @@ def test_a_record_whose_incoming_event_is_unknown_shows_no_side(by_kind):
     """WP7: ``incoming`` then holds the event as it left; what came in, and
     whether the replacement edited it, are unknown, so no side is read."""
     record = _entering(by_kind)
-    params = {"event": "zone_change", "result": "updated"}
+    params = {"event": "zone_change", "result": "replaced"}
     assert FAMILY.match(record, None, params) is not None
     unknown = replace(record, payload=replace(record.payload, incoming_unknown=True,
                                               outgoing=None))

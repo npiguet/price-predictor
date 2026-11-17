@@ -1,4 +1,4 @@
-"""``sba_game_loss`` on real gen-2 combats."""
+"""``sba_game_loss`` on real gen-3 combats and effect halves."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import pytest
 
 from effects.domain.event_schema import Event, EventType
 from effects.domain.rule_catalogue import Polarity
+from effects.domain.rule_detectors.acting_line import is_rescued_orphans
 from effects.domain.rule_detectors.sba_game_loss import FAMILY
 
 
@@ -56,29 +57,45 @@ def test_an_unknown_check_is_refused(by_kind):
         FAMILY.validate({"check": "commander_damage"})
 
 
-def _record(gen2_records, record_id):
-    return next(r for r in gen2_records if r.record_id == record_id)
+_BURN = "9442f17f-cb56-4893-8d4a-66b5538de180.3-mwhr1318yo3f.11670"
 
 
-def test_a_burn_kill_s_game_end_is_in_the_next_record_so_unreadable(gen2_records):
+def _burn_kill(gen3_records):
+    """A real effect half dealing 1 damage to P1, edited so P1 stands at 1
+    life: the resolution takes P1 to 0 and holds no game-end event."""
+    record = next(r for r in gen3_records if r.record_id == _BURN)
+    assert not any(e.type in (EventType.PLAYER_WON, EventType.PLAYER_LOST)
+                   for e in record.payload.listed_events())
+    state = replace(record.state, players=tuple(
+        replace(p, life=1) if p.id == "P1" else p for p in record.state.players))
+    return replace(record, state=state)
+
+
+def test_a_burn_kill_s_game_end_is_in_the_next_record_so_unreadable(gen3_records):
     """The resolution takes P1 to 0 life; the game-end rescue after it holds
     player_won. The kill fires, its outcome unreadable, and is no review."""
-    kill = _record(gen2_records, "71253f20-5472-4ddd-8c58-27c78651878b.3-mv4d43zn1o4f.6392")
-    found = FAMILY.match(kill, None, {"check": "life_zero"})
+    found = FAMILY.match(_burn_kill(gen3_records), None, {"check": "life_zero"})
     assert found.polarity is Polarity.FIRES and found.observed is None
     assert found.entities == ("P1",)
 
 
-def test_the_game_end_rescue_shows_no_side(gen2_records):
-    rescue = _record(gen2_records, "71253f20-5472-4ddd-8c58-27c78651878b.3-mv4d43zn1o4f.6393")
-    assert any(e.type is EventType.PLAYER_WON for e in rescue.payload.events)
-    assert FAMILY.match(rescue, None, {"check": "life_zero"}) is None
+def test_the_game_end_rescue_shows_no_side(gen3_records):
+    """A real rescue record edited to hold the game end the collector files there."""
+    rescue = next(r for r in gen3_records if is_rescued_orphans(r))
+    won = Event(type=EventType.PLAYER_WON, subjects=("P0",))
+    edited = replace(rescue, payload=replace(rescue.payload, events=(*rescue.payload.events, won)))
+    assert any(e.type is EventType.PLAYER_WON for e in edited.payload.events)
+    assert FAMILY.match(edited, None, {"check": "life_zero"}) is None
 
 
-def test_a_player_both_dead_and_poisoned_is_neither_check_s_near_miss(gen2_records):
-    """Twelve damage at 3 life and the ninth poison counter: the life loss
-    ends the game, so poison's near miss cannot say what ended it."""
-    combat = _record(gen2_records, "71253f20-5472-4ddd-8c58-27c78651878b.0-mv46oleh5eqw.8786")
+def test_a_player_both_dead_and_poisoned_is_neither_check_s_near_miss(by_kind):
+    """Lethal damage with the ninth poison counter: the life loss ends the
+    game, so poison's near miss cannot say what ended it. A real combat edited
+    to the lethal hit."""
+    record, player = _player_hit(by_kind)
+    state = replace(record.state, players=tuple(
+        replace(p, life=1, poison=9) if p.id == player else p for p in record.state.players))
+    combat = replace(record, state=state)
     found = FAMILY.match(combat, None, {"check": "life_zero"})
-    assert found.polarity is Polarity.FIRES and found.observed and found.entities == ("P0",)
+    assert found.polarity is Polarity.FIRES and found.entities == (player,)
     assert FAMILY.match(combat, None, {"check": "poison_ten"}) is None

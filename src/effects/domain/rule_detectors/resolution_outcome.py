@@ -6,11 +6,10 @@ became illegal, 608.2b), ``partially_fizzled``, ``declined`` or ``countered``
 outcome is the one it names, and on its near miss when the outcome is one of
 ``near``.
 
-Where the outcome is written depends on the generation. Gen-1 and gen-2 stamp
-it on the cost half. Gen-3 (root spec § 8.14, FR-042b) writes it on the
-effect half, and a countered object writes no effect half at all: its fate is
-the countering clause's effect half, which holds the countered object's
-``spell_countered`` event. So on gen-3 a ``countered`` observation is a half
+The outcome is written on the effect half (root spec § 8.14, FR-042b), and a
+countered object writes no effect half at all: its fate is the countering
+clause's effect half, which holds the countered object's ``spell_countered``
+event. So a ``countered`` observation is a half
 holding ``spell_countered`` (whose subjects are the countered objects), read
 as such only for a rule naming ``countered``, and every other outcome is the
 effect half's own.
@@ -25,9 +24,7 @@ Parameters:
   spell): the countered object's card on a countering half;
 - ``targeted``: true to count only stack objects that had a target, so a
   fizzle rule's near miss is a targeted spell that resolved. The targets are
-  read as cast (``Refs.as_cast``: ``targets_at_cast``, else ``targets``); a
-  fizzled half of a record without ``targets_at_cast``, whose ``targets`` lost
-  the illegal ones, counts as targeted by definition.
+  read as cast (``Refs.as_cast``: ``targets_at_cast``, else ``targets``).
 
 The condition entities are the stack object (``refs.source``, or the
 countered object) and its targets, whose legality a fizzle reads; the outcome
@@ -92,10 +89,8 @@ def _observed(record: EffectRecord, countered_asked: bool) -> _Observed | None:
             return _Observed(ResolutionOutcome.COUNTERED, countered, countered, True)
     if payload.outcome is None:
         return None
-    # The targets as cast (V5 #25); a fizzled half with no targets_at_cast
-    # (an older record) had a target by definition.
-    targeted = bool(refs.as_cast) or (
-        refs.targets_at_cast is None and payload.outcome is ResolutionOutcome.FIZZLED)
+    # The targets as cast (V5 #25).
+    targeted = bool(refs.as_cast)
     return _Observed(payload.outcome, tuple(dict.fromkeys((*source, *refs.as_cast))), source,
                      targeted)
 

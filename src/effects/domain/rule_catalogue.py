@@ -139,8 +139,8 @@ class DetectorDeclaration:
     """How a scenario's outcome is found in a record (FR-002, research R1).
 
     ``family`` names a registered detector family and ``params`` its arguments;
-    ``needs`` lists the gen-3 fields the detector reads, empty when it runs on
-    gen-2 records too.
+    ``needs`` lists the record fields the detector reads, empty when it reads
+    none beyond the envelope.
     """
 
     family: str

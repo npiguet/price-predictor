@@ -69,24 +69,6 @@ def test_does_not_fire_wins_over_other():
     assert tag_record(make_record(), index).tags[0].polarity is Polarity.DOES_NOT_FIRE
 
 
-def test_a_rule_needing_a_gen3_field_is_not_countable_on_gen2_and_counted_on_gen3():
-    """Story 1 acceptance 4: not countable, never zero (FR-007)."""
-    family = _Fixed(FamilyMatch(Polarity.FIRES, True), gen3_fields=frozenset({"failed_checks"}))
-    index = _index(("601.3-1", ("601.3",), family))
-    gen2 = tag_record(make_record(generation=None), index)
-    assert gen2.tags == () and gen2.not_countable == {"601.3"}
-    gen3 = tag_record(make_record(generation=3), index)
-    assert [t.rule for t in gen3.tags] == ["601.3"] and not gen3.not_countable
-
-
-def test_a_declaration_s_own_needs_also_make_a_rule_not_countable():
-    family = _Fixed(FamilyMatch(Polarity.FIRES, True))
-    decl = declaration(family.id, "resolution", needs=("timing",))
-    index = DetectorIndex({"resolution": ((scenario("x-1", ("1.1",), "resolution", decl),
-                                           decl, family),)})
-    assert tag_record(make_record(generation=None), index).not_countable == {"1.1"}
-
-
 def test_a_scenario_declaring_no_detector_tags_nothing():
     """Story 1 acceptance 3."""
     none = scenario("613.1-1", ("613.1",), "continuous", NoDetector("layer order is not recorded"))

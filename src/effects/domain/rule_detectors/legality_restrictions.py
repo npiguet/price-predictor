@@ -13,8 +13,8 @@ names the one rule a declaration speaks for, decided by ``rule_outcomes``:
   creature type, and skulk compares powers); ``tapped`` (509.1a: a blocker
   is untapped); ``landwalk``, applying where the defending player controls a
   land the attacker's landwalk line names (``Landwalk:Swamp``,
-  ``Land.nonBasic``, ``Swamp.Snow``; where no line names it, a gen-2 entity
-  or a chosen type, the attacker's landwalk and no other reason); and
+  ``Land.nonBasic``, ``Swamp.Snow``; where no line names it, a chosen type,
+  the attacker's landwalk and no other reason); and
   ``effect``, a forbidden creature nothing the record shows explains: no
   evasion, tap or landwalk, no responsible line (gen-3 names the static
   forbidding the block, Pacifism's included, or the creature's own keyword
@@ -191,7 +191,7 @@ def _cant_block_keyword(blocker: EntityState, keywords: set[str], state) -> bool
 def _walked(anchor: EntityState, blocker: EntityState, state) -> bool | None:
     """Whether the blocker's controller controls a land the anchor's landwalk
     names (702.14c), read off its keyword lines' fragments; None where no
-    line says which land (a gen-2 entity, a chosen type)."""
+    line says which land (a chosen type)."""
     selectors = [line.fragment.split(":")[1] for line in anchor.lines or ()
                  if line.fragment and line.fragment.lower().startswith("landwalk:")
                  and len(line.fragment.split(":")) > 1]

@@ -1,4 +1,4 @@
-"""``legality_membership`` on real gen-2 legality records (T029)."""
+"""``legality_membership`` on real gen-3 legality records (T029)."""
 
 from __future__ import annotations
 
@@ -84,7 +84,7 @@ class TestUniverse:
 
     def _targeting(self, by_kind):
         return next(r for r in by_kind("playability", "decision")
-                    if 0 < len(r.payload.candidates[0].legal_targets) < 32)
+                    if r.payload.candidates[0].legal_targets)
 
     def test_what_a_targeting_candidate_does_not_list_is_outside(self, by_kind):
         record = self._targeting(by_kind)
@@ -100,15 +100,13 @@ class TestUniverse:
                                              "universe": "battlefield"})
         assert inside.polarity is Polarity.FIRES and set(inside.entities) == legal
 
-    def test_a_capped_or_untargeted_candidate_speaks_for_no_outside(self, by_kind):
+    def test_an_untargeted_candidate_speaks_for_no_outside(self, by_kind):
         record = self._targeting(by_kind)
         candidate = record.payload.candidates[0]
         declared = {"list": "legal_targets", "universe": "battlefield"}
-        capped = replace(candidate, legal_targets=tuple(f"E{i}" for i in range(32)))
         untargeted = replace(candidate, legal_targets=(), has_legal_target=True)
-        for edited in (capped, untargeted):
-            payload = replace(record.payload, candidates=(edited,))
-            assert FAMILY.match(replace(record, payload=payload), None, declared) is None
+        payload = replace(record.payload, candidates=(untargeted,))
+        assert FAMILY.match(replace(record, payload=payload), None, declared) is None
 
     def test_an_unknown_universe_is_refused(self, by_kind):
         with pytest.raises(ValueError, match="universe"):
@@ -185,12 +183,6 @@ class TestTheGen3Lists:
         assert found.polarity is Polarity.FIRES and _judged(found, edited) == bound
         assert found.outcome == (*bound, record.payload.anchor_attacker)
 
-    def test_a_gen2_record_shows_neither_list(self, by_kind):
-        assert FAMILY.match(by_kind("playability", "attackers")[0], None,
-                            {"list": "legal_defenders", "universe": "battlefield"}) is None
-        assert FAMILY.match(by_kind("playability", "blockers")[0], None,
-                            {"list": "must_block"}) is None
-
     def test_both_lists_need_their_gen3_field(self):
         assert FAMILY.needs({"list": "legal_defenders"}) == {"legal_defenders"}
         assert FAMILY.needs({"list": "must_block"}) == {"must_block"}
@@ -232,31 +224,31 @@ class TestKeywordAndCounter:
     def _declared(self, keyword):
         return {"list": "legal_blockers", "keyword": keyword, "counter_type": "+1/+1"}
 
-    def test_a_carrier_kept_out_while_holding_the_counter_fires(self, by_kind, gen2_sidecars):
-        record, entity_id, keyword = self._carrier(by_kind, gen2_sidecars)
+    def test_a_carrier_kept_out_while_holding_the_counter_fires(self, by_kind, gen3_sidecars):
+        record, entity_id, keyword = self._carrier(by_kind, gen3_sidecars)
         edited = self._edited(record, entity_id, counters={"P1P1": 1}, forbidden=True)
-        found = FAMILY.match(edited, gen2_sidecars, self._declared(keyword))
+        found = FAMILY.match(edited, gen3_sidecars, self._declared(keyword))
         assert found.polarity is Polarity.FIRES and entity_id in found.entities
 
-    def test_a_legal_carrier_without_the_counter_is_the_near_miss(self, by_kind, gen2_sidecars):
-        record, entity_id, keyword = self._carrier(by_kind, gen2_sidecars)
+    def test_a_legal_carrier_without_the_counter_is_the_near_miss(self, by_kind, gen3_sidecars):
+        record, entity_id, keyword = self._carrier(by_kind, gen3_sidecars)
         edited = self._edited(record, entity_id, counters={}, forbidden=False)
-        found = FAMILY.match(edited, gen2_sidecars, self._declared(keyword))
+        found = FAMILY.match(edited, gen3_sidecars, self._declared(keyword))
         assert found.polarity is Polarity.DOES_NOT_FIRE and entity_id in found.entities
 
     def test_a_carrier_on_the_side_its_counter_does_not_explain_is_not_counted(
-            self, by_kind, gen2_sidecars):
-        record, entity_id, keyword = self._carrier(by_kind, gen2_sidecars)
+            self, by_kind, gen3_sidecars):
+        record, entity_id, keyword = self._carrier(by_kind, gen3_sidecars)
         for counters, forbidden in (({}, True), ({"+1/+1": 2}, False)):
             edited = self._edited(record, entity_id, counters=counters, forbidden=forbidden)
-            found = FAMILY.match(edited, gen2_sidecars, self._declared(keyword))
+            found = FAMILY.match(edited, gen3_sidecars, self._declared(keyword))
             assert found is None, (counters, forbidden, found)
 
     def test_an_entity_whose_card_lacks_the_keyword_is_not_counted(
-            self, by_kind, gen2_sidecars):
-        record, entity_id, _ = self._carrier(by_kind, gen2_sidecars)
+            self, by_kind, gen3_sidecars):
+        record, entity_id, _ = self._carrier(by_kind, gen3_sidecars)
         edited = self._edited(record, entity_id, counters={"P1P1": 1}, forbidden=True)
-        assert FAMILY.match(edited, gen2_sidecars, self._declared("No Such Keyword")) is None
+        assert FAMILY.match(edited, gen3_sidecars, self._declared("No Such Keyword")) is None
 
 
 class TestAnchorLists:
@@ -278,10 +270,8 @@ class TestAnchorLists:
         found = FAMILY.match(free, None, {"list": "must_attack", "fires_when": "inside"})
         assert found.polarity is Polarity.DOES_NOT_FIRE and found.outcome == (anchor,)
 
-    def test_must_attack_needs_the_gen3_record(self, by_kind):
+    def test_must_attack_needs_its_field(self):
         assert FAMILY.needs({"list": "must_attack"}) == {"must_attack"}
-        assert FAMILY.match(by_kind("playability", "attackers")[0], None,
-                            {"list": "must_attack"}) is None
 
     def test_an_anchor_needing_two_blockers_is_inside_min_blockers(self, by_kind):
         record = by_kind("playability", "blockers")[0]

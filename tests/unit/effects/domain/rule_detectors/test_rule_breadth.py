@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections import Counter
-from pathlib import Path
 
 import pytest
 
@@ -19,23 +18,7 @@ from effects.domain.rule_breadth import (
 )
 from effects.domain.rule_detectors import DetectorIndex, families
 from effects.domain.rule_detectors.acting_line import acting_line
-from effects.infrastructure.shard_io import read_shard
 from tests.unit.effects.domain.rule_detectors.builders import catalogue, declaration, scenario
-
-_FIXTURES = Path(__file__).parents[4] / "fixtures" / "effects"
-
-
-@pytest.fixture(scope="module")
-def gen3_records():
-    return list(read_shard(_FIXTURES / "gen3-records.jsonl.gz"))
-
-
-@pytest.fixture(scope="module")
-def gen3_sidecars():
-    from effects.infrastructure.converted_trees import SourceTrees
-
-    root = _FIXTURES / "gen3-sidecars"
-    return SourceTrees.of([root / "cardsfolder", root / "tokenscripts"]).sidecar_cache()
 
 
 def test_every_family_s_general_parameters_are_its_own():

@@ -1,4 +1,4 @@
-"""``continuous_contribution`` on real gen-2 continuous records (T029)."""
+"""``continuous_contribution`` on real gen-3 continuous records (T029)."""
 
 from __future__ import annotations
 
@@ -15,29 +15,32 @@ from effects.domain.rule_detectors.continuous_contribution import (
     conditioned_on_counters,
 )
 
+#: The keyword the fixture's Storm Fleet Swashbuckler static grants (a Pirate gets double strike).
+_GRANTED = "double_strike"
 
-def _trample_grant(by_kind):
+
+def _keyword_grant(by_kind):
     return next(r for r in by_kind("continuous")
-                if any("trample" in c.keywords for c in r.payload.contributions))
+                if any(_GRANTED in c.keywords for c in r.payload.contributions))
 
 
 def test_a_static_granting_the_keyword_fires(by_kind):
-    record = _trample_grant(by_kind)
-    found = FAMILY.match(record, None, {"field": "keywords", "value": "trample"})
+    record = _keyword_grant(by_kind)
+    found = FAMILY.match(record, None, {"field": "keywords", "value": _GRANTED})
     assert found.polarity is Polarity.FIRES
     # The contributions carrying trample are the outcome; the host the condition.
     assert found.outcome == tuple(dict.fromkeys(
-        c.entity for c in record.payload.contributions if "trample" in c.keywords))
+        c.entity for c in record.payload.contributions if _GRANTED in c.keywords))
     assert found.condition == tuple(
         e.id for e in source_entities(record.state, record.ability))
 
 
 def test_the_same_static_edited_to_grant_nothing_is_the_near_miss(by_kind):
-    record = _trample_grant(by_kind)
+    record = _keyword_grant(by_kind)
     stripped = ContinuousPayload(contributions=tuple(
         replace(c, keywords=()) for c in record.payload.contributions))
     found = FAMILY.match(replace(record, payload=stripped), None,
-                         {"field": "keywords", "value": "trample"})
+                         {"field": "keywords", "value": _GRANTED})
     assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
 
 
@@ -82,25 +85,29 @@ def test_a_tokens_static_shows_by_the_tokens_kind(by_kind):
 
 
 def test_a_roles_kind_is_its_name(by_kind):
-    """Every Role is an Aura Role: a Monster Role is told apart by its name alone."""
-    record, host = next(
-        (r, h) for r in by_kind("continuous")
-        for h in source_entities(r.state, r.ability) if "role" in {s.lower() for s in h.subtypes})
-    kind = next(word for word in host.name.split() if word.lower() != "role")
-    assert FAMILY.match(record, None, {"field": "pt", "source_token_kind": kind}) is not None
-    assert FAMILY.match(record, None, {"field": "pt", "source_token_kind": "Nonesuch"}) is None
+    """Every Role is an Aura Role: a Monster Role is told apart by its name
+    alone. The fixture holds no Role, so the host of a real token static is
+    edited into one."""
+    record = next(r for r in by_kind("continuous")
+                  if r.ability[0].script_file.startswith("tokenscripts/"))
+    hosts = {h.id for h in source_entities(record.state, record.ability)}
+    role = replace(record, state=replace(record.state, entities=tuple(
+        replace(e, name="Monster Role", subtypes=("aura", "role")) if e.id in hosts else e
+        for e in record.state.entities)))
+    assert FAMILY.match(role, None, {"field": "pt", "source_token_kind": "Monster"}) is not None
+    assert FAMILY.match(role, None, {"field": "pt", "source_token_kind": "Nonesuch"}) is None
 
 
-def test_a_counter_conditioned_static_shows_by_its_counter_type(by_kind, gen2_sidecars):
+def test_a_counter_conditioned_static_shows_by_its_counter_type(by_kind, gen3_sidecars):
     def counter_type(record):
-        line = acting_line(record, gen2_sidecars)
+        line = acting_line(record, gen3_sidecars)
         return next(iter(sorted(condition_counter_types(line.script_text if line else None))),
                     None)
     record = next(r for r in by_kind("continuous") if counter_type(r))
     declared = {"field": "pt", "counter_condition": counter_type(record)}
-    assert FAMILY.match(record, gen2_sidecars, declared) is not None
+    assert FAMILY.match(record, gen3_sidecars, declared) is not None
     assert FAMILY.match(record, None, declared) is None
-    assert FAMILY.match(record, gen2_sidecars,
+    assert FAMILY.match(record, gen3_sidecars,
                         {"field": "pt", "counter_condition": "NONESUCH"}) is None
 
 
@@ -116,7 +123,7 @@ def test_a_counter_condition_compares_in_one_spelling():
 
 
 def test_another_keyword_is_the_near_miss(by_kind):
-    found = FAMILY.match(_trample_grant(by_kind), None, {"field": "keywords", "value": "flying"})
+    found = FAMILY.match(_keyword_grant(by_kind), None, {"field": "keywords", "value": "flying"})
     assert found.polarity is Polarity.DOES_NOT_FIRE
 
 
@@ -158,37 +165,37 @@ class TestT030Parameters:
 
     @staticmethod
     def _carriers_as(record, **changes):
-        """``record`` with every contribution's entity changed, as gen-3 entities."""
+        """``record`` with every contribution's entity changed."""
         carrying = {c.entity for c in record.payload.contributions}
         return replace(record, state=replace(record.state, entities=tuple(
-            replace(e, lines=(), **changes) if e.id in carrying else e
+            replace(e, **changes) if e.id in carrying else e
             for e in record.state.entities)))
 
     def test_a_script_parameter_and_a_source_keyword_read_the_static(
-            self, by_kind, gen2_sidecars):
-        record = _trample_grant(by_kind)
-        line = acting_line(record, gen2_sidecars)
+            self, by_kind, gen3_sidecars):
+        record = _keyword_grant(by_kind)
+        line = acting_line(record, gen3_sidecars)
         key = next(k for k in ("Mode", "Affected", "AddKeyword") if f"{k}$" in line.script_text)
-        declared = {"field": "keywords", "value": "trample"}
-        assert FAMILY.match(record, gen2_sidecars, {**declared, "script_param": key})
-        assert FAMILY.match(record, gen2_sidecars,
+        declared = {"field": "keywords", "value": _GRANTED}
+        assert FAMILY.match(record, gen3_sidecars, {**declared, "script_param": key})
+        assert FAMILY.match(record, gen3_sidecars,
                             {**declared, "script_param": "NoSuchKey"}) is None
-        assert FAMILY.match(record, gen2_sidecars,
+        assert FAMILY.match(record, gen3_sidecars,
                             {**declared, "source_keyword": "No Such Keyword"}) is None
 
     def test_a_face_state_narrows_the_contributions(self, by_kind):
-        record = _trample_grant(by_kind)
-        declared = {"field": "keywords", "value": "trample", "affected_face_state": "flipped"}
+        record = _keyword_grant(by_kind)
+        declared = {"field": "keywords", "value": _GRANTED, "affected_face_state": "flipped"}
         flipped = self._carriers_as(record, face_state="flipped")
         assert FAMILY.match(flipped, None, declared).polarity is Polarity.FIRES
         assert FAMILY.match(self._carriers_as(record, face_state="front"), None, declared) is None
         assert FAMILY.needs(declared) == {"face_state"}
 
     def test_a_designation_counts_where_it_explains_the_side(self, by_kind):
-        record = _trample_grant(by_kind)
+        record = _keyword_grant(by_kind)
         record = replace(record, payload=ContinuousPayload(contributions=tuple(
-            c for c in record.payload.contributions if "trample" in c.keywords)))
-        declared = {"field": "keywords", "value": "trample", "designation": "suspected"}
+            c for c in record.payload.contributions if _GRANTED in c.keywords)))
+        declared = {"field": "keywords", "value": _GRANTED, "designation": "suspected"}
         held = self._carriers_as(record, designations=("suspected",))
         found = FAMILY.match(held, None, declared)
         assert found.polarity is Polarity.FIRES

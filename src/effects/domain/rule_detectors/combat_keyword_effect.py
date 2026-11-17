@@ -62,7 +62,7 @@ Parameters:
 
 The condition entity is always the carrier, or the creature without the
 keyword on the sides that judge one. Keywords are read as ``keyword_combat``
-reads them (``KeywordResolver``), on gen-2 records as well.
+reads them (``KeywordResolver``).
 """
 
 from __future__ import annotations

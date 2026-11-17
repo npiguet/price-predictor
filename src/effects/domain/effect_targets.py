@@ -367,11 +367,10 @@ def _apply_type_change(entry: EntityTargets, event: Event) -> None:
     _apply_duration(entry, HeadField.TYPE_COLOR_DURATION, event.duration)
 
 
-def _displaceable(record: EffectRecord, entity) -> dict[str, tuple[str, ...]] | None:
+def _displaceable(entity) -> dict[str, tuple[str, ...]] | None:
     """Each lost field's values on the board a continuous record's static
-    displaces, keyed by the lost field; None where that board is not the one
-    without the static (before gen-3) or the entity is not on it."""
-    if entity is None or record.generation is None or record.generation < 3:
+    displaces, keyed by the lost field; None where the entity is not on it."""
+    if entity is None:
         return None
     return {
         HeadField.TYPES_LOST: entity.types,
@@ -922,7 +921,7 @@ def _apply_continuous(record: EffectRecord, slot) -> None:
             _flag_keyword(entry, HeadField.KEYWORDS_LOST, keyword)
         # Whole-class tokens (``all-creature-types``) match no slot and drop.
         entity = entities.get(contribution.entity)
-        before = _displaceable(record, entity)
+        before = _displaceable(entity)
         channels = [
             (contribution.type_changes, vocabulary, gained, lost)
             for gained, lost, vocabulary in _TYPE_CHANNELS

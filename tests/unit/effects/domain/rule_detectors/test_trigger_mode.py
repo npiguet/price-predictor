@@ -1,4 +1,4 @@
-"""``trigger_mode`` on real gen-2 trigger records (T026)."""
+"""``trigger_mode`` on real gen-3 trigger records (T026)."""
 
 from __future__ import annotations
 
@@ -15,10 +15,10 @@ def _mode_of(record, sidecars):
     return (acting_root_params(record, sidecars) or {}).get("Mode")
 
 
-def test_a_fired_trigger_of_the_named_mode_fires(by_kind, gen2_sidecars):
+def test_a_fired_trigger_of_the_named_mode_fires(by_kind, gen3_sidecars):
     record = next(r for r in by_kind("trigger")
-                  if r.payload.fired and _mode_of(r, gen2_sidecars) == "ChangesZone")
-    found = FAMILY.match(record, gen2_sidecars, {"mode": "ChangesZone"})
+                  if r.payload.fired and _mode_of(r, gen3_sidecars) == "ChangesZone")
+    found = FAMILY.match(record, gen3_sidecars, {"mode": "ChangesZone"})
     assert found.polarity is Polarity.FIRES and found.observed
     # A trigger record carries no outcome: the triggering event's subjects
     # and the trigger's source are its condition.
@@ -28,24 +28,25 @@ def test_a_fired_trigger_of_the_named_mode_fires(by_kind, gen2_sidecars):
         assert record.state.refs.source in found.condition
 
 
-def test_the_same_trigger_edited_to_unfired_is_the_near_miss(by_kind, gen2_sidecars):
+def test_the_same_trigger_edited_to_unfired_is_the_near_miss(by_kind, gen3_sidecars):
     record = next(r for r in by_kind("trigger")
-                  if r.payload.fired and _mode_of(r, gen2_sidecars) == "ChangesZone")
+                  if r.payload.fired and _mode_of(r, gen3_sidecars) == "ChangesZone")
     unfired = replace(record, payload=TriggerPayload(event=record.payload.event, fired=False))
-    found = FAMILY.match(unfired, gen2_sidecars, {"mode": "ChangesZone"})
+    found = FAMILY.match(unfired, gen3_sidecars, {"mode": "ChangesZone"})
     assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
 
 
-def test_a_real_unfired_trigger_is_the_near_miss(by_kind, gen2_sidecars):
+def test_a_real_unfired_trigger_is_the_near_miss(by_kind, gen3_sidecars):
     record = next(r for r in by_kind("trigger")
-                  if not r.payload.fired and _mode_of(r, gen2_sidecars) == "Phase")
-    assert FAMILY.match(record, gen2_sidecars, {"mode": "Phase"}).polarity is Polarity.DOES_NOT_FIRE
+                  if not r.payload.fired and _mode_of(r, gen3_sidecars) == "ChangesZone")
+    found = FAMILY.match(record, gen3_sidecars, {"mode": "ChangesZone"})
+    assert found.polarity is Polarity.DOES_NOT_FIRE
 
 
-def test_another_mode_or_zone_shows_nothing(by_kind, gen2_sidecars):
-    record = next(r for r in by_kind("trigger") if _mode_of(r, gen2_sidecars) == "ChangesZone")
-    assert FAMILY.match(record, gen2_sidecars, {"mode": "Attacks"}) is None
-    assert FAMILY.match(record, gen2_sidecars,
+def test_another_mode_or_zone_shows_nothing(by_kind, gen3_sidecars):
+    record = next(r for r in by_kind("trigger") if _mode_of(r, gen3_sidecars) == "ChangesZone")
+    assert FAMILY.match(record, gen3_sidecars, {"mode": "Attacks"}) is None
+    assert FAMILY.match(record, gen3_sidecars,
                         {"mode": "ChangesZone", "destination": "Nowhere"}) is None
 
 
@@ -53,12 +54,12 @@ def test_without_the_sidecars_no_mode_can_be_read(by_kind):
     assert FAMILY.match(by_kind("trigger")[0], None, {"mode": "Phase"}) is None
 
 
-def test_a_declaration_without_a_mode_is_refused(by_kind, gen2_sidecars):
+def test_a_declaration_without_a_mode_is_refused(by_kind, gen3_sidecars):
     with pytest.raises(ValueError, match="mode"):
         FAMILY.validate({})
 
 
-def test_a_selector_naming_a_card_is_refused(by_kind, gen2_sidecars):
+def test_a_selector_naming_a_card_is_refused(by_kind, gen3_sidecars):
     with pytest.raises(ValueError, match="naming a card"):
         FAMILY.validate({"mode": "ChangesZone", "selector": "Card.namedGoblin King"})
 
@@ -70,26 +71,26 @@ def _keyword_trigger(by_kind, sidecars, fired):
 
 
 class TestKeyword:
-    def test_a_trigger_a_keyword_generates_shows_on_its_side(self, by_kind, gen2_sidecars):
+    def test_a_trigger_a_keyword_generates_shows_on_its_side(self, by_kind, gen3_sidecars):
         for fired, polarity in ((True, Polarity.FIRES), (False, Polarity.DOES_NOT_FIRE)):
-            record = _keyword_trigger(by_kind, gen2_sidecars, fired)
-            name = gen2_sidecars.first_line(record.ability).keyword_display_name
-            found = FAMILY.match(record, gen2_sidecars, {"keyword": name})
+            record = _keyword_trigger(by_kind, gen3_sidecars, fired)
+            name = gen3_sidecars.first_line(record.ability).keyword_display_name
+            found = FAMILY.match(record, gen3_sidecars, {"keyword": name})
             assert found.polarity is polarity and found.observed is fired
 
-    def test_the_name_is_compared_in_the_packages_spelling(self, by_kind, gen2_sidecars):
-        record = _keyword_trigger(by_kind, gen2_sidecars, True)
-        name = gen2_sidecars.first_line(record.ability).keyword_display_name
+    def test_the_name_is_compared_in_the_packages_spelling(self, by_kind, gen3_sidecars):
+        record = _keyword_trigger(by_kind, gen3_sidecars, True)
+        name = gen3_sidecars.first_line(record.ability).keyword_display_name
         spelled = name.lower().replace(" ", "_")
-        assert FAMILY.match(record, gen2_sidecars, {"keyword": spelled}) is not None
+        assert FAMILY.match(record, gen3_sidecars, {"keyword": spelled}) is not None
 
-    def test_another_keyword_or_a_script_trigger_shows_nothing(self, by_kind, gen2_sidecars):
-        record = _keyword_trigger(by_kind, gen2_sidecars, True)
-        assert FAMILY.match(record, gen2_sidecars, {"keyword": "no such keyword"}) is None
-        scripted = next(r for r in by_kind("trigger") if _mode_of(r, gen2_sidecars))
-        assert FAMILY.match(scripted, gen2_sidecars, {"keyword": "exalted"}) is None
+    def test_another_keyword_or_a_script_trigger_shows_nothing(self, by_kind, gen3_sidecars):
+        record = _keyword_trigger(by_kind, gen3_sidecars, True)
+        assert FAMILY.match(record, gen3_sidecars, {"keyword": "no such keyword"}) is None
+        scripted = next(r for r in by_kind("trigger") if _mode_of(r, gen3_sidecars))
+        assert FAMILY.match(scripted, gen3_sidecars, {"keyword": "exalted"}) is None
 
-    def test_a_keyword_takes_no_script_parameter(self, by_kind, gen2_sidecars):
+    def test_a_keyword_takes_no_script_parameter(self, by_kind, gen3_sidecars):
         with pytest.raises(ValueError, match="no script parameters"):
             FAMILY.validate({"keyword": "exalted", "mode": "Attacks"})
 
@@ -103,23 +104,23 @@ class TestT030Parameters:
     """Phase, script parameters, step, source and spawned triggers (T030 follow-up)."""
 
     def test_the_phase_and_a_script_parameter_read_the_trigger_segment(
-            self, by_kind, gen2_sidecars):
-        record = _phase_trigger(by_kind, gen2_sidecars)
-        phase = acting_root_params(record, gen2_sidecars)["Phase"]
-        assert FAMILY.match(record, gen2_sidecars, {"mode": "Phase", "phase": phase})
-        assert FAMILY.match(record, gen2_sidecars, {"mode": "Phase", "phase": "Nowhere"}) is None
-        assert FAMILY.match(record, gen2_sidecars, {"mode": "Phase", "script_param": "Phase"})
-        assert FAMILY.match(record, gen2_sidecars,
+            self, by_kind, gen3_sidecars):
+        record = _phase_trigger(by_kind, gen3_sidecars)
+        phase = acting_root_params(record, gen3_sidecars)["Phase"]
+        assert FAMILY.match(record, gen3_sidecars, {"mode": "Phase", "phase": phase})
+        assert FAMILY.match(record, gen3_sidecars, {"mode": "Phase", "phase": "Nowhere"}) is None
+        assert FAMILY.match(record, gen3_sidecars, {"mode": "Phase", "script_param": "Phase"})
+        assert FAMILY.match(record, gen3_sidecars,
                             {"mode": "Phase", "script_param": "NoSuchKey"}) is None
 
-    def test_a_step_alone_speaks_for_every_trigger_evaluated_then(self, by_kind, gen2_sidecars):
+    def test_a_step_alone_speaks_for_every_trigger_evaluated_then(self, by_kind, gen3_sidecars):
         record = by_kind("trigger")[0]
         step = record.state.global_.phase.lower()
-        found = FAMILY.match(record, gen2_sidecars, {"step": step})
+        found = FAMILY.match(record, gen3_sidecars, {"step": step})
         assert found.polarity is (Polarity.FIRES if record.payload.fired
                                   else Polarity.DOES_NOT_FIRE)
         other = next(p for p in ("cleanup", "untap") if p != step)
-        assert FAMILY.match(record, gen2_sidecars, {"step": other}) is None
+        assert FAMILY.match(record, gen3_sidecars, {"step": other}) is None
         with pytest.raises(ValueError, match="step"):
             FAMILY.validate({"step": "EndCombat"})
 
@@ -146,13 +147,11 @@ class TestT030Parameters:
             record = self._sourced(by_kind, fired)
             declared = {"step": record.state.global_.phase.lower(),
                         "source_designation": "harnessed"}
-            held = self._source_as(record, lines=(), designations=("harnessed",))
-            lacking = self._source_as(record, lines=(), designations=())
+            held = self._source_as(record, designations=("harnessed",))
+            lacking = self._source_as(record, designations=())
             explained, other = (held, lacking) if fired else (lacking, held)
             assert FAMILY.match(explained, None, declared).polarity is polarity
             assert FAMILY.match(other, None, declared) is None
-            # A gen-2 source records no designation.
-            assert FAMILY.match(record, None, declared) is None
         assert FAMILY.needs({"mode": "Phase", "source_designation": "x"}) == {"designations"}
 
     def test_a_delayed_trigger_is_read_off_the_segment_that_created_it(self, by_kind):

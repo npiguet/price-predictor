@@ -1,4 +1,4 @@
-"""Real gen-2 records for the detector families."""
+"""Real gen-3 records for the detector families."""
 
 from __future__ import annotations
 
@@ -8,26 +8,26 @@ import pytest
 
 from effects.infrastructure.shard_io import read_shard
 
-GEN2_RECORDS = Path(__file__).parents[4] / "fixtures" / "effects" / "gen2-records.jsonl.gz"
+GEN3_RECORDS = Path(__file__).parents[4] / "fixtures" / "effects" / "gen3-records.jsonl.gz"
 
 
 @pytest.fixture(scope="session")
-def gen2_records():
-    return list(read_shard(GEN2_RECORDS))
+def gen3_records():
+    return list(read_shard(GEN3_RECORDS))
 
 
 @pytest.fixture(scope="session")
-def gen2_sidecars():
+def gen3_sidecars():
     from effects.infrastructure.converted_trees import SourceTrees
 
-    root = GEN2_RECORDS.parent / "gen2-sidecars"
+    root = GEN3_RECORDS.parent / "gen3-sidecars"
     return SourceTrees.of([root / "cardsfolder", root / "tokenscripts"]).sidecar_cache()
 
 
 @pytest.fixture(scope="session")
-def by_kind(gen2_records):
+def by_kind(gen3_records):
     """The fixture's records of one kind (and subkind), in fixture order."""
     def pick(kind: str, subkind: str | None = None):
-        return [r for r in gen2_records if r.kind.value == kind
+        return [r for r in gen3_records if r.kind.value == kind
                 and (subkind is None or (r.subkind and r.subkind.value == subkind))]
     return pick
