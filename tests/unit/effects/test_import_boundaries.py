@@ -28,6 +28,7 @@ _SRC =Path(__file__).resolve().parents[3] / "src"
 # that name a single symbol.
 _ALLOWED: dict[str, set[str] | None] = {
     "price_predictor.domain.tokenizer": None,
+    "price_predictor.domain.keyword_tokens": {"keyword_token_form", "multi_word_keywords"},
     "price_predictor.infrastructure.tokenizer_store": None,
     "price_predictor.application.build_vocabulary": None,
     "price_predictor.application.ridge_probes": None,

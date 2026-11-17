@@ -23,6 +23,9 @@ _SPACE_BEFORE_PUNCT_RE = re.compile(r"\s+([.,;:])")
 #: A bracketed cost part (``Sac<1/Creature>``) or a bare shard.
 _COST_PART_RE = re.compile(r"\w+<[^>]*>|\S+")
 _MANA_SHARD_RE = re.compile(r"^(\d+|[XYZ]|[WUBRGCS](/[WUBRGCP2])*|2/[WUBRG])$")
+#: Forge's hybrid and Phyrexian spellings in a ``Cost$``, ``ManaCostShard``'s
+#: enum names without the slash: ``WB``, ``WP``, ``BGP``, ``CW``.
+_HYBRID_SHARD_RE = re.compile(r"^(?:[WUBRG]{2}P?|[WUBRG]P|C[WUBRG])$")
 
 _COLORS = {"white", "blue", "black", "red", "green", "colorless"}
 #: After Forge's ``CardType.isACardType``. Not the effect head's frozen
@@ -202,15 +205,23 @@ def _bracket_part(part: str) -> str:
     return wording(BracketPart.parse(rest))
 
 
+def _shard_of(part: str) -> str | None:
+    """The mana shard a cost part spells, in the slashed form, or None."""
+    if _HYBRID_SHARD_RE.match(part):
+        return "/".join(part)
+    return part if _MANA_SHARD_RE.match(part) else None
+
+
 def cost_text(cost: str) -> str:
     """``Cost.toSimpleString()``: mana as symbols, the other parts in words."""
     mana: list[str] = []
     others: list[str] = []
     for part in _COST_PART_RE.findall(cost.strip()):
+        shard = _shard_of(part)
         if part in ("T", "Q"):
             others.append("{" + part + "}")
-        elif _MANA_SHARD_RE.match(part):
-            mana.append("{" + part + "}")
+        elif shard is not None:
+            mana.append("{" + shard + "}")
         elif "<" in part:
             others.append(_bracket_part(part))
         else:
@@ -222,7 +233,7 @@ def cost_text(cost: str) -> str:
 def _only_mana(cost: str) -> bool:
     """``Cost.isOnlyManaCost``: waterbend is a ``CostPartMana`` too."""
     return all(
-        _MANA_SHARD_RE.match(part) or part.startswith("Waterbend<")
+        _shard_of(part) or part.startswith("Waterbend<")
         for part in _COST_PART_RE.findall(cost.strip())
     )
 
@@ -277,6 +288,14 @@ def _with_cost(template: str, details: str) -> str:
     return java_format(template, [cost_text(cost)])
 
 
+def _join_or(items: list[str]) -> str:
+    """``Lang.joinHomogenous(items, null, "or")``: commas, then "or" before the
+    last item, with no comma ahead of it."""
+    if len(items) < 2:
+        return "".join(items)
+    return ", ".join(items[:-1]) + " or " + items[-1]
+
+
 def _ward(template: str, details: str) -> str:
     def reminder(cost: str) -> str:
         text = cost_text(cost)
@@ -287,7 +306,7 @@ def _ward(template: str, details: str) -> str:
         return "pays " + text if _only_mana(cost) else text
 
     costs = [c for c in details.split(":") if c]
-    return java_format(template, [" or ".join(reminder(c) for c in costs)])
+    return java_format(template, [_join_or([reminder(c) for c in costs])])
 
 
 def _equip(template: str, details: str) -> str:
@@ -368,7 +387,7 @@ def _exile_ctrl_or_grave(part: str, x_min: int) -> str:
 def _craft(template: str, details: str) -> str:
     fields = details.split(":")
     parts = _COST_PART_RE.findall(fields[0])
-    mana = " ".join(part for part in parts if _MANA_SHARD_RE.match(part))
+    mana = " ".join(part for part in parts if _shard_of(part))
     others = [part for part in parts if "<" in part]
     x_min = next((int(part[4:]) for part in parts if part.startswith("XMin")), 0)
     if len(fields) > 2:

@@ -252,7 +252,7 @@ class TestTargetSize:
 
     def test_an_uncapped_build_keeps_everything(self, corpus, tmp_path):
         big = run(_config(corpus, tmp_path, target_size=10_000))
-        small = run(_config(corpus, tmp_path, target_size=100))
+        small = run(_config(corpus, tmp_path, target_size=70))
         assert big > small
 
     def test_a_target_below_the_seeded_count_is_rejected(self, corpus, tmp_path):

@@ -400,3 +400,30 @@ class TestSetCodeExtraction:
         result = build_vocabulary(cards_dir, freq_threshold=1, printings_path=printings)
         assert "eld" in result.vocab
         assert "abro" not in result.vocab
+
+
+class TestKeywordNamesSeedMultiWordKeywords:
+    """Finding 1.14: the multi-word keywords come from the definitions' names."""
+
+    def test_names_with_a_space_or_hyphen_are_seeded_in_token_form(self, tmp_path: Path):
+        from price_predictor.application.build_vocabulary import build_vocabulary
+
+        (tmp_path / "card.txt").write_text("name: Test Card\n", encoding="utf-8")
+        names = ["Flying", "Beam me up", "Jump-start", "Web-slinging", "Doctor's companion"]
+        result = build_vocabulary(tmp_path, freq_threshold=1, keyword_names=names)
+        for token in ("beam_me_up", "jump_start", "web_slinging", "doctors_companion"):
+            assert token in result.vocab
+        assert "first_strike" not in result.vocab
+        assert "flying" not in result.vocab
+
+    def test_the_derived_set_extends_the_default_by_the_three_unexpandable_ones(self):
+        import json
+
+        from price_predictor.application.build_vocabulary import MULTI_WORD_KEYWORDS
+        from price_predictor.domain.keyword_tokens import multi_word_keywords
+
+        fixtures = Path(__file__).resolve().parents[2] / "fixtures" / "effects"
+        path = fixtures / "keyword-definitions.json"
+        derived = set(multi_word_keywords(json.loads(path.read_text(encoding="utf-8"))))
+        assert derived - set(MULTI_WORD_KEYWORDS) == {"beam_me_up", "jump_start", "web_slinging"}
+        assert set(MULTI_WORD_KEYWORDS) <= derived

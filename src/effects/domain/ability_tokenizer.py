@@ -23,10 +23,11 @@ from effects.domain.keyword_formatting import (
     java_format,
     strip_specifiers,
 )
-from effects.domain.keyword_names import display_name_of
+from effects.domain.keyword_names import QUALITY_KEYWORDS, display_name_of
 from effects.domain.provenance import Role, RoleSpan
 from effects.domain.recorded_version import recorded_version
 from effects.domain.script_text import CHAIN_KEYS, SEG
+from price_predictor.domain.keyword_tokens import keyword_token_form
 from price_predictor.domain.tokenizer import MtgTokenizer
 
 
@@ -102,12 +103,49 @@ def tokenizer_surface(vocab_surface: Surface, training_settings) -> Surface:
 
 def keyword_token(display_name: str) -> str:
     """Forge's display name as the token form the vocabulary carries."""
-    return display_name.lower().replace("'", "").replace(" ", "_")
+    return keyword_token_form(display_name)
 
 
 def withheld_keyword_tokens(withheld: str | None) -> frozenset[str]:
     """The token form of the keyword ``--withhold-keyword`` names, if any."""
     return frozenset({keyword_token(withheld)}) if withheld else frozenset()
+
+
+#: The most words a keyword's display name spells (``More Than Meets the Eye``).
+_LONGEST_KEYWORD_NAME = 5
+_PROSE_COST_RE = re.compile(r"(?:\{[^{}]+\})+")
+
+
+def prose_details(name: str, rest: str) -> str | None:
+    """The ``details`` of a keyword line whose prose carries ``rest`` after the
+    keyword's name, or None when ``rest`` is no value of it: a quality after
+    ``from`` for protection and hexproof, a run of cost symbols otherwise. Nothing
+    after the name is the bare keyword, which has no values."""
+    if not rest:
+        return ""
+    if name.lower() in QUALITY_KEYWORDS:
+        quality = rest.removeprefix("from ").strip()
+        return quality if quality and rest != quality else None
+    if _PROSE_COST_RE.fullmatch(rest):
+        return " ".join(re.findall(r"\{([^{}]+)\}", rest))
+    return None
+
+
+def _spelled_length(tokens: list[Token], index: int, parts: list[str]) -> int | None:
+    """How many tokens from ``index`` spell ``parts`` (a hyphen between two
+    words counts: ``jump - start`` is ``jump_start``), or None."""
+    position = index
+    for number, part in enumerate(parts):
+        if number and _text_at(tokens, position) == "-":
+            position += 1
+        if _text_at(tokens, position) != part:
+            return None
+        position += 1
+    return position - index
+
+
+def _text_at(tokens: list[Token], position: int) -> str | None:
+    return tokens[position].text if position < len(tokens) else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,13 +190,28 @@ class KeywordExpander:
             return None
         name = self._name_by_display.get(display_name_of(text).lower())
         if name is None:
-            return None
+            return self._prose_line(text)
         colon = text.find(":")
         details = text[colon + 1:] if colon >= 0 else ""
         return KeywordLine(
             name=name, details=details,
             name_end=colon if colon >= 0 else len(text),
         )
+
+    def _prose_line(self, text: str) -> KeywordLine | None:
+        """A parameterised keyword line as the prose surface spells it
+        (``ward {2}``, ``protection from red``), its values read back to
+        Forge's ``Keyword:details`` form; None for any other prose."""
+        if ":" in text:
+            return None
+        words = text.strip().split(" ")
+        for count in range(min(len(words), _LONGEST_KEYWORD_NAME), 0, -1):
+            spelled = " ".join(words[:count])
+            name = self._name_by_display.get(spelled.lower())
+            if name is not None:
+                details = prose_details(name, " ".join(words[count:]))
+                return None if details is None else KeywordLine(name, details, len(spelled))
+        return None
 
     def name_of_token(self, token_text: str) -> str | None:
         """The display name a keyword token spells, or None."""
@@ -391,14 +444,10 @@ class AbilityTokenizer:
         self, tokens: list[Token], index: int,
     ) -> tuple[str, int] | None:
         candidates = self._multi_word_by_first.get(tokens[index].text)
-        if not candidates:
-            return None
-        for entry, parts in candidates:
-            end = index + len(parts)
-            if end > len(tokens):
-                continue
-            if all(tokens[index + i].text == part for i, part in enumerate(parts)):
-                return entry, len(parts)
+        for entry, parts in candidates or ():
+            length = _spelled_length(tokens, index, parts)
+            if length is not None:
+                return entry, length
         return None
 
     @staticmethod

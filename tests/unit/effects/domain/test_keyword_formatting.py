@@ -57,6 +57,12 @@ class TestCostText:
             ("B Sac<1/Creature>", "{B}, Sacrifice a creature"),
             ("PayLife<3>", "Pay 3 life"),
             ("T", "{T}"),
+            # Forge spells a hybrid shard without its slash.
+            ("1 WB", "{1}{W/B}"),
+            ("WP", "{W/P}"),
+            ("BGP", "{B/G/P}"),
+            ("CW", "{C/W}"),
+            ("2 W", "{2}{W}"),
         ],
     )
     def test_forge_cost_strings_render_as_toSimpleString_does(self, cost, text):
@@ -66,6 +72,22 @@ class TestCostText:
 class TestFormatters:
     def test_ward_reads_pays_before_a_mana_cost(self):
         assert format_reminder("Ward", _WARD, "2").endswith("unless that player pays {2}.")
+
+    def test_ward_with_a_hybrid_cost_keeps_pays(self):
+        assert format_reminder("Ward", _WARD, "WB").endswith(
+            "unless that player pays {W/B}."
+        )
+
+    def test_three_ward_costs_join_the_way_lang_joinHomogenous_does(self):
+        filled = format_reminder("Ward", _WARD, "2:PayLife<2>:Discard<1/Card>")
+        assert filled.endswith(
+            "unless that player pays {2}, pays 2 life or discards a card."
+        )
+
+    def test_two_ward_costs_join_with_or_alone(self):
+        assert format_reminder("Ward", _WARD, "Discard<1/Card>:2").endswith(
+            "unless that player discards a card or pays {2}."
+        )
 
     def test_ward_rewords_a_life_payment(self):
         assert format_reminder("Ward", _WARD, "PayLife<3>").endswith(

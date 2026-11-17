@@ -14,14 +14,17 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+from price_predictor.domain.keyword_tokens import multi_word_keywords
 from price_predictor.domain.tokenizer import MtgTokenizer
 
-# Multi-word keywords derived from forge.game.keyword.Keyword enum.
-# Entries whose display name contains a space, normalized to:
-# lowercase, apostrophes removed, spaces replaced with underscores.
+# The multi-word keywords a vocabulary seeds when it is given no keyword
+# definitions: Forge's ``Keyword`` display names with a space, in token form
+# (``keyword_token_form``). A build that has the definitions file passes its
+# names as ``keyword_names`` and seeds ``multi_word_keywords(names)`` instead.
 MULTI_WORD_KEYWORDS: tuple[str, ...] = (
     "aura_swap",
     "bands_with_other",
@@ -152,7 +155,7 @@ class VocabBuildResult:
     unk_pct: float
 
 
-def _bootstrap_tokenizer() -> MtgTokenizer:
+def _bootstrap_tokenizer(keywords: tuple[str, ...]) -> MtgTokenizer:
     """Build a tokenizer suitable for vocabulary scanning.
 
     The token IDs are irrelevant here — only the tokenize() output is used.
@@ -163,7 +166,7 @@ def _bootstrap_tokenizer() -> MtgTokenizer:
         MtgTokenizer.PAD: MtgTokenizer.PAD_ID,
         MtgTokenizer.UNK: MtgTokenizer.UNK_ID,
     }
-    for kw in MULTI_WORD_KEYWORDS:
+    for kw in keywords:
         bootstrap_vocab[kw] = len(bootstrap_vocab)
     return MtgTokenizer(bootstrap_vocab)
 
@@ -188,13 +191,13 @@ def _seed_special_tokens(vocab: dict[str, int]) -> None:
     _add_token(vocab, "[MASK]")
 
 
-def _seed_domain_terms(vocab: dict[str, int]) -> None:
+def _seed_domain_terms(vocab: dict[str, int], keywords: tuple[str, ...]) -> None:
     """Seed game zones, color names, multi-word keywords, and printing-data terms."""
     for zone in sorted(_GAME_ZONES):
         _add_token(vocab, zone)
     for color in sorted(_COLOR_NAMES):
         _add_token(vocab, color)
-    for kw in sorted(MULTI_WORD_KEYWORDS):
+    for kw in sorted(keywords):
         _add_token(vocab, kw)
     for term in sorted(_PRINTING_DATA_TERMS):
         _add_token(vocab, term)
@@ -293,6 +296,7 @@ def build_vocabulary(
     cards_path: Path,
     freq_threshold: int = 5,
     printings_path: Path | None = None,
+    keyword_names: Iterable[str] | None = None,
 ) -> VocabBuildResult:
     """Build a compact MTG domain vocabulary from the converted card corpus.
 
@@ -313,19 +317,23 @@ def build_vocabulary(
         printings_path: Optional path to AllPrintings.json. When supplied,
             alphabetic fragments of every set code are seeded into the fixed
             domain section so set codes in training texts carrying printing data are never UNK.
+        keyword_names: Forge's keyword display names (the keys of the keyword
+            definitions file); the multi-word ones are seeded. None seeds
+            ``MULTI_WORD_KEYWORDS``.
 
     Returns:
         VocabBuildResult with the vocabulary and coverage statistics.
     """
     vocab: dict[str, int] = {}
+    keywords = MULTI_WORD_KEYWORDS if keyword_names is None else multi_word_keywords(keyword_names)
 
     _seed_special_tokens(vocab)
-    _seed_domain_terms(vocab)
+    _seed_domain_terms(vocab, keywords)
     _seed_set_codes(vocab, printings_path)
     domain_token_count = len(vocab)
 
     counts, total_occurrences = _scan_corpus_frequencies(
-        cards_path, _bootstrap_tokenizer(),
+        cards_path, _bootstrap_tokenizer(keywords),
     )
 
     _add_freq_tokens(vocab, counts, freq_threshold)

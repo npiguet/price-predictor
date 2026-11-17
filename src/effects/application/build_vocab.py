@@ -32,6 +32,7 @@ from price_predictor.application.build_vocabulary import (
     build_vocabulary,
     truncate_to_target_size,
 )
+from price_predictor.domain.keyword_tokens import multi_word_keywords
 from price_predictor.infrastructure.tokenizer_store import save_vocabulary
 
 logger = logging.getLogger(__name__)
@@ -148,7 +149,7 @@ def staging_tokenizer(surface: Surface, definitions: dict | None = None) -> Abil
     """A tokenizer applying the surface's rules before the vocabulary exists,
     knowing the multi-word keywords the final one will merge."""
     vocab = {token: index for index, token in enumerate(SEEDED_SPECIALS)}
-    for keyword in MULTI_WORD_KEYWORDS:
+    for keyword in multi_word_keywords(definitions) if definitions else MULTI_WORD_KEYWORDS:
         vocab.setdefault(keyword, len(vocab))
     return AbilityTokenizer(vocab, definitions or {}, surface=surface)
 
@@ -244,6 +245,7 @@ def _scan_vocabularies(folders: list[Path], definitions: dict) -> tuple[list, in
                 cards_path=source,
                 freq_threshold=_FREQ_THRESHOLD,
                 printings_path=None,
+                keyword_names=definitions or None,
             )
             for source in [*folders, extra]
         ]
