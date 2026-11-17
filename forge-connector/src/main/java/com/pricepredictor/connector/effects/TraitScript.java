@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.regex.Pattern;
 
 /**
  * The script behind one runtime trait: its API type, its parameter keys, its
@@ -33,9 +34,13 @@ import java.util.TreeMap;
  * the root segment, then every ability a chain parameter of an emitted segment
  * names — a trigger's {@code Execute$}, each {@code SubAbility$}, a
  * {@code RepeatSubAbility$}, a replacement's {@code ReplaceWith$}, the
- * {@code Choices$} of a non-modal chooser — each segment its own parameters in
+ * {@code Choices$} of a non-modal chooser, each trait a granting parameter
+ * names ({@link GrantedTraits}: a static's {@code AddTrigger$}, an Animate's
+ * {@code Triggers$}) — each segment its own parameters in
  * key order, joined by {@value #SEGMENT_SEPARATOR} and opened by the label its
- * parent referenced it by. Labels are the script author's own SVar names,
+ * parent referenced it by. An ability Forge chained with no parameter naming
+ * it (a trigger's or replacement's effect set directly, a sub-ability a
+ * keyword attached) is a segment too, opened by a label of its own. Labels are the script author's own SVar names,
  * thousands of distinct ones across the card tree and most used once, so they are
  * renamed by position ({@code SV1}, {@code SV2}, …) in order of first
  * appearance reading the text from its start: two cards whose chains differ
@@ -64,6 +69,7 @@ public record TraitScript(
         Set<String> keys = new HashSet<>(ChainRenderer.SINGLE_LINK_KEYS);
         keys.addAll(ChainRenderer.ADDITIONAL_LINK_KEYS);
         keys.add(ChainRenderer.CHOICES);
+        keys.addAll(GrantedTraits.parameters());
         return keys;
     }
 
@@ -103,11 +109,24 @@ public record TraitScript(
      */
     public static TraitScript of(CardTraitBase trait, ProvenanceKey key,
                                  MissingSVarReport report) {
-        if (trait == null) {
+        return trait == null ? EMPTY : ofTraits(List.of(trait), key, report);
+    }
+
+    /**
+     * The script of a line several traits print together (a Class level: its
+     * level-up ability and the static that grants the level's traits): the
+     * first trait's, its chain followed by each other trait's as a segment of
+     * its own, in order.
+     */
+    public static TraitScript ofTraits(List<? extends CardTraitBase> traits, ProvenanceKey key,
+                                 MissingSVarReport report) {
+        if (traits.isEmpty()) {
             return EMPTY;
         }
+        CardTraitBase trait = traits.get(0);
         SpellAbility effect = effectOf(trait);
-        return build(trait, effect, apiTypeOf(trait, effect), null, key, report);
+        Root root = new Root(trait, effect, apiTypeOf(trait, effect), null);
+        return build(root, List.copyOf(traits.subList(1, traits.size())), key, report);
     }
 
     /**
@@ -126,29 +145,45 @@ public record TraitScript(
             return EMPTY;
         }
         ApiType api = mode.getApi();
-        return build(mode, mode, api == null ? null : api.name(), label, key, report);
+        return build(new Root(mode, mode, api == null ? null : api.name(), label),
+                List.of(), key, report);
     }
 
     /**
-     * The script of {@code trait}: its parameters, the sub-ability links below
-     * {@code effect} (none when null), and its chain opened by {@code label}.
+     * The trait a script is read from: {@code effect} is the ability it
+     * executes, or null, and {@code label} what its chain opens with, or null.
      */
-    private static TraitScript build(CardTraitBase trait, SpellAbility effect, String apiType,
-                                     String label, ProvenanceKey key,
-                                     MissingSVarReport report) {
+    private record Root(CardTraitBase trait, SpellAbility effect, String apiType, String label) {
+    }
+
+    /**
+     * The script of {@code root}: its parameters, the sub-ability links below
+     * its effect, and its chain, followed by each of {@code followers}' chains.
+     */
+    private static TraitScript build(Root root, List<CardTraitBase> followers,
+                                     ProvenanceKey key, MissingSVarReport report) {
+        CardTraitBase trait = root.trait();
         Map<String, String> params = new TreeMap<>(trait.getMapParams());
         List<SubAbilityLink> links = new ArrayList<>();
-        if (effect != null) {
-            collectSubAbilities(effect, links);
+        if (root.effect() != null) {
+            collectSubAbilities(root.effect(), links);
         }
         String text = params.isEmpty() ? null
-                : new ChainRenderer(trait, key, report)
-                        .render(label, trait, params, unnamedEffect(trait, effect, params));
+                : new ChainRenderer(trait, key, report).render(root.label(), trait, params,
+                        unnamed(unnamedEffect(trait, root.effect(), params), followers));
         return new TraitScript(
-                apiType,
+                root.apiType(),
                 List.copyOf(params.keySet()),
                 text,
                 List.copyOf(links));
+    }
+
+    /** The root's unnamed effect, where it has one, then {@code followers}. */
+    private static List<CardTraitBase> unnamed(SpellAbility effect, List<CardTraitBase> followers) {
+        List<CardTraitBase> all = new ArrayList<>();
+        if (effect != null) all.add(effect);
+        all.addAll(followers);
+        return all;
     }
 
     /**
@@ -254,14 +289,10 @@ public record TraitScript(
             return Set.copyOf(keys);
         }
 
-        /** Where a root's unnamed effect is reported from, should it be missing. */
+        /** Where a root's unnamed effect or follower is reported from. */
         private static final String EFFECT = "Effect";
-        /**
-         * The label of a root's unnamed effect: no script names it, and like
-         * every label it prints as its {@code SV} number, so it only has to
-         * differ from every SVar name.
-         */
-        private static final String EFFECT_LABEL = "<effect>";
+        /** Where an unnamed sub-ability is reported from. */
+        private static final String SUB_ABILITY = "SubAbility";
 
         /** The parameter whose value is a comma-separated list of labels. */
         private static final String CHOICES = "Choices";
@@ -282,9 +313,10 @@ public record TraitScript(
         private final Set<String> reached = new HashSet<>();
         private final Deque<Pending> queue = new ArrayDeque<>();
         private final StringBuilder out = new StringBuilder();
+        private int unnamedLabels;
 
         /** A segment waiting its turn: the label it opens with and what to render. */
-        private record Pending(String label, SpellAbility ability) {
+        private record Pending(String label, CardTraitBase trait) {
         }
 
         ChainRenderer(CardTraitBase lineTrait, ProvenanceKey key, MissingSVarReport report) {
@@ -295,23 +327,23 @@ public record TraitScript(
 
         /**
          * The whole chain below {@code root}, opened by {@code label} when it
-         * has one; {@code unnamedEffect}, the root's effect no parameter
-         * names, follows the root segment as the next label's segment.
+         * has one; each of {@code unnamed}, traits no parameter of the root
+         * names (its effect set directly, the line's other traits), follows
+         * the root segment as a segment of its own.
          */
         String render(String label, CardTraitBase root, Map<String, String> params,
-                      SpellAbility unnamedEffect) {
+                      List<CardTraitBase> unnamed) {
             if (label != null) {
                 reached.add(label);
             }
             segment(label, root, params);
-            if (unnamedEffect != null) {
-                follow(EFFECT, EFFECT_LABEL, unnamedEffect);
+            for (CardTraitBase trait : unnamed) {
+                followUnnamed(EFFECT, trait);
             }
             while (!queue.isEmpty()) {
                 Pending next = queue.removeFirst();
                 out.append(SEGMENT_SEPARATOR);
-                segment(next.label(), next.ability(),
-                        new TreeMap<>(next.ability().getMapParams()));
+                segment(next.label(), next.trait(), new TreeMap<>(next.trait().getMapParams()));
             }
             return out.toString();
         }
@@ -320,27 +352,70 @@ public record TraitScript(
             if (label != null) {
                 out.append(number(label)).append(": ");
             }
-            boolean first = true;
+            String separator = "";
             for (Map.Entry<String, String> entry : params.entrySet()) {
-                if (!first) out.append(" | ");
-                first = false;
-                String name = entry.getKey();
-                String value = entry.getValue();
-                out.append(name).append("$ ");
-                if (SINGLE_LINK_KEYS.contains(name) && value != null) {
-                    String reference = value.trim();
-                    out.append(number(reference));
-                    follow(name, reference, linked(name, reference, trait));
-                } else if (ADDITIONAL_LINK_KEYS.contains(name) && value != null
-                        && trait instanceof SpellAbility sa
-                        && sa.getAdditionalAbility(name) != null) {
-                    String reference = value.trim();
-                    out.append(number(reference));
-                    follow(name, reference, sa.getAdditionalAbility(name));
-                } else if (CHOICES.equals(name) && value != null && isChooser(trait)) {
-                    renderChoices(value, (SpellAbility) trait);
-                } else {
-                    out.append(value);
+                out.append(separator).append(entry.getKey()).append("$ ");
+                separator = " | ";
+                renderValue(entry.getKey(), entry.getValue(), trait);
+            }
+            AbilitySub sub = unnamedSubAbility(trait, params);
+            if (sub != null) {
+                followUnnamed(SUB_ABILITY, sub);
+            }
+        }
+
+        /** One parameter's value: a link renamed and followed, or as written. */
+        private void renderValue(String name, String value, CardTraitBase trait) {
+            if (value == null) {
+                out.append((String) null);
+            } else if (SINGLE_LINK_KEYS.contains(name)) {
+                linkTo(name, value.trim(), linked(name, value, trait));
+            } else if (isAdditionalLink(name, trait)) {
+                linkTo(name, value.trim(), ((SpellAbility) trait).getAdditionalAbility(name));
+            } else if (CHOICES.equals(name) && isChooser(trait)) {
+                renderChoices(value, (SpellAbility) trait);
+            } else if (GrantedTraits.separator(name, trait) != null) {
+                renderGrants(name, value, trait);
+            } else {
+                out.append(value);
+            }
+        }
+
+        private void linkTo(String parameter, String reference, CardTraitBase linked) {
+            out.append(number(reference));
+            follow(parameter, reference, linked);
+        }
+
+        /** Whether {@code name} is an additional ability Forge holds on {@code trait}. */
+        private static boolean isAdditionalLink(String name, CardTraitBase trait) {
+            if (!ADDITIONAL_LINK_KEYS.contains(name)) return false;
+            return trait instanceof SpellAbility sa && sa.getAdditionalAbility(name) != null;
+        }
+
+        /**
+         * The sub-ability Forge chained below {@code trait} with no {@code
+         * SubAbility$} naming it, or null: a keyword attaches one directly
+         * (Backup's granted abilities below its counter).
+         */
+        private static AbilitySub unnamedSubAbility(CardTraitBase trait,
+                                                    Map<String, String> params) {
+            if (!(trait instanceof SpellAbility sa) || params.containsKey(SUB_ABILITY)) return null;
+            return sa.getSubAbility();
+        }
+
+        /**
+         * The SVars a granting parameter lists, each renamed, written with
+         * the parameter's own separator, and followed as the trait it holds.
+         */
+        private void renderGrants(String parameter, String value, CardTraitBase granter) {
+            String separator = GrantedTraits.separator(parameter, granter);
+            String[] names = value.split(Pattern.quote(separator), -1);
+            for (int i = 0; i < names.length; i++) {
+                if (i > 0) out.append(separator);
+                String name = names[i].trim();
+                out.append(number(name));
+                if (!reached.contains(name)) {
+                    follow(parameter, name, GrantedTraits.build(parameter, name, granter));
                 }
             }
         }
@@ -371,39 +446,61 @@ public record TraitScript(
         /** The ability a chain parameter names, as the trait resolved it, or null. */
         private static SpellAbility linked(String name, String value, CardTraitBase trait) {
             if (value == null) return null;
+            if (trait instanceof SpellAbility sa) return linkedBelow(name, sa);
             return switch (name) {
                 case "Execute" -> trait instanceof Trigger trigger
-                        ? trigger.getOverridingAbility()
-                        : trait instanceof SpellAbility sa
-                                ? sa.getAdditionalAbility("Execute") : null;
+                        ? trigger.getOverridingAbility() : null;
                 case "ReplaceWith" -> trait instanceof ReplacementEffect replacement
                         ? replacement.getOverridingAbility() : null;
-                case "SubAbility" -> trait instanceof SpellAbility sa
-                        ? sa.getSubAbility() : null;
-                case "RepeatSubAbility" -> trait instanceof SpellAbility sa
-                        ? sa.getAdditionalAbility("RepeatSubAbility") : null;
+                default -> null;
+            };
+        }
+
+        /** The ability a chain parameter of an ability names, or null. */
+        private static SpellAbility linkedBelow(String name, SpellAbility sa) {
+            return switch (name) {
+                case "Execute", "RepeatSubAbility" -> sa.getAdditionalAbility(name);
+                case SUB_ABILITY -> sa.getSubAbility();
                 default -> null;
             };
         }
 
         /**
-         * Queue the ability a reference names, once per label per chain.
+         * Queue the trait a reference names, once per label per chain.
          *
-         * <p>Forge builds a fresh object for every reference, so the object
-         * graph is a tree and nothing here can loop; the once-per-label rule is
-         * what keeps a sub-ability two branches share from being rendered
-         * twice. A label the script never defines is one the accessor could not
-         * resolve: reported, and its segment left out.
+         * <p>Forge builds a fresh object for every reference it resolves, so
+         * that graph is a tree; a granted trait is built here from its SVar's
+         * name, and a grant naming itself or an earlier SVar would loop but
+         * for the once-per-label rule, which also keeps a sub-ability two
+         * branches share from being rendered twice. A label the script never
+         * defines is one the accessor could not resolve: reported, and its
+         * segment left out.
          */
-        private void follow(String parameter, String label, SpellAbility ability) {
-            if (label == null || label.isEmpty() || !reached.add(label)) return;
-            if (ability == null) {
+        private void follow(String parameter, String label, CardTraitBase trait) {
+            if (!firstReach(label)) return;
+            if (trait == null) {
                 if (report != null) {
                     report.add(cardName(), key, parameter, label);
                 }
                 return;
             }
-            queue.addLast(new Pending(label, ability));
+            queue.addLast(new Pending(label, trait));
+        }
+
+        /** Whether {@code label} is a real label this chain reaches for the first time. */
+        private boolean firstReach(String label) {
+            boolean named = label != null && !label.isEmpty();
+            return named && reached.add(label);
+        }
+
+        /**
+         * Queue a trait no parameter names, under a label of its own: no
+         * script holds it, and like every label it prints as its {@code SV}
+         * number, so it only has to differ from every SVar name.
+         */
+        private void followUnnamed(String parameter, CardTraitBase trait) {
+            unnamedLabels++;
+            follow(parameter, "<unnamed " + unnamedLabels + ">", trait);
         }
 
         /** The label's number on this line, assigned at its first appearance. */

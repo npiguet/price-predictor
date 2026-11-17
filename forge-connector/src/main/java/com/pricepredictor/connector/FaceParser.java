@@ -210,6 +210,7 @@ final class FaceParser {
         if (kw == Keyword.UNDEFINED) return renderUndefinedKeyword(ki);
         if (kw == Keyword.HAUNT) return HauntKeyword.of(ki, card);
         if (kw == Keyword.GIFT) return KeywordRendering.of(GiftKeyword.of(ki, card));
+        if (kw == Keyword.BACKUP) return backupLine(ki);
         if (kw == Keyword.COMPANION && ki instanceof Companion comp) {
             return KeywordRendering.of(CompanionKeyword.of(ki, comp));
         }
@@ -240,8 +241,8 @@ final class FaceParser {
         handlers.put("AlternateAdditionalCost:", (ki, p) -> KeywordRendering.of(new TextAbility(
                 AbilityType.ADDITIONAL_COST, AbilityDescription.applyCasing(
                         buildAlternateAdditionalCostDescription(ki.getOriginal())))));
-        handlers.put("Visit:", (ki, p) -> KeywordRendering.of(visitAbilities(ki)));
-        KeywordRenderer openingEffect = (ki, p) -> KeywordRendering.of(openingEffectAbility(ki));
+        handlers.put("Visit:", (ki, p) -> visitAbilities(ki));
+        KeywordRenderer openingEffect = (ki, p) -> openingEffect(ki);
         handlers.put("MayEffectFromOpeningHand:", openingEffect);
         handlers.put("MayEffectFromOpeningDeck:", openingEffect);
         return handlers;
@@ -257,15 +258,33 @@ final class FaceParser {
         return KeywordRendering.of(StandardKeyword.of(ki, Keyword.UNDEFINED));
     }
 
-    /** A Class level's line, its inner text kept so its duplicate trait entry can go. */
+    /**
+     * A Class level's line, its inner text kept so its duplicate trait entry
+     * can go; the line is the text of the level-up ability and of the static
+     * granting what the level adds, which Forge builds from the keyword.
+     */
     private KeywordRendering renderClassLevel(KeywordInterface ki) {
         ClassLevelAbility level = ClassLevelAbility.of(ki);
-        if (level != null) classLevelDescriptions.add(level.innerDescription());
-        return KeywordRendering.of(level);
+        if (level == null) return KeywordRendering.of(List.of());
+        classLevelDescriptions.add(level.innerDescription());
+        KeywordRendering.Builder rendering = new KeywordRendering.Builder();
+        rendering.add(level);
+        ki.getAbilities().forEach(levelUp -> rendering.printed(levelUp, level));
+        ki.getStaticAbilities().forEach(grant -> rendering.printed(grant, level));
+        return rendering.build();
     }
 
     /**
-     * An Attraction's visit lines.
+     * Backup's line, the text of the trigger Forge builds for it: its
+     * counter, and below it the abilities the keyword's SVar grants.
+     */
+    private static KeywordRendering backupLine(KeywordInterface ki) {
+        Trigger trigger = ki.getTriggers().stream().findFirst().orElse(null);
+        return KeywordRendering.ofTrait(StandardKeyword.of(ki, Keyword.BACKUP), trigger);
+    }
+
+    /**
+     * An Attraction's visit lines, each the text of its trigger.
      *
      * <p>For Charm-based visits, the TriggerDescription is the header and the
      * Charm options are OPTION sub-abilities. Any other visit takes its header
@@ -273,8 +292,8 @@ final class FaceParser {
      * the complete oracle text and SpellEffect.fromChain would only duplicate
      * it.
      */
-    private static List<Ability> visitAbilities(KeywordInterface ki) {
-        List<Ability> visits = new ArrayList<>();
+    private static KeywordRendering visitAbilities(KeywordInterface ki) {
+        KeywordRendering.Builder visits = new KeywordRendering.Builder();
         for (Trigger t : ki.getTriggers()) {
             SpellAbility overriding = t.getOverridingAbility();
             boolean charm = overriding != null && overriding.getApi() == ApiType.Charm;
@@ -282,9 +301,11 @@ final class FaceParser {
             if (header == null) continue;
             List<Ability> children =
                     charm ? CharmAbility.optionsFrom(overriding, t) : List.of();
-            visits.add(new TriggeredAbilityEntry(AbilityType.TRIGGERED, header, children));
+            Ability visit = new TriggeredAbilityEntry(AbilityType.TRIGGERED, header, children);
+            visits.add(visit);
+            visits.printed(t, visit);
         }
-        return visits;
+        return visits.build();
     }
 
     /**
@@ -321,22 +342,28 @@ final class FaceParser {
      * rather than registering it as a standard trigger/spell. The description comes
      * from an SA built from the named SVar, falling back to a RevealCard SVar used by
      * Chancellor-cycle cards where the named SVar lacks a SpellDescription.
+     * The line is the text of the named SVar's ability, the one Forge plays.
      */
-    private static Ability openingEffectAbility(KeywordInterface ki) {
-        String svarName = new KeywordSpec(ki.getOriginal()).part(1);
+    private static KeywordRendering openingEffect(KeywordInterface ki) {
         Card hostCard = ki.getHostCard();
-        if (hostCard == null) return null;
-        String desc = null;
-        if (hostCard.hasSVar(svarName)) {
-            SpellAbility svarSa = AbilityFactory.getAbility(hostCard, svarName);
-            if (svarSa != null) desc = svarSa.getParam("SpellDescription");
-        }
-        if ((desc == null || desc.isEmpty()) && hostCard.hasSVar("RevealCard")) {
-            SpellAbility revealSa = AbilityFactory.getAbility(hostCard, "RevealCard");
-            if (revealSa != null) desc = revealSa.getParam("SpellDescription");
-        }
-        String normalized = AbilityDescription.normalize(desc);
-        return normalized == null ? null : new TextAbility(AbilityType.TRIGGERED, normalized);
+        if (hostCard == null) return KeywordRendering.of(List.of());
+        SpellAbility named = svarAbility(hostCard, new KeywordSpec(ki.getOriginal()).part(1));
+        SpellAbility described = spellDescription(named) != null
+                ? named : svarAbility(hostCard, "RevealCard");
+        String normalized = AbilityDescription.normalize(spellDescription(described));
+        Ability line = normalized == null ? null : new TextAbility(AbilityType.TRIGGERED, normalized);
+        return KeywordRendering.ofTrait(line, named != null ? named : described);
+    }
+
+    /** The ability the SVar {@code name} of {@code host} holds, or null. */
+    private static SpellAbility svarAbility(Card host, String name) {
+        return host.hasSVar(name) ? AbilityFactory.getAbility(host, name) : null;
+    }
+
+    /** An ability's own non-empty {@code SpellDescription$}, or null. */
+    private static String spellDescription(SpellAbility sa) {
+        String description = sa == null ? null : sa.getParam("SpellDescription");
+        return description == null || description.isEmpty() ? null : description;
     }
 
     private static String buildAlternateAdditionalCostDescription(String original) {

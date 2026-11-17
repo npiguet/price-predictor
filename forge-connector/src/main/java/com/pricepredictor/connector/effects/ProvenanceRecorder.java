@@ -182,16 +182,18 @@ public final class ProvenanceRecorder {
     }
 
     /**
-     * The script of a keyword's one line: the chain of the built trait the
-     * line is the text of (a chapter's trigger, an ETB replacement), or the
+     * The script of a keyword's one line: the chain of the traits the line
+     * is the text of (a chapter's trigger, an ETB replacement, a Visit's or
+     * Backup's trigger, an opening-hand effect; a Class level's level-up
+     * ability then its granting static), or the
      * keyword's own script text where the line states the keyword itself
      * ({@code Flying}, {@code Ward:2}).
      */
     private TraitScript lineScript(KeywordRendering rendering, Ability line, ProvenanceKey key,
                                    KeywordInterface keyword) {
-        CardTraitBase trait = rendering.traitOf(line);
-        return trait == null ? TraitScript.ofKeyword(keyword.getOriginal())
-                : TraitScript.of(trait, key, missingSVars);
+        List<CardTraitBase> traits = rendering.traitsOf(line);
+        return traits.isEmpty() ? TraitScript.ofKeyword(keyword.getOriginal())
+                : TraitScript.ofTraits(traits, key, missingSVars);
     }
 
     private static boolean rendersSeveralLines(List<Ability> abilities) {

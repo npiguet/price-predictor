@@ -53,14 +53,29 @@ public record KeywordRendering(List<Ability> lines, List<TraitLine> traitLines) 
     }
 
     /**
-     * The first built trait that printed {@code line}, or null when the line
-     * is the keyword's own text rather than a trait's. By identity.
+     * A keyword printing {@code line} alone, as the text of {@code trait} (a
+     * Visit's trigger, Backup's trigger), or nothing when the line is null;
+     * a null trait names none, and the line is the keyword's own text.
      */
-    public CardTraitBase traitOf(Ability line) {
-        for (TraitLine traitLine : traitLines) {
-            if (traitLine.line() == line) return traitLine.trait();
-        }
-        return null;
+    public static KeywordRendering ofTrait(Ability line, CardTraitBase trait) {
+        if (line == null) return of(List.of());
+        Builder rendering = new Builder();
+        rendering.add(line);
+        if (trait != null) rendering.printed(trait, line);
+        return rendering.build();
+    }
+
+    /**
+     * The traits that printed {@code line}, in the order the keyword named
+     * them, or none when the line is the keyword's own text rather than a
+     * trait's (a Class level's line is its level-up ability's and its
+     * static's). By identity.
+     */
+    public List<CardTraitBase> traitsOf(Ability line) {
+        return traitLines.stream()
+                .filter(traitLine -> traitLine.line() == line)
+                .map(TraitLine::trait)
+                .toList();
     }
 
     /** Collects a keyword's lines and its traits' lines while it renders. */
