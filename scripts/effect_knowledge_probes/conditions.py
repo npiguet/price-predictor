@@ -209,7 +209,7 @@ def resync_statics(record, lines):
     whose turn it is, and an edit to one must move the other."""
     edit = BoardEdit(record)
     for entity in record.state.entities:
-        for line in entity.lines or ():
+        for line in entity.lines:
             if line.active is None or not line.keys or line.kind != "static":
                 continue
             sidecar = lines.line_or_none(line.keys[0])
@@ -339,14 +339,12 @@ def _stack(record) -> list:
 
 def has_split_second(entity) -> bool:
     return any(line.in_force and line.keyword == "split_second"
-               for line in entity.lines or ()) or (
+               for line in entity.lines) or (
         "split_second" in entity.granted_temporary.keywords)
 
 
 def without_split_second(entity):
-    lines = entity.lines
-    if lines is not None:
-        lines = tuple(line for line in lines if line.keyword != "split_second")
+    lines = tuple(line for line in entity.lines if line.keyword != "split_second")
     granted = entity.granted_temporary
     return replace(entity, lines=lines, granted_temporary=replace(
         granted, keywords=tuple(k for k in granted.keywords if k != "split_second")))
@@ -384,7 +382,7 @@ def split_second_items(record) -> list[ConditionItem]:
 
 def _host(record, key):
     for entity in record.state.entities:
-        if any(key in line.keys for line in entity.lines or ()):
+        if any(key in line.keys for line in entity.lines):
             return entity
     return None
 

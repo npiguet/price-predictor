@@ -297,7 +297,7 @@ def _no_prevention_on_the_board(record: EffectRecord, lines: SidecarLookup) -> b
     for entity in record.state.entities:
         if not entity.on_battlefield and entity.zone != Zone.COMMAND:
             continue
-        for card_line in entity.lines or ():
+        for card_line in entity.lines:
             if card_line.kind != LineKind.STATIC or card_line.active is False:
                 continue
             for key in card_line.keys:
@@ -433,7 +433,7 @@ def _aura_opportunity(record, payload: ResolutionPayload, entities) -> Opportuni
 
 def _bestowed(aura: EntityState) -> bool:
     """Whether the Aura spell carries bestow, by a keyword line or a grant."""
-    lines = aura.lines or ()
+    lines = aura.lines
     return ("bestow" in {k.lower() for k in aura.granted_temporary.keywords}
             or any((line.fragment or "").lower().startswith("bestow") for line in lines))
 

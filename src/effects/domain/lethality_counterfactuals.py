@@ -388,7 +388,7 @@ def _death_may_be_replaced(state: StateSnapshot, hit: set[str], lines: SidecarLo
     for entity in state.entities:
         if not entity.on_battlefield and entity.zone != Zone.COMMAND:
             continue
-        for card_line in entity.lines or ():
+        for card_line in entity.lines:
             if card_line.kind != LineKind.REPLACEMENT or card_line.active is False:
                 continue
             for key in card_line.keys:

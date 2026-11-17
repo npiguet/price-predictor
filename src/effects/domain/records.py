@@ -996,7 +996,7 @@ def key_sites(record: EffectRecord) -> Iterator[ProvenanceKey]:
         yield from entity.granted_temporary.abilities
     for made in (*state.global_.floating_effects, *state.global_.delayed_triggers):
         yield from made.source_lines
-    for link in state.links or ():
+    for link in state.links:
         yield from link.line_keys()
     yield from record.payload.provenance_keys()
 

@@ -80,6 +80,7 @@ from effects.infrastructure.shard_io import (
 from effects.infrastructure.sidecar_io import sidecar_path_for
 from tests.unit.effects.builders import (
     held_out_cards,
+    lines_of,
     make_entity,
     make_snapshot,
     write_ended_shard,
@@ -752,7 +753,7 @@ def test_the_manifest_records_how_its_records_were_collected_and_read(
 
     unrooted = _combat("g-clean-1.variant", "g-clean-1")
     unrooted = replace(unrooted, state=replace(unrooted.state, entities=(
-        make_entity("E0", "x variant", printed=(variant,),
+        make_entity("E0", "x variant", lines=lines_of(printed=(variant,)),
                     combat=CombatStatus(attacking="p2")),)))
     from tests.unit.effects.builders import game_end_marker
 
@@ -831,7 +832,8 @@ def test_one_raw_corpus_builds_to_one_digest_wherever_it_sits_and_whatever_ran_b
     variant = ProvenanceKey("variant-scripts/x_variant.txt", 0, "spell", 0)
     unrooted = _combat("g-clean-1.variant", "g-clean-1")
     unrooted = replace(unrooted, state=replace(unrooted.state, entities=(
-        make_entity("E0", "x variant", printed=(variant,), combat=CombatStatus(attacking="p2")),)))
+        make_entity("E0", "x variant", lines=lines_of(printed=(variant,)),
+                    combat=CombatStatus(attacking="p2")),)))
     write_ended_shard(a_corpus.records / "full-strength" / "run.0-variant.jsonl.gz", [unrooted])
 
     first = a_corpus.build(tmp_path / "first").load()
@@ -1941,7 +1943,7 @@ def test_a_token_printing_a_held_out_text_holds_its_game_out(tmp_path, a_corpus)
         replace(
             _resolution("g-token.0", "g-token", ability=(_SHOCK_KEY,)),
             state=make_snapshot(entities=(
-                make_entity("E1", "Goblin Token", printed=(token_key,)),
+                make_entity("E1", "Goblin Token", lines=lines_of(printed=(token_key,))),
             )),
         ),
     ])

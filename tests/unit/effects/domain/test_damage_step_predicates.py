@@ -44,6 +44,7 @@ from effects.domain.state_snapshot import (
 )
 from tests.unit.effects.builders import (
     fresh_interpreter_env,
+    lines_of,
     make_entity,
     make_record,
     make_snapshot,
@@ -74,7 +75,7 @@ def _creature(
     return make_entity(
         entity_id, entity_id, controller=controller, types=("creature",),
         pt=PowerToughness(base=(power, toughness)), damage=damage, combat=combat,
-        printed=printed, granted_temporary=GrantedTemporary(keywords=keywords),
+        lines=lines_of(printed), granted_temporary=GrantedTemporary(keywords=keywords),
     )
 
 

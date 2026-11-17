@@ -6,17 +6,10 @@ change rather than a re-collection. Controllers are absolute player ids — mine
 and opponent derive from the record's ``actor_player`` — and an absent
 inclusion tier means uncollected, not empty.
 
-One :class:`EntityState` reads both entity shapes. A gen-2 card slot lists
-its keys in ``printed`` and ``granted_attached`` and its power and toughness
-in ``pt``; a gen-3 one lists ``lines`` (:class:`CardLine`), ``base_pt`` and
-``pt_boosts``. ``EntityState.__post_init__`` and
-:attr:`EntityState.ability_keys` hold the one mapping from a gen-3 entity onto
-what the gen-2 readers read, so every reader works on both shapes.
-
-Every other gen-3 member (a card's facts, a player's, the global block's
-command-zone objects, ``refs.random``, ``links``) is a field an earlier record
-reads at its default. Two markers say which shape was on the wire: an
-entity's ``lines``, and the snapshot's ``links`` for everything else.
+An :class:`EntityState` lists its card's ``lines`` (:class:`CardLine`), and its
+power and toughness as ``base_pt`` and ``pt_boosts``. :attr:`EntityState.printed`
+and :attr:`EntityState.ability_keys` derive from the lines what the readers
+ask of an entity: the printed keys, and the keys in force.
 """
 
 from __future__ import annotations
@@ -129,9 +122,7 @@ class Dungeon:
 class GlobalState:
     """Turn structure and the parts of the board that belong to nobody.
 
-    The last four fields are gen-3's (FR-024); a gen-1 or gen-2 snapshot reads
-    them as their defaults, and whether they were written is the snapshot's
-    shape (:attr:`StateSnapshot.links`), not theirs.
+    The last four fields are FR-024's.
     """
 
     turn: int
@@ -193,7 +184,7 @@ class PlayerState:
     #: 1 plus every raise in force), which bounds ``this_turn``'s
     #: ``lands_played``. None where the record carries no number: unlimited
     #: (``land_plays_unlimited``), or a record collected without the member
-    #: (gen-1, gen-2, a gen-3 record before it existed).
+    #: (a gen-3 record before it existed).
     max_land_plays: int | None = None
     #: Whether the collector wrote ``max_land_plays`` as null: a static such as
     #: Fastbond lifts the limit. Kept apart so absent and unlimited stay distinct.
@@ -203,7 +194,6 @@ class PlayerState:
     rad: int = 0
     monarch: bool = False
     initiative: bool = False
-    #: None on a gen-1 or gen-2 player, which carries no counts.
     turn_counts: TurnCounts | None = None
 
 
@@ -212,11 +202,10 @@ class PowerToughness:
     """Power and toughness decomposed into the three sources that set it.
 
     Kept separate because a boost and a counter are different effects with
-    the same total. A gen-2 entity writes the three as ``pt`` (``base`` the
-    printed base); a gen-3 one as ``base_pt`` (the base a layer-7b setting
-    effect leaves, Ensoul Artifact's 5/5) and ``pt_boosts`` ``{temporary,
-    counters}``, read into ``base``, ``boosts`` and ``counters``. On both the
-    three sum to the net power and toughness.
+    the same total. An entity writes them as ``base_pt`` (the base a layer-7b
+    setting effect leaves, Ensoul Artifact's 5/5) and ``pt_boosts``
+    ``{temporary, counters}``, read into ``base``, ``boosts`` and ``counters``,
+    which sum to the net power and toughness.
     """
 
     base: tuple[int, int]
@@ -251,8 +240,8 @@ class GrantedTemporary:
     ability tokens because temporary grants ride the overlay rather than the
     tokens, and gate 2 strips a keyword from whichever carries it.
 
-    ``keywords`` is every keyword the card has now, printed ones included, on
-    gen-2 and gen-3 alike: the collector writes the card's whole keyword list.
+    ``keywords`` is every keyword the card has now, printed ones included, the
+    collector writes the card's whole keyword list.
     ``abilities`` is the spell and activated abilities a layer-6 change
     granted.
     """
@@ -511,25 +500,14 @@ class EntityState:
     attached_to: str | None = None
     face_down: bool = False
 
-    #: Gen-2 only: the spell abilities of the cards attached to this one. A
-    #: gen-3 entity lists its grants among its ``lines`` and reads ``()``.
-    granted_attached: tuple[ProvenanceKey, ...] = ()
     granted_temporary: GrantedTemporary = field(default_factory=GrantedTemporary)
-
-    #: The entity's own printed lines, as keys into its sidecar. On a gen-3
-    #: entity derived from ``lines`` (:func:`printed_keys_of`), replacing
-    #: whatever was passed, so an edit of the lines carries through.
-    printed: tuple[ProvenanceKey, ...] = ()
 
     stack_extras: StackExtras | None = None
 
-    #: Gen-3: every line the card carries now (FR-021). None on a gen-1 or
-    #: gen-2 entity, which wrote ``printed`` instead; this is what tells the
-    #: two shapes apart, in memory and on the wire.
-    lines: tuple[CardLine, ...] | None = None
+    #: Every line the card carries now (FR-021).
+    lines: tuple[CardLine, ...] = ()
 
-    # The card facts of a gen-3 entity (FR-024): their defaults on gen-1 and
-    # gen-2, which wrote none, and where a gen-3 card has none to state.
+    # The card facts (FR-024), where a card has none to state their defaults.
 
     #: A player ref; control changes leave it alone.
     owner: str | None = None
@@ -560,43 +538,36 @@ class EntityState:
     #: :class:`EntityRole` on an entity beyond the four tiers, else None.
     role: str | None = None
 
-    def __post_init__(self) -> None:
-        if self.lines is not None:
-            object.__setattr__(self, "printed", printed_keys_of(self.lines))
-            object.__setattr__(self, "granted_attached", ())
+    @property
+    def printed(self) -> tuple[ProvenanceKey, ...]:
+        """The entity's own printed lines, as keys into its sidecar."""
+        return printed_keys_of(self.lines)
 
     @property
     def ability_keys(self) -> tuple[ProvenanceKey, ...]:
         """The entity's ability tokens.
 
-        Gen-2: the printed and attachment-granted lines. Gen-3: the key of
-        every line in force (:attr:`CardLine.in_force`), printed or granted,
-        each once in line order, so an unmet static and a face not up give no
-        token.
+        The key of every line in force (:attr:`CardLine.in_force`), printed or
+        granted, each once in line order, so an unmet static and a face not up
+        give no token.
 
-        Temporary grants are not among them on either: they ride the overlay
-        (FR-073), so a gen-3 key ``granted_temporary.abilities`` also lists is
-        left to the overlay.
+        Temporary grants are not among them: they ride the overlay (FR-073),
+        so a key ``granted_temporary.abilities`` also lists is left to the
+        overlay.
         """
-        if self.lines is None:
-            return (*self.printed, *self.granted_attached)
         overlay = set(self.granted_temporary.abilities)
         in_force = _unique_keys(line for line in self.lines if line.in_force)
         return tuple(key for key in in_force if key not in overlay)
 
     @property
     def line_keys(self) -> tuple[ProvenanceKey, ...]:
-        """Every key the entity's lines name, in force or not: gen-2's printed
-        and attached keys, or every gen-3 line's."""
-        if self.lines is None:
-            return (*self.printed, *self.granted_attached)
+        """Every key the entity's lines name, in force or not."""
         return _unique_keys(self.lines)
 
     @property
     def keyword_lines(self) -> tuple[CardLine, ...]:
-        """A gen-3 entity's keyword lines; none on gen-2, whose keywords are
-        ``granted_temporary.keywords`` alone."""
-        return tuple(line for line in self.lines or () if line.kind == LineKind.KEYWORD)
+        """The entity's keyword lines."""
+        return tuple(line for line in self.lines if line.kind == LineKind.KEYWORD)
 
     @property
     def power(self) -> int:
@@ -656,16 +627,13 @@ class EntityState:
         ``keyword`` is in the package's spelling. No line is added where one in
         force already has the fragment or, for a fragment carrying no value
         after a colon, the keyword: a creature printing flying gains no second
-        flying line, one with protection from artifacts gains a Goblin one. A
-        gen-1 or gen-2 entity has no lines, so its list is all that changes.
+        flying line, one with protection from artifacts gains a Goblin one.
         """
         entity = self
         granted = entity.granted_temporary
         if keyword not in granted.keywords:
             entity = replace(entity, granted_temporary=replace(
                 granted, keywords=(*granted.keywords, keyword)))
-        if entity.lines is None:
-            return entity
         valued = ":" in fragment
         if any(line.in_force and (line.fragment == fragment
                                   or (not valued and line.keyword == normalize_keyword(keyword)))
@@ -777,11 +745,8 @@ class StateSnapshot:
     #: Which tiers the collector wrote; check before reading an empty list as
     #: an empty zone. Never inferred, so a snapshot naming none claims none.
     tiers: frozenset[InclusionTier] = frozenset()
-    #: Gen-3: the links between the snapshot's objects (FR-026), possibly
-    #: empty. None on a gen-1 or gen-2 snapshot, which is what tells the
-    #: shapes apart: a gen-3 snapshot also writes the gen-3 members of its
-    #: global block, its players and its refs, an earlier one none of them.
-    links: tuple[Link, ...] | None = None
+    #: The links between the snapshot's objects (FR-026), possibly empty.
+    links: tuple[Link, ...] = ()
 
     def entity(self, entity_id: str) -> EntityState | None:
         for candidate in self.entities:

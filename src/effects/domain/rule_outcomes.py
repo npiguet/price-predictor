@@ -153,7 +153,7 @@ def has_changeling(entity: EntityState) -> bool:
     """Whether the entity has changeling, granted or on one of its lines."""
     if "changeling" in entity.granted_temporary.keywords:
         return True
-    return any(line.keyword == "changeling" for line in entity.lines or ())
+    return any(line.keyword == "changeling" for line in entity.lines)
 
 
 class QualityKind(StrEnum):

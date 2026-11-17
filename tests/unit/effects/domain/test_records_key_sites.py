@@ -17,7 +17,7 @@ from effects.domain.records import (
     key_sites,
 )
 from effects.domain.state_snapshot import GrantedTemporary
-from tests.unit.effects.builders import make_entity
+from tests.unit.effects.builders import lines_of, make_entity
 
 
 def _key(name: str, kind: str = "static") -> ProvenanceKey:
@@ -30,7 +30,7 @@ EMBLEM = _key("emblem")
 
 def _board(snapshot):
     entity = make_entity(
-        "E1", "Bear", printed=(PRINTED,), granted_attached=(ATTACHED,),
+        "E1", "Bear", lines=lines_of((PRINTED,), (ATTACHED,)),
         granted_temporary=GrantedTemporary(abilities=(TEMPORARY,)),
     )
     return replace(

@@ -34,6 +34,7 @@ from tests.unit.effects.builders import (
     gen3_fixture_records,
     java_golden_entities,
     java_golden_records,
+    lines_of,
     make_entity,
     make_snapshot,
 )
@@ -74,14 +75,14 @@ class TestEntityArithmetic:
         assert entity.pt == PowerToughness(base=(2, 4), boosts=(0, 1), counters=(0, 1))
         assert (entity.toughness, entity.damage) == (6, 0)
 
-    def test_ability_keys_hold_printed_then_attached_lines_only(self):
+    def test_ability_keys_hold_printed_then_granted_lines_only(self):
         from effects.domain.provenance import ProvenanceKey
 
         printed, attached, temporary = (
             ProvenanceKey("cardsfolder/a/a.txt", 0, "spell", i) for i in range(3))
         entity = EntityState(
             id="E1", name="A", zone="battlefield", controller="P0",
-            printed=(printed,), granted_attached=(attached,),
+            lines=lines_of((printed,), (attached,)),
             granted_temporary=GrantedTemporary(abilities=(temporary,)),
         )
         assert entity.ability_keys == (printed, attached)
@@ -103,8 +104,8 @@ def _line(name: str, kind: str = "static", index: int = 0, **members) -> CardLin
     return CardLine(keys=(key,), kind=kind, granted=members.pop("granted", False), **members)
 
 
-class TestAGen3EntityReadsAsTheGen2ReadersExpect:
-    """The one mapping from a gen-3 entity's ``lines`` onto ``printed`` and
+class TestAnEntityDerivesItsKeysFromItsLines:
+    """The one mapping from an entity's ``lines`` onto ``printed`` and
     ``ability_keys`` (T074)."""
 
     def test_printed_is_the_lines_printed_on_the_card_in_force_or_not(self):
@@ -112,14 +113,11 @@ class TestAGen3EntityReadsAsTheGen2ReadersExpect:
         granted = _line("levitation", granted=True, active=True)
         entity = make_entity("E1", "A", lines=(own, granted, unmet))
         assert entity.printed == (*own.keys, *unmet.keys)
-        assert entity.granted_attached == ()
 
-    def test_the_lines_replace_whatever_printed_was_passed(self):
-        stale = _line("stale")
+    def test_an_edit_of_the_lines_carries_through_to_printed(self):
         own = _line("angel", "keyword")
-        entity = make_entity("E1", "A", printed=stale.keys, granted_attached=stale.keys,
-                             lines=(own,))
-        assert (entity.printed, entity.granted_attached) == (own.keys, ())
+        entity = make_entity("E1", "A", lines=(own,))
+        assert entity.printed == own.keys
         assert replace(entity, lines=()).printed == ()
 
     def test_ability_keys_are_the_lines_in_force_printed_or_granted(self):

@@ -610,9 +610,8 @@ def _snapshot_to_json(state: StateSnapshot) -> dict:
         "players": [_player_to_json(player) for player in state.players],
         "entities": [_entity_to_json(e) for e in state.entities],
     }
-    if state.links is not None:
-        out["links"] = [_link_to_json(link) for link in state.links]
     return out | {
+        "links": [_link_to_json(link) for link in state.links],
         "refs": _refs_to_json(state.refs),
         "pending_event": (
             state.pending_event.as_dict() if state.pending_event else None
@@ -623,7 +622,6 @@ def _snapshot_to_json(state: StateSnapshot) -> dict:
 
 def _snapshot_from_json(data: dict) -> StateSnapshot:
     pending = data.get("pending_event")
-    links = data.get("links")
     return StateSnapshot(
         global_=_global_from_json(data["global"]),
         players=tuple(_player_from_json(p) for p in data.get("players", ())),
@@ -631,7 +629,7 @@ def _snapshot_from_json(data: dict) -> StateSnapshot:
         refs=_refs_from_json(data.get("refs") or {}),
         pending_event=_event_from_json(pending) if pending else None,
         tiers=frozenset(InclusionTier(t) for t in data.get("tiers", ())),
-        links=tuple(_link_from_json(link) for link in links) if links is not None else None,
+        links=tuple(_link_from_json(link) for link in data["links"]),
     )
 
 

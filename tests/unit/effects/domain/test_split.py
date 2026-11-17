@@ -24,6 +24,7 @@ from effects.domain.split import (
 from effects.domain.text_holdout import HoldoutUnit
 from tests.unit.effects.builders import (
     held_out_cards,
+    lines_of,
     make_entity,
     make_record,
     make_snapshot,
@@ -48,9 +49,9 @@ class TestRecordNamesHeldOutCard:
 
     def test_a_record_carrying_the_cards_line_on_another_entity_names_it(self):
         """An anthem's granted line names the anthem, wherever it landed."""
-        recipient = named_entity("Grizzly Bears", granted_attached=(
+        recipient = named_entity("Grizzly Bears", lines=lines_of(granted=(
             ProvenanceKey("cardsfolder/s/serra_angel.txt", 0, "static", 0),
-        ))
+        )))
         assert record_names_held_out_card(
             record_on_board("g1", entities=(recipient,)), self._held()
         )
@@ -203,7 +204,7 @@ def test_a_held_out_token_on_the_board_names_its_game_held_out():
 
     token = ProvenanceKey("tokenscripts/goblin.txt", 0, "spell", 1)
     record = make_record(state=make_snapshot(entities=(
-        make_entity("E1", "Goblin Token", printed=(token,)),
+        make_entity("E1", "Goblin Token", lines=lines_of(printed=(token,))),
     )))
     held = held_out_cards(script_files={"tokenscripts/goblin.txt"})
     assert record_names_held_out_card(record, held)

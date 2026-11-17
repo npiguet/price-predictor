@@ -426,7 +426,7 @@ def _line_active(record: EffectRecord, key: ProvenanceKey) -> bool | None:
     for entity in record.state.entities:
         if entity.zone is None:
             continue
-        for line in entity.lines or ():
+        for line in entity.lines:
             if key in line.keys and line.active is not None:
                 return line.active
     return None

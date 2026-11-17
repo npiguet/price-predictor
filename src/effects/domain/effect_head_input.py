@@ -597,13 +597,8 @@ def _push_characteristics(out, entity: EntityState, record, masked) -> None:
 
 
 def face_state_of(entity: EntityState) -> str:
-    """Which face is up: the record's ``face_state``, or on a gen-1 or gen-2
-    entity, which writes none, its face-down flag and face index."""
-    if entity.face_state is not None:
-        return entity.face_state
-    if entity.face_down:
-        return FaceState.FACE_DOWN.value
-    return FaceState.FRONT.value if entity.face == 0 else FaceState.BACK.value
+    """Which face is up: the record's ``face_state``."""
+    return entity.face_state if entity.face_state is not None else FaceState.FRONT.value
 
 
 def _push_face_state(out, entity: EntityState, record, masked) -> None:
@@ -805,7 +800,7 @@ def _push_pending_event(out, entity: EntityState, record: EffectRecord, masked) 
 
 def command_zone_object(record: EffectRecord, object_id: str) -> CommandZoneObject | None:
     """The floating effect or pending delayed trigger named ``object_id``;
-    None for any other id, and on a gen-1 or gen-2 record, which lists none."""
+    None for any other id."""
     g = record.state.global_
     for found in (*g.floating_effects, *g.delayed_triggers):
         if found.id == object_id:
@@ -878,7 +873,7 @@ def command_zone_entities(record: EffectRecord) -> tuple[EntityState, ...]:
     like a permanent in the command zone (root spec § 9.3): its lines are the
     source lines that made it, granted by an effect, and its controller is that of the card
     its ``created_by`` link ends at. An effect card (``E``) is a snapshot
-    entity already, its lines its source lines. None on gen-1 and gen-2."""
+    entity already, its lines its source lines."""
     state = record.state
     g = state.global_
     if not (g.floating_effects or g.delayed_triggers):
@@ -886,7 +881,7 @@ def command_zone_entities(record: EffectRecord) -> tuple[EntityState, ...]:
     known = {entity.id for entity in state.entities}
     controllers = {entity.id: entity.controller for entity in state.entities}
     makers: dict[str, str] = {}
-    for link in state.links or ():
+    for link in state.links:
         if link.type == "created_by" and isinstance(link.from_, str):
             end = link.to.entity if isinstance(link.to, LineRef) else link.to
             makers.setdefault(link.from_, end)
@@ -992,12 +987,10 @@ def slot_lines(
     line's own ``grant``; a granted line of a record written before
     ``grant`` existed reads none, as nothing else says why it is granted. A
     line with no key is read through :func:`keyword_line_key` where it is a
-    keyword line, and has no slot otherwise. Gen-1 and gen-2: the printed and
-    attached lines, then the abilities a layer-6 change granted, granted by
-    an effect as the overlay's name says. Either way a keyword counter whose
-    keyword no line carries adds a keyword line granted by the counter.
+    keyword line, and has no slot otherwise. A keyword counter whose keyword
+    no line carries adds a keyword line granted by the counter.
     """
-    own = _gen2_slot_lines(entity) if entity.lines is None else _gen3_slot_lines(entity.lines)
+    own = _gen3_slot_lines(entity.lines)
     merged = _merge_by_key({}, _expanded(own, board_keys))
     return tuple(_merge_by_key(merged, _keyword_counter_lines(entity, merged)).values())
 
@@ -1018,14 +1011,6 @@ def _merge_by_key(merged: dict[ProvenanceKey, SlotLine],
         earlier = merged.get(line.key)
         merged[line.key] = line if earlier is None else earlier.merged(line)
     return merged
-
-
-def _gen2_slot_lines(entity: EntityState) -> Iterator[SlotLine]:
-    attached = set(entity.granted_attached)
-    for key in (*entity.printed, *entity.granted_attached):
-        yield SlotLine(key, granted=key in attached)
-    for key in entity.granted_temporary.abilities:
-        yield SlotLine(key, granted=True, grant=LineGrant.EFFECT.value)
 
 
 def _gen3_slot_lines(lines: tuple[CardLine, ...]) -> Iterator[SlotLine]:
@@ -1135,7 +1120,7 @@ class _SlotRelations:
     (each pair of cards whose names match, and a card that chose a name to
     each card of that name). The rest are the record's ``links``. ``[ACT]``
     reads ``targets`` to the acting ability's targets and ``source_of`` from
-    its source, as gen-2's target and source flags do (root spec § 10.4).
+    its source, as the target and source flags do (root spec § 10.4).
 
     A link end that is a line reads that line's slot; where the line has no
     slot (context dropout, gate 2's strip, a key with no rendered line) it
@@ -1202,7 +1187,7 @@ class _SlotRelations:
                 for at in self._named.get(_name_key(name), ()):
                     self.link(chooser, at, "has_the_same_name")
         state = record.state
-        for found in state.links or ():
+        for found in state.links:
             index = (found.index or 0) if found.type == "targets" else None
             self.link(self._end(found.from_), self._end(found.to), found.type, index)
         if record.has_act_line:

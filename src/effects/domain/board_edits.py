@@ -76,10 +76,8 @@ class BoardEdit:
             return (end.entity if isinstance(end, LineRef) else end) == entity_id
 
         record = self.record
-        links = record.state.links
-        if links is not None:
-            links = tuple(link for link in links
-                          if not names(link.from_) and not names(link.to))
+        links = tuple(link for link in record.state.links
+                      if not names(link.from_) and not names(link.to))
         return BoardEdit(replace(record, state=replace(
             record.state, links=links,
             entities=tuple(e for e in record.state.entities if e.id != entity_id))))
@@ -146,8 +144,6 @@ class BoardEdit:
         """Forge's answer to whether the static ``key`` on ``entity_id`` holds."""
 
         def edit(entity):
-            if entity.lines is None:
-                return entity
             return replace(entity, lines=tuple(
                 replace(line, active=active) if key in line.keys and line.active is not None
                 else line for line in entity.lines))

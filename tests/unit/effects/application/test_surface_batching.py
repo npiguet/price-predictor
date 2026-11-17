@@ -46,6 +46,7 @@ from effects.domain.surface_collation import entity_target_tensors
 from effects.infrastructure.shard_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 from tests.unit.effects.builders import (
+    lines_of,
     make_batcher,
     make_entity,
     make_record,
@@ -83,7 +84,7 @@ def _record() -> EffectRecord:
         record_id="run.0.1", run_id="run", game_id="run.0.1", ability=(_ACT,),
         state=make_snapshot(
             global_=GlobalState(turn=1, phase="main1", active="P0", priority="P0", stack_size=1),
-            entities=(make_entity("E1", "Anthem", printed=(_PHANTOM, _ANTHEM)),),
+            entities=(make_entity("E1", "Anthem", lines=lines_of(printed=(_PHANTOM, _ANTHEM))),),
         ),
     )
 
@@ -670,7 +671,7 @@ def test_no_state_zeroes_the_line_flags_and_the_card_ids():
 
     entity = EntityState(
         id="E1", name="soldier", zone="battlefield", controller="P0",
-        subtypes=("human",), counters={"OIL": 2}, printed=(_ACT,),
+        subtypes=("human",), counters={"OIL": 2}, lines=lines_of(printed=(_ACT,)),
     )
     record = _resolution(entities=(entity,))
     widths = feature_widths([record])

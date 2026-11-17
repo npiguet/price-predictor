@@ -109,7 +109,7 @@ class KeyJoins:
     def add(self, record: EffectRecord) -> None:
         self.keys.update(key_sites(record))
         for entity in record.state.entities:
-            if entity.copy_source is None or entity.lines is None:
+            if entity.copy_source is None:
                 continue
             copied = record.state.entity(entity.copy_source)
             files = {key.script_file for key in copied.line_keys} if copied else set()

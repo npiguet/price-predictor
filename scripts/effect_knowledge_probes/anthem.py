@@ -66,7 +66,7 @@ def anthems(record, lines) -> list[Anthem]:
     for entity in record.state.entities:
         if not entity.on_battlefield:
             continue
-        for line in entity.lines or ():
+        for line in entity.lines:
             if (line.kind != "static" or line.granted or not line.keys
                     or not line.in_force or not line.affected):
                 continue
@@ -100,10 +100,8 @@ def destroyed(record, anthem: Anthem):
     def unboosted(entity):
         pt = entity.pt
         boosts = (pt.boosts[0] - anthem.boost[0], pt.boosts[1] - anthem.boost[1])
-        lines = entity.lines
-        if lines is not None:
-            lines = tuple(line for line in lines
-                          if not (line.granted and anthem.key in line.keys))
+        lines = tuple(line for line in entity.lines
+                      if not (line.granted and anthem.key in line.keys))
         return replace(entity, pt=replace(pt, boosts=boosts), lines=lines)
 
     board = BoardEdit(record)

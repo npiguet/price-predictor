@@ -192,7 +192,7 @@ def _walked(anchor: EntityState, blocker: EntityState, state) -> bool | None:
     """Whether the blocker's controller controls a land the anchor's landwalk
     names (702.14c), read off its keyword lines' fragments; None where no
     line says which land (a chosen type)."""
-    selectors = [line.fragment.split(":")[1] for line in anchor.lines or ()
+    selectors = [line.fragment.split(":")[1] for line in anchor.lines
                  if line.fragment and line.fragment.lower().startswith("landwalk:")
                  and len(line.fragment.split(":")) > 1]
     if not selectors or any(s.split(".")[0] in ("ChosenType", "YourBasic") for s in selectors):

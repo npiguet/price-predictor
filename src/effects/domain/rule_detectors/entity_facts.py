@@ -42,7 +42,7 @@ def is_copy(entity: EntityState, state: StateSnapshot) -> bool:
     if entity.copy_source is not None:
         return True
     return any(link.type == "copy_of" and _end_is(link.from_, entity.id)
-               for link in state.links or ())
+               for link in state.links)
 
 
 def is_merged(entity: EntityState, state: StateSnapshot) -> bool:
@@ -50,7 +50,7 @@ def is_merged(entity: EntityState, state: StateSnapshot) -> bool:
     reaches it (a mutated permanent's other card, the card a melded permanent
     melded with)."""
     return any(link.type == "merged_with" and _end_is(link.to, entity.id)
-               for link in state.links or ())
+               for link in state.links)
 
 
 def card_type_count(entity: EntityState) -> int:

@@ -200,16 +200,11 @@ def make_snapshot(**overrides) -> StateSnapshot:
 
 
 def make_entity(entity_id: str, name: str, **overrides) -> EntityState:
-    """A battlefield permanent controlled by ``P0``, in gen 3's shape: unless
-    ``lines`` is given, a ``printed`` key is a printed line and a
-    ``granted_attached`` one a line a static grants, each of its key's trait
-    kind (:func:`lines_of`)."""
+    """A battlefield permanent controlled by ``P0``; its ``lines`` come from
+    :func:`lines_of`."""
     defaults: dict = {
         "id": entity_id, "name": name, "zone": "battlefield", "controller": "P0",
     }
-    if "lines" not in overrides:
-        overrides["lines"] = lines_of(overrides.pop("printed", ()),
-                                      overrides.pop("granted_attached", ()))
     defaults.update(overrides)
     return EntityState(**defaults)
 

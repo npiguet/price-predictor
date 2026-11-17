@@ -783,10 +783,11 @@ class TestTheUntargetedRound:
         import logging
 
         from effects.domain.provenance import ProvenanceKey
-        from tests.unit.effects.builders import make_entity, make_snapshot
+        from tests.unit.effects.builders import lines_of, make_entity, make_snapshot
 
         shock_on_board = make_snapshot(entities=(make_entity(
-            "E9", "Shock Variant 99aa00ff", printed=(ProvenanceKey(self.SHOCK, 0, "spell", 0),),
+            "E9", "Shock Variant 99aa00ff",
+            lines=lines_of(printed=(ProvenanceKey(self.SHOCK, 0, "spell", 0),)),
         ),))
         shown = [_variant_record(self.BOLT, "g9", 0, state=shock_on_board)]
         collect_variants, config = self._fixture(

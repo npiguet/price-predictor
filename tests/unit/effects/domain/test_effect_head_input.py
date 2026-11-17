@@ -58,6 +58,7 @@ from effects.domain.state_snapshot import (
     StateSnapshot,
 )
 from tests.unit.effects.builders import (
+    lines_of,
     make_entity,
     make_record,
     make_snapshot,
@@ -120,8 +121,8 @@ def _snapshot(**overrides) -> StateSnapshot:
             PlayerState(id="P1", life=8, hand=1, library=30, graveyard=4),
         ),
         "entities": (
-            _entity("E1", printed=(_ANTHEM,)),
-            _entity("E2", controller="P1", printed=(_WARD,)),
+            _entity("E1", lines=lines_of(printed=(_ANTHEM,))),
+            _entity("E2", controller="P1", lines=lines_of(printed=(_WARD,))),
         ),
     }
     defaults.update(overrides)
@@ -211,9 +212,9 @@ class TestPositionReset:
 
     def test_a_board_position_does_not_change_an_entitys_geometry(self):
         """The reset is what makes twelve permanents one geometry, not twelve."""
-        one = _snapshot(entities=(_entity("E1", printed=(_ANTHEM,)),))
+        one = _snapshot(entities=(_entity("E1", lines=lines_of(printed=(_ANTHEM,))),))
         many = _snapshot(entities=(
-            _entity("E0"), _entity("E1", printed=(_ANTHEM,)),
+            _entity("E0"), _entity("E1", lines=lines_of(printed=(_ANTHEM,))),
         ))
         first = _build(_record(state=one))
         second = _build(_record(state=many))
@@ -275,7 +276,7 @@ class TestActSlot:
 
 class TestAbilityTokens:
     def test_printed_and_attachment_granted_lines_become_tokens(self):
-        entity = _entity("E1", printed=(_ANTHEM,), granted_attached=(_WARD,))
+        entity = _entity("E1", lines=lines_of((_ANTHEM,), (_WARD,)))
         surface = _build(_record(state=_snapshot(entities=(entity,))))
         vectors = [s.e for s in slots_of_kind(surface, SlotKind.ABILITY)]
         assert vectors == [_VECTORS[_ANTHEM], _VECTORS[_WARD]]
@@ -292,7 +293,7 @@ class TestAbilityTokens:
         )
         unmet = _build(_record(state=_snapshot(entities=(_entity("E1", lines=lines),))))
         met = _build(_record(state=_snapshot(entities=(
-            _entity("E1", printed=(_ANTHEM,), granted_attached=(_WARD,)),))))
+            _entity("E1", lines=lines_of((_ANTHEM,), (_WARD,))),))))
         assert unmet.slots[:-1] == met.slots
         inactive = unmet.slots[-1]
         assert inactive.e == _VECTORS[_BOLT] and _flags(inactive)["active"] == 0.0
@@ -485,7 +486,7 @@ class TestKeysWithNoLine:
 
     def test_a_key_with_no_line_gets_no_ability_token(self):
         record = _record(state=_snapshot(entities=(
-            _entity("E1", printed=(self._PHANTOM, _ANTHEM)),
+            _entity("E1", lines=lines_of(printed=(self._PHANTOM, _ANTHEM))),
         )))
         surface = _build(record, has_line=lambda key: key in _VECTORS)
         abilities = slots_of_kind(surface, SlotKind.ABILITY)
@@ -493,7 +494,7 @@ class TestKeysWithNoLine:
 
     def test_positions_stay_contiguous_after_a_skip(self):
         record = _record(state=_snapshot(entities=(
-            _entity("E1", printed=(self._PHANTOM, _ANTHEM, _WARD)),
+            _entity("E1", lines=lines_of(printed=(self._PHANTOM, _ANTHEM, _WARD))),
         )))
         surface = _build(record, has_line=lambda key: key in _VECTORS)
         positions = [
@@ -504,13 +505,14 @@ class TestKeysWithNoLine:
 
     def test_a_masked_line_keeps_its_zero_token(self):
         """The state-only control zeroes ``e`` but keeps the geometry."""
-        record = _record(state=_snapshot(entities=(_entity("E1", printed=(_ANTHEM,)),)))
+        record = _record(state=_snapshot(entities=(
+            _entity("E1", lines=lines_of(printed=(_ANTHEM,))),)))
         surface = _build(record, e_for=lambda key: None, has_line=lambda key: True)
         assert [slot.e for slot in slots_of_kind(surface, SlotKind.ABILITY)] == [_ZERO]
 
     def test_without_the_predicate_every_key_keeps_its_token(self):
         record = _record(state=_snapshot(entities=(
-            _entity("E1", printed=(self._PHANTOM,)),
+            _entity("E1", lines=lines_of(printed=(self._PHANTOM,))),
         )))
         assert [slot.e for slot in slots_of_kind(_build(record), SlotKind.ABILITY)] == [_ZERO]
 
@@ -530,7 +532,7 @@ class TestOptionRows:
         vectors = {self._CHARM: (0.5,) * E_DIM}
         vectors |= {mode: (float(mode.option),) * E_DIM for mode in self._modes()}
         record = _record(state=_snapshot(entities=(
-            _entity("E1", printed=(self._CHARM, _ANTHEM)),
+            _entity("E1", lines=lines_of(printed=(self._CHARM, _ANTHEM))),
         )))
         return _build(
             record, e_for=lambda key: vectors.get(key, _VECTORS.get(key)),
@@ -862,15 +864,13 @@ class TestKeywordFlags:
 class TestCardSlotInputs:
     """Root spec § 9.4: the card slot's new inputs."""
 
-    def test_face_state_replaces_the_face_down_flag(self):
+    def test_the_face_state_is_one_hot(self):
         from effects.domain.effect_head_input import FACE_STATES
 
         record = _record()
         for face in FACE_STATES:
             part = _card_part(_entity("E1", face_state=face), record, "face_state")
             assert part[FACE_STATES.index(face)] == 1.0 and sum(part) == 1.0
-        gen2 = _card_part(_entity("E1", face_down=True), record, "face_state")
-        assert gen2[FACE_STATES.index("face_down")] == 1.0
 
     def test_two_face_down_cards_differ_only_in_their_inactive_lines(self):
         from effects.domain.state_snapshot import RealFace
