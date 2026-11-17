@@ -1,5 +1,5 @@
 name: balloon stand
 types: artifact attraction
-triggered: visit — choose one —
+triggered: visit — choose one
 option[1]: create a 1/1 red balloon creature token with flying.
 option[2]: sacrifice a balloon. if you do, target creature gains flying until end of turn.

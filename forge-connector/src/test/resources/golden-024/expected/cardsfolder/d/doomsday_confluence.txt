@@ -1,7 +1,7 @@
 name: doomsday confluence
 mana cost: {X}{X}{B}
 types: sorcery
-spell[1]: choose one
+spell[1]: choose X. you may choose the same mode more than once.
 option[2]: each player sacrifices a nonartifact creature.
 option[3]: create a 3/3 black dalek artifact creature token with menace.
 option[4]: each opponent discards a card.
