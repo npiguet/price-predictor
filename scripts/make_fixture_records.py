@@ -34,23 +34,23 @@ check, the legend rule, a damage-step probe, a keyword's own line, a random-seat
 game and a game the Forge AI played on both seats), one per story-2 acceptance
 scenario (``a1-`` … ``a11-``: a permanent with a static, a trigger and a
 replacement line; a creature stripped of every ability; flying granted by
-another permanent's static; ward and annihilator fragments; protection; a first-strike combat; a burn kill, which
-also brings the dies-trigger records of its game; a sorcery off turn and a
-candidate of the seat without priority; an unmet condition; a declared anchor
-tapped and one with vigilance), one per ``turn_action`` subkind and per failed
-check, the anchored legality shapes, and the new snapshot members (floating
-effects of both kinds, delayed triggers, dungeons, day and night, each
-extra-entity role, a face-down card, dice), and land-play candidates: playable,
-past the turn's limit, off their player's turn, and on it at a time no sorcery
-could be cast, the combats ``combat_keyword_effect`` reads (a vigilant
-attacker, a first striker in the regular step), a directed fork, a fork
-whose copy dropped something, and the rarer members ``field-coverage`` checks
-vary (the initiative, a land-play limit other than one, a buffered ability's
-events, a blocker required elsewhere or forbidden by its own line), and an
-effect half creating one continuous effect or delayed trigger. Face-down keys
-name ``variant-scripts/``: pass that tree as a ``--cards-folder`` too when the
-records name it. The sidecars directory is emptied first, so it holds exactly
-the sidecars the records name.
+another permanent's static; ward and annihilator fragments; protection; a
+first-strike combat; a burn kill, which also brings the dies-trigger records of
+its game; a sorcery off turn and a candidate of the seat without priority; an
+unmet condition; a declared anchor tapped and one with vigilance), one per
+``turn_action`` subkind and per failed check, the anchored legality shapes, and
+the new snapshot members (floating effects of both kinds, delayed triggers,
+dungeons, day and night, each extra-entity role, a face-down card, dice), and
+land-play candidates: playable, past the turn's limit, off their player's turn,
+and on it at a time no sorcery could be cast, the combats
+``combat_keyword_effect`` reads (a vigilant attacker, a first striker in the
+regular step), a directed fork, a fork whose copy dropped something, and the
+rarer members ``field-coverage`` checks vary (the initiative, a land-play limit
+other than one, a buffered ability's events, a blocker required elsewhere or
+forbidden by its own line), and an effect half creating one continuous effect or
+delayed trigger. Face-down keys name ``variant-scripts/``: pass that tree as a
+``--cards-folder`` too when the records name it. The sidecars directory is
+emptied first, so it holds exactly the sidecars the records name.
 
 The categories, the scan and the joins live in ``fixture_records/``."""
 
