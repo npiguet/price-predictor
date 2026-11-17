@@ -67,6 +67,12 @@ class TestRunServe:
         args = parser.parse_args([
             "serve",
             "--model-path", str(tmp_path / "test_model.joblib"),
+            # Absent inputs: the defaults would load the real 600 MB MTGJSON
+            # dump and any trained transformer, about 5 GB for one test.
+            "--printings-path", str(tmp_path / "no-printings.json"),
+            "--prices-path", str(tmp_path / "no-prices.json"),
+            "--vocab-path", str(tmp_path / "no-vocab.txt"),
+            "--transformer-path", str(tmp_path / "no-transformer"),
             "--host", "127.0.0.1",
             "--port", "9090",
         ])
