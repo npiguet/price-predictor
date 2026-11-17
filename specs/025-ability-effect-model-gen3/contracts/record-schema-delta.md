@@ -168,7 +168,10 @@ A `keyword` line's keys name the keyword line the card prints, else the static t
 keyword; a keyword a resolved effect granted has `keys: []` and is read by its `fragment`. A copy
 (a Clone's, a Phantasmal Image's) prints what it copies: its keyword lines key into the copied
 card's script file, through a copy of a copy to the original; a keyword, trigger or ability the copy
-effect itself adds (`AddTriggers$`, `AddAbilities$`) keys to the line that made the copy. The
+effect itself adds (`AddTriggers$`, `AddAbilities$`) keys to the line that made the copy. A
+trigger, static or replacement a card granted itself (a Class level's, a "has ... as long as"
+trigger, a manland's animated trigger) keys to the line that granted it, a Class level's to its
+`Class:N` keyword's bare key, and past every declared line when none is found. The
 triggers, statics and abilities a keyword instance builds are its line, not lines of their own; a
 `Secondary$ True` trait is listed under its own key and joins its primary's line through the
 sidecar. A land's play and a permanent's plain cast are not lines. A face not up (a face-down

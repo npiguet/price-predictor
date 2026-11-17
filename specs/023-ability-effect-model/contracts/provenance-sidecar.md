@@ -103,7 +103,7 @@ join — and the mismatch is the one condition that must fail loudly.
 | A record whose acting keys all sit in `dropped_keys` (or name an unconverted script) | `build-corpus` refuses it as `no-acting-text`; on the board, the surface builder emits no token for such a key. A runtime-only key is neither: it keeps the record and gets no token |
 | A key names a script file with **no sidecar at all** under its tree | not an error: the converted corpus never held that card, and the ability contributes no text. Token entities do this — the collector files a token's provenance as `cardsfolder/<letter>/<sanitized token name>.txt` while tokens convert into `output/tokenscripts/` under Forge's own script filenames, so the path resolves to nothing. Readers raise `UnconvertedScript` and count it; `SidecarCache.line_for` returns None. Distinct from the row below, where the sidecar exists and disagrees |
 | A record names a provenance key **inside** a declared `(face, trait_kind)` range that is in neither `lines` nor `dropped_keys` | fail loudly — the sidecar does not describe the card the record was collected against, i.e. a reconversion between collection and training. `dropped_keys` is declared-minus-claimed, so every index the converter parsed sits in one of the two lists and a gap between them can only come from a different trait list |
-| A key whose face or trait kind the sidecar never declared, or whose index is past the highest it declared for that pair | runtime-only: a trait Forge attaches to a live card — level up, bestow, scavenge; a trigger granted by another card's static, keyed to the granting card's script; a disguise creature's face-down face. No line, the record is kept, and the surface builder emits no token |
+| A key whose face or trait kind the sidecar never declared, or whose index is past the highest it declared for that pair | runtime-only: a trait Forge attaches to a live card — level up, bestow, scavenge; a trigger granted by another card's static, keyed to the granting card's script; a trait a card granted itself whose granting line is not found; a disguise creature's face-down face. No line, the record is kept, and the surface builder emits no token |
 | A record whose `ability` is empty and whose `ability_unresolved` is `engine_effect` | expected, not an error, and **not** a `dropped_keys` case: the acting card is engine-built (The Monarch, The Initiative, dungeons, emblems, speed) and has no script file in any tree, so there is no sidecar to drop from. A sentinel `script_file` would turn that honest answer into a hard join failure, inverting the fail-loudly rule above |
 | An event attributed to a sub-ability link absent from `sub_ability_links` falls back to the **root line** | attribution never drops an event |
 | `script_text` is the stage-four primary encoding surface | every command that encodes reads it here and needs no Forge-cardsfolder path of its own |
@@ -142,7 +142,11 @@ match refuses to answer when it is ambiguous — **no key beats a wrong key**:
 2. **Trigger- and replacement-borne abilities** key to the trait that owns them (`getTrigger()`,
    `getReplacementEffect()`), not to the `Execute$` SVar ability, which is a member of no trait slice.
 3. **Keyword-derived traits** key to their keyword's ordinal (see below).
-4. **The trait where it stands**, located by identity in its own `CardState` slice.
+4. **The trait where it stands**, located by identity in its own `CardState` slice. A trigger, static or
+   replacement the slice holds and the state's own traits (`get...WithoutChanges()`) do not is one the card
+   granted itself: it keys to its granting line, the line naming the SVar it was parsed from, and to its index
+   only when no such line is found. Several lines naming the SVar are accepted when they key alike, or differ only in `built`, which
+   gives the bare key: a Class level's trait keys to its `Class:N` keyword's bare key.
 5. **The trait where it stands**, located by *structure*: the unique member of the slice with the same
    class and the same `getOriginalMapParams()`. This is what reaches an alternative-cost or
    extra-keyword-cost copy, which carries no back-reference at all.

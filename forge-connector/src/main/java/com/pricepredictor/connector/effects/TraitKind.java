@@ -55,12 +55,16 @@ public enum TraitKind implements WireNamed {
     }
 
     /**
-     * The state's trait list for this kind, in declaration order.
+     * The state's live trait list for this kind.
      *
-     * <p>Printed traits occupy the head of every slice — a state builds each
-     * list from its own parsed traits and only then appends the keyword-derived
-     * and runtime-granted ones — which is why an index into a slice is stable
-     * across processes for a scripted line.
+     * <p>Printed traits occupy the head of every slice: a state builds each
+     * list from its own parsed traits, then appends the ones its trait
+     * changes granted (layer 3, layer 4's land traits, layer 6; a trait the
+     * card granted itself is one of these), then the keyword-built ones
+     * ({@code CardState.getTriggers}, {@code Card.updateTriggers}). That is
+     * why an index into a slice is stable across processes for a scripted
+     * line, and why a trait a change granted is not keyed by its index here
+     * ({@code ProvenanceResolver.keyInState}).
      */
     Iterable<? extends CardTraitBase> slice(CardState state) {
         return switch (this) {

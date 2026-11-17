@@ -289,8 +289,21 @@ public final class ProvenanceResolver {
      * keyword's key carries {@code built}, which of the instance's traits it
      * is ({@link #builtOf}), so a saga's chapter III names its own line and
      * not the saga's first.
+     *
+     * <p>A trait the card granted itself keys to the line that granted it
+     * ({@link #keyInState}).
      */
     static ProvenanceKey keyFor(CardTraitBase trait) {
+        return keyFor(trait, 0);
+    }
+
+    /**
+     * {@link #keyFor}, {@code depth} granting lines into a search for one
+     * ({@link #grantingLineKey}): a granted line that names the SVar of
+     * another is keyed by its own granting line in turn, as deep as
+     * {@link #MAX_HOPS}, and two lines granting each other end there.
+     */
+    private static ProvenanceKey keyFor(CardTraitBase trait, int depth) {
         if (trait == null) return null;
         CardState state = trait.getCardState();
         if (state == null) return null;
@@ -311,8 +324,47 @@ public final class ProvenanceResolver {
         }
         TraitKind kind = TraitKind.of(trait);
         if (kind == null) return null;
+        return keyInState(state, trait, kind, depth);
+    }
+
+    /**
+     * A trait of a state that copies nothing, keyed by its index in the
+     * state's slice, unless the card granted it to itself: then the line
+     * that granted it ({@link #grantingLineKey}), and the index only when no
+     * line is found.
+     *
+     * <p>Forge lists a state's traits printed first, then the ones its trait
+     * changes granted, then the keyword-built ones. A trait the card's own
+     * static or effect granted (a Class level's trigger, Expedition
+     * Diviner's "has 'When this creature dies...'", a manland's animated
+     * trigger) is parsed onto the card's own state, so it stands in that
+     * list, past the printed lines, where the converter numbered no line or
+     * another one.
+     */
+    private static ProvenanceKey keyInState(CardState state, CardTraitBase trait, TraitKind kind,
+                                            int depth) {
+        if (depth < MAX_HOPS && grantedInPlace(state, trait, kind)) {
+            ProvenanceKey granting = grantingLineKey(trait, depth);
+            if (granting != null) return granting;
+        }
         int index = indexWithin(state, trait, kind);
         return keyAt(state, kind, index < 0 ? indexLike(state, trait, kind) : index);
+    }
+
+    /**
+     * Whether a trigger, static or replacement stands in its own state's live
+     * slice but not among the state's own traits (Forge's
+     * {@code get...WithoutChanges()}, the slice through no trait change): a
+     * trait the card granted itself. A printed trait, the land traits a
+     * type change built and every keyword-built trait are among its own or
+     * not in its state's slice at all. A spell is never one: an ability a
+     * static grants is followed through its grantor first ({@link #grantor}).
+     */
+    private static boolean grantedInPlace(CardState state, CardTraitBase trait, TraitKind kind) {
+        if (kind == TraitKind.SPELL) return false;
+        List<? extends CardTraitBase> own = ForgeFields.traitsThrough(state, kind, List.of());
+        if (own == null || indexIn(own, trait) >= 0) return false;
+        return indexIn(kind.slice(state), trait) >= 0;
     }
 
     /**
@@ -512,7 +564,8 @@ public final class ProvenanceResolver {
      * done again on the way back: find the SVar whose text parses to exactly
      * these parameters, then find the line that names that SVar.
      *
-     * <p>Both halves refuse when more than one candidate matches, for the
+     * <p>Both halves refuse when more than one candidate matches, unless the
+     * naming lines all key to one line ({@link #oneLineOf}), for the
      * reason {@link #indexLike} refuses: a record with no key is still
      * trainable through its state and payload, while a record with the wrong
      * key silently trains the wrong line. The parameter comparison is equality
@@ -523,13 +576,19 @@ public final class ProvenanceResolver {
      * that searches rather than follows, and it is last for that reason. It
      * runs only once every back-reference in the chain has come up empty,
      * which is also why walking four trait lists here is cheap: few records
-     * ever reach this point.
+     * ever reach this point. A trait the card granted itself is the
+     * exception: {@link #keyInState} searches for its line before its index.
      */
     private static StepResult grantingLine(CardTraitBase trait) {
+        return keyed(grantingLineKey(trait, 0));
+    }
+
+    /** The key of the line that granted {@code trait} ({@link #grantingLine}), or null. */
+    private static ProvenanceKey grantingLineKey(CardTraitBase trait, int depth) {
         CardState state = trait.getCardState();
-        if (state == null) return Pass.PASS;
+        if (state == null) return null;
         Map<String, String> want = trait.getOriginalMapParams();
-        if (want == null || want.isEmpty()) return Pass.PASS;
+        if (want == null || want.isEmpty()) return null;
         String svar = soleSVarParsingTo(state, want);
         // The SVar may itself be named only by another SVar: a Clone's
         // AddAbilities$ names the granted ability's SVar from the copy
@@ -539,11 +598,34 @@ public final class ProvenanceResolver {
         Set<String> climbed = new HashSet<>();
         for (int hop = 0; svar != null && hop < MAX_HOPS && climbed.add(svar); hop++) {
             List<CardTraitBase> naming = linesNaming(state, svar);
-            if (naming.size() == 1) return keyed(keyFor(naming.get(0)));
-            if (naming.size() > 1) return Pass.PASS;
+            if (!naming.isEmpty()) return oneLineOf(naming, depth);
             svar = soleSVarNaming(state, svar);
         }
-        return Pass.PASS;
+        return null;
+    }
+
+    /**
+     * The key of the one line every trait in {@code naming} keys to: their
+     * key when they all key alike; the bare keyword key when they differ only
+     * in {@code built}; else null, refusing as {@link #indexLike} refuses.
+     *
+     * <p>A keyword names its SVars in its own text, so each trait it built
+     * names them: a Class level's static, which grants the level's lines,
+     * and its level-up ability both name each SVar the level grants. They
+     * are one line, the {@code Class:N} keyword's, which declares the bare
+     * key; a granted line is none of the traits the keyword built, so no
+     * {@code built} names it.
+     */
+    private static ProvenanceKey oneLineOf(List<CardTraitBase> naming, int depth) {
+        Set<ProvenanceKey> keys = new HashSet<>();
+        Set<ProvenanceKey> bare = new HashSet<>();
+        for (CardTraitBase line : naming) {
+            ProvenanceKey key = keyFor(line, depth + 1);
+            keys.add(key);
+            bare.add(key == null ? null : key.withoutBuilt());
+        }
+        if (keys.size() == 1) return keys.iterator().next();
+        return bare.size() == 1 ? bare.iterator().next() : null;
     }
 
     /** The one other SVar of {@code state} whose text names {@code svar}, or null. */
