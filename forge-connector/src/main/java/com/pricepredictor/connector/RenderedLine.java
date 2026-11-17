@@ -36,15 +36,26 @@ public record RenderedLine(String prefix, String prose, Ability owner, int face)
      */
     private static final Pattern LINE_BREAK = Pattern.compile("[ \t]*\r?\n[ \t]*");
 
+    /** A run of blanks inside a line: one space to every reader. */
+    private static final Pattern BLANK_RUN = Pattern.compile("[ \t]{2,}");
+
     /**
      * Append the one line a text renders as, opened by {@code prefix}. A text
      * that runs onto several lines (a Class level's continuation, a saga's
      * modes) is folded into one, each line break read as a space: a line is
      * one ability's whole text, and a join reads the one line a key names.
+     * A run of blanks in a text is one space.
      */
     public static void appendLine(
             List<RenderedLine> lines, String prefix, String text, Ability owner, int face) {
-        lines.add(new RenderedLine(prefix, LINE_BREAK.matcher(text).replaceAll(" "), owner, face));
+        String folded = LINE_BREAK.matcher(text).replaceAll(" ");
+        lines.add(new RenderedLine(
+                prefix, BLANK_RUN.matcher(folded).replaceAll(" "), owner, face));
+    }
+
+    /** This line with its prose replaced. */
+    public RenderedLine withProse(String replacement) {
+        return new RenderedLine(prefix, replacement, owner, face);
     }
 
     /** The line as the converted file holds it. */
