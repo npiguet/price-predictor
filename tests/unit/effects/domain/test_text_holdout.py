@@ -19,24 +19,19 @@ from pathlib import Path
 import pytest
 
 from effects.domain.text_holdout import (
-    HoldoutUnit,
-    holdout_key,
     masked_template,
     normalize_script_text,
     select_holdout,
 )
 from tests.unit.effects.builders import fresh_interpreter_env
 
-_UNIT = HoldoutUnit.TEMPLATE
-
-
 
 def test_an_eligible_text_is_held_out_when_its_hash_qualifies() -> None:
     """The hash decides membership, over texts few cards carry."""
     texts_by_card = {"Alpha": ["SP$ DealDamage | NumDmg$ 3"]}
 
-    all_in = select_holdout(texts_by_card, permille=1000, max_carriers=8, unit=_UNIT)
-    none_in = select_holdout(texts_by_card, permille=0, max_carriers=8, unit=_UNIT)
+    all_in = select_holdout(texts_by_card, permille=1000, max_carriers=8)
+    none_in = select_holdout(texts_by_card, permille=0, max_carriers=8)
 
     assert all_in.texts == frozenset({"SP$ DealDamage | NumDmg$ 3"})
     assert all_in.cards == frozenset({"Alpha"})
@@ -50,7 +45,7 @@ def test_a_text_too_many_cards_carry_is_never_held_out() -> None:
     texts_by_card = {f"Bear {n}": [common] for n in range(9)}
     texts_by_card["Rare Thing"] = ["SP$ Bespoke | Weird$ True"]
 
-    chosen = select_holdout(texts_by_card, permille=1000, max_carriers=8, unit=_UNIT)
+    chosen = select_holdout(texts_by_card, permille=1000, max_carriers=8)
 
     assert common not in chosen.texts
     assert chosen.texts == frozenset({"SP$ Bespoke | Weird$ True"})
@@ -60,11 +55,11 @@ def test_a_text_too_many_cards_carry_is_never_held_out() -> None:
 def test_adding_unrelated_cards_does_not_move_an_existing_text() -> None:
     """A depleted corpus is composed once; a selection that drifts invalidates it."""
     kept = "SP$ DealDamage | NumDmg$ 3"
-    before = select_holdout({"Alpha": [kept]}, permille=1000, max_carriers=8, unit=_UNIT)
+    before = select_holdout({"Alpha": [kept]}, permille=1000, max_carriers=8)
 
     after = select_holdout(
         {"Alpha": [kept], "Beta": ["SP$ Draw | NumCards$ 2"]},
-        permille=1000, max_carriers=8, unit=_UNIT,
+        permille=1000, max_carriers=8,
     )
 
     assert (kept in before.texts) == (kept in after.texts)
@@ -159,7 +154,7 @@ def test_whitespace_differences_are_one_template():
 
 
 def _templates_select_together(texts_by_card, **flags):
-    chosen = select_holdout(texts_by_card, unit="template", **flags)
+    chosen = select_holdout(texts_by_card, **flags)
     by_template: dict[str, set[bool]] = {}
     for texts in texts_by_card.values():
         for text in texts:
@@ -205,15 +200,8 @@ def test_a_template_over_the_carrier_cap_is_never_held_out():
     texts_by_card = {
         f"card {i}": [f"SP$ DealDamage | NumDmg$ {i}"] for i in range(10)
     }
-    chosen = select_holdout(texts_by_card, permille=1000, max_carriers=8, unit="template")
+    chosen = select_holdout(texts_by_card, permille=1000, max_carriers=8)
     assert chosen.texts == frozenset()
-
-
-@pytest.mark.parametrize("unit", ["card", "text"])
-def test_an_unknown_unit_is_refused(unit):
-    """``text`` was feature 023's unit; it is no unit any more."""
-    with pytest.raises(ValueError, match="holdout unit"):
-        holdout_key("SP$ Draw", unit)
 
 
 def test_a_selector_choices_value_is_masked_but_a_label_list_is_not():

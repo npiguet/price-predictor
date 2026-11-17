@@ -267,7 +267,6 @@ class TestCollectVariantsHoldoutRule:
         from unittest.mock import patch
 
         from effects.domain.split import HoldoutRule
-        from effects.domain.text_holdout import HoldoutUnit
         from effects.infrastructure.cli import run_collect_variants
 
         with patch("effects.application.collect_variants.run", return_value=0) as collect:
@@ -276,7 +275,7 @@ class TestCollectVariantsHoldoutRule:
                 "--holdout-permille", "50", "--holdout-max-carriers", "3",
             )) == 0
         config = collect.call_args.args[0]
-        assert config.holdout == HoldoutRule(50, 3, HoldoutUnit.TEMPLATE)
+        assert config.holdout == HoldoutRule(50, 3)
         assert config.cards_folders == (Path("trees/cards"),)
 
 

@@ -17,7 +17,6 @@ from effects.domain.canonical_digest import canonical_digest
 from effects.domain.rule_budgets import RuleBudgets, RuleRow
 from effects.domain.rule_catalogue import MapVerdict, RuleMapEntry
 from effects.domain.split import HoldoutRule
-from effects.domain.text_holdout import HoldoutUnit
 
 if TYPE_CHECKING:
     from effects.domain.corpus_plan import GameStrata
@@ -259,26 +258,12 @@ class CorpusManifest:
     #: attribute to a clause (FR-148). They are still the ability's own
     #: outcomes, so they train.
     unattributed_records: int = field(default=0, metadata=_reads(int))
-    #: Legacy, with ``token_keys_ambiguous`` and ``forge_tokenscripts``: the
-    #: retired token-key remap's tallies (FR-151), which the digest hashes;
-    #: always written empty now.
-    token_keys_remapped: int = field(default=0, metadata=_reads(int))
-    token_keys_ambiguous: dict[str, int] = field(
-        default_factory=dict, metadata=_reads(_int_map),
-    )
     #: Script file -> resolution records refused because every acting key
     #: mapped to no rendered line (FR-148), largest 100 only: Forge's implicit
     #: permanent spell would otherwise add an entry per permanent. For an
     #: operator, not code.
     no_acting_text_scripts: dict[str, int] = field(
         default_factory=dict, metadata=_reads(_int_map),
-    )
-    #: Legacy, as ``token_keys_remapped``.
-    forge_tokenscripts: str = field(default="", metadata=_reads(str))
-    #: Gen-1's ``--game-disjoint-games``, replaced by a per-game threshold
-    #: (FR-044). No longer set; it is hashed, so it stays.
-    game_disjoint_target: int | None = field(
-        default=None, metadata=_reads(_optional_int),
     )
     #: Which generation of corpus this manifest describes: ``build-corpus``
     #: writes :data:`MANIFEST_GENERATION`, and ``from_dict`` refuses a manifest
@@ -287,10 +272,6 @@ class CorpusManifest:
 
     # Gen-2 (feature 024).
 
-    #: The unit the held-out texts were chosen by (FR-042).
-    holdout_unit: HoldoutUnit = field(
-        default=HoldoutUnit.TEMPLATE, metadata=_reads(HoldoutUnit),
-    )
     #: ``class -> family -> FamilyRow``.
     families: dict[str, dict[str, FamilyRow]] = field(
         default_factory=dict, metadata=_reads(_family_rows),
@@ -476,7 +457,7 @@ class CorpusManifest:
     def holdout(self) -> HoldoutRule:
         """The rule the held-out texts were chosen by; stored as three fields,
         the form every manifest so far was written in."""
-        return HoldoutRule(self.holdout_permille, self.holdout_max_carriers, self.holdout_unit)
+        return HoldoutRule(self.holdout_permille, self.holdout_max_carriers)
 
     def variant_scripts_or(self, given: Path | None) -> Path | None:
         """The variant-script tree a run over this dataset reads: ``given``,

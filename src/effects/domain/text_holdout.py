@@ -10,21 +10,9 @@ import re
 from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from enum import StrEnum
 from zlib import crc32
 
 from effects.domain.script_text import CHAIN_KEYS, SEG, SEGMENT_OPENER
-
-
-class HoldoutUnit(StrEnum):
-    """What the holdout keys on.
-
-    ``template`` (FR-039) holds out every text sharing a masked template
-    together.
-    """
-
-    TEMPLATE = "template"
-
 
 _WHITESPACE = re.compile(r"\s+")
 
@@ -99,14 +87,10 @@ def masked_template(text: str) -> str:
     )
 
 
-def holdout_key(text: str, unit: HoldoutUnit) -> str:
-    """What the holdout counts carriers of and hashes, under ``unit``."""
-    if unit == HoldoutUnit.TEMPLATE:
-        return masked_template(text)
-    raise ValueError(
-        f"unknown holdout unit {unit!r}; "
-        f"expected one of {tuple(known.value for known in HoldoutUnit)}"
-    )
+def holdout_key(text: str) -> str:
+    """What the holdout counts carriers of and hashes: the masked template
+    (FR-039), which holds out every text sharing one together."""
+    return masked_template(text)
 
 
 def text_is_held_out(text: str, *, permille: int) -> bool:
@@ -134,7 +118,6 @@ def select_holdout(
     *,
     permille: int,
     max_carriers: int,
-    unit: HoldoutUnit,
 ) -> HoldoutSelection:
     """Pick the held-out texts, and the cards depletion has to remove.
 
@@ -152,7 +135,7 @@ def select_holdout(
         for text in texts:
             key = key_of.get(text)
             if key is None:
-                key = key_of[text] = holdout_key(text, unit)
+                key = key_of[text] = holdout_key(text)
             keys.add(key)
         carriers.update(keys)
 

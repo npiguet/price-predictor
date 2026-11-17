@@ -281,7 +281,6 @@ def build_manifest(
         validation_sample=config.validation_sample,
         max_events_per_record=config.max_events_per_record,
         unattributed_records=written.unattributed,
-        holdout_unit=config.holdout.unit,
         families=families,
         signatures=signatures,
         policy_counts=_nested(written.families.policy),

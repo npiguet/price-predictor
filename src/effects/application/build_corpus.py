@@ -756,9 +756,9 @@ def _precision_exit(config: BuildCorpusConfig, decisions: Decisions) -> int:
 
 def _log_holdout(config: BuildCorpusConfig, held_out: HeldOutCards, surface: Surface) -> None:
     logger.info(
-        "Holdout (%s unit): %d ability text(s) on %d card(s) and %d token "
+        "Holdout: %d ability text(s) on %d card(s) and %d token "
         "script(s); encoding surface %r.",
-        config.holdout.unit, len(held_out.texts), len(held_out.names),
+        len(held_out.texts), len(held_out.names),
         sum(
             1 for script in held_out.script_files
             if split_script_file(script)[0] == SourceTree.TOKENSCRIPTS

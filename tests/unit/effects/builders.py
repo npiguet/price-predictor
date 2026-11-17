@@ -38,7 +38,7 @@ from effects.domain.state_snapshot import (
     PlayerState,
     StateSnapshot,
 )
-from effects.domain.text_holdout import HoldoutUnit, holdout_key
+from effects.domain.text_holdout import holdout_key
 
 EFFECTS_FIXTURES = Path(__file__).parents[2] / "fixtures" / "effects"
 #: Forge's keyword table, as the fixture records' runs read it.
@@ -317,15 +317,15 @@ def record_on_board(game_id: str, entities=(), ability=None, **overrides) -> Eff
 
 
 def held_out_cards(
-    names=(), script_files=(), *, texts=(), unit: HoldoutUnit = HoldoutUnit.TEMPLATE,
+    names=(), script_files=(), *, texts=(),
 ) -> HeldOutCards:
     """A holdout of exactly these cards, script files and ``texts``, each
-    text's :meth:`HeldOutCards.holds_text` key derived under ``unit`` as
+    text's :meth:`HeldOutCards.holds_text` key derived as
     :func:`text_keyed_holdout` derives it."""
     return HeldOutCards(
         names=frozenset(names), script_files=frozenset(script_files),
         texts=frozenset(texts),
-        keys=frozenset(holdout_key(text, unit) for text in texts), unit=unit,
+        keys=frozenset(holdout_key(text) for text in texts),
     )
 
 
@@ -487,12 +487,11 @@ def make_training_loop(
     from effects.application.train_effect_model import CorpusFacts
     from effects.application.training_loop import TrainingLoop
     from effects.domain.split import HoldoutRule
-    from effects.domain.text_holdout import HoldoutUnit
 
     return TrainingLoop(
         config,
         facts=CorpusFacts(**{
-            "holdout": HoldoutRule(unit=HoldoutUnit.TEMPLATE), "rarity": {}, **facts,
+            "holdout": HoldoutRule(), "rarity": {}, **facts,
         }),
         training_shards=list(training_shards),
         validation_samples=validation_samples or {},

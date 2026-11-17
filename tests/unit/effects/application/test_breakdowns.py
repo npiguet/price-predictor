@@ -1,6 +1,6 @@
 """The evaluation report's breakdowns (T106; spec Story 6 scenarios 1–5).
 
-The rows are real gen-1 records from the fixture, grouped by the families
+The rows are real records from the fixture, grouped by the families
 ``effect_family`` gives them over their real sidecars; only the losses are made
 up, because what is under test is the grouping, not the model.
 """
@@ -167,7 +167,7 @@ class TestWithheldKeyword:
 
 
 class TestTheReport:
-    def test_every_section_appears_for_a_gen2_shaped_set(self, rows):
+    def test_every_section_appears_for_a_full_set(self, rows):
         legality = next(r for r in rows if r.subkind in LEGALITY_SUBKINDS)
         card = [*rows, replace(rows[0], random_seat=True),
                 replace(legality, what_if=False)]

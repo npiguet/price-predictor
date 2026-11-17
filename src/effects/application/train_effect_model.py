@@ -348,7 +348,6 @@ class CorpusFacts:
             holdout_max_carriers=self.holdout.max_carriers,
             corpus_path=config.corpus or "",
             corpus_digest=self.digest,
-            holdout_unit=self.holdout.unit,
         )
 
 
@@ -415,11 +414,10 @@ def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
             "the holdout cannot be recomputed: no converted card tree among "
             f"--cards-folder {', '.join(str(f) for f in config.cards_folders)}"
         )
-    unit = manifest.holdout_unit
     started = time.monotonic()
     logger.info(
-        "Recomputing the %s holdout over %d cards' sidecars under %s.",
-        unit, len(trees.card_files), cards_folder,
+        "Recomputing the holdout over %d cards' sidecars under %s.",
+        len(trees.card_files), cards_folder,
     )
     recomputed = trees.holdout(manifest.holdout)
     logger.info(
@@ -431,7 +429,7 @@ def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
         missing = sorted(recorded - recomputed.texts)
         extra = sorted(recomputed.texts - recorded)
         raise HoldoutMismatchError(
-            f"the holdout recomputed under {unit} over {cards_folder} holds "
+            f"the holdout recomputed over {cards_folder} holds "
             f"{len(recomputed.texts)} text(s), the corpus recorded "
             f"{len(recorded)}: {len(missing)} recorded text(s) not held out "
             f"now, {len(extra)} held out now and not recorded. The sidecars "

@@ -12,7 +12,6 @@ from dataclasses import asdict, dataclass, fields
 from enum import Enum
 from typing import Any
 
-from effects.domain.text_holdout import HoldoutUnit
 from effects.domain.tokenizer_files import TokenizerFiles
 
 
@@ -41,14 +40,9 @@ class SplitProvenance:
     #: The curated dataset read and its manifest digest (FR-147).
     corpus_path: str = ""
     corpus_digest: str = ""
-    #: FR-042.
-    holdout_unit: HoldoutUnit = HoldoutUnit.TEMPLATE
 
     def as_dict(self) -> dict[str, Any]:
-        data = asdict(self)
-        # A plain string: an enum member would tie loading to its import path.
-        data["holdout_unit"] = str(self.holdout_unit)
-        return data
+        return asdict(self)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SplitProvenance:

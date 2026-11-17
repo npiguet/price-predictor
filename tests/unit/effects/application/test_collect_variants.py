@@ -37,7 +37,6 @@ from effects.domain.script_variants import (
     variant_name,
 )
 from effects.domain.split import HoldoutRule
-from effects.domain.text_holdout import HoldoutUnit
 from tests.unit.effects.builders import make_record
 from tests.unit.effects.domain.test_script_variants import _BOLT_SCRIPT
 
@@ -1029,12 +1028,12 @@ class TestNoVariantPrintsAHeldOutText:
         )
         return GeneratedVariant(name=name, source_card="x", path=path, perturbation="numeric")
 
-    def _holdout(self, unit: HoldoutUnit):
+    def _holdout(self):
         from effects.domain.split import text_keyed_holdout
 
         return text_keyed_holdout(
             {"Held": "cardsfolder/h/held.txt"}, {"Held": [self._HELD]},
-            HoldoutRule(1000, 8, unit),
+            HoldoutRule(1000, 8),
         )
 
     def test_a_variant_printing_a_held_out_template_is_dropped_with_its_files(self, tmp_path):
@@ -1047,7 +1046,7 @@ class TestNoVariantPrintsAHeldOutText:
         )
         clean = self._variant(tmp_path, "shock_variant_2", "SP$ Draw | NumCards$ 2")
 
-        kept = drop_held_out_variants([held, clean], self._holdout(HoldoutUnit.TEMPLATE))
+        kept = drop_held_out_variants([held, clean], self._holdout())
 
         assert kept == [clean]
         assert not held.path.exists()
@@ -1066,7 +1065,7 @@ class TestNoVariantPrintsAHeldOutText:
             "SP$ DealDamage | ValidTgts$ Artifact | NumDmg$ 5",
         ), fresh=False)
 
-        assert drop_held_out_variants([held], self._holdout(HoldoutUnit.TEMPLATE)) == []
+        assert drop_held_out_variants([held], self._holdout()) == []
         assert held.path.exists() and sidecar_path_for(held.path).exists()
 
     def test_the_rule_the_collector_is_given_decides_what_is_dropped(self, tmp_path):

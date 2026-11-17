@@ -23,18 +23,17 @@ from effects.application.holdout_cards import (
 )
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.split import HoldoutRule, text_keyed_holdout
-from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.sidecar_io import sidecar_path_for
 from tests.unit.effects.builders import write_sidecar
 
 
 def _report(
-    card_files, texts_by_card, *, unit="template", canonical_names=None, split_faces=None,
+    card_files, texts_by_card, *, canonical_names=None, split_faces=None,
     **rule,
 ):
     """The report over ``text_keyed_holdout``, as ``run`` builds it from the trees."""
     return holdout_report(
-        text_keyed_holdout(card_files, texts_by_card, HoldoutRule(unit=unit, **rule)),
+        text_keyed_holdout(card_files, texts_by_card, HoldoutRule(**rule)),
         converted_cards=len(card_files), canonical_names=canonical_names,
         **({} if split_faces is None else {"split_faces": split_faces}),
     )
@@ -67,7 +66,7 @@ def _run(root: Path, out: Path, **rule) -> HoldoutReport:
         out=out,
         cards_folders=(root / "cardsfolder", root / "tokenscripts"),
         printings_path=root / "AllPrintings.json",
-        holdout=HoldoutRule(**{"unit": HoldoutUnit.TEMPLATE, "max_carriers": 8, **rule}),
+        holdout=HoldoutRule(**{"max_carriers": 8, **rule}),
     ))
 
 
@@ -92,7 +91,7 @@ def test_the_list_is_the_cards_the_trainer_holds_out(tmp_path) -> None:
     for permille in (0, 250, 500, 750, 1000):
         listed = _run(tmp_path, out, permille=permille).names
         held = text_keyed_holdout(
-            card_files, texts_by_card, HoldoutRule(permille, 8, HoldoutUnit.TEMPLATE),
+            card_files, texts_by_card, HoldoutRule(permille, 8),
         )
         assert set(listed) == held.names, f"disagreed at permille={permille}"
         assert out.read_text(encoding="utf-8").splitlines() == listed
@@ -257,7 +256,7 @@ def test_the_report_counts_templates_texts_cards_and_the_depleted_share():
         "card 4": [], "card 5": [],
     }
     report = _report(
-        card_files, texts_by_card, permille=1000, max_carriers=8, unit="template",
+        card_files, texts_by_card, permille=1000, max_carriers=8,
     )
 
     assert report.keys == 2
@@ -275,7 +274,7 @@ def test_number_only_variants_land_on_the_same_side_of_the_list():
         for i in range(40)
     }
     listed = set(_report(
-        card_files, texts_by_card, permille=500, max_carriers=8, unit="template",
+        card_files, texts_by_card, permille=500, max_carriers=8,
     ).names)
     by_template: dict[str, set[bool]] = {}
     for card, texts in texts_by_card.items():

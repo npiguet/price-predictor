@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from effects.domain.card_names import fold_card_name
 from effects.domain.provenance import ProvenanceKey, first_text
 from effects.domain.records import EffectRecord, key_sites
-from effects.domain.text_holdout import HoldoutUnit, holdout_key, select_holdout
+from effects.domain.text_holdout import holdout_key, select_holdout
 
 #: An eligible ability text is held out when crc32(text) % 1000 falls below
 #: this, stable per text so a depleted corpus stays valid (FR-088).
@@ -32,10 +32,6 @@ class HoldoutRule:
 
     permille: int = HOLDOUT_PERMILLE
     max_carriers: int = HOLDOUT_MAX_CARRIERS
-    unit: HoldoutUnit = HoldoutUnit.TEMPLATE
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "unit", HoldoutUnit(self.unit))
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,7 +51,6 @@ class HeldOutCards:
     texts: frozenset[str]
     #: The held-out units (masked templates) that :meth:`holds_text` tests against.
     keys: frozenset[str]
-    unit: HoldoutUnit
 
     def __post_init__(self) -> None:
         folded = frozenset(fold_card_name(name) for name in self.names)
@@ -68,10 +63,10 @@ class HeldOutCards:
     def holds_text(self, script_text: str) -> bool:
         """Whether a script text is held out, carried by a card or not.
 
-        By unit rather than ``texts`` membership: a variant or a token can
+        By template rather than ``texts`` membership: a variant or a token can
         print a text no card carries.
         """
-        return holdout_key(script_text, self.unit) in self.keys
+        return holdout_key(script_text) in self.keys
 
     def text_acted_through(
         self, keys: Iterable[ProvenanceKey],
@@ -119,7 +114,6 @@ def text_keyed_holdout(
 ) -> HeldOutCards:
     """Hold out ability texts, and with them every card carrying one (FR-088).
 
-    ``rule.unit`` selects what is counted and hashed (FR-040, FR-041).
     ``holdout-cards``, ``build-corpus`` and ``train-effect-model`` all go
     through here, so the three agree by construction.
 
@@ -133,7 +127,7 @@ def text_keyed_holdout(
     tokens = dict(token_texts or {})
     chosen = select_holdout(
         {**texts_by_card, **tokens}, permille=rule.permille,
-        max_carriers=rule.max_carriers, unit=rule.unit,
+        max_carriers=rule.max_carriers,
     )
     names = frozenset(chosen.cards & card_files.keys())
     return HeldOutCards(
@@ -142,7 +136,6 @@ def text_keyed_holdout(
         | (chosen.cards & tokens.keys()),
         texts=chosen.texts,
         keys=chosen.keys,
-        unit=rule.unit,
     )
 
 

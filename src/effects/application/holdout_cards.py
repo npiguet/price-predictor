@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 
 from effects.domain import default_paths
 from effects.domain.split import HoldoutRule
-from effects.domain.text_holdout import HoldoutUnit
 
 if TYPE_CHECKING:
     from effects.domain.split import HeldOutCards
@@ -47,8 +46,7 @@ class HoldoutReport:
     """The depletion list and the counts the operator reads beside it (FR-043)."""
 
     names: list[str]
-    unit: HoldoutUnit
-    #: Held-out units: masked templates under ``template``, texts under ``text``.
+    #: Held-out units: the masked templates.
     keys: int
     texts: int
     converted_cards: int
@@ -139,8 +137,7 @@ def holdout_report(
 
     return HoldoutReport(
         names=sorted(forge_name(name) for name in held.names),
-        unit=held.unit,
-        keys=len({holdout_key(text, held.unit) for text in held.texts}),
+        keys=len({holdout_key(text) for text in held.texts}),
         texts=len(held.texts),
         converted_cards=converted_cards,
     )

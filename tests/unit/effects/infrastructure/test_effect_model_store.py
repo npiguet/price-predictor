@@ -23,7 +23,6 @@ from effects.domain.baselines import (
 from effects.domain.effect_head_input import INPUT_LAYOUT, INPUT_LAYOUT_KEY, layout_settings
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.split_provenance import SplitProvenance
-from effects.domain.text_holdout import HoldoutUnit
 from effects.domain.tokenizer_files import TokenizerFiles
 from effects.infrastructure.effect_model_store import (
     DEFAULT_MODEL_OUTPUT,
@@ -157,17 +156,9 @@ class TestCorpusProvenance:
         original = SplitProvenance(
             corpus_path="output/effects/corpus", corpus_digest="abc123",
             holdout_permille=20, holdout_max_carriers=8,
-            holdout_unit=HoldoutUnit.TEMPLATE,
         )
         restored = SplitProvenance.from_dict(original.as_dict())
         assert restored == original
-        assert restored.holdout_unit is HoldoutUnit.TEMPLATE
-
-    def test_the_holdout_unit_is_always_written(self):
-        """FR-042."""
-        recorded = SplitProvenance(held_out_cards=("Alpha",)).as_dict()
-        assert recorded["holdout_unit"] == "template"
-        assert SplitProvenance.from_dict(recorded).holdout_unit is HoldoutUnit.TEMPLATE
 
     def test_a_provenance_missing_a_member_is_refused(self):
         recorded = SplitProvenance().as_dict()
@@ -445,14 +436,13 @@ class TestSweepSettings:
         store.save(_checkpoint(
             files, encoder_config=encoder,
             encoder_state={},
-            provenance=_provenance(files, holdout_unit=HoldoutUnit.TEMPLATE),
+            provenance=_provenance(files),
             cards_folders=("output/old-cardsfolder", "output/old-tokenscripts"),
             training_settings=settings,
         ))
         loaded = store.load()
         assert (loaded.encoder_config.n_layers, loaded.encoder_config.d_model) == (2, 32)
         assert loaded.encoder_config.ff_dim == 128  # follows d_model x 4
-        assert loaded.provenance.holdout_unit == "template"
         assert loaded.training_settings == settings
         assert loaded.cards_folders == (
             "output/old-cardsfolder", "output/old-tokenscripts",

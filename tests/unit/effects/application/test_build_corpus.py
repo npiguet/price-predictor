@@ -68,7 +68,6 @@ from effects.domain.stratum_placement import (
     MAX_ITEM_ERROR,
     MIN_GAMES_PER_HALF,
 )
-from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.shard_io import (
     iter_shards,
@@ -230,7 +229,7 @@ def _rewrite(
 
 #: A catalogue of one scenario declared without a detector and one heads line
 #: the map does not mark ``trained``: no scenario tags a record and no rule is
-#: budgeted, so these hand-built corpora show gen-2's curation alone (a build
+#: budgeted, so these hand-built corpora show the curation alone (a build
 #: refuses a catalogue with no scenario or no heads line); the gen-3
 #: fixture's tests below read the real ``rules/``.
 _NO_RULES = Path(__file__).parents[3] / "fixtures" / "effects" / "minimal-rules"
@@ -239,10 +238,10 @@ _NO_RULES = Path(__file__).parents[3] / "fixtures" / "effects" / "minimal-rules"
 #: held out under the ``template`` unit, ``0.16`` places exactly one
 #: game (``g-clean-3``) in the game-disjoint stratum, and one copy per record.
 #: Placement's precision thresholds are off (research E5): no half needs a
-#: minimum of games, so nothing is promoted past gen-2's draw, and no
+#: minimum of games, so nothing is promoted past the base draw, and no
 #: component a precision target, so a build of four games exits 0.
 _LEGACY_RULES = dict(
-    holdout=HoldoutRule(unit=HoldoutUnit.TEMPLATE),
+    holdout=HoldoutRule(),
     game_disjoint_share=0.16, game_disjoint_keyword_share=0.16,
     reuse_cap=1, rules_dir=_NO_RULES, min_games_per_half=0,
     max_component_error=math.inf,
@@ -393,14 +392,6 @@ def default_build(tmp_path_factory, shared_corpus) -> CorpusStore:
     return shared_corpus.build(tmp_path_factory.mktemp("default-build") / "curated")
 
 
-def test_a_build_writes_the_legacy_token_key_fields_empty(default_build):
-    """Older manifests carry them and a digest hashes them, so they stay, unset."""
-    manifest = default_build.load()
-    assert manifest.token_keys_remapped == 0
-    assert manifest.token_keys_ambiguous == {}
-    assert manifest.forge_tokenscripts == ""
-
-
 def test_no_training_record_belongs_to_a_withheld_game(default_build):
     store = default_build
     manifest = store.load()
@@ -520,7 +511,7 @@ def test_build_refuses_a_holdout_that_selects_no_card(tmp_path, a_corpus):
     """
     with pytest.raises(ValueError, match="no held-out card") as raised:
         a_corpus.build(
-            tmp_path / "curated", holdout=HoldoutRule(permille=0, unit=HoldoutUnit.TEMPLATE),
+            tmp_path / "curated", holdout=HoldoutRule(permille=0),
         )
 
     assert "4 converted card" in str(raised.value)
@@ -1716,12 +1707,12 @@ def test_a_class_that_keeps_most_of_its_records_raises_nothing():
     ))
 
 
-# ── gen-2 selection, placement and refusals (T036, T069, T080, T083) ─────
+# ── selection, placement and refusals (T036, T069, T080, T083) ─────
 
 
-#: Gen-2's copies up to the default ``--reuse-cap``, on the legacy holdout and
+#: The copies up to the default ``--reuse-cap``, on the legacy holdout and
 #: game split, with no keyword table.
-_GEN2_RULES = {
+_BUDGET_FREE_RULES = {
     **{rule: value for rule, value in _LEGACY_RULES.items() if rule != "reuse_cap"},
     "keyword_definitions": None,
 }
@@ -1741,7 +1732,7 @@ def test_a_display_name_match_on_a_non_keyword_line_fails_the_build(tmp_path, a_
     }), encoding="utf-8")
 
     with pytest.raises(BuildCorpusError, match="FR-015"):
-        a_corpus.build(tmp_path / "out", rules=_GEN2_RULES, keyword_definitions=definitions)
+        a_corpus.build(tmp_path / "out", rules=_BUDGET_FREE_RULES, keyword_definitions=definitions)
 
 
 def test_a_gen1_shard_among_gen3_ones_is_refused_naming_it(tmp_path, a_corpus):
@@ -1758,7 +1749,7 @@ def test_a_gen1_shard_among_gen3_ones_is_refused_naming_it(tmp_path, a_corpus):
         handle.write(json.dumps(gen1) + "\n")
 
     with pytest.raises(BuildCorpusError, match=r"old\.jsonl\.gz, line 1: the record is gen-1 "):
-        a_corpus.build(tmp_path / "out", rules=_GEN2_RULES)
+        a_corpus.build(tmp_path / "out", rules=_BUDGET_FREE_RULES)
 
 
 def test_the_game_disjoint_keywords_parse_as_a_comma_separated_list():
@@ -1772,23 +1763,23 @@ def test_the_game_disjoint_keywords_parse_as_a_comma_separated_list():
 
 def test_an_unscored_game_disjoint_keyword_is_refused(tmp_path, shared_corpus):
     with pytest.raises(BuildCorpusError, match="flying"):
-        shared_corpus.config(tmp_path, rules=_GEN2_RULES, game_disjoint_keywords=("flying",))
+        shared_corpus.config(tmp_path, rules=_BUDGET_FREE_RULES, game_disjoint_keywords=("flying",))
 
 
 @pytest.fixture(scope="module")
-def gen2_build(tmp_path_factory, shared_corpus) -> CorpusStore:
-    """``shared_corpus`` built once under :data:`_GEN2_RULES`."""
-    output = tmp_path_factory.mktemp("gen2-build") / "curated"
-    return shared_corpus.build(output, rules=_GEN2_RULES)
+def shared_build(tmp_path_factory, shared_corpus) -> CorpusStore:
+    """``shared_corpus`` built once under :data:`_BUDGET_FREE_RULES`."""
+    output = tmp_path_factory.mktemp("shared-build") / "curated"
+    return shared_corpus.build(output, rules=_BUDGET_FREE_RULES)
 
 
-def test_random_seat_changes_no_selection(tmp_path, shared_corpus, gen2_build):
+def test_random_seat_changes_no_selection(tmp_path, shared_corpus, shared_build):
     """FR-050: the off-policy flag is reported, never selected on.
 
     Flipped on the training games only: a random seat keeps a game out of
     both validation strata (FR-059), which is placement, not selection.
     """
-    manifest = gen2_build.load()
+    manifest = shared_build.load()
     validation = {*manifest.card_disjoint_games, *manifest.game_disjoint_games}
     flipped_root = tmp_path / "flipped"
     for shard in iter_shards(shared_corpus.records):
@@ -1796,10 +1787,10 @@ def test_random_seat_changes_no_selection(tmp_path, shared_corpus, gen2_build):
                    for r in read_shard(shard)]
         write_shard(flipped_root / shard.relative_to(shared_corpus.records), records)
     flipped = shared_corpus.build(
-        tmp_path / "flipped-out", rules=_GEN2_RULES, records_dir=flipped_root,
+        tmp_path / "flipped-out", rules=_BUDGET_FREE_RULES, records_dir=flipped_root,
     )
 
-    assert _training_ids(gen2_build) == _training_ids(flipped)
+    assert _training_ids(shared_build) == _training_ids(flipped)
     counts = flipped.load().policy_counts
     assert counts and all(c.get("on_policy", 0) == 0 for c in counts.values())
 
@@ -1807,7 +1798,7 @@ def test_random_seat_changes_no_selection(tmp_path, shared_corpus, gen2_build):
 def test_a_rebuild_over_a_grown_corpus_keeps_every_game_disjoint_game(tmp_path, a_corpus):
     """SC-007."""
     first = set(
-        a_corpus.build(tmp_path / "first", rules=_GEN2_RULES).load().game_disjoint_games
+        a_corpus.build(tmp_path / "first", rules=_BUDGET_FREE_RULES).load().game_disjoint_games
     )
     assert first
 
@@ -1815,7 +1806,7 @@ def test_a_rebuild_over_a_grown_corpus_keeps_every_game_disjoint_game(tmp_path, 
         CorpusFixture.resolution(f"g-more-{i}.1", game=f"g-more-{i}") for i in range(40)
     ])
     grown = set(
-        a_corpus.build(tmp_path / "grown", rules=_GEN2_RULES).load().game_disjoint_games
+        a_corpus.build(tmp_path / "grown", rules=_BUDGET_FREE_RULES).load().game_disjoint_games
     )
 
     assert first <= grown
@@ -1823,12 +1814,10 @@ def test_a_rebuild_over_a_grown_corpus_keeps_every_game_disjoint_game(tmp_path, 
 
 def test_the_manifest_records_families_policy_and_the_flags(tmp_path, shared_corpus):
     """FR-053."""
-    manifest = shared_corpus.build(tmp_path / "out", rules=_GEN2_RULES, reuse_cap=3).load()
+    manifest = shared_corpus.build(tmp_path / "out", rules=_BUDGET_FREE_RULES, reuse_cap=3).load()
 
-    assert manifest.holdout_unit == "template"
     assert manifest.reuse_cap == 3
     assert manifest.game_disjoint_share == 0.16
-    assert manifest.game_disjoint_target is None
     effect = manifest.families["resolution-effect"]
     assert all(
         set(row.as_dict()) == {
@@ -1856,7 +1845,7 @@ def test_a_short_family_is_repeated_up_to_the_reuse_cap(tmp_path, a_corpus):
     ]
     a_corpus.with_extra_records(legality)
     manifest = a_corpus.build(
-        tmp_path / "out", rules=_GEN2_RULES,
+        tmp_path / "out", rules=_BUDGET_FREE_RULES,
         class_mix={"playability-legality": 1.0}, reuse_cap=4, validation_sample=0,
     ).load()
 
@@ -2044,7 +2033,7 @@ def budget_build(tmp_path, a_corpus):
         *(_damaged(f"{game}.plain{i}", game, hits=1) for i in range(8)),
     ])
     store = a_corpus.build(
-        tmp_path / "out", rules=_GEN2_RULES, rules_dir=_budget_rules(tmp_path / "rules"),
+        tmp_path / "out", rules=_BUDGET_FREE_RULES, rules_dir=_budget_rules(tmp_path / "rules"),
         game_disjoint_share=0.01, game_disjoint_keyword_share=0.01,
         class_mix={"resolution-effect": 1.0}, validation_sample=0,
     )
@@ -2065,7 +2054,7 @@ def test_the_text_cap_bounds_a_text_s_natural_and_added_copies_together(tmp_path
         *(_resolution(f"{game}.shock{i}", game, ability=(_SHOCK_KEY,)) for i in range(40)),
     ])
     store = a_corpus.build(
-        tmp_path / "out", rules=_GEN2_RULES, rules_dir=_budget_rules(tmp_path / "rules"),
+        tmp_path / "out", rules=_BUDGET_FREE_RULES, rules_dir=_budget_rules(tmp_path / "rules"),
         game_disjoint_share=0.01, game_disjoint_keyword_share=0.01,
         class_mix={"resolution-effect": 1.0}, validation_sample=0, text_cap=6,
     )

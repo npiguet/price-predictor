@@ -569,8 +569,8 @@ def _keep_unheld(
     kept = drop_held_out_variants(variants, held_out)
     if len(kept) < len(variants):
         logger.info(
-            "Dropped %d of %d variant(s) printing a held-out %s.",
-            len(variants) - len(kept), len(variants), config.holdout.unit,
+            "Dropped %d of %d variant(s) printing a held-out text.",
+            len(variants) - len(kept), len(variants),
         )
     if not kept:
         logger.error("Every variant printed a held-out text; there is nothing to deck.")

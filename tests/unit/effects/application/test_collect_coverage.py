@@ -884,14 +884,13 @@ class TestHeldOutTextUnit:
         ``template`` theirs is printed elsewhere, so no game is ever credited
         to them and the round would deck them until each retired."""
         from effects.application.collect_coverage import _held_out_carriers
-        from effects.domain.text_holdout import HoldoutUnit
 
         held, other = "SP$ Rare | Thing$ 1", "AB$ GainLife | LifeAmount$ 3"
         carriers = _held_out_carriers(
             ["alpha"],
             {"alpha": [held, other], "gamma": ["AB$ GainLife | LifeAmount$ 2"]},
             set(),
-            _holding({held}, HoldoutUnit.TEMPLATE),
+            _holding({held}),
         )
         assert carriers == {held: frozenset({"alpha"})}
 
@@ -935,7 +934,6 @@ class TestHeldOutTextUnit:
         )
         from effects.domain.coverage import TextCoverage
         from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
-        from effects.domain.text_holdout import HoldoutUnit
         from tests.unit.effects.builders import make_record, write_ended_shard, write_sidecar
 
         damage, draw = "SP$ DealDamage | NumDmg$ 2", "SP$ Draw | NumCards$ 1"
@@ -956,7 +954,7 @@ class TestHeldOutTextUnit:
             ),
         )])
         roots = {"cardsfolder": str(tmp_path / "cardsfolder")}
-        held_out = _holding({"SP$ DealDamage | NumDmg$ 3", draw}, HoldoutUnit.TEMPLATE)
+        held_out = _holding({"SP$ DealDamage | NumDmg$ 3", draw})
         coverage = {draw: TextCoverage(text=draw)}
 
         assert count_text_shard(shard, roots=roots, held_out=held_out).games == {
@@ -1070,11 +1068,9 @@ _GEN3_ROOTS = {
 }
 
 
-def _holding(texts, unit=None):
-    """A holdout of exactly ``texts``, by ``unit`` (``text`` by default)."""
-    from effects.domain.text_holdout import HoldoutUnit
-
-    return held_out_cards(texts=texts, unit=unit or HoldoutUnit.TEMPLATE)
+def _holding(texts):
+    """A holdout of exactly ``texts``."""
+    return held_out_cards(texts=texts)
 
 
 def _texts_by_game(shard: Path) -> tuple[dict[str, set[str]], dict[str, set[str]]]:

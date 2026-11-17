@@ -57,7 +57,6 @@ from effects.domain.default_paths import (
 )
 from effects.domain.shard_generation import UnacceptedGenerationError
 from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HoldoutRule
-from effects.domain.text_holdout import HoldoutUnit
 from price_predictor.domain.dataclass_defaults import field_default
 from price_predictor.infrastructure.cli_run_manifest import (
     READ_ONLY,
@@ -741,8 +740,7 @@ def run_holdout_cards(args: argparse.Namespace) -> int:
 
     config = config_from_args(HoldoutCardsConfig, args, holdout=holdout_rule(args))
     report = holdout_cards(config)
-    if report.unit is HoldoutUnit.TEMPLATE:
-        print(f"held-out templates: {report.keys}")
+    print(f"held-out templates: {report.keys}")
     print(f"held-out texts: {report.texts}")
     print(
         f"held-out cards: {len(report.names)} of {report.converted_cards} converted "

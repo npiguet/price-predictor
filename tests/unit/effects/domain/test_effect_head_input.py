@@ -591,10 +591,10 @@ class TestOptionRows:
         assert batcher.options_for(modes[0]) == ()
 
 
-class TestGen2Layout:
-    """The gen-2 input layout reads the collector's names and compares amounts (FR-063c).
+class TestCollectorSpellings:
+    """The input layout reads the collector's names and compares amounts (FR-063c).
 
-    The spellings are the collector's own, as a real gen-2 shard writes them:
+    The spellings are the collector's own, as a real shard writes them:
     Forge's ``combat_*`` phase names, ``+1/+1`` counters, and keywords already
     normalized at parse time (``protection_from_red``, ``landwalk``).
     """

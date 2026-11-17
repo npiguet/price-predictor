@@ -7,7 +7,6 @@ from pathlib import Path
 
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine, SourceTree
 from effects.domain.split import HoldoutRule
-from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.converted_trees import SourceTrees, process_sidecars
 from effects.infrastructure.sidecar_io import sidecar_path_for
 from tests.unit.effects.builders import write_sidecar
@@ -68,7 +67,7 @@ def test_cards_texts_and_tokens_are_read_through_one_sidecar_cache(tmp_path) -> 
 
 
 #: Every text held out, unless a second carrier prints it.
-_ONE_CARRIER = HoldoutRule(permille=1000, max_carriers=1, unit=HoldoutUnit.TEMPLATE)
+_ONE_CARRIER = HoldoutRule(permille=1000, max_carriers=1)
 
 
 def test_a_token_printing_a_text_is_a_carrier_of_it(tmp_path) -> None:

@@ -27,7 +27,6 @@ from effects.domain.selection_set import (
     write_selection_set,
 )
 from effects.domain.shard_generation import UnacceptedGenerationError
-from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.shard_io import write_shard
 
@@ -73,7 +72,7 @@ def _manifest(**overrides) -> CorpusManifest:
     fields = dict(
         seed=1, surface="script", vocab_path="models/effects/vocab-script.txt",
         variant_scripts="", holdout_permille=20, holdout_max_carriers=8,
-        text_cap=0, card_disjoint_text_cap=0, game_disjoint_target=0,
+        text_cap=0, card_disjoint_text_cap=0,
         training_records=1, class_mix={}, delivered_mix={},
         held_out_cards=("Lightning Bolt", "Shock"),
         held_out_texts=_HELD_OUT_TEXTS,
@@ -415,12 +414,7 @@ def test_a_kept_aside_tree_resolves_the_keys_of_its_original(tmp_path):
         sidecars.resolution_of(key)  # neither raises nor reports no tree
 
 
-# ── the holdout unit and its recompute (FR-041, FR-042; T043) ────────────
-
-
-def test_the_trainer_takes_the_manifests_unit(config, started):
-    assert run(config) == 0
-    assert started[-1].spec.facts.holdout.unit is HoldoutUnit.TEMPLATE
+# ── the holdout recompute (FR-041, FR-042; T043) ─────────────────────────
 
 
 def test_a_recomputed_holdout_that_disagrees_is_refused(corpus, config):
