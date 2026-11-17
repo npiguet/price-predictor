@@ -84,14 +84,13 @@ def _older_line(*dropped: str) -> str:
     return json.dumps(data)
 
 
-@pytest.mark.parametrize(("dropped", "named"), [
+@pytest.mark.parametrize("older", [
     (("generation",), "gen-2"),
     (("generation", "random_seat"), "gen-1"),
-])
+], ids=["gen-2", "gen-1"])
 @pytest.mark.parametrize("command", ["field-coverage", "validate-corpus"])
-def test_a_record_of_an_older_generation_exits_1_naming_it(
-    tmp_path, caplog, command, dropped, named,
-):
+def test_a_record_of_an_older_generation_exits_1_naming_it(tmp_path, caplog, command, older):
+    dropped, named = older
     lines = _gen3_lines()
     (tmp_path / "a.jsonl").write_text(f"{lines[0]}\n{_older_line(*dropped)}\n",
                                       encoding="utf-8")
