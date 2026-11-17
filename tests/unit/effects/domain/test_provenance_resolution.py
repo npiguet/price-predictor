@@ -28,7 +28,7 @@ def _sidecar() -> ProvenanceSidecar:
     return ProvenanceSidecar(
         card="mogg war marshal", script_file=_SCRIPT,
         lines=(SidecarLine(line_index=0, line_kind="triggered", provenance=(_LINE,),
-                           script_text="when this enters or dies"),),
+                           script_text="when this enters or dies", prose_offset=0),),
         dropped_keys=(_DROPPED, _DROPPED_FAR),
     )
 
@@ -102,18 +102,18 @@ def _charm_sidecar() -> ProvenanceSidecar:
         lines=(
             SidecarLine(line_index=3, line_kind="spell", provenance=(_CHARM_ROOT,),
                         script_api_type="Charm",
-                        script_text="CharmNum$ 2 | Choices$ SV1,SV2 | SP$ Charm"),
+                        script_text="CharmNum$ 2 | Choices$ SV1,SV2 | SP$ Charm", prose_offset=0),
             SidecarLine(line_index=4, line_kind="option", provenance=(_mode(0),),
                         script_api_type="Counter",
-                        script_text="SV1: DB$ Counter | TargetType$ Spell"),
+                        script_text="SV1: DB$ Counter | TargetType$ Spell", prose_offset=0),
             SidecarLine(line_index=5, line_kind="option", provenance=(_mode(1),),
                         script_api_type="Draw",
-                        script_text="SV1: DB$ Draw | NumCards$ 1"),
+                        script_text="SV1: DB$ Draw | NumCards$ 1", prose_offset=0),
             SidecarLine(line_index=6, line_kind="option", provenance=(),
-                        script_text=""),
+                        script_text="", prose_offset=0),
             SidecarLine(line_index=7, line_kind="spell", provenance=(
                 ProvenanceKey(_CHARM_SCRIPT, 0, "spell", 1),),
-                script_text="SP$ Draw"),
+                script_text="SP$ Draw", prose_offset=0),
         ),
     )
 

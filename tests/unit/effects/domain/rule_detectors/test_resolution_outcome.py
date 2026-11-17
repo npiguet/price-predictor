@@ -111,7 +111,8 @@ class _Keyworded:
         from effects.domain.provenance import KEYWORD_API_TYPE, SidecarLine
 
         self.line = SidecarLine(line_index=0, line_kind="trigger", provenance=(),
-                                script_api_type=KEYWORD_API_TYPE, script_text=keyword)
+                                script_api_type=KEYWORD_API_TYPE, script_text=keyword,
+                                prose_offset=0)
         self.sidecar = SimpleNamespace(lines=(self.line,))
 
     def first_line(self, keys):

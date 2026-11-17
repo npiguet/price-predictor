@@ -274,10 +274,9 @@ class TestCollectVariantsHoldoutRule:
             assert run_collect_variants(parse(
                 "collect-variants", "--exclude-cards", "h.txt", "--cards-folder", "trees/cards",
                 "--holdout-permille", "50", "--holdout-max-carriers", "3",
-                "--holdout-unit", "text",
             )) == 0
         config = collect.call_args.args[0]
-        assert config.holdout == HoldoutRule(50, 3, HoldoutUnit.TEXT)
+        assert config.holdout == HoldoutRule(50, 3, HoldoutUnit.TEMPLATE)
         assert config.cards_folders == (Path("trees/cards"),)
 
 

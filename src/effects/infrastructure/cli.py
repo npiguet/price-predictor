@@ -84,6 +84,8 @@ _Config = TypeVar("_Config")
 _EFFECT_MODEL_STORE = "effects.infrastructure.effect_model_store"
 #: A checkpoint trained on another input layout (FR-045), refused by every loader.
 _LAYOUT_REFUSED = "effects.domain.effect_head_input.CheckpointLayoutError"
+#: A corpus manifest of an older generation, or one missing a member.
+_MANIFEST_REFUSED = "effects.domain.corpus_manifest.ManifestError"
 
 
 def config_from_args(cls: type[_Config], args: argparse.Namespace, **overrides: Any) -> _Config:
@@ -269,25 +271,11 @@ def _add_holdout_flags(parser: argparse.ArgumentParser) -> None:
             "(default: %(default)s)"
         ),
     )
-    _add_holdout_unit(parser, default=HoldoutRule().unit)
-
-
-def _add_holdout_unit(
-    parser: argparse.ArgumentParser, *, default: HoldoutUnit | None,
-) -> None:
-    parser.add_argument(
-        "--holdout-unit", type=HoldoutUnit, choices=list(HoldoutUnit), default=default,
-        help=(
-            "'template' holds out every text sharing a masked template together; "
-            "'text' is feature 023's per-text rule (default: "
-            + ("%(default)s)" if default else "the corpus manifest's recorded unit)")
-        ),
-    )
 
 
 def holdout_rule(args: argparse.Namespace) -> HoldoutRule:
     """The rule :func:`_add_holdout_flags` parsed."""
-    return HoldoutRule(args.holdout_permille, args.holdout_max_carriers, args.holdout_unit)
+    return HoldoutRule(args.holdout_permille, args.holdout_max_carriers)
 
 
 def _add_variant(parser: argparse.ArgumentParser, *, help_text: str | None = None) -> None:
@@ -714,7 +702,7 @@ def _add_corpus_inputs(parser: argparse.ArgumentParser) -> None:
 
 # A bare ValueError is NOT mapped: `decide`'s cap-mismatch guard and
 # `CapHeap.merge`'s are internal invariants, worth a traceback.
-@exits_with({BuildCorpusError: 1, FileNotFoundError: 1})
+@exits_with({BuildCorpusError: 1, FileNotFoundError: 1, _MANIFEST_REFUSED: 1})
 def run_build_corpus(args: argparse.Namespace) -> int:
     from effects.application import build_corpus as build_corpus_module
 
@@ -958,7 +946,6 @@ def _train_effect_model_parser(subparsers) -> None:
         ),
     )
     _add_cards_folder(parser)
-    _add_holdout_unit(parser, default=None)
     _add_variant_scripts(parser, without=(
         "the tree the corpus's manifest records is read, if any"
     ))
@@ -969,6 +956,7 @@ def _train_effect_model_parser(subparsers) -> None:
 @exits_with({
     MissingTrainingInputError: 1,
     _LAYOUT_REFUSED: 1,
+    _MANIFEST_REFUSED: 1,
     HoldoutMismatchError: 1,
     # Raised in a prefetch worker too, which hands the exception itself over.
     ValidationGameInTrainingError: 1,
@@ -1101,6 +1089,7 @@ def _baseline_checkpoint(value: str):
     FileNotFoundError: 2,
     # A checkpoint of another input layout, a corpus not wholly gen-3 (FR-076).
     _LAYOUT_REFUSED: 1,
+    _MANIFEST_REFUSED: 1,
     MixedGenerationsError: 1,
     UnacceptedGenerationError: 1,
     **_SHARD_REFUSED,

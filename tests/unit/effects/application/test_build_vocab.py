@@ -297,7 +297,7 @@ class TestSurfaces:
                                 ProvenanceKey(script_file, 0, "static", 0),
                             ),
                             script_api_type="PutCounter",
-                            script_text="Mode$ Continuous | AddKeyword$ Flying",
+                            script_text="Mode$ Continuous | AddKeyword$ Flying", prose_offset=0,
                         ),
                     ),
                 ),
@@ -356,7 +356,7 @@ def _scripted_corpus(corpus, lines: list[str], copies: int = 2) -> None:
                     SidecarLine(
                         line_index=4 + row, line_kind="triggered",
                         provenance=(ProvenanceKey(script_file, 0, "trigger", row),),
-                        script_text=text,
+                        script_text=text, prose_offset=0,
                     )
                     for row, text in enumerate(lines)
                 ),

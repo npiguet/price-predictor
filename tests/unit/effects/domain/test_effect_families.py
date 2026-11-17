@@ -74,7 +74,8 @@ def test_a_trigger_takes_its_root_segments_mode(records, sidecars):
 def test_a_trigger_with_no_mode_is_no_mode(records):
     record = _first(records, RecordKind.TRIGGER)
     line = SidecarLine(line_index=0, line_kind="triggered", provenance=record.ability,
-                       script_api_type="Draw", script_text="Execute$ SV1 | TriggerZones$ Hand")
+                       script_api_type="Draw", script_text="Execute$ SV1 | TriggerZones$ Hand",
+                       prose_offset=0)
     assert effect_family(record, _Lines({record.ability[0]: line})) == FamilySentinel.NO_MODE
 
 
@@ -88,7 +89,8 @@ def test_a_multi_mode_static_keeps_its_mode_list_whole(records):
     record = _first(records, RecordKind.CONTINUOUS)
     line = SidecarLine(line_index=0, line_kind="static", provenance=record.ability,
                        script_api_type="CantBlockBy,CantAttack",
-                       script_text="Mode$ CantBlockBy,CantAttack | ValidCard$ Creature")
+                       script_text="Mode$ CantBlockBy,CantAttack | ValidCard$ Creature",
+                       prose_offset=0)
     assert effect_family(record, _Lines({record.ability[0]: line})) == "CantBlockBy,CantAttack"
 
 
@@ -134,7 +136,7 @@ def test_a_keyword_acting_line_is_its_keywords_family(records):
     """Spec Story 4 scenario 7 / FR-048: whatever the kind."""
     record = _first(records, RecordKind.TRIGGER)
     line = SidecarLine(line_index=0, line_kind="static", provenance=record.ability,
-                       script_api_type="Keyword", script_text="Ward:2")
+                       script_api_type="Keyword", script_text="Ward:2", prose_offset=0)
     assert effect_family(record, _Lines({record.ability[0]: line})) == "Ward"
 
 
@@ -151,6 +153,7 @@ def test_decision_candidates_by_verdict_and_by_static(records):
     lines = _Lines({static: SidecarLine(
         line_index=0, line_kind="static", provenance=(static,),
         script_api_type="CantBeCast", script_text="Mode$ CantBeCast | ValidCard$ Card",
+        prose_offset=0,
     )})
     unaffordable = Candidate(ability=(), can_play=True, affordable=False, has_legal_target=True)
     forbidden = Candidate(ability=(), can_play=False, affordable=True, has_legal_target=True,
@@ -186,7 +189,7 @@ def _restricted(records, *statics):
             for i in range(len(statics))]
     lines = _Lines({
         key: SidecarLine(line_index=0, line_kind="static", provenance=(key,),
-                         script_api_type=mode, script_text=f"Mode$ {mode}")
+                         script_api_type=mode, script_text=f"Mode$ {mode}", prose_offset=0)
         for key, mode in zip(keys, statics)
     })
     record = _first(records, RecordKind.PLAYABILITY, "blockers")

@@ -58,7 +58,7 @@ def fake_sidecars() -> FakeSidecarCache:
 
     def _line(text: str, key: ProvenanceKey) -> SidecarLine:
         return SidecarLine(
-            line_index=0, line_kind="spell", provenance=(key,), script_text=text,
+            line_index=0, line_kind="spell", provenance=(key,), script_text=text, prose_offset=0,
         )
 
     lines = {}

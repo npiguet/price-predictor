@@ -1071,14 +1071,14 @@ def _write_bears_sidecar(root, keyword_indices, spell_indices=(), dropped=()):
             SidecarLine(
                 line_index=row,
                 line_kind="keyword",
-                provenance=(ProvenanceKey(_BEARS, 0, "keyword", index),),
+                provenance=(ProvenanceKey(_BEARS, 0, "keyword", index),), prose_offset=0,
             )
             for row, index in enumerate(keyword_indices)
         ) + tuple(
             SidecarLine(
                 line_index=len(keyword_indices) + row,
                 line_kind="spell",
-                provenance=(ProvenanceKey(_BEARS, 0, "spell", index),),
+                provenance=(ProvenanceKey(_BEARS, 0, "spell", index),), prose_offset=0,
             )
             for row, index in enumerate(spell_indices)
         ),

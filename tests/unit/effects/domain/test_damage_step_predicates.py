@@ -838,7 +838,7 @@ class TestSubjectResolution:
 #: White Knight's printed first strike, as its sidecar line spells it.
 _WHITE_KNIGHT_LINE = SidecarLine(
     line_index=0, line_kind="static", provenance=(_WHITE_KNIGHT,),
-    script_text="First Strike",
+    script_text="First Strike", prose_offset=0,
 )
 
 

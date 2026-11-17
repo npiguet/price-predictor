@@ -161,7 +161,7 @@ class TestT030Parameters:
         line = SidecarLine(
             line_index=0, line_kind="spell", provenance=(spell,), script_api_type="Dig",
             script_text="SP$ Dig | DigNum$ 3 | SubAbility$ SV1 [SEG] SV1: DB$ DelayedTrigger "
-                        "| Mode$ Phase | Phase$ End of Turn | Execute$ SV2")
+                        "| Mode$ Phase | Phase$ End of Turn | Execute$ SV2", prose_offset=0)
 
         class Lines:
             def first_line(self, keys):

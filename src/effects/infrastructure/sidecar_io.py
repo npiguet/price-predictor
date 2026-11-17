@@ -43,7 +43,7 @@ def tree_of_folder(folder: Path) -> str:
     """The source tree a converted folder holds, read from its name.
 
     A name ending in ``-<tree>`` counts too: a kept-aside copy such as
-    ``output/gen1-cardsfolder`` still keys as ``cardsfolder/…`` (FR-063b).
+    ``output/old-cardsfolder`` still keys as ``cardsfolder/…`` (FR-063b).
     """
     name = Path(folder).name
     for tree in SourceTree:
@@ -122,10 +122,11 @@ def sidecar_to_dict(sidecar: ProvenanceSidecar) -> dict:
 
 
 def _line_to_dict(line: SidecarLine) -> dict:
-    """One line as the converter writes it; ``prose_offset`` only where known."""
-    entry = {"line_index": line.line_index, "line_kind": line.line_kind}
-    if line.prose_offset is not None:
-        entry["prose_offset"] = line.prose_offset
+    """One line as the converter writes it."""
+    entry = {
+        "line_index": line.line_index, "line_kind": line.line_kind,
+        "prose_offset": line.prose_offset,
+    }
     entry.update({
         "provenance": [key.sidecar_dict() for key in line.provenance],
         "sub_ability_links": [
@@ -158,6 +159,11 @@ def sidecar_from_dict(data: dict) -> ProvenanceSidecar:
 def _line_from_dict(data: dict, script_file: str) -> SidecarLine:
     """One line as :func:`_line_to_dict` writes it; a key's script file
     defaults to the sidecar's own."""
+    if "prose_offset" not in data:
+        raise SidecarError(
+            f"line {data['line_index']} records no prose_offset: reconvert the "
+            "cards (`python -m price_predictor convert`) with the current converter"
+        )
     return SidecarLine(
         line_index=data["line_index"],
         line_kind=data["line_kind"],
@@ -173,7 +179,7 @@ def _line_from_dict(data: dict, script_file: str) -> SidecarLine:
             RoleSpan(start=span["start"], end=span["end"], role=Role(span["role"]))
             for span in data.get("role_spans", ())
         ),
-        prose_offset=data.get("prose_offset"),
+        prose_offset=data["prose_offset"],
     )
 
 

@@ -15,7 +15,7 @@ _FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
 def _line(text: str | None, api: str | None = "Keyword") -> SidecarLine:
     return SidecarLine(
         line_index=0, line_kind="static", provenance=(),
-        script_api_type=api, script_text=text,
+        script_api_type=api, script_text=text, prose_offset=0,
     )
 
 

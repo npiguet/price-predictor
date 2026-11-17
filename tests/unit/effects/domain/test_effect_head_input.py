@@ -593,10 +593,12 @@ class TestOptionRows:
         sidecar = ProvenanceSidecar(
             card="cryptic command", script_file=self._CHARM.script_file,
             lines=(
-                SidecarLine(3, "spell", (self._CHARM,), script_text="Choices$ SV1,SV2,SV3"),
-                *(SidecarLine(4 + m.option, "option", (m,), script_text=f"SV1: DB$ M{m.option}")
+                SidecarLine(3, "spell", (self._CHARM,), script_text="Choices$ SV1,SV2,SV3",
+                    prose_offset=0),
+                *(SidecarLine(4 + m.option, "option", (m,), script_text=f"SV1: DB$ M{m.option}",
+                    prose_offset=0)
                   for m in modes),
-                SidecarLine(7, "option", (), script_text=""),
+                SidecarLine(7, "option", (), script_text="", prose_offset=0),
             ),
         )
 

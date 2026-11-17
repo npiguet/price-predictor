@@ -22,6 +22,7 @@ from effects.domain.provenance import (
     ProvenanceKey,
     ProvenanceSidecar,
     RoleSpan,
+    SidecarError,
     SidecarLine,
     SubAbilityLink,
 )
@@ -53,7 +54,7 @@ def _sidecar() -> ProvenanceSidecar:
         lines=(
             SidecarLine(
                 line_index=0, line_kind="keyword", provenance=(),
-                script_text="Flying",
+                script_text="Flying", prose_offset=0,
             ),
             SidecarLine(
                 line_index=3,
@@ -69,7 +70,7 @@ def _sidecar() -> ProvenanceSidecar:
                 role_spans=(
                     RoleSpan(0, 34, "trigger-condition"),
                     RoleSpan(35, 71, "effect"),
-                ),
+                ), prose_offset=0,
             ),
         ),
         dropped_keys=(_DROPPED,),
@@ -144,7 +145,7 @@ class TestSidecarCache:
                 lines=(
                     SidecarLine(
                         line_index=0, line_kind="keyword",
-                        provenance=(ProvenanceKey(token_script, 0, "static", 0),),
+                        provenance=(ProvenanceKey(token_script, 0, "static", 0),), prose_offset=0,
                     ),
                 ),
             ),
@@ -375,7 +376,7 @@ class TestTheVariantTreeHasNoProse:
                 lines=(
                     SidecarLine(
                         line_index=0, line_kind="spell", provenance=(key,),
-                        script_text="SP$ DealDamage | NumDmg$ 7",
+                        script_text="SP$ DealDamage | NumDmg$ 7", prose_offset=0,
                     ),
                 ),
             ),
@@ -421,21 +422,24 @@ class TestTheProseSplit:
         line = self._line(0, len("static: "))
         assert line.prose_in(self._RENDERED) == "creatures you control have:"
 
-    def test_a_sidecar_without_the_offset_falls_back_to_the_first_colon(self):
-        """Sidecars on disk predate the field and must still read."""
-        assert self._line(0, None).prose_in(self._RENDERED) == (
-            "creatures you control have:"
-        )
-
-    def test_the_offset_round_trips_and_is_absent_when_unknown(self):
+    def test_the_offset_round_trips(self):
         sidecar = ProvenanceSidecar(
             card="Test", script_file=_SCRIPT,
-            lines=(self._line(0, 8), self._line(1, None)),
+            lines=(self._line(0, 8), self._line(1, 0)),
         )
         data = sidecar_to_dict(sidecar)
-        assert data["lines"][0]["prose_offset"] == 8
-        assert "prose_offset" not in data["lines"][1]
+        assert [line["prose_offset"] for line in data["lines"]] == [8, 0]
         assert sidecar_from_dict(data) == sidecar
+
+    def test_a_sidecar_without_the_offset_is_refused(self):
+        """No reader guesses the split: reconvert the tree."""
+        sidecar = ProvenanceSidecar(
+            card="Test", script_file=_SCRIPT, lines=(self._line(0, 8),),
+        )
+        data = sidecar_to_dict(sidecar)
+        del data["lines"][0]["prose_offset"]
+        with pytest.raises(SidecarError, match="prose_offset"):
+            sidecar_from_dict(data)
 
 
 class TestATransientOpenFailureIsRetried:
@@ -543,13 +547,14 @@ class TestOptionKeys:
             card="cryptic command", script_file=self._SCRIPT,
             lines=(
                 SidecarLine(line_index=3, line_kind="spell", provenance=(root,),
-                            script_text="CharmNum$ 2 | Choices$ SV1,SV2 | SP$ Charm"),
+                            script_text="CharmNum$ 2 | Choices$ SV1,SV2 | SP$ Charm",
+                            prose_offset=0),
                 SidecarLine(line_index=4, line_kind="option",
                             provenance=(ProvenanceKey(self._SCRIPT, 0, "spell", 0, 0),),
-                            script_text="SV1: DB$ Counter"),
+                            script_text="SV1: DB$ Counter", prose_offset=0),
                 SidecarLine(line_index=5, line_kind="option",
                             provenance=(ProvenanceKey(self._SCRIPT, 0, "spell", 0, 1),),
-                            script_text="SV1: DB$ Draw | NumCards$ 1"),
+                            script_text="SV1: DB$ Draw | NumCards$ 1", prose_offset=0),
             ),
             dropped_keys=(ProvenanceKey(self._SCRIPT, 1, "spell", 0, 3),),
         )
@@ -579,12 +584,12 @@ class TestSidecarRoots:
         from effects.infrastructure.sidecar_io import sidecar_roots
 
         roots = sidecar_roots(
-            [Path("output/gen1-cardsfolder"), Path("output/gen1-tokenscripts")],
+            [Path("output/old-cardsfolder"), Path("output/old-tokenscripts")],
             Path("output/effects/variant-scripts"),
         )
         assert roots == {
-            "cardsfolder": Path("output/gen1-cardsfolder"),
-            "tokenscripts": Path("output/gen1-tokenscripts"),
+            "cardsfolder": Path("output/old-cardsfolder"),
+            "tokenscripts": Path("output/old-tokenscripts"),
             "variant-scripts": Path("output/effects/variant-scripts"),
         }
 
@@ -598,7 +603,7 @@ class TestSidecarRoots:
                 0, "spell", (key,), script_api_type="Draw",
                 script_param_keys=("NumCards", "SP", "SubAbility"),
                 script_text="NumCards$ 1 | SP$ Draw | SubAbility$ SV1 "
-                            "[SEG] SV1: DB$ Pump | NumAtt$ +1",
+                            "[SEG] SV1: DB$ Pump | NumAtt$ +1", prose_offset=0,
             ),),
         ), tmp_path / "cardsfolder" / "a" / "a.provenance.json")
         api_types, keys = script_vocabularies([tmp_path / "cardsfolder"])
@@ -618,8 +623,8 @@ class TestLoadTreeTexts:
                 card="goblin", script_file="tokenscripts/goblin.txt",
                 lines=(
                     SidecarLine(line_index=0, line_kind="spell", provenance=(key,),
-                                script_text="SP$ DealDamage | NumDmg$ 1"),
-                    SidecarLine(line_index=1, line_kind="keyword", provenance=()),
+                                script_text="SP$ DealDamage | NumDmg$ 1", prose_offset=0),
+                    SidecarLine(line_index=1, line_kind="keyword", provenance=(), prose_offset=0),
                 ),
             ),
             sidecar_path_for(tmp_path / "tokenscripts" / "goblin.txt"),

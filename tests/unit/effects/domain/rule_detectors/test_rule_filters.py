@@ -192,7 +192,7 @@ class _Lines:
 
         self.line = SidecarLine(line_index=0, line_kind="spell", provenance=(),
                                 sub_ability_links=(), script_api_type="Pump",
-                                script_param_keys=(), script_text=text)
+                                script_param_keys=(), script_text=text, prose_offset=0)
 
     def first_line(self, keys):
         return self.line

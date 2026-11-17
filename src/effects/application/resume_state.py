@@ -38,15 +38,14 @@ logger = logging.getLogger(__name__)
 
 #: Flags a resumed run may set differently from the run it continues. The
 #: corpus is compared by its digest instead, the selection set by its digest,
-#: the vocabulary and keyword definitions by their bytes, and the holdout unit
-#: is the corpus's own.
+#: the vocabulary and keyword definitions by their bytes.
 #: Every other flag is compared, ``--rule-mask``, ``--deviance-floor``,
 #: ``--ema-epochs``, ``--stratum-weight`` and ``--relation-values`` included
 #: (story 7 acceptance 5).
 RESUME_MAY_CHANGE: frozenset[str] = frozenset({
     "epochs", "patience", "lr_scale", "save_every_epoch", "model_output",
     "prefetch_workers", "resume", "corpus", "cards_folders", "variant_scripts",
-    "holdout_unit", "vocab_path", "keyword_definitions", "reports_dir",
+    "vocab_path", "keyword_definitions", "reports_dir",
 })
 
 

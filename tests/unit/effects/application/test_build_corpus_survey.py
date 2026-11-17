@@ -123,6 +123,7 @@ def converted_tree(tmp_path, *keys: ProvenanceKey, text=None) -> dict[str, Path]
                     SidecarLine(
                         line_index=index, line_kind="spell", provenance=(key,),
                         script_text=(text or {}).get(key, f"{path.stem} line {index}"),
+                        prose_offset=0,
                     )
                     for index, key in enumerate(script_keys)
                 ),

@@ -20,12 +20,11 @@ class HoldoutUnit(StrEnum):
     """What the holdout keys on.
 
     ``template`` (FR-039) holds out every text sharing a masked template
-    together; ``text`` is feature 023's rule, kept so a corpus collected under
-    it can be rebuilt exactly.
+    together.
     """
 
     TEMPLATE = "template"
-    TEXT = "text"
+
 
 _WHITESPACE = re.compile(r"\s+")
 
@@ -104,8 +103,6 @@ def holdout_key(text: str, unit: HoldoutUnit) -> str:
     """What the holdout counts carriers of and hashes, under ``unit``."""
     if unit == HoldoutUnit.TEMPLATE:
         return masked_template(text)
-    if unit == HoldoutUnit.TEXT:
-        return normalize_script_text(text)
     raise ValueError(
         f"unknown holdout unit {unit!r}; "
         f"expected one of {tuple(known.value for known in HoldoutUnit)}"
@@ -124,8 +121,7 @@ def text_is_held_out(text: str, *, permille: int) -> bool:
 class HoldoutSelection:
     """The held-out texts and every card carrying one.
 
-    ``keys`` are the held-out units themselves: masked templates under
-    ``template``, the texts again under ``text``.
+    ``keys`` are the held-out units themselves: masked templates.
     """
 
     texts: frozenset[str]

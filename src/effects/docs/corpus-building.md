@@ -14,7 +14,7 @@ Rules to respect when running or changing `build-corpus` or `holdout-cards`, or 
 - A grown raw corpus is rebuilt whole, never extended in place: the split and the rarity table are corpus-wide quantities. The three directories are cleared before the write pass. `--verify` reports the manifest's drift against the corpus on disk and writes nothing.
 - Placement depends on every game, so a rebuild over a grown corpus can move a game it placed before. Only the split a checkpoint records says where each game went.
 - A failed build leaves no stale manifest: `manifest.json` is moved to `manifest.previous.json` before the strata are cleared, and the new one is written atomically, last.
-- A checkpoint pins the manifest's digest, and `evaluate-effect-model` fails fast on a dataset rebuilt since. For that reason the legacy members `token_keys_remapped`, `token_keys_ambiguous` and `forge_tokenscripts` are still written (as `0`, `{}`, `""`), and a new manifest member is omitted at its gen-1 value. Removing or always writing one changes digests that checkpoints pinned.
+- A checkpoint pins the manifest's digest, and `evaluate-effect-model` fails fast on a dataset rebuilt since. Every member is written, the legacy ones `token_keys_remapped`, `token_keys_ambiguous`, `forge_tokenscripts` and `game_disjoint_target` as `0`, `{}`, `""` and `null`, and each is inside the digest. The manifest names its `generation` (`3`, `MANIFEST_GENERATION`). `CorpusManifest.from_dict` refuses a manifest with another or no `generation`, naming gen-1 or gen-2, and one missing a member (`ManifestError`, exit 1 from `build-corpus --verify`, `train-effect-model` and `evaluate-effect-model`); there is no default-filling for an older manifest.
 - The manifest records the unique-ability-text count of each output. That count, not any record count, says whether curation preserved the tail.
 - Only gen-3 shards are accepted; a records set holding any other exits 1 before a record is read.
 - A gen-3 game whose shard holds no game-end marker was cut, and its records are incomplete. The survey and the write pass both drop it whole (`dropped-cut`), so no stratum, derived copy or selection set holds one. The manifest counts them in `cut_games`, inside the digest. A records set none of whose gen-3 games has a marker is refused before `--output` is touched.
@@ -36,14 +36,14 @@ Rules to respect when running or changing `build-corpus` or `holdout-cards`, or 
 
 ## Flags that must agree across commands
 
-- `--holdout-permille`, `--holdout-max-carriers` and `--holdout-unit` must be passed with the same values to `holdout-cards`, `build-corpus`, `collect-variants` and `collect-coverage --only-cards`. A depleted corpus was composed against them and a checkpoint records them. All four select through the one rule (`HeldOutCards`), so they agree whenever the values do.
+- `--holdout-permille` and `--holdout-max-carriers` must be passed with the same values to `holdout-cards`, `build-corpus`, `collect-variants` and `collect-coverage --only-cards`. A depleted corpus was composed against them and a checkpoint records them. All of them select through the one rule (`HeldOutCards`), so they agree whenever the values do.
 - `--vocab-path` decides the encoding surface the rarity table keys its texts on. Built on the other surface, the table keys every text differently while looking exactly as valid, which is why `train-effect-model --corpus` refuses a `--vocab-path` on the other one.
 - `--variant-scripts` names the perturbed-script tree. Without it a variant line resolves to no ability text, and a resolution record acting through it is refused as `no-acting-text`. Every key read as no line for want of its tree's root is counted by tree (`JoinGaps.unconfigured`).
 
 ## The holdout
 
 - Membership depends on the text's own bytes (`crc32` of the normalized script text), so a Forge upgrade never reassigns an existing text. That is what lets a depleted corpus stay valid.
-- `--holdout-unit template` (the default) holds out masked templates: digit runs outside chain labels, `CARDNAME` and description values are masked, so `NumDmg$ 2` and `NumDmg$ 3` fall on one side. `text` reproduces feature 023.
+- The holdout unit is the masked template, the only unit and no flag: digit runs outside chain labels, `CARDNAME` and description values are masked, so `NumDmg$ 2` and `NumDmg$ 3` fall on one side. The manifest and a checkpoint's provenance record it as `holdout_unit`.
 - Token scripts count as carriers, toward `--holdout-max-carriers` too.
 - The trainer recomputes the holdout over its sidecars and refuses a disagreement with the manifest.
 - A game counts toward the text `build-corpus` credits it to: its first acting key whose text is held out, through the one `HeldOutCards.text_acted_through` that `build-corpus` and `collect-coverage --only-cards` both call. Under `template`, a game whose first acting key prints a held-out template no listed card carries counts toward no listed text.

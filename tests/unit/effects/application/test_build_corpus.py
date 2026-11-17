@@ -94,9 +94,9 @@ def make_record(kind: RecordKind = RecordKind.RESOLUTION, **overrides) -> Effect
 
 
 _HELD_OUT_CARD = "Held Out Bears"
-#: Found by brute force over ``text_is_held_out(..., permille=20)`` (the
-#: default), the way the brief asks: constructed, not guessed at.
-_HELD_OUT_TEXT = "deals 10 damage to any target held out effect"
+#: Found by brute force over ``text_is_held_out(masked_template(...),
+#: permille=20)`` (the default rule): constructed, not guessed at.
+_HELD_OUT_TEXT = "deals 10 damage to any target held out effect ac"
 _HELD_OUT_FILE = "cardsfolder/h/held_out_bears.txt"
 _HELD_OUT_KEY = ProvenanceKey(_HELD_OUT_FILE, 0, "spell", 0)
 
@@ -165,7 +165,7 @@ def _write_card(
             lines=(
                 SidecarLine(
                     line_index=999, line_kind="spell", provenance=(key,),
-                    script_text=text,
+                    script_text=text, prose_offset=0,
                 ),
             ),
             dropped_keys=dropped,
@@ -234,14 +234,14 @@ def _rewrite(
 #: fixture's tests below read the real ``rules/``.
 _NO_RULES = Path(__file__).parents[3] / "fixtures" / "effects" / "minimal-rules"
 
-#: Feature 023's rules, which most of this file was written against: the held-out
-#: text above is held out under the ``text`` unit, ``0.16`` places exactly one
+#: The rules most of this file was written against: the held-out text above is
+#: held out under the ``template`` unit, ``0.16`` places exactly one
 #: game (``g-clean-3``) in the game-disjoint stratum, and one copy per record.
 #: Placement's precision thresholds are off (research E5): no half needs a
 #: minimum of games, so nothing is promoted past gen-2's draw, and no
 #: component a precision target, so a build of four games exits 0.
 _LEGACY_RULES = dict(
-    holdout=HoldoutRule(unit=HoldoutUnit.TEXT),
+    holdout=HoldoutRule(unit=HoldoutUnit.TEMPLATE),
     game_disjoint_share=0.16, game_disjoint_keyword_share=0.16,
     reuse_cap=1, rules_dir=_NO_RULES, min_games_per_half=0,
     max_component_error=math.inf,
@@ -519,7 +519,7 @@ def test_build_refuses_a_holdout_that_selects_no_card(tmp_path, a_corpus):
     """
     with pytest.raises(ValueError, match="no held-out card") as raised:
         a_corpus.build(
-            tmp_path / "curated", holdout=HoldoutRule(permille=0, unit=HoldoutUnit.TEXT),
+            tmp_path / "curated", holdout=HoldoutRule(permille=0, unit=HoldoutUnit.TEMPLATE),
         )
 
     assert "4 converted card" in str(raised.value)
@@ -773,7 +773,7 @@ def test_the_manifest_records_how_its_records_were_collected_and_read(
     # alone is no sign the corpus changed between them.
     assert "changed between the passes" not in caplog.text
     data = json.loads((tmp_path / "curated" / "manifest.json").read_text(encoding="utf-8"))
-    assert "damaged_tails" not in data
+    assert data["damaged_tails"] == []
 
 
 def test_a_shard_whose_last_member_is_damaged_builds_and_is_named_in_the_manifest(
@@ -877,7 +877,7 @@ def test_the_cut_count_moves_the_digest_and_nothing_else_does(tmp_path, a_corpus
                 [_resolution("g-cut.1", "g-cut", ability=(_SHOCK_KEY,))])
     second = a_corpus.build(tmp_path / "second").load()
     assert (first.cut_games, second.cut_games) == (0, 1)
-    assert "cut_games" not in first.as_dict(), "omitted at 0, as an older manifest"
+    assert first.as_dict()["cut_games"] == 0
     assert first.digest() != second.digest()
 
 
@@ -1278,7 +1278,7 @@ def _write_variant(root: Path, script_file: str, text: str) -> None:
             lines=(
                 SidecarLine(
                     line_index=0, line_kind="spell",
-                    provenance=(_VARIANT_KEY,), script_text=text,
+                    provenance=(_VARIANT_KEY,), script_text=text, prose_offset=0,
                 ),
             ),
         ),
@@ -1823,7 +1823,7 @@ def test_the_manifest_records_families_policy_and_the_flags(tmp_path, shared_cor
     """FR-053."""
     manifest = shared_corpus.build(tmp_path / "out", rules=_GEN2_RULES, reuse_cap=3).load()
 
-    assert manifest.holdout_unit == "text"
+    assert manifest.holdout_unit == "template"
     assert manifest.reuse_cap == 3
     assert manifest.game_disjoint_share == 0.16
     assert manifest.game_disjoint_target is None
@@ -1969,7 +1969,7 @@ def test_a_variant_printing_a_held_out_text_trains_on_nothing(tmp_path, a_corpus
             card="Held Out Bears Variant", script_file=variant_file,
             lines=(SidecarLine(
                 line_index=0, line_kind="spell", provenance=(variant_key,),
-                script_text=_HELD_OUT_TEXT,
+                script_text=_HELD_OUT_TEXT, prose_offset=0,
             ),),
         ),
         sidecar_path_for(path),
@@ -2275,16 +2275,24 @@ def test_a_real_gen3_manifest_keeps_its_digest_when_read_back(gen3_build):
     gen-3 manifest, every gen-3 field filled, reads back to the digest of the
     JSON as written, by the rule feature 023 fixed, and writes back byte for
     byte, so loading the manifest a checkpoint names never moves its digest."""
+    import hashlib
     import json
 
     from effects.domain.corpus_manifest import CorpusManifest
-    from tests.unit.effects.domain.test_corpus_manifest import _as_written, _canonical_digest
+
+    def as_written(data: dict) -> str:
+        return json.dumps(data, indent=2, sort_keys=True)
 
     raw = json.loads(gen3_build.manifest_path.read_text(encoding="utf-8"))
     loaded = CorpusManifest.from_dict(raw)
-    assert loaded.digest() == _canonical_digest(raw)
-    assert _as_written(loaded.as_dict()) == _as_written(raw)
-    assert gen3_build.manifest_path.read_text(encoding="utf-8") == _as_written(raw)
+    payload = {k: v for k, v in raw.items() if k not in CorpusManifest._OUTSIDE_THE_DIGEST}
+    payload["sources"] = sorted(payload["sources"], key=lambda s: s["name"])
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    assert loaded.digest() == hashlib.blake2b(
+        canonical.encode("utf-8"), digest_size=16).hexdigest()
+    assert raw["generation"] == 3
+    assert as_written(loaded.as_dict()) == as_written(raw)
+    assert gen3_build.manifest_path.read_text(encoding="utf-8") == as_written(raw)
 
 
 def test_each_validation_stratum_is_written_in_the_class_mix(tmp_path):

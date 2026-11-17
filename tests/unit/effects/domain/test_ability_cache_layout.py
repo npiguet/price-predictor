@@ -33,7 +33,7 @@ def _sidecar(n_lines: int = 3) -> ProvenanceSidecar:
         lines=tuple(
             SidecarLine(
                 line_index=4 + i, line_kind="static",
-                provenance=(ProvenanceKey(_SCRIPT, 0, "static", i),),
+                provenance=(ProvenanceKey(_SCRIPT, 0, "static", i),), prose_offset=0,
             )
             for i in range(n_lines)
         ),

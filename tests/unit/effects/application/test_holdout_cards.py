@@ -29,7 +29,7 @@ from tests.unit.effects.builders import write_sidecar
 
 
 def _report(
-    card_files, texts_by_card, *, unit="text", canonical_names=None, split_faces=None,
+    card_files, texts_by_card, *, unit="template", canonical_names=None, split_faces=None,
     **rule,
 ):
     """The report over ``text_keyed_holdout``, as ``run`` builds it from the trees."""
@@ -53,7 +53,7 @@ def _convert(root: Path, script_file: str, name: str, texts: list[str]) -> None:
                 SidecarLine(
                     line_index=i, line_kind="spell",
                     provenance=(ProvenanceKey(script_file, 0, "spell", i),),
-                    script_text=text,
+                    script_text=text, prose_offset=0,
                 )
                 for i, text in enumerate(texts)
             ),
@@ -67,7 +67,7 @@ def _run(root: Path, out: Path, **rule) -> HoldoutReport:
         out=out,
         cards_folders=(root / "cardsfolder", root / "tokenscripts"),
         printings_path=root / "AllPrintings.json",
-        holdout=HoldoutRule(**{"unit": HoldoutUnit.TEXT, "max_carriers": 8, **rule}),
+        holdout=HoldoutRule(**{"unit": HoldoutUnit.TEMPLATE, "max_carriers": 8, **rule}),
     ))
 
 
@@ -92,7 +92,7 @@ def test_the_list_is_the_cards_the_trainer_holds_out(tmp_path) -> None:
     for permille in (0, 250, 500, 750, 1000):
         listed = _run(tmp_path, out, permille=permille).names
         held = text_keyed_holdout(
-            card_files, texts_by_card, HoldoutRule(permille, 8, HoldoutUnit.TEXT),
+            card_files, texts_by_card, HoldoutRule(permille, 8, HoldoutUnit.TEMPLATE),
         )
         assert set(listed) == held.names, f"disagreed at permille={permille}"
         assert out.read_text(encoding="utf-8").splitlines() == listed
@@ -283,17 +283,17 @@ def test_number_only_variants_land_on_the_same_side_of_the_list():
     assert all(len(sides) == 1 for sides in by_template.values())
 
 
-def test_the_cli_defaults_to_the_template_unit():
+def test_no_command_takes_a_holdout_unit():
+    """Template is the only unit: ``--holdout-unit`` is no flag, and ``text``
+    (feature 023's rule) is refused."""
     from effects.infrastructure.cli import build_parser
 
-    args = build_parser().parse_args(["holdout-cards", "--out", "x.txt"])
-    assert args.holdout_unit is HoldoutUnit.TEMPLATE
-    args = build_parser().parse_args(["build-corpus"])
-    assert args.holdout_unit is HoldoutUnit.TEMPLATE
-    args = build_parser().parse_args(["build-corpus", "--holdout-unit", "text"])
-    assert args.holdout_unit is HoldoutUnit.TEXT
-    args = build_parser().parse_args(["train-effect-model", "--corpus", "c"])
-    assert args.holdout_unit is None
+    for command in (["holdout-cards", "--out", "x.txt"], ["build-corpus"],
+                    ["train-effect-model", "--corpus", "c"]):
+        args = build_parser().parse_args(command)
+        assert not hasattr(args, "holdout_unit")
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["build-corpus", "--holdout-unit", "template"])
 
 
 def test_the_cli_takes_the_repeatable_cards_folder_like_every_other_command():
@@ -305,27 +305,6 @@ def test_the_cli_takes_the_repeatable_cards_folder_like_every_other_command():
         "holdout-cards", "--out", "x.txt", "--cards-folder", "a/", "--cards-folder", "b/",
     ])
     assert args.cards_folders == (Path("a/"), Path("b/"))
-
-
-def test_a_real_gen1_checkpoint_split_reads_as_the_text_unit():
-    """The 09.17f checkpoint's recorded split, as written, carries no unit."""
-    from effects.domain.split_provenance import SplitProvenance
-
-    recorded = {
-        "held_out_cards": ["a-moss-pit skeleton"], "card_disjoint_games": [],
-        "game_disjoint_games": [], "vocab_path": "models/effects/vocab-script.txt",
-        "keyword_definitions_path": "output/effects/keyword-definitions.json",
-        "vocab_hash": "47c816e1", "keyword_definitions_hash": "93b710ba",
-        "withheld_keyword": None, "holdout_permille": 20, "holdout_max_carriers": 8,
-        "corpus_path": "output/effects/corpus/",
-        "corpus_digest": "e3c0c9bb913b9aeda0d07eb587b5445c",
-    }
-    provenance = SplitProvenance.from_dict(recorded)
-    assert provenance.holdout_unit == "text"
-    assert provenance.as_dict() == {
-        **recorded,
-        **{k: tuple(v) for k, v in recorded.items() if isinstance(v, list)},
-    }
 
 
 class TestSplitCardsAreListedByTheirCombinedName:

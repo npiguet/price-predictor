@@ -24,7 +24,7 @@ def _convert(root: Path, script_file: str, name: str, text: str) -> None:
             lines=(SidecarLine(
                 line_index=0, line_kind="spell",
                 provenance=(ProvenanceKey(script_file, 0, "spell", 0),),
-                script_text=text,
+                script_text=text, prose_offset=0,
             ),),
         ),
         sidecar_path_for(txt),
@@ -33,17 +33,17 @@ def _convert(root: Path, script_file: str, name: str, text: str) -> None:
 
 def test_each_folder_is_keyed_by_the_tree_its_name_names(tmp_path) -> None:
     source = SourceTrees.of(
-        (tmp_path / "tokenscripts", tmp_path / "gen1-cardsfolder"),
+        (tmp_path / "tokenscripts", tmp_path / "old-cardsfolder"),
         variant_scripts=tmp_path / "variants",
     )
     trees = source.converted()
 
     assert trees.roots == {
         SourceTree.TOKENSCRIPTS: tmp_path / "tokenscripts",
-        SourceTree.CARDSFOLDER: tmp_path / "gen1-cardsfolder",
+        SourceTree.CARDSFOLDER: tmp_path / "old-cardsfolder",
         SourceTree.VARIANT_SCRIPTS: tmp_path / "variants",
     }
-    assert trees.cards_folder == tmp_path / "gen1-cardsfolder"
+    assert trees.cards_folder == tmp_path / "old-cardsfolder"
     assert source.sidecar_roots() == trees.roots
 
 
@@ -68,7 +68,7 @@ def test_cards_texts_and_tokens_are_read_through_one_sidecar_cache(tmp_path) -> 
 
 
 #: Every text held out, unless a second carrier prints it.
-_ONE_CARRIER = HoldoutRule(permille=1000, max_carriers=1, unit=HoldoutUnit.TEXT)
+_ONE_CARRIER = HoldoutRule(permille=1000, max_carriers=1, unit=HoldoutUnit.TEMPLATE)
 
 
 def test_a_token_printing_a_text_is_a_carrier_of_it(tmp_path) -> None:

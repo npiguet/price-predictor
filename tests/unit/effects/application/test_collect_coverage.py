@@ -318,7 +318,8 @@ def _convert_acting_line(cards_folder: Path) -> None:
 
     write_sidecar(
         ProvenanceSidecar(card="shock", script_file=ACTING_KEY.script_file, lines=(
-            SidecarLine(0, "spell", (ACTING_KEY,), script_text="SP$ DealDamage | NumDmg$ 2"),
+            SidecarLine(0, "spell", (ACTING_KEY,), script_text="SP$ DealDamage | NumDmg$ 2",
+                prose_offset=0),
         )),
         cards_folder / "s" / "shock.provenance.json",
     )
@@ -943,7 +944,7 @@ class TestHeldOutTextUnit:
             key = ProvenanceKey(f"cardsfolder/a/{stem}.txt", 0, "spell", 0)
             write_sidecar(
                 ProvenanceSidecar(card=stem, script_file=key.script_file, lines=(
-                    SidecarLine(0, "spell", (key,), script_text=text),
+                    SidecarLine(0, "spell", (key,), script_text=text, prose_offset=0),
                 )),
                 tmp_path / "cardsfolder" / "a" / f"{stem}.provenance.json",
             )
@@ -1073,7 +1074,7 @@ def _holding(texts, unit=None):
     """A holdout of exactly ``texts``, by ``unit`` (``text`` by default)."""
     from effects.domain.text_holdout import HoldoutUnit
 
-    return held_out_cards(texts=texts, unit=unit or HoldoutUnit.TEXT)
+    return held_out_cards(texts=texts, unit=unit or HoldoutUnit.TEMPLATE)
 
 
 def _texts_by_game(shard: Path) -> tuple[dict[str, set[str]], dict[str, set[str]]]:

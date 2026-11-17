@@ -27,15 +27,16 @@ from effects.domain.text_holdout import (
 )
 from tests.unit.effects.builders import fresh_interpreter_env
 
-TEXT = HoldoutUnit.TEXT
+_UNIT = HoldoutUnit.TEMPLATE
+
 
 
 def test_an_eligible_text_is_held_out_when_its_hash_qualifies() -> None:
     """The hash decides membership, over texts few cards carry."""
     texts_by_card = {"Alpha": ["SP$ DealDamage | NumDmg$ 3"]}
 
-    all_in = select_holdout(texts_by_card, permille=1000, max_carriers=8, unit=TEXT)
-    none_in = select_holdout(texts_by_card, permille=0, max_carriers=8, unit=TEXT)
+    all_in = select_holdout(texts_by_card, permille=1000, max_carriers=8, unit=_UNIT)
+    none_in = select_holdout(texts_by_card, permille=0, max_carriers=8, unit=_UNIT)
 
     assert all_in.texts == frozenset({"SP$ DealDamage | NumDmg$ 3"})
     assert all_in.cards == frozenset({"Alpha"})
@@ -49,7 +50,7 @@ def test_a_text_too_many_cards_carry_is_never_held_out() -> None:
     texts_by_card = {f"Bear {n}": [common] for n in range(9)}
     texts_by_card["Rare Thing"] = ["SP$ Bespoke | Weird$ True"]
 
-    chosen = select_holdout(texts_by_card, permille=1000, max_carriers=8, unit=TEXT)
+    chosen = select_holdout(texts_by_card, permille=1000, max_carriers=8, unit=_UNIT)
 
     assert common not in chosen.texts
     assert chosen.texts == frozenset({"SP$ Bespoke | Weird$ True"})
@@ -59,11 +60,11 @@ def test_a_text_too_many_cards_carry_is_never_held_out() -> None:
 def test_adding_unrelated_cards_does_not_move_an_existing_text() -> None:
     """A depleted corpus is composed once; a selection that drifts invalidates it."""
     kept = "SP$ DealDamage | NumDmg$ 3"
-    before = select_holdout({"Alpha": [kept]}, permille=1000, max_carriers=8, unit=TEXT)
+    before = select_holdout({"Alpha": [kept]}, permille=1000, max_carriers=8, unit=_UNIT)
 
     after = select_holdout(
         {"Alpha": [kept], "Beta": ["SP$ Draw | NumCards$ 2"]},
-        permille=1000, max_carriers=8, unit=TEXT,
+        permille=1000, max_carriers=8, unit=_UNIT,
     )
 
     assert (kept in before.texts) == (kept in after.texts)
@@ -82,10 +83,6 @@ def test_a_text_s_verdict_is_its_crc_residue_against_the_permille(text, residue)
 
     assert not text_is_held_out(text, permille=residue)
     assert text_is_held_out(text, permille=residue + 1)
-    selected = select_holdout({"Card": [text]}, permille=residue + 1, max_carriers=8, unit=TEXT)
-    assert selected.texts == {text}
-    assert select_holdout({"Card": [text]}, permille=residue, max_carriers=8,
-                          unit=TEXT).texts == frozenset()
 
 
 def test_the_hash_is_stable_across_processes() -> None:
@@ -210,30 +207,13 @@ def test_a_template_over_the_carrier_cap_is_never_held_out():
     }
     chosen = select_holdout(texts_by_card, permille=1000, max_carriers=8, unit="template")
     assert chosen.texts == frozenset()
-    # Under the text unit each printing is its own carrier and is eligible.
-    assert select_holdout(
-        texts_by_card, permille=1000, max_carriers=8, unit="text",
-    ).texts
 
 
-def test_the_text_unit_is_feature_023s_rule():
-    """Spec Story 2 scenario 4: ``text`` keys the hash on the text itself."""
-    from effects.domain.text_holdout import text_is_held_out
-
-    texts_by_card = {f"c{i}": [f"SP$ Bespoke | Weird$ {i}"] for i in range(200)}
-    chosen = select_holdout(texts_by_card, permille=300, max_carriers=8, unit="text")
-    expected = {
-        normalize_script_text(t)
-        for texts in texts_by_card.values() for t in texts
-        if text_is_held_out(t, permille=300)
-    }
-    assert chosen.texts == expected
-    assert holdout_key("SP$ Bespoke | Weird$ 3", "text") == "SP$ Bespoke | Weird$ 3"
-
-
-def test_an_unknown_unit_is_refused():
+@pytest.mark.parametrize("unit", ["card", "text"])
+def test_an_unknown_unit_is_refused(unit):
+    """``text`` was feature 023's unit; it is no unit any more."""
     with pytest.raises(ValueError, match="holdout unit"):
-        holdout_key("SP$ Draw", "card")
+        holdout_key("SP$ Draw", unit)
 
 
 def test_a_selector_choices_value_is_masked_but_a_label_list_is_not():

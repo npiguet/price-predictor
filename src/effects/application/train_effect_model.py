@@ -22,7 +22,7 @@ from effects.domain.rule_mask import RuleMask
 from effects.domain.shard_generation import ACCEPTED_GENERATIONS
 from effects.domain.split import CorpusSplit, HoldoutRule
 from effects.domain.strata import VALIDATION_STRATA, Stratum
-from effects.domain.text_holdout import HoldoutUnit, normalize_script_text
+from effects.domain.text_holdout import normalize_script_text
 from effects.domain.tokenizer_files import TokenizerFiles
 from effects.infrastructure.converted_trees import SourceTrees
 from effects.infrastructure.corpus_store import CorpusStore
@@ -104,8 +104,6 @@ class TrainEffectModelConfig:
     corpus: str | None = None
     cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     variant_scripts: Path | None = None
-    #: ``--holdout-unit``: None takes the manifest's recorded unit (FR-041).
-    holdout_unit: HoldoutUnit | None = None
     vocab_path: Path = Path(default_paths.DEFAULT_VOCAB_PATH)
     #: ``None`` draws one, so runs do not all measure one arrangement of the
     #: corpus; the checkpoint records the drawn value.
@@ -298,7 +296,7 @@ class CorpusFacts:
     split: CorpusSplit = field(default_factory=CorpusSplit)
     #: The holdout rule the corpus was composed against; no trainer flag, as
     #: re-deriving it could only disagree.
-    holdout: HoldoutRule = HoldoutRule(0, 0, HoldoutUnit.TEXT)
+    holdout: HoldoutRule = HoldoutRule(0, 0)
     #: Records in the manifest's gate-1 slice (FR-088b).
     gate_one_records: int = 0
     #: The corpus-wide ``text -> games`` table (FR-146).
@@ -408,17 +406,9 @@ class ValidationGameInTrainingError(ValueError):
 
 
 def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
-    """Refuse a holdout unit or a held-out text set the manifest does not
-    record (FR-041); recomputed over this run's sidecars, since different
-    sidecars would train on texts the run believes held out."""
-    unit = manifest.holdout_unit
-    if config.holdout_unit is not None and config.holdout_unit != unit:
-        raise HoldoutMismatchError(
-            f"--holdout-unit {config.holdout_unit} differs from the unit the "
-            f"corpus at {config.corpus} was built under ({unit}). The split is "
-            "the corpus's; rebuild it with build-corpus --holdout-unit "
-            f"{config.holdout_unit}, or drop the flag."
-        )
+    """Refuse a held-out text set the manifest does not record (FR-041);
+    recomputed over this run's sidecars, since different sidecars would train
+    on texts the run believes held out."""
     trees = SourceTrees.of(config.cards_folders).converted()
     cards_folder = trees.cards_folder
     if cards_folder is None or not cards_folder.is_dir():
@@ -426,6 +416,7 @@ def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
             "the holdout cannot be recomputed: no converted card tree among "
             f"--cards-folder {', '.join(str(f) for f in config.cards_folders)}"
         )
+    unit = manifest.holdout_unit
     started = time.monotonic()
     logger.info(
         "Recomputing the %s holdout over %d cards' sidecars under %s.",

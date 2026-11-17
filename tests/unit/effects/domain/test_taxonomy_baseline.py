@@ -16,7 +16,7 @@ class TestTaxonomyBaseline:
         sidecar = ProvenanceSidecar(
             card="serra angel", script_file="cardsfolder/s/serra_angel.txt",
             lines=tuple(
-                SidecarLine(line_index=i, line_kind="static", provenance=())
+                SidecarLine(line_index=i, line_kind="static", provenance=(), prose_offset=0)
                 for i in range(3)
             ),
         )
@@ -26,15 +26,15 @@ class TestTaxonomyBaseline:
     def test_the_vector_is_a_function_of_the_api_type_and_params(self):
         first = SidecarLine(
             line_index=0, line_kind="static", provenance=(),
-            script_api_type="Pump", script_param_keys=("Defined",),
+            script_api_type="Pump", script_param_keys=("Defined",), prose_offset=0,
         )
         same = SidecarLine(
             line_index=9, line_kind="triggered", provenance=(),
-            script_api_type="Pump", script_param_keys=("Defined",),
+            script_api_type="Pump", script_param_keys=("Defined",), prose_offset=0,
         )
         different = SidecarLine(
             line_index=0, line_kind="static", provenance=(),
-            script_api_type="Destroy", script_param_keys=("Defined",),
+            script_api_type="Destroy", script_param_keys=("Defined",), prose_offset=0,
         )
         np.testing.assert_allclose(
             taxonomy_vector(first, E_DIM), taxonomy_vector(same, E_DIM),
@@ -44,7 +44,7 @@ class TestTaxonomyBaseline:
         )
 
     def test_a_line_with_no_script_facts_still_yields_a_vector(self):
-        bare = SidecarLine(line_index=0, line_kind="text", provenance=())
+        bare = SidecarLine(line_index=0, line_kind="text", provenance=(), prose_offset=0)
         assert taxonomy_vector(bare, E_DIM).shape == (E_DIM,)
 
     def test_a_source_with_no_lines_yields_an_empty_matrix(self):

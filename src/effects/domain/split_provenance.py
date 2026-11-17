@@ -38,29 +38,23 @@ class SplitProvenance:
     #: The holdout flags the split was computed under (FR-134).
     holdout_permille: int = 0
     holdout_max_carriers: int = 0
-    #: The curated dataset read and its manifest digest (FR-147); ``""`` on a
-    #: checkpoint saved before curated corpora existed.
+    #: The curated dataset read and its manifest digest (FR-147).
     corpus_path: str = ""
     corpus_digest: str = ""
-    #: FR-042. ``text`` is written as no field at all, so a checkpoint that
-    #: records none reads as it trained.
-    holdout_unit: HoldoutUnit = HoldoutUnit.TEXT
+    #: FR-042.
+    holdout_unit: HoldoutUnit = HoldoutUnit.TEMPLATE
 
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self)
         # A plain string: an enum member would tie loading to its import path.
         data["holdout_unit"] = str(self.holdout_unit)
-        if self.holdout_unit is HoldoutUnit.TEXT:
-            del data["holdout_unit"]
         return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SplitProvenance:
-        """The provenance ``as_dict`` wrote; a field a checkpoint predates
-        takes its default, which is how such a checkpoint trained."""
+        """The provenance ``as_dict`` wrote; a member it lacks raises ``KeyError``."""
         return cls(**{
-            spec.name: _like(spec.default, data[spec.name])
-            for spec in fields(cls) if spec.name in data
+            spec.name: _like(spec.default, data[spec.name]) for spec in fields(cls)
         })
 
     @property

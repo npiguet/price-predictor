@@ -811,7 +811,7 @@ def _line_of(api, *keys):
     text = "Flying" if api == "Keyword" else f"AB$ {api}"
     return SidecarLine(
         line_index=0, line_kind="static", provenance=keys,
-        script_api_type=api, script_text=text,
+        script_api_type=api, script_text=text, prose_offset=0,
     )
 
 

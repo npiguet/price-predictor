@@ -57,7 +57,7 @@ class SourceTrees:
 
     def sidecar_roots(self) -> dict[str, Path]:
         """``tree -> folder``, each card folder keyed by the tree its name ends
-        in (FR-063b), so ``output/gen1-cardsfolder`` serves ``cardsfolder/`` keys."""
+        in (FR-063b), so ``output/old-cardsfolder`` serves ``cardsfolder/`` keys."""
         return sidecar_roots(self.cards_folders, self.variant_scripts)
 
     def sidecar_cache(self) -> SidecarCache:

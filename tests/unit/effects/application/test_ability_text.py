@@ -87,7 +87,7 @@ def test_text_for_key_and_the_acting_text_agree_on_one_key():
         lines={
             key: SidecarLine(
                 line_index=0, line_kind="keyword", provenance=(key,),
-                script_text="Flying",
+                script_text="Flying", prose_offset=0,
             ),
         },
         prose={key: "Flying"},
@@ -119,7 +119,8 @@ def test_a_key_in_neither_list_raises_rather_than_reading_as_no_text(tmp_path):
         ProvenanceSidecar(
             card="plague sliver", script_file=script,
             lines=(SidecarLine(line_index=0, line_kind="static",
-                               provenance=(rendered,), script_text="all slivers have"),),
+                               provenance=(rendered,), script_text="all slivers have",
+                               prose_offset=0),),
             dropped_keys=(
                 ProvenanceKey(script, 0, "spell", 0),
                 ProvenanceKey(script, 0, "static", 2),
@@ -173,7 +174,7 @@ def test_a_textless_line_reads_the_same_empty_text_in_training_and_the_cache(
     path = sidecar_path_for(txt)
     write_sidecar(ProvenanceSidecar(
         card="Ajani's Pridemate token", script_file=script,
-        lines=(SidecarLine(line_index=1, line_kind="keyword", provenance=(key,)),),
+        lines=(SidecarLine(line_index=1, line_kind="keyword", provenance=(key,), prose_offset=0),),
     ), path)
     sidecars = SidecarCache({"tokenscripts": tmp_path / "tokenscripts"})
     line = read_sidecar(path).lines[0]
@@ -216,7 +217,7 @@ def test_a_decisions_acting_text_is_its_candidates():
     sidecars = FakeSidecarCache(
         lines={key: SidecarLine(
             line_index=0, line_kind="spell", provenance=(key,),
-            script_text="DealDamage",
+            script_text="DealDamage", prose_offset=0,
         )},
     )
 
@@ -239,9 +240,9 @@ def test_every_line_on_disk_is_a_known_text_spelled_as_the_join_spells_it(tmp_pa
             card="shock", script_file=script,
             lines=(
                 SidecarLine(line_index=1, line_kind="spell", provenance=(keys[0],),
-                            script_text="SP$ DealDamage | NumDmg$ 2"),
+                            script_text="SP$ DealDamage | NumDmg$ 2", prose_offset=0),
                 SidecarLine(line_index=1, line_kind="static", provenance=(keys[1],),
-                            script_text="SP$ DealDamage | NumDmg$ 2"),
+                            script_text="SP$ DealDamage | NumDmg$ 2", prose_offset=0),
             ),
         ),
         sidecar_path_for(txt),
@@ -276,11 +277,11 @@ class TestWeightsKeyByAbilityText:
         sidecars = FakeSidecarCache(lines={
             common_key: SidecarLine(
                 line_index=0, line_kind="keyword", provenance=(common_key,),
-                script_text="Common Ability",
+                script_text="Common Ability", prose_offset=0,
             ),
             rare_key: SidecarLine(
                 line_index=0, line_kind="keyword", provenance=(rare_key,),
-                script_text="Rare Ability",
+                script_text="Rare Ability", prose_offset=0,
             ),
         })
         # Carried by fifty games...

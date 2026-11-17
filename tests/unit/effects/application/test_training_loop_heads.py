@@ -250,7 +250,7 @@ class TestTheApiTargets:
         return SidecarLine(
             line_index=3, line_kind="static",
             provenance=(ProvenanceKey("cardsfolder/w/white_knight.txt", 0, "keyword", 1),),
-            script_api_type="Keyword", script_text="Protection from white")
+            script_api_type="Keyword", script_text="Protection from white", prose_offset=0)
 
     def test_a_text_a_batch_holds_no_line_for_has_no_target_either_way(self, tmp_path):
         """A granted keyword's text, its line in one batch and none in

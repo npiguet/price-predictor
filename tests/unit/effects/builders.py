@@ -335,7 +335,7 @@ def record_on_board(game_id: str, entities=(), ability=None, **overrides) -> Eff
 
 
 def held_out_cards(
-    names=(), script_files=(), *, texts=(), unit: HoldoutUnit = HoldoutUnit.TEXT,
+    names=(), script_files=(), *, texts=(), unit: HoldoutUnit = HoldoutUnit.TEMPLATE,
 ) -> HeldOutCards:
     """A holdout of exactly these cards, script files and ``texts``, each
     text's :meth:`HeldOutCards.holds_text` key derived under ``unit`` as
@@ -510,7 +510,7 @@ def make_training_loop(
     return TrainingLoop(
         config,
         facts=CorpusFacts(**{
-            "holdout": HoldoutRule(unit=HoldoutUnit.TEXT), "rarity": {}, **facts,
+            "holdout": HoldoutRule(unit=HoldoutUnit.TEMPLATE), "rarity": {}, **facts,
         }),
         training_shards=list(training_shards),
         validation_samples=validation_samples or {},

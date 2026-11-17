@@ -1018,6 +1018,7 @@ class TestNoVariantPrintsAHeldOutText:
                 card=name, script_file=f"variant-scripts/{name}.txt",
                 lines=(SidecarLine(
                     line_index=0, line_kind="spell", provenance=(key,), script_text=text,
+                    prose_offset=0,
                 ),),
             ),
             sidecar_path_for(path),
@@ -1064,16 +1065,6 @@ class TestNoVariantPrintsAHeldOutText:
         assert drop_held_out_variants([held], self._holdout(HoldoutUnit.TEMPLATE)) == []
         assert held.path.exists() and sidecar_path_for(held.path).exists()
 
-    def test_under_the_text_unit_only_the_text_itself_is_held_out(self, tmp_path):
-        from effects.application.collect_variants import drop_held_out_variants
-
-        near = self._variant(
-            tmp_path, "near_variant_1", "SP$ DealDamage | ValidTgts$ Artifact | NumDmg$ 5",
-        )
-        same = self._variant(tmp_path, "same_variant_2", self._HELD)
-
-        assert drop_held_out_variants([near, same], self._holdout(HoldoutUnit.TEXT)) == [near]
-
     def test_the_rule_the_collector_is_given_decides_what_is_dropped(self, tmp_path):
         """A6: under ``build-corpus --holdout-permille 1000`` this text is held
         out, under the default it is not; a collector applying the default
@@ -1095,6 +1086,7 @@ class TestNoVariantPrintsAHeldOutText:
                 lines=(SidecarLine(
                     line_index=0, line_kind="spell", script_text=self._HELD,
                     provenance=(ProvenanceKey("cardsfolder/h/held.txt", 0, "spell", 0),),
+                    prose_offset=0,
                 ),),
             ),
             sidecar_path_for(card),

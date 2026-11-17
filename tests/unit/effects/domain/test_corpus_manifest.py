@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import hashlib
 import json
-from pathlib import Path
 
 import pytest
 
 from effects.domain.corpus_manifest import (
-    _GEN1_DEFAULTS,
     ClassCounts,
     CorpusManifest,
     FamilyRow,
+    ManifestError,
     SourceShard,
     rule_curation_fields,
 )
@@ -26,7 +24,6 @@ def manifest(**overrides) -> CorpusManifest:
         holdout_max_carriers=8,
         text_cap=200,
         card_disjoint_text_cap=50,
-        game_disjoint_target=1000,
         training_records=0,
         class_mix={"rewrite": 1.0},
         delivered_mix={"rewrite": 1.0},
@@ -58,9 +55,36 @@ def test_round_trips_through_a_dict():
     assert CorpusManifest.from_dict(original.as_dict()) == original
 
 
-def test_digest_is_the_value_checkpoints_already_pinned():
+def test_the_digest_rule_is_pinned():
     """The hash rule is fixed: a checkpoint records this exact string (FR-147)."""
-    assert manifest().digest() == "49b74d299099eb1da3ac0000e5a278eb"
+    assert manifest().digest() == "b94b27096a4f4d1c78a0fb6fec15f82c"
+
+
+def test_every_field_is_written_and_the_manifest_names_its_generation(manifest_dict):
+    from dataclasses import fields
+
+    assert set(manifest_dict) == {spec.name for spec in fields(CorpusManifest)}
+    assert manifest_dict["generation"] == 3
+
+
+def test_a_manifest_of_an_older_generation_is_refused_naming_it(manifest_dict):
+    """A gen-2 build wrote no ``generation`` member but wrote the gen-2 tables;
+    a gen-1 manifest has neither."""
+    gen2 = {k: v for k, v in manifest_dict.items() if k != "generation"}
+    with pytest.raises(ManifestError, match="gen-2 manifest"):
+        CorpusManifest.from_dict(gen2)
+    gen1 = {k: v for k, v in gen2.items()
+            if k not in ("families", "signatures", "policy_counts")}
+    with pytest.raises(ManifestError, match="gen-1 manifest"):
+        CorpusManifest.from_dict(gen1)
+    with pytest.raises(ManifestError, match="gen-4 manifest"):
+        CorpusManifest.from_dict({**manifest_dict, "generation": 4})
+
+
+def test_a_manifest_missing_a_member_is_refused(manifest_dict):
+    del manifest_dict["rule_map_digest"]
+    with pytest.raises(ManifestError, match="rule_map_digest"):
+        CorpusManifest.from_dict(manifest_dict)
 
 
 def test_digest_changes_when_a_recorded_decision_changes():
@@ -103,29 +127,7 @@ def test_digest_changes_when_the_delivered_mixture_changes():
     ).digest()
 
 
-def test_a_manifest_written_before_the_rework_still_loads(manifest_dict):
-    """Every field this rework added has a default (FR-143 compatibility)."""
-    for key in (
-        "quality_dropped", "games_by_source", "held_out_games_by_source",
-        "shard_records", "validation_sample", "max_events_per_record",
-        "unattributed_records", "token_keys_remapped", "token_keys_ambiguous",
-        "forge_tokenscripts",
-    ):
-        manifest_dict.pop(key, None)
-    loaded = CorpusManifest.from_dict(manifest_dict)
-    assert loaded.quality_dropped == {}
-    assert loaded.games_by_source == {}
-    assert loaded.held_out_games_by_source == {}
-    assert loaded.shard_records == 0
-    assert loaded.validation_sample == 0
-    assert loaded.max_events_per_record == 0
-    assert loaded.unattributed_records == 0
-    assert loaded.token_keys_remapped == 0
-    assert loaded.token_keys_ambiguous == {}
-    assert loaded.forge_tokenscripts == ""
-
-
-def test_the_new_fields_round_trip(manifest_dict):
+def test_the_tallies_round_trip(manifest_dict):
     manifest_dict.update({
         "quality_dropped": {"no-ability": 3},
         "games_by_source": {"depleted": 10, "full-strength": 4},
@@ -154,15 +156,10 @@ def test_the_legacy_remap_tallies_stay_inside_the_digest():
 
 
 def test_the_no_acting_text_tally_stays_out_of_the_digest(manifest_dict):
-    """A tally added after the fact must not invalidate older checkpoints.
-
-    The digest is what FR-147 pins a checkpoint to, and it stands for the
+    """The digest is what FR-147 pins a checkpoint to, and it stands for the
     split and the contents. ``no_acting_text_scripts`` says which scripts the
     build refused records through, which an operator reads and no sampling
-    decision depends on, so a manifest written before the field existed has to
-    hash exactly as one that carries it.
-    """
-    manifest_dict.pop("no_acting_text_scripts", None)
+    decision depends on."""
     before = CorpusManifest.from_dict(manifest_dict)
     after = CorpusManifest.from_dict({
         **manifest_dict,
@@ -183,72 +180,11 @@ def test_a_different_held_out_text_still_moves_the_digest():
 
 # ── gen-2 fields (FR-053, FR-042; T082, T084) ───────────────────────────
 
-_FIXTURE = Path(__file__).parents[3] / "fixtures" / "effects" / "gen1-manifest-trimmed.json"
-
-
-def _canonical_digest(raw: dict) -> str:
-    """The digest of a manifest's JSON as written, by the rule feature 023 used."""
-    payload = {k: v for k, v in raw.items() if k not in CorpusManifest._OUTSIDE_THE_DIGEST}
-    payload["sources"] = sorted(payload["sources"], key=lambda s: s["name"])
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return hashlib.blake2b(canonical.encode("utf-8"), digest_size=16).hexdigest()
-
-
-def test_a_real_gen1_manifest_keeps_its_digest():
-    """Every checkpoint pinned to a gen-1 corpus must stay evaluable (FR-042)."""
-    raw = json.loads(_FIXTURE.read_text(encoding="utf-8"))
-    loaded = CorpusManifest.from_dict(raw)
-
-    assert loaded.holdout_unit == "text"
-    assert loaded.game_disjoint_target == 1000
-    assert loaded.digest() == _canonical_digest(raw)
-    assert loaded.digest() == "6a383294af4ac5417044add00dd14492"
-    assert set(loaded.as_dict()) == set(raw)
-
-
-def _as_written(data: dict) -> str:
-    """A manifest's JSON as ``CorpusStore`` writes it."""
-    return json.dumps(data, indent=2, sort_keys=True)
-
-
-def test_a_real_gen1_manifest_is_written_back_byte_for_byte():
-    raw = json.loads(_FIXTURE.read_text(encoding="utf-8"))
-    assert _as_written(CorpusManifest.from_dict(raw).as_dict()) == _as_written(raw)
-
-
-def test_a_family_row_keeps_the_columns_its_manifest_was_written_with():
-    """A manifest built before ``planned`` existed lacks it in every row, and
-    writing it back must not add one: its digest is pinned by checkpoints."""
-    rows = {"rewrite": {
-        "Moved": {"available": 10, "share": 5, "written": 8, "repeats": 3, "shortfall": 0},
-    }}
-    planned = {"rewrite": {"Moved": {**rows["rewrite"]["Moved"], "planned": 6}}}
-    for families in (rows, planned):
-        raw = manifest(game_disjoint_target=None).as_dict() | {"families": families}
-        loaded = CorpusManifest.from_dict(raw)
-        assert isinstance(loaded.families["rewrite"]["Moved"], FamilyRow)
-        assert _as_written(loaded.as_dict()) == _as_written(raw)
-
-
-def test_gen2_fields_are_left_out_at_their_gen1_values(manifest_dict):
-    assert len(_GEN1_DEFAULTS) == 39  # cut_games (WP7) the last
-    for name in _GEN1_DEFAULTS:
-        if name != "game_disjoint_target":
-            assert name not in manifest_dict
-
-
-def test_a_manifest_without_the_retired_count_omits_it():
-    data = manifest(game_disjoint_target=None).as_dict()
-    assert "game_disjoint_target" not in data
-    assert CorpusManifest.from_dict(data).game_disjoint_target is None
-
 
 def test_the_gen2_fields_round_trip_and_move_the_digest():
     gen2 = manifest(
-        game_disjoint_target=None,
-        holdout_unit="template",
         families={"rewrite": {"Moved": FamilyRow(
-            available=10, share=5, planned=None, written=8, repeats=3, shortfall=0,
+            available=10, share=5, planned=6, written=8, repeats=3, shortfall=0,
         )}},
         signatures={"rewrite": {"Moved": {"died:changed": 8}}},
         policy_counts={"rewrite": {"on_policy": 6, "off_policy": 2}},
@@ -264,8 +200,8 @@ def test_the_gen2_fields_round_trip_and_move_the_digest():
     restored = CorpusManifest.from_dict(json.loads(json.dumps(gen2.as_dict())))
 
     assert restored == gen2
-    assert gen2.digest() == "24b7724862c3ad8fad0add0976dd10c1"
-    assert gen2.digest() != manifest(game_disjoint_target=None).digest()
+    assert isinstance(restored.families["rewrite"]["Moved"], FamilyRow)
+    assert gen2.digest() != manifest().digest()
 
 
 def test_class_targets_round_trip_beside_what_was_delivered():
@@ -325,17 +261,17 @@ def _gen3_fields(**extra_map) -> dict:
 
 
 def test_the_gen3_fields_round_trip_through_json():
-    gen3 = manifest(game_disjoint_target=None, **_gen3_fields())
+    gen3 = manifest(**_gen3_fields())
     restored = CorpusManifest.from_dict(json.loads(json.dumps(gen3.as_dict())))
     assert restored == gen3
-    assert gen3.digest() != manifest(game_disjoint_target=None).digest()
+    assert gen3.digest() != manifest().digest()
 
 
 def test_the_gen3_fields_hold_what_the_build_decided():
     from effects.domain.closed_lists import ordered_keywords
     from effects.domain.forge_vocabularies import SUBTYPES
 
-    gen3 = manifest(game_disjoint_target=None, **_gen3_fields())
+    gen3 = manifest(**_gen3_fields())
     data = json.loads(json.dumps(gen3.as_dict()))
     row = data["rules"]["effects"]["702.16e"]["fires"]
     assert row == {"available": {"forge_ai": 2}, "share": 4, "written": {"forge_ai": 4},
@@ -365,14 +301,8 @@ def test_an_unbudgeted_rule_no_training_record_shows_is_still_named():
     from effects.domain.rule_catalogue import MapVerdict, RuleMapEntry
 
     fields = _gen3_fields(**{"502.3": RuleMapEntry("502.3", MapVerdict.MISSING)})
-    data = json.loads(json.dumps(manifest(game_disjoint_target=None, **fields).as_dict()))
+    data = json.loads(json.dumps(manifest(**fields).as_dict()))
     assert data["unbudgeted_rules"] == {"502.3": {}, "510.1": {"fires": {"random_seat": 1}}}
-
-
-def test_a_gen2_manifest_writes_no_gen3_field(manifest_dict):
-    gen3 = set(_gen3_fields())
-    assert gen3 <= set(_GEN1_DEFAULTS)
-    assert not gen3 & set(manifest_dict)
 
 
 def test_the_collection_fields_round_trip():
@@ -383,7 +313,6 @@ def test_the_collection_fields_round_trip():
     row = RuleRow(available={"forge_ai": 2}, share=4, written={"forge_ai": 3},
                   added={"forge_ai": 1}, shortfall=1)
     built = manifest(
-        game_disjoint_target=None,
         validation_rules={"card-disjoint": {"resolution-effect": {"702.2b": {"fires": row}}}},
         record_flags={"combat": {"fork": 1}},
         placement_thresholds={"min_games_per_half": 300, "max_item_error": 0.1,

@@ -8,6 +8,7 @@ rather than recomputing them against a corpus that has grown since.
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 
 import pytest
@@ -162,23 +163,24 @@ class TestCorpusProvenance:
         assert restored == original
         assert restored.holdout_unit is HoldoutUnit.TEMPLATE
 
-    def test_the_text_unit_is_written_as_no_field_and_read_back(self):
-        """FR-042: a checkpoint that records no unit reads as it trained."""
-        text = SplitProvenance(held_out_cards=("Alpha",))
-        assert "holdout_unit" not in text.as_dict()
-        assert SplitProvenance.from_dict(text.as_dict()).holdout_unit is HoldoutUnit.TEXT
+    def test_the_holdout_unit_is_always_written(self):
+        """FR-042."""
+        recorded = SplitProvenance(held_out_cards=("Alpha",)).as_dict()
+        assert recorded["holdout_unit"] == "template"
+        assert SplitProvenance.from_dict(recorded).holdout_unit is HoldoutUnit.TEMPLATE
 
-    def test_a_checkpoint_saved_before_curated_corpora_still_loads(self):
-        assert SplitProvenance.from_dict({}).corpus_digest == ""
-
-    def test_an_empty_provenance_reads_as_every_default(self):
-        assert SplitProvenance.from_dict({}) == SplitProvenance()
+    def test_a_provenance_missing_a_member_is_refused(self):
+        recorded = SplitProvenance().as_dict()
+        del recorded["corpus_digest"]
+        with pytest.raises(KeyError, match="corpus_digest"):
+            SplitProvenance.from_dict(recorded)
 
     def test_stored_lists_read_back_as_tuples(self):
-        provenance = SplitProvenance.from_dict({
-            "held_out_cards": ["Shock"], "card_disjoint_games": ["g1"],
-            "holdout_permille": 20,
-        })
+        stored = json.loads(json.dumps(SplitProvenance(
+            held_out_cards=("Shock",), card_disjoint_games=("g1",), holdout_permille=20,
+        ).as_dict()))
+        assert isinstance(stored["held_out_cards"], list)
+        provenance = SplitProvenance.from_dict(stored)
         assert provenance.held_out_cards == ("Shock",)
         assert provenance.card_disjoint_games == ("g1",)
         assert provenance.holdout_permille == 20
@@ -429,8 +431,8 @@ class TestTheInputLayout:
             load_effect_checkpoint(store.latest_path())
 
 
-class TestGen2Checkpoint:
-    """What a gen-2 checkpoint records and drops (T101, FR-059, FR-061, FR-063)."""
+class TestSweepSettings:
+    """What a checkpoint records of its sweep flags and roots (T101, FR-059, FR-061, FR-063)."""
 
     def test_the_sweep_flags_and_roots_round_trip(self, tmp_path, files):
         """Spec Story 5 scenario 6: unit, size, noise ratio, value weight."""
@@ -443,8 +445,8 @@ class TestGen2Checkpoint:
         store.save(_checkpoint(
             files, encoder_config=encoder,
             encoder_state={},
-            provenance=_provenance(files, holdout_unit="template"),
-            cards_folders=("output/gen1-cardsfolder", "output/gen1-tokenscripts"),
+            provenance=_provenance(files, holdout_unit=HoldoutUnit.TEMPLATE),
+            cards_folders=("output/old-cardsfolder", "output/old-tokenscripts"),
             training_settings=settings,
         ))
         loaded = store.load()
@@ -453,7 +455,7 @@ class TestGen2Checkpoint:
         assert loaded.provenance.holdout_unit == "template"
         assert loaded.training_settings == settings
         assert loaded.cards_folders == (
-            "output/gen1-cardsfolder", "output/gen1-tokenscripts",
+            "output/old-cardsfolder", "output/old-tokenscripts",
         )
 
     def test_a_config_recording_no_size_builds_at_four_layers_and_256(self):
@@ -485,17 +487,6 @@ class TestGen3Checkpoint:
         assert loaded.loss_denominators == {"floor": 0.04, "values": {}}
         # Each under its own name, never in ``extra``.
         assert loaded.extra == {}
-
-    def test_a_checkpoint_saved_before_them_reads_them_as_unset(self, tmp_path, files):
-        """The control score is US8's: until it exists a run saves None."""
-        path = EffectModelStore(tmp_path).save(_checkpoint(files))
-        payload = torch.load(path, weights_only=False)
-        for name in ("best_control_score", "rule_mask", "ema_epochs", "selection_set_digest"):
-            payload.pop(name)
-        torch.save(payload, path)
-        loaded = EffectModelStore(tmp_path).load(path)
-        assert loaded.best_control_score is None and loaded.selection_set_digest is None
-        assert loaded.rule_mask == "" and loaded.ema_epochs is None
 
     def test_the_relation_tables_layout_rides_the_training_settings(self, tmp_path, files):
         from effects.domain.effect_head_input import (

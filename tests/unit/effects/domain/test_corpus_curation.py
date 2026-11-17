@@ -310,7 +310,7 @@ class _Lines:
 
         self._lines = {
             key: SidecarLine(line_index=0, line_kind="spell", provenance=(key,),
-                             script_text=text)
+                             script_text=text, prose_offset=0)
             for key, text in scripts.items()
         }
 

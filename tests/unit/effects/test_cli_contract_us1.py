@@ -310,7 +310,6 @@ class TestBuildCorpus:
             "first strike", "deathtouch", "trample", "indestructible", "wither", "infect",
         )
         assert args.reuse_cap == 4
-        assert args.holdout_unit == "template"
         assert args.training_records == 0  # no ceiling
         assert args.class_mix is None  # the training mixture
         assert args.seed == 42

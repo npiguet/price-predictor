@@ -94,19 +94,19 @@ _EQUIPPED = ProvenanceKey("cardsfolder/b/bonesplitter.txt", 0, "static", 0)
 _LINES = {
     _EQUIPPED: SidecarLine(
         line_index=0, line_kind="static", provenance=(_EQUIPPED,),
-        script_text="Equipped creature has first strike.",
+        script_text="Equipped creature has first strike.", prose_offset=0,
     ),
     _FIRST_STRIKE: SidecarLine(
         line_index=0, line_kind="static", provenance=(_FIRST_STRIKE,),
-        script_text="First Strike",
+        script_text="First Strike", prose_offset=0,
     ),
     _PUMP: SidecarLine(
         line_index=1, line_kind="activated", provenance=(_PUMP,),
-        script_text="W: this creature gets +1/+0",
+        script_text="W: this creature gets +1/+0", prose_offset=0,
     ),
     _OTHER: SidecarLine(
         line_index=0, line_kind="static", provenance=(_OTHER,),
-        script_text="Trample",
+        script_text="Trample", prose_offset=0,
     ),
 }
 

@@ -298,21 +298,21 @@ def test_real_regular_step_first_strikers_are_the_near_miss(gen3_combats, gen3_s
 #: trample lines are ``Trample`` and ``Trample:Planeswalker``.
 _THRASTA_SIDECAR = (
     '{"card":"thrasta, tempest\'s roar","script_file":"cardsfolder/t/thrasta_tempests_roar.txt",'
-    '"lines":[{"line_index":4,"line_kind":"static","provenance":[{"face":0,'
+    '"lines":[{"line_index":4,"line_kind":"static","prose_offset":8,"provenance":[{"face":0,'
     '"trait_kind":"keyword","index_within_kind":1}],"sub_ability_links":[],'
     '"script_api_type":"Keyword","script_param_keys":[],"script_text":"Trample",'
-    '"role_spans":[{"start":0,"end":7,"role":"effect"}]},{"line_index":5,"line_kind":"static",'
+    '"role_spans":[{"start":0,"end":7,"role":"effect"}]},{"line_index":5,"line_kind":"static","prose_offset":8,'
     '"provenance":[{"face":0,"trait_kind":"keyword","index_within_kind":2}],'
     '"sub_ability_links":[],"script_api_type":"Keyword","script_param_keys":[],'
     '"script_text":"Trample:Planeswalker","role_spans":[{"start":0,"end":26,"role":"effect"}]},'
-    '{"line_index":6,"line_kind":"static","provenance":[{"face":0,"trait_kind":"keyword",'
+    '{"line_index":6,"line_kind":"static","prose_offset":8,"provenance":[{"face":0,"trait_kind":"keyword",'
     '"index_within_kind":0}],"sub_ability_links":[],"script_api_type":"Keyword",'
     '"script_param_keys":[],"script_text":"Haste","role_spans":[{"start":0,"end":5,'
     '"role":"effect"}]}],"dropped_keys":[{"face":0,"trait_kind":"spell","index_within_kind":0}]}'
 )
 _DREADMAW_SIDECAR = (
     '{"card":"colossal dreadmaw","script_file":"cardsfolder/c/colossal_dreadmaw.txt",'
-    '"lines":[{"line_index":4,"line_kind":"static","provenance":[{"face":0,'
+    '"lines":[{"line_index":4,"line_kind":"static","prose_offset":8,"provenance":[{"face":0,'
     '"trait_kind":"keyword","index_within_kind":0}],"sub_ability_links":[],'
     '"script_api_type":"Keyword","script_param_keys":[],"script_text":"Trample",'
     '"role_spans":[{"start":0,"end":7,"role":"effect"}]}],'

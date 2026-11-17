@@ -27,8 +27,7 @@ class HoldoutRule:
     """How the held-out texts are chosen: one value, so every command computing
     the holdout is handed the same rule rather than three flags to keep in step.
 
-    The defaults are the commands' own; a corpus manifest or checkpoint that
-    predates the unit records ``text``.
+    The defaults are the commands' own.
     """
 
     permille: int = HOLDOUT_PERMILLE
@@ -54,8 +53,7 @@ class HeldOutCards:
     #: The held-out ability texts; under depletion also gate 1's unique-text
     #: slice.
     texts: frozenset[str]
-    #: The held-out units (masked templates under ``template``, the texts under
-    #: ``text``) that :meth:`holds_text` tests against.
+    #: The held-out units (masked templates) that :meth:`holds_text` tests against.
     keys: frozenset[str]
     unit: HoldoutUnit
 

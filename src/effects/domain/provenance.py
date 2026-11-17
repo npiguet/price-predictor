@@ -264,8 +264,8 @@ class SidecarLine:
     ``provenance`` holds several keys where the converter merged several
     traits into one line. ``line_index`` points into the converted ``.txt``;
     the ability-cache row is instead this entry's position in ``lines``.
-    ``prose_offset`` is ``None`` on a sidecar written before the converter
-    recorded it, whose readers cut at the first ``": "``.
+    ``prose_offset`` is where the line's prose starts in the converted line,
+    after its ``kind[n]: `` prefix; the converter records it on every line.
     """
 
     line_index: int
@@ -276,7 +276,7 @@ class SidecarLine:
     script_param_keys: tuple[str, ...] = ()
     script_text: str | None = None
     role_spans: tuple[RoleSpan, ...] = ()
-    prose_offset: int | None = None
+    prose_offset: int = field(kw_only=True)
 
     def prose_in(self, rendered: Sequence[str]) -> str | None:
         """This line's converted prose, without its ``kind[n]: `` prefix, out
@@ -284,16 +284,11 @@ class SidecarLine:
 
         Role spans are offsets into the prose without the prefix. The split is
         ``prose_offset``, since a continuation line has no prefix but may hold
-        a ``{T}: ``; an older sidecar without it is cut at the first ``": "``,
-        right for every line such sidecars hold.
+        a ``{T}: ``.
         """
         if not (0 <= self.line_index < len(rendered)):
             return None
-        line = rendered[self.line_index]
-        if self.prose_offset is not None:
-            return line[self.prose_offset:]
-        separator = line.find(": ")
-        return line if separator < 0 else line[separator + 2:]
+        return rendered[self.line_index][self.prose_offset:]
 
     # Two answers to "which keyword is this line", which part company on a
     # ``Keyword`` line whose script carries parameters (``Equip:2:::ReduceCost$

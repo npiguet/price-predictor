@@ -102,7 +102,7 @@ class _Lines:
 
         def line(key, script):
             return SidecarLine(line_index=0, line_kind="spell", provenance=(key,),
-                               script_text=script)
+                               script_text=script, prose_offset=0)
 
         self.line = line(_SWEEP_KEY, text)
         self.others = {key: line(key, script) for key, script in (others or {}).items()}

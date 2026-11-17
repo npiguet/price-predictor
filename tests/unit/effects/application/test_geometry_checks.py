@@ -60,7 +60,7 @@ def _write_source(
                 SidecarLine(
                     line_index=i, line_kind="static",
                     provenance=(ProvenanceKey(script_file, 0, "static", i),),
-                    script_text=text,
+                    script_text=text, prose_offset=len("static: "),
                 )
                 for i, text in enumerate(texts)
             ),

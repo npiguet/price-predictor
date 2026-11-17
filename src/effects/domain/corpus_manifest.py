@@ -8,7 +8,7 @@ can refuse a dataset rebuilt since (FR-147).
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from dataclasses import MISSING, Field, asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
 
@@ -18,10 +18,31 @@ from effects.domain.rule_budgets import RuleBudgets, RuleRow
 from effects.domain.rule_catalogue import MapVerdict, RuleMapEntry
 from effects.domain.split import HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
-from price_predictor.domain.dataclass_defaults import field_default
 
 if TYPE_CHECKING:
     from effects.domain.corpus_plan import GameStrata
+
+
+#: The generation of corpus a manifest describes, written as its ``generation``
+#: member: the only one this code reads.
+MANIFEST_GENERATION = 3
+
+#: Members only a gen-2 build wrote, which tell a gen-2 manifest from a gen-1
+#: one when neither carries a ``generation`` member.
+_GEN2_MEMBERS = ("families", "signatures", "policy_counts")
+
+
+class ManifestError(ValueError):
+    """A manifest this code does not read: one of an older generation, or one
+    missing a member."""
+
+
+def _recorded_generation(data: dict[str, Any]) -> str:
+    """The generation a manifest's own members name: its ``generation`` member,
+    else gen-2 where a gen-2 build's members are present, else gen-1."""
+    if "generation" in data:
+        return f"gen-{data['generation']}"
+    return "gen-2" if any(name in data for name in _GEN2_MEMBERS) else "gen-1"
 
 
 class ManifestDrift(NamedTuple):
@@ -85,28 +106,21 @@ class FamilyRow:
 
     available: int
     share: int
-    #: None on a manifest built before the column existed, which leaves it
-    #: out of the row again on the way back, so its digest does not move.
-    planned: int | None
+    planned: int
     #: Copies included; ``repeats`` is how many of them are copies.
     written: int
     repeats: int
     shortfall: int
 
     def as_dict(self) -> dict[str, int]:
-        row = asdict(self)
-        if self.planned is None:
-            del row["planned"]
-        return row
+        return asdict(self)
 
     @classmethod
     def from_dict(cls, values: dict) -> FamilyRow:
-        planned = values.get("planned")
         return cls(
             available=int(values["available"]), share=int(values["share"]),
-            planned=None if planned is None else int(planned),
-            written=int(values["written"]), repeats=int(values["repeats"]),
-            shortfall=int(values["shortfall"]),
+            planned=int(values["planned"]), written=int(values["written"]),
+            repeats=int(values["repeats"]), shortfall=int(values["shortfall"]),
         )
 
 
@@ -175,38 +189,11 @@ def _rule_map(values: dict) -> dict[str, RuleMapEntry]:
 
 #: Field metadata: how ``from_dict`` reads the field's JSON value back.
 _READ = "read"
-#: Field metadata: the value a required field reads as when a manifest lacks it.
-_ABSENT = "absent"
-#: Field metadata marking a field ``as_dict`` leaves out while it holds its
-#: default: every gen-2 field, and the one gen-1 field gen-2 stopped writing.
-_OMITTED_AT_DEFAULT = "omitted_at_default"
 
 
-def _reads(
-    read, *, absent: Any = MISSING, omitted_at_default: bool = False,
-) -> dict[str, Any]:
-    """A field's metadata: its reader, the value an absent one reads as when
-    ``absent`` is given, and whether ``as_dict`` omits it at its default."""
-    metadata: dict[str, Any] = {_READ: read}
-    if absent is not MISSING:
-        metadata[_ABSENT] = absent
-    if omitted_at_default:
-        metadata[_OMITTED_AT_DEFAULT] = True
-    return metadata
-
-
-def _gen1_implied(read) -> dict[str, Any]:
-    return _reads(read, omitted_at_default=True)
-
-
-def _default_of(spec: Field) -> Any:
-    """The value a manifest lacking ``spec`` reads as; KeyError if it has none."""
-    if _ABSENT in spec.metadata:
-        return spec.metadata[_ABSENT]
-    try:
-        return field_default(spec)
-    except ValueError:
-        raise KeyError(spec.name) from None
+def _reads(read) -> dict[str, Any]:
+    """A field's metadata: its reader."""
+    return {_READ: read}
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,7 +206,7 @@ class CorpusManifest:
     surface: Surface = field(metadata=_reads(Surface))
     vocab_path: str = field(metadata=_reads(str))
     #: The variant tree the build resolved keys against, or "" when none.
-    variant_scripts: str = field(metadata=_reads(str, absent=""))
+    variant_scripts: str = field(metadata=_reads(str))
     holdout_permille: int = field(metadata=_reads(int))
     holdout_max_carriers: int = field(metadata=_reads(int))
     text_cap: int = field(metadata=_reads(int))
@@ -248,7 +235,7 @@ class CorpusManifest:
     unique_texts: dict[str, int] = field(metadata=_reads(_int_map))
     shortfall: dict[str, int] = field(metadata=_reads(_int_map))
     #: Records refused by ``effects.domain.record_quality`` in both passes,
-    #: by reason (FR-148). Empty on a manifest written before the rule existed.
+    #: by reason (FR-148).
     quality_dropped: dict[str, int] = field(
         default_factory=dict, metadata=_reads(_int_map),
     )
@@ -261,8 +248,8 @@ class CorpusManifest:
     held_out_games_by_source: dict[str, int] = field(
         default_factory=dict, metadata=_reads(_int_map),
     )
-    #: ``--shard-records``: the size output shards were repacked to. 0 on a
-    #: manifest from before repacking, whose shards mirror their sources.
+    #: ``--shard-records``: the size output shards were repacked to; 0 leaves
+    #: the shards mirroring their sources.
     shard_records: int = field(default=0, metadata=_reads(int))
     #: ``--validation-sample``: records per stratum in ``validation/samples/``.
     validation_sample: int = field(default=0, metadata=_reads(int))
@@ -273,8 +260,8 @@ class CorpusManifest:
     #: outcomes, so they train.
     unattributed_records: int = field(default=0, metadata=_reads(int))
     #: Legacy, with ``token_keys_ambiguous`` and ``forge_tokenscripts``: the
-    #: retired token-key remap's tallies (FR-151), kept because manifests on
-    #: disk carry them and the digest hashes them; always written empty now.
+    #: retired token-key remap's tallies (FR-151), which the digest hashes;
+    #: always written empty now.
     token_keys_remapped: int = field(default=0, metadata=_reads(int))
     token_keys_ambiguous: dict[str, int] = field(
         default_factory=dict, metadata=_reads(_int_map),
@@ -286,139 +273,139 @@ class CorpusManifest:
     no_acting_text_scripts: dict[str, int] = field(
         default_factory=dict, metadata=_reads(_int_map),
     )
-    #: Legacy, as ``token_keys_remapped``: kept for digest stability.
+    #: Legacy, as ``token_keys_remapped``.
     forge_tokenscripts: str = field(default="", metadata=_reads(str))
     #: Gen-1's ``--game-disjoint-games``, replaced by a per-game threshold
-    #: (FR-044). No longer written; a manifest carrying it still reads, and
-    #: keeps its digest.
+    #: (FR-044). No longer set; it is hashed, so it stays.
     game_disjoint_target: int | None = field(
-        default=None, metadata=_gen1_implied(_optional_int),
+        default=None, metadata=_reads(_optional_int),
     )
+    #: Which generation of corpus this manifest describes: ``build-corpus``
+    #: writes :data:`MANIFEST_GENERATION`, and ``from_dict`` refuses a manifest
+    #: that records another or none.
+    generation: int = field(default=MANIFEST_GENERATION, metadata=_reads(int))
 
-    # Gen-2 (feature 024): each is omitted from ``as_dict`` at the value a gen-1
-    # manifest implies, so a gen-1 manifest keeps its digest.
+    # Gen-2 (feature 024).
 
-    #: ``template`` or ``text`` (FR-042); absent reads as ``text``.
+    #: The unit the held-out texts were chosen by (FR-042).
     holdout_unit: HoldoutUnit = field(
-        default=HoldoutUnit.TEXT, metadata=_gen1_implied(HoldoutUnit),
+        default=HoldoutUnit.TEMPLATE, metadata=_reads(HoldoutUnit),
     )
     #: ``class -> family -> FamilyRow``.
     families: dict[str, dict[str, FamilyRow]] = field(
-        default_factory=dict, metadata=_gen1_implied(_family_rows),
+        default_factory=dict, metadata=_reads(_family_rows),
     )
     #: ``class -> family -> {outcome signature: records written}``.
     signatures: dict[str, dict[str, dict[str, int]]] = field(
-        default_factory=dict, metadata=_gen1_implied(_doubly_nested_int_map),
+        default_factory=dict, metadata=_reads(_doubly_nested_int_map),
     )
     #: ``class -> {on_policy, off_policy}`` training records, by ``random_seat``.
     policy_counts: dict[str, dict[str, int]] = field(
-        default_factory=dict, metadata=_gen1_implied(_nested_int_map),
+        default_factory=dict, metadata=_reads(_nested_int_map),
     )
     #: ``legality subkind -> {real, what_if, unknown}`` training records.
     legality_counts: dict[str, dict[str, int]] = field(
-        default_factory=dict, metadata=_gen1_implied(_nested_int_map),
+        default_factory=dict, metadata=_reads(_nested_int_map),
     )
     #: Surveyed records per legality mode: every reader places a legality
     #: record in its rarest mode's family from this table.
     legality_mode_counts: dict[str, int] = field(
-        default_factory=dict, metadata=_gen1_implied(_int_map),
+        default_factory=dict, metadata=_reads(_int_map),
     )
     #: Game-disjoint games placed only under ``--game-disjoint-keyword-share``.
     keyword_threshold_games: tuple[str, ...] = field(
-        default=(), metadata=_gen1_implied(tuple),
+        default=(), metadata=_reads(tuple),
     )
     #: Held-out texts with no gate-one resolution record.
     held_out_texts_without_resolution: tuple[str, ...] = field(
-        default=(), metadata=_gen1_implied(tuple),
+        default=(), metadata=_reads(tuple),
     )
     #: ``held-out text -> games`` for the texts recorded in fewer than five.
     held_out_texts_under_five_games: dict[str, int] = field(
-        default_factory=dict, metadata=_gen1_implied(_int_map),
+        default_factory=dict, metadata=_reads(_int_map),
     )
-    #: The game-disjoint and reuse flags as run; None on a gen-1 manifest.
+    #: The game-disjoint and reuse flags as run; None where a flag was not set.
     game_disjoint_share: float | None = field(
-        default=None, metadata=_gen1_implied(_optional_float),
+        default=None, metadata=_reads(_optional_float),
     )
     game_disjoint_keyword_share: float | None = field(
-        default=None, metadata=_gen1_implied(_optional_float),
+        default=None, metadata=_reads(_optional_float),
     )
     game_disjoint_keywords: tuple[str, ...] = field(
-        default=(), metadata=_gen1_implied(tuple),
+        default=(), metadata=_reads(tuple),
     )
-    reuse_cap: int | None = field(default=None, metadata=_gen1_implied(_optional_int))
+    reuse_cap: int | None = field(default=None, metadata=_reads(_optional_int))
     #: Training records the plan asked of each class, copies included, read
     #: against ``per_class[...].kept``.
     class_targets: dict[str, int] = field(
-        default_factory=dict, metadata=_gen1_implied(_int_map),
+        default_factory=dict, metadata=_reads(_int_map),
     )
 
-    # Gen-3 (feature 025, FR-060, FR-060a): written by every gen-3 build and
-    # omitted from ``as_dict`` at their defaults like the gen-2 fields, so an
-    # older manifest keeps its digest; no gen-3 reader accepts one.
+    # Gen-3 (feature 025, FR-060, FR-060a): written by every gen-3 build.
 
     #: The survey's per-rule counts in ``rule-counts.json``'s shape (FR-008):
     #: ``records``, ``rules`` (rule -> polarity -> source -> records),
     #: ``not_countable``, ``none`` and ``review``.
     rule_counts: dict[str, Any] = field(
-        default_factory=dict, metadata=_gen1_implied(dict),
+        default_factory=dict, metadata=_reads(dict),
     )
     #: The rules-to-fields map as the build read it (research R4): every
     #: tagged rule's verdict and outputs. Budgets, the rule mask, the freeze
     #: and evaluation read verdicts and outputs here, never ``rules/heads/``.
     rule_map: dict[str, RuleMapEntry] = field(
-        default_factory=dict, metadata=_gen1_implied(_rule_map),
+        default_factory=dict, metadata=_reads(_rule_map),
     )
     #: The map's content hash, which a checkpoint records.
-    rule_map_digest: str = field(default="", metadata=_gen1_implied(str))
+    rule_map_digest: str = field(default="", metadata=_reads(str))
     #: ``rule -> outputs``: of each mapped rule's outputs, in the map's
     #: order, those at least one of its tagged records carries
     #: (``rule_output_carriage``; FR-060a). The rule mask and the rule tests
     #: read these, never the map's own list; a rule its records carry no
     #: output of maps to an empty tuple.
     effective_outputs: dict[str, tuple[str, ...]] = field(
-        default_factory=dict, metadata=_gen1_implied(_tuple_map),
+        default_factory=dict, metadata=_reads(_tuple_map),
     )
     #: ``class -> rule -> polarity -> RuleRow`` (FR-060).
     rules: dict[str, dict[str, dict[str, RuleRow]]] = field(
-        default_factory=dict, metadata=_gen1_implied(_rule_rows),
+        default_factory=dict, metadata=_reads(_rule_rows),
     )
     #: ``class -> budgeted rules whose polarity halves stay unequal`` (FR-054a).
     one_sided_rules: dict[str, tuple[str, ...]] = field(
-        default_factory=dict, metadata=_gen1_implied(_tuple_map),
+        default_factory=dict, metadata=_reads(_tuple_map),
     )
     #: ``class -> condition carriers seen on one side only`` (FR-056).
     one_sided_conditions: dict[str, tuple[str, ...]] = field(
-        default_factory=dict, metadata=_gen1_implied(_tuple_map),
+        default_factory=dict, metadata=_reads(_tuple_map),
     )
     #: ``rule -> polarity -> source -> records`` for every tagged rule the map
     #: does not mark ``trained`` (FR-054).
     unbudgeted_rules: dict[str, dict[str, dict[str, int]]] = field(
-        default_factory=dict, metadata=_gen1_implied(_doubly_nested_int_map),
+        default_factory=dict, metadata=_reads(_doubly_nested_int_map),
     )
     #: ``stratum -> half -> rules`` with both polarities in the inventories
     #: and one missing from that half (research R3).
     left_out_of_half: dict[str, dict[str, tuple[str, ...]]] = field(
-        default_factory=dict, metadata=_gen1_implied(_nested_tuple_map),
+        default_factory=dict, metadata=_reads(_nested_tuple_map),
     )
     #: ``turn_action`` records written to no stratum, by subkind (FR-059).
     turn_action_left_out: dict[str, int] = field(
-        default_factory=dict, metadata=_gen1_implied(_int_map),
+        default_factory=dict, metadata=_reads(_int_map),
     )
     #: The closed subtype and keyword lists (FR-052, FR-053), in the head's
     #: column order: ``closed_lists.ordered_subtypes`` and ``ordered_keywords``,
     #: which is what ``output_vocabularies`` holds, so
     #: ``scripts/scan_output_vocabularies.py --manifest`` copies them verbatim.
-    subtypes: tuple[str, ...] = field(default=(), metadata=_gen1_implied(tuple))
-    keywords: tuple[str, ...] = field(default=(), metadata=_gen1_implied(tuple))
+    subtypes: tuple[str, ...] = field(default=(), metadata=_reads(tuple))
+    keywords: tuple[str, ...] = field(default=(), metadata=_reads(tuple))
     #: ``stratum -> half -> game ids``, sorted (FR-070).
     halves: dict[str, dict[str, tuple[str, ...]]] = field(
-        default_factory=dict, metadata=_gen1_implied(_nested_tuple_map),
+        default_factory=dict, metadata=_reads(_nested_tuple_map),
     )
     #: ``validation stratum -> class -> rule -> polarity -> RuleRow``: each
     #: validation stratum's rule budgets, as ``rules`` holds the training
     #: stratum's (FR-068a).
     validation_rules: dict[str, dict[str, dict[str, dict[str, RuleRow]]]] = field(
-        default_factory=dict, metadata=_gen1_implied(
+        default_factory=dict, metadata=_reads(
             lambda values: {stratum: _rule_rows(rows) for stratum, rows in values.items()}),
     )
     #: ``class -> collection flag -> kept records`` over the records read
@@ -426,46 +413,46 @@ class CorpusManifest:
     #: and ``runtime_only`` for a resolution acting only through runtime-only
     #: keys); a flag no record of the class carries is left out.
     record_flags: dict[str, dict[str, int]] = field(
-        default_factory=dict, metadata=_gen1_implied(_nested_int_map),
+        default_factory=dict, metadata=_reads(_nested_int_map),
     )
     #: Placement's precision thresholds (research E5), config fields with no
     #: flag: ``min_games_per_half``, ``max_item_error``, ``max_component_error``
     #: (None where infinite).
     placement_thresholds: dict[str, float | None] = field(
-        default_factory=dict, metadata=_gen1_implied(dict),
+        default_factory=dict, metadata=_reads(dict),
     )
     #: sha256 of the keyword-definition file the build read; "" without one.
-    keyword_definitions_digest: str = field(default="", metadata=_gen1_implied(str))
+    keyword_definitions_digest: str = field(default="", metadata=_reads(str))
     #: ``"<member> <repr of the value>" -> times read`` for every value of a
     #: raw record outside the wire's closed lists (``shard_io.off_list_counts``).
     decode_off_list: dict[str, int] = field(
-        default_factory=dict, metadata=_gen1_implied(_int_map),
+        default_factory=dict, metadata=_reads(_int_map),
     )
     #: Each raw shard whose damaged last gzip member ended its read.
-    damaged_tails: tuple[str, ...] = field(default=(), metadata=_gen1_implied(tuple))
+    damaged_tails: tuple[str, ...] = field(default=(), metadata=_reads(tuple))
     #: Keys the survey read as no line, by why (``sidecar_io.JoinGaps``):
     #: ``unresolved``, ``undescribed`` and ``ambiguous`` by script file,
     #: ``unconfigured`` by source tree, each with how often it was asked; an
     #: empty kind left out.
     join_gaps: dict[str, dict[str, int]] = field(
-        default_factory=dict, metadata=_gen1_implied(_nested_int_map),
+        default_factory=dict, metadata=_reads(_nested_int_map),
     )
     #: ``kind -> events`` of kept records no output column reads (a hidden
     #: keyword change, a name change, a mana cost change;
     #: ``effect_targets.RecordTargets.unsupervised``).
     unsupervised_events: dict[str, int] = field(
-        default_factory=dict, metadata=_gen1_implied(_int_map),
+        default_factory=dict, metadata=_reads(_int_map),
     )
     #: The commit of the code that built the corpus (``git rev-parse HEAD``),
     #: "" outside a checkout.
-    code_version: str = field(default="", metadata=_gen1_implied(str))
+    code_version: str = field(default="", metadata=_reads(str))
     #: sha256 over every sidecar the build joined against, by tree, relative
     #: path and size: a reconversion since the build moves it.
-    sidecar_digest: str = field(default="", metadata=_gen1_implied(str))
+    sidecar_digest: str = field(default="", metadata=_reads(str))
     #: Gen-3 games dropped whole as cut, their shard holding no game-end marker
     #: (WP7); their records are ``per_stratum["dropped-cut"]``. Inside the
     #: digest: which games are cut decides which records the corpus holds.
-    cut_games: int = field(default=0, metadata=_gen1_implied(int))
+    cut_games: int = field(default=0, metadata=_reads(int))
 
     @property
     def budgeted_rules(self) -> frozenset[str]:
@@ -524,30 +511,38 @@ class CorpusManifest:
                       for klass, by_rule in by_class.items()}
             for stratum, by_class in self.validation_rules.items()
         }
-        for name, default in _GEN1_DEFAULTS.items():
-            if getattr(self, name) == default:
-                data.pop(name, None)
         return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> CorpusManifest:
-        """Each field through its own reader, an older manifest's gaps at default.
+        """Each member through its own reader.
 
-        A required field missing from ``data`` raises ``KeyError`` unless its
-        metadata names the value an absent one reads as.
+        A manifest of another generation, or none, raises :class:`ManifestError`
+        naming it, as does one missing a member: only the manifest this code
+        writes is read.
         """
-        values = {}
-        for spec in fields(cls):
-            raw = data[spec.name] if spec.name in data else _default_of(spec)
-            values[spec.name] = spec.metadata[_READ](raw)
-        return cls(**values)
+        recorded = _recorded_generation(data)
+        if recorded != f"gen-{MANIFEST_GENERATION}":
+            raise ManifestError(
+                f"the manifest is a {recorded} manifest; this code reads "
+                f"gen-{MANIFEST_GENERATION} only. Rebuild the corpus with "
+                "`python -m effects build-corpus`."
+            )
+        missing = [spec.name for spec in fields(cls) if spec.name not in data]
+        if missing:
+            raise ManifestError(
+                f"the manifest lacks {', '.join(missing)}; rebuild the corpus "
+                "with `python -m effects build-corpus`."
+            )
+        return cls(**{
+            spec.name: spec.metadata[_READ](data[spec.name]) for spec in fields(cls)
+        })
 
-    #: Operator-facing tallies the digest leaves out, so a manifest written
-    #: before one existed keeps the digest its checkpoints pin (FR-147).
-    #: Fields no decision reads: what the build met reading (a tally a pool
-    #: worker's sidecar cache shapes, a shard's damaged tail), so neither
-    #: where the raw corpus sits nor what ran before moves the digest the
-    #: selection set and every checkpoint find the corpus by.
+    #: Operator-facing tallies the digest leaves out: fields no decision reads,
+    #: what the build met reading (a tally a pool worker's sidecar cache
+    #: shapes, a shard's damaged tail), so neither where the raw corpus sits
+    #: nor what ran before moves the digest the selection set and every
+    #: checkpoint find the corpus by (FR-147).
     _OUTSIDE_THE_DIGEST = (
         "no_acting_text_scripts", "decode_off_list", "damaged_tails", "join_gaps",
         "unsupervised_events", "code_version", "sidecar_digest",
@@ -573,15 +568,6 @@ class CorpusManifest:
             sorted(name for name in set(was) & set(now) if was[name] != now[name])
         )
         return ManifestDrift(added, removed, resized)
-
-
-_FIELDS = {spec.name: spec for spec in fields(CorpusManifest)}
-
-#: Every field ``as_dict`` leaves out, and the value at which it does.
-_GEN1_DEFAULTS = {
-    name: _default_of(spec) for name, spec in _FIELDS.items()
-    if spec.metadata.get(_OMITTED_AT_DEFAULT)
-}
 
 
 def _unbudgeted_rules(

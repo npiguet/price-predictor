@@ -59,9 +59,9 @@ _PHANTOM = ProvenanceKey("cardsfolder/a/anthem.txt", 0, "spell", 0)
 
 _LINES = {
     _ACT: SidecarLine(line_index=0, line_kind="spell", provenance=(_ACT,),
-                      script_text="deals 3 damage to any target"),
+                      script_text="deals 3 damage to any target", prose_offset=0),
     _ANTHEM: SidecarLine(line_index=0, line_kind="static", provenance=(_ANTHEM,),
-                         script_text="creatures you control get +1/+1"),
+                         script_text="creatures you control get +1/+1", prose_offset=0),
 }
 
 
@@ -571,7 +571,7 @@ def test_a_prose_text_is_encoded_with_its_lines_role_spans():
     line = SidecarLine(
         line_index=0, line_kind="activated", provenance=(_ACT,),
         script_text="AB$ Draw | Cost$ T",
-        role_spans=(RoleSpan(0, 4, "cost"), RoleSpan(5, len(prose), "effect")),
+        role_spans=(RoleSpan(0, 4, "cost"), RoleSpan(5, len(prose), "effect")), prose_offset=0,
     )
     batcher = make_batcher(
         tokenizer=AbilityTokenizer({"[PAD]": 0, "[UNK]": 1, "[CLS]": 2, "[MASK]": 3}),

@@ -14,7 +14,7 @@ from effects.domain.value_targets import VALUE_TARGET_NAMES
 _KEY = ProvenanceKey("cardsfolder/s/shock.txt", 0, "spell", 0)
 _LINE = SidecarLine(
     line_index=0, line_kind="spell", provenance=(_KEY,),
-    script_text="SP$ DealDamage | NumDmg$ 2 | ValidTgts$ Any",
+    script_text="SP$ DealDamage | NumDmg$ 2 | ValidTgts$ Any", prose_offset=0,
 )
 
 

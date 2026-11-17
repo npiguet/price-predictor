@@ -35,12 +35,12 @@ from effects.infrastructure.shard_io import write_shard
 #: search: the trainer recomputes the holdout from its sidecars at startup and
 #: refuses a corpus whose recorded texts it cannot reproduce (FR-041).
 _HELD_OUT_TEXTS = (
-    "SP$ Bespoke | Weird$ 249", "SP$ Bespoke | Weird$ 281", "SP$ Bespoke | Weird$ 82",
+    "SP$ Bespoke | Weird$ bz", "SP$ Bespoke | Weird$ cl", "SP$ Bespoke | Weird$ du",
 )
 _CARD_TEXTS = {
     "Lightning Bolt": [_HELD_OUT_TEXTS[0], _HELD_OUT_TEXTS[1]],
     "Shock": [_HELD_OUT_TEXTS[2]],
-    "Grizzly Bears": ["SP$ Bespoke | Weird$ 0"],
+    "Grizzly Bears": ["SP$ Bespoke | Weird$ aa"],
 }
 
 
@@ -58,7 +58,8 @@ def _card_tree(root):
         path.write_text(f"name: {name}\n", encoding="utf-8")
         write_sidecar(ProvenanceSidecar(card=name, script_file=script, lines=tuple(
             SidecarLine(line_index=i, line_kind="spell",
-                        provenance=(ProvenanceKey(script, 0, "spell", i),), script_text=text)
+                        provenance=(ProvenanceKey(script, 0, "spell", i),), script_text=text,
+                        prose_offset=0)
             for i, text in enumerate(texts)
         )), sidecar_path_for(path))
     return root
@@ -379,17 +380,20 @@ def test_the_size_flags_reach_the_trainers_config(tmp_path):
 
 
 def test_a_kept_aside_tree_resolves_the_keys_of_its_original(tmp_path):
-    """Stage 0 reads gen-1's sidecars from a copy while stage 1 reconverts."""
+    """Stage 0 reads one stage's sidecars from a copy while the next reconverts."""
     import shutil
     from pathlib import Path
 
     from effects.domain.provenance import ProvenanceKey
     from tests.unit.effects.builders import make_preparer
 
-    fixture = Path(__file__).parents[3] / "fixtures" / "effects" / "gen1-sidecars"
-    kept = tmp_path / "gen1-cardsfolder"
+    fixture = Path(__file__).parents[3] / "fixtures" / "effects" / "gen3-sidecars"
+    kept = tmp_path / "old-cardsfolder"
     shutil.copytree(fixture / "cardsfolder", kept)
-    key = ProvenanceKey("cardsfolder/q/quintessential_katana.txt", 0, "static", 0)
+    script_file = next(
+        path.relative_to(kept).as_posix() for path in sorted(kept.rglob("*.provenance.json"))
+    ).replace(".provenance.json", ".txt")
+    key = ProvenanceKey(f"cardsfolder/{script_file}", 0, "static", 0)
     config = TrainEffectModelConfig(corpus=str(tmp_path), cards_folders=(kept,))
 
     trainer = make_preparer(tmp_path, cards_folders=(kept,)).sidecars
@@ -401,55 +405,16 @@ def test_a_kept_aside_tree_resolves_the_keys_of_its_original(tmp_path):
 # ── the holdout unit and its recompute (FR-041, FR-042; T043) ────────────
 
 
-def test_the_trainer_takes_the_manifests_unit_when_the_flag_is_absent(config, started):
-    """A gen-1 manifest records no unit and reads as ``text``."""
+def test_the_trainer_takes_the_manifests_unit(config, started):
     assert run(config) == 0
-    assert started[-1].spec.facts.holdout.unit is HoldoutUnit.TEXT
-    assert config.holdout_unit is None
-
-
-def test_a_unit_differing_from_the_manifests_is_refused(config):
-    config.holdout_unit = HoldoutUnit.TEMPLATE
-    with pytest.raises(HoldoutMismatchError, match="--holdout-unit template differs"):
-        run(config)
+    assert started[-1].spec.facts.holdout.unit is HoldoutUnit.TEMPLATE
 
 
 def test_a_recomputed_holdout_that_disagrees_is_refused(corpus, config):
-    corpus.save(_manifest(held_out_texts=("SP$ Bespoke | Weird$ 82",)))
+    corpus.save(_manifest(held_out_texts=("SP$ Bespoke | Weird$ du",)))
     _freeze(corpus, config.reports_dir)
     with pytest.raises(HoldoutMismatchError, match="recomputed"):
         run(config)
-
-
-def test_a_real_gen1_manifest_is_accepted_under_its_text_unit(
-    tmp_path, make_record, started,
-):
-    """The trimmed real gen-1 manifest records no unit; the trainer reads text."""
-    import json
-    from pathlib import Path
-
-    from effects.domain.corpus_manifest import CorpusManifest as Manifest
-
-    raw = json.loads((Path(__file__).parents[3] / "fixtures" / "effects"
-                      / "gen1-manifest-trimmed.json").read_text(encoding="utf-8"))
-    raw["held_out_texts"] = list(_HELD_OUT_TEXTS)
-    # Without them the manifest is refused before its unit is read (FR-066).
-    raw["rule_counts"] = _RULE_COUNTS
-    store = CorpusStore(tmp_path / "corpus")
-    store.training_dir.mkdir(parents=True)
-    store.samples_dir.mkdir(parents=True)
-    write_shard(store.training_dir / "t.jsonl.gz", [make_record(record_id="t0", game_id="tg")])
-    for stratum in ("card-disjoint", "game-disjoint"):
-        write_shard(store.sample_path(stratum), [make_record(record_id=stratum, game_id=stratum)])
-    store.save(Manifest.from_dict(raw))
-    config = TrainEffectModelConfig(
-        corpus=str(store.directory), cards_folders=(_card_tree(tmp_path / "cardsfolder"),),
-        vocab_path="models/effects/vocab-script.txt",
-        reports_dir=_freeze(store, tmp_path / "reports"),
-    )
-
-    assert run(config) == 0
-    assert started[-1].spec.facts.holdout.unit is HoldoutUnit.TEXT
 
 
 def test_a_records_set_mixing_generations_is_refused(corpus, config, make_record):

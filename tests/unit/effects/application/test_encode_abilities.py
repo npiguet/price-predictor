@@ -20,6 +20,7 @@ from effects.application.encode_abilities import (
 )
 from effects.domain.ability_cache_layout import ARRAY_KEY, cache_path_for
 from effects.domain.ability_encoder import AbilityEncoderConfig
+from effects.domain.ability_tokenizer import TOKENIZER_RULES, TOKENIZER_RULES_KEY
 from effects.domain.baselines import Baseline
 from effects.domain.effect_head_input import layout_settings
 from effects.domain.effect_model import EffectModel, EffectModelConfig
@@ -53,7 +54,7 @@ def _sidecar(script_file: str, n_lines: int = 2) -> ProvenanceSidecar:
                 provenance=(ProvenanceKey(script_file, 0, "static", i),),
                 script_api_type="Pump" if i == 0 else "PutCounter",
                 script_param_keys=("Defined", "NumAtt") if i == 0 else ("CounterType",),
-                script_text="Mode$ Continuous | AddPower$ 1",
+                script_text="Mode$ Continuous | AddPower$ 1", prose_offset=0,
             )
             for i in range(n_lines)
         ),
@@ -96,7 +97,7 @@ def corpus(tmp_path):
             vocab_hash=content_hash(vocab),
             keyword_definitions_hash=content_hash(keywords),
         ),
-        training_settings=layout_settings(),
+        training_settings={**layout_settings(), TOKENIZER_RULES_KEY: TOKENIZER_RULES},
     ))
     return cards, tokens, store.latest_path(), vocab
 
@@ -266,7 +267,7 @@ class TestOneEncodeForTheTree:
                 SidecarLine(
                     line_index=i, line_kind="static",
                     provenance=(ProvenanceKey(script_file, 0, "static", i),),
-                    script_text=text,
+                    script_text=text, prose_offset=0,
                 )
                 for i, text in enumerate(texts)
             ),
@@ -344,7 +345,7 @@ class TestTheRealEncoder:
                 vocab_hash=content_hash(vocab),
                 keyword_definitions_hash=content_hash(keywords),
             ),
-            training_settings=layout_settings(),
+            training_settings={**layout_settings(), TOKENIZER_RULES_KEY: TOKENIZER_RULES},
         ))
         return EncodeAbilitiesConfig(
             cards_folders=(cards,),
@@ -618,7 +619,7 @@ class TestEncodingText:
     def _line(self, script_text):
         return SidecarLine(
             line_index=0, line_kind="static", provenance=(),
-            script_text=script_text,
+            script_text=script_text, prose_offset=0,
         )
 
     def test_a_scripted_line_encodes_its_script(self):
