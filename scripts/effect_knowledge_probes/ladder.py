@@ -267,8 +267,6 @@ class LadderInput:
     features: dict[str, np.ndarray]
     rung3: np.ndarray | None = None
     weight: np.ndarray | None = None
-    #: Why rung 3 is missing, where it is.
-    rung3_note: str | None = None
     #: Per-layer trunk outputs, when ``--per-layer`` asked for them.
     layers: list[np.ndarray] = field(default_factory=list)
 
@@ -295,8 +293,6 @@ def run_ladder(data: LadderInput, *, rungs=PROBED_RUNGS, mlp_options=None,
             oof[(rung, probe_type)] = prediction
             scores[probe_type] = score(data.kind, data.y, prediction, data.weight)
         result["rungs"][rung] = scores
-    if data.rung3_note is not None:
-        result["rung3_unavailable"] = data.rung3_note
     if data.rung3 is not None:
         rung3 = score(data.kind, data.y, data.rung3, data.weight)
         result["rungs"]["3"] = {"model": rung3}
@@ -331,35 +327,8 @@ def run_ladder(data: LadderInput, *, rungs=PROBED_RUNGS, mlp_options=None,
 # ── rung features from one forward pass ─────────────────────────────────
 
 
-#: Targets whose rung 3 reads the verdict head. Feature 023's trainer never
-#: called the verdict loss, so on its checkpoints that head sits at its initial
-#: weights; a score read from it measures where a random projection happens to
-#: point, not what the model learned.
-VERDICT_TARGETS: frozenset[str] = frozenset({"affordable", "fires"})
-
-#: Why rung 3 is missing for a verdict target on such a checkpoint.
-UNTRAINED_VERDICT_NOTE = "verdict head never trained by this checkpoint's trainer"
-
-
-def verdict_head_trained(checkpoint) -> bool:
-    """Did the trainer that wrote ``checkpoint`` train the verdict head?
-
-    The gen-2 trainer wires the verdict loss and records its training settings
-    in every checkpoint; feature 023's trainer recorded none and never trained
-    the head.
-    """
-    return bool(getattr(checkpoint, "training_settings", None))
-
-
-def _readout(target: str, outputs, verdict, slot: int, row: int, *,
-             verdict_trained: bool = True) -> float:
-    """Rung 3: the head's own prediction for one item (:mod:`readout`).
-
-    NaN where the head this target reads was never trained, which
-    :func:`ladder_inputs` turns into an unavailable rung 3 rather than a score.
-    """
-    if target in VERDICT_TARGETS and not verdict_trained:
-        return float("nan")
+def _readout(target: str, outputs, verdict, slot: int, row: int) -> float:
+    """Rung 3: the head's own prediction for one item (:mod:`readout`)."""
     return readout.read(target, outputs, verdict, row, slot)
 
 
@@ -545,7 +514,6 @@ def extract_features(probe_model, records: list, items_by_record: dict, *,
     import torch
 
     model, encoder, batcher = probe_model.model, probe_model.encoder, probe_model.batcher
-    verdict_trained = verdict_head_trained(probe_model.checkpoint)
     captured: list = []
     hooks = []
     if per_layer:
@@ -594,8 +562,7 @@ def extract_features(probe_model, records: list, items_by_record: dict, *,
                         extracted.append(ExtractedItem(
                             target=item.target, label=item.label, group=item.group,
                             features={k: v.astype(np.float32) for k, v in features.items()},
-                            rung3=_readout(item.target, outputs, verdict, slot, b,
-                                           verdict_trained=verdict_trained),
+                            rung3=_readout(item.target, outputs, verdict, slot, b),
                             layers=[layer[b, slot] for layer in layer_np],
                             record_id=item.record_id,
                         ))
@@ -618,17 +585,13 @@ def ladder_inputs(extracted: list[ExtractedItem], kinds: dict[str, str]) -> dict
     out = {}
     for target, items in by_target.items():
         rung3 = np.array([i.rung3 for i in items], dtype=np.float64)
-        # Every item NaN means the head this target reads was never trained:
-        # no rung 3, so no share, rather than a score from random weights.
-        untrained = bool(np.isnan(rung3).all())
         out[target] = LadderInput(
             kind=kinds[target],
             y=np.array([i.label for i in items], dtype=np.float64),
             groups=np.array([i.group for i in items], dtype=object),
             features={rung: np.stack([i.features[rung] for i in items])
                       for rung in PROBED_RUNGS},
-            rung3=None if untrained else rung3,
-            rung3_note=UNTRAINED_VERDICT_NOTE if untrained else None,
+            rung3=rung3,
             layers=([np.stack([i.layers[d] for i in items])
                      for d in range(len(items[0].layers))]
                     if items[0].layers else []),

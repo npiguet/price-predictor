@@ -506,10 +506,6 @@ def _probe_scores(inputs: dict) -> dict[str, dict]:
 
     out = {}
     for name, data in sorted(inputs.items()):
-        if data.rung3 is None:
-            out[name] = {"kind": data.kind, "n": int(len(data.y)), "score": None,
-                         "unavailable": data.rung3_note}
-            continue
         value = float(item_score(data.kind, data.y, data.rung3))
         out[name] = {"kind": data.kind, "n": int(len(data.y)), "score": value,
                      "rescaled": rescaled_auc(value) if data.kind == labels.BINARY else value}
@@ -543,28 +539,19 @@ def _board_ladder(args, scorecard: Scorecard, probe_model, reads: list[halves.Ha
     return act_hidden
 
 
-def _run_sweeps(reads: list[halves.HalfRead], probe_model, checkpoint) -> dict:
+def _run_sweeps(reads: list[halves.HalfRead], probe_model) -> dict:
     """Every board sweep over the reporting half's records: per-record curves
     and their mean, both strata pooled."""
     out: dict = {}
-    verdict_trained = ladder.verdict_head_trained(checkpoint)
     curves: dict[str, list] = defaultdict(list)
-    names: set[str] = set()
     for read in reads:
         for name, rows in read.sweep_rows.items():
-            names.add(name)
-            if name == "affordability" and not verdict_trained:
-                continue
             for row in rows:
                 record = read.records.get(row["record_id"])
                 if record is None:
                     continue
                 label = f"damage_{row['host']}" if name == "damage" else name
                 curves[label].append(sweeps.run_sweep(name, probe_model, record, row))
-    if "affordability" in names and not verdict_trained:
-        # It reads the verdict head, which this checkpoint never trained: a
-        # curve from random weights says nothing.
-        out["affordability"] = {"unavailable": ladder.UNTRAINED_VERDICT_NOTE}
     for label, curve in curves.items():
         out[label] = {"mean": sweeps.summarize(curve), "records": curve}
     return out
@@ -710,7 +697,7 @@ def probe(args, context: common.ProbeContext, selection) -> Scorecard:
 
     if not args.no_sweeps:
         progress("board sweeps")
-        scorecard.sweeps = _run_sweeps(reads, probe_model, context.checkpoint)
+        scorecard.sweeps = _run_sweeps(reads, probe_model)
     _run_ablations(args, context, scorecard, probe_model, cache[0], board_subsets)
 
     scorecard.runtime = {
@@ -795,9 +782,6 @@ def write_tables(out_dir: Path, scorecard: Scorecard) -> None:
     if scorecard.sweeps:
         lines = ["# Board sweeps", ""]
         for name, body in scorecard.sweeps.items():
-            if "unavailable" in body:
-                lines += [f"## {name}", "", f"Not run: {body['unavailable']}.", ""]
-                continue
             columns = ["wording", "value", "mean prediction", "n"]
             rows = [[p.get("wording", ""), p["value"], fmt(p["prediction"]), p["n"]]
                     for p in body["mean"]]

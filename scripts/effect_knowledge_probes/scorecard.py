@@ -71,9 +71,7 @@ class Scorecard:
     def from_json(cls, data: dict) -> Scorecard:
         return cls(
             checkpoint=data.get("checkpoint", ""),
-            # A gen-2 scorecard recorded its probe set's digest under this name.
-            selection_set_digest=data.get(
-                "selection_set_digest", data.get("probe_set_digest", "")),
+            selection_set_digest=data.get("selection_set_digest", ""),
             corpus_digest=data.get("corpus_digest", ""), date=data.get("date", ""),
             e_dim=data.get("e_dim", 0), surface=data.get("surface", ""),
             join_rate=data.get("join_rate"), families=data.get("families", {}),

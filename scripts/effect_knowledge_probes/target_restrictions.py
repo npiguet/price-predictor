@@ -11,8 +11,8 @@ ability and Forge's legal targets for it; every card and every player on its boa
 one item, labelled legal or not by Forge, and the model's answer is its ``target_legal``
 output at that card's or player's slot (FR-074): gen-3 trains that field on every card
 and player of a decision whose candidate targets, 1 at a legal target and 0 elsewhere.
-The affected gate, which gen-2's probe read because its field was only ever trained to
-1, is reported beside it.
+The affected gate, which an earlier probe read because its field was only ever trained
+to 1, is reported beside it.
 
 Two breakdowns are reported, each as AUC over the items it holds (``target_legal``,
 then the gate):
@@ -147,7 +147,7 @@ def decision_items(record, sidecars):
     return (restriction, items) if items else None
 
 
-#: The two answers read at every item: the field, then the gate gen-2 read.
+#: The two answers read at every item: the field, then the gate an earlier probe read.
 READOUTS: tuple[str, ...] = ("target_legal", "affected")
 
 

@@ -249,7 +249,7 @@ def corpus_lines(trees) -> list[dict]:
     for tree in trees:
         for path, sidecar in iter_sidecars(tree):
             # Named by the source tree the keys spell, not the folder's own
-            # name: a kept-aside ``gen1-cardsfolder`` still holds ``cardsfolder``.
+            # name: a kept-aside ``old-cardsfolder`` still holds ``cardsfolder``.
             rel = (Path(tree_of_folder(tree)) / path.relative_to(tree)).as_posix()
             stem = rel.removesuffix(".provenance.json")
             for index, line in enumerate(sidecar.lines):

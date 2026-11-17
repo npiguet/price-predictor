@@ -3,7 +3,7 @@ scenarios 9 and 10).
 
 ``scripts/`` is not part of the installed package; the conftest puts it on the
 path, so the battery imports as the package its scripts make it. The sidecars
-are real gen-1 ones from the fixture tree; the cache rows beside them are
+are real gen-3 ones from the fixture tree; the cache rows beside them are
 written here, row-aligned, at a width no checkpoint has shipped, so nothing can
 pass by assuming 64.
 """
@@ -27,6 +27,8 @@ from effects.domain.provenance import BuiltTrait, ProvenanceKey
 _FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "effects"
 
 _WIDTH = 12
+#: How many of the fixture's sidecars each test copies.
+_SIDECARS = 100
 
 
 def _provenance(vocab: str = "models/effects/vocab-script.txt", corpus: str = ""):
@@ -35,9 +37,16 @@ def _provenance(vocab: str = "models/effects/vocab-script.txt", corpus: str = ""
 
 @pytest.fixture
 def tree(tmp_path):
-    """A copy of the real gen-1 sidecars, with a cache of width 12 beside them."""
-    cards = tmp_path / "gen1-cardsfolder"
-    shutil.copytree(_FIXTURES / "gen1-sidecars" / "cardsfolder", cards)
+    """A copy of the first real gen-3 sidecars and their converted cards, with a
+    cache of width 12 beside them."""
+    source = _FIXTURES / "gen3-sidecars" / "cardsfolder"
+    cards = tmp_path / "old-cardsfolder"
+    for path in sorted(source.rglob("*.provenance.json"))[:_SIDECARS]:
+        converted = path.with_name(path.name.removesuffix(".provenance.json") + ".txt")
+        for found in (path, converted):
+            target = cards / found.relative_to(source)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(found, target)
     abilities = tmp_path / "abilities"
     rng = np.random.default_rng(0)
     from effects.infrastructure.sidecar_io import read_sidecar
@@ -74,20 +83,20 @@ class TestResolvePaths:
 
     def test_output_is_named_by_checkpoint_and_date(self, tree):
         paths = common.paths_for(
-            tree.root / "2026-10-gen2-a" / "latest.pt", tree.abilities, _provenance(),
+            tree.root / "2026-10-gen3-a" / "latest.pt", tree.abilities, _provenance(),
             today=datetime.date(2026, 10, 8),
         )
-        assert paths.out.name == "embedding-probes-2026-10-gen2-a-latest-20261008"
+        assert paths.out.name == "embedding-probes-2026-10-gen3-a-latest-20261008"
         assert paths.out.parent == common.REPORTS
 
     def test_a_reports_dir_moves_the_output_beside_the_arm(self, tree):
-        arm = tree.root / "2026-10-gen2-a"
+        arm = tree.root / "2026-10-gen3-a"
         paths = common.paths_for(
             arm / "latest.pt", tree.abilities, _provenance(),
             today=datetime.date(2026, 10, 8), reports_dir=arm / "reports",
         )
         assert paths.out == (
-            arm / "reports" / "embedding-probes-2026-10-gen2-a-latest-20261008"
+            arm / "reports" / "embedding-probes-2026-10-gen3-a-latest-20261008"
         )
 
     def test_sidecar_trees_default_to_what_the_checkpoint_recorded(self, tree):

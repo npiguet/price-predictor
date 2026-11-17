@@ -540,7 +540,7 @@ class TestAblationsOnGen3:
         # The card blocks' ability slots carry e on gen-3, so their noise moves the loss.
         assert any(body["noise"]["cards"] != 0.0 for body in result.values())
 
-    def test_a_gen3_permanent_lists_its_own_unlisted_lines(self, records, sidecars):
+    def test_a_gen3_permanent_lists_its_own_unlisted_lines(self, records):
         from effects.domain.state_snapshot import CardLine
 
         entity = next(e for r in records for e in r.state.entities if e.lines)
@@ -548,8 +548,8 @@ class TestAblationsOnGen3:
                  CardLine(keys=(), kind="trigger", granted=True),
                  CardLine(keys=(), kind="replacement", granted=False, active=False),
                  CardLine(keys=(), kind="keyword", granted=False, fragment="Flying"))
-        assert board.unlisted_kinds(replace(entity, lines=lines), sidecars) == {"static"}
-        assert board.unlisted_kinds(replace(entity, lines=()), sidecars) == frozenset()
+        assert board.unlisted_kinds(replace(entity, lines=lines)) == {"static"}
+        assert board.unlisted_kinds(replace(entity, lines=())) == frozenset()
 
     def test_the_board_abilities_ablation_runs_over_gen3_subsets(
         self, records, sidecars, probe_model,
@@ -983,7 +983,6 @@ class TestExtraction:
                                             act_hidden=act_hidden)
         assert extracted and act_hidden
         assert loaded.device.type == "cpu"
-        assert ladder.verdict_head_trained(loaded.checkpoint)
         for target in {i.target for i in extracted}:
             rows = [i for i in extracted if i.target == target]
             for rung in ladder.PROBED_RUNGS:

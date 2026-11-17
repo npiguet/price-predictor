@@ -1,7 +1,7 @@
 """The value head's targets, read from a line's script (T091, FR-058, FR-058a).
 
 Texts are real script lines from the converted tree, chained by hand in the
-gen-2 form where a test needs more than one segment.
+sidecar form where a test needs more than one segment.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from pathlib import Path
 from effects.domain.value_targets import VALUE_TARGET_NAMES, value_targets
 from tests.unit.effects.builders import stated_targets
 
-#: Lightning Bolt's script line, as gen-1's sidecar carries it.
+#: Lightning Bolt's script line, as a sidecar carries it.
 _BOLT = (
     "NumDmg$ 3 | SP$ DealDamage | SpellDescription$ CARDNAME deals 3 damage to "
     "any target. | ValidTgts$ Any"
@@ -27,11 +27,11 @@ _TIM = (
     "AB$ DealDamage | Cost$ T | NumDmg$ 1 | SpellDescription$ CARDNAME deals 1 "
     "damage to any target. | ValidTgts$ Any"
 )
-#: Cryptic Command's charm root under gen-2's chain rendering.
+#: A charm root, as a sidecar renders one.
 _CHARM = "CharmNum$ 2 | Choices$ SV1,SV2,SV3,SV4 | SP$ Charm"
 
 
-def test_a_one_segment_gen1_text_reads_its_amount():
+def test_a_one_segment_text_reads_its_amount():
     targets = stated_targets(_BOLT)
     assert targets.get("damage") == 3
     assert targets.get("cards_drawn") == 0
@@ -123,30 +123,30 @@ def test_the_mask_and_values_align_with_the_target_list():
     assert len(targets.values) == len(targets.mask) == len(VALUE_TARGET_NAMES)
 
 
-# ── real gen-2 sidecars ─────────────────────────────────────────────────
+# ── real gen-3 sidecars ─────────────────────────────────────────────────
 
-_GEN2 = Path(__file__).parents[3] / "fixtures" / "effects" / "gen2-sidecars" / "cardsfolder"
+_SIDECARS = Path(__file__).parents[3] / "fixtures" / "effects" / "gen3-sidecars" / "cardsfolder"
 
 
 def _texts(card: str) -> list[str]:
-    data = json.loads((_GEN2 / f"{card}.provenance.json").read_text(encoding="utf-8"))
+    data = json.loads((_SIDECARS / f"{card}.provenance.json").read_text(encoding="utf-8"))
     return [line["script_text"] for line in data["lines"] if line["script_text"]]
 
 
-def test_arc_trail_sums_its_two_segments():
-    assert stated_targets(_texts("a/arc_trail")[0]).get("damage") == 3
+def test_psionic_blast_sums_its_two_segments():
+    assert stated_targets(_texts("p/psionic_blast")[0]).get("damage") == 6
 
 
 def test_a_trigger_reads_the_damage_of_its_executed_segment():
-    (text,) = [t for t in _texts("a/abraded_bluffs") if "NumDmg" in t]
-    assert stated_targets(text).get("damage") == 1
+    (text,) = [t for t in _texts("p/perilous_myr") if "NumDmg" in t]
+    assert stated_targets(text).get("damage") == 2
 
 
-def test_cryptic_commands_root_masks_amounts_and_its_draw_mode_reads_one():
-    root, *modes = _texts("c/cryptic_command")
+def test_a_charms_root_masks_amounts_and_its_draw_mode_reads_two():
+    root, draw, pump = _texts("r/reverent_howl")
     assert stated_targets(root).get("damage") is None
-    assert stated_targets(modes[3]).get("cards_drawn") == 1
-    assert stated_targets(modes[0]).get("cards_drawn") == 0
+    assert stated_targets(draw).get("cards_drawn") == 2
+    assert stated_targets(pump).get("cards_drawn") == 0
 
 
 class TestStaticAndCounterAmounts:

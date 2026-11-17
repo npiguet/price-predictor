@@ -25,17 +25,15 @@ from effects.domain.provenance import (
     ProvenanceKey,
     SidecarError,
 )
-from effects.domain.records import EffectRecord
+from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.rule_detectors.acting_line import acting_line, acting_root_params
 from effects.infrastructure.shard_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache, read_sidecar, sidecar_from_dict
-from tests.unit.effects.builders import EFFECTS_FIXTURES, GEN3_RECORDS, GEN3_SIDECAR_FOLDERS
+from tests.unit.effects.builders import GEN3_RECORDS, GEN3_SIDECAR_FOLDERS
 
 _SAGA = "cardsfolder/b/binding_the_old_gods.txt"
 #: Binding the Old Gods' saga keyword, which builds one trigger per chapter.
 _SAGA_KEY = ProvenanceKey(_SAGA, 0, "keyword", 0)
-_GEN2_FOLDERS = (EFFECTS_FIXTURES / "gen2-sidecars" / "cardsfolder",
-                 EFFECTS_FIXTURES / "gen2-sidecars" / "tokenscripts")
 
 
 def _chapter(index: int) -> ProvenanceKey:
@@ -124,15 +122,15 @@ class TestABareKeyOfAKeywordOfSeveralLines:
         assert _cache().get(_SAGA).board_keys(_chapter(1)) == (_chapter(1),)
 
     def test_acting_it_is_ambiguous_counted_and_without_text(self):
-        """Review focus 1: a real gen-2 record of Summon: Shiva acting through
-        the saga's bare key, written before the key change, joined against the
+        """Review focus 1: a real gen-3 record acting through the saga's bare
+        key, as a record written before the key change did, joined against the
         current converter's sidecar: no text, never chapter I's, and
         counted."""
-        record = _record(EFFECTS_FIXTURES / "gen2-records.jsonl.gz", 0)
+        trigger = next(r for r in read_shard(GEN3_RECORDS) if r.kind is RecordKind.TRIGGER)
+        record = replace(trigger, ability=(_SAGA_KEY,))
         key = record.ability[0]
-        assert (key.script_file, key.trait_kind, key.built) == (
-            "cardsfolder/s/summon_shiva.txt", "keyword", None)
-        cache = _cache(_GEN2_FOLDERS)
+        assert (key.script_file, key.trait_kind, key.built) == (_SAGA, "keyword", None)
+        cache = _cache()
         assert cache.resolution_of(key) is KeyResolution.AMBIGUOUS
         assert KeyResolver(cache, Surface.SCRIPT).acting_text(record) is None
         assert acting_line(record, cache) is None
@@ -197,13 +195,13 @@ class TestOneJoinAnswersEveryLookup:
 
 
 class TestOneFolderPerTree:
-    def test_two_cards_folders_of_one_tree_are_refused_naming_both(self):
-        """A fixture's gen-3 and gen-2 card trees: both key as
+    def test_two_cards_folders_of_one_tree_are_refused_naming_both(self, tmp_path):
+        """The fixture's card tree and a kept-aside copy: both key as
         ``cardsfolder/...``, so one would silently shadow the other."""
         from effects.infrastructure.sidecar_io import sidecar_roots
 
-        gen3, gen2 = GEN3_SIDECAR_FOLDERS[0], _GEN2_FOLDERS[0]
+        fixture, kept_aside = GEN3_SIDECAR_FOLDERS[0], tmp_path / "old-cardsfolder"
         with pytest.raises(ValueError, match="cardsfolder") as raised:
-            sidecar_roots([gen3, gen2])
-        assert str(gen3) in str(raised.value)
-        assert str(gen2) in str(raised.value)
+            sidecar_roots([fixture, kept_aside])
+        assert str(fixture) in str(raised.value)
+        assert str(kept_aside) in str(raised.value)

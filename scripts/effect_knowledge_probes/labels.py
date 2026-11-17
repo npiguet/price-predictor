@@ -137,7 +137,7 @@ _INT_RE = re.compile(r"^[+-]?\d+$")
 def segments(script: str | None) -> list[dict[str, str]]:
     """``Key$ value`` pairs of every segment of a (possibly chained) script.
 
-    A gen-1 text is one segment; a gen-2 text is ``seg [SEG] SV1: seg …``.
+    A one-segment text gives one entry; a chained text is ``seg [SEG] SV1: seg …``.
     """
     if not script or "$" not in script:
         return []

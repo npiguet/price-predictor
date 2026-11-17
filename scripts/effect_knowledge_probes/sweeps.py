@@ -145,22 +145,32 @@ def basic_land_colour(entity) -> str | None:
 def basic_land(colour: str, entity_id: str, controller: str):
     """An untapped basic land of ``colour``, as the collector writes one.
 
-    Its printed keys are the card's own two traits: ``spell`` 0, the permanent
-    spell every permanent carries, which maps to no line, and ``spell`` 1, its
-    mana ability. Built rather than copied from the record, because a record
-    often holds no basic of the colour its cost names — a sweep that needed one
-    would drop exactly the boards where the player cannot cast the card.
+    Its one line is the card's mana ability, the ``spell`` 1 trait of its
+    script (``spell`` 0, the permanent spell every permanent carries, maps to
+    no line). Built rather than copied from the record, because a record often
+    holds no basic of the colour its cost names — a sweep that needed one would
+    drop exactly the boards where the player cannot cast the card.
     """
     from effects.domain.provenance import ProvenanceKey
-    from effects.domain.state_snapshot import EntityState
+    from effects.domain.state_snapshot import (
+        CardChoices,
+        CardHistory,
+        CardLine,
+        EntityState,
+        FaceState,
+        GrantedTemporary,
+        LineKind,
+    )
 
     land_type = _BASIC_LAND_TYPE[colour]
-    script = f"cardsfolder/{land_type[0]}/{land_type}.txt"
+    mana_ability = ProvenanceKey(f"cardsfolder/{land_type[0]}/{land_type}.txt", 0, "spell", 1)
     return EntityState(
         id=entity_id, name=land_type.capitalize(), zone="battlefield",
         controller=controller, types=("land",), subtypes=(land_type,),
-        supertypes=("basic",),
-        printed=tuple(ProvenanceKey(script, 0, "spell", index) for index in (0, 1)),
+        supertypes=("basic",), granted_temporary=GrantedTemporary(hidden_keywords=()),
+        lines=(CardLine(keys=(mana_ability,), kind=LineKind.ACTIVATED, granted=False),),
+        owner=controller, face_state=FaceState.FRONT, chosen=CardChoices(),
+        history=CardHistory(), order_rank=0,
     )
 
 

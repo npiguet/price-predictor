@@ -529,7 +529,7 @@ def load_texts(paths: ProbePaths) -> pd.DataFrame:
 def has_taxonomy(table: pd.DataFrame) -> bool:
     """Whether every row carries a taxonomy-baseline ``e``.
 
-    A gen-2 arm need not have a taxonomy cache; ``build_texts.py`` then leaves
+    An arm need not have a taxonomy cache; ``build_texts.py`` then leaves
     ``e_tax`` empty, and every column that reads it is omitted (FR-072).
     """
     return bool(len(table)) and all(

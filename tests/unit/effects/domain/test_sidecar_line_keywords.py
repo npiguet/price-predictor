@@ -47,12 +47,11 @@ def test_a_keyword_line_with_no_text_names_no_keyword():
     assert _line("").bare_keyword is None
 
 
-@pytest.mark.parametrize("tree", ["gen1-sidecars", "gen2-sidecars", "gen3-sidecars"])
-def test_every_fixture_sidecar_spells_its_kinds_from_the_vocabularies(tree):
+def test_every_fixture_sidecar_spells_its_kinds_from_the_vocabularies():
     """The enums mirror the converter's ``AbilityType`` and ``TraitKind``, so
     a line or key of a kind they do not list is a converter they predate."""
     lines = keys = 0
-    for _, sidecar in iter_sidecars(_FIXTURES / tree):
+    for _, sidecar in iter_sidecars(_FIXTURES / "gen3-sidecars"):
         for line in sidecar.lines:
             lines += 1
             assert line.line_kind in set(LineKind)

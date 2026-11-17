@@ -33,13 +33,15 @@ from effects.domain.provenance import ProvenanceKey, SidecarLine
 from effects.domain.records import (
     Curation,
     EffectRecord,
-    Moment,
     PlayabilityDecisionPayload,
-    RecordKind,
-    ResolutionPayload,
 )
 from effects.domain.rule_mask import FULL_WEIGHT, RuleMask, copy_weights
-from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
+from effects.domain.state_snapshot import (
+    CardLine,
+    EntityState,
+    GlobalState,
+    LineKind,
+)
 from effects.domain.surface_collation import entity_target_tensors
 from effects.infrastructure.shard_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
@@ -335,34 +337,26 @@ def test_every_option_row_on_a_real_surface_follows_its_root():
                 assert before.entity_id == slot.entity_id
 
 
-def test_a_real_gen2_charm_gets_its_four_mode_rows_after_its_root():
-    """FR-063a on Cryptic Command as the gen-2 converter writes it."""
-    gen2 = _FIXTURES / "gen2-sidecars"
-    sidecars = SidecarCache({"cardsfolder": gen2 / "cardsfolder"})
-    root = ProvenanceKey("cardsfolder/c/cryptic_command.txt", 0, "spell", 0)
+def test_a_real_charm_gets_its_three_mode_rows_after_its_root():
+    """FR-063a on Fire Magic as the converter writes it."""
+    gen3 = _FIXTURES / "gen3-sidecars"
+    sidecars = SidecarCache({"cardsfolder": gen3 / "cardsfolder"})
+    root = ProvenanceKey("cardsfolder/f/fire_magic.txt", 0, "spell", 0)
     batcher = make_batcher(
         tokenizer=None, sidecars=sidecars, masks=BaselineMasks(),
         surface="script", e_dim=4, widths={}, device=torch.device("cpu"),
     )
     modes = batcher.options_for(root)
-    assert [mode.option for mode in modes] == [0, 1, 2, 3]
-    record = EffectRecord(
-        record_id="run.0.1", run_id="run", timestamp="t", game_id="run.0.1",
-        kind=RecordKind.RESOLUTION, moment=Moment.RESOLUTION, actor_player="P0",
-        ability=(root,), payload=ResolutionPayload(),
-        state=StateSnapshot(
-            global_=GlobalState(turn=1, phase="main1", active="P0", priority="P0",
-                                stack_size=1),
-            players=(),
-            entities=(EntityState(id="E1", name="Cryptic Command", zone="stack",
-                                  controller="P0", printed=(root,)),),
-        ),
-    )
+    assert [mode.option for mode in modes] == [0, 1, 2]
+    fire_magic = make_entity(
+        "E1", "Fire Magic", zone="stack",
+        lines=(CardLine(keys=(root,), kind=LineKind.SPELL, granted=False),))
+    record = make_record(ability=(root,), state=make_snapshot(entities=(fire_magic,)))
     texts = batcher.batch_texts([record])
-    assert len(texts) == 5  # the root and each mode's own chain
+    assert len(texts) == 4  # the root and each mode's own chain
     rows = {text: row for row, text in enumerate(sorted(texts))}
     abilities = slots_of_kind(batcher.surface_builder(rows).build(record), SlotKind.ABILITY)
-    assert [slot.option for slot in abilities] == [False, True, True, True, True]
+    assert [slot.option for slot in abilities] == [False, True, True, True]
     assert [slot.e for slot in abilities[1:]] == [
         rows[batcher.text_of(mode)] for mode in modes
     ]

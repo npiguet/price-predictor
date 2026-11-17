@@ -2,8 +2,8 @@
 
 Measures nothing on its own. Every other module in this directory reads a
 checkpoint, its sidecars, its ability cache and the records of the probe games
-through these functions, so the suite runs on any checkpoint — gen-1 included —
-without assuming gen-1's paths or its width of ``e`` (FR-075).
+through these functions, so the suite runs on any gen-3 checkpoint without
+assuming its paths or its width of ``e`` (FR-075).
 
 The probe records come from the curated corpus's two validation strata, which
 hold whole games: a probing run reads the games of the selection set's halves

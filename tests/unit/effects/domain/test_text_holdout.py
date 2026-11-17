@@ -111,7 +111,7 @@ def test_the_hash_is_stable_across_processes() -> None:
 
 # ── the masked template (FR-039, FR-040; T039) ──────────────────────────
 
-_FIXTURE_SIDECARS = Path(__file__).parents[3] / "fixtures" / "effects" / "gen1-sidecars"
+_FIXTURE_SIDECARS = Path(__file__).parents[3] / "fixtures" / "effects" / "gen3-sidecars"
 
 
 @pytest.mark.parametrize(("left", "right"), [
@@ -236,9 +236,6 @@ def test_an_unknown_unit_is_refused():
         holdout_key("SP$ Draw", "card")
 
 
-_GEN2_SIDECARS = Path(__file__).parents[3] / "fixtures" / "effects" / "gen2-sidecars"
-
-
 def test_a_selector_choices_value_is_masked_but_a_label_list_is_not():
     """Only chooser APIs list ``SV<n>`` labels in ``Choices$``; elsewhere it is
     a selector, and its digits are amounts like any other."""
@@ -248,13 +245,13 @@ def test_a_selector_choices_value_is_masked_but_a_label_list_is_not():
     assert masked_template("Choices$ SV2,SV3 | DB$ Charm") == "Choices$ SV2,SV3 | DB$ Charm"
 
 
-def test_sc003_over_real_chained_gen2_texts():
-    """SC-003 on chained, label-renamed texts from a real gen-2 conversion."""
+def test_sc003_over_real_chained_texts():
+    """SC-003 on chained, label-renamed texts from a real conversion."""
     from effects.infrastructure.sidecar_io import read_sidecar
 
     texts_by_card: dict[str, list[str]] = {}
     chained = 0
-    for path in sorted(_GEN2_SIDECARS.rglob("*.provenance.json")):
+    for path in sorted(_FIXTURE_SIDECARS.rglob("*.provenance.json")):
         sidecar = read_sidecar(path)
         real = [line.script_text for line in sidecar.lines if line.script_text]
         chained += sum("[SEG]" in text for text in real)
@@ -271,7 +268,8 @@ def test_sc003_over_real_chained_gen2_texts():
 def test_a_real_triggered_charm_keeps_its_labels_in_the_template():
     from effects.infrastructure.sidecar_io import read_sidecar
 
-    sidecar = read_sidecar(_GEN2_SIDECARS / "cardsfolder" / "s" / "shambling_ghast.provenance.json")
+    ghast = _FIXTURE_SIDECARS / "cardsfolder" / "s" / "shambling_ghast.provenance.json"
+    sidecar = read_sidecar(ghast)
     template = masked_template(sidecar.lines[0].script_text)
     assert "Execute$ SV1" in template and "SV1: Choices$ SV2,SV3" in template
 

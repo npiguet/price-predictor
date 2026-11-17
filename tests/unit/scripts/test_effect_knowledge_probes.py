@@ -4,8 +4,8 @@
 path, so the suite imports as the package its entry scripts make it and a test
 reads the very modules a run would.
 
-Fixtures are real: the gen-1 records and sidecars cut from the corpus by
-``scripts/make_fixture_records.py``, and the real gen-2 chained sidecars.
+Fixtures are real: the gen-3 records and sidecars cut from the corpus by
+``scripts/make_fixture_records.py``.
 """
 
 from __future__ import annotations
@@ -40,22 +40,21 @@ from effects.domain.effect_head_input import MAGNITUDE_CAP
 _ROOT = Path(__file__).resolve().parents[3]
 _FIXTURES = _ROOT / "tests" / "fixtures" / "effects"
 
-from tests.unit.effects.builders import player_of  # noqa: E402
+from tests.unit.effects.builders import (  # noqa: E402
+    GEN3_SIDECAR_FOLDERS,
+    curated_fixture_records,
+    player_of,
+)
 
 
 @pytest.fixture(scope="module")
 def records():
-    from effects.infrastructure.shard_io import read_shard
-
-    return list(read_shard(_FIXTURES / "gen1-records.jsonl.gz"))
+    return curated_fixture_records()
 
 
 @pytest.fixture(scope="module")
 def sidecars():
-    return common.sidecar_cache([
-        _FIXTURES / "gen1-sidecars" / "cardsfolder",
-        _FIXTURES / "gen1-sidecars" / "tokenscripts",
-    ])
+    return common.sidecar_cache(GEN3_SIDECAR_FOLDERS)
 
 
 def _join_triggers(records):
@@ -88,18 +87,18 @@ def _select_sweep_records(records, sidecars) -> dict:
 LETHAL_STEP = np.array([[float(p >= t) for t in range(1, 9)] for p in range(1, 9)])
 
 
-def _fixture_lines(tree: str):
+def _fixture_lines():
     from effects.infrastructure.sidecar_io import read_sidecar
 
-    for path in sorted((_FIXTURES / tree).rglob("*.provenance.json")):
+    for path in sorted((_FIXTURES / "gen3-sidecars").rglob("*.provenance.json")):
         sidecar = read_sidecar(path)
         for line in sidecar.lines:
             if line.script_text:
                 yield line
 
 
-def _line(tree: str, *needles: str):
-    for line in _fixture_lines(tree):
+def _line(*needles: str):
+    for line in _fixture_lines():
         if all(n in line.script_text for n in needles):
             return line
     raise AssertionError(f"no fixture line holds {needles}")
@@ -244,18 +243,18 @@ class TestProbes:
 
 class TestLineLabels:
     def test_an_activated_damage_ability(self):
-        line = _line("gen1-sidecars", "AB$ DealDamage", "NumDmg$ 3", "Sac<1/CARDNAME")
+        line = _line("AB$ DealDamage", "NumDmg$ 3", "Sac<1/CARDNAME>")
         found = labels.line_labels(line.script_text, line.line_kind, line.script_api_type)
         assert found["damage"] == 3
-        assert found["cost_r"] == 1 and found["cost_generic"] == 4
-        assert found["cost_total"] == 5
-        assert found["damage_per_mana"] == pytest.approx(3 / 5)
-        assert found["sacrifice_cost"] == 1.0 and found["tap_cost"] == 0.0
+        assert found["cost_r"] == 0 and found["cost_generic"] == 3
+        assert found["cost_total"] == 3
+        assert found["damage_per_mana"] == pytest.approx(1.0)
+        assert found["sacrifice_cost"] == 1.0 and found["tap_cost"] == 1.0
         assert found["repeatable"] == 0.0
         assert found["instant_speed"] == 1.0
 
     def test_a_spell_line_has_no_mana_cost_labels(self):
-        line = _line("gen1-sidecars", "SP$ DealDamage", "NumDmg$ 3")
+        line = _line("SP$ DealDamage", "NumDmg$ 3")
         found = labels.line_labels(line.script_text, line.line_kind, line.script_api_type,
                                    "instant")
         assert found["damage"] == 3
@@ -264,49 +263,45 @@ class TestLineLabels:
         assert found["repeatable"] == 0.0
 
     def test_a_variable_amount_is_left_unlabelled(self):
-        line = _line("gen1-sidecars", "NumAtt$ -X")
+        line = _line("NumAtt$ -X")
         found = labels.line_labels(line.script_text, line.line_kind, line.script_api_type)
         assert "power_change" not in found and "toughness_change" not in found
         assert found["until_end_of_turn"] == 1.0
 
     def test_a_restricted_any_colour_mana_ability(self):
-        line = _line("gen1-sidecars", "Produced$ Any", "RestrictValid$")
-        found = labels.line_labels(line.script_text, line.line_kind, line.script_api_type)
+        # No fixture mana ability carries a restriction: a real one is given the
+        # member Forge writes for it.
+        line = _line("Cost$ T | Produced$ Any")
+        script = f"{line.script_text} | RestrictValid$ Spell"
+        found = labels.line_labels(script, line.line_kind, line.script_api_type)
         assert found["any_colour"] == 1.0 and found["restricted"] == 1.0
         assert found["mana_amount"] == 1.0 and found["tap_cost"] == 1.0
         assert found["produces_g"] == 0.0
 
     def test_a_two_colour_mana_ability(self):
-        line = _line("gen1-sidecars", "Produced$ Combo U R")
+        line = _line("Produced$ Combo U R")
         found = labels.line_labels(line.script_text, line.line_kind, line.script_api_type)
         assert found["produces_u"] == found["produces_r"] == 1.0
         assert found["produces_w"] == 0.0 and found["any_colour"] == 0.0
 
     def test_a_sorcery_speed_activation(self):
-        line = _line("gen1-sidecars", "SorcerySpeed$ True", "KW$ Flying")
+        line = _line("SorcerySpeed$ True", "KW$ Vigilance")
         found = labels.line_labels(line.script_text, line.line_kind, line.script_api_type)
         assert found["instant_speed"] == 0.0 and found["repeatable"] == 1.0
 
     def test_a_counter_is_not_until_end_of_turn(self):
-        line = _line("gen1-sidecars", "AB$ PutCounter |")
+        line = _line("AB$ PutCounter |")
         found = labels.line_labels(line.script_text, line.line_kind, line.script_api_type)
         assert found["as_counter"] == 1.0 and found["until_end_of_turn"] == 0.0
 
-    def test_a_gen2_chain_sums_its_segments(self):
-        chained = [
-            line for line in _fixture_lines("gen2-sidecars")
-            if "[SEG]" in line.script_text and "NumDmg$" in line.script_text
-        ]
-        if not chained:
-            pytest.skip("no chained damage text in the gen-2 fixture")
-        line = chained[0]
+    def test_a_chain_sums_its_segments(self):
+        line = next(line for line in _fixture_lines()
+                    if line.script_text.count("[SEG]") and "NumDmg$ 4" in line.script_text)
         found = labels.line_labels(line.script_text, line.line_kind, line.script_api_type)
         segments = labels.segments(line.script_text)
         stated = [s["NumDmg"] for s in segments if "NumDmg" in s]
-        if all(v.lstrip("+-").isdigit() for v in stated):
-            assert found["damage"] == sum(int(v) for v in stated)
-        else:
-            assert "damage" not in found
+        assert all(v.lstrip("+-").isdigit() for v in stated)
+        assert found["damage"] == sum(int(v) for v in stated)
 
     def test_a_charm_root_states_no_amounts(self):
         root = "CharmNum$ 2 | Choices$ SV1,SV2,SV3,SV4 | SP$ Charm"
@@ -348,7 +343,7 @@ class TestLineLabels:
         assert found["damage_per_mana"] == pytest.approx(MAGNITUDE_CAP / 3)
 
     def test_every_amount_label_is_within_the_cap_and_no_flag_moves(self):
-        for line in _fixture_lines("gen1-sidecars"):
+        for line in _fixture_lines():
             found = labels.line_labels(line.script_text, line.line_kind,
                                        line.script_api_type)
             for name, value in found.items():
@@ -477,7 +472,7 @@ class TestRecordLabels:
         assert labels.state_weight(5) == pytest.approx(0.5)
 
     def test_the_mined_pairs_join_a_death_trigger_to_a_sacrifice_outlet(self):
-        items = common.line_items([_FIXTURES / "gen1-sidecars" / "cardsfolder"], "script")
+        items = common.line_items([GEN3_SIDECAR_FOLDERS[0]], "script")
         pairs = labels.mined_pairs(items)
         by_key = {item.key: item for item in items}
         assert pairs
@@ -558,7 +553,7 @@ class TestAffordabilityEdit:
 
     def test_the_untapped_lands_make_exactly_the_swept_mana(self, records):
         # The actor's untapped Swamp is the board the collector wrote.
-        record = _decision(records, "{2}{U}")
+        record = _decision(records, "{U}")
         actor = record.actor_player
         assert [(e.name, e.tapped) for e in _lands(record, actor)] == [("Swamp", False)]
         pips = sweeps.candidate_cost(record)
@@ -583,7 +578,7 @@ class TestAffordabilityEdit:
                     assert kept[before.id] == before
 
     def test_coloured_pips_are_fed_first_and_the_player_s_basics_reused(self, records):
-        record = _decision(records, "{2}{U}")
+        record = _decision(records, "{U}")
         actor = record.actor_player
         pips = sweeps.candidate_cost(record)
 
@@ -601,19 +596,18 @@ class TestAffordabilityEdit:
     def test_every_other_land_of_the_player_is_tapped(self, records):
         record = _decision(records, "{1}{U}")
         actor = record.actor_player
-        building = next(e for e in _lands(record, actor) if e.name == "TCRI Building")
-        untapped = replace(record, state=replace(record.state, entities=tuple(
-            replace(e, tapped=False) if e.id == building.id else e
-            for e in record.state.entities)))
-        edited = sweeps.set_untapped_lands(untapped, actor, sweeps.candidate_cost(record), 1)
-        assert edited.state.entity(building.id).tapped
+        lands = _lands(record, actor)
+        assert next(e for e in lands if e.name == "Island").tapped is False
+        swamp = next(e for e in lands if e.name == "Swamp" and not e.tapped)
+        edited = sweeps.set_untapped_lands(record, actor, sweeps.candidate_cost(record), 1)
+        assert edited.state.entity(swamp.id).tapped
         assert [e.name for e in _lands(edited, actor) if not e.tapped] == ["Island"]
 
     def test_a_fresh_land_is_the_basic_the_collector_writes(self, records):
         swamp = next(e for r in records for e in r.state.entities if e.name == "Swamp")
         fresh = sweeps.basic_land("B", "P9~land0", "P9")
-        assert fresh == replace(swamp, id="P9~land0", controller="P9", zone="battlefield",
-                                tapped=False, sick=False)
+        assert fresh == replace(swamp, id="P9~land0", controller="P9", owner="P9",
+                                zone="battlefield", tapped=False, sick=False)
 
     @pytest.mark.parametrize(("cost", "payable"), [
         ("{2}{U}", True), ("{1}{G/U}", True), ("{W}{W}", True),
@@ -624,25 +618,25 @@ class TestAffordabilityEdit:
         assert sweeps.land_payable(cost) is payable
 
     def test_an_untapped_mana_creature_keeps_a_record_out(self, records, sidecars):
-        record = _decision(records, "{2}{U}")
+        record = _decision(records, "{U}")
         assert sweeps.affordability_ready(record, sidecars)
-        nurturer = next(e for r in records for e in r.state.entities
-                        if e.name == "Scaled Nurturer")
+        elves = next(e for r in records for e in r.state.entities
+                     if e.name == "Llanowar Elves")
 
-        def with_nurturer(tapped):
-            dork = replace(nurturer, id="E-dork", zone="battlefield",
+        def with_elves(tapped):
+            dork = replace(elves, id="E-dork", zone="battlefield",
                            controller=record.actor_player, tapped=tapped)
             return replace(record, state=replace(
                 record.state, entities=(*record.state.entities, dork)))
 
-        assert not sweeps.affordability_ready(with_nurturer(False), sidecars)
-        assert sweeps.affordability_ready(with_nurturer(True), sidecars)
+        assert not sweeps.affordability_ready(with_elves(False), sidecars)
+        assert sweeps.affordability_ready(with_elves(True), sidecars)
 
     def test_a_candidate_on_the_player_s_own_land_keeps_a_record_out(self, records,
                                                                       sidecars):
-        record = _decision(records, "{2}{U}")
+        record = _decision(records, "{U}")
         swamp = _lands(record, record.actor_player)[0]
-        candidate = replace(record.payload.candidates[0], ability=(swamp.printed[1],))
+        candidate = replace(record.payload.candidates[0], ability=(swamp.printed[0],))
         on_land = replace(record, payload=replace(record.payload, candidates=(candidate,)))
         assert not sweeps.affordability_ready(on_land, sidecars)
 
@@ -832,20 +826,6 @@ def _legality(*forbidden_kinds):
 
 
 class TestBoard:
-    def test_a_keyword_line_and_the_other_face_are_not_unlisted(self):
-        entity = SimpleNamespace(printed=(_key("spell"),), face=0, lines=None)
-        sidecars = _Sidecars([
-            _line_of("Keyword", _key("static")),
-            _line_of("Continuous", _key("static")),
-            _line_of(None, _key("trigger", face=1)),
-            _line_of("DealDamage", _key("spell")),
-        ])
-        assert board.unlisted_kinds(entity, sidecars) == {"static"}
-
-    def test_a_permanent_without_printed_keys_lists_nothing(self):
-        entity = SimpleNamespace(printed=(), face=0, lines=None)
-        assert board.unlisted_kinds(entity, _Sidecars([])) == frozenset()
-
     def test_legality_is_split_by_the_restricting_static(self):
         sidecars = _Sidecars([], {"static": "CantBlock", "keyword": "Keyword"})
         assert board.subset_of(_legality("static", "keyword"), sidecars) == "legality-static"
@@ -877,7 +857,7 @@ class TestBoard:
                 assert record.moment is Moment.RESOLUTION
             if name == "resolution-replacement":
                 assert any(
-                    "replacement" in board.unlisted_kinds(entity, sidecars)
+                    "replacement" in board.unlisted_kinds(entity)
                     for entity in record.state.entities
                     if entity.zone == "battlefield" and entity.id != record.state.refs.source)
         assert {"legality-none", "resolution-none", "resolution-replacement"} <= seen
@@ -936,60 +916,27 @@ class TestRung3ReadsTheRightOutput:
         outputs[0, 0, FIELD_SLICES["damage_taken"][0]] = math.log(3.0)
         assert ladder._readout("damage_taken", outputs, None, 0, 0) == pytest.approx(3.0)
 
-    def test_an_untrained_verdict_head_gives_no_rung_3(self):
-        assert np.isnan(ladder._readout("affordable", None, None, 0, 0,
-                                        verdict_trained=False))
-        assert np.isnan(ladder._readout("fires", None, None, 0, 0,
-                                        verdict_trained=False))
-
-    def test_a_checkpoint_without_training_settings_never_trained_the_verdict_head(self):
-        class Gen1:
-            training_settings: dict = {}
-
-        class Gen2:
-            training_settings = {"tokenizer_rules": "gen-2", "value_weight": 0.05}
-
-        assert not ladder.verdict_head_trained(Gen1())
-        assert ladder.verdict_head_trained(Gen2())
-
-    def test_the_ladder_reports_why_rung_3_is_missing_and_gives_no_share(self):
-        rng = np.random.default_rng(4)
-        n = 200
-        y = rng.integers(0, 2, n).astype(float)
-        items = [
-            ladder.ExtractedItem(
-                target="affordable", label=float(label), group=f"g{i}",
-                features={rung: rng.normal(size=3) for rung in ladder.PROBED_RUNGS},
-                rung3=float("nan"),
-            )
-            for i, label in enumerate(y)
-        ]
-        data = ladder.ladder_inputs(items, {"affordable": "binary"})["affordable"]
-        assert data.rung3 is None and data.rung3_note == ladder.UNTRAINED_VERDICT_NOTE
-        result = ladder.run_ladder(data, rungs=("0", "1"),
-                                   mlp_options={"hidden": 8, "epochs": 2, "device": "cpu"},
-                                   bootstrap=0)
-        assert "3" not in result["rungs"] and result["share"] is None
-        assert result["rung3_unavailable"] == ladder.UNTRAINED_VERDICT_NOTE
-
 
 # ── the combat grid ─────────────────────────────────────────────────────
 
 
 def _one_on_one(records):
-    """A fixture combat turned into one attacker blocked by one blocker."""
+    """A fixture combat turned into one attacker blocked by one blocker, both
+    cleared of damage and keywords."""
     from effects.domain.records import RecordKind
 
     record = next(r for r in records if r.kind is RecordKind.COMBAT
-                  and any(len(b) == 2 for b in r.payload.blocks.values()))
-    attacker, (blocker, dropped) = next(
-        (a, b) for a, b in record.payload.blocks.items() if len(b) == 2)
+                  and sum(1 for b in r.payload.blocks.values() if b) == 1)
+    attacker, (blocker, *_) = next((a, b) for a, b in record.payload.blocks.items() if b)
     entities = []
     for entity in record.state.entities:
-        if entity.id == dropped:
-            continue
+        if entity.id in (attacker, blocker):
+            entity = replace(entity, damage=0, granted_temporary=replace(
+                entity.granted_temporary, keywords=()))
         if entity.id == attacker:
             entity = replace(entity, combat=replace(entity.combat, blocked_by=(blocker,)))
+        if entity.id == blocker:
+            entity = replace(entity, combat=replace(entity.combat, blocking=(attacker,)))
         entities.append(entity)
     record = replace(
         record, fork=False, interventional=False, mirror_of=None,
@@ -1370,7 +1317,7 @@ class TestColourPips:
         assert not colour_pips.missing_colour_present("{W}{U}")
 
     def test_a_configuration_edits_the_lands_to_its_colours(self, records):
-        record = _decision(records, "{2}{U}")
+        record = _decision(records, "{U}")
         actor = record.actor_player
         lands, _ = colour_pips.configurations("{2}{U}")["pip missing"]
         edited = sweeps.set_untapped_lands(record, actor, list(lands), len(lands))
@@ -1510,7 +1457,7 @@ class TestFreezeSelectionSet:
         monkeypatch.setattr(common, "probe_context", lambda *a, **k: pytest.fail("no checkpoint"))
         code = run.main(["--freeze-probe-set", "--corpus", str(corpus),
                          "--probe-set-dir", str(tmp_path / "sets"),
-                         "--cards-folder", str(_FIXTURES / "gen1-sidecars" / "cardsfolder")])
+                         "--cards-folder", str(GEN3_SIDECAR_FOLDERS[0])])
         assert code == 1
         assert seen["corpus"] == corpus and seen["reports_dir"] == tmp_path / "sets"
         names = [grid.name for grid in seen["grids"]]

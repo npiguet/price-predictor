@@ -1,4 +1,4 @@
-"""``effect_family`` over real gen-1 records and their sidecars (T071, FR-047–048).
+"""``effect_family`` over real gen-3 records and their sidecars (T071, FR-047–048).
 
 Every record here is cut from a real shard (``scripts/make_fixture_records.py``);
 the few tests that need a shape the sample lacks — a keyword on a combat
@@ -9,7 +9,6 @@ rather than build one by hand.
 from __future__ import annotations
 
 import dataclasses
-from pathlib import Path
 
 import pytest
 
@@ -24,21 +23,17 @@ from effects.domain.records import Candidate, ForbiddenEntity, RecordKind
 from effects.domain.state_snapshot import GrantedTemporary
 from effects.infrastructure.shard_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
-
-_FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
+from tests.unit.effects.builders import GEN3_RECORDS, GEN3_SIDECAR_FOLDERS
 
 
 @pytest.fixture(scope="module")
 def records():
-    return list(read_shard(_FIXTURES / "gen1-records.jsonl.gz"))
+    return list(read_shard(GEN3_RECORDS))
 
 
 @pytest.fixture(scope="module")
 def sidecars():
-    root = _FIXTURES / "gen1-sidecars"
-    return SidecarCache({
-        "cardsfolder": root / "cardsfolder", "tokenscripts": root / "tokenscripts",
-    })
+    return SidecarCache({folder.name: folder for folder in GEN3_SIDECAR_FOLDERS})
 
 
 def _first(records, kind, discriminator=None, test=lambda r: True):
@@ -53,25 +48,26 @@ def _first(records, kind, discriminator=None, test=lambda r: True):
 
 def test_a_resolution_takes_its_acting_lines_api_type(records, sidecars):
     record = _first(records, RecordKind.RESOLUTION, "resolution",
-                    lambda r: r.ability and r.ability[0].script_file.endswith("tcri_building.txt"))
+                    lambda r: r.ability and r.ability[0].script_file.endswith("c_a_food_sac.txt"))
     assert effect_family(record, sidecars) == "GainLife"
 
 
 def test_both_halves_of_a_resolution_share_its_family(records, sidecars):
     halves = [r for r in records if r.link_id and r.ability
-              and r.ability[0].script_file.endswith("crustacean_commando.txt")]
+              and r.ability[0].script_file.endswith("firebolt.txt")]
     assert {r.moment.value for r in halves} == {"activation", "resolution"}
-    assert {effect_family(r, sidecars) for r in halves} == {"Token"}
+    assert {effect_family(r, sidecars) for r in halves} == {"DealDamage"}
 
 
-def test_a_charm_resolution_is_the_charm_family(records, sidecars):
-    record = _first(records, RecordKind.RESOLUTION, "resolution",
-                    lambda r: r.ability and "you_come_to_a_river" in r.ability[0].script_file)
+def test_a_charm_s_activation_half_is_the_charm_family(records, sidecars):
+    record = _first(records, RecordKind.RESOLUTION, "activation",
+                    lambda r: r.ability and "sprouting_renewal" in r.ability[0].script_file)
     assert effect_family(record, sidecars) == "Charm"
 
 
 def test_a_trigger_takes_its_root_segments_mode(records, sidecars):
-    record = _first(records, RecordKind.TRIGGER)
+    record = _first(records, RecordKind.TRIGGER,
+                    test=lambda r: "perilous_myr" in r.ability[0].script_file)
     assert effect_family(record, sidecars) == "ChangesZone"
 
 
@@ -84,7 +80,7 @@ def test_a_trigger_with_no_mode_is_no_mode(records):
 
 def test_a_continuous_record_takes_its_static_mode(records, sidecars):
     record = _first(records, RecordKind.CONTINUOUS,
-                    test=lambda r: "bramblewood_paragon" in r.ability[0].script_file)
+                    test=lambda r: "holy_strength" in r.ability[0].script_file)
     assert effect_family(record, sidecars) == "Continuous"
 
 
@@ -98,8 +94,8 @@ def test_a_multi_mode_static_keeps_its_mode_list_whole(records):
 
 def test_a_rewrite_takes_its_event(records, sidecars):
     record = _first(records, RecordKind.REWRITE,
-                    test=lambda r: "bramblewood_paragon" in r.ability[0].script_file)
-    assert effect_family(record, sidecars) == "ETBReplacement"
+                    test=lambda r: "phantom_tiger" in r.ability[0].script_file)
+    assert effect_family(record, sidecars) == "DamageDone"
 
 
 def test_a_combat_without_damage_step_keywords_is_none(records, sidecars):
@@ -143,8 +139,9 @@ def test_a_keyword_acting_line_is_its_keywords_family(records):
 
 
 def test_a_decision_with_an_unaffordable_candidate_is_unaffordable(records, sidecars):
-    record = _first(records, RecordKind.PLAYABILITY, "decision")
-    assert not record.payload.candidates[0].affordable
+    record = _first(records, RecordKind.PLAYABILITY, "decision",
+                    lambda r: r.payload.candidates and r.payload.candidates[0].can_play
+                    and not r.payload.candidates[0].affordable)
     assert effect_family(record, sidecars) == FamilySentinel.UNAFFORDABLE
 
 
@@ -171,10 +168,16 @@ def test_decision_candidates_by_verdict_and_by_static(records):
     ), lines) == FamilySentinel.NONE
 
 
-def test_a_blockers_record_restricted_by_flying_is_flying(records, sidecars):
+def test_a_blockers_record_restricted_by_a_static_is_that_statics_mode(records, sidecars):
     record = _first(records, RecordKind.PLAYABILITY, "blockers",
                     test=lambda r: any(f.responsible_static for f in r.payload.forbidden))
-    assert effect_family(record, sidecars) == "Flying"
+    assert effect_family(record, sidecars) == "CantBlock"
+
+
+def test_an_attackers_record_restricted_by_a_keyword_is_that_keyword(records, sidecars):
+    record = _first(records, RecordKind.PLAYABILITY, "attackers",
+                    test=lambda r: any(f.responsible_static for f in r.payload.forbidden))
+    assert effect_family(record, sidecars) == "Defender"
 
 
 def _restricted(records, *statics):
@@ -229,15 +232,9 @@ def test_every_fixture_record_has_a_family(records, sidecars):
     assert any(f not in set(FamilySentinel) for f in families)
 
 
-def test_a_gen3_record_takes_its_family_through_the_gen3_line_model():
-    """The gen-3 fixture's records against the converter's gen-3 sidecars:
-    one family per kind, read through the same join a build uses."""
-    from effects.infrastructure.record_codec import record_from_dict
-    from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS, gen3_fixture_records
-
-    cache = SidecarCache({folder.name: folder for folder in GEN3_SIDECAR_FOLDERS})
-    seen = {(record.kind, effect_family(record, cache))
-            for record in map(record_from_dict, gen3_fixture_records())}
+def test_each_record_kind_takes_its_family_through_the_line_model(records, sidecars):
+    """One family per kind, read through the same join a build uses."""
+    seen = {(record.kind, effect_family(record, sidecars)) for record in records}
     assert {
         (RecordKind.RESOLUTION, "DealDamage"), (RecordKind.RESOLUTION, "Charm"),
         (RecordKind.TRIGGER, "ChangesZone"), (RecordKind.CONTINUOUS, "Continuous"),
