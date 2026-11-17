@@ -203,15 +203,15 @@ State on master when this feature starts (the gen-3 record's Result):
 
 ## User Scenarios & Testing *(mandatory)*
 
-The stories follow the gen-3 record's Future plans. Story 1 runs on gen-2's corpus and needs no
-new collection, so it starts first and its counts steer stories 3 and 6. Story 2 changes what is
+The stories follow the gen-3 record's Future plans. Story 1 runs on the gen-3 records of a pilot
+collection, and its counts steer stories 3 and 6. Story 2 changes what is
 decided at collection time, so it is complete before the first gen-3 game is collected: the record
 schema cannot be applied to records afterwards. Story 4 is built and tested before gen-3's first
 training run and needs no gen-3 data. Stories 5 to 8 consume the gen-3 corpus.
 
 ### User Story 1 - Count the records that show each rule (Priority: P1)
 
-An operator runs `python -m effects rule-counts --records-dir <gen-2 records>`. Every scenario of
+An operator runs `python -m effects rule-counts --records-dir <gen-3 records>`. Every scenario of
 the catalogue has a detector, or a declared reason it has none. The command tags each record with
 the rules it shows and prints, per rule, how many records show the rule's effect happening and how
 many show its near miss, split between natural records of random-seat games, natural records of
@@ -224,13 +224,13 @@ directed forks or coverage rounds, and whether the random seat needs a larger sh
 detectors later drive rule budgets, the rule mask and the rule tests, so nothing rule-balanced can
 be built before them.
 
-**Independent Test**: Run `rule-counts` on gen-2's records. Check that every scenario's detector
+**Independent Test**: Run `rule-counts` on gen-3 records. Check that every scenario's detector
 fires on at least one record of its `fires` polarity wherever the corpus holds one, rejects a
 hand-built near-miss record, and that the counts file and the printed table agree.
 
 **Acceptance Scenarios**:
 
-1. **Given** gen-2's corpus and scenario `704.5f-1` (a creature with toughness 0 dies), **When**
+1. **Given** a gen-3 corpus and scenario `704.5f-1` (a creature with toughness 0 dies), **When**
    `rule-counts` runs, **Then** a resolution record whose effect half moves a 0-toughness creature
    to the graveyard during the state-based check is tagged `704.5f` with polarity `fires`, a
    resolution that leaves a creature at toughness 1 is tagged with polarity `does_not_fire`, and the
@@ -242,9 +242,8 @@ hand-built near-miss record, and that the counts file and the printed table agre
 3. **Given** rule 613 (layer order), whose detector is declared `none`, **When** `rule-counts`
    runs, **Then** the rule is listed with no counts and its declared reason, and no record is tagged
    with it.
-4. **Given** a scenario whose detector reads a gen-3-only field (for example `failed_checks`),
-   **When** `rule-counts` runs on gen-2 records, **Then** the rule is reported as not countable on
-   that generation rather than as zero.
+4. **Given** a scenario whose detector reads a field the record lacks, **When** `rule-counts`
+   runs, **Then** the rule is reported as not countable rather than as zero.
 5. **Given** a record its detector tags with a polarity whose observed outcome differs from the
    scenario's expected outcome, **When** `rule-counts` runs, **Then** the record is listed for
    review, by record id and scenario id.
@@ -556,8 +555,7 @@ and that the reporting half never enters the control score.
   rule-test records (FR-072).
 - A rule's detector exists but finds no record in either validation stratum. The rule contributes
   nothing to the rule-test component; the frozen set names it as untested (FR-073).
-- A detector reads only gen-3 fields and `rule-counts` runs over gen-2 records. The rule is
-  reported as not countable on gen-2 (FR-007).
+- A detector reads a field the record lacks. The rule is reported as not countable (FR-007).
 - A static's condition is reevaluated mid-action. `active` is Forge's answer at snapshot time.
 - A face-down permanent. Its card slot carries its real face's lines flagged inactive and face
   state "face down"; nothing of the real face reaches an opponent-facing input other than through
@@ -664,17 +662,16 @@ and that the reporting half never enters the control score.
   `does_not_fire` with no such event) MUST name condition entities only. Merging a rule's scenarios
   MUST union each role separately. The same tags MUST feed the per-rule counts, the rule budgets
   (FR-054), the rule mask (FR-061) and the rule tests (FR-073).
-- **FR-007**: Detectors MUST run over gen-2 and gen-3 records. A detector that needs a field the
-  record's generation lacks MUST report the rule as not countable on that generation, never as
-  zero.
+- **FR-007**: Detectors MUST run over gen-3 records. A detector that needs a field the record
+  lacks MUST report the rule as not countable, never as zero.
 - **FR-008**: `python -m effects rule-counts --records-dir DIR [--output PATH] [--cards-folder DIR …]
   [--variant-scripts DIR] [--rules-dir DIR] [--workers N]` (the middle three for the sidecars and
   catalogue the detectors read, defaulting as `build-corpus` does and to `rules`; `--cards-folder`
   repeatable, as on `build-corpus`; `--workers` the parallel shard readers) MUST count, per
   rule, the records of each polarity, split into three sources: natural records of random-seat
   games, natural records of games between two Forge AIs, and aimed records (those carrying
-  `aimed_at`, FR-009a, whatever their game). It MUST write them to `--output` and print them. It reads gen-2 and gen-3 records; a gen-2
-  record carries no `aimed_at` and counts as natural. Beside the counts it MUST list the rules a
+  `aimed_at`, FR-009a, whatever their game). It MUST write them to `--output` and print them. It reads gen-3 records only and refuses a set
+  of an older generation with exit 1. Beside the counts it MUST list the rules a
   taggable declaration speaks for that no record tags (`declared_zero`), the untaggable scenarios
   with their reasons (FR-002c) and the `same_as` scenarios with the scenarios and rules they are
   counted under (FR-002b): no declared rule is left out silently. A gen-3 game whose shard holds no
@@ -869,8 +866,7 @@ and that the reporting half never enters the control score.
   away relative to gen-2. The schema-compatibility tests MUST be re-pinned to the gen-3 schema, and
   the record-schema contract MUST gain a gen-3 section listing the changes of root § 8.13.
 - **FR-020**: `build-corpus`, `train-effect-model`, `evaluate-effect-model` and the knowledge
-  probes MUST exit 1 on a records set holding a gen-1 or gen-2 record. `rule-counts` MUST accept
-  both.
+  probes MUST exit 1 on a records set holding a gen-1 or gen-2 record, and so MUST `rule-counts`.
 
 #### Collection: lines of a permanent (root § 8.2, § 8.3)
 
@@ -1513,9 +1509,9 @@ and that the reporting half never enters the control score.
 
 - **SC-001**: Every scenario in the catalogue declares a detector or a reason for none, and every
   non-base variant is classified into a fork operation or marked unclassifiable; `validate` passes.
-- **SC-002**: `rule-counts` over gen-2's corpus reports, for every rule with a detector, its counts
-  per polarity split by natural random-seat games, natural Forge-AI games and aimed records (none
-  on gen-2), or "not countable on gen-2".
+- **SC-002**: `rule-counts` over a gen-3 corpus reports, for every rule with a detector, its counts
+  per polarity split by natural random-seat games, natural Forge-AI games and aimed records, or
+  "not countable".
 - **SC-003**: In a gen-3 pilot, every record carries `generation: 3`, every field of root § 8.13
   appears with a non-constant value in `field-coverage` or is listed as constant or absent with a
   reason the operator accepts, and the dropped-event report is printed.
