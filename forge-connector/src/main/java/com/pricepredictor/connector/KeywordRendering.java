@@ -7,8 +7,8 @@ import java.util.List;
 
 /**
  * What one keyword rendered: the lines it printed, in order, and, for a
- * keyword printing a line per trait it built (a saga's chapters, haunt's
- * halves), which of those lines each such trait printed.
+ * keyword printing a line per trait it built (a saga's chapters, a dungeon's
+ * rooms, haunt's halves), which of those lines each such trait printed.
  *
  * <p>Built in the one pass that renders the keyword, so the line a built
  * trait's key is declared on is read off this value rather than reported on

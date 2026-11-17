@@ -23,8 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The keys a keyword's lines declare (findings 1.1, 1.4). A keyword that
  * prints one line declares its bare key there; one that prints several (a
- * saga's chapters, haunt) declares on each line the {@code built} keys of the
- * traits that line prints, and its bare key on none. The kind-indexed key of
+ * saga's chapters, a dungeon's rooms, haunt) declares on each line the
+ * {@code built} keys of the traits that line prints, and its bare key on
+ * none. The kind-indexed key of
  * a trait a keyword built is declared nowhere, not even in
  * {@code dropped_keys}. Over every golden script, no key of any kind is
  * declared by two lines of a face, and no spell of an instant or sorcery is

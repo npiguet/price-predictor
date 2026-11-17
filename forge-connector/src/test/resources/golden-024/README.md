@@ -12,9 +12,9 @@ Layout:
 - `cardsfolder/<letter>/<name>.txt` — source scripts; copies of `../forge/forge-gui/res/cardsfolder/`
   as of 2026-10-07 (History of Benalia, Blind Hunter, Censor, Ranger Class, Balloon
   Stand, Harrow, Abeyance, Contact Other Plane, Dig Up, Selvala's Charge, Crashing Wave,
-  Garbage Fire and Tyranid Invasion as of 2026-11-17), plus the four synthetic scripts marked below. The tree is letter-keyed like
+  Garbage Fire and Tyranid Invasion as of 2026-11-17; Pick-a-Beeble, Lost Mine of Phandelver and Undercity as of 2026-11-18), plus the four synthetic scripts marked below. The tree is letter-keyed like
   Forge's so every provenance key reads `cardsfolder/<letter>/<name>.txt`.
-- `tokenscripts/<name>.txt` — one token script, flat like Forge's token tree.
+- `tokenscripts/<name>.txt` — token scripts, flat like Forge's token tree.
 - `expected/cardsfolder/…`, `expected/tokenscripts/…` — the `.txt` that `python -m price_predictor convert`
   writes for them: the byte-identity reference. The gen-1 sidecars are not kept: no test
   compares them, and the gen-2 sidecars differ by design.
@@ -88,6 +88,8 @@ When a sentence the description already holds stopped being appended again (task
 | `g/garbage_fire.txt` | spell with no `SpellDescription$`: its line is its own `Description$` |
 | `t/tyranid_invasion.txt` | spell with no `SpellDescription$` and no other line: its keyed line is the whole oracle, not an unkeyed `text:` line |
 | `tokenscripts/c_a_food_sac.txt` | token script, flat tree |
+| `tokenscripts/lost_mine_of_phandelver.txt`, `tokenscripts/undercity.txt` | dungeons: one line per room trigger, each declaring its `built` key (Undercity also has a static keyword) |
+| `p/pick_a_beeble.txt` | Attraction `Prize`: a single-line keyword whose line is its built trigger's description |
 | `u/undefined_svar.txt` | **synthetic** — `TrigDraw` names `SubAbility$ DBMissing`, which no `SVar:` defines (FR-003). The task asked for an undefined `Execute$`, but Forge fails the whole card at parse for that shape (`Error in Trigger for Card`), so no converter can produce output for it; `SubAbility$` is the one undefined reference Forge tolerates |
 | `l/label_a.txt`, `l/label_b.txt` | **synthetic** — identical chains naming their sub-ability `DBDraw` and `DBDrawCard` (scenario 12) |
 | `r/repeat_loop.txt` | **synthetic** — a `RepeatSubAbility$` chain that reaches an SVar the root chain also names, so the once-per-chain rule is exercised |

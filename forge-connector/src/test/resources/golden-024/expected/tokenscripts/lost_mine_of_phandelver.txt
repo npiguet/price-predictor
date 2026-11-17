@@ -1,0 +1,9 @@
+name: lost mine of phandelver
+types: dungeon
+triggered: cave entrance — scry 1.
+triggered: goblin lair — create a 1/1 red goblin creature token.
+triggered: mine tunnels — create a treasure token.
+triggered: storeroom — put a +1/+1 counter on target creature.
+triggered: dark pool — each opponent loses 1 life and you gain 1 life.
+triggered: fungi cavern — target creature gets -4/-0 until your next turn.
+triggered: temple of dumathoin — draw a card.

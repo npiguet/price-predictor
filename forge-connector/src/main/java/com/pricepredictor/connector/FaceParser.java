@@ -18,6 +18,7 @@ import com.pricepredictor.connector.ability.SpellLine;
 import com.pricepredictor.connector.ability.StandardKeyword;
 import com.pricepredictor.connector.ability.StaticAbilityEntry;
 import com.pricepredictor.connector.ability.TextAbility;
+import com.pricepredictor.connector.ability.TriggerDescribedKeyword;
 import com.pricepredictor.connector.ability.TriggeredAbilityEntry;
 import com.pricepredictor.connector.ability.UndescribedSpellText;
 import com.pricepredictor.connector.effects.FaceOrder;
@@ -261,6 +262,8 @@ final class FaceParser {
                 AbilityType.ADDITIONAL_COST, AbilityDescription.applyCasing(
                         buildAlternateAdditionalCostDescription(ki.getOriginal())))));
         handlers.put("Visit:", (ki, p) -> visitAbilities(ki));
+        handlers.put("Dungeon:", (ki, p) -> TriggerDescribedKeyword.rooms(ki));
+        handlers.put("Prize:", (ki, p) -> TriggerDescribedKeyword.prize(ki));
         KeywordRenderer openingEffect = (ki, p) -> openingEffect(ki);
         handlers.put("MayEffectFromOpeningHand:", openingEffect);
         handlers.put("MayEffectFromOpeningDeck:", openingEffect);

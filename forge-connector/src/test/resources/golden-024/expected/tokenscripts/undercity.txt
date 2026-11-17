@@ -1,0 +1,12 @@
+name: undercity
+types: dungeon undercity
+triggered: secret entrance — search your library for a basic land card, reveal it, put it into your hand, then shuffle.
+triggered: forge — put two +1/+1 counters on target creature.
+triggered: lost well — scry 2.
+triggered: trap! — target player loses 5 life.
+triggered: arena — goad target creature.
+triggered: stash — create a treasure token.
+triggered: archive — draw a card.
+triggered: catacombs — create a 4/1 black skeleton creature token with menace.
+triggered: throne of the dead three — reveal the top ten cards of your library. put a creature card from among them onto the battlefield with three +1/+1 counters on it. it gains hexproof until your next turn. then shuffle.
+static: you can't enter this dungeon unless you "venture into CARDNAME."
