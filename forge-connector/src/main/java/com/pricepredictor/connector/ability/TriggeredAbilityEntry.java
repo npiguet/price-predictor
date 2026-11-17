@@ -16,8 +16,9 @@ import java.util.Objects;
  * is TRIGGERED, or REPLACEMENT if the trigger is static.
  *
  * <p>The execute chain contributes text only where the description leaves it
- * out: a charm or dice placeholder is expanded into option or outcome
- * sub-lines, and a transparent execute's sub-ability descriptions are appended
+ * out: a charm's modes become option sub-lines (and its {@code ABILITY}
+ * placeholder, if any, its header), a dice placeholder is expanded into
+ * outcome sub-lines, and a transparent execute's sub-ability descriptions are appended
  * to the line itself rather than becoming children.
  */
 public record TriggeredAbilityEntry(AbilityType type, String descriptionText, List<Ability> subAbilities) implements Ability {
@@ -46,20 +47,8 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
 
         SpellAbility execute = trigger.getOverridingAbility();
         boolean placeholder = rawDesc.contains("ABILITY");
-
-        // An ABILITY placeholder whose execute is a Charm, directly or through an
-        // ImmediateTrigger anywhere in its SubAbility chain (Caesar, Hylda: direct;
-        // Cemetery Desecrator: ChangeZone → SubAbility → ImmediateTrigger), is the
-        // charm's header with its choices as OPTION sub-abilities.
-        if (placeholder && execute != null) {
-            SpellAbility charm = execute.getApi() == ApiType.Charm
-                    ? execute : immediateTriggerCharm(execute);
-            if (charm != null) {
-                CharmAbility.Expanded expanded =
-                        CharmAbility.expandPlaceholder(rawDesc, charm, trigger);
-                return new TriggeredAbilityEntry(type, expanded.description(), expanded.options());
-            }
-        }
+        SpellAbility charm = execute == null ? null : charmOf(execute);
+        if (charm != null) return charmEntry(type, trigger, charm, normalized);
 
         // Do NOT walk the execute SA chain for SpellEffect descriptions: TriggerDescription
         // is the authoritative oracle text for triggered abilities.  Walking the chain would
@@ -91,6 +80,31 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
             normalized = DescriptionText.appendMissing(normalized, extra);
         }
         return new TriggeredAbilityEntry(type, normalized, children);
+    }
+
+    /**
+     * The charm a trigger executes, directly or through an ImmediateTrigger
+     * anywhere in its SubAbility chain (Caesar, Hylda: direct; Cemetery
+     * Desecrator: ChangeZone → SubAbility → ImmediateTrigger), or null.
+     */
+    private static SpellAbility charmOf(SpellAbility execute) {
+        return execute.getApi() == ApiType.Charm ? execute : immediateTriggerCharm(execute);
+    }
+
+    /**
+     * The line of a trigger executing {@code charm}: its description, then one
+     * option line per mode. An {@code ABILITY} placeholder becomes the charm's
+     * header; a description without one (The Fantastic Four's "choose one that
+     * hasn't been chosen this turn") already states it and is printed as written.
+     */
+    private static TriggeredAbilityEntry charmEntry(AbilityType type, Trigger trigger,
+                                                    SpellAbility charm, String normalized) {
+        String rawDesc = trigger.getParam("TriggerDescription");
+        if (!rawDesc.contains("ABILITY")) {
+            return new TriggeredAbilityEntry(type, normalized, CharmAbility.optionsFrom(charm, trigger));
+        }
+        CharmAbility.Expanded expanded = CharmAbility.expandPlaceholder(rawDesc, charm, trigger);
+        return new TriggeredAbilityEntry(type, expanded.description(), expanded.options());
     }
 
     /**

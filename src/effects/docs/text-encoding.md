@@ -52,6 +52,8 @@ How a key resolves, by case:
 - A sidecar line's `script_text` is the whole chain of the trait that first claimed the line (root segment, a trigger's `Execute$` ability, every sub-ability, a replacement's `ReplaceWith$` ability) joined by ` [SEG] `.
 - Chain labels are renamed `SV1…` by first appearance per line, so two cards differing only in an author's SVar name share a text.
 - A charm root carries its own segment, and each mode is an `option` line with its own chain and API type.
+- A charm's root line is the kind of line its root is (`ability/CharmAbility`): a modal spell's is a `spell` line, an activated charm's an `activated` (or `planeswalker`) line opening with its cost, which takes the `cost` role span. Its prose is the charm's header, never the bare continuation of one (`AdditionalDescription$ . If…` follows its "choose N").
+- A trigger executing a charm prints one `option` line per mode whether or not its description holds the `ABILITY` placeholder (`ability/TriggeredAbilityEntry`), each keyed under every root key the trigger's line carries plus its `option`; a mode line missing would leave its mode key in range and in neither list.
 - A line merged from several traits carries its first claimant's chain alone; a one-line keyword's line carries the keyword's own script text (`Ward:2`).
 - The converted `.txt` changes only on purpose: the connector's `golden-024` tests compare it byte for byte with expected text maintained by hand.
 
