@@ -141,9 +141,11 @@ _FROZEN_GEN3_ENTITY = (
     "granted_temporary", "lines", "stack_extras", "role",
 )
 #: A line's members (``FE/CardLines.java``): the ones always written, and the
-#: ones written only when set.
+#: ones written only when set (``grant`` on a granted line, a member added
+#: by finding 1.7).
 _FROZEN_LINE_MEMBERS = {"keys", "kind", "granted"}
-_FROZEN_OPTIONAL_LINE_MEMBERS = {"active", "cast_with", "chosen", "fragment", "affected"}
+_FROZEN_OPTIONAL_LINE_MEMBERS = {
+    "grant", "active", "cast_with", "chosen", "fragment", "affected"}
 _FROZEN_LINE_KINDS = {"spell", "activated", "trigger", "static", "replacement", "keyword"}
 
 #: The gen-2 card-slot members gen-3 drops (FR-019): ``printed`` and

@@ -61,6 +61,9 @@ def _entity(**members) -> dict:
     (_record(entities=[_entity(role="bystander")]), ("entity.role", "bystander")),
     (_record(entities=[_entity(lines=[{"keys": [], "kind": "ability"}])]),
      ("line.kind", "ability")),
+    (_record(entities=[_entity(lines=[
+        {"keys": [], "kind": "keyword", "granted": True, "grant": "anthem"}])]),
+     ("line.grant", "anthem")),
     (_record(links=[{"from": "E1", "to": "E2", "type": "haunts"}]), ("link.type", "haunts")),
     (_record(**{"global": {"phase": "beginning"}}), ("global.phase", "beginning")),
     (_record(**{"global": {"phase": "main2", "combat_substep": "trample"}}),
@@ -181,6 +184,19 @@ def test_the_choice_kinds_are_the_connector_s():
 def test_the_event_durations_are_the_connector_s():
     source = (_CONNECTOR / "EventDuration.java").read_text(encoding="utf-8")
     assert sorted(EVENT_DURATIONS) == sorted(re.findall(r'[A-Z_]+\("([a-z_]+)"\)', source))
+
+
+def test_the_line_grants_are_the_connector_s():
+    from effects.domain.state_snapshot import LineGrant
+
+    source = (_CONNECTOR / "LineGrant.java").read_text(encoding="utf-8")
+    assert sorted(LineGrant) == sorted(
+        re.findall(r'static final String [A-Z]+ = "([a-z]+)";', source))
+
+
+def test_a_printed_line_carries_no_grant_and_is_on_the_list():
+    raw = _record(entities=[_entity(lines=[{"keys": [], "kind": "spell", "granted": False}])])
+    assert list(off_list_values(raw)) == []
 
 
 def test_a_last_known_entity_with_no_zone_is_on_the_list():

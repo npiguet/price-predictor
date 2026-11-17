@@ -198,6 +198,8 @@ def _line_to_json(line: CardLine) -> dict:
     """One gen-3 line; the optional members only where set, as Java writes them."""
     out: dict = {"keys": _keys_to_json(line.keys), "kind": line.kind,
                  "granted": line.granted}
+    if line.grant is not None:
+        out["grant"] = line.grant
     if line.active is not None:
         out["active"] = line.active
     if line.cast_with is not None:
@@ -216,6 +218,7 @@ def _line_from_json(data: dict) -> CardLine:
         keys=_keys_from_json(data.get("keys")),
         kind=data["kind"],
         granted=data.get("granted", False),
+        grant=data.get("grant"),
         active=data.get("active"),
         cast_with=data.get("cast_with"),
         chosen=_tuple_or_none(data.get("chosen")),

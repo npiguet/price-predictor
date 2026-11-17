@@ -225,7 +225,7 @@ class TestDamagePrevented:
         protected = copy.record.state.entity("E1")
         assert copy.quality.keyword in protected.granted_temporary.keywords
         assert protected.lines == (CardLine(keys=(), kind="keyword", granted=True,
-                                            fragment=copy.quality.fragment),)
+                                            grant="effect", fragment=copy.quality.fragment),)
 
     def test_protection_from_everything_for_702_16j(self):
         copy = _copy(_sweeper(_creature("E1")), EVERYTHING_RULE)

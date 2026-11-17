@@ -99,8 +99,8 @@ class _Lines:
 
 def _flags(slot) -> dict[str, float]:
     """An ``[ABILITY]`` slot's line flags by name."""
-    active, granted, temporary, cast, count, _, chosen = slot.features
-    return {"active": active, "granted": granted, "temporary": temporary,
+    active, granted, by_effect, cast, count, _, chosen = slot.features
+    return {"active": active, "granted": granted, "by_effect": by_effect,
             "cast_with": cast, "count": count, "chosen": chosen}
 
 
@@ -299,7 +299,7 @@ class TestAbilityTokens:
         vectors = [s.e for s in slots_of_kind(surface, SlotKind.ABILITY)]
         assert vectors == [_VECTORS[_ANTHEM], _VECTORS[_WARD]]
 
-    def test_temporary_grants_become_tokens_flagged_temporary(self):
+    def test_gen2_temporary_grants_become_tokens_flagged_granted_by_an_effect(self):
         """Root spec § 9.2: a temporary grant is a line, in place of a count."""
         entity = _entity(
             "E1", printed=(_ANTHEM,),
@@ -308,7 +308,7 @@ class TestAbilityTokens:
         surface = _build(_record(state=_snapshot(entities=(entity,))))
         abilities = slots_of_kind(surface, SlotKind.ABILITY)
         assert [slot.e for slot in abilities] == [_VECTORS[_ANTHEM], _VECTORS[_WARD]]
-        assert [_flags(slot)["temporary"] for slot in abilities] == [0.0, 1.0]
+        assert [_flags(slot)["by_effect"] for slot in abilities] == [0.0, 1.0]
 
     def test_a_gen3_entity_builds_the_surface_its_gen2_twin_builds(self):
         """The lines in force read as the gen-2 twin's tokens, printed or
@@ -719,6 +719,7 @@ class TestGen2Layout:
 
 _CHOICE = ProvenanceKey("cardsfolder/c/charm.txt", 0, "spell", 0)
 _KICKER = ProvenanceKey("cardsfolder/k/kicker.txt", 0, "keyword", 0)
+_SLIVER = ProvenanceKey("cardsfolder/f/fungus_sliver.txt", 0, "trigger", 0)
 
 
 def _line(key, kind="static", granted=False, **fields):
@@ -750,21 +751,68 @@ class TestLineFlags:
             _line(_ANTHEM, active=True), _line(_WARD, kind="trigger", active=False)))
         assert [_flags(slot)["active"] for slot in self._abilities(entity)] == [1.0, 0.0]
 
-    def test_a_grant_by_a_static_is_granted_but_not_temporary(self):
-        entity = _entity("E1", lines=(_line(_ANTHEM, kind="activated", granted=True),))
-        flags = _flags(self._abilities(entity)[0])
-        assert (flags["granted"], flags["temporary"]) == (1.0, 0.0)
+    def _grant_flags(self, *lines) -> list[tuple[float, float]]:
+        abilities = self._abilities(_entity("E1", lines=lines))
+        return [(_flags(slot)["granted"], _flags(slot)["by_effect"]) for slot in abilities]
+
+    def test_a_grant_by_a_static_is_granted_but_not_by_an_effect(self):
+        assert self._grant_flags(
+            _line(_ANTHEM, kind="activated", granted=True, grant="static")) == [(1.0, 0.0)]
+
+    def test_a_trigger_a_static_grants_is_not_by_an_effect(self):
+        """Finding 1.7: a second Fungus Sliver's trigger keys to its own
+        trigger line, and is no effect's for that."""
+        assert self._grant_flags(
+            _line(_SLIVER, kind="trigger", granted=True, grant="static")) == [(1.0, 0.0)]
+
+    def test_a_copied_trigger_line_reads_not_granted(self):
+        """A copy prints what it copies: its trigger line is printed."""
+        assert self._grant_flags(_line(_SLIVER, kind="trigger")) == [(0.0, 0.0)]
+
+    def test_a_trait_a_card_grants_itself_merges_with_its_granting_line_printed(self):
+        """A Class level's trigger is listed beside its ``Class:N`` line under
+        the same key, both printed: one slot, not granted."""
+        assert self._grant_flags(_line(_KICKER, kind="keyword"),
+                                 _line(_KICKER, kind="trigger")) == [(0.0, 0.0)]
+
+    def test_a_keyword_counter_line_is_granted_not_by_an_effect(self):
+        assert self._grant_flags(_line(
+            None, kind="keyword", granted=True, grant="counter", fragment="Trample",
+        )) == [(1.0, 0.0)]
+
+    def test_an_until_end_of_turn_granted_ability_is_by_an_effect(self):
+        assert self._grant_flags(
+            _line(_ANTHEM, kind="activated", granted=True, grant="effect")) == [(1.0, 1.0)]
+
+    def test_a_static_an_effect_granted_is_by_an_effect(self):
+        """The grant decides, not the key's trait kind: an animation's static."""
+        assert self._grant_flags(
+            _line(_WARD, kind="static", granted=True, grant="effect")) == [(1.0, 1.0)]
+
+    def test_a_granted_line_written_before_grant_existed_is_not_by_an_effect(self):
+        """A granted line with no ``grant`` (a record collected before the
+        member) says nothing about why: nothing is guessed from its key."""
+        assert self._grant_flags(
+            _line(_SLIVER, kind="trigger", granted=True),
+            _line(None, kind="keyword", granted=True, fragment="Flying"),
+        ) == [(1.0, 0.0), (1.0, 0.0)]
 
     def test_a_keyword_an_effect_granted_reads_through_its_reminder_line(self):
         from effects.domain.effect_head_input import keyword_line_fragment
 
         entity = _entity("E1", lines=(
-            _line(None, kind="keyword", granted=True, fragment="Flying"),))
+            _line(None, kind="keyword", granted=True, grant="effect", fragment="Flying"),))
         keys = []
         abilities = self._abilities(entity, e_for=lambda key: keys.append(key) or None)
         flags = _flags(abilities[0])
-        assert (flags["granted"], flags["temporary"]) == (1.0, 1.0)
+        assert (flags["granted"], flags["by_effect"]) == (1.0, 1.0)
         assert keyword_line_fragment(keys[-1]) == "Flying"
+
+    def test_a_keyword_an_edit_grants_is_by_an_effect(self):
+        """``with_granted_keyword`` grants as a resolved effect does."""
+        entity = _entity("E1", lines=(_line(_ANTHEM),)).with_granted_keyword("flying", "Flying")
+        flags = _flags(self._abilities(entity)[1])
+        assert (flags["granted"], flags["by_effect"]) == (1.0, 1.0)
 
     def test_a_line_with_no_key_and_no_keyword_has_no_slot(self):
         entity = _entity("E1", lines=(_line(None, kind="trigger"), _line(_ANTHEM)))
@@ -788,7 +836,7 @@ class TestLineFlags:
         entity = _entity("E1", counters={"FLYING": 1, "P1P1": 2})
         lines = slot_lines(entity)
         assert [keyword_line_fragment(line.key) for line in lines] == ["FLYING"]
-        assert lines[0].granted and not lines[0].temporary
+        assert lines[0].granted and lines[0].grant == "counter" and not lines[0].by_effect
         assert counter_rows(entity) == ((counter_id("P1P1"), 2.0),)
 
     def test_a_keyword_counter_adds_no_line_where_the_keyword_has_one(self):
@@ -1053,7 +1101,8 @@ class TestTheGen3Fixture:
         entities = [entity for record in records for entity in record.state.entities]
         lines = [line for entity in entities for line in slot_lines(entity)]
         assert any(not line.active for line in lines)
-        assert any(line.temporary and keyword_line_fragment(line.key) for line in lines)
+        # Cut before ``grant`` existed: its granted keyword lines carry none.
+        assert any(line.granted and keyword_line_fragment(line.key) for line in lines)
         assert any(counter_rows(entity) for entity in entities)
         assert any(entity.chosen and entity.chosen.type for entity in entities)
 
@@ -1153,6 +1202,8 @@ class TestCommandZoneSlots:
         line = surface.slots[at + 1]
         assert line.kind is SlotKind.ABILITY and line.entity_id == "F40"
         assert line.e == falter_e and _flags(line)["granted"] == 1.0
+        # Its lines are an effect's, whose duration the card reads apart.
+        assert _flags(line)["by_effect"] == 1.0
         for creature in ("E1", "E2"):
             assert _linked(surface, at, _subject_slot(surface, creature), "affects")
         # created_by ends at the casting line's own slot, not its card.

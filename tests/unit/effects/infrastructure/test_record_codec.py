@@ -1174,6 +1174,38 @@ class TestTheGen3EntityShape:
         assert record_from_dict(record_to_dict(record)) == record
 
 
+class TestALinesGrant:
+    """A granted line's ``grant``, why it is granted (finding 1.7)."""
+
+    @staticmethod
+    def _with_a_granted_trigger(grant: str | None) -> tuple[dict, dict]:
+        """A real fixture record with its first granted trigger line's
+        ``grant`` set (left out on None), and that line."""
+        raw, line = next(
+            (raw, line) for raw in gen3_fixture_records()
+            for entity in raw["state"]["entities"] for line in entity.get("lines") or ()
+            if line["granted"] and line["kind"] == "trigger")
+        if grant is not None:
+            line["grant"] = grant
+        return raw, line
+
+    def test_it_reads_and_writes_back_right_after_granted(self):
+        raw, line = self._with_a_granted_trigger("static")
+        written = record_to_dict(record_from_dict(raw))
+        lines = [written_line for entity in written["state"]["entities"]
+                 for written_line in entity.get("lines") or ()
+                 if written_line.get("grant") is not None]
+        assert lines == [line]
+        assert list(lines[0])[:4] == ["keys", "kind", "granted", "grant"]
+
+    def test_a_line_written_before_it_existed_reads_none(self):
+        raw, line = self._with_a_granted_trigger(None)
+        entities = record_from_dict(raw).state.entities
+        assert [card_line.grant for entity in entities for card_line in entity.lines
+                if card_line.granted and card_line.kind == "trigger"][:1] == [None]
+        assert "grant" not in line
+
+
 def _entity_dict(entity: EntityState) -> dict:
     record = _record(state=replace(_record().state, entities=(entity,)))
     return record_to_dict(record)["state"]["entities"][0]

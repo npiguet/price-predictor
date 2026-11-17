@@ -297,6 +297,26 @@ class LineKind(StrEnum):
     KEYWORD = "keyword"
 
 
+class LineGrant(StrEnum):
+    """Why a gen-3 line is granted, in the collector's spelling (its
+    ``LineGrant``); a printed line has none.
+
+    Why, not for how long: an ``effect`` grant lasts as long as its effect,
+    which the line does not carry, and an emblem's own lines are ``effect``
+    and permanent.
+    """
+
+    #: A permanent's static ability: an anthem, an attachment, an emblem, a
+    #: type change such as Blood Moon's.
+    STATIC = "static"
+    #: A resolved effect: a pump, an animation, a copy effect another card made.
+    EFFECT = "effect"
+    #: A keyword counter on the card.
+    COUNTER = "counter"
+    #: A spliced card's spell, for one resolution.
+    SPLICE = "splice"
+
+
 @dataclass(frozen=True, slots=True)
 class CardLine:
     """One line of a gen-3 card slot: a trait the card carries now.
@@ -313,8 +333,12 @@ class CardLine:
     keys: tuple[ProvenanceKey, ...]
     kind: str
     #: The line is not printed on this card: a static's, an attachment's, an
-    #: effect's, an emblem's or a splice's.
+    #: effect's, an emblem's, a keyword counter's or a splice's. A copy prints
+    #: what it copies, and a card prints a line it grants itself.
     granted: bool
+    #: :class:`LineGrant` on a granted line; None on a printed one, and on a
+    #: granted line of a record written before the member existed.
+    grant: str | None = None
     #: Forge's answer to whether a static's condition holds; False on every
     #: line of a face not up; None on any other line.
     active: bool | None = None
@@ -647,7 +671,8 @@ class EntityState:
                                   or (not valued and line.keyword == normalize_keyword(keyword)))
                for line in entity.lines):
             return entity
-        line = CardLine(keys=(), kind=LineKind.KEYWORD.value, granted=True, fragment=fragment)
+        line = CardLine(keys=(), kind=LineKind.KEYWORD.value, granted=True,
+                        grant=LineGrant.EFFECT.value, fragment=fragment)
         return replace(entity, lines=(*entity.lines, line))
 
 

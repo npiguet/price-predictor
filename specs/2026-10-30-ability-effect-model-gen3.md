@@ -709,12 +709,13 @@ The ability encoder, `e` and the trunk are each 256 wide.
   | flag | set on |
   |---|---|
   | active | a line in force: its face is up, its Class level is reached, its Room door is unlocked, its static's condition holds |
-  | granted temporarily | a temporary grant, read as a line; a bare keyword is read through its reminder text |
+  | granted | a line not printed on the card; a bare keyword is read through its reminder text |
+  | granted by an effect | a line a resolved effect grants (its `grant` is `effect`) and a command-zone card's line, whatever the effect's duration |
   | cast with | the alternative-cost or kicker line a spell was cast with, with a count for multikicker |
   | chosen | the mode a modal spell chose |
 
-- A temporarily granted keyword is a line flagged granted temporarily, in place of a count
-  and a keyword multi-hot.
+- A keyword a resolved effect or a keyword counter grants is a granted keyword line, in place
+  of a count and a keyword multi-hot.
 - The lines of a face that is not up stay as ability slots flagged inactive. A face-down
   card carries its real face that way.
 

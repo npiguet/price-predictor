@@ -21,6 +21,7 @@ from effects.domain.state_snapshot import (
     EffectDuration,
     EntityRole,
     FaceState,
+    LineGrant,
     LineKind,
 )
 
@@ -79,6 +80,8 @@ _DURATIONS = frozenset(EffectDuration)
 _FACE_STATES = frozenset(FaceState) | {None}
 _ROLES = frozenset(EntityRole) | {None}
 _LINE_KINDS = frozenset(LineKind)
+#: A line's grant, absent on a printed line.
+_LINE_GRANTS = frozenset(LineGrant) | {None}
 _LINK_TYPES = frozenset(FAMILIES)
 _ATTRIBUTION_SENTINELS = frozenset({"root", "unresolved"})
 _EVENT_DURATIONS = frozenset(EVENT_DURATIONS) | {None}
@@ -99,23 +102,29 @@ def off_list_values(raw: Mapping) -> Iterator[tuple[str, object]]:
     """``(member, value)`` for every value of one raw record outside its
     member's closed list; a member a record need not carry is checked only
     where present."""
+    yield from _envelope(raw)
+    yield from _state(raw.get("state") or {})
+    for event in _payload_events(raw.get("payload") or {}):
+        yield from _event(event)
+
+
+def _envelope(raw: Mapping) -> Iterator[tuple[str, object]]:
     if raw.get("generation") == 3 and "mode" not in raw:
         yield "mode", ABSENT
     for kind in raw.get("copy_dropped") or ():
         if _outside(kind, _COPY_DROPPED_KINDS):
             yield "copy_dropped", kind
-    state = raw.get("state") or {}
+
+
+def _state(state: Mapping) -> Iterator[tuple[str, object]]:
     yield from _global(state.get("global") or {})
     for entity in state.get("entities") or ():
         yield from _entity(entity)
     for link in state.get("links") or ():
-        if _outside(link.get("type"), _LINK_TYPES):
-            yield "link.type", link.get("type")
+        yield from _members(link, "link", _LINK_LISTS)
     pending = state.get("pending_event")
     if pending:
         yield from _event(pending)
-    for event in _payload_events(raw.get("payload") or {}):
-        yield from _event(event)
 
 
 def _outside(value: object, allowed: frozenset) -> bool:
@@ -127,14 +136,23 @@ def _outside(value: object, allowed: frozenset) -> bool:
         return True
 
 
+#: ``(member, its list)`` of each block whose members are checked alike.
+_GLOBAL_LISTS = (("phase", _PHASES), ("combat_substep", _SUBSTEPS), ("day_night", _DAY_NIGHT))
+_ENTITY_LISTS = (("zone", _ZONES), ("face_state", _FACE_STATES), ("role", _ROLES))
+_LINE_LISTS = (("kind", _LINE_KINDS), ("grant", _LINE_GRANTS))
+_LINK_LISTS = (("type", _LINK_TYPES),)
+
+
+def _members(block: Mapping, prefix: str, lists) -> Iterator[tuple[str, object]]:
+    """``(prefix.member, value)`` for each of ``lists``' members of ``block``
+    outside its list."""
+    for member, allowed in lists:
+        if _outside(block.get(member), allowed):
+            yield f"{prefix}.{member}", block.get(member)
+
+
 def _global(block: Mapping) -> Iterator[tuple[str, object]]:
-    phase = block.get("phase")
-    if _outside(phase, _PHASES):
-        yield "global.phase", phase
-    if _outside(block.get("combat_substep"), _SUBSTEPS):
-        yield "global.combat_substep", block.get("combat_substep")
-    if _outside(block.get("day_night"), _DAY_NIGHT):
-        yield "global.day_night", block.get("day_night")
+    yield from _members(block, "global", _GLOBAL_LISTS)
     for member in ("floating_effects", "delayed_triggers"):
         for made in block.get(member) or ():
             if "duration" in made and _outside(made["duration"], _DURATIONS):
@@ -142,15 +160,9 @@ def _global(block: Mapping) -> Iterator[tuple[str, object]]:
 
 
 def _entity(entity: Mapping) -> Iterator[tuple[str, object]]:
-    if _outside(entity.get("zone"), _ZONES):
-        yield "entity.zone", entity.get("zone")
-    if _outside(entity.get("face_state"), _FACE_STATES):
-        yield "entity.face_state", entity.get("face_state")
-    if _outside(entity.get("role"), _ROLES):
-        yield "entity.role", entity.get("role")
+    yield from _members(entity, "entity", _ENTITY_LISTS)
     for line in entity.get("lines") or ():
-        if _outside(line.get("kind"), _LINE_KINDS):
-            yield "line.kind", line.get("kind")
+        yield from _members(line, "line", _LINE_LISTS)
 
 
 def _payload_events(payload: Mapping) -> Iterator[Mapping]:
@@ -166,15 +178,27 @@ def _payload_events(payload: Mapping) -> Iterator[Mapping]:
 
 def _event(event: Mapping) -> Iterator[tuple[str, object]]:
     attributed = event.get("attributed_to")
-    if attributed is not None and not (
-            isinstance(attributed, str)
-            and (attributed in _ATTRIBUTION_SENTINELS or attributed.isdigit())):
+    if attributed is not None and not _is_attribution(attributed):
         yield "event.attributed_to", attributed
     if _outside(event.get("duration"), _EVENT_DURATIONS):
         yield "event.duration", event.get("duration")
-    kind = event.get("type")
-    params = event.get("params") or {}
+    yield from _event_params(event.get("type"), event.get("params") or {})
+
+
+def _event_params(kind: object, params: Mapping) -> Iterator[tuple[str, object]]:
     for (event_type, name), allowed in _EVENT_PARAM_LISTS.items():
-        if kind == event_type and (name in params or event_type == EventType.ZONE_CHANGE):
+        if kind == event_type and _checks_param(event_type, name, params):
             if _outside(params.get(name), allowed):
                 yield f"{event_type}.{name}", params.get(name)
+
+
+def _is_attribution(attributed: object) -> bool:
+    """What an event's ``attributed_to`` may name: a sentinel or a chain index."""
+    return isinstance(attributed, str) and (
+        attributed in _ATTRIBUTION_SENTINELS or attributed.isdigit())
+
+
+def _checks_param(event_type: str, name: str, params: Mapping) -> bool:
+    """Whether an event of ``event_type`` has ``name`` checked: where it
+    carries it, and always on a ``zone_change``."""
+    return name in params or event_type == EventType.ZONE_CHANGE

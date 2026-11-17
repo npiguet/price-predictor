@@ -1064,11 +1064,12 @@ and that the reporting half never enters the control score.
 #### Model input (root § 9)
 
 - **FR-043**: The ability encoder, `e` and the trunk MUST each be 256 wide by default.
-- **FR-044**: The model input MUST follow root § 9.2–§ 9.6: line flags (active, granted
-  temporarily, cast with with a multikicker count, chosen) on every ability slot; a temporarily
-  granted keyword as a granted line read through its reminder text, replacing the gen-2 count and
-  keyword multi-hot; a face that is not up as ability slots flagged inactive; command-zone card
-  slots for floating effects, delayed triggers and dungeons; card slots for the pending event's
+- **FR-044**: The model input MUST follow root § 9.2–§ 9.6: line flags (active, granted,
+  granted by an effect, cast with with a multikicker count, chosen) on every ability slot; a
+  keyword an effect or a keyword counter grants as a granted line read through its reminder
+  text, replacing the gen-2 count and keyword multi-hot; a face that is not up as ability
+  slots flagged inactive; command-zone card slots for floating effects, delayed triggers and
+  dungeons; card slots for the pending event's
   last known subject, the library cards of FR-024, cards exiled with a permanent and a mutated
   permanent's components; the 33 inputs of `rules/gen3-fields.json` in the places root § 9.4 gives;
   the six turn, priority and control inputs of root § 9.5 beside gen-2's acting-player inputs;

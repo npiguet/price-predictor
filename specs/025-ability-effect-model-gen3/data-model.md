@@ -280,7 +280,7 @@ log1p; the subtype and counter lists are Forge's, checked in (`forge_vocabularie
 are a multi-hot over `KEPT_KEYWORD_FLAGS` (85). Floating effects and delayed triggers the snapshot
 gives no entity are card slots in the command zone, with a duration one-hot and the shield left. A
 dungeon is a card slot holding the one keyword line `convert` renders for all its rooms. Every line is
-an ability slot with seven flags (active, granted, granted temporarily, cast-with flag and count raw
+an ability slot with seven flags (active, granted, granted by an effect, cast-with flag and count raw
 and log1p, chosen).
 
 ### RelationEncoderLayer (new)
