@@ -4,6 +4,7 @@ import com.pricepredictor.connector.effects.SourceTree;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
 
 /**
  * CLI entry point writing a provenance sidecar beside every variant script.
@@ -28,7 +29,7 @@ public class VariantSidecarMain {
 
     /** The worker itself; an exit it requests ends the process through {@link ToolMain#guard}. */
     static void work(String[] args) {
-        String variantsPath = ToolMain.args(args, "--variants-path")
+        String variantsPath = ToolMain.args(args, Set.of(), "--variants-path")
                 .get("--variants-path", "output/effects/variant-scripts/");
 
         Path variants = Path.of(variantsPath);

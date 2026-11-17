@@ -223,6 +223,14 @@ def build_parser() -> argparse.ArgumentParser:
             "sealed pipeline reads the card tree as its corpus."
         ),
     )
+    convert_parser.add_argument(
+        "--replace", action="store_true",
+        help=(
+            "Sweep the converted files out of both output trees before "
+            "converting. Without it, an output tree that already holds "
+            "converted files is refused."
+        ),
+    )
     convert_parser.set_defaults(func=run_convert)
 
     # ── check-convert ─────────────────────────────────────────────
@@ -366,6 +374,10 @@ def run_convert(args: argparse.Namespace) -> int:
     script never defines, whose segment was left out of ``script_text`` —
     as one block on stderr at the end of the run, and the operator is the
     one who has to read it.
+
+    Returns ``ConvertMain``'s exit status: non-zero when an output tree
+    already holds converted files and ``--replace`` was not given, and when
+    any script failed to convert.
     """
     import subprocess
 
@@ -394,6 +406,7 @@ def run_convert(args: argparse.Namespace) -> int:
             "--output-path", args.output_path,
             "--tokens-path", args.tokens_path,
             "--tokens-output-path", args.tokens_output_path,
+            *(["--replace"] if args.replace else []),
         ],
     )
 
@@ -596,44 +609,45 @@ def _load_optional_transformer_bundle(
     vocab_path: Path, transformer_dir: Path = Path(_PREDICT_MODEL_PATHS["transformer"]),
 ) -> tuple[dict[str, Any] | None, Any | None]:
     """Load the transformer artifact + tokenizer for `serve`. Either may be None."""
-    transformer_artifact: dict[str, Any] | None = None
-    transformer_dir = Path(transformer_dir)
-    transformer_pt = transformer_dir / "latest.pt"
-    if transformer_pt.exists():
-        try:
-            from price_predictor.infrastructure.transformer_store import (
-                load_model as load_transformer,
-            )
-            model, config = load_transformer(transformer_dir)
-            transformer_artifact = {
-                "model": model,
-                "config": config,
-                "model_version": "transformer-v1",
-            }
-            logger.info("Transformer model loaded.")
-        except Exception as e:
-            logger.warning("Failed to load transformer model: %s", e)
-    else:
-        logger.info("No transformer model found — transformer predictions disabled.")
+    return _load_optional_transformer(Path(transformer_dir)), _load_optional_tokenizer(vocab_path)
 
-    tokenizer: Any | None = None
-    if vocab_path.exists():
-        try:
-            from price_predictor.infrastructure.tokenizer_store import load_tokenizer
-            tokenizer = load_tokenizer(vocab_path)
-            logger.info(
-                "Tokenizer loaded from %s (%d tokens).",
-                vocab_path, tokenizer.vocab_size,
-            )
-        except Exception as e:
-            logger.warning("Failed to load tokenizer: %s", e)
-    else:
+
+def _load_optional_transformer(transformer_dir: Path) -> dict[str, Any] | None:
+    """The transformer artifact for `serve`, or None when absent or unloadable."""
+    if not (transformer_dir / "latest.pt").exists():
+        logger.info("No transformer model found — transformer predictions disabled.")
+        return None
+    try:
+        from price_predictor.infrastructure.transformer_store import (
+            load_model as load_transformer,
+        )
+        model, config = load_transformer(transformer_dir)
+    except Exception as e:
+        logger.warning("Failed to load transformer model: %s", e)
+        return None
+    logger.info("Transformer model loaded.")
+    return {"model": model, "config": config, "model_version": "transformer-v1"}
+
+
+def _load_optional_tokenizer(vocab_path: Path) -> Any | None:
+    """The tokenizer for `serve`, or None when its vocabulary is absent or unloadable."""
+    if not vocab_path.exists():
         logger.warning(
             "Vocabulary not found at %s — transformer encoding may fail.",
             vocab_path,
         )
-
-    return transformer_artifact, tokenizer
+        return None
+    try:
+        from price_predictor.infrastructure.tokenizer_store import load_tokenizer
+        tokenizer = load_tokenizer(vocab_path)
+    except Exception as e:
+        logger.warning("Failed to load tokenizer: %s", e)
+        return None
+    logger.info(
+        "Tokenizer loaded from %s (%d tokens).",
+        vocab_path, tokenizer.vocab_size,
+    )
+    return tokenizer
 
 
 def run_predict_sklearn(args: argparse.Namespace) -> int:

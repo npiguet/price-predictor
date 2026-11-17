@@ -2,7 +2,10 @@ package com.pricepredictor.connector;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Set;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -11,13 +14,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ToolMainArgsTest {
 
     private static final ToolMain.Args ARGS = ToolMain.args(
-            new String[] {"--cards", "in.txt", "--stale", "--output", "out.json"},
+            new String[] {"--cards", "in.txt", "--stale", "--output", "out.json"}, Set.of(),
             "--cards", "--output", "--size");
 
     @Test
     void aGivenFlagIsReadAndAnUnknownOneSwallowsNothing() {
         assertEquals("in.txt", ARGS.require("--cards"));
         assertEquals("out.json", ARGS.require("--output"));
+    }
+
+    @Test
+    void aSwitchTakesNoValue() {
+        ToolMain.Args args = ToolMain.args(
+                new String[] {"--replace", "--output", "out"}, Set.of("--replace"), "--output");
+
+        assertTrue(args.has("--replace"));
+        assertEquals("out", args.require("--output"));
+        assertFalse(ARGS.has("--replace"));
     }
 
     @Test

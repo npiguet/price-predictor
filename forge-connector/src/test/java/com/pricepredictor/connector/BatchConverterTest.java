@@ -2,10 +2,13 @@ package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.effects.SourceTree;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -103,5 +106,91 @@ class BatchConverterTest {
                 tempDir.resolve("tokens"), SourceTree.TOKENSCRIPTS);
 
         assertTrue(tokens.missingSVars().isEmpty(), tokens.missingSVars().toString());
+    }
+
+    // ── a card's text and sidecar are written whole, together ───────────
+
+    /** Forge's own script, from the golden tree. */
+    private static final Path BOLT = GOLDEN.resolve("cardsfolder/l/lightning_bolt.txt");
+
+    private Path sourceWithBolt() throws IOException {
+        Path source = tempDir.resolve("source");
+        Files.createDirectories(source.resolve("l"));
+        Files.copy(BOLT, source.resolve("l/lightning_bolt.txt"));
+        return source;
+    }
+
+    private static List<Path> filesUnder(Path root) throws IOException {
+        try (Stream<Path> files = Files.walk(root)) {
+            return files.filter(Files::isRegularFile).toList();
+        }
+    }
+
+    /** The malformed fixture's text: the parser makes no card of it. */
+    @Test
+    void aScriptThatFailsLeavesNoFileForItself() throws IOException {
+        Path source = sourceWithBolt();
+        Files.createDirectories(source.resolve("m"));
+        Files.copy(FIXTURE.resolve("m/malformed_card.txt"), source.resolve("m/malformed_card.txt"));
+        Path output = tempDir.resolve("output");
+
+        BatchConverter.BatchResult result =
+                new BatchConverter().convert(source, output, SourceTree.CARDSFOLDER);
+
+        assertEquals(List.of("malformed_card"), result.failedScripts());
+        assertEquals(
+                Set.of(output.resolve("l/lightning_bolt.txt"),
+                        output.resolve("l/lightning_bolt.provenance.json")),
+                Set.copyOf(filesUnder(output)));
+    }
+
+    /**
+     * The sidecar fails after the text is built and renamed into place (its
+     * target is a directory that cannot be replaced): the text goes too, and
+     * no temporary file is left behind.
+     */
+    @Test
+    void aSidecarThatCannotBeWrittenTakesItsTextWithIt() throws IOException {
+        Path source = sourceWithBolt();
+        Path output = tempDir.resolve("output");
+        Path sidecar = output.resolve("l/lightning_bolt.provenance.json");
+        Files.createDirectories(sidecar.resolve("occupied"));
+
+        BatchConverter.BatchResult result =
+                new BatchConverter().convert(source, output, SourceTree.CARDSFOLDER);
+
+        assertEquals(List.of("lightning_bolt"), result.failedScripts());
+        assertTrue(result.warnings().get(0).contains(sidecar.toString()), result.warnings().toString());
+        assertEquals(List.of(), filesUnder(output));
+    }
+
+    /**
+     * Windows will not rename onto a file another handle holds open: the
+     * rewrite of a pair whose sidecar is held fails naming the sidecar, and
+     * the old pair stays whole, its text restored after it was replaced.
+     */
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void aRewriteOntoAHeldSidecarFailsNamingItAndKeepsTheOldPair() throws IOException {
+        Path source = sourceWithBolt();
+        Path output = tempDir.resolve("output");
+        BatchConverter converter = new BatchConverter();
+        converter.convert(source, output, SourceTree.CARDSFOLDER);
+        Path text = output.resolve("l/lightning_bolt.txt");
+        Path sidecar = output.resolve("l/lightning_bolt.provenance.json");
+        Files.writeString(text, "old text");
+        Files.writeString(sidecar, "old sidecar");
+
+        BatchConverter.BatchResult result;
+        try (RandomAccessFile held = new RandomAccessFile(sidecar.toFile(), "r")) {
+            result = converter.convert(source, output, SourceTree.CARDSFOLDER);
+            assertEquals("old sidecar".length(), held.length());
+        }
+
+        assertEquals(List.of("lightning_bolt"), result.failedScripts());
+        assertTrue(result.warnings().get(0).contains(sidecar.toString()), result.warnings().toString());
+        assertEquals("old text", Files.readString(text));
+        assertEquals("old sidecar", Files.readString(sidecar));
+        assertEquals(Set.of(text, sidecar), Set.copyOf(filesUnder(output)));
     }
 }

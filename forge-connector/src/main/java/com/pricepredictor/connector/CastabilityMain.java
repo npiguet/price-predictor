@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * The coverage collector's castability consult.
@@ -49,7 +50,7 @@ public class CastabilityMain {
     }
 
     public static void main(String[] args) {
-        ToolMain.Args cli = ToolMain.args(args, "--cards", "--output");
+        ToolMain.Args cli = ToolMain.args(args, Set.of(), "--cards", "--output");
 
         ToolMain.run(() -> {
             Path cardsFile = Path.of(cli.require("--cards"));

@@ -19,7 +19,11 @@ import java.util.List;
  * <p>Each card produces two files: the converted text and a
  * {@code <name>.provenance.json} sidecar beside it, joining every rendered line
  * back to the runtime traits that produced it. Both come from one render pass,
- * so the sidecar's line indices always describe the file that was written.
+ * so the sidecar's line indices always describe the file that was written,
+ * and both are written together or not at all ({@link AtomicFiles}).
+ *
+ * <p>A script that fails is a warning on the result, not the end of the run;
+ * what the run makes of a failed script is the caller's to decide.
  */
 public class BatchConverter {
 
@@ -57,6 +61,10 @@ public class BatchConverter {
     public BatchResult convert(
             Path cardsPath, Path outputPath, SourceTree tree, boolean writeConvertedText)
             throws IOException {
+        // Once, before the loop: without the hook every script would fail on
+        // its own, and the run would end as thousands of warnings.
+        CopiedFaces.requireHook();
+        Job job = new Job(cardsPath, outputPath, tree, writeConvertedText);
         int totalFiles = 0;
         int succeeded = 0;
         List<String> warnings = new ArrayList<>();
@@ -64,14 +72,13 @@ public class BatchConverter {
         for (Path scriptFile : ScriptFiles.textFilesUnder(cardsPath)) {
             totalFiles++;
             try {
-                convertOne(cardsPath, scriptFile, outputPath, tree, writeConvertedText);
+                convertOne(job, scriptFile);
                 succeeded++;
             } catch (Throwable t) {
                 // Forge's card-rules parser raises AssertionError on
                 // malformed scripts as well as IOException/RuntimeException;
                 // catch Throwable so one bad fixture can't abort the batch.
-                String cardName = scriptFile.getFileName().toString().replace(".txt", "");
-                String warning = "[" + cardName + "] " + describe(t);
+                String warning = "[" + cardNameOf(scriptFile) + "] " + describe(t);
                 warnings.add(warning);
                 Log.warn("BatchConverter", warning);
             }
@@ -83,38 +90,48 @@ public class BatchConverter {
                 converter.missingSVars().drain());
     }
 
+    /** One tree's conversion: where it reads, where it writes, and what. */
+    private record Job(Path cardsPath, Path outputPath, SourceTree tree, boolean writeConvertedText) {
+    }
+
+    private static String cardNameOf(Path scriptFile) {
+        return scriptFile.getFileName().toString().replace(".txt", "");
+    }
+
     /**
      * Convert one script: its text, when asked for, and its sidecar, both
      * from the same render so the sidecar's line indices describe the file.
+     * Both are built before either is written, and written together
+     * ({@link AtomicFiles}), so a failure anywhere leaves the script's
+     * previous pair, or none, never a new text beside an old sidecar.
      */
-    private void convertOne(
-            Path cardsPath, Path scriptFile, Path outputPath, SourceTree tree,
-            boolean writeConvertedText) throws IOException {
+    private void convertOne(Job job, Path scriptFile) throws IOException {
         List<String> lines = Files.readAllLines(scriptFile);
-        Path relativePath = cardsPath.relativize(scriptFile);
+        Path relativePath = job.cardsPath().relativize(scriptFile);
         // The key's script path is the source path as written, tree
         // included — assembled by the same ScriptFile the collectors name
         // scripts with, so the converter and a collector cannot spell one
         // script two ways.
-        String scriptKeyPath = new ScriptFile(tree, relativePath.toString()).key();
+        String scriptKeyPath = new ScriptFile(job.tree(), relativePath.toString()).key();
 
         RulesParser.ParsedCard parsed =
                 converter.parseScript(lines, scriptKeyPath);
         MultiCard result = parsed.card();
 
         List<RenderedLine> renderedLines = result.renderLines();
-        String output = RenderedLine.join(renderedLines);
-
-        Path outputFile = outputPath.resolve(relativePath);
-        Files.createDirectories(outputFile.getParent());
-        if (writeConvertedText) {
-            Files.writeString(outputFile, output);
-        }
-
         ProvenanceSidecar sidecar = ProvenanceSidecar.build(
                 result.faces().get(0).name(), scriptKeyPath,
                 renderedLines, parsed.recorders());
-        Files.writeString(sidecarPathFor(outputFile), sidecar.toJson());
+
+        Path outputFile = job.outputPath().resolve(relativePath);
+        List<AtomicFiles.Entry> files = new ArrayList<>(2);
+        if (job.writeConvertedText()) {
+            files.add(new AtomicFiles.Entry(outputFile, RenderedLine.join(renderedLines)));
+        }
+        files.add(new AtomicFiles.Entry(sidecarPathFor(outputFile), sidecar.toJson()));
+
+        Files.createDirectories(outputFile.getParent());
+        AtomicFiles.write(files);
     }
 
     /**
@@ -148,6 +165,16 @@ public class BatchConverter {
      */
     public record BatchResult(int totalFiles, int succeeded, List<String> warnings,
                               List<MissingSVarReport.Entry> missingSVars) {
+
+        /**
+         * The name of each script that failed, in the order met: what each
+         * warning starts with, in brackets.
+         */
+        public List<String> failedScripts() {
+            return warnings.stream()
+                    .map(warning -> warning.substring(1, warning.indexOf("] ")))
+                    .toList();
+        }
 
         public int warningCount() {
             return warnings.size();

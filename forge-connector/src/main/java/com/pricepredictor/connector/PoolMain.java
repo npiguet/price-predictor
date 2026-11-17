@@ -6,6 +6,7 @@ import java.io.BufferedWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 
 /**
  * CLI entry point for sealed pool generation.
@@ -41,7 +42,7 @@ public class PoolMain {
 
     public static void main(String[] args) {
         ToolMain.Args cli = ToolMain.args(
-                args, "--set", "--size", "--pools-path", "--exclude-cards");
+                args, Set.of(), "--set", "--size", "--pools-path", "--exclude-cards");
         String setCode = cli.get("--set");
         String poolsPath = cli.get("--pools-path", "./output/sealed/pools/");
         String excludePath = cli.get("--exclude-cards");

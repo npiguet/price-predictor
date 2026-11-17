@@ -6,6 +6,7 @@ import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -127,27 +128,36 @@ final class ToolMain {
     }
 
     /**
-     * The values of the named {@code --flag value} pairs; the last occurrence
-     * wins.
+     * The values of the named {@code --flag value} pairs, the last occurrence
+     * winning, and which of the {@code switches}, flags that take no value,
+     * were given ({@link Args#has}).
      *
      * <p>Only the named flags take a value. Anything else on the command line
      * is skipped on its own, so a flag this main does not know never swallows
      * the next argument — an older caller passing a since-removed flag still
      * gets the rest of its arguments read.
      */
-    static Args args(String[] args, String... flags) {
+    static Args args(String[] args, Set<String> switches, String... flags) {
         Set<String> known = Set.of(flags);
         Map<String, String> values = new HashMap<>();
+        Set<String> given = new HashSet<>();
         for (int i = 0; i < args.length; i++) {
-            if (known.contains(args[i]) && i + 1 < args.length) {
+            if (switches.contains(args[i])) {
+                given.add(args[i]);
+            } else if (known.contains(args[i]) && i + 1 < args.length) {
                 values.put(args[i], args[++i]);
             }
         }
-        return new Args(values);
+        return new Args(values, given);
     }
 
-    /** Parsed {@code --flag value} pairs. */
-    record Args(Map<String, String> values) {
+    /** Parsed {@code --flag value} pairs, and the switches given. */
+    record Args(Map<String, String> values, Set<String> switches) {
+
+        /** Whether the switch {@code flag} was given. */
+        boolean has(String flag) {
+            return switches.contains(flag);
+        }
 
         /** The flag's value, or {@code defaultValue} when it was not given. */
         String get(String flag, String defaultValue) {

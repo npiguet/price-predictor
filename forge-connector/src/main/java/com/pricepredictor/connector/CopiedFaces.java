@@ -34,7 +34,11 @@ final class CopiedFaces {
 
     private static final String DIRECTIVE = "CopyFaceFrom:";
 
-    private static final Method SUPPLY = supplyMethod();
+    /** The Forge step this class calls, as the operator would look it up. */
+    static final String HOOK = "CardRules.supplyPlaceholderFaces(Map)";
+
+    /** {@link #HOOK}, or null on a Forge without it ({@link #requireHook}). */
+    private static final Method SUPPLY = supplyMethod(CardRules.class);
 
     private CopiedFaces() {
     }
@@ -53,6 +57,7 @@ final class CopiedFaces {
         if (copied == null) {
             return;
         }
+        requireHook();
         try {
             SUPPLY.invoke(rules, copied);
         } catch (InvocationTargetException e) {
@@ -88,20 +93,42 @@ final class CopiedFaces {
         return copied;
     }
 
+    /**
+     * Refuse a Forge without {@link #HOOK}, which would convert every copying
+     * script wrongly. A batch calls this once before its first script, so the
+     * run ends naming the hook instead of failing script by script.
+     *
+     * @throws IllegalStateException naming the hook when Forge lacks it
+     */
+    static void requireHook() {
+        requireHook(SUPPLY);
+    }
+
+    /** {@link #requireHook()} on {@code hook}, as found by {@link #supplyMethod}. */
+    static void requireHook(Method hook) {
+        if (hook == null) {
+            throw new IllegalStateException("the Forge on the classpath has no " + HOOK
+                    + ", which converting a script with a CopyFaceFrom: line needs");
+        }
+    }
+
     private static CardDb cards() {
         return StaticData.instance().getCommonCards();
     }
 
-    private static Method supplyMethod() {
+    /**
+     * {@link #HOOK} on {@code rules}, made callable, or null when the class
+     * has no such method. Not thrown from the class's initialiser: that
+     * error would surface on every script that touches the class, as one
+     * warning each, rather than once.
+     */
+    static Method supplyMethod(Class<?> rules) {
         try {
-            Method method = CardRules.class.getDeclaredMethod(
-                    "supplyPlaceholderFaces", Map.class);
+            Method method = rules.getDeclaredMethod("supplyPlaceholderFaces", Map.class);
             method.setAccessible(true);
             return method;
         } catch (NoSuchMethodException e) {
-            // A Forge without the step would convert every copying script
-            // wrongly, so it fails at class load rather than per card.
-            throw new ExceptionInInitializerError(e);
+            return null;
         }
     }
 }

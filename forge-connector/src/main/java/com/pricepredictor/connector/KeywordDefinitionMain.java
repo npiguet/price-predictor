@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -46,7 +47,7 @@ import java.util.regex.Pattern;
 public class KeywordDefinitionMain {
 
     public static void main(String[] args) {
-        String outputPath = ToolMain.args(args, "--output")
+        String outputPath = ToolMain.args(args, Set.of(), "--output")
                 .get("--output", "output/effects/keyword-definitions.json");
 
         ToolMain.run(() -> {
