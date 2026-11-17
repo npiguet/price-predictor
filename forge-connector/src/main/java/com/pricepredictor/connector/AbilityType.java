@@ -67,7 +67,7 @@ public enum AbilityType {
     private static final Pattern ROMAN_PREFIX =
             Pattern.compile("^([ivxlcdm]+(?:,\\s*[ivxlcdm]+)*)\\s*\u2014");
     private static final Pattern LOYALTY_COST =
-            Pattern.compile("^([+\\-](?:\\d+|X)): ", Pattern.CASE_INSENSITIVE);
+            Pattern.compile("^([+\\-](?:\\d+|X)|0): ", Pattern.CASE_INSENSITIVE);
 
     static String uppercaseRomanPrefix(String text) {
         Matcher m = ROMAN_PREFIX.matcher(text);

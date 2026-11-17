@@ -27,7 +27,7 @@ public final class AbilityDescription {
      */
     public static String normalize(String raw) {
         if (raw == null || raw.isEmpty()) return null;
-        String result = applyCasing(stripReminderText(raw));
+        String result = applyCasing(stripReminderText(raw)).replaceAll(" {2,}", " ");
         return (result == null || result.isEmpty()) ? null : result;
     }
 

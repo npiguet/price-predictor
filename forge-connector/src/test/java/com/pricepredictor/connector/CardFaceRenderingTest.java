@@ -110,9 +110,9 @@ class CardFaceRenderingTest {
         CardFace card = new CardFace(
                 "jace beleren", "{1}{U}{U}", "legendary planeswalker jace",
                 null, "3", null, null,
-                List.of(new TextAbility(AbilityType.PLANESWALKER, "+2: each player draws a card.")));
+                List.of(new TextAbility(AbilityType.PLANESWALKER, "[+2]: each player draws a card.")));
         String output = RenderedLine.join(card.renderLines(0));
         assertTrue(output.contains("loyalty: 3"));
-        assertTrue(output.contains("planeswalker[1]: +2: each player draws a card."));
+        assertTrue(output.contains("planeswalker[1]: [+2]: each player draws a card."));
     }
 }

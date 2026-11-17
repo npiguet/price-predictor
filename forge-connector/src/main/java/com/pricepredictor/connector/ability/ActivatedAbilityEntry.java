@@ -40,9 +40,11 @@ public record ActivatedAbilityEntry(AbilityType type, String descriptionText, Li
         // newline. Strip them here; they are re-emitted as OPTION sub-abilities below.
         String normalized = AbilityDescription.normalize(AbilityDescription.firstLine(rootDesc));
         if (normalized == null && described) return null;
+        // A cost Forge has no words for prints as its raw selector: no line, its key dropped.
+        if (DescriptionText.hasRawSelector(normalized)) return null;
 
         String fullDesc = normalized == null ? subText
-                : subText.isEmpty() ? normalized : normalized + " " + subText;
+                : DescriptionText.appendMissing(normalized, subText);
         return new ActivatedAbilityEntry(type, type.formatDescription(fullDesc),
                 DiceOutcomes.of(sa, DiceOutcomes::optionLine));
     }

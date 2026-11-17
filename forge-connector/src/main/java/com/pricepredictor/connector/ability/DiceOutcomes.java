@@ -77,7 +77,7 @@ public final class DiceOutcomes {
             String rawDesc = sub.getParam("SpellDescription");
             if (rawDesc == null || rawDesc.isEmpty()) continue;
             String normalized = AbilityDescription.normalize(AbilityDescription.replaceVert(rawDesc));
-            if (normalized != null) {
+            if (normalized != null && normalized.chars().anyMatch(Character::isLetterOrDigit)) {
                 result.add(factory.apply(normalized));
             }
         }

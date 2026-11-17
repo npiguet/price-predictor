@@ -35,7 +35,14 @@ public record SpellAdditionalCost(String descriptionText) implements Ability {
         if (normalized == null || normalized.equals(normalized(sa.getParam("PrecostDesc")))) {
             return null;
         }
-        return AbilityDescription.stripAdditionalCostPrefix(normalized).isEmpty() ? null : normalized;
+        String cost = withoutAbilityWord(normalized, normalized(sa.getParam("PrecostDesc")));
+        return AbilityDescription.stripAdditionalCostPrefix(cost).isEmpty() ? null : cost;
+    }
+
+    /** {@code cost} without the ability word the line opens with ({@code precost}), if any. */
+    private static String withoutAbilityWord(String cost, String precost) {
+        return precost != null && cost.startsWith(precost)
+                ? cost.substring(precost.length()).trim() : cost;
     }
 
     private static String normalized(String description) {

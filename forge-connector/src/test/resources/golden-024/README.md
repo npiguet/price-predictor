@@ -41,6 +41,8 @@ continuation line folded into the level line) was edited to match.
 
 When a face's keyword lines came to print in the sorted order of the keywords' original text (task A16), the expected text of `b/blast_from_the_past.txt` was edited to match: only its line order changed.
 
+When a sentence the description already holds stopped being appended again (task A14, finding 1.12), the expected text of `a/aberrant_mind_sorcerer.txt` was edited to match: its trigger line says "roll a d20." once. When a haunt line came to name its card as CARDNAME, `b/blind_hunter.txt`'s haunted-dies line was edited likewise.
+
 | Script | Why it is here |
 |---|---|
 | `a/anticausal_vestige.txt` | trigger with `Execute$` → `SubAbility$` chain (story 1 scenario 1); `Warp` keyword |

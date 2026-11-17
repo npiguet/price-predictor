@@ -50,12 +50,20 @@ final class SpellAbilityUtils {
         if (stack == null || stack.isEmpty()
                 || stack.equals("SpellDescription")
                 || stack.equals("None")
-                || stack.contains("REP ")
-                || stack.contains("{p:")) {
+                || isTemplate(stack)) {
             return null;
         }
         return stack;
     }
+
+    /** Stack text Forge fills in only on the stack: REP, {p:}, {c:} and {targeted}, in any case. */
+    private static boolean isTemplate(String stack) {
+        String lowered = stack.toLowerCase();
+        return stack.contains("REP ") || STACK_TEMPLATE_MARKERS.stream().anyMatch(lowered::contains);
+    }
+
+    private static final List<String> STACK_TEMPLATE_MARKERS =
+            List.of("{p:", "{c:", "{targeted}");
 
     /**
      * True when {@code sa} carries text of its own: a declared description or

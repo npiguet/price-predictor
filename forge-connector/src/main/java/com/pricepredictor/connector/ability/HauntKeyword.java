@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Haunt keyword ability — expands the haunt keyword into its constituent lines:
@@ -36,7 +37,7 @@ public final class HauntKeyword {
      */
     public static KeywordRendering of(KeywordInterface ki, Card card) {
         KeywordRendering.Builder rendering = new KeywordRendering.Builder();
-        String effectDesc = effectDescription(ki, card);
+        String effectDesc = cardnamed(effectDescription(ki, card), card);
 
         // 1. For non-creature spells: emit the primary spell effect first
         if (!card.isCreature() && effectDesc != null) {
@@ -44,7 +45,7 @@ public final class HauntKeyword {
         }
 
         // 2. Process triggers — deduplicate by description
-        TriggerLines triggers = new TriggerLines(effectDesc, rendering);
+        TriggerLines triggers = new TriggerLines(effectDesc, rendering, card);
         for (Trigger t : ki.getTriggers()) {
             triggers.add(t);
         }
@@ -67,6 +68,13 @@ public final class HauntKeyword {
         return SpellAbilityUtils.svarParam(card.getSVar(svarName), "SpellDescription");
     }
 
+    /** {@code text} with the card's own name written as CARDNAME, as every other entry has it. */
+    private static String cardnamed(String text, Card card) {
+        if (text == null) return null;
+        return Pattern.compile(Pattern.quote(card.getName()), Pattern.CASE_INSENSITIVE)
+                .matcher(text).replaceAll("CARDNAME");
+    }
+
     private static void addSpellEffect(KeywordInterface ki, String effectDesc,
                                        KeywordRendering.Builder rendering) {
         String normalized = AbilityDescription.normalize(effectDesc);
@@ -84,15 +92,17 @@ public final class HauntKeyword {
         private final KeywordRendering.Builder rendering;
         private final Map<String, Ability> emitted = new HashMap<>();
         private final List<Trigger> blank = new ArrayList<>();
+        private final Card card;
         private Ability hauntLine;
 
-        TriggerLines(String effectDesc, KeywordRendering.Builder rendering) {
+        TriggerLines(String effectDesc, KeywordRendering.Builder rendering, Card card) {
             this.effectDesc = effectDesc;
             this.rendering = rendering;
+            this.card = card;
         }
 
         void add(Trigger t) {
-            String tDesc = t.getParam("TriggerDescription");
+            String tDesc = cardnamed(t.getParam("TriggerDescription"), card);
             if (tDesc == null || "Blank".equals(tDesc)) {
                 blank.add(t);
                 return;

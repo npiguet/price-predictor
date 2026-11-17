@@ -88,9 +88,7 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
                 && execute.getApi() != ApiType.ImmediateTrigger
                 && !"ETBReplacement".equals(execute.getParam("Mode"))) {
             String extra = SpellAbilityUtils.chainText(execute);
-            if (!extra.isEmpty()) {
-                normalized = normalized + " " + extra;
-            }
+            normalized = DescriptionText.appendMissing(normalized, extra);
         }
         return new TriggeredAbilityEntry(type, normalized, children);
     }
