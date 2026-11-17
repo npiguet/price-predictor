@@ -1,0 +1,21 @@
+layout: meld
+name: the mightstone and weakstone
+mana cost: {5}
+types: legendary artifact powerstone
+activated[1]: {T}: add {C}{C}. this mana can't be spent to cast nonartifact spells.
+triggered: when CARDNAME enters, choose one
+option[2]: draw two cards.
+option[3]: target creature gets -5/-5 until end of turn.
+
+ALTERNATE
+
+name: urza, planeswalker
+types: legendary planeswalker urza
+loyalty: 7
+planeswalker[1]: [+2]: artifact, instant, and sorcery spells you cast this turn cost {2} less to cast. you gain 2 life.
+planeswalker[2]: [+1]: draw two cards, then discard a card.
+planeswalker[3]: [0]: create two 1/1 colorless soldier artifact creature tokens.
+planeswalker[4]: [-3]: exile target nonland permanent.
+planeswalker[5]: [-10]: artifacts and planeswalkers you control gain indestructible until end of turn. destroy all nonland permanents.
+static: you may activate the loyalty abilities of CARDNAME twice each turn rather than only once.
+replacement: CARDNAME enters with seven loyalty counters on it.

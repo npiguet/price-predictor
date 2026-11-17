@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
+import shutil
 from pathlib import Path
 
 import gen3_review_checks as grc
 from gen3_review_checks_parts.convoke import is_convoke_row, mana_value, reduction
 from gen3_review_checks_parts.model import Line
+from gen3_review_checks_parts.tree_checks import tree_lines
 
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "effects"
 SIDECARS = FIXTURES / "gen3-sidecars"
@@ -116,3 +119,108 @@ def test_convoke_cost_reduction_against_the_printed_cost() -> None:
     assert reduction("{R}{R}", "{2}{R}{R}") == "reduced"
     assert reduction("{2}{R}{R}", "{2}{R}{R}") == "same"
     assert reduction(None, "{2}{R}{R}") == "other"
+
+
+# The tree checks, on real converted cards (tests/fixtures/gen3_review_checks_tree/README.md).
+
+TREE = Path(__file__).resolve().parents[2] / "fixtures" / "gen3_review_checks_tree"
+
+
+def _tree_copy(tmp_path: Path) -> Path:
+    shutil.copytree(TREE, tmp_path / "tree")
+    return tmp_path / "tree"
+
+
+def _tree_counts(root: Path) -> dict[str, tuple[int, int]]:
+    return {line.name: (line.count, line.total) for line in tree_lines(root)}
+
+
+def _edit_sidecar(root: Path, relative: str, edit) -> None:
+    path = root / "cardsfolder" / f"{relative}.provenance.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    edit(data)
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def _edit_text(root: Path, relative: str, old: str, new: str) -> None:
+    path = root / "cardsfolder" / f"{relative}.txt"
+    text = path.read_text(encoding="utf-8")
+    assert old in text
+    path.write_text(text.replace(old, new), encoding="utf-8")
+
+
+def test_the_real_cards_pass_every_tree_check_but_the_spell_with_no_line(tmp_path: Path) -> None:
+    counts = _tree_counts(_tree_copy(tmp_path))
+    flagged = {name: n for name, (n, _) in counts.items() if n}
+    assert flagged == {
+        "spells-of-instants-and-sorceries-with-no-line": 1,
+        "keyed-lines-with-placeholder[CARDNAME]": counts[
+            "keyed-lines-with-placeholder[CARDNAME]"][0],
+    }
+    assert counts["spells-of-instants-and-sorceries-with-no-line"] == (1, 2)
+    assert counts["meld-halves-without-face-1"] == (0, 1)
+    assert counts["sidecars-raising-sidecar-error"] == (0, 6)
+
+
+def test_a_keyed_line_with_empty_prose_is_flagged(tmp_path: Path) -> None:
+    root = _tree_copy(tmp_path)
+    bolt = "spell[1]: CARDNAME deals 3 damage to any target."
+    _edit_text(root, "l/lightning_bolt", bolt, "spell[1]: ")
+    _edit_sidecar(root, "l/lightning_bolt", lambda d: d["lines"][0].update(prose_offset=10))
+    count, _ = _tree_counts(root)["keyed-lines-with-empty-prose"]
+    assert count == 1
+
+
+def test_unfilled_templates_are_flagged_each_under_its_own_name(tmp_path: Path) -> None:
+    root = _tree_copy(tmp_path)
+    _edit_text(root, "l/lightning_bolt", "CARDNAME deals", "ABILITY deals {C:x}")
+    counts = _tree_counts(root)
+    assert counts["keyed-lines-with-placeholder[ABILITY]"][0] == 1
+    assert counts["keyed-lines-with-placeholder[{C:]"][0] == 1
+
+
+def test_a_spell_with_a_line_is_not_flagged_and_one_dropped_is(tmp_path: Path) -> None:
+    root = _tree_copy(tmp_path)
+    _edit_sidecar(root, "c/crashing_wave", lambda d: d["dropped_keys"].clear())
+    count, total = _tree_counts(root)["spells-of-instants-and-sorceries-with-no-line"]
+    assert (count, total) == (0, 1)
+
+
+def test_a_meld_half_with_no_face_1_key_is_flagged(tmp_path: Path) -> None:
+    root = _tree_copy(tmp_path)
+
+    def drop_face_1(data: dict) -> None:
+        data["lines"] = [
+            line for line in data["lines"] if all(k["face"] != 1 for k in line["provenance"])
+        ]
+
+    _edit_sidecar(root, "t/the_mightstone_and_weakstone", drop_face_1)
+    assert _tree_counts(root)["meld-halves-without-face-1"] == (1, 1)
+
+
+def test_a_class_level_line_declaring_a_kind_indexed_key_is_flagged(tmp_path: Path) -> None:
+    root = _tree_copy(tmp_path)
+    assert _tree_counts(root)["class-level-lines-with-kind-indexed-key"] == (0, 3)
+
+    def build_level_2(data: dict) -> None:
+        data["lines"][1]["provenance"][0]["trait_kind"] = "static"
+
+    _edit_sidecar(root, "r/ranger_class", build_level_2)
+    assert _tree_counts(root)["class-level-lines-with-kind-indexed-key"] == (1, 3)
+
+
+def test_a_sidecar_declaring_a_key_twice_is_counted_not_raised(tmp_path: Path) -> None:
+    root = _tree_copy(tmp_path)
+    _edit_sidecar(
+        root, "b/binding_the_old_gods",
+        lambda d: d["lines"][1]["provenance"].append(d["lines"][0]["provenance"][0]),
+    )
+    assert _tree_counts(root)["sidecars-raising-sidecar-error"] == (1, 6)
+
+
+def test_the_script_runs_the_tree_checks_alone_without_records(capsys) -> None:
+    assert grc.main(["--converted-dir", str(TREE)]) == 0
+    out = capsys.readouterr().out
+    assert "meld-halves-without-face-1" in out
+    assert "keys-declared-by-two-lines" in out
+    assert "equip-halves" not in out

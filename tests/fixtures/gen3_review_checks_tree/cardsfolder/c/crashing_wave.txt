@@ -1,0 +1,4 @@
+name: crashing wave
+mana cost: {U}{U}
+types: sorcery
+additional cost: waterbend {X}.

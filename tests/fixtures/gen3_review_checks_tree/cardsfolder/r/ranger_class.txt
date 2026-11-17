@@ -1,0 +1,6 @@
+name: ranger class
+mana cost: {1}{G}
+types: enchantment class
+level[1]: when CARDNAME enters, create a 2/2 green wolf creature token.
+level[2]: {1}{G}: whenever you attack, put a +1/+1 counter on target attacking creature.
+level[3]: {3}{G}: you may look at the top card of your library any time. you may cast creature spells from the top of your library.

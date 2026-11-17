@@ -4,7 +4,9 @@ One line per check: its name, the count it flags, the total it looked at, and th
 count the review reported, for comparison. The script only reports; no count makes it
 exit non-zero, and it writes no file. Progress, one line per shard, goes to stderr.
 
-Usage: python -u scripts/gen3_review_checks.py --records-dir DIR --converted-dir DIR
+Usage: python -u scripts/gen3_review_checks.py [--records-dir DIR] --converted-dir DIR
+
+Without ``--records-dir`` only the checks over the converted tree run.
 
 ``--converted-dir`` holds ``cardsfolder/`` and ``tokenscripts/`` with their sidecars: the
 tree the records were collected against.
@@ -18,7 +20,7 @@ from pathlib import Path
 
 from gen3_review_checks_parts.model import Line
 from gen3_review_checks_parts.reviews import review_for
-from gen3_review_checks_parts.runner import run_checks, shards_of
+from gen3_review_checks_parts.runner import run_checks, run_tree_checks, shards_of
 
 
 def format_line(line: Line) -> str:
@@ -28,14 +30,19 @@ def format_line(line: Line) -> str:
 
 def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--records-dir", type=Path, required=True)
+    parser.add_argument("--records-dir", type=Path, default=None,
+                        help="without it, only the tree checks run")
     parser.add_argument("--converted-dir", type=Path, required=True)
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
-    for line in run_checks(shards_of(args.records_dir), args.converted_dir):
+    if args.records_dir is None:
+        lines = run_tree_checks(args.converted_dir)
+    else:
+        lines = run_checks(shards_of(args.records_dir), args.converted_dir)
+    for line in lines:
         print(format_line(line))
     return 0
 
