@@ -1128,19 +1128,36 @@ def directed_rules(counts, by_rule):
                                                       rule_sort_key(item[0]))))
 
 
+def melds_into(text, face):
+    """Whether the card's own face (the text before ``ALTERNATE``) is the one
+    whose script melds the pair into ``face``: since the meld halves both print
+    the melded face, only the holder's front face names it."""
+    return f"meld them into {face}" in text.partition("\nALTERNATE")[0]
+
+
 def converted_card_of_face(cards_folder):
     """``face name -> converted card name`` over a converted tree: a scenario
     may name a back face (Ribbons, a meld result), which the coverage round
-    knows only by the card's own ``name:``, its first."""
+    knows only by the card's own ``name:``, its first. A face several files
+    print (both meld halves print the melded face) maps to the file whose first
+    face melds into it, else to the sorted-first path, never by listing order."""
     from price_predictor.domain.tokenizer import extract_card_name
 
-    out = {}
-    for path in cards_folder.rglob("*.txt"):
+    out, holder = {}, set()
+    for path in sorted(cards_folder.rglob("*.txt"), key=lambda p: p.as_posix()):
         text = path.read_text(encoding="utf-8")
         card = extract_card_name(text)
         for line in text.splitlines():
-            if line.startswith("name:"):
-                out.setdefault(line[len("name:"):].strip(), card)
+            if not line.startswith("name:"):
+                continue
+            face = line[len("name:"):].strip()
+            if face in holder:
+                continue
+            if melds_into(text, face):
+                holder.add(face)
+                out[face] = card
+            else:
+                out.setdefault(face, card)
         out[card] = card
     return out
 

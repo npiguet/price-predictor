@@ -10,6 +10,7 @@ import argparse
 import copy
 import json
 import sys
+from pathlib import Path
 
 import pytest
 import rules_catalogue as rc
@@ -579,3 +580,24 @@ def test_the_forge_script_index_reads_a_card_by_its_name():
     script = rc.card_scripts()("Grizzly Bears")
     assert script is not None and "PT:2/2" in [line.strip() for line in script]
     assert rc.card_scripts()("No Such Card Anywhere") is None
+
+
+MELD_SCRATCH = Path(
+    r"C:\Users\nicol\AppData\Local\Temp\claude\01313e7323e07cb5"
+    r"\0933e53d-6efe-4136-8d8e-e5a64f914ea7\scratchpad\a22-verify\cardsfolder")
+MELD_PAIRS = [("g/graf_rats_chittering_host", "m/midnight_scavengers"),
+              ("u/urza_lord_protector_urza_planeswalker", "t/the_mightstone_and_weakstone")]
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_a_melded_face_both_halves_print_maps_to_the_holders_file_whatever_the_creation_order(
+        tmp_path, reverse):
+    files = [name for pair in MELD_PAIRS for name in pair]
+    for name in reversed(files) if reverse else files:
+        target = tmp_path / f"{name}.txt"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text((MELD_SCRATCH / f"{name}.txt").read_text(encoding="utf-8"),
+                          encoding="utf-8")
+    faces = rc.converted_card_of_face(tmp_path)
+    assert faces["chittering host"] == "graf rats"
+    assert faces["urza, planeswalker"] == "urza, lord protector"
