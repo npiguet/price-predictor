@@ -1,6 +1,6 @@
 """The categories a fixture is filled with, most specific first: a record
-lands in the first category it fits. Each generation's own categories are
-matched before those every generation shares."""
+lands in the first category it fits. The gen-3 categories are matched first,
+then the detector categories, then the shared ones."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from effects.infrastructure.converted_trees import SourceTrees
-from fixture_records.gen2 import gen2_categories
+from fixture_records.detector_categories import detector_categories
 from fixture_records.gen3 import gen3_categories
 from fixture_records.shapes import acting_key
 from fixture_records.sidecars import Sidecars
@@ -65,7 +65,7 @@ def _observed_combat(record: dict) -> bool:
 
 
 def shared_categories(sidecars: Sidecars) -> dict[str, Test]:
-    """The categories every generation fills, in the order they are matched."""
+    """The categories every fixture fills, in the order they are matched."""
     return {
         "modal": _modal(sidecars),
         "interventional": _interventional,
@@ -84,15 +84,10 @@ def shared_categories(sidecars: Sidecars) -> dict[str, Test]:
     }
 
 
-def categories_for(generation: int, sidecars: Sidecars,
-                   folders: list[Path]) -> dict[str, Test]:
-    """A generation's categories, in the order they are matched; ``folders``
+def categories_for(sidecars: Sidecars, folders: list[Path]) -> dict[str, Test]:
+    """The fixture's categories, in the order they are matched; ``folders``
     are the converted trees, which gen 3's detectors read through a sidecar
     cache of their own."""
-    categories = shared_categories(sidecars)
-    if generation >= 2:
-        categories = {**gen2_categories(sidecars), **categories}
-    if generation == 3:
-        lookup = SourceTrees.of(folders).sidecar_cache()
-        categories = {**gen3_categories(sidecars, lookup), **categories}
-    return categories
+    lookup = SourceTrees.of(folders).sidecar_cache()
+    return {**gen3_categories(sidecars, lookup), **detector_categories(sidecars),
+            **shared_categories(sidecars)}

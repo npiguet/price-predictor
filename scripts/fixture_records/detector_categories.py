@@ -1,4 +1,4 @@
-"""Gen-2's own categories: the records the rule detectors are tested on and
+"""The detector categories: the records the rule detectors are tested on and
 the shapes the detector families' parameters read."""
 
 from __future__ import annotations
@@ -170,8 +170,8 @@ def _random_seat(record: dict) -> bool:
     return record.get("random_seat") is True
 
 
-def gen2_categories(sidecars: Sidecars) -> dict[str, Callable[[dict], bool]]:
-    """Gen-2's own categories, matched before the shared ones."""
+def detector_categories(sidecars: Sidecars) -> dict[str, Callable[[dict], bool]]:
+    """The detector categories, matched before the shared ones."""
     return {
         **detector_shapes(sidecars),
         "704.5j-fires": sba_fires("legend_rule"),

@@ -1,6 +1,6 @@
 """Cut a small, kind-balanced sample of real records into a test fixture.
 
-Tests of the gen-2 readers, families, value targets and probes need records
+Tests of the readers, families, value targets and probes need records
 shaped exactly like the collector's output, so the fixture is cut from real
 shards rather than built by hand. Every category below is filled with a few
 records; a chosen cost half brings its effect half, a chosen probe brings the
@@ -12,7 +12,7 @@ The sidecars and converted texts every chosen record names, anywhere in its
 envelope, state or payload, are copied beside it under the same tree layout,
 so a ``SidecarCache`` rooted there resolves every key.
 
-    python scripts/make_fixture_records.py --generation 3 --per-category 2
+    python scripts/make_fixture_records.py --per-category 2
         --records-dir output/effects/gen3/scratch/2026-11-15-pilot
         --cards-folder output/effects/gen3/converted/cardsfolder
         --cards-folder output/effects/gen3/converted/tokenscripts
@@ -21,38 +21,18 @@ so a ``SidecarCache`` rooted there resolves every key.
 
 (one command line).
 Every path is named on the command line: the records, the converted trees
-and both outputs (the ``artifact-layout`` skill). Gen-1 and gen-2 are cut the
-same way from their records' NAS copies.
+and both outputs (the ``artifact-layout`` skill).
 
-``--generation 2`` adds the categories the rule detectors are tested on: a
-resolution whose effect half kills a creature at toughness 0 or less in the
-state-based check (704.5f fires), one that leaves a creature at toughness 1
-(704.5f does not fire), a creature killed by damage (704.5g), the legend rule
-(704.5j), a planeswalker at loyalty 0 (704.5i) and an Aura whose host left
-(704.5m), a damage-step probe stripping deathtouch, triggers a keyword
-generates (fired and not), a predefined token
-kind made (111.10) and an ability whose source is one, and records from a
-random-seat game and from a game the Forge AI played on both seats, and the
-shapes the detector families' parameters read: a resolution and a decision
-candidate acting through a keyword's own line, a candidate whose card prints a
-keyword, a candidate whose cost has a part (``Sac<...>``), a candidate listing
-targets, a damage rewrite a prevention shield replaced, a creature leaving the
-battlefield in combat, a token's static and a counter-conditioned static.
-
-Gen-2 also pins records by id (``GEN2_PINNED`` in ``fixture_records/pinned.py``):
-the shapes the rule detectors were corrected against in T036, each one record
-read and judged by hand, found by reading the shards their ids name.
-``--append`` adds the pinned records to the fixture already on disk without
-rescanning, so every record an existing test names stays.
-
-``--generation 3`` reads each ``--records-dir`` in its own interleaved order,
+It reads each ``--records-dir`` in its own interleaved order,
 a later one filling only what the earlier left, and takes records only from
 games that ended: each game the fixture holds a record of brings its
 game-end marker, and every record sharing a ``link_id`` with a chosen one or
 mirrored by one, wherever it sits in the game. Records are written as the
-collector wrote their lines, in shard order. It adds, before
-gen-2's categories, one per story-2 acceptance scenario (``a1-`` … ``a11-``: a
-permanent with a static, a trigger and a replacement line; a creature stripped
+collector wrote their lines, in shard order. The categories are the shapes the
+rule detectors and detector families read (a creature killed in the state-based
+check, the legend rule, a damage-step probe, a keyword's own line, a random-seat
+game and a game the Forge AI played on both seats), one per story-2 acceptance
+scenario (``a1-`` … ``a11-``: a permanent with a static, a trigger and a replacement line; a creature stripped
 of every ability; flying granted by another permanent's static; ward and
 annihilator fragments; protection; a first-strike combat; a burn kill, which
 also brings the dies-trigger records of its game; a sorcery off turn and a
@@ -82,7 +62,6 @@ import sys
 from pathlib import Path
 
 from fixture_records.categories import categories_for
-from fixture_records.pinned import GEN2_PINNED, append_pinned, pinned_records
 from fixture_records.scan import Selection, scan
 from fixture_records.shards import interleaved, write_fixture
 from fixture_records.sidecars import Sidecars, copy_sidecars
@@ -93,7 +72,6 @@ from effects.infrastructure.shard_io import iter_shards
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
-    parser.add_argument("--generation", type=int, choices=(1, 2, 3), required=True)
     parser.add_argument("--records-dir", type=Path, action="append", required=True,
                         help="a records run directory; repeatable, read in order, a later "
                              "one filling only the categories the earlier left unfilled")
@@ -107,8 +85,6 @@ def _parser() -> argparse.ArgumentParser:
                              "tests/fixtures/effects/gen3-sidecars")
     parser.add_argument("--per-category", type=int, default=3)
     parser.add_argument("--max-shards", type=int, default=400)
-    parser.add_argument("--append", action="store_true",
-                        help="gen-2: add the pinned records to the fixture on disk, no scan")
     return parser
 
 
@@ -121,8 +97,6 @@ def _checked_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
     not_a_tree = next((folder for folder in args.cards_folder if not folder.is_dir()), None)
     if not_a_tree is not None:
         parser.error(f"--cards-folder {not_a_tree} is no directory")
-    if args.append and args.generation != 2:
-        parser.error("--append adds gen-2's pinned records")
     return args
 
 
@@ -139,14 +113,12 @@ def _print_names(heading: str, names: list[str]) -> None:
 def _write(args: argparse.Namespace, selection: Selection, sidecars: Sidecars) -> int:
     """Write the fixture and the sidecars its records name, and report them."""
     records = selection.records()
-    if args.generation == 2:
-        records.update(pinned_records(args.records_dir[0], GEN2_PINNED))
     missing = selection.missing()
     # Every record must parse with the current reader before it is a fixture.
     for record in records.values():
         record_from_dict(_without_tags(record))
     write_fixture(args.output, records)
-    if args.generation == 3 and args.sidecars_out.exists():
+    if args.sidecars_out.exists():
         # Exactly the sidecars these records name: none left from an earlier cut.
         shutil.rmtree(args.sidecars_out)
     copied, unresolved = copy_sidecars(records, sidecars, args.sidecars_out,
@@ -163,15 +135,13 @@ def _write(args: argparse.Namespace, selection: Selection, sidecars: Sidecars) -
 def main() -> int:
     args = _checked_args(_parser())
     sidecars = Sidecars({folder.name: folder for folder in args.cards_folder})
-    if args.append:
-        return append_pinned(args.records_dir[0], args.output, args.sidecars_out, sidecars)
-    selection = Selection(categories_for(args.generation, sidecars, args.cards_folder),
-                          args.per_category, forge_ai_wanted=args.generation >= 2)
+    selection = Selection(categories_for(sidecars, args.cards_folder),
+                          args.per_category, forge_ai_wanted=True)
     # Interleave the collection runs rather than reading one run's shards first,
     # so a category only another run reaches (probes, variants) is found early;
     # a later directory only fills what the earlier ones left unfilled.
     shards = [shard for directory in args.records_dir for shard in interleaved(directory)]
-    scan(shards[: args.max_shards], selection, gen3=args.generation == 3)
+    scan(shards[: args.max_shards], selection)
     return _write(args, selection, sidecars)
 
 

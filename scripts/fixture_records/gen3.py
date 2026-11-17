@@ -1,7 +1,7 @@
 """Gen-3's own categories: story 2's acceptance scenarios, each
 ``turn_action`` subkind and failed check, the anchored legality records, the
 new snapshot members, the combats the keyword detector's real-record tests
-read and the fork tags. Matched before gen-2's and the shared ones."""
+read and the fork tags. Matched before the detector and shared ones."""
 
 from __future__ import annotations
 

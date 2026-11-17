@@ -22,16 +22,8 @@ from fixture_records.shapes import (
 
 
 def toughness(entity: dict) -> int | None:
-    """Net toughness: gen-2's ``pt`` triple, or gen-3's ``base_pt`` and ``pt_boosts``."""
-    if "base_pt" in entity:
-        return _gen3_toughness(entity["base_pt"], entity.get("pt_boosts"))
-    pt = entity.get("pt")
-    if not pt:
-        return None
-    return sum(part[1] for part in (pt["base"], pt["boosts"], pt["counters"]))
-
-
-def _gen3_toughness(base: list | None, boosts: dict | None) -> int | None:
+    """Net toughness: ``base_pt`` plus the temporary and counter boosts."""
+    base, boosts = entity.get("base_pt"), entity.get("pt_boosts")
     if base is None or boosts is None:
         return None
     return base[1] + boosts["temporary"][1] + boosts["counters"][1]

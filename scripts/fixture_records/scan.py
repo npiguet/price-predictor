@@ -96,11 +96,11 @@ class ShardScan:
     partner of a chosen record is known, once its shard has been read through."""
 
     def __init__(self, selection: Selection, shard: Path, shard_no: int,
-                 ended: set[str] | None) -> None:
+                 ended: set[str]) -> None:
         self.selection = selection
         self.shard = shard
         self.shard_no = shard_no
-        #: Gen 3: the games that ended, as every reader keeps only those.
+        #: The games that ended, as every reader keeps only those.
         self.ended = ended
         self.games: set[str] = set()
         self.followers: dict[str, int] = {}
@@ -115,7 +115,7 @@ class ShardScan:
         self._read_lines()
         if self.selection.forge_ai_wanted:
             self._choose_forge_ai()
-        if self.ended is not None and self.games:
+        if self.games:
             self._join_partners()
 
     def _read_lines(self) -> None:
@@ -125,14 +125,12 @@ class ShardScan:
                 self._read(record, record["game_id"])
 
     def _join_partners(self) -> None:
-        """Gen 3: bring every partner of the records chosen from this shard."""
+        """Bring every partner of the records chosen from this shard."""
         found = joined(self.shard, self.shard_no, self.games, self.selection.partners)
         for record_id, record in found.items():
             self.selection.extras.setdefault(record_id, record)
 
     def _admit(self, record: dict, line: str, number: int) -> bool:
-        if self.ended is None:
-            return True
         if record["game_id"] not in self.ended:
             return False
         tag_line(record, line, self.shard_no, number)
@@ -194,11 +192,10 @@ class ShardScan:
                 self.games.add(game)
 
 
-def scan(shards: list[Path], selection: Selection, *, gen3: bool) -> None:
+def scan(shards: list[Path], selection: Selection) -> None:
     """Read ``shards`` in order until every category is full."""
     for shard_no, shard in enumerate(shards):
-        ended = ended_games(shard) if gen3 else None
-        ShardScan(selection, shard, shard_no, ended).read()
+        ShardScan(selection, shard, shard_no, ended_games(shard)).read()
         if selection.complete():
             break
         print(f"{shard_no + 1} shards read, {selection.filled()}/{len(selection.categories)} "

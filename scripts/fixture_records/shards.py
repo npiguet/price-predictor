@@ -84,13 +84,8 @@ def read_fixture(path: Path) -> dict[str, dict]:
 
 
 def write_fixture(output: Path, records: dict[str, dict]) -> None:
-    """Gen 3: each record's line as the collector wrote it, in shard order.
-    Earlier generations: re-serialized, by game and timestamp."""
+    """Each record's line as the collector wrote it, in shard order."""
     output.parent.mkdir(parents=True, exist_ok=True)
     with gzip.open(output, "wt", encoding="utf-8", newline="\n") as out:
-        if records and all("_line" in record for record in records.values()):
-            for record in sorted(records.values(), key=lambda r: (r["_shard"], r["_number"])):
-                out.write(record["_line"] + "\n")
-            return
-        for record in sorted(records.values(), key=lambda r: (r["game_id"], r["timestamp"])):
-            out.write(json.dumps(record, separators=(",", ":")) + "\n")
+        for record in sorted(records.values(), key=lambda r: (r["_shard"], r["_number"])):
+            out.write(record["_line"] + "\n")
