@@ -1,0 +1,4 @@
+name: selvala's charge
+mana cost: {4}{G}
+types: sorcery
+spell[1]: parley — each player reveals the top card of their library. for each nonland card revealed this way, you create a 3/3 green elephant creature token. then each player draws a card.

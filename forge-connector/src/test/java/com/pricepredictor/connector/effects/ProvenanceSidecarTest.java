@@ -337,6 +337,22 @@ class ProvenanceSidecarTest {
         assertEquals(List.of(), linesStartingWith(harrow, "additional cost"));
     }
 
+    /**
+     * Selvala's Charge's {@code PrecostDesc$ Parley —} is an ability word,
+     * not a cost: Forge reports it as the spell's cost description, and the
+     * spell's own description opens with it already.
+     */
+    @Test
+    void anAbilityWordAloneIsNoAdditionalCost() {
+        Converted charge = convert("s/selvalas_charge.txt");
+        ProvenanceSidecar.Line spell = linesStartingWith(charge, "spell").get(0);
+        String prose = charge.lines().get(spell.lineIndex()).substring(spell.proseOffset());
+
+        assertTrue(prose.startsWith("parley — each player reveals"), prose);
+        assertTrue(spell.roleSpans().stream().noneMatch(span -> span.role() == SpanRole.COST),
+                spell.roleSpans().toString());
+    }
+
     /** Abeyance's two sentences are one line, in chain order (finding 1.3). */
     @Test
     void aSpellWhoseChainHasSeveralSentencesIsOneLine() {

@@ -11,8 +11,9 @@ Layout:
 
 - `cardsfolder/<letter>/<name>.txt` — source scripts; copies of `../forge/forge-gui/res/cardsfolder/`
   as of 2026-10-07 (History of Benalia, Blind Hunter, Censor, Ranger Class, Balloon
-  Stand, Harrow, Abeyance, Contact Other Plane and Dig Up as of 2026-11-17), plus the four
-  synthetic scripts marked below. The tree is letter-keyed like Forge's so every provenance key reads `cardsfolder/<letter>/<name>.txt`.
+  Stand, Harrow, Abeyance, Contact Other Plane, Dig Up and Selvala's Charge as of
+  2026-11-17), plus the four synthetic scripts marked below. The tree is letter-keyed like
+  Forge's so every provenance key reads `cardsfolder/<letter>/<name>.txt`.
 - `tokenscripts/<name>.txt` — one token script, flat like Forge's token tree.
 - `expected/cardsfolder/…`, `expected/tokenscripts/…` — the `.txt` that `python -m price_predictor convert`
   writes for them: the byte-identity reference. The gen-1 sidecars are not kept: no test
@@ -76,6 +77,7 @@ continuation line folded into the level line) was edited to match.
 | `a/abeyance.txt` | spell whose chain states two sentences: one line |
 | `c/contact_other_plane.txt` | spell die roll: unkeyed `option` result rows |
 | `d/dig_up.txt` | cleave: an alternate-cost line declaring no key, its spell claimed by the spell line |
+| `s/selvalas_charge.txt` | `PrecostDesc$ Parley —`: an ability word Forge reports as a cost description, which is no additional cost |
 | `b/balloon_stand.txt` | Attraction `Visit` charm: a single-line keyword whose built trigger has modes |
 | `tokenscripts/c_a_food_sac.txt` | token script, flat tree |
 | `u/undefined_svar.txt` | **synthetic** — `TrigDraw` names `SubAbility$ DBMissing`, which no `SVar:` defines (FR-003). The task asked for an undefined `Execute$`, but Forge fails the whole card at parse for that shape (`Error in Trigger for Card`), so no converter can produce output for it; `SubAbility$` is the one undefined reference Forge tolerates |

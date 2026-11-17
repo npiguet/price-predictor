@@ -26,12 +26,19 @@ public record SpellAdditionalCost(String descriptionText) implements Ability {
     /**
      * The additional cost as the card states it ("as an additional cost to
      * cast this spell, sacrifice a land."), or null if {@code sa} has none.
+     * An ability word alone ({@code PrecostDesc$ Parley —}, which Forge
+     * prints before the cost) is no cost: the spell's description opens with
+     * it already.
      */
     public static String sentenceOf(SpellAbility sa) {
-        String costDesc = sa.getCostDescription();
-        if (costDesc == null) return null;
-        String normalized = AbilityDescription.normalize(costDesc.trim());
-        if (normalized == null) return null;
+        String normalized = normalized(sa.getCostDescription());
+        if (normalized == null || normalized.equals(normalized(sa.getParam("PrecostDesc")))) {
+            return null;
+        }
         return AbilityDescription.stripAdditionalCostPrefix(normalized).isEmpty() ? null : normalized;
+    }
+
+    private static String normalized(String description) {
+        return description == null ? null : AbilityDescription.normalize(description.trim());
     }
 }
