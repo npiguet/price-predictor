@@ -23,11 +23,13 @@ import com.pricepredictor.connector.effects.ProvenanceRecorder;
 import com.pricepredictor.connector.effects.TraitKind;
 import forge.card.CardStateName;
 import forge.card.ICardFace;
+import forge.card.MagicColor;
 import forge.card.mana.ManaCost;
 import forge.game.CardTraitBase;
 import forge.game.ability.AbilityFactory;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
+import forge.game.card.CardState;
 import forge.game.cost.Cost;
 import forge.game.keyword.Companion;
 import forge.game.keyword.Keyword;
@@ -36,6 +38,7 @@ import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -102,7 +105,7 @@ final class FaceParser {
     /** The synthetic mana line of a basic-typed face, or null. */
     private final String landManaDescription;
     /**
-     * Runtime mana abilities of a basic-typed face, skipped by the spell
+     * The mana abilities a basic-typed face's land types build, skipped by the spell
      * phase and rendered once by the synthetic land-mana line. Kept with
      * their keys so that line can claim them: without the claim the land's
      * mana ability is a dropped key, and every activation record that names
@@ -231,7 +234,7 @@ final class FaceParser {
         handlers.put("NICKNAME ", nameStatic);
         handlers.put("Chapter:", (ki, p) -> ChapterAbility.fromKeyword(ki));
         handlers.put("Class:", (ki, p) -> p.renderClassLevel(ki));
-        KeywordRenderer etb = (ki, p) -> KeywordRendering.of(EtbReplacementAbility.fromKeyword(ki));
+        KeywordRenderer etb = (ki, p) -> EtbReplacementAbility.fromKeyword(ki);
         handlers.put("etbCounter:", etb);
         handlers.put("ETBReplacement:", etb);
         handlers.put("AlternateAdditionalCost:", (ki, p) -> KeywordRendering.of(new TextAbility(
@@ -365,10 +368,11 @@ final class FaceParser {
         /** A spell cast for an alternative cost ({@code NonBasicSpell}). */
         ALT_COST,
         /**
-         * A mana ability of a face with basic land types. The synthetic land
-         * mana line renders it once in canonical form; CardFactory's fully
-         * resolved card lists it among the spell abilities as well, so
-         * rendering it here would count it twice.
+         * A mana ability Forge builds from a basic land type of the face. The
+         * synthetic land mana line renders it once in canonical form;
+         * CardFactory's fully resolved card lists it among the spell
+         * abilities as well, so rendering it here would count it twice. A
+         * mana ability the script writes is ACTIVATED.
          */
         LAND_MANA,
         ACTIVATED,
@@ -446,8 +450,7 @@ final class FaceParser {
         if (sa.getApi() == ApiType.Charm) return SpellRoute.CHARM;
         if (sa.isSpell() && "True".equals(sa.getParam("NonBasicSpell"))) return SpellRoute.ALT_COST;
         if (sa.isActivatedAbility()) {
-            return sa.isManaAbility() && landManaDescription != null
-                    ? SpellRoute.LAND_MANA : SpellRoute.ACTIVATED;
+            return isIntrinsicLandMana(sa) ? SpellRoute.LAND_MANA : SpellRoute.ACTIVATED;
         }
         if (sa.isSpell()) {
             return sa.getApi() == ApiType.ImmediateTrigger
@@ -455,6 +458,22 @@ final class FaceParser {
                     ? SpellRoute.DUPLICATE_TRAIT : SpellRoute.SPELL;
         }
         return SpellRoute.UNRENDERED;
+    }
+
+    /**
+     * Whether {@code sa} is a mana ability Forge builds from one of this
+     * face's basic land types ({@code CardState.getLandManaForColor}), which
+     * the synthetic land-mana line stands for. A mana ability the script
+     * writes (Murmuring Bosk's "{T}: Add {W} or {B}.") is not: it prints its
+     * own line under its own key.
+     */
+    private boolean isIntrinsicLandMana(SpellAbility sa) {
+        if (landManaDescription == null) return false;
+        CardState state = card.getCurrentState();
+        return Arrays.stream(MagicColor.Color.values())
+                .filter(colour -> colour.getBasicLandType() != null
+                        && face.getType().hasSubtype(colour.getBasicLandType()))
+                .anyMatch(colour -> state.getLandManaForColor(colour) == sa);
     }
 
     /** The lines a rendering route makes of {@code sa}. */

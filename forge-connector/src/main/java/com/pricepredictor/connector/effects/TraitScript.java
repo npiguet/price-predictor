@@ -142,7 +142,8 @@ public record TraitScript(
             collectSubAbilities(effect, links);
         }
         String text = params.isEmpty() ? null
-                : new ChainRenderer(trait, key, report).render(label, trait, params);
+                : new ChainRenderer(trait, key, report)
+                        .render(label, trait, params, unnamedEffect(trait, effect, params));
         return new TraitScript(
                 apiType,
                 List.copyOf(params.keySet()),
@@ -168,6 +169,19 @@ public record TraitScript(
             return sa;
         }
         return null;
+    }
+
+    /**
+     * The effect of a trigger or replacement no parameter of its own names, or
+     * null. Forge builds a keyword's chapter trigger, haunt trigger and ETB
+     * replacement with the effect set directly rather than through an
+     * {@code Execute$} or {@code ReplaceWith$}, and the chain still holds it.
+     */
+    private static SpellAbility unnamedEffect(CardTraitBase trait, SpellAbility effect,
+                                              Map<String, String> params) {
+        boolean executes = trait instanceof Trigger || trait instanceof ReplacementEffect;
+        boolean named = params.containsKey("Execute") || params.containsKey("ReplaceWith");
+        return executes && !named ? effect : null;
     }
 
     private static String apiTypeOf(CardTraitBase trait, SpellAbility effect) {
@@ -240,6 +254,15 @@ public record TraitScript(
             return Set.copyOf(keys);
         }
 
+        /** Where a root's unnamed effect is reported from, should it be missing. */
+        private static final String EFFECT = "Effect";
+        /**
+         * The label of a root's unnamed effect: no script names it, and like
+         * every label it prints as its {@code SV} number, so it only has to
+         * differ from every SVar name.
+         */
+        private static final String EFFECT_LABEL = "<effect>";
+
         /** The parameter whose value is a comma-separated list of labels. */
         private static final String CHOICES = "Choices";
         /**
@@ -270,12 +293,20 @@ public record TraitScript(
             this.report = report;
         }
 
-        /** The whole chain below {@code root}, opened by {@code label} when it has one. */
-        String render(String label, CardTraitBase root, Map<String, String> params) {
+        /**
+         * The whole chain below {@code root}, opened by {@code label} when it
+         * has one; {@code unnamedEffect}, the root's effect no parameter
+         * names, follows the root segment as the next label's segment.
+         */
+        String render(String label, CardTraitBase root, Map<String, String> params,
+                      SpellAbility unnamedEffect) {
             if (label != null) {
                 reached.add(label);
             }
             segment(label, root, params);
+            if (unnamedEffect != null) {
+                follow(EFFECT, EFFECT_LABEL, unnamedEffect);
+            }
             while (!queue.isEmpty()) {
                 Pending next = queue.removeFirst();
                 out.append(SEGMENT_SEPARATOR);

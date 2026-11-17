@@ -54,7 +54,9 @@ How a key resolves, by case:
 - A charm root carries its own segment, and each mode is an `option` line with its own chain and API type.
 - A charm's root line is the kind of line its root is (`ability/CharmAbility`): a modal spell's is a `spell` line, an activated charm's an `activated` (or `planeswalker`) line opening with its cost, which takes the `cost` role span. Its prose is the charm's header, never the bare continuation of one (`AdditionalDescription$ . If…` follows its "choose N").
 - A trigger executing a charm prints one `option` line per mode whether or not its description holds the `ABILITY` placeholder (`ability/TriggeredAbilityEntry`), each keyed under every root key the trigger's line carries plus its `option`; a mode line missing would leave its mode key in range and in neither list.
-- A line merged from several traits carries its first claimant's chain alone; a one-line keyword's line carries the keyword's own script text (`Ward:2`).
+- A line merged from several traits carries its first claimant's chain alone; a one-line keyword's line carries the keyword's own script text (`Ward:2`), unless the line is the text of a trait the keyword built, which the keyword's renderer names (`KeywordRendering.traitOf`: an `ETBReplacement` or `etbCounter` replacement, a saga whose chapters print one line): that line carries the trait's chain.
+- A trigger or replacement whose effect Forge set directly, with no `Execute$` or `ReplaceWith$` naming it (a chapter, a haunt trigger, an ETB replacement), carries that effect's chain after its root segment (`TraitScript`), so a perturbed SVar of such a trait reaches the script surface.
+- The synthetic land-mana line (`{T}: add {G}.`) stands for the mana abilities a face's basic land types build (`CardState.getLandManaForColor`) and claims their keys; a mana ability the script writes on a basic-typed land prints its own line under its own key (`FaceParser`).
 - The converted `.txt` changes only on purpose: the connector's `golden-024` tests compare it byte for byte with expected text maintained by hand.
 
 ## Tokenization

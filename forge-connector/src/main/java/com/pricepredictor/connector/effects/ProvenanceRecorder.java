@@ -170,7 +170,7 @@ public final class ProvenanceRecorder {
         declare(key);
         if (abilities.isEmpty()) return;
         Ability line = abilities.get(0);
-        claim(line, key, TraitScript.ofKeyword(keyword.getOriginal()));
+        claim(line, key, lineScript(rendering, line, key, keyword));
         // Each built trait again under the bare key: the line holds that key
         // already, and a charm's mode lines (an Attraction's visit) take it
         // with the mode's option.
@@ -179,6 +179,19 @@ public final class ProvenanceRecorder {
                 attribute(List.of(line), key, trait);
             }
         }
+    }
+
+    /**
+     * The script of a keyword's one line: the chain of the built trait the
+     * line is the text of (a chapter's trigger, an ETB replacement), or the
+     * keyword's own script text where the line states the keyword itself
+     * ({@code Flying}, {@code Ward:2}).
+     */
+    private TraitScript lineScript(KeywordRendering rendering, Ability line, ProvenanceKey key,
+                                   KeywordInterface keyword) {
+        CardTraitBase trait = rendering.traitOf(line);
+        return trait == null ? TraitScript.ofKeyword(keyword.getOriginal())
+                : TraitScript.of(trait, key, missingSVars);
     }
 
     private static boolean rendersSeveralLines(List<Ability> abilities) {

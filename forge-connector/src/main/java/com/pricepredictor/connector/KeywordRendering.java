@@ -52,6 +52,17 @@ public record KeywordRendering(List<Ability> lines, List<TraitLine> traitLines) 
         return null;
     }
 
+    /**
+     * The first built trait that printed {@code line}, or null when the line
+     * is the keyword's own text rather than a trait's. By identity.
+     */
+    public CardTraitBase traitOf(Ability line) {
+        for (TraitLine traitLine : traitLines) {
+            if (traitLine.line() == line) return traitLine.trait();
+        }
+        return null;
+    }
+
     /** Collects a keyword's lines and its traits' lines while it renders. */
     public static final class Builder {
         private final List<Ability> lines = new ArrayList<>();
