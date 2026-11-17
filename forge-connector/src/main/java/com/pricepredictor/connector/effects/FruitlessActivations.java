@@ -116,10 +116,12 @@ public final class FruitlessActivations {
         onStack.keySet().retainAll(ids);
     }
 
-    /** The line itself, whichever of its modes resolved. */
+    /**
+     * The line itself, whichever of its modes resolved; a keyword's ability
+     * keeps its {@code built}, so two abilities one keyword built stay two.
+     */
     private static ProvenanceKey rootOf(ProvenanceKey key) {
-        return new ProvenanceKey(
-                key.scriptFile(), key.face(), key.traitKind(), key.indexWithinKind());
+        return key.root();
     }
 
     private void current() {

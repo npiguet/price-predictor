@@ -285,7 +285,10 @@ public final class ProvenanceResolver {
      * slice it was appended to: {@code Card.updateSpellAbilities} appends those
      * in {@code KeywordCollection} order, which is hash order over an enum and
      * therefore differs between the convert JVM and the collect JVM, so a
-     * {@code spell} index landing in that tail is not reproducible.
+     * {@code spell} index landing in that tail is not reproducible. The
+     * keyword's key carries {@code built}, which of the instance's traits it
+     * is ({@link #builtOf}), so a saga's chapter III names its own line and
+     * not the saga's first.
      */
     static ProvenanceKey keyFor(CardTraitBase trait) {
         if (trait == null) return null;
@@ -295,7 +298,7 @@ public final class ProvenanceResolver {
         if (host == null) return null;
         if (isScriptless(host)) return null;
         if (trait.getKeyword() != null) {
-            return keyOfPrinted(state, trait.getKeyword(), 0);
+            return keyOfPrinted(state, trait.getKeyword(), builtOf(trait), 0);
         }
         forge.game.card.CardCloneStates cloned = copyStatesOf(state);
         if (cloned != null) {
@@ -317,15 +320,17 @@ public final class ProvenanceResolver {
      * prints, else the line of the static that granted it, else null.
      *
      * <p>The same answer a trait the keyword built gets from {@link #keyFor}
-     * and {@link #keywordGrantor}, so a keyword line and the triggers, statics
-     * and abilities its instance carries name one line. A keyword with no
-     * traits at all, such as flying, has only this to key it.
+     * and {@link #keywordGrantor}, less that trait's {@code built}: a board
+     * lists one line per keyword instance, and the triggers, statics and
+     * abilities the instance carries each name that line plus which of them
+     * it is. A keyword with no traits at all, such as flying, has only this
+     * to key it.
      */
     static ProvenanceKey keyOfKeyword(CardState state, KeywordInterface keyword) {
         if (state == null || keyword == null) return null;
         Card host = state.getCard();
         if (host != null && !isScriptless(host)) {
-            ProvenanceKey printed = keyOfPrinted(state, keyword, 0);
+            ProvenanceKey printed = keyOfPrinted(state, keyword, null, 0);
             if (printed != null) return printed;
         }
         return keyword.getStatic() == null ? null : of(keyword.getStatic());
@@ -335,17 +340,20 @@ public final class ProvenanceResolver {
     private static final int MAX_COPY_DEPTH = 8;
 
     /**
-     * The keyword line {@code state} prints for {@code keyword}, or null.
+     * The keyword line {@code state} prints for {@code keyword}, carrying
+     * {@code built} when it is set, or null.
      *
      * <p>A copy's state (a Clone's, a Phantasmal Image's) is read through
      * what it copies: its keywords are the original's, keyed into the
      * original's script file; one the copy effect added has the line that
-     * made the copy, and is no keyword line of the copier's own file.
+     * made the copy, and is no keyword line of the copier's own file, so
+     * that line's key is returned as it is, without {@code built}.
      */
-    private static ProvenanceKey keyOfPrinted(CardState state, KeywordInterface keyword, int depth) {
+    private static ProvenanceKey keyOfPrinted(CardState state, KeywordInterface keyword,
+                                              ProvenanceKey.Built built, int depth) {
         forge.game.card.CardCloneStates cloned = copyStatesOf(state);
         if (cloned == null) {
-            return keyAt(state, TraitKind.KEYWORD, FaceOrder.keywordIndex(state, keyword));
+            return withBuilt(keyAt(state, TraitKind.KEYWORD, FaceOrder.keywordIndex(state, keyword)), built);
         }
         Card origin = cloned.getOrigin();
         if (origin != null && depth < MAX_COPY_DEPTH) {
@@ -356,11 +364,46 @@ public final class ProvenanceResolver {
                     origin.getState(state.getStateName()), origin.getCurrentState())) {
                 if (original != null && original != state
                         && FaceOrder.keywordIndex(original, keyword) >= 0) {
-                    return keyOfPrinted(original, keyword, depth + 1);
+                    return keyOfPrinted(original, keyword, built, depth + 1);
                 }
             }
         }
         return cloned.getSource() == null ? null : of(cloned.getSource());
+    }
+
+    private static ProvenanceKey withBuilt(ProvenanceKey key, ProvenanceKey.Built built) {
+        return key == null || built == null ? key : key.withBuilt(built.kind(), built.index());
+    }
+
+    /**
+     * Which of its keyword instance's traits {@code trait} is: its kind and
+     * its position, by identity, in the instance's list of that kind, else
+     * the position of the ability it is a stack copy of
+     * ({@code getOriginalAbility}, which {@code MagicStack.add} sets on the
+     * activated ability it pushes).
+     *
+     * <p>Null when neither is in the list, as with a copy Forge made and set
+     * the keyword on with no back-reference (a flashback cast): the key stays
+     * the bare keyword key, which joins the keyword's one line, and no index
+     * is guessed.
+     */
+    private static ProvenanceKey.Built builtOf(CardTraitBase trait) {
+        TraitKind kind = TraitKind.of(trait);
+        if (kind == null) return null;
+        Iterable<? extends CardTraitBase> built = kind.builtBy(trait.getKeyword());
+        int index = indexOfSame(built, trait);
+        if (index < 0) index = indexOfSame(built, originalOf(trait));
+        return index < 0 ? null : new ProvenanceKey.Built(kind, index);
+    }
+
+    /** The position of {@code trait} itself in {@code items}, or -1; -1 for null. */
+    private static int indexOfSame(Iterable<? extends CardTraitBase> items, CardTraitBase trait) {
+        return trait == null ? -1 : soleIndex(items, each -> each == trait);
+    }
+
+    /** The ability a stack copy was made from, or null. */
+    private static CardTraitBase originalOf(CardTraitBase trait) {
+        return trait instanceof SpellAbility sa ? sa.getOriginalAbility() : null;
     }
 
     /**

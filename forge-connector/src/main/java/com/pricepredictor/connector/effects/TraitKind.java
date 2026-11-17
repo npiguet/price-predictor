@@ -4,6 +4,7 @@ import com.pricepredictor.connector.WireNamed;
 
 import forge.game.CardTraitBase;
 import forge.game.card.CardState;
+import forge.game.keyword.KeywordInterface;
 import forge.game.replacement.ReplacementEffect;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
@@ -69,6 +70,22 @@ public enum TraitKind implements WireNamed {
             case REPLACEMENT -> state.getReplacementEffects();
             // A keyword's traits are appended to the other kinds' slices; it
             // indexes by printed keyword ordinal and has no slice of its own.
+            case KEYWORD -> List.of();
+        };
+    }
+
+    /**
+     * A keyword instance's list of the traits of this kind it built, in the
+     * order it built them: what a key's {@code built} index counts in. A
+     * {@link #SPELL} is an activated or a spell ability
+     * ({@code KeywordInterface.getAbilities()}).
+     */
+    Iterable<? extends CardTraitBase> builtBy(KeywordInterface keyword) {
+        return switch (this) {
+            case SPELL -> keyword.getAbilities();
+            case TRIGGER -> keyword.getTriggers();
+            case STATIC -> keyword.getStaticAbilities();
+            case REPLACEMENT -> keyword.getReplacements();
             case KEYWORD -> List.of();
         };
     }
