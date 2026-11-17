@@ -320,10 +320,11 @@ def line_ladder(line_labels: list[LineLabels], probe_model, cache, targets, act_
                 held_out_cards) -> dict:
     """The short ladder for every line target: ``e``, its width control, ``[ACT]``.
 
-    ``cache`` is ``(items, text_by_key)`` from ``common.line_items`` over the
-    checkpoint's cache: every line it encodes, read once per run.
+    ``cache`` is ``(items, acting_text)``: ``common.line_items`` over the
+    checkpoint's cache, every line it encodes read once per run, and the join's
+    ``key -> text``.
     """
-    items, text_by_key = cache
+    items, acting_text = cache
     by_text = {item.text: item for item in items}
     e_dim = probe_model.e_dim
     act_mean = {text: np.mean(rows, axis=0) for text, rows in act_hidden.items()}
@@ -336,7 +337,7 @@ def line_ladder(line_labels: list[LineLabels], probe_model, cache, targets, act_
             label = entry.labels.get(spec.name)
             if label is None:
                 continue
-            text = text_by_key.get(entry.key)
+            text = acting_text(entry.key)
             item = by_text.get(text)
             if item is None or item.e is None:
                 continue
@@ -378,12 +379,12 @@ def pair_ladder(pairs: list[dict], probe_model, cache) -> dict:
     """Interaction pairs: a trigger line with its cause, read from both ``e``."""
     from effects.domain.provenance import ProvenanceKey
 
-    items, text_by_key = cache
+    items, acting_text = cache
     by_text = {item.text: item for item in items}
     rows = []
     for pair in pairs:
-        a = by_text.get(text_by_key.get(ProvenanceKey.from_dict(pair["a"])))
-        b = by_text.get(text_by_key.get(ProvenanceKey.from_dict(pair["b"])))
+        a = by_text.get(acting_text(ProvenanceKey.from_dict(pair["a"])))
+        b = by_text.get(acting_text(ProvenanceKey.from_dict(pair["b"])))
         if a is None or b is None or a.e is None or b.e is None:
             continue
         rows.append((a, b, pair["label"]))
@@ -680,9 +681,8 @@ def probe(args, context: common.ProbeContext, selection) -> Scorecard:
 
     progress("line-level probes over the ability cache")
     _observe_training(args, context, outcomes)
-    text_by_key: dict = {}
-    cache = (common.line_items(context.cards_folders, probe_model.surface, args.abilities_root,
-                               text_by_key=text_by_key), text_by_key)
+    cache = (common.line_items(context.cards_folders, probe_model.surface, args.abilities_root),
+             common.acting_text_function(sidecars, probe_model.surface))
     held_out_cards = set(context.checkpoint.provenance.held_out_cards)
     line_labels = label_lines(cache[0], outcomes, sidecars)
     for name, entry in line_ladder(line_labels, probe_model, cache, targets, act_hidden,

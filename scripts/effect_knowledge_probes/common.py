@@ -100,14 +100,11 @@ class LineItem:
 
 def line_items(
     cards_folders: Iterable[Path], surface: Surface, abilities_root: Path | None = None,
-    *, text_by_key: dict | None = None,
 ) -> list[LineItem]:
     """Every unique encoded text over the sidecar trees, with its cached ``e``.
 
     One item per text on the checkpoint's surface, since two lines that read the
     same share one ``e``. ``abilities_root`` None reads labels only.
-    ``text_by_key``, when given, is filled with every keyed line's text, so a
-    probe item frozen under one key finds its text whichever carrier named it.
     """
     from effects.domain.ability_encoder import encoding_text
     from effects.infrastructure.ability_cache_store import AbilityCacheStore
@@ -144,9 +141,6 @@ def line_items(
                     e=None if matrix is None else matrix[row].astype(np.float32),
                 )
             item.carriers.add(sidecar.card)
-            if text_by_key is not None:
-                for key in line.provenance:
-                    text_by_key[key] = text
     return list(items.values())
 
 
