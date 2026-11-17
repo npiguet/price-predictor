@@ -32,8 +32,8 @@ collector wrote their lines, in shard order. The categories are the shapes the
 rule detectors and detector families read (a creature killed in the state-based
 check, the legend rule, a damage-step probe, a keyword's own line, a random-seat
 game and a game the Forge AI played on both seats), one per story-2 acceptance
-scenario (``a1-`` … ``a11-``: a permanent with a static, a trigger and a replacement line; a creature stripped
-of every ability; flying granted by another permanent's static; ward and
+scenario (``a1-`` … ``a11-``: a permanent with a static, a trigger and a
+replacement line; a creature stripped of every ability; flying granted by another permanent's static; ward and
 annihilator fragments; protection; a first-strike combat; a burn kill, which
 also brings the dies-trigger records of its game; a sorcery off turn and a
 candidate of the seat without priority; an unmet condition; a declared anchor
