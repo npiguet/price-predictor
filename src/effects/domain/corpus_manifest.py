@@ -270,7 +270,7 @@ class CorpusManifest:
     #: that records another or none.
     generation: int = field(default=MANIFEST_GENERATION, metadata=_reads(int))
 
-    # Gen-2 (feature 024).
+    # Feature 024.
 
     #: ``class -> family -> FamilyRow``.
     families: dict[str, dict[str, FamilyRow]] = field(

@@ -121,8 +121,7 @@ class BoardEdit:
         the keyword keeps one, and as a granted keyword line with no key, which
         the model reads through the keyword's reminder text. A keyword without
         a kept flag (fear, intimidate, unblockable) reaches the model through
-        that line alone. A gen-1 or gen-2 entity has no lines, so its list is
-        all an edit can change.
+        that line alone.
 
         ``keyword`` is in the package's spelling (``first_strike``,
         ``protection_from_red``); an entity that has it already is left alone
