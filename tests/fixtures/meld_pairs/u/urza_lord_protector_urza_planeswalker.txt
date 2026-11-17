@@ -1,0 +1,20 @@
+layout: meld
+name: urza, lord protector
+mana cost: {1}{W}{U}
+types: legendary creature human artificer
+power toughness: 2/4
+activated[1]: {7}: if you both own and control CARDNAME and an artifact named the mightstone and weakstone, exile them, then meld them into urza, planeswalker. activate only as a sorcery.
+static: artifact, instant and sorcery spells you cast cost {1} less to cast.
+
+ALTERNATE
+
+name: urza, planeswalker
+types: legendary planeswalker urza
+loyalty: 7
+planeswalker[1]: [+2]: artifact, instant, and sorcery spells you cast this turn cost {2} less to cast. you gain 2 life.
+planeswalker[2]: [+1]: draw two cards, then discard a card.
+planeswalker[3]: [0]: create two 1/1 colorless soldier artifact creature tokens.
+planeswalker[4]: [-3]: exile target nonland permanent.
+planeswalker[5]: [-10]: artifacts and planeswalkers you control gain indestructible until end of turn. destroy all nonland permanents.
+static: you may activate the loyalty abilities of CARDNAME twice each turn rather than only once.
+replacement: CARDNAME enters with seven loyalty counters on it.

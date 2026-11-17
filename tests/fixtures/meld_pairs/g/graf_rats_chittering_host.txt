@@ -1,0 +1,15 @@
+layout: meld
+name: graf rats
+mana cost: {1}{B}
+types: creature rat
+power toughness: 2/1
+triggered: at the beginning of combat on your turn, if you both own and control CARDNAME and a creature named midnight scavengers, exile them, then meld them into chittering host.
+
+ALTERNATE
+
+name: chittering host
+types: creature eldrazi horror
+power toughness: 5/6
+static: haste
+static: menace
+triggered: when CARDNAME enters, other creatures you control get +1/+0 and menace until end of turn.

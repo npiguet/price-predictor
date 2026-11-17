@@ -1,0 +1,15 @@
+layout: meld
+name: midnight scavengers
+mana cost: {4}{B}
+types: creature human rogue
+power toughness: 3/3
+triggered: when CARDNAME enters, you may return target creature card with mana value 3 or less from your graveyard to your hand.
+
+ALTERNATE
+
+name: chittering host
+types: creature eldrazi horror
+power toughness: 5/6
+static: haste
+static: menace
+triggered: when CARDNAME enters, other creatures you control get +1/+0 and menace until end of turn.
