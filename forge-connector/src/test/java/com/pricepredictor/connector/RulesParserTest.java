@@ -628,16 +628,37 @@ class RulesParserTest {
 
     // --- Meld halves ---
 
+    /**
+     * A meld half whose script does not hold the melded face takes it from its
+     * meld partner, as Forge's {@code CardFactory} does: The Mightstone and
+     * Weakstone's face 1 is Urza, Planeswalker, line for line as Urza, Lord
+     * Protector's script prints it.
+     */
+    @Test
+    void theMightstoneAndWeakstoneHoldsUrzaPlaneswalkerOnFaceOne() {
+        MultiCard mightstone = convertFromFile("t/the_mightstone_and_weakstone.txt");
+        MultiCard urza = convertFromFile("u/urza_lord_protector_urza_planeswalker.txt");
+
+        assertEquals(List.of("the mightstone and weakstone", "urza, planeswalker"),
+                mightstone.faces().stream().map(CardFace::name).toList());
+        assertEquals(rendered(urza.faces().get(1)), rendered(mightstone.faces().get(1)));
+    }
+
+    /** Every meld half whose script does not hold the melded face converts with it as face 1. */
     @ParameterizedTest
-    @CsvSource({
-            "t/the_mightstone_and_weakstone.txt, the mightstone and weakstone",
-            "p/phyrexian_dragon_engine.txt,       phyrexian dragon engine",
+    @CsvSource(delimiter = '|', quoteCharacter = '"', value = {
+            "a/argoth_sanctum_of_nature.txt     | argoth, sanctum of nature    | titania, gaea incarnate",
+            "b/bruna_the_fading_light.txt       | bruna, the fading light      | brisela, voice of nightmares",
+            "f/fang_fearless_lcie.txt           | fang, fearless l'cie         | ragnarok, divine deliverance",
+            "h/hanweir_garrison.txt             | hanweir garrison             | hanweir, the writhing township",
+            "m/midnight_scavengers.txt          | midnight scavengers          | chittering host",
+            "p/phyrexian_dragon_engine.txt      | phyrexian dragon engine      | mishra, lost to phyrexia",
+            "t/the_mightstone_and_weakstone.txt | the mightstone and weakstone | urza, planeswalker",
     })
-    void meldHalfHasSingleFace(String file, String expectedName) {
+    void aMeldHalfBorrowsTheMeldedFaceFromItsPartner(String file, String half, String melded) {
         MultiCard result = convertFromFile(file);
         assertEquals("meld", result.layout());
-        assertEquals(1, result.faces().size());
-        assertEquals(expectedName, result.faces().get(0).name());
+        assertEquals(List.of(half, melded), result.faces().stream().map(CardFace::name).toList());
     }
 
     // --- Implicit land mana abilities ---

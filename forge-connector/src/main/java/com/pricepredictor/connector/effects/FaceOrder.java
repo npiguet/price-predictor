@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import forge.StaticData;
 import forge.card.CardRules;
 import forge.card.CardSplitType;
 import forge.card.CardStateName;
@@ -11,7 +12,9 @@ import forge.game.keyword.KeywordInterface;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The two ordinals a provenance key carries that the converter and the
@@ -26,6 +29,10 @@ import java.util.List;
  * in range on both — a silent wrong join rather than a loud failure.
  */
 public final class FaceOrder {
+
+    /** The states {@link #faceOrder} adds no face for after the first: Original leads it. */
+    private static final Set<CardStateName> NO_FACE_OF_ITS_OWN = EnumSet.of(
+            CardStateName.Original, CardStateName.FaceDown, CardStateName.EmptyRoom);
 
     private FaceOrder() {
     }
@@ -62,8 +69,7 @@ public final class FaceOrder {
         List<CardStateName> order = new ArrayList<>();
         order.add(CardStateName.Original);
         for (CardStateName name : card.getStates()) {
-            if (name != CardStateName.Original && name != CardStateName.FaceDown
-                    && name != CardStateName.EmptyRoom && !order.contains(name)) {
+            if (!NO_FACE_OF_ITS_OWN.contains(name) && !order.contains(name)) {
                 order.add(name);
             }
         }
@@ -76,7 +82,8 @@ public final class FaceOrder {
      *
      * <p>Shared by the converter, which renders each face of
      * {@link #faceOrder} from it, and the collectors, which number a token or
-     * spell copy's keywords against it ({@link KeywordPrinters}).
+     * spell copy's keywords against it ({@link KeywordPrinters}). A meld
+     * half's Meld state prints its partner's melded face ({@link #otherPart}).
      */
     public static ICardFace printedFace(CardRules rules, CardStateName state) {
         CardSplitType splitType = rules.getSplitType();
@@ -88,7 +95,23 @@ public final class FaceOrder {
         if (splitType == CardSplitType.Specialize) {
             return rules.getSpecializeParts().get(state);
         }
-        return state == splitType.getChangedStateName() ? rules.getOtherPart() : null;
+        return state == splitType.getChangedStateName() ? otherPart(rules) : null;
+    }
+
+    /**
+     * The second face of {@code rules}, or for a meld half whose script does
+     * not hold the melded face, its meld partner's second face: the melded
+     * card, which Forge's {@code CardFactory} reads into the half's Meld state
+     * from the partner's rules in the card database (the one
+     * {@code CopiedFaces} supplies copied faces from), and which the
+     * collectors key as face 1 of the half's own file.
+     */
+    private static ICardFace otherPart(CardRules rules) {
+        if (rules.getOtherPart() != null || rules.getMeldWith().isEmpty()) {
+            return rules.getOtherPart();
+        }
+        return StaticData.instance().getCommonCards()
+                .getRulesOrElseUnsupported(rules.getMeldWith()).getOtherPart();
     }
 
     /**
