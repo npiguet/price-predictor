@@ -4,32 +4,26 @@ import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
 import forge.game.CardTraitBase;
-import forge.game.card.Card;
-import forge.game.keyword.Keyword;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 /**
  * Charm ability with nested OPTION sub-abilities, rendered as the kind of line
  * its root is: a {@code spell} line for a modal spell, an {@code activated}
  * (or {@code planeswalker}) line opening with its cost for an activated charm.
- * A charm whose count is an expression and that writes no description prints
- * the header Forge writes for an expression, so no charm root is left unprinted.
+ * A charm that writes no description of its own prints its choice sentence
+ * ({@link CharmHeader}), so no charm root is left unprinted.
  */
 public record CharmAbility(AbilityType type, String descriptionText, List<Ability> subAbilities)
         implements Ability {
 
     private static final Pattern TRAILING_EM_DASH = Pattern.compile("\\s*\u2014\\s*$");
     private static final Pattern REPEATED_SPACES = Pattern.compile(" {2,}");
-    /** The header Forge writes when the charm's count is an expression. */
-    private static final String DEFAULT_HEADER = "Choose one";
-    private static final String[] NUMBER_WORDS = {"", "one", "two", "three", "four", "five"};
 
     public CharmAbility {
         Objects.requireNonNull(type);
@@ -38,17 +32,11 @@ public record CharmAbility(AbilityType type, String descriptionText, List<Abilit
     }
 
     public static List<Ability> fromSpellAbility(SpellAbility sa) {
-        String charmDesc = firstNonEmpty(
-                () -> spellDescription(sa),
-                () -> pawprintHeader(sa),
-                () -> additionalDescription(sa),
-                // "choose N" from CharmNum/MinCharmNum when no description is written
-                () -> synthesizeCharmHeader(sa));
-
-        List<Ability> choiceSubs = optionsFrom(sa, null);
+        String own = spellDescription(sa);
         // Every charm prints its root: an activated charm's cost is on no other
         // line, and a root nobody prints lands in dropped_keys.
-        String header = charmDesc != null ? charmDesc : headerOrDefault(sa);
+        String header = own != null && !own.isEmpty() ? own : CharmHeader.of(sa);
+        List<Ability> choiceSubs = optionsFrom(sa, null);
         AbilityType type = typeOf(sa);
         String root = AbilityDescription.applyCasing(leadOf(sa) + header);
         return new ArrayList<>(List.of(
@@ -74,18 +62,6 @@ public record CharmAbility(AbilityType type, String descriptionText, List<Abilit
         return precost.isEmpty() ? "" : precost + " ";
     }
 
-    /** The first candidate that yields a non-empty string, tried in order, or null. */
-    @SafeVarargs
-    private static String firstNonEmpty(Supplier<String>... candidates) {
-        for (Supplier<String> candidate : candidates) {
-            String text = candidate.get();
-            if (text != null && !text.isEmpty()) {
-                return text;
-            }
-        }
-        return null;
-    }
-
     /** The charm's own {@code SpellDescription}, without reminder text or a trailing em-dash. */
     private static String spellDescription(SpellAbility sa) {
         String desc = sa.getParam("SpellDescription");
@@ -95,96 +71,6 @@ public record CharmAbility(AbilityType type, String descriptionText, List<Abilit
         desc = AbilityDescription.stripReminderText(desc);
         // Strip trailing em-dash (oracle/SpellDescription often ends with " —")
         return TRAILING_EM_DASH.matcher(desc).replaceAll("").trim();
-    }
-
-    /** A pawprint charm's header, built from its {@code Pawprint} total; null for any other charm. */
-    private static String pawprintHeader(SpellAbility sa) {
-        if (!sa.hasParam("Pawprint")) {
-            return null;
-        }
-        String header = "Choose up to " + sa.getParam("Pawprint") + " {P} worth of modes.";
-        if (sa.hasParam("CanRepeatModes")) {
-            header += " You may choose the same mode more than once.";
-        }
-        return header;
-    }
-
-    /**
-     * The charm's {@code AdditionalDescription}, without reminder text, or null.
-     *
-     * <p>Forge writes it after the "choose N" header: joined directly when it
-     * opens with a period ({@code ". If there are four or more card types..."}),
-     * after a comma when it opens "where X", and after a space otherwise (the
-     * printed card has a period there). A Spree or Tiered charm has no header,
-     * and a description that states the choice itself needs none.
-     */
-    private static String additionalDescription(SpellAbility sa) {
-        String desc = sa.getParam("AdditionalDescription");
-        if (desc == null || desc.isEmpty()) return null;
-        desc = AbilityDescription.stripReminderText(desc).trim();
-        if (statesTheChoice(sa, desc)) return desc;
-        String header = headerOrDefault(sa);
-        if (desc.startsWith(".")) return header + desc;
-        return header + (desc.startsWith("where X") ? ", " : ". ") + desc;
-    }
-
-    /** Whether the description stands without a header: it opens "Choose", or the card has none. */
-    private static boolean statesTheChoice(SpellAbility sa, String desc) {
-        Card host = sa.getHostCard();
-        return desc.regionMatches(true, 0, "choose", 0, "choose".length())
-                || host.hasKeyword(Keyword.SPREE) || host.hasKeyword(Keyword.TIERED);
-    }
-
-    /**
-     * What Forge appends to a charm's "choose N" for its {@code ChoiceRestriction$},
-     * with a leading space, or the empty string.
-     */
-    private static String restriction(SpellAbility sa) {
-        return switch (sa.getParamOrDefault("ChoiceRestriction", "")) {
-            case "ThisGame" -> " that hasn't been chosen";
-            case "ThisTurn" -> " that hasn't been chosen this turn";
-            case "YourLastCombat" -> " that wasn't chosen during your last combat";
-            default -> "";
-        };
-    }
-
-    /**
-     * Synthesize a "choose N —" header from CharmNum / MinCharmNum params.
-     * Returns null if CharmNum is a variable/expression (can't determine statically).
-     * Logic:
-     *   MinCharmNum=0 → "choose up to N"
-     *   MinCharmNum=1, CharmNum=2 → "choose one or both"
-     *   MinCharmNum=1, CharmNum≥3 → "choose one or more"
-     *   no MinCharmNum (exact) → "choose N"
-     *   no CharmNum → "choose one" (default)
-     * No trailing em-dash: the header stands on its own line.
-     */
-    static String synthesizeCharmHeader(SpellAbility sa) {
-        String numStr = sa.getParam("CharmNum");
-        int num = parseSimpleInt(numStr);    // -1 if null or non-integer
-        if (num == -1 && numStr != null) {
-            // CharmNum is a variable/expression — can't synthesize
-            return null;
-        }
-        int minNum = parseSimpleInt(sa.getParam("MinCharmNum")); // -1 if not set
-        // CharmNum absent → default choose one
-        String header = num == -1 ? (minNum == 0 ? "Choose up to one" : "Choose one")
-                : countedHeader(num, minNum);
-        return header + restriction(sa);
-    }
-
-    /** The synthesized header, or "choose one" when the count is an expression, as Forge writes it. */
-    private static String headerOrDefault(SpellAbility sa) {
-        String header = synthesizeCharmHeader(sa);
-        return header != null ? header : DEFAULT_HEADER + restriction(sa);
-    }
-
-    /** The header of a charm choosing {@code num} modes, at least {@code minNum} (-1: exactly). */
-    private static String countedHeader(int num, int minNum) {
-        if (minNum == 0) return "Choose up to " + numberWord(num);
-        if (minNum == 1 && num >= 2) return num == 2 ? "Choose one or both" : "Choose one or more";
-        // No MinCharmNum (or minNum == num): choose exactly N
-        return "Choose " + numberWord(num);
     }
 
     /**
@@ -212,10 +98,6 @@ public record CharmAbility(AbilityType type, String descriptionText, List<Abilit
         if (s == null) return -1;
         try { return Integer.parseInt(s.trim()); }
         catch (NumberFormatException e) { return -1; }
-    }
-
-    private static String numberWord(int n) {
-        return n >= 1 && n < NUMBER_WORDS.length ? NUMBER_WORDS[n] : String.valueOf(n);
     }
 
     /**
@@ -286,8 +168,8 @@ public record CharmAbility(AbilityType type, String descriptionText, List<Abilit
      *
      * <p>Forge writes {@code "When CARDNAME enters, ABILITY"} and fills the
      * placeholder from the charm at runtime. Here it becomes the charm's
-     * "choose N" header — "choose one" when the count is an expression — and
-     * the modes become the trait's option lines.
+     * choice sentence ({@link CharmHeader}), its {@code AdditionalDescription$}
+     * included, and the modes become the trait's option lines.
      *
      * @param desc  the raw description holding the placeholder
      * @param owner the trait that executes the charm, or null (see
@@ -297,7 +179,7 @@ public record CharmAbility(AbilityType type, String descriptionText, List<Abilit
      */
     public static Expanded expandPlaceholder(String desc, SpellAbility charm,
                                              CardTraitBase owner) {
-        String header = headerOrDefault(charm);
+        String header = CharmHeader.of(charm);
         return new Expanded(
                 AbilityDescription.normalize(desc.replace("ABILITY", header)),
                 optionsFrom(charm, owner));

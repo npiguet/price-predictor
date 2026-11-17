@@ -172,17 +172,80 @@ class CharmAbilityTest {
         }
     }
 
+    // -- the header, as CharmEffect.makeFormatedDescription builds it ------
+    // Each expectation is the card's printed choice sentence (Oracle), cased.
+
+    @Test
+    void aTriggeredCharmCountedByXStatesXAndWhatXIs() {
+        // Oracle: "choose up to X, where X is the number of times you chose a
+        // mode for that spell —"; the placeholder path read "choose one".
+        assertEquals("triggered: whenever you cast a modal spell, choose up to X, where X is"
+                        + " the number of times you chose a mode for that spell",
+                lineOf("r/riku_of_many_paths.txt", "triggered"));
+    }
+
+    @Test
+    void aTriggeredCharmCountedByAnExpressionStatesItsMinimumAndItsAdditionalDescription() {
+        // Oracle: "choose one or more. Each mode must target a different player."
+        assertEquals("triggered: whenever CARDNAME attacks or dies, choose one or more."
+                        + " each mode must target a different player.",
+                lineOf("b/balor.txt", "triggered"));
+    }
+
+    @Test
+    void aCharmThatMayRepeatModesSaysSo() {
+        assertEquals("spell[1]: choose three. you may choose the same mode more than once.",
+                lineOf("m/mystic_confluence.txt", "spell"));
+    }
+
+    @Test
+    void aCharmAnOpponentChoosesSaysWhoChooses() {
+        assertEquals("spell[1]: an opponent chooses one", lineOf("f/fatal_lore.txt", "spell"));
+    }
+
+    @Test
+    void aRandomCharmSaysAtRandomBeforeItsAdditionalDescription() {
+        // Oracle: "choose one at random. Create a red and white creature token
+        // with those characteristics."
+        assertEquals("triggered: at the beginning of your upkeep, choose one at random."
+                        + " create a red and white creature token with those characteristics.",
+                lineOf("o/outlaws_merriment.txt", "triggered"));
+    }
+
+    @Test
+    void aCharmCountedByAnAnnouncedXStatesX() {
+        // Oracle: "Choose X. You may choose the same mode more than once."
+        assertEquals("spell[1]: choose X. you may choose the same mode more than once.",
+                lineOf("d/doomsday_confluence.txt", "spell"));
+    }
+
+    @Test
+    void aCharmHeaderKeepsNoTrailingEmDash() {
+        // Forge writes "Visit — Choose one —" and "I, II, III — Choose one at random. —".
+        assertEquals("triggered: visit — choose one", lineOf("b/balloon_stand.txt", "triggered"));
+        assertEquals("chapter: I, II, III — choose one at random.",
+                lineOf("s/summon_magus_sisters.txt", "chapter"));
+    }
+
     @Test
     void aModalSpellWithNoDescriptionStillPrintsItsRootKeyedWithTheSpell() {
         Converted doomsday = Converted.of("d/doomsday_confluence.txt");
-        assertTrue(doomsday.texts().contains("spell[1]: choose one"), "root: " + doomsday.texts());
+        assertTrue(doomsday.texts().stream().anyMatch(t -> t.startsWith("spell[1]: choose X")),
+                "root: " + doomsday.texts());
         assertEquals(3, doomsday.lineKind("option").size());
         assertTrue(doomsday.sidecar().droppedKeys().isEmpty(),
                 "dropped: " + doomsday.sidecar().droppedKeys());
     }
 
     private static String rootOf(String card) {
-        return Converted.of(card).texts().stream().filter(t -> t.startsWith("spell")).findFirst().orElseThrow();
+        return lineOf(card, "spell");
+    }
+
+    /** The first line of {@code card} of the given kind. */
+    private static String lineOf(String card, String kind) {
+        List<String> texts = Converted.of(card).texts();
+        return texts.stream().filter(t -> t.startsWith(kind)).findFirst()
+                .orElseThrow(() -> new AssertionError("no " + kind + " line: " + texts));
     }
 
     /** A real Forge script converted with its sidecar, as BatchConverter writes both. */

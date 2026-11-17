@@ -5,6 +5,7 @@ import com.pricepredictor.connector.ability.ActivatedAbilityEntry;
 import com.pricepredictor.connector.ability.AlternateCostSpell;
 import com.pricepredictor.connector.ability.ChapterAbility;
 import com.pricepredictor.connector.ability.CharmAbility;
+import com.pricepredictor.connector.ability.CharmHeader;
 import com.pricepredictor.connector.ability.ClassLevelAbility;
 import com.pricepredictor.connector.ability.CompanionKeyword;
 import com.pricepredictor.connector.ability.EtbReplacementAbility;
@@ -309,7 +310,7 @@ final class FaceParser {
         for (Trigger t : ki.getTriggers()) {
             SpellAbility overriding = t.getOverridingAbility();
             boolean charm = overriding != null && overriding.getApi() == ApiType.Charm;
-            String header = charm ? triggerHeader(t) : visitHeader(t, overriding);
+            String header = charm ? charmVisitHeader(overriding) : visitHeader(t, overriding);
             if (header == null) continue;
             List<Ability> children =
                     charm ? CharmAbility.optionsFrom(overriding, t) : List.of();
@@ -337,6 +338,14 @@ final class FaceParser {
         }
         return AbilityDescription.normalize(
                 spellDesc.startsWith("Visit — ") ? spellDesc : "Visit — " + spellDesc);
+    }
+
+    /**
+     * A charm visit's header: Forge writes "Visit — " and the charm's
+     * description, whose header is the charm's choice sentence.
+     */
+    private static String charmVisitHeader(SpellAbility charm) {
+        return AbilityDescription.normalize("Visit — " + CharmHeader.of(charm));
     }
 
     /** A trigger's normalized first description line, or null if it prints none. */

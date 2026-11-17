@@ -19,6 +19,8 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
 
     /** What opens each mode in Forge's own description of a charm. */
     private static final char MODE_BULLET = '\u2022';
+    /** What ends a chapter's numerals ("I, II —"). */
+    private static final char EM_DASH = '\u2014';
 
     public ChapterAbility {
         Objects.requireNonNull(subAbilities);
@@ -83,12 +85,15 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
 
     /**
      * A chapter whose description spells out its charm: Forge writes the
-     * header and every mode into the one description, so the header is what
-     * precedes the first bullet and the modes become the chapter's options.
+     * chapter's numerals, the charm's header and every mode into the one
+     * description, so the line is the numerals and the charm's choice
+     * sentence ({@link CharmHeader}), and the modes become the chapter's
+     * options.
      */
     private static Ability modesChapter(String stripped, SpellAbility execute, Trigger trigger) {
-        String header = stripped.substring(0, stripped.indexOf(MODE_BULLET)).trim();
-        String normalized = AbilityDescription.normalize(header);
+        String numerals = stripped.substring(0, stripped.indexOf(EM_DASH) + 1);
+        String normalized = AbilityDescription.normalize(
+                (numerals + " " + CharmHeader.of(execute)).trim());
         if (normalized == null) return null;
         return new ChapterAbility(AbilityType.CHAPTER.formatDescription(normalized),
                 CharmAbility.optionsFrom(execute, trigger));
@@ -123,7 +128,7 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
      * with no effect text after the em-dash.
      */
     private static boolean isHeaderOnly(String desc) {
-        int dashIdx = desc.indexOf('\u2014'); // em-dash
+        int dashIdx = desc.indexOf(EM_DASH);
         if (dashIdx < 0) return false;
         return desc.substring(dashIdx + 1).trim().isEmpty();
     }
