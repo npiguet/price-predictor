@@ -18,9 +18,11 @@ REVIEW_COUNTS = {
     # report-verify-01.md, claims table and claim 1: live Equip halves holding `attached`.
     "equip-halves-without-stat-change": "356",
     "equip-halves-with-stat-change": "16",
-    # report-verify-02.md, claim 1 data table: random seat, live, stack-targeting scripts.
-    "counter-halves-random-seat-countered": "24",
-    "counter-halves-random-seat-not-countered": "37",
+    # report-verify-02.md, claim 1 data table: random seat, live, stack-targeting scripts, in
+    # cast pairs. Measured: the table covers the pilot, the three stall runs, blind-kill-check
+    # and pilot-checks together (the pilot alone has 20 random-seat live pairs).
+    "counter-halves-random-seat-countered[spell-target]": "24 (six runs)",
+    "counter-halves-random-seat-not-countered[stack-card-target]": "37 (six runs)",
     # report-verify-01.md, claims table, claim 2: 23 of 23 fizzled halves with stack extras.
     "fizzled-halves-with-zero-targets": "23 of 23",
     # report-verify-03.md, claim 8b: forced halves by phase (3,980 in all), 888 stamped early.
@@ -70,7 +72,9 @@ REVIEW_COUNTS = {
     # MERGED-FINDINGS.md, 9.8: null attribution on mana records, in the review's sample.
     "mana-record-events-without-attribution[tapped]": "1375",
     "mana-record-events-without-attribution[mana_produced]": "1377",
-    # report-verify-02.md, scan 2 data: 31 convoke candidates.
+    # report-verify-02.md, scan 2 data: 31 convoke candidates (own turn before attacks with an
+    # untapped creature: cost never reduced, 2 of 2; own later or opponent's turn with an
+    # untapped creature: reduced in 11 of 16).
     "convoke-candidates": "31",
 }
 

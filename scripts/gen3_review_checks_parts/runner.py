@@ -7,8 +7,9 @@ from pathlib import Path
 
 from effects.infrastructure.shard_io import iter_record_dicts, iter_shards
 
+from .convoke import ConvokeCandidates
+from .counter_checks import CounterHalves
 from .event_checks import (
-    ConvokeCandidates,
     DirectedForks,
     ManaAttribution,
     PhaseSkipped,
@@ -16,7 +17,7 @@ from .event_checks import (
 )
 from .forced_checks import ForcedHalves, ForcedUnattached
 from .game_checks import LethalCombat, MarkedGames, RescueRecords
-from .half_checks import CounterHalves, EquipHalves, FizzledHalves
+from .half_checks import EquipHalves, FizzledHalves
 from .key_checks import AmbiguousKeys
 from .model import Check, Line
 from .protection import ProtectionForks

@@ -9,7 +9,6 @@ from .model import (
     Line,
     TallyCheck,
     events_of,
-    first_key,
     is_effect_half,
     payload_of,
     state_of,
@@ -85,41 +84,3 @@ class DirectedForks(Check):
             Line(f"directed-forks[{rule}]", len(self.forks[rule]), count)
             for rule, count in sorted(self.records.items())
         ]
-
-
-def card_has_convoke(sidecars, key: dict) -> bool:
-    data = sidecars.get(key["script_file"])
-    if data is None:
-        return False
-    keyword_lines = [line for line in data["lines"] if line["line_kind"] == "keyword"]
-    texts = [sidecars.line_text(key["script_file"], line).lower() for line in keyword_lines]
-    return any("convoke" in text for text in texts)
-
-
-class ConvokeCandidates(TallyCheck):
-    """Decision candidates that are convoke spells, by phase and affordability."""
-
-    NAMES = ("convoke-candidates",)
-
-    def __init__(self, sidecars) -> None:
-        super().__init__()
-        self.sidecars = sidecars
-
-    def feed(self, record: dict) -> None:
-        if record.get("subkind") != "decision":
-            return
-        phase = (state_of(record).get("global") or {}).get("phase")
-        for candidate in payload_of(record).get("candidates") or ():
-            key = first_key(candidate)
-            if key.get("trait_kind") == "spell" and card_has_convoke(self.sidecars, key):
-                self._count(phase, bool((candidate.get("verdict") or {}).get("affordable")))
-
-    def _count(self, phase: str | None, affordable: bool) -> None:
-        self.pairs["convoke-candidates"][0] += 1
-        self.pairs["convoke-candidates"][1] += 1
-        label = "affordable" if affordable else "unaffordable"
-        self.add(f"convoke-candidates[{phase},{label}]", True)
-
-    def lines(self) -> list[Line]:
-        total = self.pairs["convoke-candidates"][1]
-        return [Line(n, p[0], total) for n, p in sorted(self.pairs.items())]

@@ -1,8 +1,6 @@
-"""Effect halves: Equip, counterspells and fizzles."""
+"""Effect halves: Equip and fizzles."""
 
 from __future__ import annotations
-
-import re
 
 from .model import (
     TallyCheck,
@@ -13,12 +11,8 @@ from .model import (
     payload_of,
     state_of,
 )
-from .sidecars import Sidecars
 
 STAT_EVENTS = frozenset({"pt_change", "keyword_change", "ability_change", "control_change"})
-STACK_APIS = re.compile(
-    r"\b(?:SP|AB|DB)\$ (?:Counter|CopySpellAbility|ChangeTargets|ControlSpell)\b"
-)
 
 
 def _is_live_half_of(record: dict, trait_kind: str) -> bool:
@@ -40,34 +34,6 @@ class EquipHalves(TallyCheck):
             has_stat = bool(types & STAT_EVENTS)
             self.add("equip-halves-with-stat-change", has_stat)
             self.add("equip-halves-without-stat-change", not has_stat)
-
-
-def _is_random_seat_live_half(record: dict) -> bool:
-    if not is_effect_half(record) or record.get("fork"):
-        return False
-    return bool(record.get("random_seat"))
-
-
-class CounterHalves(TallyCheck):
-    """Random-seat effect halves of stack-targeting scripts, with and without `spell_countered`."""
-
-    NAMES = ("counter-halves-random-seat-countered", "counter-halves-random-seat-not-countered")
-
-    def __init__(self, sidecars: Sidecars) -> None:
-        super().__init__()
-        self.sidecars = sidecars
-
-    def feed(self, record: dict) -> None:
-        if not _is_random_seat_live_half(record):
-            return
-        if self._targets_the_stack(first_key(record)):
-            countered = any(e.get("type") == "spell_countered" for e in events_of(record))
-            self.add("counter-halves-random-seat-countered", countered)
-            self.add("counter-halves-random-seat-not-countered", not countered)
-
-    def _targets_the_stack(self, key: dict) -> bool:
-        rows = self.sidecars.rows_holding(key) if key else None
-        return any(STACK_APIS.search(row.get("script_text") or "") for row in rows or ())
 
 
 class FizzledHalves(TallyCheck):
