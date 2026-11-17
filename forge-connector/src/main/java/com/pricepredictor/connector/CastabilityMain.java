@@ -4,6 +4,7 @@ import com.pricepredictor.connector.json.Json;
 import forge.card.CardRules;
 import forge.game.card.Card;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -50,25 +51,27 @@ public class CastabilityMain {
     }
 
     public static void main(String[] args) {
-        ToolMain.Args cli = ToolMain.args(args, Set.of(), "--cards", "--output");
+        ToolMain.run(() -> work(args));
+    }
 
-        ToolMain.run(() -> {
-            Path cardsFile = Path.of(cli.require("--cards"));
-            Path output = Path.of(cli.require("--output"));
-            ForgeEnvironmentInitializer.initialize();
-            List<String> names = CorpusFiles.nonBlankLines(cardsFile);
-            Map<String, Verdict> verdicts = consult(names);
-            if (output.getParent() != null) {
-                Files.createDirectories(output.getParent());
-            }
-            Files.writeString(output, render(verdicts), StandardCharsets.UTF_8);
-            long castable = verdicts.values().stream()
-                    .filter(Verdict.CASTABLE::equals).count();
-            System.out.println(
-                    "Consulted " + verdicts.size() + " cards: " + castable
-                            + " castable, " + (verdicts.size() - castable)
-                            + " uncastable. Output: " + output);
-        });
+    /** The consult itself; an exit it requests ends the process through {@link ToolMain#run}. */
+    static void work(String[] args) throws IOException {
+        ToolMain.Args cli = ToolMain.args(args, Set.of(), "--cards", "--output");
+        Path cardsFile = Path.of(cli.require("--cards"));
+        Path output = Path.of(cli.require("--output"));
+        ForgeEnvironmentInitializer.initialize();
+        List<String> names = CorpusFiles.nonBlankLines(cardsFile);
+        Map<String, Verdict> verdicts = consult(names);
+        if (output.getParent() != null) {
+            Files.createDirectories(output.getParent());
+        }
+        Files.writeString(output, render(verdicts), StandardCharsets.UTF_8);
+        long castable = verdicts.values().stream()
+                .filter(Verdict.CASTABLE::equals).count();
+        System.out.println(
+                "Consulted " + verdicts.size() + " cards: " + castable
+                        + " castable, " + (verdicts.size() - castable)
+                        + " uncastable. Output: " + output);
     }
 
     /** One verdict per name Forge recognizes; names it does not are omitted. */

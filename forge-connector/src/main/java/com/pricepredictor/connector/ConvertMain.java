@@ -75,10 +75,12 @@ public class ConvertMain {
      */
     private static List<Conversion> conversions(ToolMain.Args cli) {
         String cardsPath = cli.get("--cards-path", "../forge/forge-gui/res/cardsfolder/");
-        String outputPath = cli.get("--output-path", "./output");
+        // No default output tree: the run directory belongs to the caller
+        // (the artifact layout), and a default would take the conversion
+        // wherever a misspelt flag left it.
+        String outputPath = cli.require("--output-path");
+        String tokensOutputPath = cli.require("--tokens-output-path");
         String tokensPath = cli.get("--tokens-path", defaultSibling(cardsPath, "tokenscripts"));
-        String tokensOutputPath = cli.get(
-                "--tokens-output-path", defaultSibling(outputPath, "tokenscripts"));
 
         List<Conversion> conversions = new ArrayList<>(2);
         conversions.add(new Conversion(Path.of(cardsPath), Path.of(outputPath), SourceTree.CARDSFOLDER));
@@ -150,7 +152,7 @@ public class ConvertMain {
         throw ToolMain.exit(ExitCode.FAILURE);
     }
 
-    /** A sibling of {@code path} named {@code name} — the token tree's default. */
+    /** A sibling of {@code path} named {@code name} — the token source's default. */
     private static String defaultSibling(String path, String name) {
         Path resolved = Path.of(path).toAbsolutePath().normalize();
         Path parent = resolved.getParent();

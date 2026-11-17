@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * What the one-shot tool mains share: {@code --flag value} arguments, and the
@@ -132,23 +133,37 @@ final class ToolMain {
      * winning, and which of the {@code switches}, flags that take no value,
      * were given ({@link Args#has}).
      *
-     * <p>Only the named flags take a value. Anything else on the command line
-     * is skipped on its own, so a flag this main does not know never swallows
-     * the next argument — an older caller passing a since-removed flag still
-     * gets the rest of its arguments read.
+     * <p>Anything else on the command line is refused, as is a flag left
+     * without its value: a misspelt flag would otherwise leave its value to
+     * the main's default, and a caller passing a flag the main ignores
+     * believes it was honoured.
+     *
+     * @throws Exit with {@link ExitCode#BAD_CONFIG}, the argument named
      */
     static Args args(String[] args, Set<String> switches, String... flags) {
         Set<String> known = Set.of(flags);
         Map<String, String> values = new HashMap<>();
         Set<String> given = new HashSet<>();
         for (int i = 0; i < args.length; i++) {
-            if (switches.contains(args[i])) {
-                given.add(args[i]);
-            } else if (known.contains(args[i]) && i + 1 < args.length) {
-                values.put(args[i], args[++i]);
+            String arg = args[i];
+            if (switches.contains(arg)) {
+                given.add(arg);
+            } else if (!known.contains(arg)) {
+                throw badConfig("unknown argument " + arg + "; this tool takes "
+                        + new TreeSet<>(union(known, switches)));
+            } else if (i + 1 == args.length) {
+                throw badConfig(arg + " needs a value");
+            } else {
+                values.put(arg, args[++i]);
             }
         }
         return new Args(values, given);
+    }
+
+    private static Set<String> union(Set<String> first, Set<String> second) {
+        Set<String> all = new HashSet<>(first);
+        all.addAll(second);
+        return all;
     }
 
     /** Parsed {@code --flag value} pairs, and the switches given. */
@@ -168,7 +183,7 @@ final class ToolMain {
          * The flag's value as an integer, or {@code defaultValue} when it was
          * not given.
          *
-         * @throws IllegalArgumentException when the value is not an integer
+         * @throws Exit with {@link ExitCode#BAD_CONFIG} when the value is not an integer
          */
         int intValue(String flag, int defaultValue) {
             String value = values.get(flag);
@@ -178,7 +193,7 @@ final class ToolMain {
             try {
                 return Integer.parseInt(value);
             } catch (NumberFormatException e) {
-                throw new IllegalArgumentException(flag + " must be an integer, got: " + value);
+                throw badConfig(flag + " must be an integer, got: " + value);
             }
         }
 
@@ -190,12 +205,13 @@ final class ToolMain {
         /**
          * The flag's value.
          *
-         * @throws IllegalArgumentException naming the flag when it was not given
+         * @throws Exit with {@link ExitCode#BAD_CONFIG}, the flag named, when it
+         *         was not given
          */
         String require(String flag) {
             String value = values.get(flag);
             if (value == null) {
-                throw new IllegalArgumentException(flag + " is required");
+                throw badConfig(flag + " is required");
             }
             return value;
         }

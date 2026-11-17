@@ -9,6 +9,7 @@ import forge.game.keyword.KeywordInterface;
 import forge.game.keyword.KeywordWithTypeInterface;
 
 import java.util.EnumSet;
+import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -92,7 +93,7 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
     private static String protectionTitle(String original) {
         KeywordSpec spec = new KeywordSpec(original);
         String target = spec.size() > 2 ? spec.rest(2) : spec.rest(1);
-        return target == null ? original : "Protection from " + target.toLowerCase();
+        return target == null ? original : "Protection from " + target.toLowerCase(Locale.ROOT);
     }
 
     /**

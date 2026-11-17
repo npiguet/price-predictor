@@ -47,14 +47,15 @@ import java.util.regex.Pattern;
 public class KeywordDefinitionMain {
 
     public static void main(String[] args) {
-        String outputPath = ToolMain.args(args, Set.of(), "--output")
-                .get("--output", "output/effects/keyword-definitions.json");
+        ToolMain.run(() -> work(args));
+    }
 
-        ToolMain.run(() -> {
-            ForgeEnvironmentInitializer.initialize();
-            System.out.println("Wrote keyword definitions to "
-                    + writeTo(Path.of(outputPath)));
-        });
+    /** The extraction itself; an exit it requests ends the process through {@link ToolMain#run}. */
+    static void work(String[] args) throws IOException {
+        String outputPath = ToolMain.args(args, Set.of(), "--output").require("--output");
+        ForgeEnvironmentInitializer.initialize();
+        System.out.println("Wrote keyword definitions to "
+                + writeTo(Path.of(outputPath)));
     }
 
     /** Render the document and write it, creating the parent directory. */

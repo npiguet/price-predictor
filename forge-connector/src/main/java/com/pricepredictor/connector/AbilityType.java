@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -72,7 +73,7 @@ public enum AbilityType {
     static String uppercaseRomanPrefix(String text) {
         Matcher m = ROMAN_PREFIX.matcher(text);
         if (m.find()) {
-            return m.group(1).toUpperCase() + text.substring(m.group(1).length());
+            return m.group(1).toUpperCase(Locale.ROOT) + text.substring(m.group(1).length());
         }
         return text;
     }

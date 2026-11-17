@@ -2,6 +2,7 @@ package com.pricepredictor.connector;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -75,7 +76,7 @@ public final class AbilityDescription {
         StringBuilder sb = new StringBuilder();
         int lastEnd = 0;
         while (m.find()) {
-            braceSymbols.add(m.group().toUpperCase());
+            braceSymbols.add(m.group().toUpperCase(Locale.ROOT));
             sb.append(text, lastEnd, m.start());
             sb.append("\0BRACE").append(braceSymbols.size() - 1).append('\0');
             lastEnd = m.end();
@@ -83,7 +84,7 @@ public final class AbilityDescription {
         sb.append(text, lastEnd, text.length());
 
         // Lowercase everything
-        String lowered = sb.toString().toLowerCase();
+        String lowered = sb.toString().toLowerCase(Locale.ROOT);
 
         // Restore brace symbols (uppercase)
         for (int i = 0; i < braceSymbols.size(); i++) {
@@ -91,7 +92,7 @@ public final class AbilityDescription {
         }
 
         // Restore placeholders to uppercase (word-boundary-aware to avoid corrupting substrings)
-        lowered = PLACEHOLDER_WORD.matcher(lowered).replaceAll(mr -> mr.group().toUpperCase());
+        lowered = PLACEHOLDER_WORD.matcher(lowered).replaceAll(mr -> mr.group().toUpperCase(Locale.ROOT));
 
         // Normalize NICKNAME to CARDNAME: both refer to the card's own name; use one placeholder.
         lowered = lowered.replace("NICKNAME", "CARDNAME");

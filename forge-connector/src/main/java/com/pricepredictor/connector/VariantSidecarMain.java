@@ -30,7 +30,7 @@ public class VariantSidecarMain {
     /** The worker itself; an exit it requests ends the process through {@link ToolMain#guard}. */
     static void work(String[] args) {
         String variantsPath = ToolMain.args(args, Set.of(), "--variants-path")
-                .get("--variants-path", "output/effects/variant-scripts/");
+                .require("--variants-path");
 
         Path variants = Path.of(variantsPath);
         if (!Files.isDirectory(variants)) {

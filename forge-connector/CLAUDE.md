@@ -17,7 +17,7 @@ No worker has a per-game timeout, and none should get one. A game that does not 
 
 `MatchWorkerMain` also stops gracefully at a game end (`WorkerStop`), when the file `-Dworker.stop.file` names exists or once `-Dworker.recycle.seconds` have passed, after the game's recording is closed and its game-end marker written. Its stop line, its other printed lines and what the supervisor does are the contract `specs/025-ability-effect-model-gen3/contracts/cli.md` § Match worker stop protocol: the supervisor parses them, so they do not drift.
 
-Every main runs under `ToolMain.guard` or `ToolMain.run`: `ToolMain.exit` and `badConfig` return a `ToolMain.Exit` (an `Error`) for the caller to throw, and the guard turns it into the exit status, so an exit path is testable by catching it (`ToolMainExitTest` checks every main).
+Every main runs under `ToolMain.guard` or `ToolMain.run`: `ToolMain.exit` and `badConfig` return a `ToolMain.Exit` (an `Error`) for the caller to throw, and the guard turns it into the exit status, so an exit path is testable by catching it (`ToolMainExitTest` checks every main). A tool main reads its `--flag value` arguments through `ToolMain.args`, which refuses with `BAD_CONFIG` any argument the main does not declare, so a Python caller passes exactly the flags its main declares; no tool main has a default output path.
 
 ## Engine hooks
 

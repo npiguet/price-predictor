@@ -41,17 +41,19 @@ public class PoolMain {
     static final int PROGRESS_EVERY = 1000;
 
     public static void main(String[] args) {
+        ToolMain.run(() -> work(args));
+    }
+
+    /** The generation itself; an exit it requests ends the process through {@link ToolMain#run}. */
+    static void work(String[] args) throws java.io.IOException {
         ToolMain.Args cli = ToolMain.args(
                 args, Set.of(), "--set", "--size", "--pools-path", "--exclude-cards");
         String setCode = cli.get("--set");
-        String poolsPath = cli.get("--pools-path", "./output/sealed/pools/");
+        String poolsPath = cli.require("--pools-path");
         String excludePath = cli.get("--exclude-cards");
-
-        ToolMain.run(() -> {
-            int poolCount = cli.intValue("--size", 10000);
-            ForgeEnvironmentInitializer.initialize();
-            writePools(setCode, poolCount, Path.of(poolsPath), excludePath);
-        });
+        int poolCount = cli.intValue("--size", 10000);
+        ForgeEnvironmentInitializer.initialize();
+        writePools(setCode, poolCount, Path.of(poolsPath), excludePath);
     }
 
     /**

@@ -12,6 +12,7 @@ import forge.game.card.Card;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Parses Forge card scripts into domain objects (MultiCard/CardFace/Ability).
@@ -106,7 +107,7 @@ public class RulesParser {
                     nextRecorder(recorders), 0, scriptFile).parse());
         }
 
-        String layout = splitType.name().toLowerCase();
+        String layout = splitType.name().toLowerCase(Locale.ROOT);
         List<CardFace> faces = new ArrayList<>();
         // In the order the collectors number faces, read from the same method,
         // because a key's face ordinal is joined by value: CardRules holds the

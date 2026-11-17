@@ -1,7 +1,11 @@
 package com.pricepredictor.connector;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -14,11 +18,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ToolMainArgsTest {
 
     private static final ToolMain.Args ARGS = ToolMain.args(
-            new String[] {"--cards", "in.txt", "--stale", "--output", "out.json"}, Set.of(),
+            new String[] {"--cards", "in.txt", "--output", "out.json"}, Set.of(),
             "--cards", "--output", "--size");
 
+    /** What a refused command line printed: the problem, on stderr, before the exit. */
+    private static String refusal(Executable parse) {
+        PrintStream original = System.err;
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(bytes, true, StandardCharsets.UTF_8));
+        try {
+            ToolMain.Exit exit = assertThrows(ToolMain.Exit.class, parse);
+            assertEquals(ExitCode.BAD_CONFIG, exit.code());
+        } finally {
+            System.setErr(original);
+        }
+        return bytes.toString(StandardCharsets.UTF_8);
+    }
+
     @Test
-    void aGivenFlagIsReadAndAnUnknownOneSwallowsNothing() {
+    void aGivenFlagIsRead() {
         assertEquals("in.txt", ARGS.require("--cards"));
         assertEquals("out.json", ARGS.require("--output"));
     }
@@ -33,12 +51,51 @@ class ToolMainArgsTest {
         assertFalse(ARGS.has("--replace"));
     }
 
+    /**
+     * A misspelt flag would otherwise leave its value to the flag's default:
+     * a misspelt output path wrote a whole conversion into the working
+     * directory.
+     */
+    @Test
+    void anUnknownFlagIsRefusedByName() {
+        String printed = refusal(() -> ToolMain.args(
+                new String[] {"--ouptut-path", "out"}, Set.of("--replace"), "--output-path"));
+
+        assertTrue(printed.contains("--ouptut-path"), printed);
+        assertTrue(printed.contains("--output-path"), printed);
+    }
+
+    @Test
+    void aStrayArgumentIsRefused() {
+        String printed = refusal(() -> ToolMain.args(
+                new String[] {"--output", "out", "extra"}, Set.of(), "--output"));
+
+        assertTrue(printed.contains("extra"), printed);
+    }
+
+    @Test
+    void aFlagWithoutItsValueIsRefused() {
+        String printed = refusal(() -> ToolMain.args(
+                new String[] {"--output"}, Set.of(), "--output"));
+
+        assertTrue(printed.contains("--output"), printed);
+    }
+
     @Test
     void aMissingRequiredFlagIsNamed() {
-        IllegalArgumentException e =
-                assertThrows(IllegalArgumentException.class, () -> ARGS.require("--size"));
-        assertTrue(e.getMessage().contains("--size"), e.getMessage());
+        String printed = refusal(() -> ARGS.require("--size"));
+
+        assertTrue(printed.contains("--size"), printed);
         assertNull(ARGS.get("--size"));
+    }
+
+    @Test
+    void aMalformedIntegerIsNamed() {
+        ToolMain.Args args = ToolMain.args(new String[] {"--size", "ten"}, Set.of(), "--size");
+
+        String printed = refusal(() -> args.intValue("--size", 1));
+
+        assertTrue(printed.contains("--size") && printed.contains("ten"), printed);
     }
 
     /**

@@ -54,3 +54,13 @@ def test_convert_passes_replace_through(launched):
 
     assert launched["main_args"][-1] == "--replace"
     assert launched["main_args"].count("--replace") == 1
+
+
+@pytest.mark.parametrize("flag", ["--output-path", "--tokens-output-path"])
+def test_convert_has_no_default_output_tree(flag, launched):
+    index = PATHS.index(flag)
+    without = PATHS[:index] + PATHS[index + 2:]
+
+    with pytest.raises(SystemExit):
+        _convert(without)
+    assert launched == {}

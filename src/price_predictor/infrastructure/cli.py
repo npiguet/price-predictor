@@ -202,12 +202,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to Forge cardsfolder directory",
     )
     convert_parser.add_argument(
-        "--output-path", type=str, default="./output/cardsfolder",
+        "--output-path", type=str, required=True,
         help=(
-            "Output directory for converted files. Defaults to the tree every "
-            "consumer reads: 'vocabulary', the sealed pipeline and the effects "
-            "package all look in ./output/cardsfolder, so writing anywhere "
-            "else produces a corpus none of them find."
+            "Output directory for the converted cards: a generation's "
+            "output/<module>/<gen>/converted/cardsfolder"
         ),
     )
     convert_parser.add_argument(
@@ -216,9 +214,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to Forge tokenscripts directory (skipped if absent)",
     )
     convert_parser.add_argument(
-        "--tokens-output-path", type=str, default="./output/tokenscripts",
+        "--tokens-output-path", type=str, required=True,
         help=(
-            "Output directory for converted token scripts. Kept out of the card "
+            "Output directory for converted token scripts, beside "
+            "--output-path. Kept out of the card "
             "tree because converted token and card filenames collide and the "
             "sealed pipeline reads the card tree as its corpus."
         ),

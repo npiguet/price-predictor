@@ -5,6 +5,7 @@ import forge.game.spellability.SpellAbility;
 import forge.util.FileSection;
 
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Utility methods for walking SpellAbility chains and reading their SVars.
@@ -58,7 +59,7 @@ final class SpellAbilityUtils {
 
     /** Stack text Forge fills in only on the stack: REP, {p:}, {c:} and {targeted}, in any case. */
     private static boolean isTemplate(String stack) {
-        String lowered = stack.toLowerCase();
+        String lowered = stack.toLowerCase(Locale.ROOT);
         return stack.contains("REP ") || STACK_TEMPLATE_MARKERS.stream().anyMatch(lowered::contains);
     }
 

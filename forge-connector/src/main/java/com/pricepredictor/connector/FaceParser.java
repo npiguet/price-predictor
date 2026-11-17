@@ -44,6 +44,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -372,7 +373,7 @@ final class FaceParser {
             Cost cost = new Cost(costPart, false);
             String costText = cost.toSimpleString();
             costs.add((cost.isOnlyManaCost() ? "pay " : "")
-                    + costText.substring(0, 1).toLowerCase() + costText.substring(1));
+                    + costText.substring(0, 1).toLowerCase(Locale.ROOT) + costText.substring(1));
         }
         return joinWithOr(costs);
     }
@@ -696,7 +697,7 @@ final class FaceParser {
     private static String formatTypeLine(ICardFace face) {
         String typeStr = face.getType().toString();
         typeStr = typeStr.replace(" - ", " ");
-        return typeStr.toLowerCase();
+        return typeStr.toLowerCase(Locale.ROOT);
     }
 
     private static void addIfNotNull(List<Ability> list, Ability item) {
