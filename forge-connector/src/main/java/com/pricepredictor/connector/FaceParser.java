@@ -9,6 +9,7 @@ import com.pricepredictor.connector.ability.CharmHeader;
 import com.pricepredictor.connector.ability.ClassLevelAbility;
 import com.pricepredictor.connector.ability.CompanionKeyword;
 import com.pricepredictor.connector.ability.EtbReplacementAbility;
+import com.pricepredictor.connector.ability.FaceOracle;
 import com.pricepredictor.connector.ability.GiftKeyword;
 import com.pricepredictor.connector.ability.HauntKeyword;
 import com.pricepredictor.connector.ability.KeywordSpec;
@@ -240,15 +241,20 @@ final class FaceParser {
         KeywordRendering render(KeywordInterface ki, FaceParser parser);
     }
 
+    /** The face's Oracle text, for a keyword line whose script states nothing. */
+    private FaceOracle oracle() {
+        return new FaceOracle(face.getOracleText(), face.getName());
+    }
+
     private static Map<String, KeywordRenderer> undefinedKeywordHandlers() {
         Map<String, KeywordRenderer> handlers = new LinkedHashMap<>();
         KeywordRenderer nameStatic = (ki, p) -> KeywordRendering.of(new TextAbility(
                 AbilityType.STATIC, AbilityDescription.applyCasing(ki.getOriginal())));
         handlers.put("CARDNAME ", nameStatic);
         handlers.put("NICKNAME ", nameStatic);
-        handlers.put("Chapter:", (ki, p) -> ChapterAbility.fromKeyword(ki));
+        handlers.put("Chapter:", (ki, p) -> ChapterAbility.fromKeyword(ki, p.oracle()));
         handlers.put("Class:", (ki, p) -> p.renderClassLevel(ki));
-        KeywordRenderer etb = (ki, p) -> EtbReplacementAbility.fromKeyword(ki);
+        KeywordRenderer etb = (ki, p) -> EtbReplacementAbility.fromKeyword(ki, p.oracle());
         handlers.put("etbCounter:", etb);
         handlers.put("ETBReplacement:", etb);
         handlers.put("AlternateAdditionalCost:", (ki, p) -> KeywordRendering.of(new TextAbility(

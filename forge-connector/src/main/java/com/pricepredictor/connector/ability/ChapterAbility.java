@@ -44,13 +44,16 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
      * ability grouped together, the first of a group primary and the rest
      * secondary ("I, II —" is one line from two triggers): a secondary trigger
      * belongs to the line its group's primary printed.
+     *
+     * @param oracle the face's Oracle text, where a chapter whose script
+     *               states nothing finds its sentence
      */
-    public static KeywordRendering fromKeyword(KeywordInterface ki) {
+    public static KeywordRendering fromKeyword(KeywordInterface ki, FaceOracle oracle) {
         KeywordRendering.Builder rendering = new KeywordRendering.Builder();
         Ability groupLine = null;
         for (var trigger : ki.getTriggers()) {
             if (!trigger.isSecondary()) {
-                groupLine = chapter(trigger);
+                groupLine = chapter(trigger, oracle);
                 if (groupLine != null) rendering.add(groupLine);
             }
             rendering.printed(trigger, groupLine);
@@ -59,7 +62,7 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
     }
 
     /** The line {@code trigger} prints, or null if it prints none. */
-    private static Ability chapter(Trigger trigger) {
+    private static Ability chapter(Trigger trigger, FaceOracle oracle) {
         String trigDesc = trigger.getParam("TriggerDescription");
         if (trigDesc == null) return null;
 
@@ -78,7 +81,8 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
             return modesChapter(stripped, execute, trigger);
         }
 
-        String normalized = AbilityDescription.normalize(withEffectText(stripped, execute));
+        String normalized = AbilityDescription.normalize(
+                withOracleText(withEffectText(stripped, execute), oracle));
         if (normalized == null) return null;
         return new ChapterAbility(AbilityType.CHAPTER.formatDescription(normalized));
     }
@@ -108,6 +112,18 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
         if (execute == null || !isHeaderOnly(stripped)) return stripped;
         String effectText = SpellAbilityUtils.chainText(execute);
         return effectText.isEmpty() ? stripped : stripped + " " + effectText;
+    }
+
+    /**
+     * A header-only chapter whose chain states nothing completed with the
+     * Oracle line opening with its numerals (Fall of the Thran's "II, III —"
+     * effect has no {@code SpellDescription$}), as an undescribed instant's
+     * spell takes its Oracle sentences.
+     */
+    private static String withOracleText(String chapter, FaceOracle oracle) {
+        if (!isHeaderOnly(chapter)) return chapter;
+        String sentence = oracle.lineAfter(chapter);
+        return sentence == null ? chapter : chapter + " " + sentence;
     }
 
     /** A chapter whose ABILITY placeholder names a charm: its header and options. */

@@ -207,12 +207,29 @@ public final class ProvenanceRecorder {
         for (TraitKind kind : TraitKind.values()) {
             int index = 0;
             for (CardTraitBase trait : kind.builtBy(keyword)) {
-                claimed |= attributeBuiltTrait(lineOf(rendering, trait),
-                        key.withBuilt(kind, index), trait);
+                Ability line = lineOf(rendering, trait);
+                ProvenanceKey builtKey = key.withBuilt(kind, index);
+                claimScriptOf(rendering, line, builtKey);
+                claimed |= attributeBuiltTrait(line, builtKey, trait);
                 index++;
             }
         }
         return claimed;
+    }
+
+    /**
+     * Claim a several-line keyword's {@code line} first with the script of the
+     * traits the rendering names for it ({@link KeywordRendering#scriptTraitsOf}),
+     * so the line carries the chain of the trait whose text it prints and not
+     * that of whichever trait claims it first in index order (haunt's line:
+     * the haunting trigger's, not a description-less trigger ending the
+     * haunting). The script reports no missing SVar: each trait's own claim
+     * reports its own.
+     */
+    private void claimScriptOf(KeywordRendering rendering, Ability line, ProvenanceKey builtKey) {
+        if (line == null || byAbility.containsKey(line)) return;
+        List<CardTraitBase> traits = rendering.scriptTraitsOf(line);
+        if (!traits.isEmpty()) claim(line, builtKey, TraitScript.ofTraits(traits, builtKey, null));
     }
 
     /** The line a built trait printed: the keyword's one line, or the one named for it. */
