@@ -87,4 +87,7 @@ def first_key(record: dict) -> dict:
 
 
 def key_tuple(key: dict) -> tuple:
-    return (key["face"], key["trait_kind"], key["index_within_kind"], key.get("option"))
+    """A key's identity within its script file; ``built`` is part of it."""
+    built = key.get("built")
+    return (key["face"], key["trait_kind"], key["index_within_kind"], key.get("option"),
+            None if built is None else (built["kind"], built["index"]))

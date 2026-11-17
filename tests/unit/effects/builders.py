@@ -82,7 +82,14 @@ def java_golden_entities() -> list[dict]:
 #: --generation 3 --per-category 2`` from the 2026-11-15 pilot and the three
 #: stall runs beside it (``output/effects/gen3/scratch/2026-11-15-{pilot,
 #: stall-1,stall-2,stall-3}``), from games that ended: each of its games ends
-#: in its game-end marker.
+#: in its game-end marker. Eight of its sidecars were since replaced by the
+#: current converter's output (sidecar and converted text), their old ones
+#: declaring one key on two lines of a face, which a reader now refuses: the
+#: sagas ``b/binding_the_old_gods``, ``d/down_down_to_goblin_town`` and
+#: ``t/the_trickster_gods_heist``, whose chapter lines now declare ``built``
+#: keys, and the spells ``b/big_score``, ``f/fumarole``, ``l/laughing_mad``,
+#: ``t/thunderwave`` and ``w/weigh_down``, now one spell line each. The records
+#: keep their old keys: a saga's bare ``keyword 0`` reads as ambiguous.
 GEN3_RECORDS = EFFECTS_FIXTURES / "gen3-records.jsonl.gz"
 GEN3_SIDECAR_FOLDERS = (
     EFFECTS_FIXTURES / "gen3-sidecars" / "cardsfolder",

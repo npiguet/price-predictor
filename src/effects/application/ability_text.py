@@ -79,6 +79,7 @@ class KeyResolver:
         self.surface = surface
         self._resolved: dict[ProvenanceKey, tuple[str | None, SidecarLine | None]] = {}
         self._options: dict[ProvenanceKey, tuple[ProvenanceKey, ...]] = {}
+        self._board: dict[ProvenanceKey, tuple[ProvenanceKey, ...]] = {}
         #: ``text -> keys resolved to it``: how a truncated text is named.
         self._keys_by_text: dict[str, list[ProvenanceKey]] = defaultdict(list)
 
@@ -124,3 +125,16 @@ class KeyResolver:
                 )
         self._options[key] = found
         return found
+
+    def board_keys(self, key: ProvenanceKey) -> tuple[ProvenanceKey, ...]:
+        """The keys a board line of ``key`` reads as slots
+        (:meth:`ProvenanceSidecar.board_keys`): a saga's bare keyword key is
+        its chapter lines; the key itself where no sidecar answers."""
+        cached = self._board.get(key)
+        if cached is None:
+            try:
+                cached = self.sidecars.get(key.script_file).board_keys(key)
+            except KeyError:
+                cached = (key,)
+            self._board[key] = cached
+        return cached

@@ -434,7 +434,7 @@ class SurfaceBatcher:
                 if note(key) is not None:
                     break
             for entity in board_entities(record):
-                for line in slot_lines(entity):
+                for line in slot_lines(entity, self.board_keys):
                     if note(line.key) is not None:
                         for mode in self.options_for(line.key):
                             note(mode)
@@ -446,6 +446,14 @@ class SurfaceBatcher:
         if key in self._overrides or keyword_line_fragment(key) is not None:
             return ()
         return self.resolver.options_for(key)
+
+    def board_keys(self, key) -> tuple:
+        """The keys a board line of ``key`` reads as slots: a saga's bare
+        keyword key is its chapter lines (``KeyResolver.board_keys``); an
+        overridden key or a keyword line is itself."""
+        if key in self._overrides or keyword_line_fragment(key) is not None:
+            return (key,)
+        return self.resolver.board_keys(key)
 
     def _keys_of(self, text: str) -> list:
         """The keys resolved to ``text`` so far: how a truncation is named."""
@@ -568,3 +576,6 @@ class _StagedLines:
 
     def options_for(self, key) -> tuple:
         return self.batcher.options_for(key)
+
+    def board_keys(self, key) -> tuple:
+        return self.batcher.board_keys(key)

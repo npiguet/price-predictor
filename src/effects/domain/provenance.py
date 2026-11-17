@@ -7,7 +7,7 @@ rendered lines and aligns the ability cache. Pure dataclasses; the JSON is
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Protocol
@@ -84,8 +84,11 @@ class KeyResolution(StrEnum):
     (:meth:`ProvenanceSidecar.is_runtime_only`); ``UNCONVERTED`` is a script no
     sidecar describes; ``UNCONFIGURED_TREE`` names a source tree the run was
     given no root for (a variant key without ``--variant-scripts``), so whether
-    it joins is unknown. A key inside a declared range and in neither list is
-    not a value: it raises.
+    it joins is unknown. ``AMBIGUOUS`` is a keyword's bare key acting where the
+    keyword prints several lines (a saga, haunt) and no line declares the key:
+    it names none of them, so it has no text and is counted
+    (:meth:`ProvenanceSidecar.board_keys` gives a board line its lines). A key
+    inside a declared range and in neither list is not a value: it raises.
     """
 
     LINE = "line"
@@ -93,6 +96,11 @@ class KeyResolution(StrEnum):
     RUNTIME_ONLY = "runtime-only"
     UNCONVERTED = "unconverted"
     UNCONFIGURED_TREE = "unconfigured-tree"
+    AMBIGUOUS = "ambiguous"
+
+
+class SidecarError(ValueError):
+    """A sidecar breaks its contract: two lines of a face declare one key."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -321,6 +329,18 @@ def _note_declared(
         declared[slot] = key.index_within_kind
 
 
+def _first_built_key_per_keyword(
+    line: SidecarLine,
+) -> Iterator[tuple[ProvenanceKey, ProvenanceKey]]:
+    """``(bare key, first built key)`` for each keyword ``line`` declares a
+    ``built`` key of."""
+    seen: set[ProvenanceKey] = set()
+    for key in line.provenance:
+        if key.built is not None and key.without_built() not in seen:
+            seen.add(key.without_built())
+            yield key.without_built(), key
+
+
 @dataclass(frozen=True, slots=True)
 class ProvenanceSidecar:
     """``<name>.provenance.json``, read beside the converted ``<name>.txt``.
@@ -344,19 +364,41 @@ class ProvenanceSidecar:
     _dropped: frozenset[ProvenanceKey] = field(
         default=frozenset(), init=False, repr=False, compare=False,
     )
+    _built_lines: dict[ProvenanceKey, tuple[ProvenanceKey, ...]] = field(
+        default_factory=dict, init=False, repr=False, compare=False,
+    )
 
     def __post_init__(self) -> None:
-        index: dict[ProvenanceKey, int] = {}
         declared: dict[tuple[int, str], int] = {}
-        for row, line in enumerate(self.lines):
-            for key in line.provenance:
-                index.setdefault(key, row)
-                _note_declared(declared, key)
-        for key in self.dropped_keys:
+        for key in (*(k for line in self.lines for k in line.provenance), *self.dropped_keys):
             _note_declared(declared, key)
-        object.__setattr__(self, "_row_by_key", index)
+        object.__setattr__(self, "_row_by_key", self._key_index())
+        object.__setattr__(self, "_built_lines", self._built_line_keys())
         object.__setattr__(self, "_declared_max", declared)
         object.__setattr__(self, "_dropped", frozenset(self.dropped_keys))
+
+    def _key_index(self) -> dict[ProvenanceKey, int]:
+        """``key -> row``; raises where two lines declare one key, since the
+        join would have to pick one of them."""
+        index: dict[ProvenanceKey, int] = {}
+        for row, line in enumerate(self.lines):
+            for key in dict.fromkeys(line.provenance):
+                if index.setdefault(key, row) != row:
+                    raise SidecarError(
+                        f"{self.script_file}: key {key.label} is declared by lines "
+                        f"{self.lines[index[key]].line_index} and {line.line_index}; "
+                        "a key names at most one line (reconvert the card)"
+                    )
+        return index
+
+    def _built_line_keys(self) -> dict[ProvenanceKey, tuple[ProvenanceKey, ...]]:
+        """``bare keyword key -> the first built key of each line declaring a
+        built key of it``, in line order: a keyword that prints several lines."""
+        lines: dict[ProvenanceKey, list[ProvenanceKey]] = {}
+        for line in self.lines:
+            for bare, built in _first_built_key_per_keyword(line):
+                lines.setdefault(bare, []).append(built)
+        return {bare: tuple(keys) for bare, keys in lines.items()}
 
     def is_runtime_only(self, key: ProvenanceKey) -> bool:
         """Is this a trait Forge attached to a live card rather than one parsed?
@@ -380,7 +422,8 @@ class ProvenanceSidecar:
         return [line.script_text for line in self.lines if line.script_text]
 
     def row_for(self, key: ProvenanceKey) -> int | None:
-        """The ability-cache row a key resolves to, or None where it was dropped."""
+        """The ability-cache row a key resolves to, or None where it names no
+        line (dropped, runtime-only, ambiguous)."""
         return self._resolve(key)[1]
 
     def resolution_of(self, key: ProvenanceKey) -> KeyResolution:
@@ -390,11 +433,32 @@ class ProvenanceSidecar:
         """
         return self._resolve(key)[0]
 
+    def board_keys(self, key: ProvenanceKey) -> tuple[ProvenanceKey, ...]:
+        """The keys a board line of ``key`` reads as slots, one per line.
+
+        A keyword's bare key that no line declares, where the keyword prints
+        several lines declaring ``built`` keys (a saga's chapters), is all of
+        those lines in line order, each read through its first ``built`` key;
+        any other key is itself.
+        """
+        if key in self._row_by_key:
+            return (key,)
+        return self._built_lines.get(key, (key,))
+
     def _resolve(self, key: ProvenanceKey) -> tuple[KeyResolution, int | None]:
-        """The join's answer for a key and its row, the one place it is decided."""
+        """The join's answer for a key and its row, the one place it is decided.
+
+        Exactly the line declaring the key; else, for a ``built`` key, as the
+        keyword's bare key, whose one line holds its text; a bare key naming a
+        keyword of several lines is ``AMBIGUOUS``.
+        """
         row = self._row_by_key.get(key)
         if row is not None:
             return KeyResolution.LINE, row
+        if key.built is not None:
+            return self._resolve(key.without_built())
+        if key in self._built_lines:
+            return KeyResolution.AMBIGUOUS, None
         if key in self._dropped:
             return KeyResolution.DROPPED, None
         if self.is_runtime_only(key):
@@ -402,7 +466,8 @@ class ProvenanceSidecar:
         raise KeyError(self._mismatch_message(key))
 
     def line_for(self, key: ProvenanceKey) -> SidecarLine | None:
-        """The rendered line a key resolves to, or None where it was dropped.
+        """The rendered line a key resolves to, or None where it names none
+        (dropped, runtime-only, ambiguous).
 
         Raises on a key inside a declared range in neither list: the corpus was
         reconverted between collection and training.

@@ -76,6 +76,9 @@ class _EveryKeyLookup:
     def options_for(self, key):
         return ()
 
+    def board_keys(self, key):
+        return (key,)
+
 
 def surfaces_of(records: list[EffectRecord], *, with_relations: bool) -> list[EffectHeadInput]:
     """Each record's surface as ``SurfaceBuilder.build`` lays it out, its

@@ -1,5 +1,4 @@
 name: fumarole
 mana cost: {3}{B}{R}
 types: sorcery
-additional cost: pay 3 life.
-spell[1]: destroy target creature and target land.
+spell[1]: as an additional cost to cast this spell, pay 3 life. destroy target creature and target land.

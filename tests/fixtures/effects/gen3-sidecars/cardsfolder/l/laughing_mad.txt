@@ -2,5 +2,4 @@ name: laughing mad
 mana cost: {2}{R}
 types: instant
 alternate cost: flashback {3}{R}
-additional cost: discard a card.
-spell[1]: draw two cards.
+spell[1]: as an additional cost to cast this spell, discard a card. draw two cards.

@@ -11,11 +11,14 @@ from __future__ import annotations
 
 import errno
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from effects.domain.provenance import (
+    BuiltTrait,
+    KeyResolution,
     ProvenanceKey,
     ProvenanceSidecar,
     RoleSpan,
@@ -319,31 +322,42 @@ class TestSidecarCache:
 
     def test_a_saga_s_chapter_trigger_joins_its_own_chapter_line(self):
         """Over the converter's own sidecars of every saga the fixture names:
-        each chapter's trigger joins its own chapter line and no other line
-        holds it. A line printing two chapters ("III, IV —", Down, Down to
-        Goblin Town) holds both chapters' triggers, in chapter order."""
+        each chapter line declares its chapters' ``built`` keys, the trigger
+        the saga keyword built for that chapter, and each joins its own line;
+        no line declares the bare keyword key. A line printing two chapters
+        ("III, IV —", Down, Down to Goblin Town) holds both, in chapter
+        order."""
         from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS
 
         cache = SidecarCache({folder.name: folder for folder in GEN3_SIDECAR_FOLDERS})
-        folder = GEN3_SIDECAR_FOLDERS[0]
-        sagas = [f"cardsfolder/{path.relative_to(folder).as_posix()}".replace(
-                     ".provenance.json", ".txt")
-                 for path in sorted(folder.rglob("*.provenance.json"))
-                 if '"chapter"' in path.read_text(encoding="utf-8")]
+        sagas = _saga_scripts(GEN3_SIDECAR_FOLDERS[0])
         assert len(sagas) >= 2, sagas
-        shared = 0
-        for script in sagas:
-            chapters = [line for line in cache.get(script).lines if line.line_kind == "chapter"]
-            assert len(chapters) >= 2, script
-            held = [(key, line) for line in chapters
-                    for key in line.provenance if key.trait_kind == "trigger"]
-            assert [key for key, _ in held] == [
-                ProvenanceKey(script, 0, "trigger", chapter) for chapter in range(len(held))
-            ], script
-            for key, line in held:
-                assert cache.line_for(key) == line, key
-            shared += len(held) > len(chapters)
-        assert shared, "no saga of the fixture prints two chapters on one line"
+        shared = [_check_saga_chapters(cache, script) for script in sagas]
+        assert any(shared), "no saga of the fixture prints two chapters on one line"
+
+
+def _check_saga_chapters(cache: SidecarCache, script: str) -> bool:
+    """Each chapter line of ``script`` declares its chapters' ``built`` keys,
+    in chapter order, and each joins its line; the bare keyword key acts as
+    ``AMBIGUOUS``. True where a line prints two chapters."""
+    chapters = [line for line in cache.get(script).lines if line.line_kind == "chapter"]
+    assert len(chapters) >= 2, script
+    held = [(key, line) for line in chapters for key in line.provenance]
+    keyword = held[0][0].without_built()
+    assert [key for key, _ in held] == [
+        replace(keyword, built=BuiltTrait("trigger", chapter)) for chapter in range(len(held))
+    ], script
+    assert all(cache.line_for(key) == line for key, line in held), script
+    assert cache.resolution_of(keyword) is KeyResolution.AMBIGUOUS, script
+    return len(held) > len(chapters)
+
+
+def _saga_scripts(folder: Path) -> list[str]:
+    """The script file of every sidecar under ``folder`` with a chapter line."""
+    return [f"cardsfolder/{path.relative_to(folder).as_posix()}".replace(
+                ".provenance.json", ".txt")
+            for path in sorted(folder.rglob("*.provenance.json"))
+            if '"chapter"' in path.read_text(encoding="utf-8")]
 
 
 class TestTheVariantTreeHasNoProse:

@@ -22,6 +22,7 @@ from effects.domain.provenance import (
     ProvenanceSidecar,
     Role,
     RoleSpan,
+    SidecarError,
     SidecarLine,
     SourceTree,
     SubAbilityLink,
@@ -213,8 +214,16 @@ def read_sidecar(path: Path) -> ProvenanceSidecar:
                 )
             time.sleep(_SIDECAR_RETRY_DELAY * 2 ** (attempt - 1))
         else:
-            return sidecar_from_dict(json.loads(text))
+            return _parsed_sidecar(path, text)
     raise AssertionError("unreachable: the last attempt either returns or raises")
+
+
+def _parsed_sidecar(path: Path, text: str) -> ProvenanceSidecar:
+    """One sidecar's JSON, read; a contract breach names the file."""
+    try:
+        return sidecar_from_dict(json.loads(text))
+    except SidecarError as exc:
+        raise SidecarError(f"{path}: {exc}") from exc
 
 
 def load_tree_texts(root: Path | None) -> dict[str, list[str]]:
@@ -304,7 +313,8 @@ class JoinGaps:
     """Keys a sidecar cache read as no line, by why: a script never converted
     (``unresolved``, by script file), a key its sidecar does not describe
     (``undescribed``, by script file), a source tree the run has no root for
-    (``unconfigured``, by tree), each with how often it was asked.
+    (``unconfigured``, by tree), a keyword's bare key naming several lines
+    (``ambiguous``, by script file), each with how often it was asked.
 
     A cache's are cumulative (:meth:`SidecarCache.join_gaps`); a pool worker
     hands back what each shard added (:meth:`SidecarCache.take_join_gaps`),
@@ -314,19 +324,23 @@ class JoinGaps:
     unresolved: Counter = field(default_factory=Counter)
     undescribed: Counter = field(default_factory=Counter)
     unconfigured: Counter = field(default_factory=Counter)
+    ambiguous: Counter = field(default_factory=Counter)
 
     def merge(self, other: JoinGaps) -> None:
         self.unresolved.update(other.unresolved)
         self.undescribed.update(other.undescribed)
         self.unconfigured.update(other.unconfigured)
+        self.ambiguous.update(other.ambiguous)
 
     def __bool__(self) -> bool:
-        return bool(self.unresolved or self.undescribed or self.unconfigured)
+        return any(self._kinds())
+
+    def _kinds(self) -> tuple[Counter, ...]:
+        return self.unresolved, self.undescribed, self.unconfigured, self.ambiguous
 
     def __sub__(self, earlier: JoinGaps) -> JoinGaps:
-        return JoinGaps(self.unresolved - earlier.unresolved,
-                        self.undescribed - earlier.undescribed,
-                        self.unconfigured - earlier.unconfigured)
+        return JoinGaps(*(now - then for now, then in zip(
+            self._kinds(), earlier._kinds(), strict=True)))
 
     def report_lines(self, *, examples: int = 5) -> list[str]:
         """The gaps as printed lines, the most asked first; none when empty."""
@@ -335,6 +349,8 @@ class JoinGaps:
             ("unresolved", "scripts the converted corpus does not hold", self.unresolved),
             ("undescribed", "scripts whose sidecar does not describe a key", self.undescribed),
             ("unconfigured", "source trees this run has no root for", self.unconfigured),
+            ("ambiguous", "scripts with a keyword's bare key naming several lines",
+             self.ambiguous),
         ):
             if gaps:
                 most = ", ".join(f"{key} ({n})" for key, n in gaps.most_common(examples))
@@ -366,6 +382,9 @@ class SidecarCache:
         #: ``tree -> times asked`` for keys :meth:`line_or_none` read as no
         #: line because this run configured no root for their source tree.
         self.unconfigured: dict[str, int] = {}
+        #: ``script_file -> times asked`` for keys that resolved ``AMBIGUOUS``:
+        #: a keyword's bare key acting where the keyword prints several lines.
+        self.ambiguous: dict[str, int] = {}
         #: What :meth:`take_join_gaps` last handed out.
         self._taken = JoinGaps()
 
@@ -396,17 +415,21 @@ class SidecarCache:
         """The rendered line a record's key names, or None where there is none.
 
         None also for a script never converted; an unconfigured tree still
-        raises, being a misconfigured run.
+        raises, being a misconfigured run. A key resolving ``AMBIGUOUS`` is
+        tallied in :attr:`ambiguous`.
         """
         try:
-            return self.get(key.script_file).line_for(key)
+            sidecar = self.get(key.script_file)
         except UnconvertedScript:
             return None
+        if sidecar.resolution_of(key) is KeyResolution.AMBIGUOUS:
+            self.ambiguous[key.script_file] = self.ambiguous.get(key.script_file, 0) + 1
+        return sidecar.line_for(key)
 
     def join_gaps(self) -> JoinGaps:
         """Every key this cache read as no line so far, by why."""
         return JoinGaps(Counter(self.unresolved), Counter(self.undescribed),
-                        Counter(self.unconfigured))
+                        Counter(self.unconfigured), Counter(self.ambiguous))
 
     def take_join_gaps(self) -> JoinGaps:
         """What :meth:`join_gaps` gained since the last take: a pool worker,

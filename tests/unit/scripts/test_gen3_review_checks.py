@@ -60,8 +60,26 @@ def test_phase_skipped_events_all_carry_the_unknown_phase() -> None:
 
 
 def test_sidecar_tree_has_keys_declared_by_two_lines() -> None:
+    """The fixture tree holds the current converter's sidecars wherever an
+    older one declared a key twice, so it has none."""
     count, total = _run()["keys-declared-by-two-lines"]
     assert (count, total) == TREE_DUPLICATES
+
+
+def test_a_key_declared_by_two_lines_is_flagged(tmp_path: Path) -> None:
+    """Binding the Old Gods' sidecar with chapter I's key copied onto chapter
+    II's line, as a sidecar written before the key change declared it."""
+    import json
+
+    from gen3_review_checks_parts.sidecars import keys_declared_by_two_lines
+
+    relative = Path("cardsfolder/b/binding_the_old_gods.provenance.json")
+    data = json.loads((SIDECARS / relative).read_text(encoding="utf-8"))
+    data["lines"][1]["provenance"].append(data["lines"][0]["provenance"][0])
+    (tmp_path / relative).parent.mkdir(parents=True)
+    (tmp_path / relative).write_text(json.dumps(data), encoding="utf-8")
+    line = keys_declared_by_two_lines(tmp_path)
+    assert (line.count, line.total) == (1, 1)
 
 
 def test_report_line_names_the_review_count() -> None:
@@ -72,7 +90,7 @@ def test_report_line_names_the_review_count() -> None:
 
 
 PHASE_SKIPPED = (2, 2)
-TREE_DUPLICATES = (8, 947)
+TREE_DUPLICATES = (0, 947)
 
 
 STOKE_CONVOKE_ROW = {

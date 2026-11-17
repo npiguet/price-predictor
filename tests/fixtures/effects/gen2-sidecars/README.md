@@ -26,3 +26,14 @@ targets, a damage rewrite a prevention shield replaced or reduced, a creature le
 battlefield while attacking or blocking, a token's static (the Monster Role's) and a static whose
 `IsPresent$` condition reads counters (Captain America's). Rerunning the script rewrites the records file and adds sidecars here; it never edits a
 sidecar already present.
+
+Fifteen cards were since replaced by the current converter's output (sidecar and converted text),
+because their old sidecars declared one key on two lines of a face, which a sidecar reader now
+refuses: the sagas `d/death_in_heaven`, `s/summon_shiva`, `v/vault_21_house_gambit` and
+`h/huatli_poet_of_unity_roar_of_the_fifth_people` (its face 1), whose chapter lines now declare
+`built` keys, and eleven spells whose additional-cost line declared the spell's key beside the
+spell line (`a/abjure`, `b/bone_splinters`, `c/charge_of_the_forever_beast`, `e/endemic_plague`,
+`f/final_flare`, `i/infernal_plunge`, `n/new_blood`, `r/reckless_abandon`,
+`r/ritual_of_the_machine`, `s/soulblast`, `t/tormented_thoughts`), now one spell line. The records
+naming these cards keep their old keys: a saga's bare `keyword 0` acting key now resolves as
+ambiguous.

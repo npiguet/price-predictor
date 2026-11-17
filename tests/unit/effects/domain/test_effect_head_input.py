@@ -89,12 +89,13 @@ def _e_for(key: ProvenanceKey):
 @dataclass(frozen=True)
 class _Lines:
     """A :class:`LineLookup` from plain callables: every key has a line, is
-    no keyword and has no modes unless a test says otherwise."""
+    no keyword, has no modes and is one slot unless a test says otherwise."""
 
     e_for: Callable = _e_for
     has_line: Callable = lambda key: True
     keyword_of: Callable = lambda key: None
     options_for: Callable = lambda key: ()
+    board_keys: Callable = lambda key: (key,)
 
 
 def _flags(slot) -> dict[str, float]:
@@ -1073,6 +1074,65 @@ class TestPlayerGlobalAndActInputs:
             random=RandomResults(dice=(4, 6), coin_flips_won=1))))
         assert act_features(rolled) != act_features(_record())
         assert len(act_features(rolled)) == len(act_features(_record()))
+
+
+class TestAKeywordOfSeveralLines:
+    """A board line naming a keyword's bare key, where the keyword prints
+    several lines (a saga's chapters), is one slot per line, in line order:
+    the real gen-3 record of Binding the Old Gods on the battlefield, against
+    the current converter's sidecar."""
+
+    _SAGA = "cardsfolder/b/binding_the_old_gods.txt"
+
+    @pytest.fixture(scope="class")
+    def record(self):
+        import itertools
+
+        from effects.infrastructure.shard_io import read_shard
+        from tests.unit.effects.builders import GEN3_RECORDS
+
+        return next(itertools.islice(read_shard(GEN3_RECORDS), 226, None))
+
+    @pytest.fixture(scope="class")
+    def sidecars(self):
+        from effects.infrastructure.sidecar_io import SidecarCache
+        from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS
+
+        return SidecarCache({folder.name: folder for folder in GEN3_SIDECAR_FOLDERS})
+
+    def _chapter(self, index: int) -> ProvenanceKey:
+        from effects.domain.provenance import BuiltTrait
+
+        return ProvenanceKey(self._SAGA, 0, "keyword", 0, built=BuiltTrait("trigger", index))
+
+    def test_the_surface_gives_each_chapter_line_its_slot(self, record, sidecars):
+        saga = next(e for e in record.state.entities if e.name == "Binding the Old Gods")
+        vectors = {self._chapter(n): (float(n + 1),) * E_DIM for n in range(3)}
+        surface = SurfaceBuilder(
+            _Lines(e_for=vectors.get,
+                   board_keys=lambda key: sidecars.get(key.script_file).board_keys(key)),
+            e_dim=E_DIM, rng=random.Random(0),
+        ).build(record)
+        abilities = [slot for slot in slots_of_kind(surface, SlotKind.ABILITY)
+                     if slot.entity_id == saga.id]
+        assert [slot.e[0] for slot in abilities] == [0.0, 1.0, 2.0, 3.0]
+
+    def test_the_batcher_stages_every_chapter_s_text(self, record, sidecars):
+        import torch
+
+        from effects.domain.baselines import BaselineMasks
+        from tests.unit.effects.builders import make_batcher
+
+        batcher = make_batcher(
+            tokenizer=None, sidecars=sidecars, masks=BaselineMasks(),
+            surface="script", e_dim=E_DIM, widths={}, device=torch.device("cpu"),
+        )
+        chapters = [line.script_text for line in sidecars.get(self._SAGA).lines
+                    if line.line_kind == "chapter"]
+        staged = batcher.batch_texts([record])
+        assert len(chapters) == 3
+        assert all(any(text.startswith(chapter.split(" |")[0]) for text in staged)
+                   for chapter in chapters)
 
 
 class TestTheGen3Fixture:

@@ -29,8 +29,8 @@ from __future__ import annotations
 
 import math
 import random
-from collections.abc import Iterable, Iterator, Mapping
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from dataclasses import dataclass, field, replace
 from enum import IntEnum
 from functools import lru_cache
 from types import MappingProxyType
@@ -966,8 +966,19 @@ class SlotLine:
         )
 
 
-def slot_lines(entity: EntityState) -> tuple[SlotLine, ...]:
+def _as_is(key: ProvenanceKey) -> tuple[ProvenanceKey, ...]:
+    return (key,)
+
+
+def slot_lines(
+    entity: EntityState,
+    board_keys: Callable[[ProvenanceKey], tuple[ProvenanceKey, ...]] = _as_is,
+) -> tuple[SlotLine, ...]:
     """A card's lines as ``[ABILITY]`` slots, each key once, in line order.
+
+    A line's key becomes one slot per key ``board_keys`` gives it
+    (:meth:`LineLookup.board_keys`): a saga's bare keyword key, one slot per
+    chapter line, each with the line's flags. Without it every key is one slot.
 
     Gen-3: every line, in force or not (a face not up, an unmet static, the
     real face of a face-down card are slots flagged inactive), with the
@@ -980,8 +991,17 @@ def slot_lines(entity: EntityState) -> tuple[SlotLine, ...]:
     keyword no line carries adds a keyword line granted by the counter.
     """
     own = _gen2_slot_lines(entity) if entity.lines is None else _gen3_slot_lines(entity.lines)
-    merged = _merge_by_key({}, own)
+    merged = _merge_by_key({}, _expanded(own, board_keys))
     return tuple(_merge_by_key(merged, _keyword_counter_lines(entity, merged)).values())
+
+
+def _expanded(lines: Iterable[SlotLine],
+              board_keys: Callable[[ProvenanceKey], tuple[ProvenanceKey, ...]],
+              ) -> Iterator[SlotLine]:
+    """Each line once per key ``board_keys`` gives its key."""
+    for line in lines:
+        keys = board_keys(line.key)
+        yield from (line if key == line.key else replace(line, key=key) for key in keys)
 
 
 def _merge_by_key(merged: dict[ProvenanceKey, SlotLine],
@@ -1072,6 +1092,10 @@ class LineLookup(Protocol):
 
     def options_for(self, key: ProvenanceKey) -> tuple[ProvenanceKey, ...]:
         """The charm-mode keys whose slots follow the key's (FR-063a)."""
+
+    def board_keys(self, key: ProvenanceKey) -> tuple[ProvenanceKey, ...]:
+        """The keys a board line of ``key`` reads as slots, one per line: a
+        saga's bare keyword key is its chapter lines; any other key itself."""
 
 
 #: The ``stripped`` map of a record built as collected: no entity loses a keyword.
@@ -1280,7 +1304,7 @@ class SurfaceBuilder:
             chosen_types=chosen_subtypes(entity),
             counters=counter_rows(entity),
         )]
-        for line in slot_lines(entity):
+        for line in slot_lines(entity, self.lines.board_keys):
             if not self._keeps(line, gone=gone, dropout=dropout):
                 continue
             modes = self.lines.options_for(line.key)

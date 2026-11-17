@@ -1,5 +1,4 @@
 name: ritual of the machine
 mana cost: {2}{B}{B}
 types: sorcery
-additional cost: sacrifice a creature.
-spell[1]: gain control of target nonblack, nonartifact creature.
+spell[1]: as an additional cost to cast this spell, sacrifice a creature. gain control of target nonblack, nonartifact creature.

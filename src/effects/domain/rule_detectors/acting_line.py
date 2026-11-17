@@ -59,7 +59,13 @@ def line_of(keys: Iterable[ProvenanceKey], lines: SidecarLookup | None) -> Sidec
 
 
 def acting_line(record: EffectRecord, lines: SidecarLookup | None) -> SidecarLine | None:
-    """The record's acting line, or None where no line is readable."""
+    """The record's acting line, or None where no line is readable.
+
+    The line the join gives the first acting key that has one: a chapter's
+    ``built`` key reads its own chapter line, whose script is that chapter's
+    trigger; a keyword's bare key naming several lines (``AMBIGUOUS``) reads
+    none, never the first of them.
+    """
     return line_of(record.ability or (), lines)
 
 

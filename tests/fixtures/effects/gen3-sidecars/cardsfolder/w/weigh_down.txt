@@ -1,5 +1,4 @@
 name: weigh down
 mana cost: {B}
 types: sorcery
-additional cost: exile a creature card from your graveyard.
-spell[1]: target creature gets -3/-3 until end of turn.
+spell[1]: as an additional cost to cast this spell, exile a creature card from your graveyard. target creature gets -3/-3 until end of turn.

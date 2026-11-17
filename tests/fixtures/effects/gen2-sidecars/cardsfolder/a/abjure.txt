@@ -1,5 +1,4 @@
 name: abjure
 mana cost: {U}
 types: instant
-additional cost: sacrifice a blue permanent.
-spell[1]: counter target spell.
+spell[1]: as an additional cost to cast this spell, sacrifice a blue permanent. counter target spell.

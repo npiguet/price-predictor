@@ -288,6 +288,9 @@ class _EveryLine:
     def options_for(self, key):
         return ()
 
+    def board_keys(self, key):
+        return (key,)
+
 
 def _board() -> StateSnapshot:
     """A gen-3 board: card slots that list ``lines``."""

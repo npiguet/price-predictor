@@ -378,10 +378,16 @@ def _collection_fields(
         "cut_games": len(totals.cut.games),
         "code_version": _code_version(),
         "sidecar_digest": _sidecar_digest(config.source_trees.sidecar_roots()),
-        "join_gaps": {kind: dict(sorted(counts.items())) for kind, counts in (
-            ("unresolved", reading.unresolved), ("undescribed", reading.undescribed),
-            ("unconfigured", reading.unconfigured)) if counts},
+        "join_gaps": _join_gaps(reading),
     }
+
+
+def _join_gaps(reading) -> dict[str, dict[str, int]]:
+    """The survey's join gaps by kind, each sorted; an empty kind left out."""
+    return {kind: dict(sorted(counts.items())) for kind, counts in (
+        ("unresolved", reading.unresolved), ("undescribed", reading.undescribed),
+        ("unconfigured", reading.unconfigured), ("ambiguous", reading.ambiguous))
+        if counts}
 
 
 def log_report(
