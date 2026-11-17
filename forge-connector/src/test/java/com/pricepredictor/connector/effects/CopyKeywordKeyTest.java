@@ -2,9 +2,11 @@ package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.RulesParser;
+import forge.game.CardTraitBase;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardFactory;
+import forge.game.card.CardState;
 import forge.game.keyword.KeywordInterface;
 import forge.game.phase.PhaseType;
 import forge.game.spellability.SpellAbility;
@@ -15,9 +17,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -32,7 +36,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>A token copy's state holds the original's keywords plus the ones its
  * copy effect added, and numbering that state's keywords shifted each later
  * printed keyword one line on. A mutated permanent's keywords come from
- * several cards, each printed in its own file. A trait Forge builds on a
+ * several cards, each printed in its own file, as do its triggers, statics,
+ * replacements and abilities, which keep the state of the card that printed
+ * them. A trait Forge builds on a
  * copy's state (a land's mana ability) is no line of the copy effect's. Each
  * key is read against the real sidecar of the card it names.
  */
@@ -129,6 +135,93 @@ class CopyKeywordKeyTest {
 
         assertJoins(convertedScriptOf(angel), keyOf(angel, "Flying"), "flying");
         assertJoins(convertedScriptOf(heron), keyOf(angel, "Mutate:3 U"), "mutate");
+    }
+
+    /**
+     * Dreamtail Heron, whose mutate trigger is its own, merged on top of
+     * Marjhan, which prints a replacement, a static, a trigger and two
+     * activated abilities: each trait joins its own line in the file of the
+     * card that prints it, and is printed.
+     */
+    @Test
+    void aMutatedPermanentsTraitsJoinTheLinesOfTheCardOnTop() throws IOException {
+        assertMergedTraitsJoinTheirOwnLines(true);
+    }
+
+    /** As above, with Dreamtail Heron merged under Marjhan. */
+    @Test
+    void aMutatedPermanentsTraitsJoinTheLinesOfTheCardUnder() throws IOException {
+        assertMergedTraitsJoinTheirOwnLines(false);
+    }
+
+    private void assertMergedTraitsJoinTheirOwnLines(boolean heronOnTop) throws IOException {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card marjhan = board.battlefield("Marjhan", board.you);
+        board.battlefield("Island", board.you);
+        Card heron = merge(board, marjhan, "Dreamtail Heron", heronOnTop);
+        Map<String, ConvertedScript> scripts = Map.of(
+                "Dreamtail Heron", convertedScriptOf(heron), "Marjhan", convertedScriptOf(marjhan));
+        Map<String, String[]> printers = Map.of(
+                "draw a card", new String[] {"Dreamtail Heron", "draw a card"},
+                "doesn't untap", new String[] {"Marjhan", "doesn't untap"},
+                "can't attack", new String[] {"Marjhan", "can't attack"},
+                "no Islands", new String[] {"Marjhan", "no islands"},
+                "Untap this", new String[] {"Marjhan", "untap this"},
+                "1 damage", new String[] {"Marjhan", "1 damage"});
+
+        List<String> seen = new ArrayList<>();
+        for (CardTraitBase trait : ownTraitsOf(marjhan.getCurrentState())) {
+            String description = descriptionOf(trait);
+            String fragment = printers.keySet().stream().filter(description::contains)
+                    .findFirst().orElseThrow(() -> new AssertionError("unexpected trait " + trait));
+            String[] printer = printers.get(fragment);
+            assertJoins(scripts.get(printer[0]), ProvenanceResolver.of(trait), printer[1]);
+            seen.add(fragment);
+        }
+        assertEquals(printers.keySet(), Set.copyOf(seen), seen.toString());
+        for (Map<String, Object> line : linesOf(board, marjhan)) {
+            assertEquals(false, line.get("granted"), line.toString());
+        }
+    }
+
+    /**
+     * {@code name} merged with {@code target} as {@code MutateEffect} merges
+     * them, on top or under.
+     */
+    private static Card merge(CharacterizationBoard board, Card target, String name, boolean onTop) {
+        Card mutating = board.card(name, board.you);
+        mutating.setMergedToCard(target);
+        target.addMergedCard(target);
+        if (onTop) {
+            target.addMergedCardToTop(mutating);
+        } else {
+            target.addMergedCard(mutating);
+        }
+        long timestamp = board.game.getNextTimestamp();
+        target.setMutatedTimestamp(timestamp);
+        target.addCloneState(CardFactory.getMutatedCloneStates(target, null), timestamp);
+        board.game.getAction().checkStaticAbilities();
+        assertEquals(onTop ? mutating : target, target.getTopMergedCard());
+        return mutating;
+    }
+
+    /** A state's triggers, statics, replacements and activated abilities no keyword built. */
+    private static List<CardTraitBase> ownTraitsOf(CardState state) {
+        List<CardTraitBase> traits = new ArrayList<>();
+        traits.addAll(state.getTriggers());
+        traits.addAll(state.getStaticAbilities());
+        traits.addAll(state.getReplacementEffects());
+        state.getSpellAbilities().stream().filter(SpellAbility::isActivatedAbility).forEach(traits::add);
+        return traits.stream().filter(trait -> trait.getKeyword() == null).toList();
+    }
+
+    private static String descriptionOf(CardTraitBase trait) {
+        for (String param : List.of("TriggerDescription", "Description", "SpellDescription")) {
+            if (trait.hasParam(param)) {
+                return trait.getParam(param);
+            }
+        }
+        return trait.toString();
     }
 
     /**
