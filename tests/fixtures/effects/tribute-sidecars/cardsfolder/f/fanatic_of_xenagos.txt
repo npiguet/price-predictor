@@ -1,0 +1,7 @@
+name: fanatic of xenagos
+mana cost: {1}{R}{G}
+types: creature centaur warrior
+power toughness: 3/3
+static: trample
+triggered: tribute 1
+triggered: when CARDNAME enters, if tribute wasn't paid, it gets +1/+1 and gains haste until end of turn.

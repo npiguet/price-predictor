@@ -20,7 +20,7 @@ Rules to respect when running or changing `build-corpus` or `holdout-cards`, or 
 - A gen-3 game whose shard holds no game-end marker was cut, and its records are incomplete. The survey and the write pass both drop it whole (`dropped-cut`), so no stratum, derived copy or selection set holds one. The manifest counts them in `cut_games`, inside the digest. A records set none of whose gen-3 games has a marker is refused before `--output` is touched.
 - A record the write pass meets past what the survey read in its shard (a raw shard grown between the passes, a collection still writing) was never surveyed nor placed. It is written to no stratum and counted as `dropped-unsurveyed`, and the build names every raw shard whose size changed.
 - Before anything under `--output` is touched, the build refuses a rules directory holding no scenario or no heads line, and a raw shard the survey cannot read whole. The rules directory is read relative to the working directory, so a build started elsewhere would tag and budget nothing.
-- What the survey's reading met without stopping (`decode_off_list`, `damaged_tails`, `join_gaps`), `unsupervised_events`, `code_version` and `sidecar_digest` sit outside the digest, so that neither where the raw corpus sits nor what ran before in the process moves it.
+- What the survey's reading met without stopping (`decode_off_list`, `damaged_tails`, `join_gaps`: one count per textless join answer, `JoinGaps`), `unsupervised_events`, `code_version` and `sidecar_digest` sit outside the digest, so that neither where the raw corpus sits nor what ran before in the process moves it.
 - `--workers` is 1 to 12 with a default of 12, never the CPU count.
 
 ## The split

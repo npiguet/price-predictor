@@ -31,6 +31,7 @@ from effects.infrastructure.shard_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache, read_sidecar, sidecar_from_dict
 from tests.unit.effects.builders import GEN3_RECORDS, GEN3_SIDECAR_FOLDERS
 
+_TRIBUTE_TREE = Path(__file__).resolve().parents[3] / "fixtures" / "effects" / "tribute-sidecars"
 _SAGA = "cardsfolder/b/binding_the_old_gods.txt"
 #: Binding the Old Gods' saga keyword, which builds one trigger per chapter.
 _SAGA_KEY = ProvenanceKey(_SAGA, 0, "keyword", 0)
@@ -137,6 +138,35 @@ class TestABareKeyOfAKeywordOfSeveralLines:
         # Three lookups, each through the join: the resolution, the text, the line.
         assert cache.join_gaps().ambiguous == {key.script_file: 3}
         assert any("ambiguous" in line for line in cache.join_gaps().report_lines())
+
+
+class TestABareKeyALineDeclaresBesideItsBuiltLines:
+    def test_a_tributes_unpaid_trigger_line_is_a_board_slot_after_the_keywords_line(self):
+        """Fanatic of Xenagos: line 5 declares ``keyword 1``, line 6 a ``built``
+        trigger key of it; both are slots, in line order."""
+        script = "cardsfolder/f/fanatic_of_xenagos.txt"
+        sidecar = SidecarCache({"cardsfolder": _TRIBUTE_TREE / "cardsfolder"}).get(script)
+        bare = ProvenanceKey(script, 0, "keyword", 1)
+        keys = sidecar.board_keys(bare)
+        assert keys == (bare, replace(bare, built=BuiltTrait("trigger", 0)))
+        assert [sidecar.row_for(key) for key in keys] == [1, 2]
+
+    def test_a_keyword_declaring_its_built_key_on_its_own_line_is_one_slot(self):
+        script = "cardsfolder/a/air_elemental.txt"
+        key = ProvenanceKey(script, 0, "keyword", 0)
+        assert _cache().get(script).board_keys(key) == (key,)
+
+
+class TestEveryTextlessAnswerIsCounted:
+    def test_a_dropped_and_a_runtime_only_key_are_each_counted_once(self):
+        script = "cardsfolder/a/air_elemental.txt"
+        cache = _cache()
+        assert cache.join(ProvenanceKey(script, 0, "spell", 0)) == (KeyResolution.DROPPED, None)
+        runtime = ProvenanceKey(script, 0, "keyword", 9)
+        assert cache.join(runtime) == (KeyResolution.RUNTIME_ONLY, None)
+        gaps = cache.join_gaps()
+        assert (gaps.dropped, gaps.runtime_only) == ({script: 1}, {script: 1})
+        assert any("runtime_only" in line for line in gaps.report_lines())
 
 
 class TestNoKeyIsDeclaredByTwoLines:

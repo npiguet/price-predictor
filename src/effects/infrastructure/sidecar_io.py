@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
 from effects.domain.provenance import (
+    JOIN_GAP_KINDS,
     Joined,
     KeyResolution,
     ProvenanceKey,
@@ -333,14 +334,18 @@ class UnconfiguredTree(KeyError):
 
 @dataclass
 class JoinGaps:
-    """Keys :meth:`SidecarCache.join` read as no line where a line was
-    expected, by why, one field per such resolution: a script never converted
-    (``unresolved``, ``UNCONVERTED``, by script file), a source tree the run
-    has no root for (``unconfigured``, ``UNCONFIGURED_TREE``, by tree), a
-    keyword's bare key naming several lines (``ambiguous``, ``AMBIGUOUS``, by
-    script file), and a key its sidecar does not describe (``undescribed``,
-    the join's raising case, by script file), each with how often it was
-    asked. ``DROPPED`` and ``RUNTIME_ONLY`` are answers, not gaps.
+    """Keys :meth:`SidecarCache.join` read as no line, by why, one field per
+    such resolution: a script never converted (``unresolved``,
+    ``UNCONVERTED``, by script file), a source tree the run has no root for
+    (``unconfigured``, ``UNCONFIGURED_TREE``, by tree), a keyword's bare key
+    naming several lines (``ambiguous``, ``AMBIGUOUS``, by script file), a
+    trait Forge attached to a live card that no sidecar line describes
+    (``runtime_only``, ``RUNTIME_ONLY``, by script file), a trait the sidecar
+    drops by design (``dropped``, ``DROPPED``, by script file), and a key its
+    sidecar does not describe (``undescribed``, the join's raising case, by
+    script file), each with how often it was asked. Every answer that yields
+    no text is counted; ``runtime_only`` and ``dropped`` are expected, the
+    others are damage.
 
     A cache's are cumulative (:meth:`SidecarCache.join_gaps`); a pool worker
     hands back what each shard added (:meth:`SidecarCache.take_join_gaps`),
@@ -351,21 +356,21 @@ class JoinGaps:
     undescribed: Counter = field(default_factory=Counter)
     unconfigured: Counter = field(default_factory=Counter)
     ambiguous: Counter = field(default_factory=Counter)
+    runtime_only: Counter = field(default_factory=Counter)
+    dropped: Counter = field(default_factory=Counter)
 
     def copy(self) -> JoinGaps:
         return JoinGaps(*(Counter(gaps) for gaps in self._kinds()))
 
     def merge(self, other: JoinGaps) -> None:
-        self.unresolved.update(other.unresolved)
-        self.undescribed.update(other.undescribed)
-        self.unconfigured.update(other.unconfigured)
-        self.ambiguous.update(other.ambiguous)
+        for mine, theirs in zip(self._kinds(), other._kinds(), strict=True):
+            mine.update(theirs)
 
     def __bool__(self) -> bool:
         return any(self._kinds())
 
     def _kinds(self) -> tuple[Counter, ...]:
-        return self.unresolved, self.undescribed, self.unconfigured, self.ambiguous
+        return tuple(getattr(self, name) for name in JOIN_GAP_KINDS)
 
     def __sub__(self, earlier: JoinGaps) -> JoinGaps:
         return JoinGaps(*(now - then for now, then in zip(
@@ -380,6 +385,9 @@ class JoinGaps:
             ("unconfigured", "source trees this run has no root for", self.unconfigured),
             ("ambiguous", "scripts with a keyword's bare key naming several lines",
              self.ambiguous),
+            ("runtime_only", "scripts with a trait no sidecar line describes",
+             self.runtime_only),
+            ("dropped", "scripts with a trait the sidecar drops by design", self.dropped),
         ):
             if gaps:
                 most = ", ".join(f"{key} ({n})" for key, n in gaps.most_common(examples))
@@ -438,8 +446,8 @@ class SidecarCache:
 
         A script with no sidecar is ``UNCONVERTED``, one of a source tree this
         run has no root for ``UNCONFIGURED_TREE`` (the first of each tree
-        logged); both, and ``AMBIGUOUS``, are counted in :meth:`join_gaps`. A
-        key inside a declared range in neither list is counted as
+        logged); both, and every other answer that yields no line, are counted
+        in :meth:`join_gaps`. A key inside a declared range in neither list is counted as
         ``undescribed`` and raises ``KeyError``: the sidecar does not describe
         the card the record was collected against.
         """
@@ -451,10 +459,19 @@ class SidecarCache:
         except KeyError:
             self._gaps.undescribed[key.script_file] += 1
             raise
-        if resolution is KeyResolution.AMBIGUOUS:
-            self._gaps.ambiguous[key.script_file] += 1
+        counter = self._textless_counter(resolution)
+        if counter is not None:
+            counter[key.script_file] += 1
         line = sidecar.line_for(key) if resolution is KeyResolution.LINE else None
         return Joined(resolution, line)
+
+    def _textless_counter(self, resolution: KeyResolution) -> Counter | None:
+        """The gap counter of a sidecar answer that names no line, else None."""
+        return {
+            KeyResolution.AMBIGUOUS: self._gaps.ambiguous,
+            KeyResolution.RUNTIME_ONLY: self._gaps.runtime_only,
+            KeyResolution.DROPPED: self._gaps.dropped,
+        }.get(resolution)
 
     def _sidecar_of(self, key: ProvenanceKey) -> ProvenanceSidecar | KeyResolution:
         """The sidecar a key's script names, else the resolution, counted,

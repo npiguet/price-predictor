@@ -760,7 +760,10 @@ def test_the_manifest_records_how_its_records_were_collected_and_read(
         "min_games_per_half": 0, "max_item_error": MAX_ITEM_ERROR, "max_component_error": None}
     assert manifest.keyword_definitions_digest == hashlib.sha256(b"{}").hexdigest()
     assert manifest.decode_off_list == {"global.combat_substep 'third_strike'": 1}
-    assert manifest.join_gaps == {"unconfigured": {"variant-scripts": 1}}
+    bears = "cardsfolder/g/grizzly_bears.txt"
+    assert manifest.join_gaps == {
+        "unconfigured": {"variant-scripts": 1},
+        "runtime_only": {bears: 5}, "dropped": {bears: 5}}
     # The two passes ask the sidecars different numbers of times: a join gap
     # alone is no sign the corpus changed between them.
     assert "changed between the passes" not in caplog.text

@@ -18,6 +18,7 @@ from effects.domain.ability_tokenizer import Surface
 from effects.domain.corpus_manifest import ClassCounts, CorpusManifest, FamilyRow
 from effects.domain.corpus_plan import BuildCorpusError, Keys
 from effects.domain.coverage import HELD_OUT_GAME_FLOOR
+from effects.domain.provenance import JOIN_GAP_KINDS
 from effects.domain.record_quality import QualityDefect
 from effects.domain.records import LegalityDecision
 from effects.domain.sampling import SamplingClass
@@ -29,6 +30,9 @@ if TYPE_CHECKING:
     from effects.domain.split import HeldOutCards
 
 logger = logging.getLogger(__name__)
+
+#: Join gaps that are expected answers, reported without a warning.
+EXPECTED_JOIN_GAPS = frozenset({"runtime_only", "dropped"})
 
 #: How much of one sampling class the quality rules may refuse before the
 #: build stops, rather than silently losing a whole class.
@@ -383,10 +387,8 @@ def _collection_fields(
 
 def _join_gaps(reading) -> dict[str, dict[str, int]]:
     """The survey's join gaps by kind, each sorted; an empty kind left out."""
-    return {kind: dict(sorted(counts.items())) for kind, counts in (
-        ("unresolved", reading.unresolved), ("undescribed", reading.undescribed),
-        ("unconfigured", reading.unconfigured), ("ambiguous", reading.ambiguous))
-        if counts}
+    return {kind: dict(sorted(getattr(reading, kind).items()))
+            for kind in JOIN_GAP_KINDS if getattr(reading, kind)}
 
 
 def log_report(
@@ -455,8 +457,8 @@ def _log_reading(manifest: CorpusManifest) -> None:
             "events no output column reads, by kind (manifest unsupervised_events): %s",
             manifest.unsupervised_events)
     for kind, counts in manifest.join_gaps.items():
-        logger.warning(
-            "%d key(s) read as no line, %s (manifest join_gaps), e.g. %s",
+        log = logger.info if kind in EXPECTED_JOIN_GAPS else logger.warning
+        log("%d key(s) read as no line, %s (manifest join_gaps), e.g. %s",
             sum(counts.values()), kind, ", ".join(list(counts)[:3]))
 
 

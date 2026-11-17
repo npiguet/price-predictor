@@ -72,7 +72,7 @@ from effects.domain.protection_copies import (
     qualify,
     rules_offered,
 )
-from effects.domain.provenance import KeyResolution
+from effects.domain.provenance import JOIN_GAP_KINDS, KeyResolution
 from effects.domain.record_quality import QualityDefect, record_refusal
 from effects.domain.records import (
     CollectionMode,
@@ -323,6 +323,8 @@ class ReadGaps:
     undescribed: Counter[str] = field(default_factory=Counter)
     unconfigured: Counter[str] = field(default_factory=Counter)
     ambiguous: Counter[str] = field(default_factory=Counter)
+    runtime_only: Counter[str] = field(default_factory=Counter)
+    dropped: Counter[str] = field(default_factory=Counter)
 
     @classmethod
     def take(cls, sidecars: SidecarCache) -> ReadGaps:
@@ -331,12 +333,11 @@ class ReadGaps:
 
         decode, gaps = take_decode_tally(), sidecars.take_join_gaps()
         return cls(Counter(decode.off_list), list(decode.damaged_tails),
-                   Counter(gaps.unresolved), Counter(gaps.undescribed),
-                   Counter(gaps.unconfigured), Counter(gaps.ambiguous))
+                   *(Counter(getattr(gaps, kind)) for kind in JOIN_GAP_KINDS))
 
     def __bool__(self) -> bool:
-        return bool(self.off_list or self.damaged_tails or self.unresolved
-                    or self.undescribed or self.unconfigured or self.ambiguous)
+        return bool(self.off_list or self.damaged_tails
+                    or any(getattr(self, kind) for kind in JOIN_GAP_KINDS))
 
 
 @dataclass(slots=True)

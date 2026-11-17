@@ -99,6 +99,12 @@ class KeyResolution(StrEnum):
     AMBIGUOUS = "ambiguous"
 
 
+#: ``JoinGaps``' fields (``infrastructure.sidecar_io.JoinGaps``), in field order:
+#: one per answer that yields no text.
+JOIN_GAP_KINDS = ("unresolved", "undescribed", "unconfigured", "ambiguous",
+                  "runtime_only", "dropped")
+
+
 class SidecarError(ValueError):
     """A sidecar breaks its contract: two lines of a face declare one key."""
 
@@ -433,12 +439,16 @@ class ProvenanceSidecar:
 
         A keyword's bare key that no line declares, where the keyword prints
         several lines declaring ``built`` keys (a saga's chapters), is all of
-        those lines in line order, each read through its first ``built`` key;
-        any other key is itself.
+        those lines in line order, each read through its first ``built`` key.
+        A bare key some line declares is that line, then the other lines
+        declaring ``built`` keys of the same keyword, in line order (Tribute's
+        "if tribute wasn't paid" trigger); any other key is itself.
         """
-        if key in self._row_by_key:
-            return (key,)
-        return self._built_lines.get(key, (key,))
+        built = self._built_lines.get(key, ())
+        row = self._row_by_key.get(key)
+        if row is None:
+            return built or (key,)
+        return (key, *(b for b in built if self._row_by_key[b] != row))
 
     def _resolve(self, key: ProvenanceKey) -> tuple[KeyResolution, int | None]:
         """The join's answer for a key and its row, the one place it is decided.

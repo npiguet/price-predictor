@@ -412,9 +412,10 @@ class CorpusManifest:
     #: Each raw shard whose damaged last gzip member ended its read.
     damaged_tails: tuple[str, ...] = field(default=(), metadata=_reads(tuple))
     #: Keys the survey read as no line, by why (``sidecar_io.JoinGaps``):
-    #: ``unresolved``, ``undescribed`` and ``ambiguous`` by script file,
-    #: ``unconfigured`` by source tree, each with how often it was asked; an
-    #: empty kind left out.
+    #: ``unresolved``, ``undescribed``, ``ambiguous``, ``runtime_only`` and
+    #: ``dropped`` by script file, ``unconfigured`` by source tree, each with
+    #: how often it was asked; an empty kind left out. ``runtime_only`` and
+    #: ``dropped`` are expected answers, not damage.
     join_gaps: dict[str, dict[str, int]] = field(
         default_factory=dict, metadata=_reads(_nested_int_map),
     )
