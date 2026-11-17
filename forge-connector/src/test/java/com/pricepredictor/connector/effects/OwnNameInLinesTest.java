@@ -61,4 +61,17 @@ class OwnNameInLinesTest {
             assertFalse(line.contains("  "), line);
         }
     }
+
+    @Test
+    void aCreatureTypeNamedCardKeepsItsLiteralName() {
+        assertTrue(anyLine(texts("a/aurochs.txt"), "attacking aurochs"));
+        assertTrue(anyLine(texts("a/assembly_worker.txt"), "target assembly-worker creature"));
+    }
+
+    @Test
+    void anotherCardsLongerNameHoldingTheNameStays() {
+        List<String> lines = texts("k/kookus.txt");
+        assertTrue(anyLine(lines, "named keeper of kookus"), lines.toString());
+        assertTrue(anyLine(lines, "CARDNAME deals 3 damage to you"), lines.toString());
+    }
 }
