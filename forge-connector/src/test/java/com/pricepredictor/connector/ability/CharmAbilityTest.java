@@ -130,6 +130,61 @@ class CharmAbilityTest {
                 four.optionKeys());
     }
 
+    @Test
+    void anActivatedCharmsHeaderStatesItsChoiceRestriction() {
+        // Forge words ChoiceRestriction$ ThisTurn "that hasn't been chosen this turn".
+        assertEquals(List.of("activated[1]: {1}: choose one that hasn't been chosen this turn"),
+                Converted.of("k/kargan_intimidator.txt").texts().stream()
+                        .filter(t -> t.startsWith("activated")).toList());
+    }
+
+    @Test
+    void aRootsAdditionalDescriptionFollowsTheChooseHeaderWithoutALeadingPeriod() {
+        assertEquals("spell[1]: choose one. if you control a commander as you cast"
+                        + " this spell, you may choose both.",
+                rootOf("k/klauths_will.txt"));
+        assertEquals("spell[1]: choose one. if you control a commander as you cast"
+                        + " this spell, you may choose both.",
+                rootOf("j/jeskas_will.txt"));
+        assertEquals("spell[1]: choose one. if you control a commander as you cast"
+                        + " this spell, you may choose both.",
+                rootOf("n/nexus_mentality.txt"));
+        assertEquals("spell[1]: choose one. if you control a nonland permanent you don't own"
+                        + " as you cast this spell, you may choose two instead.",
+                rootOf("w/weave_the_nightmare.txt"));
+    }
+
+    @Test
+    void aTieredCharmsDescriptionStandsAloneAsForgeWritesIt() {
+        // Forge's own description of a Tiered charm has no "Choose" header.
+        assertTrue(rootOf("v/vincents_limit_break.txt").startsWith("spell[1]: until end of turn"),
+                rootOf("v/vincents_limit_break.txt"));
+    }
+
+    @Test
+    void aChapterCharmPrintsOneKeyedOptionLinePerMode() {
+        Converted sisters = Converted.of("s/summon_magus_sisters.txt");
+        List<String> modes = sisters.texts().stream().filter(t -> t.startsWith("option")).toList();
+        assertEquals(3, modes.size(), "modes: " + sisters.texts());
+        assertEquals(3, sisters.optionKeys().size());
+        for (Set<String> keys : sisters.optionKeys()) {
+            assertTrue(keys.stream().anyMatch(k -> k.matches(".* option [0-2]")), keys.toString());
+        }
+    }
+
+    @Test
+    void aModalSpellWithNoDescriptionStillPrintsItsRootKeyedWithTheSpell() {
+        Converted doomsday = Converted.of("d/doomsday_confluence.txt");
+        assertTrue(doomsday.texts().contains("spell[1]: choose one"), "root: " + doomsday.texts());
+        assertEquals(3, doomsday.lineKind("option").size());
+        assertTrue(doomsday.sidecar().droppedKeys().isEmpty(),
+                "dropped: " + doomsday.sidecar().droppedKeys());
+    }
+
+    private static String rootOf(String card) {
+        return Converted.of(card).texts().stream().filter(t -> t.startsWith("spell")).findFirst().orElseThrow();
+    }
+
     /** A real Forge script converted with its sidecar, as BatchConverter writes both. */
     private record Converted(List<RenderedLine> rendered, ProvenanceSidecar sidecar) {
 

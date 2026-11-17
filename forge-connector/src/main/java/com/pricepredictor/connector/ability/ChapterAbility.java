@@ -17,6 +17,9 @@ import java.util.Objects;
  */
 public record ChapterAbility(String descriptionText, List<Ability> subAbilities) implements Ability {
 
+    /** What opens each mode in Forge's own description of a charm. */
+    private static final char MODE_BULLET = '\u2022';
+
     public ChapterAbility {
         Objects.requireNonNull(subAbilities);
         subAbilities = List.copyOf(subAbilities);
@@ -69,9 +72,26 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
             return charmChapter(stripped, execute, trigger);
         }
 
+        if (isCharm(execute) && stripped.indexOf(MODE_BULLET) >= 0) {
+            return modesChapter(stripped, execute, trigger);
+        }
+
         String normalized = AbilityDescription.normalize(withEffectText(stripped, execute));
         if (normalized == null) return null;
         return new ChapterAbility(AbilityType.CHAPTER.formatDescription(normalized));
+    }
+
+    /**
+     * A chapter whose description spells out its charm: Forge writes the
+     * header and every mode into the one description, so the header is what
+     * precedes the first bullet and the modes become the chapter's options.
+     */
+    private static Ability modesChapter(String stripped, SpellAbility execute, Trigger trigger) {
+        String header = stripped.substring(0, stripped.indexOf(MODE_BULLET)).trim();
+        String normalized = AbilityDescription.normalize(header);
+        if (normalized == null) return null;
+        return new ChapterAbility(AbilityType.CHAPTER.formatDescription(normalized),
+                CharmAbility.optionsFrom(execute, trigger));
     }
 
     private static boolean isCharm(SpellAbility execute) {

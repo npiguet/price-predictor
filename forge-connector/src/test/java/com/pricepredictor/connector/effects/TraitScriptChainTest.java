@@ -256,13 +256,15 @@ class TraitScriptChainTest {
     }
 
     @Test
-    void aDescriptionlessCharmDropsItsRootKeyAndKeysItsModes() {
+    void aDescriptionlessCharmPrintsItsSynthesizedRootKeyedWithTheSpellAndKeysItsModes() {
         Converted doomsday = convert("d/doomsday_confluence.txt");
         ProvenanceKey root = new ProvenanceKey(
                 "cardsfolder/d/doomsday_confluence.txt", 0, TraitKind.SPELL, 0);
 
-        assertTrue(linesOfKind(doomsday, "spell").isEmpty(), doomsday.lines().toString());
-        assertTrue(doomsday.sidecar().droppedKeys().contains(root),
+        List<ProvenanceSidecar.Line> roots = linesOfKind(doomsday, "spell");
+        assertEquals(1, roots.size(), doomsday.lines().toString());
+        assertEquals(List.of(root), roots.get(0).provenance());
+        assertTrue(doomsday.sidecar().droppedKeys().isEmpty(),
                 doomsday.sidecar().droppedKeys().toString());
         List<ProvenanceSidecar.Line> options = linesOfKind(doomsday, "option");
         assertEquals(3, options.size());
