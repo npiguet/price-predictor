@@ -47,10 +47,10 @@ How a key resolves, by case:
 - A checkpoint records the tokenizer rules it trained under, and every loader picks the grammar through `tokenizer_surface`. A gen-1 checkpoint records none and is read with the prose grammar it trained on; the script rules would turn about one of its script tokens in thirty into `[UNK]`.
 - On the script surface camel case splits and `$` is always its own token. These stay whole: the values of `Execute$`, `SubAbility$`, `RepeatSubAbility$`, `ReplaceWith$` and `CounterType$`, segment openers, and `Choices$` items of the five chooser APIs (`Charm`, `GenericChoice`, `AssignGroup`, `VillainousChoice`, `Vote`). Elsewhere `Choices$` is a selector.
 - A keyword line expands by its display name, filled through `domain/keyword_formatting.py`, which mirrors Forge's per-`Keyword.type` formatting.
-- Validation, evaluation and the cache expand at `INFERENCE_KEYWORD_EXPAND_P = 0`, so only unknown keywords expand there.
-
 - On the prose surface a parameterised keyword line is recognised by `KeywordExpander.line_of` as the line is printed (`ward {2}`, `protection from red`, `hexproof from black`): a run of cost symbols or a `from` quality after the name, read back to Forge's `details` (`{W/B}` as `W/B`), so it expands with its values and `hexproof from black` never reads as plain hexproof. Other prose that merely starts with a keyword name is no keyword line.
 - `domain/keyword_formatting.py` reads Forge's hybrid and Phyrexian shard spellings (`WB`, `WP`, `BGP`, `CW`) as `{W/B}` and so on, and joins several ward costs as `Lang.joinHomogenous` does: `a`, `a or b`, `a, b or c`.
+- Validation, evaluation and the cache expand at `INFERENCE_KEYWORD_EXPAND_P = 0`, so only unknown keywords expand there.
+
 ## Keyword definitions
 
 - The keyword-definition file `extract-keyword-definitions --output` writes is keyed by display name, because that is what a card's keyword line and the converted text both spell.
@@ -60,9 +60,9 @@ How a key resolves, by case:
 ## Vocabulary
 
 - `build-vocab` scans three sources: converted cards, converted token scripts and the keyword-definition file. Unscanned reminder text would expand to `[UNK]`.
+- The multi-word keywords of the vocabulary are derived from the keyword definitions' names (`price_predictor.domain.keyword_tokens.multi_word_keywords`: a name with a space or hyphen, lower case, apostrophes dropped, spaces and hyphens as `_`), so `Beam me up`, `Jump-start` and `Web-slinging` are `beam_me_up`, `jump_start` and `web_slinging`; the tokenizer's merge step joins `jump - start` into `jump_start`. A build given no definitions seeds `MULTI_WORD_KEYWORDS` (`price_predictor.application.build_vocabulary`) instead. A vocabulary built before this derivation lacks the three tokens and must be rebuilt to merge them; a rebuilt one shifts the ids after them, so it is not interchangeable with the checkpoints and ability caches of the old one.
 - `[PAD]`, `[UNK]`, `cardname`, `[MASK]`, `[CLS]` and `[SEG]` are seeded at low ids so `--target-size` cannot truncate them away. On the script surface so are `sv1…svN`, every template word and every key part, and the build fails when a definition would expand to `[UNK]`.
 - Set codes are not seeded: an ability line never names a set.
-- The multi-word keywords of the vocabulary are derived from the keyword definitions' names (`price_predictor.domain.keyword_tokens.multi_word_keywords`: a name with a space or hyphen, lower case, apostrophes dropped, spaces and hyphens as `_`), so `Beam me up`, `Jump-start` and `Web-slinging` are `beam_me_up`, `jump_start` and `web_slinging`; the tokenizer's merge step joins `jump - start` into `jump_start`. A build given no definitions seeds `MULTI_WORD_KEYWORDS` (`price_predictor.application.build_vocabulary`) instead. A vocabulary built before this derivation lacks the three tokens and must be rebuilt to merge them; a rebuilt one shifts the ids after them, so it is not interchangeable with the checkpoints and ability caches of the old one.
 - The surface is read from the vocabulary's file name and from nothing else (`ability_encoder.surface_of`): a name containing `vocab-script` is the script surface, any other the prose surface. A script vocabulary passed with `--vocab-path` must keep such a name (`vocab-script.txt`), else every command reading it tokenizes on the prose surface. The two surfaces' vocabularies are two files, so a script-surface rebuild never overwrites the vocabulary a prose-surface checkpoint recorded and can still load against.
 
 ## Ability cache
