@@ -2198,6 +2198,16 @@ def test_every_named_invariant_is_reported():
     assert tuple(f.name for f in validate_corpus(_healthy())) == _EVERY_CHECK
 
 
+def _read_noting_damage(root: Path, presence: FieldPresence):
+    """The records under ``root`` as ``validate-corpus`` reads them: a line
+    missing a member the decoder requires ends its shard, after the presence
+    tally has seen it."""
+    from effects.application.validate_corpus import ShardDamage
+    from effects.infrastructure.shard_io import list_shards
+
+    return ShardDamage().read(root, list_shards(root), 0, presence.observe)
+
+
 class TestWhatIfPresence:
     """FR-033: every blockers record of a shard carries ``what_if``, and no
     other record does."""
@@ -2219,9 +2229,7 @@ class TestWhatIfPresence:
 
     def _finding(self, tmp_path: Path, name: str = "what_if is on every blockers record"):
         presence = FieldPresence()
-        findings = validate_corpus(
-            read_window(tmp_path, observe=presence.observe), presence=presence,
-        )
+        findings = validate_corpus(_read_noting_damage(tmp_path, presence), presence=presence)
         return _named(findings, name)
 
     def test_a_shard_with_what_if_on_its_blockers_passes(self, tmp_path):
@@ -2248,7 +2256,7 @@ class TestWhatIfPresence:
         rows[0]["what_if"] = True
         self._write(tmp_path / "a.jsonl", rows)
         with pytest.raises(ValueError, match="what_if"):
-            self._finding(tmp_path)
+            list(read_window(tmp_path))
 
 
 class TestGen3FieldPresence:
@@ -2262,8 +2270,7 @@ class TestGen3FieldPresence:
     def _findings(self, tmp_path: Path, rows: list[dict]) -> Findings:
         self._write(tmp_path / "a.jsonl", rows)
         presence = FieldPresence()
-        return validate_corpus(read_window(tmp_path, observe=presence.observe),
-                               presence=presence)
+        return validate_corpus(_read_noting_damage(tmp_path, presence), presence=presence)
 
     @staticmethod
     def _golden() -> list[dict]:
