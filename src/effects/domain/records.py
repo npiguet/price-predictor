@@ -77,8 +77,7 @@ class CollectionMode(StrEnum):
 class ResolutionOutcome(StrEnum):
     """What became of a stack item.
 
-    Gen-1 and gen-2 stamped it on the cost half; gen-3 writes it on the
-    effect half (root spec § 8.14, FR-042b), never ``countered``: a countered
+    Gen-3 writes it on the effect half (root spec § 8.14, FR-042b), never ``countered``: a countered
     item writes no effect half, its fate being the countering clause's
     ``spell_countered``.
     """
@@ -124,9 +123,8 @@ REWRITE_RESULTS_RUNNING_AN_ABILITY: frozenset[RewriteResult] = frozenset({
     RewriteResult.UPDATED,
 })
 
-#: The legality subkinds, the ones that carry ``what_if`` (FR-031) up to
-#: gen-2; gen-3 writes it on ``blockers`` alone. A ``decision`` is always a
-#: real evaluation.
+#: The legality subkinds; gen-3 writes ``what_if`` (FR-031) on ``blockers``
+#: alone. A ``decision`` is always a real evaluation.
 LEGALITY_SUBKINDS: frozenset[PlayabilitySubkind] = frozenset({
     PlayabilitySubkind.ATTACKERS, PlayabilitySubkind.BLOCKERS,
 })
@@ -205,7 +203,7 @@ class Curation:
     records only, never a collected shard. Curation metadata: it says how the
     record was copied, never what the board was, so it never reaches the model.
 
-    ``natural_share`` (n) is the copies gen-2's budgets give the record and
+    ``natural_share`` (n) is the copies the budgets give the record and
     ``copies`` (d) every copy written, natural and added. ``drawn_rule`` is set
     on an added copy only, ``drawn_rules`` lists the rule of every added copy
     of the record, and ``condition_entities`` and ``outcome_entities`` hold
@@ -322,12 +320,12 @@ class ResolutionPayload(_PayloadQueries):
 
     events: tuple[Event, ...] = ()
     #: Gen-3: one entry per conditional clause that resolved in the half, in
-    #: resolution order; empty where none did. None on gen-1 and gen-2.
+    #: resolution order; empty where none did.
     conditions_met: tuple[ConditionMet, ...] | None = None
     #: Gen-3 (FR-042b): what became of the stack item — resolved, fizzled,
     #: partially fizzled or declined. None where the half resolves no stack
-    #: item (a mana record, the game-end rescue record), on gen-1/gen-2 and on
-    #: gen-3 records collected before the record moments.
+    #: item (a mana record, the game-end rescue record) and on records collected
+    #: before the record moments.
     outcome: ResolutionOutcome | None = None
     #: Whether the record wrote an ``outcome`` key at all, null included, so a
     #: record read and written back keeps its bytes. Not part of equality.
@@ -604,14 +602,14 @@ class Candidate:
     cost_after_adjustment: dict[str, int] = field(default_factory=dict)
     responsible_static: tuple[ProvenanceKey, ...] = ()
     #: Gen-3: whether the play's timing allows it now (``can_play`` is
-    #: ``canPlay ∧ timing ∧`` no static prohibition). None on gen-1 and gen-2.
+    #: ``canPlay ∧ timing ∧`` no static prohibition).
     timing: bool | None = None
     #: Gen-3: every check the candidate failed, in :class:`PlayabilityCheck`
-    #: order; empty for a playable one. None on gen-1 and gen-2.
+    #: order; empty for a playable one.
     failed_checks: tuple[FailedCheck, ...] | None = None
     #: Gen-3: whether the candidate is a land play (FR-033a), judged by
-    #: ``Player.canPlayLand``. None on gen-1 and gen-2, and on a gen-3 record
-    #: collected before land plays were candidates.
+    #: ``Player.canPlayLand``. None on a record collected before land plays
+    #: were candidates.
     land_play: bool | None = None
 
 
@@ -698,7 +696,7 @@ class PlayabilityAttackersPayload(_PayloadQueries):
     controls, naming the creature, the defenders it may attack and whether
     it must attack. ``legal_attackers`` and ``forbidden`` are the
     declaration's, the same on each of its records. ``anchor_attacker`` is
-    None on gen-1 and gen-2, which wrote one record per declaration.
+    None where a record is not anchored.
     """
 
     legal_attackers: tuple[str, ...] = ()
@@ -726,7 +724,7 @@ class PlayabilityBlockersPayload(_PayloadQueries):
     min_blockers: int = 0
     #: Gen-3: the listed creatures, legal or forbidden, in candidate order,
     #: that a requirement makes block the anchor (509.1c), whether or not
-    #: they can obey it. None on gen-1 and gen-2.
+    #: they can obey it.
     must_block: tuple[str, ...] | None = None
 
     def provenance_keys(self) -> Iterator[ProvenanceKey]:

@@ -117,7 +117,7 @@ def _what_if_half(
     record: EffectRecord, klass: SamplingClass,
 ) -> LegalityDecision | Literal[""]:
     """``real`` / ``what-if`` on a legality record (FR-049 step 3), empty on
-    every other; a gen-1 record, whose decision is unknown, is a what-if."""
+    every other."""
     if klass != SamplingClass.PLAYABILITY_LEGALITY:
         return ""
     if LegalityDecision.of(record) is LegalityDecision.REAL:

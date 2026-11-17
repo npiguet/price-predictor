@@ -1,11 +1,10 @@
 """The four rules that let later stages widen the corpus (T023), pinned to
 the gen-3 schema (T075, FR-019).
 
-The rules hold within a generation: a record says its own (``generation``
-on gen-3, ``random_seat`` on gen-2, neither on gen-1), and gen-3 may change
-or drop a gen-2 field. These tests pin the gen-3 schema — the envelope, the
-kinds and the card slot — so the next change within gen-3 is caught, and they
-check the rules rather than the code that happens to satisfy them today.
+The rules hold within a generation: a record says its own (``generation``).
+These tests pin the gen-3 schema — the envelope, the kinds and the card slot
+— so the next change within gen-3 is caught, and they check the rules rather
+than the code that happens to satisfy them today.
 
 The rules, from ``contracts/record-schema.md`` and feature 025's
 ``contracts/record-schema-delta.md``:
@@ -16,8 +15,8 @@ The rules, from ``contracts/record-schema.md`` and feature 025's
 3. Snapshot tiers are additive; absence means uncollected.
 4. Nothing listed as collection metadata may become a model input.
 
-What gen-3 changed relative to gen-2 is listed in ``_REMOVED_IN_GEN3`` and
-``_REDEFINED_IN_GEN2`` beside the pins it would otherwise break.
+The card-slot members an entity no longer writes are listed in
+``_REMOVED_FROM_THE_CARD_SLOT``.
 """
 
 from __future__ import annotations
@@ -68,7 +67,7 @@ _FROZEN_ENVELOPE: dict[str, str] = {
     "payload": "Payload",
     "mode": "CollectionMode",
     "moment": "Moment | None",
-    # Widened by gen-3 to the turn-action subkinds; every gen-2 value keeps its meaning.
+    # Widened to the turn-action subkinds; every earlier value keeps its meaning.
     "subkind": "PlayabilitySubkind | TurnActionSubkind | None",
     "link_id": "str | None",
     "mirror_of": "str | None",
@@ -83,7 +82,7 @@ _FROZEN_ENVELOPE: dict[str, str] = {
     # as the closed vocabulary it was always validated against; on the wire it
     # is still one of those strings or null.
     "ability_unresolved": "UnresolvedReason | None",
-    # Gen-2 (feature 024), both under rule 1 and both collection metadata:
+    # Feature 024, both under rule 1 and both collection metadata:
     # whether the acting player was the random seat, on every gen-3 record,
     # and whether a blockers record is a real declaration or a what-if query,
     # None on every other record.
@@ -101,19 +100,6 @@ _FROZEN_ENVELOPE: dict[str, str] = {
     # curation copied the record, never collected.
     "curation": "Curation | None",
     "extra_fields": "dict",
-}
-
-#: The one field gen-2 redefines rather than adds, and so the one named
-#: exception to rule 1 (FR-030a). On a gen-2 ``playability`` record
-#: ``actor_player`` names the deciding player — the candidates' controller on
-#: ``attackers``, the blockers' controller on ``blockers``, the candidate
-#: ability's controller on ``decision`` — where feature 023 wrote the active
-#: player (``attackers``, ``decision``) or the attacking player (``blockers``).
-#: Its type is unchanged; its meaning is versioned by shard generation, the
-#: presence of ``random_seat`` (FR-033). Listed here so the exception is
-#: documented in the test that would otherwise forbid it, not skipped.
-_REDEFINED_IN_GEN2: dict[str, set[str]] = {
-    "actor_player": {"attackers", "blockers", "decision"},
 }
 
 # The enum values gen-3 reaches. A later stage may append; nothing here may be
@@ -147,10 +133,10 @@ _FROZEN_OPTIONAL_LINE_MEMBERS = {
     "grant", "active", "cast_with", "chosen", "fragment", "affected"}
 _FROZEN_LINE_KINDS = {"spell", "activated", "trigger", "static", "replacement", "keyword"}
 
-#: The gen-2 card-slot members gen-3 drops (FR-019): ``printed`` and
+#: The card-slot members an entity no longer writes (FR-019): ``printed`` and
 #: ``granted_attached`` are now ``lines``, ``pt`` is now ``base_pt`` and
-#: ``pt_boosts``. A gen-2 shard still carries them, and still reads.
-_REMOVED_IN_GEN3: frozenset[str] = frozenset({"printed", "granted_attached", "pt"})
+#: ``pt_boosts``.
+_REMOVED_FROM_THE_CARD_SLOT: frozenset[str] = frozenset({"printed", "granted_attached", "pt"})
 _FROZEN_MODES = {"patched", "degraded"}
 _FROZEN_OUTCOMES = {
     "resolved", "fizzled", "partially_fizzled", "declined", "countered",
@@ -173,19 +159,6 @@ class TestRuleOneFieldsMayBeAddedNotRepurposed:
             "a field was added to the envelope; that is allowed, but this list "
             f"must be updated in the same change so the next one is caught: {added}"
         )
-
-
-class TestTheActorPlayerException:
-    """FR-030a: the one redefinition, on ``playability`` records of gen-2 only.
-
-    Its type and the generation marker ``random_seat`` are pinned with the rest
-    of the envelope by rule 1's tests.
-    """
-
-    def test_the_exception_covers_exactly_the_playability_subkinds(self):
-        assert _REDEFINED_IN_GEN2["actor_player"] == {
-            s.value for s in PlayabilitySubkind
-        }
 
 
 class TestTheEnvelopeEnumsAreTheWriters:
@@ -265,7 +238,7 @@ class TestTheGen3CardSlotIsPinned:
         record = make_record(state=make_snapshot(entities=(entity,)))
         written = record_to_dict(record)["state"]["entities"][0]
         assert tuple(written) == _FROZEN_GEN3_ENTITY
-        assert not _REMOVED_IN_GEN3 & written.keys()
+        assert not _REMOVED_FROM_THE_CARD_SLOT & written.keys()
 
 
 _ACTING = ProvenanceKey("cardsfolder/s/shock.txt", 0, "spell", 0)
@@ -322,8 +295,8 @@ class TestRuleFourMetadataNeverBecomesAModelInput:
     what the board was, so it is held to the same rule.
     """
 
-    def test_the_board_is_a_gen3_board(self):
-        assert all(entity.lines is not None for entity in _board().entities)
+    def test_the_board_lists_card_lines(self):
+        assert any(entity.lines for entity in _board().entities)
         assert _surface(make_record(state=_board(), ability=(_ACTING,))).slots
 
     @pytest.mark.parametrize("flip", [
