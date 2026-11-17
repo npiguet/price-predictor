@@ -7,10 +7,7 @@ import json
 import shutil
 from pathlib import Path
 
-import pytest
 import rule_breadth
-
-from effects.domain.shard_generation import UnacceptedGenerationError
 
 FIXTURES = Path(__file__).parents[2] / "fixtures" / "effects"
 SIDECARS = FIXTURES / "gen3-sidecars"
@@ -50,15 +47,17 @@ def test_a_detector_cut_to_nothing_of_a_large_pool_is_flagged(tmp_path, capsys):
     assert "1.2-1" in capsys.readouterr().out
 
 
-def test_a_set_of_an_older_generation_is_refused_naming_it(tmp_path):
+def test_a_set_of_an_older_generation_exits_1_naming_it(tmp_path, caplog):
     records = tmp_path / "records"
     records.mkdir()
     with gzip.open(FIXTURES / "gen3-records.jsonl.gz", "rt", encoding="utf-8") as source:
         data = json.loads(next(source))
     del data["generation"]
     (records / "gen2.jsonl").write_text(json.dumps(data) + "\n", encoding="utf-8")
-    with pytest.raises(UnacceptedGenerationError, match="holds gen-2 records"):
-        rule_breadth.main([
+    with caplog.at_level("ERROR"):
+        assert rule_breadth.main([
             "--records-dir", str(records), "--rules-dir", str(_rules(tmp_path)),
             "--cards-folder", str(SIDECARS / "cardsfolder"), "--workers", "1",
-            "--output", str(tmp_path / "breadth.json")])
+            "--output", str(tmp_path / "breadth.json")]) == 1
+    assert any("holds gen-2 records; this command reads gen-3 only" in r.getMessage()
+               for r in caplog.records)

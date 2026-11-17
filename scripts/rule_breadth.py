@@ -24,8 +24,20 @@ from pathlib import Path
 from effects.application.rule_breadth import breadth
 from effects.domain.default_paths import DEFAULT_CARDS_FOLDER_PATHS, DEFAULT_VARIANT_SCRIPTS
 from effects.domain.rule_breadth import flagged_rows
+from effects.domain.shard_generation import UnacceptedGenerationError
+from effects.infrastructure.cli import exits_with
 from effects.infrastructure.converted_trees import SourceTrees
 from price_predictor.infrastructure.run_manifest import run_script
+
+
+#: The refusals ``rule-counts`` exits 1 on: no shards, a set that is not gen-3,
+#: a damaged shard or a line that does not decode.
+_REFUSED = {
+    "effects.infrastructure.shard_io.NoShardsError": 1,
+    UnacceptedGenerationError: 1,
+    "effects.infrastructure.shard_io.CorruptShardError": 1,
+    "effects.infrastructure.shard_io.RecordDecodeError": 1,
+}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -49,8 +61,9 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     args = build_parser().parse_args(argv)
     cards_folders = args.cards_folders or DEFAULT_CARDS_FOLDER_PATHS
+    run = exits_with(_REFUSED)(lambda parsed: _run(parsed, cards_folders))
     return run_script(
-        args.output.parent, lambda: _run(args, cards_folders), script=__file__, argv=argv,
+        args.output.parent, lambda: run(args), script=__file__, argv=argv,
         inputs=[args.records_dir, args.rules_dir, *cards_folders, args.variant_scripts],
     )
 
