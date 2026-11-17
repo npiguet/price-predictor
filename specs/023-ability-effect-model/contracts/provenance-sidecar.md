@@ -112,7 +112,7 @@ join — and the mismatch is the one condition that must fail loudly.
 | A charm-mode `option` line follows its root, in `Choices$` order | `provenance: [root key + option]`; `script_text` is the mode's chain opened `SV1:`; `script_api_type` is the mode's |
 | A non-charm `option` line (a die-roll outcome of a spell, an activated or a triggered ability) | `provenance: []` and no `script_text`; no record acts through it |
 | A charm with no description renders no root line | its root key is in `dropped_keys`; its option lines carry their mode keys |
-| `role_spans` are character ranges over the **converted prose** | roles are `cost` \| `effect` \| `trigger-condition` \| `target-spec` |
+| `role_spans` are character ranges over the **converted prose** | roles are `cost` \| `effect` \| `trigger-condition` \| `target-spec`; the line's kind picks them: a loyalty or level cost and a cost-only line (additional cost, alternate cost, cost reduction) are `cost`, and a trigger's condition starts after a leading ability word |
 | The converted prose is the rendered line from `prose_offset` on | `prose_offset` is the length of the line's `kind[n]: ` prefix (ASCII). A description that runs onto several lines is folded into one, each line break read as a space, so every line has its prefix. Readers take the split from the field and never re-derive it from the text, whose prose may hold a `": "` of its own (`{T}: add {G}.`). A sidecar written before the fold may hold a continuation line with `prose_offset` `0`, which repeats its first line's non-keyword keys. A sidecar without the field is read by cutting at the first `": "` |
 | Row `i` of the ability cache corresponds to `lines[i]` | rendered lines for a converted tree, script lines for the variant tree |
 

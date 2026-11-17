@@ -4,6 +4,7 @@ import com.pricepredictor.connector.json.Json;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 /**
  * Prose role spans over one rendered ability line.
@@ -44,59 +45,71 @@ public final class RoleSpans {
      *
      * <p>Offsets are relative to {@code text}, so a caller that renders the
      * prefix must add its length. The spans of the first three roles partition
-     * the text; {@code target-spec} spans overlap whichever of them contains
-     * them, because a target phrase is part of the clause it appears in.
+     * the text, except that an ability word before a trigger condition
+     * ("landfall — ") stays untagged; {@code target-spec} spans overlap
+     * whichever of them contains them, because a target phrase is part of the clause it appears in.
      */
     public static List<Span> of(String text, boolean activated) {
         List<Span> spans = new ArrayList<>();
         if (text == null || text.isEmpty()) return spans;
         String lower = text.toLowerCase(Locale.ROOT);
-
-        int triggerEnd = triggerConditionEnd(lower);
-        if (triggerEnd > 0) {
-            spans.add(new Span(0, triggerEnd, SpanRole.TRIGGER_CONDITION));
-            spans.add(new Span(triggerEnd, text.length(), SpanRole.EFFECT));
-        } else if (activated) {
-            int costEnd = costEnd(text);
-            if (costEnd > 0) {
-                spans.add(new Span(0, costEnd, SpanRole.COST));
-                spans.add(new Span(costEnd, text.length(), SpanRole.EFFECT));
-            } else {
-                spans.add(new Span(0, text.length(), SpanRole.EFFECT));
-            }
-        } else {
-            spans.add(new Span(0, text.length(), SpanRole.EFFECT));
-        }
-
+        spans.addAll(clauseSpans(text, lower, activated));
         spans.addAll(targetSpans(lower));
         return spans;
     }
 
+    /** The target spans alone, for a line whose clauses the caller tags itself. */
+    static List<Span> targets(String text) {
+        return targetSpans(text.toLowerCase(Locale.ROOT));
+    }
+
+    /** The condition, cost and effect spans: what remains once targets are set aside. */
+    private static List<Span> clauseSpans(String text, String lower, boolean activated) {
+        int length = text.length();
+        int start = triggerStart(lower);
+        int triggerEnd = start < 0 ? -1 : triggerConditionEnd(lower, start);
+        if (triggerEnd > 0) {
+            return List.of(new Span(start, triggerEnd, SpanRole.TRIGGER_CONDITION),
+                    new Span(triggerEnd, length, SpanRole.EFFECT));
+        }
+        int costEnd = activated ? costEnd(text) : -1;
+        if (costEnd > 0) {
+            return List.of(new Span(0, costEnd, SpanRole.COST),
+                    new Span(costEnd, length, SpanRole.EFFECT));
+        }
+        return List.of(new Span(0, length, SpanRole.EFFECT));
+    }
+
+    private static final Pattern ABILITY_WORD = Pattern.compile("[a-z][a-z' -]*");
+    private static final String ABILITY_WORD_DASH = " \u2014 ";
+
     /**
-     * End of a leading trigger condition, or -1.
-     *
-     * <p>A triggered line opens with "when", "whenever" or "at" and separates
-     * its condition from its effect with the first top-level comma — top-level
-     * meaning outside any parenthesis, so a reminder-text comma does not split
-     * the line.
+     * Where a trigger condition starts, or -1 when the line does not open with
+     * one: at 0, or after an ability word ("landfall — whenever ...").
      */
-    private static int triggerConditionEnd(String lower) {
-        boolean opens = false;
+    private static int triggerStart(String lower) {
+        if (opensTrigger(lower, 0)) return 0;
+        int dash = lower.indexOf(ABILITY_WORD_DASH);
+        if (dash <= 0 || !ABILITY_WORD.matcher(lower.substring(0, dash)).matches()) return -1;
+        int start = dash + ABILITY_WORD_DASH.length();
+        return opensTrigger(lower, start) ? start : -1;
+    }
+
+    private static boolean opensTrigger(String lower, int from) {
         for (String word : TRIGGER_WORDS) {
-            if (lower.startsWith(word)) {
-                opens = true;
-                break;
-            }
+            if (lower.startsWith(word, from)) return true;
         }
-        if (!opens) return -1;
-        int depth = 0;
-        for (int i = 0; i < lower.length(); i++) {
-            char c = lower.charAt(i);
-            if (c == '(') depth++;
-            else if (c == ')') depth = Math.max(0, depth - 1);
-            else if (c == ',' && depth == 0) return i + 1;
-        }
-        return -1;
+        return false;
+    }
+
+    /**
+     * End of the trigger condition that opens at {@code from}, or -1.
+     *
+     * <p>The condition ends at the first top-level comma, top-level meaning
+     * outside any parenthesis, so a reminder-text comma does not split the line.
+     */
+    private static int triggerConditionEnd(String lower, int from) {
+        return topLevelEnd(lower, from, ',', false);
     }
 
     /**
@@ -107,15 +120,30 @@ public final class RoleSpans {
      * symbols carry no colon and neither does an ordinary effect clause, so the
      * first one is the separator.
      */
-    private static int costEnd(String text) {
+    static int costEnd(String text) {
+        return topLevelEnd(text, 0, ':', true);
+    }
+
+    /**
+     * One past the first {@code separator} at or after {@code from} that sits
+     * outside every parenthesis (and, with {@code braces}, every mana symbol),
+     * or -1.
+     */
+    private static int topLevelEnd(String text, int from, char separator, boolean braces) {
+        String opening = braces ? "({" : "(";
+        String closing = braces ? ")}" : ")";
         int depth = 0;
-        for (int i = 0; i < text.length(); i++) {
+        for (int i = from; i < text.length(); i++) {
             char c = text.charAt(i);
-            if (c == '(' || c == '{') depth++;
-            else if (c == ')' || c == '}') depth = Math.max(0, depth - 1);
-            else if (c == ':' && depth == 0) return i + 1;
+            if (depth == 0 && c == separator) return i + 1;
+            depth = Math.max(0, depth + bracketStep(c, opening, closing));
         }
         return -1;
+    }
+
+    private static int bracketStep(char c, String opening, String closing) {
+        if (opening.indexOf(c) >= 0) return 1;
+        return closing.indexOf(c) >= 0 ? -1 : 0;
     }
 
     private static final String TARGET_WORD = "target ";
@@ -144,22 +172,26 @@ public final class RoleSpans {
                 from = start + 1;
                 continue;
             }
-            int after = start + TARGET_WORD.length();
-            int end = lower.indexOf(TARGET_WORD, after);
-            if (end < 0) end = lower.length();
-            for (int i = after; i < end; i++) {
-                char c = lower.charAt(i);
-                if (c == ',' || c == ';' || c == '.') {
-                    end = i;
-                    break;
-                }
-            }
-            while (end > after && Character.isWhitespace(lower.charAt(end - 1))) {
-                end--;
-            }
+            int end = phraseEnd(lower, start + TARGET_WORD.length());
             spans.add(new Span(start, end, SpanRole.TARGET_SPEC));
             from = end;
         }
         return spans;
+    }
+
+    /** End of the target phrase whose words begin at {@code after}, trailing blanks trimmed. */
+    private static int phraseEnd(String lower, int after) {
+        int end = lower.indexOf(TARGET_WORD, after);
+        if (end < 0) end = lower.length();
+        for (int i = after; i < end; i++) {
+            if (",;.".indexOf(lower.charAt(i)) >= 0) {
+                end = i;
+                break;
+            }
+        }
+        while (end > after && Character.isWhitespace(lower.charAt(end - 1))) {
+            end--;
+        }
+        return end;
     }
 }

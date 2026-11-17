@@ -2,6 +2,8 @@ package com.pricepredictor.connector.effects;
 
 import org.junit.jupiter.api.Test;
 
+import com.pricepredictor.connector.AbilityType;
+
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -104,6 +106,92 @@ class RoleSpansTest {
     void anEmptyLineHasNoSpans() {
         assertTrue(RoleSpans.of("", false).isEmpty());
         assertTrue(RoleSpans.of(null, false).isEmpty());
+    }
+
+    private static List<RoleSpans.Span> of(String prose, AbilityType type) {
+        return LineRoleSpans.of(prose, type, 0);
+    }
+
+    private static String roleText(String prose, AbilityType type, SpanRole role) {
+        RoleSpans.Span span = roleIn(of(prose, type), role);
+        return span == null ? null : textOf(prose, span);
+    }
+
+    @Test
+    void aLoyaltyCostIsACostSpan() {
+        String prose = "[+2]: look at the top card of target player's library.";
+        assertEquals("[+2]:", roleText(prose, AbilityType.PLANESWALKER, SpanRole.COST));
+        assertEquals(" look at the top card of target player's library.",
+                roleText(prose, AbilityType.PLANESWALKER, SpanRole.EFFECT));
+        assertEquals("target player's library",
+                roleText(prose, AbilityType.PLANESWALKER, SpanRole.TARGET_SPEC));
+    }
+
+    @Test
+    void aZeroLoyaltyCostWithoutBracketsIsACostSpan() {
+        String prose = "0: draw three cards, then put two cards from your hand on top of your library in any order.";
+        assertEquals("0:", roleText(prose, AbilityType.PLANESWALKER, SpanRole.COST));
+    }
+
+    @Test
+    void aLevelCostIsACostSpanAndItsTriggerKeepsItsCondition() {
+        String prose = "{B/G}: whenever a land you control enters, creature cards in your graveyard perpetually get +1/+1.";
+        assertEquals("{B/G}:", roleText(prose, AbilityType.LEVEL, SpanRole.COST));
+        assertEquals("whenever a land you control enters,",
+                roleText(prose, AbilityType.LEVEL, SpanRole.TRIGGER_CONDITION));
+    }
+
+    @Test
+    void aLevelLineWithNoCostHasNoCostSpan() {
+        String prose = "landfall — whenever a land you control enters, mill two cards.";
+        assertEquals(null, roleText(prose, AbilityType.LEVEL, SpanRole.COST));
+        assertEquals("whenever a land you control enters,",
+                roleText(prose, AbilityType.LEVEL, SpanRole.TRIGGER_CONDITION));
+    }
+
+    @Test
+    void aSpellsAdditionalCostSentenceIsACostSpan() {
+        String prose = "as an additional cost to cast this spell, sacrifice a land. search your library for up to two basic land cards.";
+        int costLength = "as an additional cost to cast this spell, sacrifice a land.".length();
+        List<RoleSpans.Span> spans = LineRoleSpans.of(prose, AbilityType.SPELL, costLength);
+        assertEquals("as an additional cost to cast this spell, sacrifice a land.",
+                textOf(prose, roleIn(spans, SpanRole.COST)));
+        assertEquals(" search your library for up to two basic land cards.",
+                textOf(prose, roleIn(spans, SpanRole.EFFECT)));
+    }
+
+    @Test
+    void anAdditionalCostLineIsAllCost() {
+        String prose = "exile six cards from your graveyard.";
+        assertEquals(prose, roleText(prose, AbilityType.ADDITIONAL_COST, SpanRole.COST));
+        assertEquals(null, roleText(prose, AbilityType.ADDITIONAL_COST, SpanRole.EFFECT));
+    }
+
+    @Test
+    void anAlternateCostLineIsAllCost() {
+        String prose = "cleave {1}{B}{B}{G}";
+        assertEquals(prose, roleText(prose, AbilityType.ALTERNATE_COST, SpanRole.COST));
+    }
+
+    @Test
+    void aCostReductionLineIsAllCost() {
+        String prose = "affinity for allies";
+        assertEquals(prose, roleText(prose, AbilityType.COST_REDUCTION, SpanRole.COST));
+    }
+
+    @Test
+    void anAbilityWordBeforeATriggerIsLeftOutOfItsCondition() {
+        String prose = "landfall — whenever a land you control enters, create a 2/2 green elemental creature token.";
+        assertEquals("whenever a land you control enters,",
+                roleText(prose, AbilityType.TRIGGERED, SpanRole.TRIGGER_CONDITION));
+        assertEquals(" create a 2/2 green elemental creature token.",
+                roleText(prose, AbilityType.TRIGGERED, SpanRole.EFFECT));
+    }
+
+    @Test
+    void aDashInsideAnEffectIsNotAnAbilityWord() {
+        String prose = "creatures you control get +1/+1 — whenever that matters, draw.";
+        assertEquals(null, roleText(prose, AbilityType.STATIC, SpanRole.TRIGGER_CONDITION));
     }
 
     @Test
