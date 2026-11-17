@@ -144,9 +144,10 @@ match refuses to answer when it is ambiguous — **no key beats a wrong key**:
 2. **Trigger- and replacement-borne abilities** key to the trait that owns them (`getTrigger()`,
    `getReplacementEffect()`), not to the `Execute$` SVar ability, which is a member of no trait slice.
 3. **Keyword-derived traits** key to their keyword's ordinal (see below).
-4. **The trait where it stands**, located by identity in its own `CardState` slice. A trigger, static or
-   replacement the slice holds and the state's own traits (`get...WithoutChanges()`) do not is one the card
-   granted itself: it keys to its granting line, the line naming the SVar it was parsed from, and to its index
+4. **The trait where it stands**, located by identity in its own `CardState` slice. A trait the slice holds
+   and the state's own traits (`get...WithoutChanges()`) do not, or a stack copy of one (`getOriginalAbility()`),
+   is one the card granted itself (a manland's `Animate` grants an activated ability so): it keys to its
+   granting line, the line naming the SVar it was parsed from, and to its index
    only when no such line is found. Several lines naming the SVar are accepted when they key alike, or differ only in `built`, which
    gives the bare key: a Class level's trait keys to its `Class:N` keyword's bare key.
 5. **The trait where it stands**, located by *structure*: the unique member of the slice with the same

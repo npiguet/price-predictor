@@ -21,8 +21,8 @@ import java.util.Set;
  * copiable exception (707.9b). A mutated permanent prints every merged
  * card's lines. A card also prints a line it grants itself: a
  * Class level's, a "has ... as long as" trigger, a manland's animated
- * trigger, a keyword its own static gives it. Since A05 such a line keys to
- * the line that granted it, in the card's own script.
+ * trigger or activated ability, a keyword its own static gives it. Such a
+ * line keys to the line that granted it, in the card's own script.
  *
  * <p>Every other line is granted, by one of:
  * <ul>

@@ -354,7 +354,8 @@ public final class ProvenanceResolver {
      * changes granted, then the keyword-built ones. A trait the card's own
      * static or effect granted (a Class level's trigger, Expedition
      * Diviner's "has 'When this creature dies...'", a manland's animated
-     * trigger) is parsed onto the card's own state, so it stands in that
+     * trigger or activated ability) is parsed onto the card's own state, so
+     * it stands in that
      * list, past the printed lines, where the converter numbered no line or
      * another one.
      */
@@ -369,19 +370,30 @@ public final class ProvenanceResolver {
     }
 
     /**
-     * Whether a trigger, static or replacement stands in its own state's live
-     * slice but not among the state's own traits (Forge's
-     * {@code get...WithoutChanges()}, the slice through no trait change): a
-     * trait the card granted itself. A printed trait, the land traits a
-     * type change built and every keyword-built trait are among its own or
-     * not in its state's slice at all. A spell is never one: an ability a
-     * static grants is followed through its grantor first ({@link #grantor}).
+     * Whether a trait stands in its own state's live slice but not among the
+     * state's own traits (Forge's {@code get...WithoutChanges()}, the slice
+     * through no trait change), or is a stack copy of one that does
+     * ({@code getOriginalAbility}): a trait the card granted itself. A
+     * printed trait and every keyword-built trait are among its own; a trait
+     * another card granted stands in the donor's state, and not in that
+     * state's slice. A land trait a type change built is not among its own
+     * either, but names no SVar, so {@link #grantingLineKey} finds no line
+     * for it.
+     *
+     * <p>An ability a card's own {@code Animate} granted ({@code Abilities$},
+     * a manland's) is one: the effect leaves no back-reference on it, unlike
+     * a static's grant, which {@link #grantor} follows first.
      */
     private static boolean grantedInPlace(CardState state, CardTraitBase trait, TraitKind kind) {
-        if (kind == TraitKind.SPELL) return false;
         List<? extends CardTraitBase> own = ForgeFields.traitsThrough(state, kind, List.of());
-        if (own == null || indexIn(own, trait) >= 0) return false;
-        return indexIn(kind.slice(state), trait) >= 0;
+        if (own == null) return false;
+        return grantedAmong(own, state, kind, trait) || grantedAmong(own, state, kind, originalOf(trait));
+    }
+
+    /** Whether {@code trait} is in its state's live slice and not in {@code own}; false for null. */
+    private static boolean grantedAmong(List<? extends CardTraitBase> own, CardState state, TraitKind kind,
+                                        CardTraitBase trait) {
+        return trait != null && indexIn(own, trait) < 0 && indexIn(kind.slice(state), trait) >= 0;
     }
 
     /**

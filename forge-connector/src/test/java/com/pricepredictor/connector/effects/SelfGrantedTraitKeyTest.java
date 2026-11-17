@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Forge lists a state's traits printed first, then the ones a layer change
  * granted, then the keyword-built ones. A trait a card's own static or effect
  * granted (a Class level's, a "has ... as long as" trigger, a manland's
- * animated trigger) sits on the card's own state, so its live index past the
+ * animated trigger or activated ability) sits on the card's own state, so its live index past the
  * printed lines named no line of the sidecar, or another one. Every case reads
  * the key against the card's real sidecar: the line the key declares, else,
  * for a key with {@code built}, the line its bare key declares.
@@ -120,6 +120,33 @@ class SelfGrantedTraitKeyTest {
     }
 
     /**
+     * Lavaclaw Reaches and Wandering Fumarole animated: the activated ability
+     * their animation gives them ({@code Abilities$}) joins the animation's
+     * line, as built and as the copy the stack pushes in its place, which
+     * resolves.
+     */
+    @Test
+    void anAbilityACardsOwnAnimationGrantsJoinsTheAnimationsLine() throws IOException {
+        for (String manland : List.of("Lavaclaw Reaches", "Wandering Fumarole")) {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card land = board.battlefield(manland, board.you);
+            SpellAbility animate = board.ability(land, ApiType.Animate);
+            board.resolve(animate, board.you);
+            board.game.getAction().checkStaticAbilities();
+            ProvenanceSidecar sidecar = sidecarOf(land);
+            SpellAbility granted = board.ability(land, ApiType.Pump);
+            int animateLine = lineDeclaring(sidecar, ProvenanceResolver.of(animate));
+
+            assertTrue(animateLine >= 0, manland + "'s animation has a line");
+            assertEquals(animateLine, lineJoining(sidecar, ProvenanceResolver.of(granted)),
+                    manland + "'s granted ability: " + ProvenanceResolver.of(granted));
+            SpellAbility resolving = onTheStack(board, granted);
+            assertEquals(animateLine, lineJoining(sidecar, ProvenanceResolver.of(resolving)),
+                    manland + "'s granted ability's stack copy: " + ProvenanceResolver.of(resolving));
+        }
+    }
+
+    /**
      * Iymrith's own static grants it ward: the trigger ward builds has no
      * keyword line of the card's, and joins the static's line.
      */
@@ -165,6 +192,20 @@ class SelfGrantedTraitKeyTest {
         card.setClassLevel(level);
         board.game.getAction().checkStaticAbilities();
         return card;
+    }
+
+    /**
+     * The copy {@code MagicStack.add} pushes in place of an activated
+     * ability, the one that resolves: a fresh instance whose original is the
+     * ability activated.
+     */
+    private static SpellAbility onTheStack(CharacterizationBoard board, SpellAbility ability) {
+        ability.setActivatingPlayer(board.you);
+        board.game.getStack().add(ability);
+        SpellAbility copy = board.game.getStack().peekAbility();
+        assertTrue(copy != ability && copy.getOriginalAbility() == ability,
+                "the stack holds a copy of the ability: " + copy);
+        return copy;
     }
 
     private static Trigger trigger(Card card, Predicate<Trigger> matches) {

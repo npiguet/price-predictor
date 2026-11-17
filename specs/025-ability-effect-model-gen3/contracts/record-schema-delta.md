@@ -181,8 +181,9 @@ not its own state, and a keyword its copy effect added (Kiki-Jiki's haste) has `
 that prints it, and every merged card's lines are printed; a keyword two merged cards print, which
 Forge keeps once, keys into the card on top, and one Forge keeps twice keys into each card in merge
 order, top first. A
-trigger, static or replacement a card granted itself (a Class level's, a "has ... as long as"
-trigger, a manland's animated trigger) keys to the line that granted it, a Class level's to its
+trait a card granted itself (a Class level's, a "has ... as long as" trigger, a manland's
+animated trigger or activated ability, or a stack copy of one) keys to the line that granted it,
+a Class level's to its
 `Class:N` keyword's bare key, and past every declared line when none is found. Such a line is
 printed, not `granted`, and is listed beside its granting line under the same key; a keyword a
 card's own static grants it (Iymrith's ward) is printed too. A line another permanent's static
