@@ -49,8 +49,8 @@ def load_tokenizer(
     """The tokenizer over ``files``' vocabulary and keyword definitions.
 
     With a loaded checkpoint's ``training_settings`` it applies the rules that
-    checkpoint trained under (:func:`tokenizer_surface`); without, the
-    vocabulary's own surface's.
+    checkpoint trained under (:func:`tokenizer_surface`, which refuses rules this
+    code does not read); without, the vocabulary's own surface's.
     """
     surface = files.surface
     if training_settings is not None:
@@ -62,6 +62,5 @@ def load_tokenizer(
 
 
 def tokenizer_for(checkpoint, files: TokenizerFiles) -> AbilityTokenizer:
-    """The tokenizer ``checkpoint`` trained with, under the rules it recorded
-    (a gen-1 checkpoint reads its script vocabulary with the prose grammar)."""
+    """The tokenizer ``checkpoint`` trained with, under the rules it recorded."""
     return load_tokenizer(files, training_settings=checkpoint.training_settings or {})

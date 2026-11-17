@@ -100,24 +100,21 @@ class EffectCheckpoint:
     variant: Baseline = Baseline.FULL
     epoch: int = 0
     extra: dict[str, Any] = field(default_factory=dict)
-    #: The sidecar roots the run resolved keys against (FR-063b); empty on a
-    #: checkpoint that predates the field.
+    #: The sidecar roots the run resolved keys against (FR-063b).
     cards_folders: tuple[str, ...] = ()
-    #: ``run_context.training_settings`` (FR-063); empty or partial on a
-    #: checkpoint that predates the field or a key.
+    #: ``run_context.training_settings`` (FR-063).
     training_settings: dict[str, Any] = field(default_factory=dict)
-    #: ``LossDenominators.as_dict()`` of the run (FR-062); empty on a
-    #: checkpoint that predates the field.
+    #: ``LossDenominators.as_dict()`` of the run (FR-062).
     loss_denominators: dict[str, Any] = field(default_factory=dict)
     # Gen-3 (data-model.md § EffectCheckpoint). The relation types and their
     # target indices are in ``training_settings`` (``layout_settings``), and
     # the weights saved are the averaged ones once warmup has ended.
     #: The best control score of the run (FR-069): the score of the epoch
-    #: whose weights these are; None on a checkpoint that predates the field.
+    #: whose weights these are; None until a control score exists.
     best_control_score: float | None = None
     #: ``--rule-mask``, ``--deviance-floor``, ``--ema-epochs``,
     #: ``--stratum-weight`` and ``--relation-values`` of the run; empty or None
-    #: on a checkpoint that predates them.
+    #: where the flag was not set.
     rule_mask: str = ""
     deviance_floor: float | None = None
     ema_epochs: float | None = None
@@ -126,17 +123,15 @@ class EffectCheckpoint:
     #: The corpus manifest's rule-map digest (FR-060a).
     rule_map_digest: str = ""
     #: The digest of the selection set the run's control score read (E1);
-    #: None on a checkpoint that predates the field.
+    #: None when the run read none.
     selection_set_digest: str | None = None
 
 
-#: The gen-3 fields a checkpoint's payload carries under their own names,
-#: with what a checkpoint written before them reads as.
-_GEN3_FIELDS: dict[str, Any] = {
-    "best_control_score": None, "rule_mask": "", "deviance_floor": None,
-    "ema_epochs": None, "stratum_weight": None, "relation_values": "",
-    "rule_map_digest": "", "selection_set_digest": None,
-}
+#: The gen-3 fields a checkpoint's payload carries under their own names.
+_GEN3_FIELDS: tuple[str, ...] = (
+    "best_control_score", "rule_mask", "deviance_floor", "ema_epochs",
+    "stratum_weight", "relation_values", "rule_map_digest", "selection_set_digest",
+)
 
 
 def filter_training_only(state: dict[str, Any]) -> dict[str, Any]:
@@ -172,15 +167,13 @@ def load_weights(checkpoint, device) -> tuple[AbilityEncoder, EffectModel]:
 #: Payload keys the checkpoint's own fields carry; anything else is ``extra``.
 _RESERVED_PAYLOAD_KEYS = frozenset({
     "encoder_state_dict", "model_state_dict", "encoder_config", "model_config",
-    # ``best_val_loss`` is no field any more (FR-069); an older payload's is
-    # still not taken for ``extra``.
-    "provenance", "variant", "best_val_loss", "epoch", "config",
+    "provenance", "variant", "epoch", "config",
     "cards_folders", "training_settings", "loss_denominators", *_GEN3_FIELDS,
 })
 
 def encoder_config_from(data: dict[str, Any]) -> AbilityEncoderConfig:
-    """An encoder config from a checkpoint's dict; one that records no size
-    builds at the defaults, which every pre-size-flag checkpoint trained at."""
+    """An encoder config from a checkpoint's dict; a size it leaves out builds
+    at the config's default."""
     return AbilityEncoderConfig(**data)
 
 
@@ -235,27 +228,28 @@ class EffectModelStore:
         payload, model_config = load_checkpoint(
             path, EffectModelConfig, weights_only=False,
         )
-        # Before anything is built from it (FR-045): a checkpoint trained on
-        # another input layout would read inputs this code no longer builds.
+        # Before anything is read from it (FR-045): a checkpoint trained on
+        # another input layout would read inputs this code no longer builds,
+        # and an older one is told apart by its recorded layout alone.
         require_input_layout(payload.get("training_settings"))
         return EffectCheckpoint(
             encoder_config=encoder_config_from(payload["encoder_config"]),
             model_config=model_config,
             encoder_state=payload["encoder_state_dict"],
             model_state=payload["model_state_dict"],
-            provenance=SplitProvenance.from_dict(payload.get("provenance", {})),
-            variant=Baseline(payload.get("variant", Baseline.FULL)),
-            epoch=payload.get("epoch", 0),
+            provenance=SplitProvenance.from_dict(payload["provenance"]),
+            variant=Baseline(payload["variant"]),
+            epoch=payload["epoch"],
             # Round-tripped: the identity baseline reloaded without its table
             # would score on random vectors.
             extra={
                 key: value for key, value in payload.items()
                 if key not in _RESERVED_PAYLOAD_KEYS
             },
-            cards_folders=tuple(payload.get("cards_folders", ())),
-            training_settings=dict(payload.get("training_settings", {})),
-            loss_denominators=dict(payload.get("loss_denominators", {})),
-            **{name: payload.get(name, absent) for name, absent in _GEN3_FIELDS.items()},
+            cards_folders=tuple(payload["cards_folders"]),
+            training_settings=dict(payload["training_settings"]),
+            loss_denominators=dict(payload["loss_denominators"]),
+            **{name: payload[name] for name in _GEN3_FIELDS},
         )
 
 

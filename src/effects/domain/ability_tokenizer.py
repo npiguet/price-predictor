@@ -88,17 +88,18 @@ HOST_BODIED_KEYWORDS: frozenset[str] = frozenset({
 INFERENCE_KEYWORD_EXPAND_P = 0.0
 
 #: The tokenization rules a checkpoint trained under, in its
-#: ``training_settings``. A gen-1 checkpoint records none and tokenized every
-#: surface with the prose grammar.
+#: ``training_settings``: the grammar's version label, not a generation of
+#: records. A checkpoint recording none or another is refused.
 TOKENIZER_RULES_KEY = "tokenizer_rules"
 TOKENIZER_RULES = "gen-2"
 
 
 def tokenizer_surface(vocab_surface: Surface, training_settings) -> Surface:
     """The surface whose rules a loaded checkpoint's tokenizer applies: the
-    vocabulary's under the gen-2 rules, else the prose grammar it trained on."""
-    rules = recorded_version(training_settings, TOKENIZER_RULES_KEY, (TOKENIZER_RULES,))
-    return Surface.PROSE if rules is None else vocab_surface
+    vocabulary's own, once the checkpoint's recorded rules are ones this code
+    reads (:func:`recorded_version` refuses the rest)."""
+    recorded_version(training_settings, TOKENIZER_RULES_KEY, (TOKENIZER_RULES,))
+    return vocab_surface
 
 
 def keyword_token(display_name: str) -> str:

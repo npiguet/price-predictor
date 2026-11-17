@@ -8,10 +8,10 @@ Rules to respect when changing what a checkpoint or `resume.pt` holds, a loader,
 - A checkpoint records the split it trained against, enumerated rather than derived: the held-out card list and both `game_id` sets. No command recomputes a split, because the corpus is append-only and a recomputed one would score the gates partly on games the model trained on.
 - It also records the vocabulary and keyword-definition paths with their content hashes, the withheld keyword, the curated dataset's manifest path and digest, the sidecar roots, the holdout unit, the encoder size and the training settings.
 - Every inference command re-hashes what it actually loaded and fails fast on a mismatch. Encoding a cache against a different vocabulary produces vectors that look fine and mean nothing.
-- Every loader builds the encoder from the recorded size, so an arm at a non-default size loads without restating its flags. A checkpoint recording no size loads at 4 layers and width 256.
+- Every loader builds the encoder from the recorded size, so an arm at a non-default size loads without restating its flags. A size the recorded encoder config leaves out builds at the config's default.
 - The MLM, script-API and value heads are training-only and are filtered out at save time.
 - A gen-3 checkpoint's weights are the averaged ones. It records `best_control_score`, the loss denominators, `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight`, `--relation-values`, the manifest's `rule_map_digest` and the `selection_set_digest`.
-- `training_settings` holds `input_layout` with the relation types, subtypes, named counters and closed output lists, whose order fixes the model's tables. A loader refuses a checkpoint whose layout or lists differ.
+- `training_settings` holds `input_layout` with the relation types, subtypes, named counters and closed output lists, whose order fixes the model's tables. A loader refuses a checkpoint whose layout or lists differ. The refusal runs first on every load (`EffectModelStore.load`) and names the checkpoint's generation: no recorded `input_layout` is gen-1, `"gen-2"` is gen-2. `tokenizer_rules` (`"gen-2"`, the grammar's version label, not a generation) is required too; a checkpoint recording none is refused. The store reads every payload member and defaults none.
 
 ## Loading
 

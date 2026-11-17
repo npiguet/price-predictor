@@ -86,6 +86,27 @@ def test_only_the_current_layout_is_accepted():
             require_input_layout(settings)
 
 
+def test_a_refusal_names_the_generation_the_checkpoint_belongs_to():
+    """No recorded layout is a gen-1 checkpoint; ``"gen-2"`` is a gen-2 one."""
+    import pytest
+
+    from effects.domain.effect_head_input import (
+        INPUT_LAYOUT_KEY,
+        CheckpointLayoutError,
+        layout_settings,
+        require_input_layout,
+    )
+
+    gen3 = layout_settings()
+    without_layout = {k: v for k, v in gen3.items() if k != INPUT_LAYOUT_KEY}
+    for settings, named in (
+        (without_layout, "gen-1 checkpoint"), (None, "gen-1 checkpoint"),
+        ({**gen3, INPUT_LAYOUT_KEY: "gen-2"}, "gen-2 checkpoint"),
+    ):
+        with pytest.raises(CheckpointLayoutError, match=named):
+            require_input_layout(settings)
+
+
 def test_a_fresh_run_records_the_gen3_layout():
     """FR-045: what a new checkpoint records is what every loader accepts."""
     from effects.application.run_context import training_settings

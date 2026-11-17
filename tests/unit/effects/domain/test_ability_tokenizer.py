@@ -754,7 +754,7 @@ _FIXTURE_DEFINITIONS = (
     Path(__file__).parents[3] / "fixtures" / "effects" / "keyword-definitions.json"
 )
 _FIXTURE_SIDECARS = (
-    Path(__file__).parents[3] / "fixtures" / "effects" / "gen1-sidecars"
+    Path(__file__).parents[3] / "fixtures" / "effects" / "gen3-sidecars"
 )
 
 
@@ -807,22 +807,18 @@ def test_no_definition_expands_to_a_percent_or_unk(surface):
 
 
 class TestTokenizerRulesByCheckpoint:
-    """A loaded checkpoint is read with the grammar it trained under.
+    """A loaded checkpoint is read with the grammar it trained under, and one
+    that records none, or rules this code does not know, is refused."""
 
-    Gen-1 tokenized its script vocabulary with the prose grammar; reading it
-    with the gen-2 script rules turns camel-case parts it never saw into
-    ``[UNK]``. The text below is a real gen-1 sidecar line.
-    """
-
-    _GEN1_TEXT = "Defined$ TriggeredCard | ValidTgts$ Creature.YouCtrl | DB$ Pump"
-
-    def test_a_checkpoint_recording_no_rules_reads_the_prose_grammar(self):
+    def test_a_checkpoint_recording_no_rules_is_refused(self):
         from effects.domain.ability_tokenizer import tokenizer_surface
+        from effects.domain.recorded_version import UnknownRecordedVersion
 
-        assert tokenizer_surface("script", {}) == "prose"
-        assert tokenizer_surface("script", None) == "prose"
+        for settings in ({}, None):
+            with pytest.raises(UnknownRecordedVersion, match="records no tokenizer_rules"):
+                tokenizer_surface("script", settings)
 
-    def test_a_gen2_checkpoint_reads_its_vocabularys_surface(self):
+    def test_a_checkpoint_reads_its_vocabularys_surface(self):
         from effects.domain.ability_tokenizer import tokenizer_surface
 
         settings = {"tokenizer_rules": "gen-2"}
@@ -835,15 +831,6 @@ class TestTokenizerRulesByCheckpoint:
 
         with pytest.raises(UnknownRecordedVersion, match="gen-3"):
             tokenizer_surface("script", {"tokenizer_rules": "gen-3"})
-
-    def test_the_two_grammars_differ_on_a_gen1_line(self):
-        vocab = _vocab(("validtgts", "creature", "youctrl", "defined"))
-        legacy = [t.text for t in AbilityTokenizer(vocab, surface="prose").tokenize(
-            self._GEN1_TEXT)]
-        script = [t.text for t in AbilityTokenizer(vocab, surface="script").tokenize(
-            self._GEN1_TEXT)]
-        assert "youctrl" in legacy and "validtgts" in legacy
-        assert "youctrl" not in script and "ctrl" in script
 
 
 class TestWithheldKeyword:

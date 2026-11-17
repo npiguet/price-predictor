@@ -171,7 +171,7 @@ PHASE_ALIASES: dict[str, str] = {
 #: loader accepts (FR-045): a checkpoint recording another layout, or none, was
 #: trained on inputs this code no longer builds. Gen-3 is the card's lines as
 #: ability slots, its gen-3 card, player, global and act inputs, command-zone
-#: slots and the relations (root spec § 9 – § 10); a gen-2 checkpoint is refused.
+#: slots and the relations (root spec § 9 – § 10).
 INPUT_LAYOUT = "gen-3"
 
 
@@ -210,15 +210,22 @@ def layout_settings() -> dict:
     }
 
 
+def _layout_generation(recorded) -> str:
+    """The generation a checkpoint's recorded layout names: a checkpoint that
+    records none predates the layout key, which is gen-1."""
+    return "gen-1" if recorded is None else str(recorded)
+
+
 def require_input_layout(training_settings) -> None:
     """Refuse a checkpoint trained on another input layout, relation-type table
-    or card-slot vocabulary."""
+    or card-slot vocabulary; a refusal names the checkpoint's generation."""
     settings = training_settings or {}
     recorded = settings.get(INPUT_LAYOUT_KEY)
     if recorded != INPUT_LAYOUT:
         raise CheckpointLayoutError(
-            f"the checkpoint was trained on input layout {recorded!r}; this code "
-            f"builds {INPUT_LAYOUT!r} only. Retrain it on the current code."
+            f"the checkpoint is a {_layout_generation(recorded)} checkpoint "
+            f"(input layout {recorded!r}); this code reads {INPUT_LAYOUT} "
+            "checkpoints only. Retrain it on the current code."
         )
     for key, value in layout_settings().items():
         if settings.get(key) != value:
