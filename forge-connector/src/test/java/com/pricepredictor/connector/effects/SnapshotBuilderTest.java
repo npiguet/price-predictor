@@ -205,6 +205,7 @@ class SnapshotBuilderTest {
             Map<String, Object> flying = line(linesOf(board, bears), "keyword");
             assertEquals("Flying", flying.get("fragment"));
             assertEquals(true, flying.get("granted"));
+            assertEquals("static", flying.get("grant"));
             Map<String, Object> key = onlyKey(flying);
             assertEquals("cardsfolder/l/levitation.txt", key.get("script_file"));
             assertEquals("static", key.get("trait_kind"));
@@ -303,7 +304,8 @@ class SnapshotBuilderTest {
          * A Clone cast and resolved as a copy of a creature with an enters
          * trigger, or with a replacement: each of its lines keys to the
          * original's script, or to no line, never to {@code clone.txt}'s own
-         * trigger or replacement at the copied line's index (B8).
+         * trigger or replacement at the copied line's index (B8), and none is
+         * granted: a copy prints what it copies (finding 1.7).
          */
         @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
         @org.junit.jupiter.params.provider.CsvSource({
@@ -328,6 +330,7 @@ class SnapshotBuilderTest {
                 for (Object key : (List<?>) line.get("keys")) {
                     assertEquals(script, RecordLines.asMap(key).get("script_file"), lines.toString());
                 }
+                assertEquals(false, line.get("granted"), "a copy prints what it copies: " + line);
             }
         }
 

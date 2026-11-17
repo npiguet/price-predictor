@@ -4,9 +4,12 @@ import forge.ImageKeys;
 import forge.StaticData;
 import forge.card.CardRules;
 import forge.game.card.Card;
+import forge.game.card.CardCloneStates;
 import forge.item.IPaperCard;
 import forge.item.PaperToken;
 
+import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Optional;
 
 /**
@@ -71,6 +74,44 @@ final class ScriptLocator {
                         stem -> CardFilenames.scriptFileForStem(SourceTree.CARDSFOLDER, stem)))
                 .orElseGet(() -> CardFilenames.scriptFile(SourceTree.CARDSFOLDER, host.getName()))
                 .key();
+    }
+
+    /** How many copies of copies {@link #printedScriptOf} follows before giving up. */
+    private static final int MAX_COPY_DEPTH = 8;
+
+    /**
+     * The script whose lines a card prints. A copy (a Clone's, a Phantasmal
+     * Image's) prints what it copies, through a copy of a copy to the
+     * original: its latest copy effect's origin's script, not its own paper
+     * card's, which {@link #scriptFileOf} answers. A token copy is no such
+     * copy: Forge builds it from the copied card's paper card, so
+     * {@link #scriptFileOf} already names the copied card's script. Any other
+     * card prints its own.
+     */
+    static String printedScriptOf(Card host) {
+        Card printer = host;
+        for (int depth = 0; depth < MAX_COPY_DEPTH; depth++) {
+            Card origin = copiedFrom(printer);
+            if (origin == null) {
+                break;
+            }
+            printer = origin;
+        }
+        return scriptFileOf(printer);
+    }
+
+    /**
+     * What a copy copies: its latest clone states' origin; null for a card
+     * that is no copy ({@code Card.isCloned}, which a mutation or a
+     * prototype is not).
+     */
+    private static Card copiedFrom(Card card) {
+        Map<Long, CardCloneStates> states = card.getCloneStates();
+        if (!card.isCloned() || states.isEmpty()) {
+            return null;
+        }
+        return states instanceof NavigableMap<Long, CardCloneStates> ordered
+                ? ordered.lastEntry().getValue().getOrigin() : null;
     }
 
     /** Whether {@code host} is a staged variant card, face down or not. */

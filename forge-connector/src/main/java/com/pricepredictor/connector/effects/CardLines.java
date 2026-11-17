@@ -33,9 +33,11 @@ import java.util.Set;
  * the live lists are what the engine plays: a creature that lost all its
  * abilities has none, a creature an anthem gave a line has it, and a line a
  * text change rewrote is there as rewritten. A line not printed on the card
- * itself is flagged {@code granted}: one another card or a layer-6 change
- * gave it, and one a type change attached (a Mountain's mana ability on a
- * nonbasic land under Blood Moon, {@link ProvenanceResolver#addedByTypeChange}).
+ * itself is flagged {@code granted}, and its {@code grant} says why
+ * ({@link LineGrant}): one another card or a layer-6 change gave it, and one
+ * a type change attached (a Mountain's mana ability on a nonbasic land under
+ * Blood Moon, {@link ProvenanceResolver#addedByTypeChange}). A copy prints
+ * what it copies, and a card prints the lines it grants itself.
  *
  * <p>Keywords are lines of their own, one per instance, written with the
  * instance's own fragment ({@code Ward:2}, {@code Protection:Goblin}): a
@@ -68,16 +70,22 @@ final class CardLines {
         return Json.array(new CardLines.Builder(game, card, board).build(), Line::toJson);
     }
 
-    /** One line of a card slot. Null members are absent from the JSON. */
+    /**
+     * One line of a card slot. Null members are absent from the JSON; a null
+     * {@code grant} is a printed line, written {@code granted: false}.
+     */
     private record Line(
-            List<ProvenanceKey> keys, String kind, boolean granted, Boolean active,
+            List<ProvenanceKey> keys, String kind, String grant, Boolean active,
             Integer castWith, List<Integer> chosen, String fragment, List<String> affected) {
 
         String toJson() {
             Json.ObjectWriter json = Json.object()
                     .raw("keys", ProvenanceKey.toJsonArray(keys))
                     .value("kind", kind)
-                    .value("granted", granted);
+                    .value("granted", grant != null);
+            if (grant != null) {
+                json.value("grant", grant);
+            }
             if (active != null) {
                 json.value("active", active);
             }
@@ -101,12 +109,11 @@ final class CardLines {
         private final Game game;
         private final Card card;
         private final StaticSuppression board;
-        private final String ownScript;
         /**
-         * Lines a layer-6 change appended — a static's, an attachment's, a
-         * pump's grant — on this board.
+         * Why a line is granted, the lines a layer-6 change appended on this
+         * board (a static's, an attachment's, a pump's grant) among them.
          */
-        private final Set<CardTraitBase> layerGranted;
+        private final LineGrant grants;
         /** The ability of this card on the stack, or null. */
         private final SpellAbility onStack;
         /** The spell this card was cast as, for the cost lines it was cast with. */
@@ -119,8 +126,7 @@ final class CardLines {
             this.game = game;
             this.card = card;
             this.board = board;
-            this.ownScript = ScriptLocator.scriptFileOf(card);
-            this.layerGranted = board.grantedLines(card);
+            this.grants = new LineGrant(card, board.grantedLines(card));
             this.onStack = stackAbilityOf(game, card);
             this.cast = castSpellOf(card, onStack);
         }
@@ -151,7 +157,7 @@ final class CardLines {
                 ProvenanceKey key = ProvenanceResolver.keyOfKeyword(state, keyword);
                 int castWith = faceUp ? castWithCount(keyword) : 0;
                 add(new Line(keysOf(key), "keyword",
-                        !printed.contains(keyword) || notOwn(key),
+                        grants.ofKeyword(keyword, printed.contains(keyword), key),
                         faceUp ? null : Boolean.FALSE,
                         castWith > 0 ? castWith : null, null, keyword.getOriginal(), null),
                         key, faceUp);
@@ -213,7 +219,7 @@ final class CardLines {
         private void addTrait(CardTraitBase trait, String kind, boolean faceUp,
                               Set<KeywordInterface> keywordLines, Set<String> keywordTexts,
                               ProvenanceKey stackKey) {
-            if (!faceUp && layerGranted.contains(trait)) {
+            if (!faceUp && grants.byLayerChange(trait)) {
                 return;
             }
             KeywordInterface keyword = trait.getKeyword();
@@ -235,9 +241,7 @@ final class CardLines {
                     ? chosenModes(onStack) : null;
             List<String> affected = faceUp && trait instanceof StaticAbility stat
                     ? affectedBy(stat) : null;
-            boolean granted = layerGranted.contains(trait) || notOwn(key)
-                    || ProvenanceResolver.addedByTypeChange(trait);
-            add(new Line(keysOf(key), kind, granted, active, null, chosen, null, affected),
+            add(new Line(keysOf(key), kind, grants.ofTrait(trait, key), active, null, chosen, null, affected),
                     key, faceUp);
         }
 
@@ -299,7 +303,8 @@ final class CardLines {
 
         /**
          * The lines spliced onto this card's spell on the stack: each spliced
-         * card's spell, granted to this one for the resolution.
+         * card's spell, granted to this one for the resolution
+         * ({@code grant: splice}).
          */
         private void addSplicedLines() {
             if (onStack == null || onStack.getSplicedCards() == null) {
@@ -308,7 +313,7 @@ final class CardLines {
             for (Card spliced : onStack.getSplicedCards()) {
                 SpellAbility spell = spliced.getFirstSpellAbility();
                 ProvenanceKey key = spell == null ? null : ProvenanceResolver.of(spell);
-                add(new Line(keysOf(key), "spell", true, null, null, null, null, null), key, true);
+                add(new Line(keysOf(key), "spell", LineGrant.SPLICE, null, null, null, null, null), key, true);
             }
         }
 
@@ -320,11 +325,6 @@ final class CardLines {
                 listed.add(key);
             }
             lines.add(line);
-        }
-
-        /** Whether a line's key names a script other than this card's own. */
-        private boolean notOwn(ProvenanceKey key) {
-            return key != null && !key.scriptFile().equals(ownScript);
         }
 
         /**

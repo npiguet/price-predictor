@@ -134,7 +134,7 @@ Shapes follow `rules/gen3-fields.json`; the collector writes the field names bel
 | Where | Field | Shape |
 |---|---|---|
 | entity | `owner` | player ref |
-| card | `lines` | list of `{keys, kind, granted, active?, cast_with?, chosen?, fragment?, affected?}`; `kind` ∈ `spell`, `activated`, `trigger`, `static`, `replacement`, `keyword`; `active` on statics, and `false` on every line of a face not up |
+| card | `lines` | list of `{keys, kind, granted, grant?, active?, cast_with?, chosen?, fragment?, affected?}`; `kind` ∈ `spell`, `activated`, `trigger`, `static`, `replacement`, `keyword`; `active` on statics, and `false` on every line of a face not up |
 | card | `face_state` | `front` \| `back` \| `flipped` \| `melded` \| `face_down` |
 | card | `base_pt`, `pt_boosts` | `[p, t]`; boosts `{temporary: [p, t], counters: [p, t]}`; both `null` on a non-creature; base + temporary + counters = net P/T |
 | card | `counters` | `{type: n}` over every named type |
@@ -157,7 +157,8 @@ A card's `lines` members:
 |---|---|---|
 | `keys` | list of 0 or 1 provenance key | every line; `[]` when the line resolves to no printed line |
 | `kind` | one of the six kinds | every line |
-| `granted` | bool: the line is not printed on this card (a static's, an attachment's, an effect's, an emblem's or a splice's, or a basic land type's mana ability a type change gave a land not printed with that type, such as a Mountain's under Blood Moon, keyed past every line the land's sidecar declares) | every line |
+| `granted` | bool: the line is not printed on this card (a static's, an attachment's, an effect's, an emblem's, a keyword counter's or a splice's, or a basic land type's mana ability a type change gave a land not printed with that type, such as a Mountain's under Blood Moon, keyed past every line the land's sidecar declares). A copy prints what it copies and the lines its copy effect adds; a card prints a line it grants itself | every line |
+| `grant` | why the line is granted: `static` (a permanent's static ability grants it: an anthem, an attachment, an emblem, a type change such as Blood Moon's, the suspected designation), `effect` (a resolved effect grants it: a pump, an animation, a copy effect another card made, an emblem's own line; it lasts as long as that effect's duration, which the line does not carry), `counter` (a keyword counter on the card, such as a trample counter) or `splice` (a spliced card's spell, for one resolution) | after `granted`, on a granted line only |
 | `active` | bool | statics of the face up (`checkConditions()`); `false` on every line of a face not up |
 | `cast_with` | int ≥ 1: times the spell this card was cast as paid the line's cost (1 for an alternative cost or kicker, the count for multikicker) | `keyword` lines of a card on the stack or a permanent cast so |
 | `chosen` | list of `Choices$` positions the ability on the stack chose, in chain order | the line of a modal ability on the stack |
@@ -168,10 +169,18 @@ A `keyword` line's keys name the keyword line the card prints, else the static t
 keyword; a keyword a resolved effect granted has `keys: []` and is read by its `fragment`. A copy
 (a Clone's, a Phantasmal Image's) prints what it copies: its keyword lines key into the copied
 card's script file, through a copy of a copy to the original; a keyword, trigger or ability the copy
-effect itself adds (`AddTriggers$`, `AddAbilities$`) keys to the line that made the copy. A
+effect itself adds (`AddTriggers$`, `AddAbilities$`) keys to the line that made the copy. None of
+these lines is `granted`: the copy prints the script of what it copies (its latest copy effect's
+origin, through a copy of a copy) and its own, and a line its copy effect adds is a copiable
+exception (707.9b); one a copy effect from another card adds is `granted`, `grant: effect`. A token
+copy is built from the copied card's own card, so its lines key into that card's script. A
 trigger, static or replacement a card granted itself (a Class level's, a "has ... as long as"
 trigger, a manland's animated trigger) keys to the line that granted it, a Class level's to its
-`Class:N` keyword's bare key, and past every declared line when none is found. The
+`Class:N` keyword's bare key, and past every declared line when none is found. Such a line is
+printed, not `granted`, and is listed beside its granting line under the same key; a keyword a
+card's own static grants it (Iymrith's ward) is printed too. A line another permanent's static
+grants is `granted` even when it keys to the same line of the same script (a second Fungus
+Sliver's trigger). The
 triggers, statics and abilities a keyword instance builds are its line, not lines of their own; a
 `Secondary$ True` trait is listed under its own key and joins its primary's line through the
 sidecar. A land's play and a permanent's plain cast are not lines. A face not up (a face-down

@@ -17,9 +17,10 @@ import forge.game.staticability.StaticAbility;
 import forge.game.trigger.Trigger;
 import forge.util.collect.FCollectionView;
 
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.IdentityHashMap;
-import java.util.Set;
+import java.util.List;
+import java.util.Map;
 
 /**
  * The board a snapshot shows: as it stands, or without one static — a
@@ -234,19 +235,27 @@ final class StaticSuppression {
 
     /**
      * The lines a layer-6 change granted the card, the suppressed static's
-     * left out: a static's, an attachment's, a resolved effect's grant.
+     * left out: a static's, an attachment's, a resolved effect's grant. Each
+     * maps to the id of the static that granted it, 0 for a resolved effect.
      */
-    Set<CardTraitBase> grantedLines(Card card) {
-        Set<CardTraitBase> granted = Collections.newSetFromMap(new IdentityHashMap<>());
+    Map<CardTraitBase, Long> grantedLines(Card card) {
+        Map<CardTraitBase, Long> granted = new IdentityHashMap<>();
         for (Table.Cell<Long, Long, ICardTraitChanges> cell : card.getChangedCardTraits().cellSet()) {
             if (cell.getValue() instanceof CardTraitChanges changes && !wrote(cell.getColumnKey())) {
-                granted.addAll(changes.getAbilities());
-                granted.addAll(changes.getTriggers());
-                granted.addAll(changes.getReplacements());
-                granted.addAll(changes.getStaticAbilities());
+                for (CardTraitBase line : linesOf(changes)) {
+                    granted.put(line, cell.getColumnKey());
+                }
             }
         }
         return granted;
+    }
+
+    private static List<CardTraitBase> linesOf(CardTraitChanges changes) {
+        List<CardTraitBase> lines = new ArrayList<>(changes.getAbilities());
+        lines.addAll(changes.getTriggers());
+        lines.addAll(changes.getReplacements());
+        lines.addAll(changes.getStaticAbilities());
+        return lines;
     }
 
     /**
