@@ -172,8 +172,15 @@ card's script file, through a copy of a copy to the original; a keyword, trigger
 effect itself adds (`AddTriggers$`, `AddAbilities$`) keys to the line that made the copy. None of
 these lines is `granted`: the copy prints the script of what it copies (its latest copy effect's
 origin, through a copy of a copy) and its own, and a line its copy effect adds is a copiable
-exception (707.9b); one a copy effect from another card adds is `granted`, `grant: effect`. A token
-copy is built from the copied card's own card, so its lines key into that card's script. A
+exception (707.9b); one a copy effect from another card adds is `granted`, `grant: effect`. A trait
+Forge builds on a copy's state (a land copy's basic land type mana ability, a copied planeswalker's
+loyalty replacement) has no key. A token or spell copy is built from the copied card's own card, so
+its lines key into that card's script; its keywords are numbered against the face that card prints,
+not its own state, and a keyword its copy effect added (Kiki-Jiki's haste) has `keys: []` and is
+`granted`, `grant: effect`. A mutated permanent's keyword keys into the script of the merged card
+that prints it, and every merged card's lines are printed; a keyword two merged cards print, which
+Forge keeps once, keys into the card on top, and one Forge keeps twice keys into each card in merge
+order, top first. A
 trigger, static or replacement a card granted itself (a Class level's, a "has ... as long as"
 trigger, a manland's animated trigger) keys to the line that granted it, a Class level's to its
 `Class:N` keyword's bare key, and past every declared line when none is found. Such a line is

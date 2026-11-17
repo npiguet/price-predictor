@@ -1,6 +1,9 @@
 package com.pricepredictor.connector.effects;
 
+import forge.card.CardRules;
+import forge.card.CardSplitType;
 import forge.card.CardStateName;
+import forge.card.ICardFace;
 import forge.game.card.Card;
 import forge.game.card.CardState;
 import forge.game.keyword.KeywordInterface;
@@ -65,6 +68,27 @@ public final class FaceOrder {
             }
         }
         return List.copyOf(order);
+    }
+
+    /**
+     * The printed face of {@code rules} the converter renders under
+     * {@code state}, or null for a state no face is printed under.
+     *
+     * <p>Shared by the converter, which renders each face of
+     * {@link #faceOrder} from it, and the collectors, which number a token or
+     * spell copy's keywords against it ({@link KeywordPrinters}).
+     */
+    public static ICardFace printedFace(CardRules rules, CardStateName state) {
+        CardSplitType splitType = rules.getSplitType();
+        CardStateName mainState = splitType == CardSplitType.Split
+                ? CardStateName.LeftSplit : CardStateName.Original;
+        if (state == mainState) {
+            return rules.getMainPart();
+        }
+        if (splitType == CardSplitType.Specialize) {
+            return rules.getSpecializeParts().get(state);
+        }
+        return state == splitType.getChangedStateName() ? rules.getOtherPart() : null;
     }
 
     /**

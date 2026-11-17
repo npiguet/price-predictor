@@ -315,17 +315,33 @@ public final class ProvenanceResolver {
             return keyOfPrinted(state, trait.getKeyword(), builtOf(trait), 0);
         }
         forge.game.card.CardCloneStates cloned = copyStatesOf(state);
-        if (cloned != null) {
-            // A trait the copy itself holds, not one copied from what it
-            // copies (a copied trait keeps the original's state): the copy
-            // effect added it (AddTriggers$, AddAbilities$), so it is the
-            // line that made the copy's.
-            return cloned.getSource() == null || cloned.getSource() == trait
-                    ? null : of(cloned.getSource());
-        }
+        if (cloned != null) return lineOfCopyEffect(cloned, state, trait);
         TraitKind kind = TraitKind.of(trait);
         if (kind == null) return null;
         return keyInState(state, trait, kind, depth);
+    }
+
+    /**
+     * A trait a copy's state holds itself, not one copied from what it copies
+     * (a copied trait keeps the original's state): one the copy effect added
+     * (AddTriggers$, AddAbilities$), among the state's own traits, keys to
+     * the line that made the copy. One Forge built fresh on the copy's state
+     * (a land copy's mana ability, a copied planeswalker's loyalty
+     * replacement) is in no list of the state's own and keys to nothing.
+     */
+    private static ProvenanceKey lineOfCopyEffect(forge.game.card.CardCloneStates cloned,
+                                                  CardState state, CardTraitBase trait) {
+        CardTraitBase source = cloned.getSource();
+        if (source == null || source == trait) return null;
+        return ownTraitOf(state, trait) ? of(source) : null;
+    }
+
+    /** Whether a trait is in its state's own list, through no trait change. */
+    private static boolean ownTraitOf(CardState state, CardTraitBase trait) {
+        TraitKind kind = TraitKind.of(trait);
+        List<? extends CardTraitBase> own = kind == null ? null
+                : ForgeFields.traitsThrough(state, kind, List.of());
+        return own != null && indexIn(own, trait) >= 0;
     }
 
     /**
@@ -401,12 +417,15 @@ public final class ProvenanceResolver {
      * original's script file; one the copy effect added has the line that
      * made the copy, and is no keyword line of the copier's own file, so
      * that line's key is returned as it is, without {@code built}.
+     *
+     * <p>A mutated permanent's and a token or spell copy's state are no such
+     * copy: they are read by {@link #keyOfUncloned}.
      */
     private static ProvenanceKey keyOfPrinted(CardState state, KeywordInterface keyword,
                                               ProvenanceKey.Built built, int depth) {
         forge.game.card.CardCloneStates cloned = copyStatesOf(state);
         if (cloned == null) {
-            return withBuilt(keyAt(state, TraitKind.KEYWORD, FaceOrder.keywordIndex(state, keyword)), built);
+            return keyOfUncloned(state, keyword, built, depth);
         }
         Card origin = cloned.getOrigin();
         if (origin != null && depth < MAX_COPY_DEPTH) {
@@ -422,6 +441,22 @@ public final class ProvenanceResolver {
             }
         }
         return cloned.getSource() == null ? null : of(cloned.getSource());
+    }
+
+    /**
+     * The keyword line a state no copy effect's clone states hold prints
+     * for {@code keyword}: a mutated permanent's keyword in the file of the
+     * merged card that prints it, a token or spell copy's in the original's
+     * file at the original's ordinal, and none for one its copy effect added
+     * ({@link KeywordPrinters}); any other state's at its own ordinal.
+     */
+    private static ProvenanceKey keyOfUncloned(CardState state, KeywordInterface keyword,
+                                               ProvenanceKey.Built built, int depth) {
+        CardState printer = KeywordPrinters.printerOf(state, keyword);
+        if (printer == state) {
+            return withBuilt(keyAt(state, TraitKind.KEYWORD, KeywordPrinters.indexOf(state, keyword)), built);
+        }
+        return printer == null || depth >= MAX_COPY_DEPTH ? null : keyOfPrinted(printer, keyword, built, depth + 1);
     }
 
     private static ProvenanceKey withBuilt(ProvenanceKey key, ProvenanceKey.Built built) {

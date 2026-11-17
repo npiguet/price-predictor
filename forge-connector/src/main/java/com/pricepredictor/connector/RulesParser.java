@@ -113,7 +113,7 @@ public class RulesParser {
         // specialize parts in a HashMap keyed by enum constants, whose order
         // changes from one JVM to the next.
         for (CardStateName state : FaceOrder.faceOrder(card)) {
-            ICardFace part = partOf(rules, splitType, state);
+            ICardFace part = FaceOrder.printedFace(rules, state);
             if (part != null) {
                 card.setState(state, false);
                 faces.add(new FaceParser(card, part,
@@ -122,20 +122,6 @@ public class RulesParser {
         }
 
         return MultiCard.multiFace(layout, faces);
-    }
-
-    /** The printed face a multi-face card shows in {@code state}, or null for none. */
-    private static ICardFace partOf(
-            CardRules rules, CardSplitType splitType, CardStateName state) {
-        CardStateName mainState = splitType == CardSplitType.Split
-                ? CardStateName.LeftSplit : CardStateName.Original;
-        if (state == mainState) {
-            return rules.getMainPart();
-        }
-        if (splitType == CardSplitType.Specialize) {
-            return rules.getSpecializeParts().get(state);
-        }
-        return state == splitType.getChangedStateName() ? rules.getOtherPart() : null;
     }
 
     /** Append and return a fresh recorder for the next face. */

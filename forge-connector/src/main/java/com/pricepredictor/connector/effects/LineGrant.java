@@ -18,7 +18,8 @@ import java.util.Set;
  * <p>A card prints the lines of the script it prints
  * ({@link ScriptLocator#printedScriptOf}: a copy's is what it copies) and of
  * its own script, which for a copy holds the lines its copy effect adds, a
- * copiable exception (707.9b). It also prints a line it grants itself: a
+ * copiable exception (707.9b). A mutated permanent prints every merged
+ * card's lines. A card also prints a line it grants itself: a
  * Class level's, a "has ... as long as" trigger, a manland's animated
  * trigger, a keyword its own static gives it. Since A05 such a line keys to
  * the line that granted it, in the card's own script.
@@ -51,9 +52,22 @@ final class LineGrant {
 
     LineGrant(Card card, Map<CardTraitBase, Long> layerGranted) {
         this.card = card;
-        this.printedScripts = new HashSet<>(List.of(
-                ScriptLocator.printedScriptOf(card), ScriptLocator.scriptFileOf(card)));
+        this.printedScripts = printedScriptsOf(card);
         this.layerGranted = layerGranted;
+    }
+
+    /**
+     * The scripts a card prints the lines of: the one it prints and its own,
+     * and for a mutated permanent each merged card's.
+     */
+    private static Set<String> printedScriptsOf(Card card) {
+        Set<String> scripts = new HashSet<>();
+        Iterable<Card> printers = card.hasMergedCard() ? card.getMergedCards() : List.of(card);
+        for (Card printer : printers) {
+            scripts.add(ScriptLocator.printedScriptOf(printer));
+            scripts.add(ScriptLocator.scriptFileOf(printer));
+        }
+        return scripts;
     }
 
     /** Whether a layer-6 change granted this line. */
@@ -75,12 +89,12 @@ final class LineGrant {
 
     /**
      * Why a keyword line is granted; null when printed. A keyword the state
-     * prints is granted only when it keys elsewhere: a copy effect another
-     * card made added it.
+     * prints is granted only when a copy effect another card made added it:
+     * it keys elsewhere, or, on a token or spell copy, nowhere.
      */
     String ofKeyword(KeywordInterface keyword, boolean intrinsic, ProvenanceKey key) {
         if (intrinsic) {
-            return elsewhere(key) ? EFFECT : null;
+            return elsewhere(key) || addedToACopy(key) ? EFFECT : null;
         }
         StaticAbility granting = keyword.getStatic();
         return granting == null ? EFFECT : ofStatic(granting, key);
@@ -156,6 +170,15 @@ final class LineGrant {
     /** Whether a key names a script the card prints. */
     private boolean printed(ProvenanceKey key) {
         return key != null && printedScripts.contains(key.scriptFile());
+    }
+
+    /**
+     * Whether a keyword the state prints with no key is one a token or spell
+     * copy's copy effect added (Kiki-Jiki's haste), which keys to no line
+     * ({@link KeywordPrinters#indexOf}).
+     */
+    private boolean addedToACopy(ProvenanceKey key) {
+        return key == null && KeywordPrinters.isStateCopy(card);
     }
 
     /** Whether a key names a script the card does not print. */
