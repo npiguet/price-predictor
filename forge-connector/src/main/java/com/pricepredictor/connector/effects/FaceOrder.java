@@ -7,6 +7,7 @@ import forge.game.keyword.KeywordInterface;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -67,6 +68,22 @@ public final class FaceOrder {
     }
 
     /**
+     * {@code keywords} sorted by original text: the order the converter prints a
+     * face's keyword lines in, and the one {@link #keywordIndex} numbers them
+     * in. The sort is stable, so identical keyword instances stay adjacent.
+     */
+    public static List<KeywordInterface> keywordOrder(Iterable<KeywordInterface> keywords) {
+        List<KeywordInterface> ordered = new ArrayList<>();
+        keywords.forEach(ordered::add);
+        ordered.sort(Comparator.comparing(FaceOrder::original));
+        return ordered;
+    }
+
+    private static String original(KeywordInterface keyword) {
+        return keyword.getOriginal() == null ? "" : keyword.getOriginal();
+    }
+
+    /**
      * The printed-keyword ordinal a keyword-derived trait keys to.
      *
      * <p>Shared by the converter and the collectors so the two cannot drift,
@@ -75,10 +92,12 @@ public final class FaceOrder {
      * <p>Not the position in {@code getKeywords()}:
      * {@code forge.game.keyword.KeywordCollection} is a
      * {@code MultimapBuilder.hashKeys()} over the {@code Keyword} enum, whose
-     * {@code hashCode()} is the identity hash, so that order differs between
-     * the convert JVM and the collect JVM and an ordinal taken from it names a
-     * different keyword on each side. Sorting the state's own keywords by their
-     * printed text is stable in both processes.
+     * order is the script's insertion order only while Guava is the
+     * {@code -android} flavour Forge pins, and is an identity-hash order
+     * (different in the convert JVM and the collect JVM) under the
+     * {@code -jre} one. Sorting the state's own keywords by their printed
+     * text, as {@link #keywordOrder} does, is stable in both processes and
+     * under either flavour.
      *
      * <p>Restricted to intrinsics, so a <em>granted</em> keyword answers -1 and
      * keys to nothing. That is correct: a keyword an anthem handed out names no

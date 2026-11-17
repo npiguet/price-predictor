@@ -177,19 +177,24 @@ final class FaceParser {
      * here, because the collector asks the same question of the same method
      * at runtime and the two answers have to be the same number. A running
      * counter over getKeywords() is not that number: the iteration order is
-     * KeywordCollection's, which is hash order over an enum and differs
-     * between the convert JVM and the collect JVM. Counted here, the two
+     * KeywordCollection's, the script's insertion order only under the
+     * {@code -android} Guava Forge pins and an identity-hash order under any
+     * other flavour. Counted here, the two
      * sides produced keys that were in range on both and named different
      * keywords — a silent wrong join rather than a loud failure. A keyword
      * with no intrinsic ordinal (a granted one) records no key at all,
      * which is the honest answer and the one the collector gives for it.
+     *
+     * <p>The keywords are walked in {@link FaceOrder#keywordOrder}, so the
+     * lines of a face's keywords come out in the order their keys number them
+     * (cost keywords first, by the later sort), whatever the script's order.
      *
      * <p>The traits a keyword built are named through this key alone: the
      * recorder declares it, or the {@code built} keys of those traits, on the
      * keyword's lines, and the later phases skip the traits' kind-indexed keys.
      */
     private void parseKeywords() {
-        for (KeywordInterface ki : card.getKeywords()) {
+        for (KeywordInterface ki : FaceOrder.keywordOrder(card.getKeywords())) {
             KeywordRendering rendering = renderKeyword(ki);
             abilities.addAll(rendering.lines());
             recorder.attributeKeyword(rendering, keywordKey(ki), ki);

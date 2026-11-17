@@ -1,0 +1,8 @@
+name: blightsteel colossus
+mana cost: {12}
+types: artifact creature phyrexian golem
+power toughness: 11/11
+static: indestructible
+static: infect
+static: trample
+replacement: if CARDNAME would be put into a graveyard from anywhere, reveal CARDNAME and shuffle it into its owner's library instead.

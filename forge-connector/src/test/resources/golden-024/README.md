@@ -39,6 +39,8 @@ When a spell came to print one line (task A04), the expected text of `l/label_a.
 `l/label_b.txt` (two sentences, once two `spell` lines) and `r/ranger_class.txt` (level 3's
 continuation line folded into the level line) was edited to match.
 
+When a face's keyword lines came to print in the sorted order of the keywords' original text (task A16), the expected text of `b/blast_from_the_past.txt` was edited to match: only its line order changed.
+
 | Script | Why it is here |
 |---|---|
 | `a/anticausal_vestige.txt` | trigger with `Execute$` → `SubAbility$` chain (story 1 scenario 1); `Warp` keyword |
@@ -57,6 +59,7 @@ continuation line folded into the level line) was edited to match.
 | `s/serra_angel.txt` | `Flying`, `Vigilance` |
 | `p/pacifism.txt` | `Enchant:Creature` |
 | `b/blast_from_the_past.txt` | five keyword lines (keyword ordinal coupling) |
+| `b/blightsteel_colossus.txt` | `K:` lines in reverse alphabetical order: the converted lines come out sorted (task A16) |
 | `g/glorious_anthem.txt` | static ability |
 | `f/fountain_of_youth.txt` | activated ability |
 | `a/ajanis_pridemate.txt` | simple trigger (the sidecar contract's worked example) |

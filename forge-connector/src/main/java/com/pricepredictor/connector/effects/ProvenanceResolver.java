@@ -283,9 +283,10 @@ public final class ProvenanceResolver {
      *
      * <p>A keyword-derived trait keys to the keyword rather than to the spell
      * slice it was appended to: {@code Card.updateSpellAbilities} appends those
-     * in {@code KeywordCollection} order, which is hash order over an enum and
-     * therefore differs between the convert JVM and the collect JVM, so a
-     * {@code spell} index landing in that tail is not reproducible. The
+     * in {@code KeywordCollection} order, which is the script's insertion order
+     * only under the {@code -android} Guava Forge pins (an identity-hash order,
+     * different per JVM, under any other flavour), so a {@code spell} index
+     * landing in that tail is not guaranteed reproducible. The
      * keyword's key carries {@code built}, which of the instance's traits it
      * is ({@link #builtOf}), so a saga's chapter III names its own line and
      * not the saga's first.
