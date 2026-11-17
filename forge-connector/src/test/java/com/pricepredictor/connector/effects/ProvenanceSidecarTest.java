@@ -301,6 +301,87 @@ class ProvenanceSidecarTest {
         }
     }
 
+    // ── a spell's one line ──────────────────────────────────────────────
+
+    /** The sidecar lines of {@code converted} whose text starts with {@code prefix}. */
+    private static List<ProvenanceSidecar.Line> linesStartingWith(Converted converted,
+                                                                  String prefix) {
+        return converted.sidecar().lines().stream()
+                .filter(line -> converted.lines().get(line.lineIndex()).startsWith(prefix))
+                .toList();
+    }
+
+    private static ProvenanceKey spellKey(String relativePath, int index) {
+        return new ProvenanceKey("cardsfolder/" + relativePath, 0, TraitKind.SPELL, index);
+    }
+
+    /**
+     * Harrow's additional cost is the first sentence of its one spell line,
+     * under a {@code cost} span, and no line states the cost alone (finding
+     * 1.2): a record acting through the spell reads its effect, not
+     * "sacrifice a land."
+     */
+    @Test
+    void aSpellsAdditionalCostIsTheFirstSentenceOfItsLine() {
+        Converted harrow = convert("h/harrow.txt");
+        List<ProvenanceSidecar.Line> spells = linesStartingWith(harrow, "spell");
+        assertEquals(1, spells.size(), harrow.lines().toString());
+        ProvenanceSidecar.Line spell = spells.get(0);
+        String prose = harrow.lines().get(spell.lineIndex()).substring(spell.proseOffset());
+        String cost = "as an additional cost to cast this spell, sacrifice a land.";
+
+        assertTrue(prose.startsWith(cost + " search your library"), prose);
+        assertEquals(List.of(spellKey("h/harrow.txt", 0)), spell.provenance());
+        assertTrue(spell.roleSpans().contains(new RoleSpans.Span(0, cost.length(), SpanRole.COST)),
+                spell.roleSpans().toString());
+        assertEquals(List.of(), linesStartingWith(harrow, "additional cost"));
+    }
+
+    /** Abeyance's two sentences are one line, in chain order (finding 1.3). */
+    @Test
+    void aSpellWhoseChainHasSeveralSentencesIsOneLine() {
+        Converted abeyance = convert("a/abeyance.txt");
+        List<ProvenanceSidecar.Line> spells = linesStartingWith(abeyance, "spell");
+        assertEquals(1, spells.size(), abeyance.lines().toString());
+        String text = abeyance.lines().get(spells.get(0).lineIndex());
+
+        assertTrue(text.startsWith("spell[1]: until end of turn, target player"), text);
+        assertTrue(text.endsWith(" draw a card."), text);
+    }
+
+    /**
+     * Contact Other Plane's result rows are {@code option} lines with no key
+     * and no script, as a trigger's are: no record acts through a row.
+     */
+    @Test
+    void aSpellsDieRollOutcomesAreUnkeyedOptionLines() {
+        Converted plane = convert("c/contact_other_plane.txt");
+        List<ProvenanceSidecar.Line> rows = linesStartingWith(plane, "option");
+
+        assertEquals(3, rows.size(), plane.lines().toString());
+        for (ProvenanceSidecar.Line row : rows) {
+            assertEquals(List.of(), row.provenance(), plane.lines().get(row.lineIndex()));
+            assertNull(row.script().scriptText(), plane.lines().get(row.lineIndex()));
+        }
+        assertEquals(List.of(spellKey("c/contact_other_plane.txt", 0)),
+                linesStartingWith(plane, "spell[1]: roll a d20.").get(0).provenance());
+    }
+
+    /**
+     * Dig Up's cleave line states only a cost and declares no key; the
+     * spell cast for cleave joins the spell line, whose bracketed words
+     * state both versions of the spell.
+     */
+    @Test
+    void anAlternateCostLineDeclaresNoKeyAndItsSpellJoinsTheSpellLine() {
+        Converted digUp = convert("d/dig_up.txt");
+
+        assertEquals(List.of(),
+                linesStartingWith(digUp, "alternate cost: cleave").get(0).provenance());
+        assertEquals(List.of(spellKey("d/dig_up.txt", 0), spellKey("d/dig_up.txt", 1)),
+                linesStartingWith(digUp, "spell[1]: ").get(0).provenance());
+    }
+
     // ── the script surface and role spans ───────────────────────────────
 
     @Test
@@ -320,28 +401,25 @@ class ProvenanceSidecarTest {
     }
 
     /**
-     * A line's prose starts where its prefix ends, and a continuation line has
-     * none, even when its own text holds a {@code ": "}.
-     *
-     * <p>Cutting each line at its first {@code ": "} would take
-     * {@code {T}: } off the continuation as though it were a prefix, and
-     * shift every role span on it by four characters.
+     * A description that runs onto several lines (Ninja Teen's level 3, a
+     * saga's modes) is folded into one line, its prose after its prefix:
+     * a continuation line would repeat its keys, and a join reads only the
+     * first line a key names (finding 1.3).
      */
     @Test
-    void aContinuationLineHoldingAColonHasNoPrefix() {
+    void aMultiLineDescriptionIsFoldedIntoOneLine() {
         Ability ability = new TextAbility(
-                AbilityType.STATIC, "creatures you control have:\n{T}: add {G}.");
+                AbilityType.STATIC, "creatures you control have:\r\n{T}: add {G}.");
         List<RenderedLine> rendered = new ArrayList<>();
         ability.appendBlock(new ActionCounter(0), 0, rendered);
 
         ProvenanceSidecar sidecar =
                 ProvenanceSidecar.build("Test", "cardsfolder/t/test.txt", rendered, List.of());
 
-        assertEquals(List.of("static: creatures you control have:", "{T}: add {G}."),
+        assertEquals(List.of("static: creatures you control have: {T}: add {G}."),
                 rendered.stream().map(RenderedLine::text).toList());
-        assertEquals(List.of(8, 0),
+        assertEquals(List.of(8),
                 sidecar.lines().stream().map(ProvenanceSidecar.Line::proseOffset).toList());
-        assertTrue(sidecar.toJson().contains("\"prose_offset\":0"), sidecar.toJson());
     }
 
     // ── the file on disk ────────────────────────────────────────────────

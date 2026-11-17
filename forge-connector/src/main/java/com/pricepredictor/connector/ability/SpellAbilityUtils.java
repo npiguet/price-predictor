@@ -97,7 +97,7 @@ final class SpellAbilityUtils {
         return chain.isEmpty() ? "" : treeText(chain.get(0));
     }
 
-    private static String treeText(Ability node) {
+    static String treeText(Ability node) {
         StringBuilder sb = new StringBuilder(node.descriptionText());
         for (Ability child : node.subAbilities()) {
             String ct = treeText(child);

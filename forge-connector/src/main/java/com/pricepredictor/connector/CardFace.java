@@ -65,6 +65,6 @@ public record CardFace(
 
     private static void addHeader(
             List<RenderedLine> lines, int face, String label, String value) {
-        RenderedLine.appendLines(lines, label + ": ", value, null, face);
+        RenderedLine.appendLine(lines, label + ": ", value, null, face);
     }
 }

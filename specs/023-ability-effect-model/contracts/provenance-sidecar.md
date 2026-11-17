@@ -47,7 +47,7 @@ ProvenanceKey = (script_file, face, trait_kind, index_within_kind, option?, buil
 
 ```jsonc
 {
-  "card": "Ajani's Pridemate",
+  "card": "ajani's pridemate",                // the first face's name as the converted text writes it
   "script_file": "cardsfolder/a/ajanis_pridemate.txt",
   "lines": [
     {
@@ -75,6 +75,9 @@ ProvenanceKey = (script_file, face, trait_kind, index_within_kind, option?, buil
 }
 ```
 
+`card` is the first face's name, lower-cased as the converted text writes it: `history of benalia`,
+and a split card's left half alone (`fire` for Fire // Ice).
+
 `dropped_keys` exists because the collector computes keys from runtime trait accessors, never from the
 sidecar. A trait the converter deduplicated away is still live at runtime and still produces a key, so
 without this list an expected dedup and a genuine corpus/sidecar mismatch would look identical at the
@@ -85,10 +88,13 @@ join — and the mismatch is the one condition that must fail loudly.
 | Rule | Consequence |
 |---|---|
 | A rendered line merged from several runtime traits carries **several** provenance keys | the join is many-to-one, never assumed one-to-one |
-| A trait whose text a rendered line carries — merged, deduplicated, a secondary of a pair, keyword-derived, or a Class level — is claimed by that line | the join is many-to-one; `dropped_keys` holds only traits with no text, such as the implicit permanent spell on every permanent. A keyword-built trait is claimed through its keyword's key, by the rows below |
+| A trait whose text a rendered line carries — merged, deduplicated, a secondary of a pair, keyword-derived, or a Class level — is claimed by that line | the join is many-to-one. A keyword-built trait is claimed through its keyword's key, by the rows below |
+| `dropped_keys` holds the traits no line states | traits with no text (the implicit permanent spell on every permanent, a descriptionless charm's root) and traits whose text the converter does not render (Orcish Farmer's activated ability, Sutured Ghoul's `ETBReplacement` keyword, a description-less sibling static such as Clutch of Undeath `static 1`) |
+| A spell prints one line | its additional cost's sentence first (`as an additional cost to cast this spell, sacrifice a land.`), under a `cost` role span, then every sentence of its sub-ability chain in chain order; a die roll's outcomes are `option` lines below it. The line declares the spell's key |
+| A line that states only a cost (`alternate cost:`, `additional cost:`, `cost reduction:`) declares no `spell` key | a cleave line keeps its text and declares no key; the spell cast for cleave is claimed by the face's spell line, whose bracketed words state both versions. A permanent whose spell states nothing but an additional cost prints that cost on an `additional cost:` line, and its spell key is in `dropped_keys` with every permanent's |
 | No key is declared by two lines of one face | a key names at most one line; a join never picks among lines |
 | A keyword that renders one line declares its bare keyword key on that line | its built traits join that line through the bare key |
-| A keyword that renders several lines (a saga's chapters, haunt's two lines, a Class level with continuation text) declares on each line the `built` keys of the traits that line renders, and its bare keyword key on no line | each chapter joins its own line. A Class level's level-up ability and its static are both its first line's; a continuation line declares no keyword key. A keyword whose built traits all lack a line declares its bare key on its first line |
+| A keyword that renders several lines (a saga's chapters, haunt's two lines) declares on each line the `built` keys of the traits that line renders, and its bare keyword key on no line | each chapter joins its own line. A keyword whose built traits all lack a line declares its bare key on its first line |
 | A keyword-built trait that renders a line of its own (Tribute's unpaid-tribute trigger) | that line declares the keyword's key with the trait's `built` |
 | The kind-indexed keys (`trigger n`, `static n`, `spell n`, `replacement n`) of keyword-built traits | declared on no line and in no `dropped_keys`, and never emitted by the collector: a keyword-built trait is named only through its keyword's key |
 | A key a line declares | resolves to that line |
@@ -101,13 +107,13 @@ join — and the mismatch is the one condition that must fail loudly.
 | A record whose `ability` is empty and whose `ability_unresolved` is `engine_effect` | expected, not an error, and **not** a `dropped_keys` case: the acting card is engine-built (The Monarch, The Initiative, dungeons, emblems, speed) and has no script file in any tree, so there is no sidecar to drop from. A sentinel `script_file` would turn that honest answer into a hard join failure, inverting the fail-loudly rule above |
 | An event attributed to a sub-ability link absent from `sub_ability_links` falls back to the **root line** | attribution never drops an event |
 | `script_text` is the stage-four primary encoding surface | every command that encodes reads it here and needs no Forge-cardsfolder path of its own |
-| `script_text` is the trait's whole chain (feature 024, FR-001–003) | `seg₀ [SEG] SV1: seg₁ [SEG] SV2: seg₂ …`: the root segment, then the trigger's `Execute$` ability, every sub-ability in chain order including `RepeatSubAbility`, and a replacement's `ReplaceWith$` ability with its chain. Each segment is its trait's parameters in key order and opens, after the root, with the label its parent referenced it by. Chain labels (values of `Execute$`, `SubAbility$`, `RepeatSubAbility$`, `ReplaceWith$`, each `Choices$` item of a chooser API, and segment openers) are renamed `SV1…` by first appearance, restarting per line; amount SVars are not renamed. Each SVar appears once per chain; one the script does not define is reported by `convert` and left out |
+| `script_text` is the whole chain of the trait that first claimed the line (feature 024, FR-001–003) | on a line merged from several traits, the first claimant's chain alone (a dual land's mana line carries its first colour's mana ability); on a one-line keyword's line, the keyword's own script text (`Flying`, `Ward:2`), with `script_api_type` `Keyword`; on a line a keyword's built traits claim with `built` keys, the first such trait's chain. A chain reads `seg₀ [SEG] SV1: seg₁ [SEG] SV2: seg₂ …`: the root segment, then the trigger's `Execute$` ability, every sub-ability in chain order including `RepeatSubAbility`, and a replacement's `ReplaceWith$` ability with its chain. Each segment is its trait's parameters in key order and opens, after the root, with the label its parent referenced it by. Chain labels (values of `Execute$`, `SubAbility$`, `RepeatSubAbility$`, `ReplaceWith$`, each `Choices$` item of a chooser API, and segment openers) are renamed `SV1…` by first appearance, restarting per line; amount SVars are not renamed. Each SVar appears once per chain; one the script does not define is reported by `convert` and left out |
 | A charm root line carries its own segment only | `Choices$ SV1,SV2,…`, no mode inlined |
 | A charm-mode `option` line follows its root, in `Choices$` order | `provenance: [root key + option]`; `script_text` is the mode's chain opened `SV1:`; `script_api_type` is the mode's |
-| A non-charm `option` line (a die-roll outcome) | `provenance: []` and no `script_text`, as before; no record acts through it |
+| A non-charm `option` line (a die-roll outcome of a spell, an activated or a triggered ability) | `provenance: []` and no `script_text`; no record acts through it |
 | A charm with no description renders no root line | its root key is in `dropped_keys`; its option lines carry their mode keys |
 | `role_spans` are character ranges over the **converted prose** | roles are `cost` \| `effect` \| `trigger-condition` \| `target-spec` |
-| The converted prose is the rendered line from `prose_offset` on | `prose_offset` is the length of the line's `kind[n]: ` prefix (ASCII), and `0` on a continuation line of a multi-line description, which has no prefix. Readers take the split from it and never re-derive it from the text, since a continuation line may hold a `": "` of its own (`{T}: add {G}.`). A sidecar without the field is read by cutting at the first `": "` |
+| The converted prose is the rendered line from `prose_offset` on | `prose_offset` is the length of the line's `kind[n]: ` prefix (ASCII). A description that runs onto several lines is folded into one, each line break read as a space, so every line has its prefix. Readers take the split from the field and never re-derive it from the text, whose prose may hold a `": "` of its own (`{T}: add {G}.`). A sidecar written before the fold may hold a continuation line with `prose_offset` `0`, which repeats its first line's non-keyword keys. A sidecar without the field is read by cutting at the first `": "` |
 | Row `i` of the ability cache corresponds to `lines[i]` | rendered lines for a converted tree, script lines for the variant tree |
 
 ## Runtime-side key computation

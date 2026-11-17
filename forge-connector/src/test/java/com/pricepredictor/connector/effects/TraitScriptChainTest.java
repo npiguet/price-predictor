@@ -176,14 +176,12 @@ class TraitScriptChainTest {
 
     @Test
     void twoChainsDifferingOnlyInLabelNamesRenderTheSameText() {
-        // The sub-ability's own SpellDescription renders a second spell line,
-        // which stays unkeyed and textless: the trait's line is the first,
-        // and it carries the whole chain.
+        // The sub-ability's own SpellDescription is the second sentence of
+        // the spell's one line, which carries the whole chain.
         List<ProvenanceSidecar.Line> a = linesOfKind(convert("l/label_a.txt"), "spell");
         List<ProvenanceSidecar.Line> b = linesOfKind(convert("l/label_b.txt"), "spell");
-        assertEquals(2, a.size());
-        assertTrue(a.get(1).provenance().isEmpty());
-        assertNull(a.get(1).script().scriptText());
+        assertEquals(1, a.size());
+        assertEquals(1, b.size());
 
         String textA = a.get(0).script().scriptText();
         String textB = b.get(0).script().scriptText();

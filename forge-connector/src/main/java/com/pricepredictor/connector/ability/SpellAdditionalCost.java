@@ -6,7 +6,9 @@ import com.pricepredictor.connector.AbilityType;
 import forge.game.spellability.SpellAbility;
 
 /**
- * Additional cost extracted from a spell ability's cost description.
+ * A spell's additional cost on a line of its own, for a spell whose chain
+ * states nothing else (a permanent's). A spell that states an effect opens
+ * its {@link SpellLine} with the cost's sentence instead.
  */
 public record SpellAdditionalCost(String descriptionText) implements Ability {
 
@@ -16,12 +18,20 @@ public record SpellAdditionalCost(String descriptionText) implements Ability {
     }
 
     public static SpellAdditionalCost of(SpellAbility sa) {
+        String sentence = sentenceOf(sa);
+        return sentence == null ? null
+                : new SpellAdditionalCost(AbilityDescription.stripAdditionalCostPrefix(sentence));
+    }
+
+    /**
+     * The additional cost as the card states it ("as an additional cost to
+     * cast this spell, sacrifice a land."), or null if {@code sa} has none.
+     */
+    public static String sentenceOf(SpellAbility sa) {
         String costDesc = sa.getCostDescription();
         if (costDesc == null) return null;
         String normalized = AbilityDescription.normalize(costDesc.trim());
         if (normalized == null) return null;
-        normalized = AbilityDescription.stripAdditionalCostPrefix(normalized);
-        if (normalized.isEmpty()) return null;
-        return new SpellAdditionalCost(normalized);
+        return AbilityDescription.stripAdditionalCostPrefix(normalized).isEmpty() ? null : normalized;
     }
 }

@@ -10,9 +10,9 @@ tests that read the sidecar side of a conversion (`TraitScriptChainTest`, `Keywo
 Layout:
 
 - `cardsfolder/<letter>/<name>.txt` — source scripts; copies of `../forge/forge-gui/res/cardsfolder/`
-  as of 2026-10-07 (History of Benalia, Blind Hunter, Censor, Ranger Class and Balloon
-  Stand as of 2026-11-17), plus the four synthetic scripts marked below. The tree is letter-keyed
-  like Forge's so every provenance key reads `cardsfolder/<letter>/<name>.txt`.
+  as of 2026-10-07 (History of Benalia, Blind Hunter, Censor, Ranger Class, Balloon
+  Stand, Harrow, Abeyance, Contact Other Plane and Dig Up as of 2026-11-17), plus the four
+  synthetic scripts marked below. The tree is letter-keyed like Forge's so every provenance key reads `cardsfolder/<letter>/<name>.txt`.
 - `tokenscripts/<name>.txt` — one token script, flat like Forge's token tree.
 - `expected/cardsfolder/…`, `expected/tokenscripts/…` — the `.txt` that `python -m price_predictor convert`
   writes for them: the byte-identity reference. The gen-1 sidecars are not kept: no test
@@ -33,6 +33,10 @@ corpus's order.
 The synthetic mana lines of `m/mountain.txt` and `t/tundra.txt` were later edited by hand to
 end in a period, when the synthesized land-mana line took the shape of a scripted mana line
 (`{T}: add {W} or {U}.`, with the serial comma from three colours on).
+
+When a spell came to print one line (task A04), the expected text of `l/label_a.txt` and
+`l/label_b.txt` (two sentences, once two `spell` lines) and `r/ranger_class.txt` (level 3's
+continuation line folded into the level line) was edited to match.
 
 | Script | Why it is here |
 |---|---|
@@ -67,7 +71,11 @@ end in a period, when the synthesized land-mana line took the shape of a scripte
 | `h/history_of_benalia.txt` | saga whose "I, II" line prints two chapter triggers (keys of a multi-line keyword) |
 | `b/blind_hunter.txt` | haunt creature: five haunt triggers over two lines |
 | `c/censor.txt` | `Cycling`: a single-line keyword that builds a spell |
-| `r/ranger_class.txt` | Class level 3 with a continuation line |
+| `r/ranger_class.txt` | Class level 3 whose text runs onto a second line, folded into one |
+| `h/harrow.txt` | spell with an additional cost: the cost sentence opens the spell's one line |
+| `a/abeyance.txt` | spell whose chain states two sentences: one line |
+| `c/contact_other_plane.txt` | spell die roll: unkeyed `option` result rows |
+| `d/dig_up.txt` | cleave: an alternate-cost line declaring no key, its spell claimed by the spell line |
 | `b/balloon_stand.txt` | Attraction `Visit` charm: a single-line keyword whose built trigger has modes |
 | `tokenscripts/c_a_food_sac.txt` | token script, flat tree |
 | `u/undefined_svar.txt` | **synthetic** — `TrigDraw` names `SubAbility$ DBMissing`, which no `SVar:` defines (FR-003). The task asked for an undefined `Execute$`, but Forge fails the whole card at parse for that shape (`Error in Trigger for Card`), so no converter can produce output for it; `SubAbility$` is the one undefined reference Forge tolerates |

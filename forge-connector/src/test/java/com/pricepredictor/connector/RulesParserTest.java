@@ -324,13 +324,13 @@ class RulesParserTest {
     void spellWithAdditionalCost() {
         CardFace card = face("a/abandon_hope.txt");
 
-        String costLine = abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0).formatLine(null);
-        assertTrue(costLine.startsWith("additional cost:"));
-        assertTrue(costLine.contains("discard X"));
-        assertFalse(costLine.contains("as an additional cost to cast"));
-
-        assertTrue(abilitiesOfType(card, AbilityType.SPELL).get(0).formatLine(null)
-                .contains("look at target opponent's hand"));
+        // The cost is the first sentence of the spell's one line (finding 1.2).
+        assertEquals(0, countOfType(card, AbilityType.ADDITIONAL_COST));
+        var spells = abilitiesOfType(card, AbilityType.SPELL);
+        assertEquals(1, spells.size(), card.abilities().toString());
+        String line = spells.get(0).formatLine(null);
+        assertTrue(line.startsWith("spell: as an additional cost to cast this spell, discard X"), line);
+        assertTrue(line.contains(". look at target opponent's hand"), line);
     }
 
     @Test
@@ -702,14 +702,15 @@ class RulesParserTest {
     @Test
     void spellWithMultipleSubAbilityDescriptions() {
         // Seed Spark has SpellDescription on both the main SP$ and on a SubAbility SVar.
-        // The root SP$ becomes one SpellEffect with the sub-ability as a child.
+        // Both sentences are the spell's one line, in chain order (finding 1.3).
         CardFace card = face("s/seed_spark.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size());
         Ability root = spells.get(0);
-        assertTrue(root.descriptionText().contains("destroy target artifact or enchantment"));
-        assertEquals(1, root.subAbilities().size());
-        assertTrue(root.subAbilities().get(0).descriptionText().contains("create two 1/1 green saproling"));
+        String text = root.descriptionText();
+        assertTrue(text.startsWith("destroy target artifact or enchantment"), text);
+        assertTrue(text.contains("create two 1/1 green saproling"), text);
+        assertEquals(List.of(), root.subAbilities());
     }
 
     @Test
@@ -979,13 +980,15 @@ class RulesParserTest {
 
     @Test
     void diceRollEmitsOutcomesWithVertReplaced() {
-        // Cone of Cold rolls a d20 with 3 outcome ranges.
-        // Expected: 4 SPELL abilities (1 "roll a d20" + 3 outcomes with | instead of VERT).
+        // Cone of Cold rolls a d20 with 3 outcome ranges: one SPELL line
+        // holding the roll, its 3 outcomes OPTION lines below it, with | for VERT.
         CardFace card = face("c/cone_of_cold.txt");
-        var spells = abilitiesOfType(card, AbilityType.SPELL);
-        assertEquals(4, spells.size(), "Dice roll card should emit 4 SPELL (roll + 3 outcomes): " + card.abilities());
-        assertTrue(spells.stream().anyMatch(a -> a.descriptionText().contains("roll a d20")),
-                "Should have 'roll a d20' spell: " + spells);
+        var lines = abilitiesOfType(card, AbilityType.SPELL);
+        assertEquals(1, lines.size(), "Dice roll card should emit 1 SPELL: " + card.abilities());
+        assertTrue(lines.get(0).descriptionText().contains("roll a d20"),
+                "Should have 'roll a d20' spell: " + lines);
+        var spells = allOptions(card);
+        assertEquals(3, spells.size(), "3 outcome options: " + card.abilities());
         assertTrue(spells.stream().anyMatch(a -> a.descriptionText().contains("1") && a.descriptionText().contains("tap all")),
                 "Should have 1-9 outcome: " + spells);
         assertTrue(spells.stream().anyMatch(a -> a.descriptionText().contains("10") && a.descriptionText().contains("don't untap")),
@@ -1002,13 +1005,16 @@ class RulesParserTest {
     void aSpellsRollUnderARepeatPrintsItsOutcomes() {
         // Strategy, Schmategy: SP → Repeat → RepeatSubAbility$ RollDice with
         // six outcomes. The roll is reached through the repeat, not the
-        // sub-ability chain, and its outcomes still print.
-        var spells = abilitiesOfType(face("s/strategy_schmategy.txt"), AbilityType.SPELL);
-        assertEquals(7, spells.size(), "The roll plus six outcomes: " + spells);
+        // sub-ability chain, and its outcomes still print, as options.
+        CardFace card = face("s/strategy_schmategy.txt");
+        var spells = abilitiesOfType(card, AbilityType.SPELL);
+        assertEquals(1, spells.size(), "The roll: " + spells);
         assertTrue(spells.get(0).descriptionText().contains("roll a six-sided die"), spells.toString());
-        assertTrue(spells.get(1).descriptionText().contains("do nothing"), spells.toString());
-        assertTrue(spells.get(6).descriptionText().contains("repeat this process two more times"),
-                spells.toString());
+        var outcomes = allOptions(card);
+        assertEquals(6, outcomes.size(), "Six outcomes: " + outcomes);
+        assertTrue(outcomes.get(0).descriptionText().contains("do nothing"), outcomes.toString());
+        assertTrue(outcomes.get(5).descriptionText().contains("repeat this process two more times"),
+                outcomes.toString());
     }
 
     @Test
@@ -1786,9 +1792,8 @@ class RulesParserTest {
      * A description Forge joined with {@code \r\n} renders as clean lines.
      *
      * <p>Ranger Class's third level adds two statics, and Forge joins their
-     * descriptions with a carriage return and a line feed. Split on the line
-     * feed alone, the first line kept the carriage return, and the converted
-     * file carried it.
+     * descriptions with a carriage return and a line feed. The level is one
+     * line, the break read as a space, and no carriage return is left in it.
      */
     @Test
     void aDescriptionJoinedWithACarriageReturnRendersWithoutOne() {
@@ -1796,7 +1801,7 @@ class RulesParserTest {
 
         assertFalse(output.contains("\r"), output);
         assertTrue(output.contains("level[3]: {3}{G}: you may look at the top card of your"
-                + " library any time.\nyou may cast creature spells from the top of your"
+                + " library any time. you may cast creature spells from the top of your"
                 + " library."), output);
     }
 

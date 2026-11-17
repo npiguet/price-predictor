@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.CardFace;
 import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.RulesParser;
 import org.junit.jupiter.api.Test;
@@ -12,7 +13,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Predicate;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -22,21 +23,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The keys a keyword's lines declare (findings 1.1, 1.4). A keyword that
  * prints one line declares its bare key there; one that prints several (a
- * saga's chapters, haunt, a Class level with continuation text) declares on
- * each line the {@code built} keys of the traits that line prints, and its
- * bare key on none. The kind-indexed key of a trait a keyword built is
- * declared nowhere, not even in {@code dropped_keys}.
+ * saga's chapters, haunt) declares on each line the {@code built} keys of the
+ * traits that line prints, and its bare key on none. The kind-indexed key of
+ * a trait a keyword built is declared nowhere, not even in
+ * {@code dropped_keys}. Over every golden script, no key of any kind is
+ * declared by two lines of a face, and no spell of an instant or sorcery is
+ * left without a line (findings 1.2, 1.3).
  */
 @ExtendWith(ForgeExtension.class)
 class KeywordLineKeysTest {
-
-    /**
-     * The keys {@link #noKeyIsDeclaredByTwoLinesOfAFace} checks. Keyword keys
-     * for now; every key once each line of a multi-line text declares only
-     * its own.
-     */
-    private static final Predicate<ProvenanceKey> CHECKED =
-            key -> key.traitKind() == TraitKind.KEYWORD;
 
     private final RulesParser parser = new RulesParser();
 
@@ -51,6 +46,14 @@ class KeywordLineKeysTest {
                 .toList();
         assertEquals(1, lines.size(), prefix + " in " + converted.texts());
         return lines.get(0).provenance();
+    }
+
+    /** The text of the one line that starts with {@code prefix}. */
+    private static String converted(ConvertedScript converted, String prefix) {
+        List<String> texts = converted.texts().stream()
+                .filter(text -> text.startsWith(prefix)).toList();
+        assertEquals(1, texts.size(), prefix + " in " + converted.texts());
+        return texts.get(0);
     }
 
     /** Every key a line or {@code dropped_keys} of {@code converted} holds. */
@@ -124,21 +127,21 @@ class KeywordLineKeysTest {
     }
 
     /**
-     * Ranger Class's level 3 prints two lines: the level-up ability and the
-     * level's static are its first line's; the continuation line repeats no
-     * keyword key. Level 2 prints one line and keeps its bare key.
+     * Ranger Class's level 3 states two sentences on two oracle lines, folded
+     * into one converted line: a keyword printing one line, it declares its
+     * bare key there, as level 2 does.
      */
     @Test
-    void aClassLevelWithContinuationTextDeclaresItsBuiltKeysOnItsFirstLine() {
+    void aClassLevelWithContinuationTextIsOneLineDeclaringItsBareKey() {
         ConvertedScript ranger = convert("r/ranger_class.txt");
         ProvenanceKey levelTwo = keyword("r/ranger_class.txt", 0);
         ProvenanceKey levelThree = keyword("r/ranger_class.txt", 1);
 
         assertEquals(List.of(levelTwo), keysOfLine(ranger, "level[2]: "));
-        assertEquals(List.of(levelThree.withBuilt(TraitKind.SPELL, 0),
-                        levelThree.withBuilt(TraitKind.STATIC, 0)),
-                keysOfLine(ranger, "level[3]: "));
-        assertEquals(List.of(), keysOfLine(ranger, "you may cast creature spells"));
+        assertEquals(List.of(levelThree), keysOfLine(ranger, "level[3]: "));
+        assertTrue(converted(ranger, "level[3]: ").endsWith(
+                " you may cast creature spells from the top of your library."),
+                ranger.texts().toString());
     }
 
     // ── every golden script ─────────────────────────────────────────────
@@ -171,7 +174,7 @@ class KeywordLineKeysTest {
         for (ConvertedScript converted : golden) {
             Map<ProvenanceKey, Integer> declaringLine = new HashMap<>();
             for (ProvenanceSidecar.Line line : converted.sidecar().lines()) {
-                for (ProvenanceKey key : line.provenance().stream().filter(CHECKED).toList()) {
+                for (ProvenanceKey key : line.provenance()) {
                     Integer earlier = declaringLine.putIfAbsent(key, line.lineIndex());
                     assertTrue(earlier == null, key.describe() + " is declared by lines "
                             + earlier + " and " + line.lineIndex() + ": " + converted.texts());
@@ -179,5 +182,40 @@ class KeywordLineKeysTest {
             }
         }
         assertTrue(golden.size() >= 40, "only " + golden.size() + " golden scripts");
+    }
+
+    private static final Pattern INSTANT_OR_SORCERY = Pattern.compile("\\b(instant|sorcery)\\b");
+
+    /**
+     * Every spell ability an instant or sorcery face declares is on a line:
+     * none sits in {@code dropped_keys}, where a record acting through it
+     * would find no text. A keyword's spell (flashback) is its keyword's,
+     * and a charm with no description has its mode lines.
+     */
+    @Test
+    void everySpellAbilityOfAnInstantOrSorceryHasALine() throws IOException {
+        int spellFaces = 0;
+        for (ConvertedScript converted : everyGoldenScript()) {
+            List<CardFace> faces = converted.parsed().card().faces();
+            for (int face = 0; face < faces.size(); face++) {
+                if (!INSTANT_OR_SORCERY.matcher(faces.get(face).types()).find()) continue;
+                spellFaces++;
+                assertEquals(List.of(), droppedSpellKeys(converted, face),
+                        "spell abilities with no line: " + converted.texts());
+            }
+        }
+        assertTrue(spellFaces >= 10, "only " + spellFaces + " instant or sorcery faces");
+    }
+
+    /**
+     * The spell keys of {@code face} in {@code dropped_keys}, but for a
+     * charm with no description, whose mode lines are its lines.
+     */
+    private static List<ProvenanceKey> droppedSpellKeys(ConvertedScript converted, int face) {
+        return converted.sidecar().droppedKeys().stream()
+                .filter(key -> key.face() == face)
+                .filter(key -> key.traitKind() == TraitKind.SPELL)
+                .filter(key -> !everyKey(converted).contains(key.withOption(0)))
+                .toList();
     }
 }

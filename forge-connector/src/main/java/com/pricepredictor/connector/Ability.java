@@ -14,6 +14,13 @@ public interface Ability {
     default List<Ability> subAbilities() { return List.of(); }
     default int ordinal() { return 0; }
 
+    /**
+     * The length of the cost sentence the description opens with (a spell's
+     * additional cost), or 0. An activated ability's cost ends at its colon
+     * and is found there instead.
+     */
+    default int costLength() { return 0; }
+
     default String formatLine(Integer actionNumber) {
         return linePrefix(actionNumber) + descriptionText();
     }
@@ -29,11 +36,8 @@ public interface Ability {
 
     /**
      * Render this ability and its sub-abilities one output line per element,
-     * each line carrying the ability that produced it.
-     *
-     * <p>A description that already contains newlines contributes several
-     * output lines, all attributed to this ability; only the first carries
-     * the prefix.
+     * each line carrying the ability that produced it. A description that
+     * contains newlines is still one line ({@link RenderedLine#appendLine}).
      *
      * @param face the ordinal of the face being rendered
      */
@@ -46,7 +50,7 @@ public interface Ability {
         } else {
             num = null;
         }
-        RenderedLine.appendLines(
+        RenderedLine.appendLine(
                 lines, linePrefix(num), String.valueOf(descriptionText()), this, face);
         for (Ability sub : subAbilities()) {
             sub.appendBlock(counter, face, lines);

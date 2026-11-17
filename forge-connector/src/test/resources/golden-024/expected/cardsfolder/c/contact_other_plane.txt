@@ -1,0 +1,7 @@
+name: contact other plane
+mana cost: {3}{U}
+types: instant
+spell[1]: roll a d20.
+option[2]: 1—9 | draw two cards.
+option[3]: 10—19 | scry 2, then draw two cards.
+option[4]: 20 | scry 3, then draw three cards.

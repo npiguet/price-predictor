@@ -7,14 +7,12 @@ import com.pricepredictor.connector.ability.ChapterAbility;
 import com.pricepredictor.connector.ability.CharmAbility;
 import com.pricepredictor.connector.ability.ClassLevelAbility;
 import com.pricepredictor.connector.ability.CompanionKeyword;
-import com.pricepredictor.connector.ability.DiceOutcomes;
 import com.pricepredictor.connector.ability.EtbReplacementAbility;
 import com.pricepredictor.connector.ability.GiftKeyword;
 import com.pricepredictor.connector.ability.HauntKeyword;
 import com.pricepredictor.connector.ability.KeywordSpec;
 import com.pricepredictor.connector.ability.ReplacementAbilityEntry;
-import com.pricepredictor.connector.ability.SpellAdditionalCost;
-import com.pricepredictor.connector.ability.SpellEffect;
+import com.pricepredictor.connector.ability.SpellLine;
 import com.pricepredictor.connector.ability.StandardKeyword;
 import com.pricepredictor.connector.ability.StaticAbilityEntry;
 import com.pricepredictor.connector.ability.TextAbility;
@@ -89,8 +87,8 @@ final class FaceParser {
     private static final Comparator<Ability> COSTS_FIRST =
             Comparator.comparing((Ability a) -> !a.type().isCostType());
 
-    /** A basic-typed face's runtime mana ability, with the key it is recorded under. */
-    private record LandManaTrait(SpellAbility ability, ProvenanceKey key) {}
+    /** A spell ability the spell phase set aside, with the key it is recorded under. */
+    private record KeyedSpell(SpellAbility ability, ProvenanceKey key) {}
 
     private final Card card;
     private final ICardFace face;
@@ -110,7 +108,15 @@ final class FaceParser {
      * mana ability is a dropped key, and every activation record that names
      * it joins to nothing.
      */
-    private final List<LandManaTrait> landManaTraits = new ArrayList<>();
+    private final List<KeyedSpell> landManaTraits = new ArrayList<>();
+    /**
+     * Spells cast for an alternative cost (cleave), whose cost line declares
+     * no key: each is claimed by the face's spell line, whose bracketed words
+     * state both versions of the spell.
+     */
+    private final List<KeyedSpell> alternateCostSpells = new ArrayList<>();
+    /** The first line a spell of this face printed, or null. */
+    private Ability spellLine;
 
     /**
      * @param card        the fully built card, set to the state {@code face} shows
@@ -387,13 +393,39 @@ final class FaceParser {
             recorder.declare(spellKey);
             switch (route) {
                 case KEYWORD_SPELL, OTHER_FACE, DUPLICATE_TRAIT -> { }
-                case LAND_MANA -> landManaTraits.add(new LandManaTrait(sa, spellKey));
-                case CHARM, ALT_COST, ACTIVATED, SPELL, UNRENDERED -> {
-                    List<Ability> lines = renderSpell(route, sa);
-                    abilities.addAll(lines);
-                    recorder.attribute(lines, spellKey, sa);
-                }
+                case LAND_MANA -> landManaTraits.add(new KeyedSpell(sa, spellKey));
+                case ALT_COST -> addAlternateCost(sa, spellKey);
+                case CHARM, ACTIVATED, SPELL, UNRENDERED ->
+                        addSpellLines(renderSpell(route, sa), spellKey, sa);
             }
+        }
+        claimAlternateCostSpells();
+    }
+
+    /**
+     * Add {@code lines}, attributing to {@code key} those that state more
+     * than a cost: a line stating only a cost (a permanent's additional
+     * cost) declares no spell key.
+     */
+    private void addSpellLines(List<Ability> lines, ProvenanceKey key, SpellAbility sa) {
+        abilities.addAll(lines);
+        List<Ability> stated = lines.stream().filter(line -> !line.type().isCostType()).toList();
+        recorder.attribute(stated, key, sa);
+        if (spellLine == null) {
+            spellLine = stated.stream().filter(SpellLine.class::isInstance).findFirst().orElse(null);
+        }
+    }
+
+    /** The cleave line, which states only a cost and declares no key. */
+    private void addAlternateCost(SpellAbility sa, ProvenanceKey key) {
+        addIfNotNull(abilities, AlternateCostSpell.of(sa));
+        alternateCostSpells.add(new KeyedSpell(sa, key));
+    }
+
+    /** Each spell cast for an alternative cost joins the face's spell line. */
+    private void claimAlternateCostSpells() {
+        for (KeyedSpell spell : alternateCostSpells) {
+            recorder.attribute(spellLine, spell.key(), spell.ability());
         }
     }
 
@@ -425,13 +457,8 @@ final class FaceParser {
         List<Ability> out = new ArrayList<>();
         switch (route) {
             case CHARM -> out.addAll(CharmAbility.fromSpellAbility(sa));
-            case ALT_COST -> addIfNotNull(out, AlternateCostSpell.of(sa));
             case ACTIVATED -> addIfNotNull(out, ActivatedAbilityEntry.of(sa));
-            case SPELL -> {
-                addIfNotNull(out, SpellAdditionalCost.of(sa));
-                out.addAll(SpellEffect.fromChain(sa));
-                out.addAll(DiceOutcomes.of(sa, text -> new SpellEffect(text, List.of())));
-            }
+            case SPELL -> out.addAll(SpellLine.linesOf(sa));
             default -> { }
         }
         return out;
@@ -519,7 +546,7 @@ final class FaceParser {
         if (landManaDescription == null) return;
         TextAbility landMana = new TextAbility(AbilityType.ACTIVATED, landManaDescription);
         abilities.add(landMana);
-        for (LandManaTrait trait : landManaTraits) {
+        for (KeyedSpell trait : landManaTraits) {
             recorder.attribute(landMana, trait.key(), trait.ability());
         }
     }

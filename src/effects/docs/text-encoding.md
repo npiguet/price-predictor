@@ -14,10 +14,11 @@ Rules to respect when touching provenance sidecars, the tokenizer, the vocabular
 - `option` is a charm mode's 0-based position in its root's `Choices$`, written only when set.
 - A line can carry several keys, where it merged several traits.
 - `built` is set only on a `keyword` key and names one trait that keyword instance built: `{"kind","index"}`, the trait's kind and its position in the instance's list of that kind (`KeywordInterface.getTriggers()`, `getReplacements()`, `getStaticAbilities()`, `getAbilities()`). It is written only when set, after `option`, and Java `ProvenanceKey` and Python `ProvenanceKey` spell it alike; two keys differing only in it are different keys.
-- No key is declared by two lines of one face. A keyword that prints one line declares its bare key there. A keyword that prints several (a saga's chapter lines, haunt's two lines, a Class level with continuation text) declares on each line the `built` keys of the traits that line renders, and its bare key on no line. The kind-indexed keys (`trigger n`, ...) of a keyword-built trait are declared nowhere and never emitted. How a `built` key and a bare keyword key join: the sidecar contract § Rules.
-- Java `ProvenanceRecorder.attributeKeyword` applies that rule. A keyword whose text runs onto continuation lines prints several lines: a Class level's first line declares the `built` keys of its level-up ability and its static, and `ProvenanceSidecar` writes no keyword key on a continuation line. A keyword-built trait that prints a line of its own (Tribute's unpaid-tribute trigger) declares the keyword's key with its `built` there. A multi-line keyword none of whose built traits has a line declares its bare key on its first line. The mode lines of a one-line keyword's charm (an Attraction's visit) declare its bare key with their `option`.
+- No key is declared by two lines of one face. A keyword that prints one line declares its bare key there. A keyword that prints several (a saga's chapter lines, haunt's two lines) declares on each line the `built` keys of the traits that line renders, and its bare key on no line. The kind-indexed keys (`trigger n`, ...) of a keyword-built trait are declared nowhere and never emitted. How a `built` key and a bare keyword key join: the sidecar contract § Rules.
+- Java `ProvenanceRecorder.attributeKeyword` applies that rule. A description that runs onto several lines is folded into one line (`RenderedLine.appendLine`), so a Class level whose text runs on prints one line and declares its bare key there. A keyword-built trait that prints a line of its own (Tribute's unpaid-tribute trigger) declares the keyword's key with its `built` there. A multi-line keyword none of whose built traits has a line declares its bare key on its first line. The mode lines of a one-line keyword's charm (an Attraction's visit) declare its bare key with their `option`.
 - A sidecar whose chapter lines all declare the saga's bare keyword key, with each chapter's `trigger n` key beside it, and a record naming only that bare key, join every chapter to chapter I's text. Reconverting does not change that: the record names no chapter. Only a sidecar declaring `built` keys and a record carrying one join a chapter to its own line.
-- `prose_offset` says where a line's prose starts after its `kind[n]: ` prefix. Do not cut at the first `": "`: a continuation line of a multi-line description has no prefix and can hold a `{T}: ` of its own. A sidecar written before the field existed is read by that cut, which is right for every line it holds.
+- `prose_offset` says where a line's prose starts after its `kind[n]: ` prefix. Do not cut at the first `": "`: the prose can hold a `{T}: ` of its own. A sidecar written before the fold may hold continuation lines with `prose_offset` 0. A sidecar written before the field existed is read by that cut, which is right for every line it holds.
+- A spell prints one line (`ability/SpellLine`): its additional cost's sentence, under a `cost` role span, then every sentence of its chain in chain order, with a die roll's outcomes as unkeyed `option` lines below it. A line that states only a cost declares no `spell` key; the spell cast for cleave is claimed by the spell line. The cases: the sidecar contract § Rules.
 - Role spans (`cost`, `effect`, `trigger-condition`, `target-spec`) are offsets into the prose after `prose_offset`.
 - Row *i* of the ability cache corresponds to `lines[i]`.
 
@@ -25,7 +26,7 @@ How a key resolves, by case:
 
 | Key | Result |
 |---|---|
-| In `dropped_keys` | A trait with no text of its own, such as the implicit permanent spell on every permanent. No line. |
+| In `dropped_keys` | A trait no line states: one with no text, such as the implicit permanent spell on every permanent, or one whose text the converter does not render. No line. |
 | Inside a declared `(face, trait_kind)` range, in neither list | Fails loudly: the sidecar does not describe the card the record was collected against. |
 | Outside every declared range | A trait Forge attached at runtime. No line; the record is kept. |
 | Names a script file with no sidecar | Does not fail; the ability contributes no text. `SidecarCache` raises `UnconvertedScript` and tallies it per script file. |
@@ -37,10 +38,11 @@ How a key resolves, by case:
 
 ## The text a line encodes to
 
-- A sidecar line's `script_text` is the trait's whole chain (root segment, a trigger's `Execute$` ability, every sub-ability, a replacement's `ReplaceWith$` ability) joined by ` [SEG] `.
+- A sidecar line's `script_text` is the whole chain of the trait that first claimed the line (root segment, a trigger's `Execute$` ability, every sub-ability, a replacement's `ReplaceWith$` ability) joined by ` [SEG] `.
 - Chain labels are renamed `SV1…` by first appearance per line, so two cards differing only in an author's SVar name share a text.
 - A charm root carries its own segment, and each mode is an `option` line with its own chain and API type.
-- The converted `.txt` must stay byte-identical; the connector's `golden-024` tests guard it.
+- A line merged from several traits carries its first claimant's chain alone; a one-line keyword's line carries the keyword's own script text (`Ward:2`).
+- The converted `.txt` changes only on purpose: the connector's `golden-024` tests compare it byte for byte with expected text maintained by hand.
 
 ## Tokenization
 

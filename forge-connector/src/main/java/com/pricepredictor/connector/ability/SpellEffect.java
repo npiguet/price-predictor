@@ -13,7 +13,9 @@ import java.util.Objects;
 /**
  * Spell effect ability. Factory walks the sub-ability chain recursively, building
  * a tree of SpellEffect nodes — one per SpellDescription fragment. Nodes without a
- * description are transparent: their children are promoted upward.
+ * description are transparent: their children are promoted upward. A spell
+ * prints the tree's sentences as one {@link SpellLine}; an activated or
+ * triggered ability appends them to its own line.
  */
 public record SpellEffect(String descriptionText, List<Ability> subAbilities) implements Ability {
 

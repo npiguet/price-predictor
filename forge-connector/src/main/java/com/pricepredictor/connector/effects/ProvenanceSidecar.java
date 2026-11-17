@@ -1,7 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.Ability;
-import com.pricepredictor.connector.AbilityType;
 import com.pricepredictor.connector.MultiCard;
 import com.pricepredictor.connector.RenderedLine;
 import com.pricepredictor.connector.json.Json;
@@ -32,11 +31,9 @@ public record ProvenanceSidecar(
      * One rendered ability line and everything that produced it.
      *
      * @param proseOffset where the line's prose starts, after its
-     *                    {@code kind[n]: } prefix: zero on a continuation line
-     *                    of a multi-line description, which has none. Written
-     *                    so a reader never re-derives the split from the text,
-     *                    which a continuation line holding a {@code ": "} of
-     *                    its own would defeat
+     *                    {@code kind[n]: } prefix. Written so a reader never
+     *                    re-derives the split from the text, whose prose can
+     *                    hold a {@code ": "} of its own
      */
     public record Line(
             int lineIndex,
@@ -105,11 +102,11 @@ public record ProvenanceSidecar(
                     // the file agree word for word.
                     owner.type().getOutputPrefix(),
                     rendered.prefix().length(),
-                    keysOf(rendered, source),
+                    keysOf(source),
                     source == null ? TraitScript.EMPTY : source.script(),
                     // Over the prose alone: the prefix is structure rather
                     // than card text, and the tokenizer does not see it.
-                    RoleSpans.of(rendered.prose(), owner.type() == AbilityType.ACTIVATED)));
+                    LineRoleSpans.of(rendered.prose(), owner)));
         }
 
         List<ProvenanceKey> dropped = new ArrayList<>();
@@ -119,17 +116,8 @@ public record ProvenanceSidecar(
         return new ProvenanceSidecar(cardName, scriptFile, lines, dropped);
     }
 
-    /**
-     * The keys {@code rendered} declares: its ability's, except that a
-     * continuation line of a multi-line text repeats no keyword key, which
-     * the text's first line declares (a Class level with continuation text).
-     */
-    private static List<ProvenanceKey> keysOf(RenderedLine rendered,
-                                              ProvenanceRecorder.Source source) {
-        if (source == null) return List.of();
-        if (!rendered.prefix().isEmpty()) return List.copyOf(source.keys());
-        return source.keys().stream()
-                .filter(key -> key.traitKind() != TraitKind.KEYWORD)
-                .toList();
+    /** The keys {@code source} claims its line under, in claim order. */
+    private static List<ProvenanceKey> keysOf(ProvenanceRecorder.Source source) {
+        return source == null ? List.of() : List.copyOf(source.keys());
     }
 }

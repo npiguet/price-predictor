@@ -36,9 +36,8 @@ public final class DiceOutcomes {
     }
 
     /**
-     * A dice outcome as an {@code option[N]: range | effect} line: what an
-     * activated or triggered ability's outcomes become, where a spell's are
-     * {@code spell} lines.
+     * A dice outcome as an {@code option[N]: range | effect} line, below the
+     * spell, activated or triggered ability that rolls.
      */
     public static Ability optionLine(String text) {
         return new TextAbility(AbilityType.OPTION, text);

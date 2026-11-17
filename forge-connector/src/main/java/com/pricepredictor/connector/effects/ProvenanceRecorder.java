@@ -26,9 +26,10 @@ import java.util.Set;
  * the sidecar has to report.
  *
  * <p>A recorder is per face. Keys declared but attached to no surviving ability
- * end up in the sidecar's {@code dropped_keys}, which holds only traits with no
- * text of their own — a permanent's implicit cast spell, say, or a charm whose
- * modes are its only lines. A trait the converter deduplicated, merged or
+ * end up in the sidecar's {@code dropped_keys}, which holds the traits no
+ * line states — a permanent's implicit cast spell, say, or a charm whose
+ * modes are its only lines, and a trait whose text the converter does not
+ * render. A trait the converter deduplicated, merged or
  * derived from a keyword keeps its attribution on the line that carries its
  * text, because it is still live at runtime and a record naming it must reach
  * the words it produced. A mode key is never declared: it is claimed by the
@@ -153,7 +154,6 @@ public final class ProvenanceRecorder {
      *
      * <p>A keyword rendering one line declares {@code key} on it, and the
      * traits it built join that line through it. A keyword rendering several
-     * — several abilities, or one whose text runs onto continuation lines —
      * declares {@code key} on none: each trait it built is claimed under
      * {@code key} with its {@code built}, by the line the rendering names for
      * it, or by the keyword's one ability. A trait with no such line is
@@ -182,11 +182,7 @@ public final class ProvenanceRecorder {
     }
 
     private static boolean rendersSeveralLines(List<Ability> abilities) {
-        return abilities.size() > 1 || (abilities.size() == 1 && spansLines(abilities.get(0)));
-    }
-
-    private static boolean spansLines(Ability ability) {
-        return String.valueOf(ability.descriptionText()).contains("\n");
+        return abilities.size() > 1;
     }
 
     /** Claim each built trait's key on its line; whether any trait had one. */

@@ -1,0 +1,4 @@
+name: abeyance
+mana cost: {1}{W}
+types: instant
+spell[1]: until end of turn, target player can't cast instant or sorcery spells, and that player can't activate abilities that aren't mana abilities. draw a card.
