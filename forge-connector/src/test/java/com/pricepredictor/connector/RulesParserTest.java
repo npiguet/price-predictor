@@ -1744,14 +1744,16 @@ class RulesParserTest {
     // --- Spells without a description, NICKNAME, developer notes ---
 
     @Test
-    void crashingWaveAdditionalCostPresentNoSpellEffect() {
-        // A:SP$ Tap has no SpellDescription/StackDescription → no spell effect can be emitted.
+    void crashingWaveAdditionalCostPresentSpellEffectFromTheOracle() {
+        // A:SP$ Tap has no SpellDescription: its effect is the oracle sentence the static's
+        // waterbend line does not state (task A19).
         var card = face("c/crashing_wave.txt");
         assertEquals(1, countOfType(card, AbilityType.ADDITIONAL_COST));
         assertTrue(abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0)
                    .descriptionText().contains("waterbend"));
-        assertEquals(0, countOfType(card, AbilityType.SPELL),
-                     "No SpellDescription in Forge script → no spell effect emitted: " + card.abilities());
+        assertEquals(List.of("tap up to X target creatures, then distribute three stun counters"
+                        + " among tapped creatures your opponents control."),
+                abilitiesOfType(card, AbilityType.SPELL).stream().map(Ability::descriptionText).toList());
     }
 
     @Test

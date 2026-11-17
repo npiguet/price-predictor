@@ -11,8 +11,8 @@ Layout:
 
 - `cardsfolder/<letter>/<name>.txt` — source scripts; copies of `../forge/forge-gui/res/cardsfolder/`
   as of 2026-10-07 (History of Benalia, Blind Hunter, Censor, Ranger Class, Balloon
-  Stand, Harrow, Abeyance, Contact Other Plane, Dig Up and Selvala's Charge as of
-  2026-11-17), plus the four synthetic scripts marked below. The tree is letter-keyed like
+  Stand, Harrow, Abeyance, Contact Other Plane, Dig Up, Selvala's Charge, Crashing Wave,
+  Garbage Fire and Tyranid Invasion as of 2026-11-17), plus the four synthetic scripts marked below. The tree is letter-keyed like
   Forge's so every provenance key reads `cardsfolder/<letter>/<name>.txt`.
 - `tokenscripts/<name>.txt` — one token script, flat like Forge's token tree.
 - `expected/cardsfolder/…`, `expected/tokenscripts/…` — the `.txt` that `python -m price_predictor convert`
@@ -84,6 +84,9 @@ When a sentence the description already holds stopped being appended again (task
 | `d/dig_up.txt` | cleave: an alternate-cost line declaring no key, its spell claimed by the spell line |
 | `s/selvalas_charge.txt` | `PrecostDesc$ Parley —`: an ability word Forge reports as a cost description, which is no additional cost |
 | `b/balloon_stand.txt` | Attraction `Visit` charm: a single-line keyword whose built trigger has modes |
+| `c/crashing_wave.txt` | spell with no `SpellDescription$`: its line is the oracle sentence the waterbend static's line does not state |
+| `g/garbage_fire.txt` | spell with no `SpellDescription$`: its line is its own `Description$` |
+| `t/tyranid_invasion.txt` | spell with no `SpellDescription$` and no other line: its keyed line is the whole oracle, not an unkeyed `text:` line |
 | `tokenscripts/c_a_food_sac.txt` | token script, flat tree |
 | `u/undefined_svar.txt` | **synthetic** — `TrigDraw` names `SubAbility$ DBMissing`, which no `SVar:` defines (FR-003). The task asked for an undefined `Execute$`, but Forge fails the whole card at parse for that shape (`Error in Trigger for Card`), so no converter can produce output for it; `SubAbility$` is the one undefined reference Forge tolerates |
 | `l/label_a.txt`, `l/label_b.txt` | **synthetic** — identical chains naming their sub-ability `DBDraw` and `DBDrawCard` (scenario 12) |

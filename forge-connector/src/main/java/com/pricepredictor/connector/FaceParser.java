@@ -17,6 +17,7 @@ import com.pricepredictor.connector.ability.StandardKeyword;
 import com.pricepredictor.connector.ability.StaticAbilityEntry;
 import com.pricepredictor.connector.ability.TextAbility;
 import com.pricepredictor.connector.ability.TriggeredAbilityEntry;
+import com.pricepredictor.connector.ability.UndescribedSpellText;
 import com.pricepredictor.connector.effects.FaceOrder;
 import com.pricepredictor.connector.effects.ProvenanceKey;
 import com.pricepredictor.connector.effects.ProvenanceRecorder;
@@ -119,6 +120,14 @@ final class FaceParser {
      * state both versions of the spell.
      */
     private final List<KeyedSpell> alternateCostSpells = new ArrayList<>();
+    /**
+     * The spells of an instant or sorcery face whose chain states nothing,
+     * given their text once every other line of the face is known
+     * ({@link #addUndescribedSpells}).
+     */
+    private final List<KeyedSpell> undescribedSpells = new ArrayList<>();
+    /** Where the first of {@link #undescribedSpells} would have printed. */
+    private int undescribedAt;
     /** The first line a spell of this face printed, or null. */
     private Ability spellLine;
 
@@ -148,6 +157,8 @@ final class FaceParser {
         parseTraits(card.getReplacementEffects(), TraitKind.REPLACEMENT,
                 ReplacementAbilityEntry::of);
         appendLandMana();
+        addUndescribedSpells();
+        claimAlternateCostSpells();
         List<Ability> finished = postProcessed();
         recorder.claimModesUnderEveryRoot(finished);
         return buildCardFace(face, finished);
@@ -389,7 +400,9 @@ final class FaceParser {
         KEYWORD_SPELL,
         /**
          * An Adventure or Omen spell met while parsing the main face: it
-         * belongs to the Secondary state and is parsed with that face.
+         * belongs to the Secondary state and is parsed and keyed with that
+         * face, as the collector keys it by its own state. The main face
+         * declares no key of it.
          */
         OTHER_FACE,
         CHARM,
@@ -412,7 +425,12 @@ final class FaceParser {
         DUPLICATE_TRAIT,
         SPELL,
         /** Anything else: it renders no line, but is still attributed. */
-        UNRENDERED
+        UNRENDERED;
+
+        /** Whether this face declares the spell's kind-indexed key. */
+        boolean keyedHere() {
+            return this != KEYWORD_SPELL && this != OTHER_FACE;
+        }
     }
 
     private void parseSpellAbilities() {
@@ -422,21 +440,72 @@ final class FaceParser {
         for (SpellAbility sa : card.getSpellAbilities()) {
             spellIndex++;
             SpellRoute route = classifySpell(sa, isAlternateFace);
-            if (route == SpellRoute.KEYWORD_SPELL) continue;
+            if (!route.keyedHere()) continue;
             // Declared before any other route skips the trait, so a trait the
             // parser passes over lands in dropped_keys rather than failing the
             // join: it is still live at runtime and a record can still name it.
             ProvenanceKey spellKey = key(TraitKind.SPELL, spellIndex);
             recorder.declare(spellKey);
-            switch (route) {
-                case KEYWORD_SPELL, OTHER_FACE, DUPLICATE_TRAIT -> { }
-                case LAND_MANA -> landManaTraits.add(new KeyedSpell(sa, spellKey));
-                case ALT_COST -> addAlternateCost(sa, spellKey);
-                case CHARM, ACTIVATED, SPELL, UNRENDERED ->
-                        addSpellLines(renderSpell(route, sa), spellKey, sa);
-            }
+            addRouted(route, sa, spellKey);
         }
-        claimAlternateCostSpells();
+    }
+
+    /** Send {@code sa}, declared under {@code key}, where {@code route} says. */
+    private void addRouted(SpellRoute route, SpellAbility sa, ProvenanceKey key) {
+        switch (route) {
+            case KEYWORD_SPELL, OTHER_FACE, DUPLICATE_TRAIT -> { }
+            case LAND_MANA -> landManaTraits.add(new KeyedSpell(sa, key));
+            case ALT_COST -> addAlternateCost(sa, key);
+            case SPELL -> addSpell(sa, key);
+            case CHARM, ACTIVATED, UNRENDERED -> addSpellLines(renderSpell(route, sa), key, sa);
+        }
+    }
+
+    /**
+     * A spell's lines; an instant's or sorcery's spell whose chain states
+     * nothing is set aside for {@link #addUndescribedSpells}.
+     */
+    private void addSpell(SpellAbility sa, ProvenanceKey key) {
+        if (!isInstantOrSorcery() || !SpellLine.statesNothing(sa)) {
+            addSpellLines(SpellLine.linesOf(sa), key, sa);
+            return;
+        }
+        if (undescribedSpells.isEmpty()) undescribedAt = abilities.size();
+        undescribedSpells.add(new KeyedSpell(sa, key));
+    }
+
+    private boolean isInstantOrSorcery() {
+        return face.getType().isInstant() || face.getType().isSorcery();
+    }
+
+    /**
+     * Each set-aside spell's line, where the spell phase would have printed
+     * it, from the text {@link UndescribedSpellText} finds against every
+     * other line of the face; a spell with no text anywhere prints no line
+     * and its key stays dropped.
+     */
+    private void addUndescribedSpells() {
+        Set<String> stated = statedTexts();
+        List<Ability> lines = new ArrayList<>();
+        for (KeyedSpell spell : undescribedSpells) {
+            String text = UndescribedSpellText.of(
+                    spell.ability(), face.getOracleText(), face.getName(), stated);
+            List<Ability> spellLines = SpellLine.linesOf(spell.ability(), text);
+            lines.addAll(spellLines);
+            attributeSpellLines(spellLines, spell.key(), spell.ability());
+        }
+        abilities.addAll(undescribedAt, lines);
+    }
+
+    /** The description texts of the face's lines so far, and of its {@code Text:}. */
+    private Set<String> statedTexts() {
+        Set<String> stated = new HashSet<>();
+        for (Ability line : abilities) {
+            if (line.descriptionText() != null) stated.add(line.descriptionText());
+        }
+        String text = AbilityDescription.scriptLine(face.getNonAbilityText(), face.getName());
+        if (text != null) stated.add(text);
+        return stated;
     }
 
     /**
@@ -446,6 +515,11 @@ final class FaceParser {
      */
     private void addSpellLines(List<Ability> lines, ProvenanceKey key, SpellAbility sa) {
         abilities.addAll(lines);
+        attributeSpellLines(lines, key, sa);
+    }
+
+    /** {@link #addSpellLines}'s attribution, for lines placed elsewhere. */
+    private void attributeSpellLines(List<Ability> lines, ProvenanceKey key, SpellAbility sa) {
         List<Ability> stated = lines.stream().filter(line -> !line.type().isCostType()).toList();
         recorder.attribute(stated, key, sa);
         if (spellLine == null) {
@@ -468,24 +542,31 @@ final class FaceParser {
 
     private SpellRoute classifySpell(SpellAbility sa, boolean isAlternateFace) {
         if (sa.getKeyword() != null) return SpellRoute.KEYWORD_SPELL;
-        // Both the SA's own Adventure/Omen flag and its state name are asked:
-        // the state name is the fallback when the flag cannot resolve the type.
-        if (!isAlternateFace && (sa.isAdventure() || sa.isOmen()
-                || (sa.getCardState() != null
-                        && sa.getCardState().getStateName() == CardStateName.Secondary))) {
-            return SpellRoute.OTHER_FACE;
-        }
+        if (!isAlternateFace && isSecondaryStateSpell(sa)) return SpellRoute.OTHER_FACE;
         if (sa.getApi() == ApiType.Charm) return SpellRoute.CHARM;
-        if (sa.isSpell() && "True".equals(sa.getParam("NonBasicSpell"))) return SpellRoute.ALT_COST;
         if (sa.isActivatedAbility()) {
             return isIntrinsicLandMana(sa) ? SpellRoute.LAND_MANA : SpellRoute.ACTIVATED;
         }
-        if (sa.isSpell()) {
-            return sa.getApi() == ApiType.ImmediateTrigger
-                    || "ETBReplacement".equals(sa.getParam("Mode"))
-                    ? SpellRoute.DUPLICATE_TRAIT : SpellRoute.SPELL;
-        }
-        return SpellRoute.UNRENDERED;
+        return sa.isSpell() ? castRoute(sa) : SpellRoute.UNRENDERED;
+    }
+
+    /**
+     * Whether {@code sa} is an Adventure or Omen spell. Both the SA's own
+     * flag and its state name are asked: the state name is the fallback when
+     * the flag cannot resolve the type.
+     */
+    private static boolean isSecondaryStateSpell(SpellAbility sa) {
+        if (sa.isAdventure() || sa.isOmen()) return true;
+        CardState state = sa.getCardState();
+        return state != null && state.getStateName() == CardStateName.Secondary;
+    }
+
+    /** The route of a spell that is neither a keyword's, another face's nor a charm. */
+    private static SpellRoute castRoute(SpellAbility sa) {
+        if ("True".equals(sa.getParam("NonBasicSpell"))) return SpellRoute.ALT_COST;
+        boolean anotherTrait = sa.getApi() == ApiType.ImmediateTrigger
+                || "ETBReplacement".equals(sa.getParam("Mode"));
+        return anotherTrait ? SpellRoute.DUPLICATE_TRAIT : SpellRoute.SPELL;
     }
 
     /**
@@ -510,7 +591,6 @@ final class FaceParser {
         switch (route) {
             case CHARM -> out.addAll(CharmAbility.fromSpellAbility(sa));
             case ACTIVATED -> addIfNotNull(out, ActivatedAbilityEntry.of(sa));
-            case SPELL -> out.addAll(SpellLine.linesOf(sa));
             default -> { }
         }
         return out;
@@ -549,7 +629,8 @@ final class FaceParser {
         recorder.declare(key);
         String exec = t.getParam("Execute");
         boolean secondary = t.isSecondary();
-        if (secondary && exec != null && primaryExecuteSVars.contains(exec)) {
+        // The set holds no null, so a trigger with no Execute$ is never found.
+        if (secondary && primaryExecuteSVars.contains(exec)) {
             recorder.attribute(primaryByExecute.get(exec), key, t);
             return;
         }

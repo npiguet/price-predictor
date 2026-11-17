@@ -1,0 +1,5 @@
+name: crashing wave
+mana cost: {U}{U}
+types: sorcery
+additional cost: waterbend {X}.
+spell[1]: tap up to X target creatures, then distribute three stun counters among tapped creatures your opponents control.

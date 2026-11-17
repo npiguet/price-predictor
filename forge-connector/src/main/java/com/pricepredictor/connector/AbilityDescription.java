@@ -41,6 +41,20 @@ public final class AbilityDescription {
                 ? normalized.substring(ADDITIONAL_COST_PREFIX.length()) : normalized;
     }
 
+    /**
+     * A raw script line ({@code Oracle:}, {@code Draft:}, {@code Text:}) as
+     * every other line of the output is written: the card's name as the
+     * CARDNAME placeholder, reminder text stripped, cased; null when nothing
+     * is left.
+     */
+    public static String scriptLine(String raw, String cardName) {
+        if (raw == null) return null;
+        String text = (cardName != null && !cardName.isEmpty())
+                ? raw.replace(cardName, "CARDNAME") : raw;
+        String stripped = stripReminderText(text.trim());
+        return stripped.isEmpty() ? null : applyCasing(stripped);
+    }
+
     /** The text up to its first newline, or all of it when it has none. */
     public static String firstLine(String text) {
         int nl = text.indexOf('\n');

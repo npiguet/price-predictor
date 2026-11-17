@@ -1,0 +1,4 @@
+name: tyranid invasion
+mana cost: {3}{G}
+types: sorcery
+spell[1]: create a number of 3/3 green tyranid warrior creature tokens with trample equal to the number of opponents you have.

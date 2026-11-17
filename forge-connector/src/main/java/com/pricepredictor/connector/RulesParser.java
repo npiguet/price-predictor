@@ -76,9 +76,10 @@ public class RulesParser {
         // not represented as standard Forge abilities), emit the Oracle text directly.
         // Skip oracle fallback when draft lines are present: draft-only cards (e.g. Cogwork
         // Librarian) produce their content via applyDraftLines(); firing the oracle fallback
-        // too would duplicate those lines as both draft: and text: entries.
-        if (header.oracle() != null && !header.oracle().isEmpty()
-                && header.draftLines().isEmpty()) {
+        // too would duplicate those lines as both draft: and text: entries. An instant's or
+        // sorcery's spell takes its own keyed line from the oracle (FaceParser), so the
+        // fallback never fires for one with text.
+        if (header.draftLines().isEmpty()) {
             result = applyOracleFallbackIfNeeded(result, header.oracle(), header.name());
         }
         // Prepend Draft: lines (if any) as TEXT abilities on the primary face.
@@ -144,6 +145,7 @@ public class RulesParser {
      */
     private static MultiCard applyOracleFallbackIfNeeded(
             MultiCard card, String rawOracle, String cardName) {
+        if (rawOracle == null || rawOracle.isEmpty()) return card;
         CardFace first = card.faces().get(0);
         if (!first.abilities().isEmpty() || first.text() != null) {
             return card; // already has content — fallback not needed
@@ -182,12 +184,8 @@ public class RulesParser {
             List<String> lines, String cardName, AbilityType type) {
         List<Ability> abilities = new ArrayList<>();
         for (String raw : lines) {
-            String text = (cardName != null && !cardName.isEmpty())
-                    ? raw.replace(cardName, "CARDNAME") : raw;
-            String stripped = AbilityDescription.stripReminderText(text.trim());
-            if (stripped != null && !stripped.isEmpty()) {
-                abilities.add(new TextAbility(type, AbilityDescription.applyCasing(stripped)));
-            }
+            String line = AbilityDescription.scriptLine(raw, cardName);
+            if (line != null) abilities.add(new TextAbility(type, line));
         }
         return abilities;
     }
