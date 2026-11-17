@@ -45,7 +45,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
@@ -60,9 +59,10 @@ import java.util.regex.Pattern;
  * <p>Recording happens here rather than inside the ability implementations
  * because this is the only place both the runtime trait and its index within
  * its kind are in scope, and {@code index_within_kind} is half the provenance
- * key. Each phase records the abilities it appended by bracketing the list, so
- * a factory that returns one ability and one that returns several are handled
- * identically.
+ * key. Each phase records the lines it rendered for a trait as it renders
+ * them, so a factory that returns one ability and one that returns several
+ * are handled identically; a keyword's rendering also names the line each
+ * trait it built printed ({@link KeywordRendering}).
  */
 final class FaceParser {
 
@@ -138,7 +138,9 @@ final class FaceParser {
         parseTraits(card.getReplacementEffects(), TraitKind.REPLACEMENT,
                 ReplacementAbilityEntry::of);
         appendLandMana();
-        return buildCardFace(face, postProcessed());
+        List<Ability> finished = postProcessed();
+        recorder.claimModesUnderEveryRoot(finished);
+        return buildCardFace(face, finished);
     }
 
     /**
@@ -158,11 +160,6 @@ final class FaceParser {
     private ProvenanceKey keywordKey(KeywordInterface ki) {
         int keywordIndex = FaceOrder.keywordIndex(card.getCurrentState(), ki);
         return keywordIndex < 0 ? null : key(TraitKind.KEYWORD, keywordIndex);
-    }
-
-    /** The abilities appended since the list had {@code before} of them. */
-    private List<Ability> since(int before) {
-        return List.copyOf(abilities.subList(before, abilities.size()));
     }
 
     // -- keywords --------------------------------------------------------
@@ -187,68 +184,70 @@ final class FaceParser {
      */
     private void parseKeywords() {
         for (KeywordInterface ki : card.getKeywords()) {
-            Keyword kw = ki.getKeyword();
-            int before = abilities.size();
-            if (kw == Keyword.UNDEFINED) {
-                routeUndefinedKeyword(ki);
-            } else if (kw == Keyword.HAUNT) {
-                abilities.addAll(HauntKeyword.of(ki, card, recorder::rendered));
-            } else if (kw == Keyword.GIFT) {
-                abilities.add(GiftKeyword.of(ki, card));
-            } else if (kw == Keyword.COMPANION && ki instanceof Companion comp) {
-                abilities.add(CompanionKeyword.of(ki, comp));
-            } else {
-                abilities.add(StandardKeyword.of(ki, kw));
-            }
-            recorder.attributeKeyword(since(before), keywordKey(ki), ki);
+            KeywordRendering rendering = renderKeyword(ki);
+            abilities.addAll(rendering.lines());
+            recorder.attributeKeyword(rendering, keywordKey(ki), ki);
         }
+    }
+
+    /** The lines {@code ki} prints. */
+    private KeywordRendering renderKeyword(KeywordInterface ki) {
+        Keyword kw = ki.getKeyword();
+        if (kw == Keyword.UNDEFINED) return renderUndefinedKeyword(ki);
+        if (kw == Keyword.HAUNT) return HauntKeyword.of(ki, card);
+        if (kw == Keyword.GIFT) return KeywordRendering.of(GiftKeyword.of(ki, card));
+        if (kw == Keyword.COMPANION && ki instanceof Companion comp) {
+            return KeywordRendering.of(CompanionKeyword.of(ki, comp));
+        }
+        return KeywordRendering.of(StandardKeyword.of(ki, kw));
     }
 
     // An undefined keyword is a script keyword Forge has no Keyword constant
     // for; its rendering depends only on how its original text starts.
-    private static final Map<String, BiConsumer<KeywordInterface, FaceParser>>
-            UNDEFINED_KEYWORDS = undefinedKeywordHandlers();
+    private static final Map<String, KeywordRenderer> UNDEFINED_KEYWORDS =
+            undefinedKeywordHandlers();
 
-    private static Map<String, BiConsumer<KeywordInterface, FaceParser>> undefinedKeywordHandlers() {
-        Map<String, BiConsumer<KeywordInterface, FaceParser>> handlers = new LinkedHashMap<>();
-        BiConsumer<KeywordInterface, FaceParser> nameStatic = (ki, p) -> p.abilities.add(
-                new TextAbility(AbilityType.STATIC, AbilityDescription.applyCasing(ki.getOriginal())));
+    /** How one kind of undefined keyword renders. */
+    private interface KeywordRenderer {
+        KeywordRendering render(KeywordInterface ki, FaceParser parser);
+    }
+
+    private static Map<String, KeywordRenderer> undefinedKeywordHandlers() {
+        Map<String, KeywordRenderer> handlers = new LinkedHashMap<>();
+        KeywordRenderer nameStatic = (ki, p) -> KeywordRendering.of(new TextAbility(
+                AbilityType.STATIC, AbilityDescription.applyCasing(ki.getOriginal())));
         handlers.put("CARDNAME ", nameStatic);
         handlers.put("NICKNAME ", nameStatic);
-        handlers.put("Chapter:", (ki, p) -> p.abilities.addAll(
-                ChapterAbility.fromKeyword(ki, p.recorder::rendered)));
-        handlers.put("Class:", (ki, p) -> {
-            ClassLevelAbility level = ClassLevelAbility.of(ki);
-            if (level != null) {
-                p.classLevelDescriptions.add(level.innerDescription());
-                p.abilities.add(level);
-            }
-        });
-        BiConsumer<KeywordInterface, FaceParser> etb =
-                (ki, p) -> p.abilities.addAll(EtbReplacementAbility.fromKeyword(ki));
+        handlers.put("Chapter:", (ki, p) -> ChapterAbility.fromKeyword(ki));
+        handlers.put("Class:", (ki, p) -> p.renderClassLevel(ki));
+        KeywordRenderer etb = (ki, p) -> KeywordRendering.of(EtbReplacementAbility.fromKeyword(ki));
         handlers.put("etbCounter:", etb);
         handlers.put("ETBReplacement:", etb);
-        handlers.put("AlternateAdditionalCost:", (ki, p) -> p.abilities.add(new TextAbility(
+        handlers.put("AlternateAdditionalCost:", (ki, p) -> KeywordRendering.of(new TextAbility(
                 AbilityType.ADDITIONAL_COST, AbilityDescription.applyCasing(
                         buildAlternateAdditionalCostDescription(ki.getOriginal())))));
-        handlers.put("Visit:", (ki, p) -> p.abilities.addAll(visitAbilities(ki)));
-        BiConsumer<KeywordInterface, FaceParser> openingEffect =
-                (ki, p) -> addIfNotNull(p.abilities, openingEffectAbility(ki));
+        handlers.put("Visit:", (ki, p) -> KeywordRendering.of(visitAbilities(ki)));
+        KeywordRenderer openingEffect = (ki, p) -> KeywordRendering.of(openingEffectAbility(ki));
         handlers.put("MayEffectFromOpeningHand:", openingEffect);
         handlers.put("MayEffectFromOpeningDeck:", openingEffect);
         return handlers;
     }
 
-    private void routeUndefinedKeyword(KeywordInterface ki) {
+    private KeywordRendering renderUndefinedKeyword(KeywordInterface ki) {
         String original = ki.getOriginal();
-        for (Map.Entry<String, BiConsumer<KeywordInterface, FaceParser>> handler
-                : UNDEFINED_KEYWORDS.entrySet()) {
+        for (Map.Entry<String, KeywordRenderer> handler : UNDEFINED_KEYWORDS.entrySet()) {
             if (original.startsWith(handler.getKey())) {
-                handler.getValue().accept(ki, this);
-                return;
+                return handler.getValue().render(ki, this);
             }
         }
-        abilities.add(StandardKeyword.of(ki, Keyword.UNDEFINED));
+        return KeywordRendering.of(StandardKeyword.of(ki, Keyword.UNDEFINED));
+    }
+
+    /** A Class level's line, its inner text kept so its duplicate trait entry can go. */
+    private KeywordRendering renderClassLevel(KeywordInterface ki) {
+        ClassLevelAbility level = ClassLevelAbility.of(ki);
+        if (level != null) classLevelDescriptions.add(level.innerDescription());
+        return KeywordRendering.of(level);
     }
 
     /**
@@ -390,9 +389,9 @@ final class FaceParser {
                 case KEYWORD_SPELL, OTHER_FACE, DUPLICATE_TRAIT -> { }
                 case LAND_MANA -> landManaTraits.add(new LandManaTrait(sa, spellKey));
                 case CHARM, ALT_COST, ACTIVATED, SPELL, UNRENDERED -> {
-                    int before = abilities.size();
-                    renderSpell(route, sa, abilities);
-                    recorder.attribute(since(before), spellKey, sa);
+                    List<Ability> lines = renderSpell(route, sa);
+                    abilities.addAll(lines);
+                    recorder.attribute(lines, spellKey, sa);
                 }
             }
         }
@@ -421,8 +420,9 @@ final class FaceParser {
         return SpellRoute.UNRENDERED;
     }
 
-    /** Append the lines a rendering route makes of {@code sa}. */
-    private static void renderSpell(SpellRoute route, SpellAbility sa, List<Ability> out) {
+    /** The lines a rendering route makes of {@code sa}. */
+    private static List<Ability> renderSpell(SpellRoute route, SpellAbility sa) {
+        List<Ability> out = new ArrayList<>();
         switch (route) {
             case CHARM -> out.addAll(CharmAbility.fromSpellAbility(sa));
             case ALT_COST -> addIfNotNull(out, AlternateCostSpell.of(sa));
@@ -434,6 +434,7 @@ final class FaceParser {
             }
             default -> { }
         }
+        return out;
     }
 
     // -- triggers, statics and replacements --------------------------------

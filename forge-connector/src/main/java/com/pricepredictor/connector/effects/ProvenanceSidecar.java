@@ -84,10 +84,6 @@ public record ProvenanceSidecar(
             List<RenderedLine> renderedLines,
             List<ProvenanceRecorder> recorders
     ) {
-        List<Ability> owners = renderedLines.stream().map(RenderedLine::owner).toList();
-        for (ProvenanceRecorder recorder : recorders) {
-            recorder.claimModesUnderEveryRoot(owners);
-        }
         List<Line> lines = new ArrayList<>();
         // By identity, as the recorders key abilities: the faces of a card
         // render equal abilities (both faces' flying) as distinct objects,

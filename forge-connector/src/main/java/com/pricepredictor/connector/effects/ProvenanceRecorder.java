@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.Ability;
+import com.pricepredictor.connector.KeywordRendering;
 import com.pricepredictor.connector.ability.OptionAbility;
 import forge.game.CardTraitBase;
 import forge.game.keyword.KeywordInterface;
@@ -74,12 +75,6 @@ public final class ProvenanceRecorder {
 
     private final Map<Ability, Source> byAbility = new IdentityHashMap<>();
     private final Set<ProvenanceKey> declared = new LinkedHashSet<>();
-    /**
-     * The one line a keyword rendered for one of the traits it generates,
-     * where the keyword renders a line per trait (a saga's chapters, haunt's
-     * two halves): that line alone declares the trait's {@code built} key.
-     */
-    private final Map<CardTraitBase, Ability> renderedFor = new IdentityHashMap<>();
     /** Where a chain's undefined SVars go; shared across every face of a run. */
     private final MissingSVarReport missingSVars;
 
@@ -120,11 +115,13 @@ public final class ProvenanceRecorder {
                 continue;
             }
             claim(ability, key, script);
-            for (Ability sub : ability.subAbilities()) {
-                if (sub instanceof OptionAbility option) {
-                    attributeMode(option, key, trait);
-                }
-            }
+            attributeModesBelow(ability, key, trait);
+        }
+    }
+
+    private void attributeModesBelow(Ability ability, ProvenanceKey key, CardTraitBase trait) {
+        for (Ability sub : ability.subAbilities()) {
+            if (sub instanceof OptionAbility option) attributeMode(option, key, trait);
         }
     }
 
@@ -158,17 +155,18 @@ public final class ProvenanceRecorder {
      * traits it built join that line through it. A keyword rendering several
      * — several abilities, or one whose text runs onto continuation lines —
      * declares {@code key} on none: each trait it built is claimed under
-     * {@code key} with its {@code built}, by the line {@link #rendered} named
-     * for it, or by the keyword's one ability. A trait with no such line is
+     * {@code key} with its {@code built}, by the line the rendering names for
+     * it, or by the keyword's one ability. A trait with no such line is
      * declared nowhere, and a record naming it falls back to the bare key.
      * Where no built trait has a line, the keyword's first line declares the
      * bare key, as if the keyword printed that line alone; a keyword
      * rendering no line has its bare key in {@code dropped_keys}.
      */
-    public void attributeKeyword(List<Ability> abilities, ProvenanceKey key,
+    public void attributeKeyword(KeywordRendering rendering, ProvenanceKey key,
                                  KeywordInterface keyword) {
         if (key == null) return;
-        if (rendersSeveralLines(abilities) && attributeBuiltTraits(abilities, key, keyword)) return;
+        List<Ability> abilities = rendering.lines();
+        if (rendersSeveralLines(abilities) && attributeBuiltTraits(rendering, key, keyword)) return;
         declare(key);
         if (abilities.isEmpty()) return;
         Ability line = abilities.get(0);
@@ -192,21 +190,30 @@ public final class ProvenanceRecorder {
     }
 
     /** Claim each built trait's key on its line; whether any trait had one. */
-    private boolean attributeBuiltTraits(List<Ability> abilities, ProvenanceKey key,
+    private boolean attributeBuiltTraits(KeywordRendering rendering, ProvenanceKey key,
                                          KeywordInterface keyword) {
         boolean claimed = false;
         for (TraitKind kind : TraitKind.values()) {
             int index = 0;
             for (CardTraitBase trait : kind.builtBy(keyword)) {
-                Ability line = abilities.size() == 1 ? abilities.get(0) : renderedFor.get(trait);
-                if (line != null) {
-                    attribute(List.of(line), key.withBuilt(kind, index), trait);
-                    claimed = true;
-                }
+                claimed |= attributeBuiltTrait(lineOf(rendering, trait),
+                        key.withBuilt(kind, index), trait);
                 index++;
             }
         }
         return claimed;
+    }
+
+    /** The line a built trait printed: the keyword's one line, or the one named for it. */
+    private static Ability lineOf(KeywordRendering rendering, CardTraitBase trait) {
+        List<Ability> lines = rendering.lines();
+        return lines.size() == 1 ? lines.get(0) : rendering.lineOf(trait);
+    }
+
+    private boolean attributeBuiltTrait(Ability line, ProvenanceKey builtKey, CardTraitBase trait) {
+        if (line == null) return false;
+        attribute(List.of(line), builtKey, trait);
+        return true;
     }
 
     /**
@@ -219,20 +226,6 @@ public final class ProvenanceRecorder {
         if (entry == null || keywordKey == null) return;
         ProvenanceKey.Built built = ProvenanceResolver.builtOf(trait);
         if (built != null) attribute(entry, keywordKey.withBuilt(built.kind(), built.index()), trait);
-    }
-
-    /**
-     * Note that a keyword rendered {@code line} for {@code trait}, one of the
-     * traits it generates.
-     *
-     * <p>A keyword rendering several lines, one per trait or group of traits,
-     * says so here while it renders: without it, every trait the keyword
-     * generated would be claimed by every one of its lines, and the join,
-     * which reads the first line holding a key, would give a saga's chapter II
-     * record chapter I's text.
-     */
-    public void rendered(CardTraitBase trait, Ability line) {
-        if (trait != null && line != null) renderedFor.put(trait, line);
     }
 
     /**
@@ -279,13 +272,15 @@ public final class ProvenanceRecorder {
      * which the converter merged, or the triggers a keyword generated. Forge
      * resolves a mode through whichever of them fired, so a mode line keyed
      * under one root alone leaves the others' records with no line. Run once
-     * every merge and keyword attribution has landed, which no single
-     * attribution site can know.
+     * on the face's finished lines, every merge and keyword attribution
+     * having landed, which no single attribution site can know; each line is
+     * a root before the lines below it, as the file prints them.
      */
-    public void claimModesUnderEveryRoot(Iterable<Ability> surviving) {
-        for (Ability ability : surviving) {
-            Source root = ability == null ? null : byAbility.get(ability);
+    public void claimModesUnderEveryRoot(Iterable<Ability> faceLines) {
+        for (Ability ability : faceLines) {
+            Source root = byAbility.get(ability);
             if (root != null) claimModesBelow(ability, root.keys());
+            claimModesUnderEveryRoot(ability.subAbilities());
         }
     }
 
@@ -293,14 +288,18 @@ public final class ProvenanceRecorder {
         for (Ability sub : parent.subAbilities()) {
             Source mode = byAbility.get(sub);
             if (sub instanceof OptionAbility option && mode != null) {
-                for (ProvenanceKey key : rootKeys) {
-                    if (key.option() != null) continue;
-                    mode.addKey(key.withOption(option.modeIndex()));
-                }
+                claimModeUnder(mode, option, rootKeys);
             } else if (mode == null) {
                 // A line of the charm's own rendering, between root and modes.
                 claimModesBelow(sub, rootKeys);
             }
+        }
+    }
+
+    private static void claimModeUnder(Source mode, OptionAbility option,
+                                       Set<ProvenanceKey> rootKeys) {
+        for (ProvenanceKey key : rootKeys) {
+            if (key.option() == null) mode.addKey(key.withOption(option.modeIndex()));
         }
     }
 

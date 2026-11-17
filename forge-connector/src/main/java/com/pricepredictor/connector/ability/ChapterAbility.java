@@ -3,16 +3,14 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
-import forge.game.CardTraitBase;
+import com.pricepredictor.connector.KeywordRendering;
 import forge.game.ability.ApiType;
 import forge.game.keyword.KeywordInterface;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.BiConsumer;
 
 /**
  * Chapter ability from a Saga. One ChapterAbility per trigger, with uppercased Roman prefix.
@@ -34,42 +32,31 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
         return AbilityType.CHAPTER;
     }
 
-    public static List<Ability> fromKeyword(KeywordInterface ki) {
-        return fromKeyword(ki, (trigger, line) -> { });
-    }
-
     /**
-     * The chapter lines, telling {@code rendered} which line each chapter's
-     * trigger printed.
+     * The chapter lines, each with the triggers that printed it.
      *
      * <p>Forge generates one trigger per chapter, the chapters sharing an
      * ability grouped together, the first of a group primary and the rest
      * secondary ("I, II —" is one line from two triggers): a secondary trigger
      * belongs to the line its group's primary printed.
      */
-    public static List<Ability> fromKeyword(KeywordInterface ki,
-                                            BiConsumer<CardTraitBase, Ability> rendered) {
-        List<Ability> abilities = new ArrayList<>();
+    public static KeywordRendering fromKeyword(KeywordInterface ki) {
+        KeywordRendering.Builder rendering = new KeywordRendering.Builder();
         Ability groupLine = null;
         for (var trigger : ki.getTriggers()) {
-            if (trigger.isSecondary()) {
-                if (groupLine != null) rendered.accept(trigger, groupLine);
-                continue;
+            if (!trigger.isSecondary()) {
+                groupLine = chapter(trigger);
+                if (groupLine != null) rendering.add(groupLine);
             }
-            groupLine = null;
-            int before = abilities.size();
-            addChapter(trigger, abilities);
-            if (abilities.size() > before) {
-                groupLine = abilities.get(abilities.size() - 1);
-                rendered.accept(trigger, groupLine);
-            }
+            rendering.printed(trigger, groupLine);
         }
-        return abilities;
+        return rendering.build();
     }
 
-    private static void addChapter(Trigger trigger, List<Ability> abilities) {
+    /** The line {@code trigger} prints, or null if it prints none. */
+    private static Ability chapter(Trigger trigger) {
         String trigDesc = trigger.getParam("TriggerDescription");
-        if (trigDesc == null) return;
+        if (trigDesc == null) return null;
 
         // If TriggerDescription is just a chapter header (nothing after the em-dash),
         // resolve the execute SVar's SpellDescription to fill chapter content.
@@ -77,35 +64,38 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
 
         // If TriggerDescription contains the ABILITY placeholder and execute is a Charm,
         // replace with charm header and attach OPTION sub-abilities.
-        if (stripped.contains("ABILITY")) {
-            SpellAbility execute = trigger.getOverridingAbility();
-            if (execute != null && execute.getApi() == ApiType.Charm) {
-                // Owned by the trigger: two chapters naming one charm SVar
-                // share the charm object, and only the trigger tells
-                // chapter I's option lines from chapter II's.
-                CharmAbility.Expanded expanded =
-                        CharmAbility.expandPlaceholder(stripped, execute, trigger);
-                if (expanded.description() == null) return;
-                abilities.add(new ChapterAbility(
-                        AbilityType.CHAPTER.formatDescription(expanded.description()),
-                        expanded.options()));
-                return;
-            }
+        SpellAbility execute = trigger.getOverridingAbility();
+        if (stripped.contains("ABILITY") && isCharm(execute)) {
+            return charmChapter(stripped, execute, trigger);
         }
 
-        if (isHeaderOnly(stripped)) {
-            SpellAbility execute = trigger.getOverridingAbility();
-            if (execute != null) {
-                String effectText = SpellAbilityUtils.chainText(execute);
-                if (!effectText.isEmpty()) {
-                    stripped = stripped + " " + effectText;
-                }
-            }
-        }
+        String normalized = AbilityDescription.normalize(withEffectText(stripped, execute));
+        if (normalized == null) return null;
+        return new ChapterAbility(AbilityType.CHAPTER.formatDescription(normalized));
+    }
 
-        String normalized = AbilityDescription.normalize(stripped);
-        if (normalized == null) return;
-        abilities.add(new ChapterAbility(AbilityType.CHAPTER.formatDescription(normalized)));
+    private static boolean isCharm(SpellAbility execute) {
+        return execute != null && execute.getApi() == ApiType.Charm;
+    }
+
+    /** A header-only chapter completed with its execute chain's text. */
+    private static String withEffectText(String stripped, SpellAbility execute) {
+        if (execute == null || !isHeaderOnly(stripped)) return stripped;
+        String effectText = SpellAbilityUtils.chainText(execute);
+        return effectText.isEmpty() ? stripped : stripped + " " + effectText;
+    }
+
+    /** A chapter whose ABILITY placeholder names a charm: its header and options. */
+    private static Ability charmChapter(String stripped, SpellAbility execute, Trigger trigger) {
+        // Owned by the trigger: two chapters naming one charm SVar
+        // share the charm object, and only the trigger tells
+        // chapter I's option lines from chapter II's.
+        CharmAbility.Expanded expanded =
+                CharmAbility.expandPlaceholder(stripped, execute, trigger);
+        if (expanded.description() == null) return null;
+        return new ChapterAbility(
+                AbilityType.CHAPTER.formatDescription(expanded.description()),
+                expanded.options());
     }
 
     /**
