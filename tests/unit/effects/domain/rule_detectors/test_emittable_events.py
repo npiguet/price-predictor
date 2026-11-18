@@ -63,7 +63,7 @@ def test_the_clause_hook_set_is_what_the_clause_hooks_build():
 
 
 def test_the_run_parameter_set_is_what_the_normalizer_builds():
-    assert RUN_PARAMS == _named("RunParamNormalizer")
+    assert RUN_PARAMS == _named("RunParamNormalizer", "RunParamRows")
 
 
 def test_the_game_s_end_reads_on_a_game_ending_line_alone():

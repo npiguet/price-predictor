@@ -23,7 +23,7 @@ and ``test_emittable_events`` reads the sources to keep it so:
   half of the resolution it belongs to;
 - :data:`CHOKE_POINTS`: the two outcome-hook events Forge reports at an
   engine choke point with no resolving ability, routed as a bus event is;
-- :data:`RUN_PARAMS`: built by ``RunParamNormalizer`` from a trigger's or a
+- :data:`RUN_PARAMS`: built by ``RunParamNormalizer`` through ``RunParamRows`` from a trigger's or a
   replacement's run parameters, the trigger record's ``event`` and the rewrite
   record's ``incoming``/``outgoing``;
 - :data:`TAPPED`: what the bracket routes (``BusBracketCollector.route``:
@@ -87,8 +87,8 @@ CLAUSE_HOOKS: frozenset[E] = frozenset({
 })
 #: Outcome-hook events Forge reports with no resolving ability, routed as bus events are.
 CHOKE_POINTS: frozenset[E] = frozenset({E.CARD_REVEALED, E.DAMAGE_PREVENTED})
-#: Built by ``RunParamNormalizer`` (``EVENT_BY_MODE``; an unmapped mode is a
-#: ``state_flag_change``).
+#: Built by ``RunParamNormalizer`` from the mode rows of ``RunParamRows`` (a
+#: mode with no row is a ``state_flag_change``).
 RUN_PARAMS: frozenset[E] = frozenset({
     E.ZONE_CHANGE, E.DAMAGE_DEALT, E.DAMAGE_PREVENTED, E.CARD_DRAWN, E.CARD_DISCARDED,
     E.CARD_MILLED, E.LIFE_CHANGE, E.COUNTER_CHANGE, E.TAPPED, E.UNTAPPED,
