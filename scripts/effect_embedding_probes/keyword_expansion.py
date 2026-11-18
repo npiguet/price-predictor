@@ -248,15 +248,19 @@ def corpus_lines(trees) -> list[dict]:
     rows = []
     for tree in trees:
         for path, sidecar in iter_sidecars(tree):
-            # Named by the source tree the keys spell, not the folder's own
-            # name: a kept-aside ``old-cardsfolder`` still holds ``cardsfolder``.
-            rel = (Path(tree_of_folder(tree)) / path.relative_to(tree)).as_posix()
-            stem = rel.removesuffix(".provenance.json")
-            for index, line in enumerate(sidecar.lines):
-                if line.script_text:
-                    rows.append({"source": stem, "card": sidecar.card, "index": index,
-                                 "api": line.script_api_type, "text": line.script_text})
+            rows.extend(_script_rows(tree, path, sidecar))
     return rows
+
+
+def _script_rows(tree, path: Path, sidecar) -> list[dict]:
+    """One sidecar's lines with script text, as corpus rows."""
+    # Named by the source tree the keys spell, not the folder's own
+    # name: a kept-aside ``old-cardsfolder`` still holds ``cardsfolder``.
+    rel = (Path(tree_of_folder(tree)) / path.relative_to(tree)).as_posix()
+    stem = rel.removesuffix(".provenance.json")
+    return [{"source": stem, "card": sidecar.card, "index": index,
+             "api": line.script_api_type, "text": line.script_text}
+            for index, line in enumerate(sidecar.lines) if line.script_text]
 
 
 def unit_rows(matrix: np.ndarray) -> np.ndarray:
@@ -400,20 +404,34 @@ def encode_corpus(r: Readers, lines: list[dict], out: Path) -> Corpus:
     """The corpus encoded with expansion off and forced, cached beside the report."""
     texts = sorted({row["text"] for row in lines})
     cache_file = out / "corpus_encodings.npz"
-    if cache_file.exists():
-        stored = np.load(cache_file, allow_pickle=True)
-        if list(stored["texts"]) == texts:
-            return Corpus(lines, texts, unit_rows(stored["plain"]), unit_rows(stored["forced"]))
-        cache_file.unlink()
+    stored = _stored_corpus(cache_file, lines, texts)
+    if stored is not None:
+        return stored
     plain_tokens = [r.tok.tokenize(t) for t in texts]
     forced_tokens = [r.tok.expand_keywords(list(t), probability=1.0) for t in plain_tokens]
     plain = r.encode(plain_tokens)
-    changed = [i for i, (a, b) in enumerate(zip(plain_tokens, forced_tokens))
-               if len(a) != len(b) or any(x is not y for x, y in zip(a, b))]
+    changed = _changed_rows(plain_tokens, forced_tokens)
     forced = plain.copy()
     forced[changed] = r.encode([forced_tokens[i] for i in changed])
     np.savez(cache_file, texts=np.array(texts, dtype=object), plain=plain, forced=forced)
     return Corpus(lines, texts, unit_rows(plain), unit_rows(forced))
+
+
+def _stored_corpus(cache_file: Path, lines: list[dict], texts: list[str]) -> Corpus | None:
+    """The corpus read back from ``cache_file`` if it holds these texts; a stale file is deleted."""
+    if not cache_file.exists():
+        return None
+    stored = np.load(cache_file, allow_pickle=True)
+    if list(stored["texts"]) == texts:
+        return Corpus(lines, texts, unit_rows(stored["plain"]), unit_rows(stored["forced"]))
+    cache_file.unlink()
+    return None
+
+
+def _changed_rows(plain_tokens: list, forced_tokens: list) -> list[int]:
+    """The rows whose forced expansion differs from the plain tokens."""
+    return [i for i, (a, b) in enumerate(zip(plain_tokens, forced_tokens))
+            if len(a) != len(b) or any(x is not y for x, y in zip(a, b))]
 
 
 def expansion_effect(paths: ProbePaths, corpus: Corpus, keyword_lines: list[dict]) -> list[str]:
@@ -535,10 +553,20 @@ def longhand_twins(corpus: Corpus, names: list[str], A: np.ndarray,
     return pd.DataFrame(rows)
 
 
-def unknown_keywords(r: Readers, corpus: Corpus, measured: pd.DataFrame, A: np.ndarray,
-                     B: np.ndarray) -> tuple[pd.DataFrame, np.ndarray]:
+@dataclass(frozen=True)
+class KeywordSpace:
+    """The measured keywords' names and their bare (A) and expanded (B) encodings, row by row."""
+
+    names: list[str]
+    bare: np.ndarray
+    expanded: np.ndarray
+
+
+def unknown_keywords(r: Readers, corpus: Corpus, measured: pd.DataFrame,
+                     space: KeywordSpace) -> tuple[pd.DataFrame, np.ndarray]:
     """Question 2's simulation: each measured keyword's token deleted from the vocabulary,
     encoded with its definitions available and without."""
+    A, B = space.bare, space.expanded
     rows, new_tokens, bare_tokens = [], [], []
     for name, text in zip(measured.keyword, measured.line):
         fired = next(t.text for t in r.tok.tokenize(text) if r.tok.expandable(t))
@@ -586,9 +614,10 @@ def new_keyword_retrieval(sim: pd.DataFrame, n: int) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def twins_for_new_keyword(corpus: Corpus, twins: pd.DataFrame, names: list[str],
-                          U: np.ndarray, A: np.ndarray) -> pd.DataFrame:
-    kw_index = {k: i for i, k in enumerate(names)}
+def twins_for_new_keyword(corpus: Corpus, twins: pd.DataFrame, space: KeywordSpace,
+                          U: np.ndarray) -> pd.DataFrame:
+    A = space.bare
+    kw_index = {k: i for i, k in enumerate(space.names)}
     rows = []
     for _, row in twins[twins.resolved].iterrows():
         k = kw_index[row.keyword]
@@ -679,12 +708,13 @@ def report(paths: ProbePaths) -> None:
                 table_text(twins.drop(columns=["twin_text"])), ""]
 
     summary += vocabulary_gaps(defs, klines)
-    sim, U = unknown_keywords(r, corpus, measured, A, B)
+    space = KeywordSpace(names, A, B)
+    sim, U = unknown_keywords(r, corpus, measured, space)
     sim.to_csv(out / "q2_simulated_new_keyword.csv", index=False)
     q2 = new_keyword_retrieval(sim, n)
     q2.to_csv(out / "q2_retrieval.csv", index=False)
     summary += ["  Simulated new keyword (token deleted from the vocabulary):", table_text(q2)]
-    twin_new = twins_for_new_keyword(corpus, twins, names, U, A)
+    twin_new = twins_for_new_keyword(corpus, twins, space, U)
     twin_new.to_csv(out / "q2_twins_for_new_keyword.csv", index=False)
     summary += ["  Longhand twins seen from the simulated new keyword:", table_text(twin_new)]
 
