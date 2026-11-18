@@ -28,16 +28,7 @@ def records():
     return curated_fixture_records()
 
 
-@pytest.fixture(scope="module")
-def corpus(tmp_path_factory, records):
-    """Three training shards, the validation sample, and a vocabulary file.
-
-    ``held`` is a validation game: its records are in the sample and in no
-    training shard, as build-corpus routes them.
-    """
-    root = tmp_path_factory.mktemp("corpus")
-    games = sorted({record.game_id for record in records})
-    held = games[0]
+def _write_training_shards(root, records, held):
     shards = []
     for index in range(FIXTURE_TRAINING_SHARDS):
         path = root / f"train{index}.jsonl.gz"
@@ -46,9 +37,10 @@ def corpus(tmp_path_factory, records):
             if i % FIXTURE_TRAINING_SHARDS == index and r.game_id != held
         ])
         shards.append(path)
-    sample = root / "validation.jsonl.gz"
-    write_shard(sample, records[:24])
+    return shards
 
+
+def _write_vocabulary(root, records):
     cards, tokens = GEN3_SIDECAR_FOLDERS
     sidecars = SidecarCache({"cardsfolder": cards, "tokenscripts": tokens})
     definitions = load_keyword_definitions(FIXTURE_KEYWORD_DEFINITIONS)
@@ -66,9 +58,24 @@ def corpus(tmp_path_factory, records):
             vocab.setdefault(token.text, len(vocab))
     vocab_path = root / "vocab-script.txt"
     save_vocabulary(vocab, vocab_path)
+    return vocab_path
+
+
+@pytest.fixture(scope="module")
+def corpus(tmp_path_factory, records):
+    """Three training shards, the validation sample, and a vocabulary file.
+
+    ``held`` is a validation game: its records are in the sample and in no
+    training shard, as build-corpus routes them.
+    """
+    root = tmp_path_factory.mktemp("corpus")
+    held = sorted({record.game_id for record in records})[0]
+    shards = _write_training_shards(root, records, held)
+    sample = root / "validation.jsonl.gz"
+    write_shard(sample, records[:24])
     return type("Corpus", (), {
         "root": root, "shards": shards, "sample": sample, "held": held,
-        "vocab": vocab_path,
+        "vocab": _write_vocabulary(root, records),
     })
 
 
