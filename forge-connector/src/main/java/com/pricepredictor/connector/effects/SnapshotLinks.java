@@ -1,6 +1,8 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.WireNamed;
 import com.pricepredictor.connector.json.Json;
+import com.pricepredictor.connector.json.JsonParts;
 import forge.game.CardTraitBase;
 import forge.game.Game;
 import forge.game.GameEntity;
@@ -48,11 +50,13 @@ import java.util.Set;
  * stack and command zone; an end the snapshot carries no entity for (a card
  * a cipher encoded in exile, a creature damaged and since exiled) is still
  * named, for the reader to drop. A card that has left the game (a token
- * that died) is no end: Forge's lists may still hold it (a control card's
- * gain-control targets, a source's damage history), but it describes
- * nothing on the board, and a game copy, which holds no such card, could
- * not write the link. Families the reader builds from its own layout are
- * never written ({@link LinkFamily#collected}).
+ * that died) is no end unless the snapshot writes it as an entity (a
+ * referenced token as it last existed, {@code SnapshotBuilder}): Forge's
+ * lists may still hold it (a control card's gain-control targets, a
+ * source's damage history), but it describes nothing on the board, and a
+ * game copy, which holds no such card, could not write the link. Families
+ * the reader builds from its own layout are never written ({@link
+ * LinkFamily#collected}).
  *
  * <p>Links are listed by family in the table's order, each once.
  */
@@ -60,11 +64,14 @@ final class SnapshotLinks {
 
     private final Game game;
     private final Map<LinkFamily, Set<String>> byFamily = new EnumMap<>(LinkFamily.class);
-    /** The ref of every card in the game, each a card end may name. */
+    /** The ref of every card in the game or among the snapshot's entities, each a card end may name. */
     private final Set<String> inGame = new HashSet<>();
 
-    private SnapshotLinks(Game game) {
+    private SnapshotLinks(Game game, Collection<Card> entities) {
         this.game = game;
+        for (Card entity : entities) {
+            inGame.add(card(entity));
+        }
         game.forEachCardInGame(card -> {
             inGame.add(card(card));
             return true;
@@ -110,7 +117,7 @@ final class SnapshotLinks {
                          SpellAbility acting, boolean actingTargets, EffectEvent pending,
                          StaticSuppression board, FloatingEffects floating,
                          List<String> actingTargetsAsCast) {
-        SnapshotLinks links = new SnapshotLinks(game);
+        SnapshotLinks links = new SnapshotLinks(game, cards);
         links.cardLinks(cards, board);
         links.combat(game.getCombat());
         links.stack(acting, actingTargets, actingTargetsAsCast);
@@ -120,9 +127,42 @@ final class SnapshotLinks {
             links.add(LinkFamily.LAST_KNOWN_STATE_OF,
                     Json.string("L" + lastKnown.getId()), card(lastKnown));
         }
+        return joined(links.byFamily);
+    }
+
+    /**
+     * {@code links}, a snapshot's rendered links, with the {@code controls}
+     * and {@code owns} links of {@code libraryCards} added in their
+     * families' places: the library cards the record's events name, which
+     * join the entities at the write ({@link Snapshot#withEventCards}),
+     * each controlled by its owner, as in the library.
+     */
+    static String withLibraryCards(String links, Collection<Card> libraryCards) {
+        Map<LinkFamily, Set<String>> byFamily = new EnumMap<>(LinkFamily.class);
+        for (String link : JsonParts.elements(links)) {
+            byFamily.computeIfAbsent(familyOf(link), f -> new LinkedHashSet<>()).add(link);
+        }
+        for (Card card : libraryCards) {
+            String owner = player(card.getOwner());
+            byFamily.computeIfAbsent(LinkFamily.CONTROLS, f -> new LinkedHashSet<>())
+                    .add(linkJson(LinkFamily.CONTROLS, owner, card(card)));
+            byFamily.computeIfAbsent(LinkFamily.OWNS, f -> new LinkedHashSet<>())
+                    .add(linkJson(LinkFamily.OWNS, owner, card(card)));
+        }
+        return joined(byFamily);
+    }
+
+    /** A rendered link's family, from its {@code type}. */
+    private static LinkFamily familyOf(String link) {
+        String type = JsonParts.fields(link).get("type");
+        return WireNamed.fromWireName(LinkFamily.class, type.substring(1, type.length() - 1));
+    }
+
+    /** Every link, by family in the table's order. */
+    private static String joined(Map<LinkFamily, Set<String>> byFamily) {
         List<String> all = new ArrayList<>();
         for (LinkFamily family : LinkFamily.values()) {
-            all.addAll(links.byFamily.getOrDefault(family, Set.of()));
+            all.addAll(byFamily.getOrDefault(family, Set.of()));
         }
         return "[" + String.join(",", all) + "]";
     }
@@ -500,9 +540,12 @@ final class SnapshotLinks {
 
     private void add(LinkFamily family, String from, String to) {
         if (isEnd(from) && isEnd(to)) {
-            byFamily.computeIfAbsent(family, f -> new LinkedHashSet<>()).add(Json.object()
-                    .raw("from", from).raw("to", to).value("type", family).render());
+            byFamily.computeIfAbsent(family, f -> new LinkedHashSet<>()).add(linkJson(family, from, to));
         }
+    }
+
+    private static String linkJson(LinkFamily family, String from, String to) {
+        return Json.object().raw("from", from).raw("to", to).value("type", family).render();
     }
 
     private void addTarget(String from, String to, int index) {
@@ -515,7 +558,7 @@ final class SnapshotLinks {
 
     /**
      * Whether a rendered end names something: not null, and, for a card's
-     * ref, a card still in the game. A line, a player and a command-zone
+     * ref, a card still in the game or an entity of the snapshot. A line, a player and a command-zone
      * object's ref are ends as they are.
      */
     private boolean isEnd(String end) {

@@ -1,6 +1,9 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.json.Json;
+import forge.game.card.Card;
+
+import java.util.List;
 
 /**
  * One record's state snapshot, held as its rendered blocks until it is written.
@@ -67,20 +70,23 @@ record Snapshot(
      * entities, each where it sat when the board was captured: a card the
      * record's own effect drew, milled, revealed or searched out is read in
      * the library it came from, as every other entity is read before the
-     * events.
+     * events, with its owner's {@code controls} and {@code owns} links.
      */
     Snapshot withEventCards(Iterable<EffectEvent> events) {
         if (libraries == null) {
             return this;
         }
-        String named = libraries.render(events);
+        List<LibraryCapture.Slot> named = libraries.named(events);
         if (named.isEmpty()) {
             return this;
         }
+        String rendered = libraries.render(named);
         String joined = entities.equals("[]")
-                ? "[" + named + "]"
-                : entities.substring(0, entities.length() - 1) + "," + named + "]";
-        return new Snapshot(global, players, joined, links, refs, pendingEvent, libraries);
+                ? "[" + rendered + "]"
+                : entities.substring(0, entities.length() - 1) + "," + rendered + "]";
+        List<Card> cards = named.stream().map(LibraryCapture.Slot::card).toList();
+        return new Snapshot(global, players, joined, SnapshotLinks.withLibraryCards(links, cards),
+                refs, pendingEvent, libraries);
     }
 
     /** The state as a record writes it, its blocks in the order the schema fixes. */

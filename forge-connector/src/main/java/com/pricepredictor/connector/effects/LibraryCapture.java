@@ -57,22 +57,30 @@ record LibraryCapture(
     }
 
     /**
-     * The entities of the captured library cards {@code events} name and the
-     * snapshot does not already hold, comma-joined in the order first named;
-     * empty when none.
+     * The captured library cards {@code events} name and the snapshot does
+     * not already hold, in the order first named.
      */
-    String render(Iterable<EffectEvent> events) {
-        List<String> rendered = new ArrayList<>();
+    List<Slot> named(Iterable<EffectEvent> events) {
+        List<Slot> named = new ArrayList<>();
         Set<String> added = new java.util.HashSet<>(present);
         for (EffectEvent event : events) {
             for (String subject : event.subjects()) {
                 Slot slot = byId.get(subject);
                 if (slot != null && added.add(subject)) {
-                    rendered.add(EntityJson.render(game, asInLibrary(slot.card()), board,
-                            new EntityJson.Beyond(null, "library", slot.position(),
-                                    SnapshotBuilder.ROLE_LIBRARY_CARD)));
+                    named.add(slot);
                 }
             }
+        }
+        return named;
+    }
+
+    /** The entities of {@code slots}, comma-joined, each where it sat. */
+    String render(List<Slot> slots) {
+        List<String> rendered = new ArrayList<>();
+        for (Slot slot : slots) {
+            rendered.add(EntityJson.render(game, asInLibrary(slot.card()), board,
+                    new EntityJson.Beyond(null, "library", slot.position(),
+                            SnapshotBuilder.ROLE_LIBRARY_CARD)));
         }
         return String.join(",", rendered);
     }

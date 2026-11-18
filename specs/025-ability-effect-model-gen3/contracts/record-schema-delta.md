@@ -139,7 +139,8 @@ Shapes follow `rules/gen3-fields.json`; the collector writes the field names bel
 | card | `base_pt`, `pt_boosts` | `[p, t]`; boosts `{temporary: [p, t], counters: [p, t]}`; both `null` on a non-creature; base + temporary + counters = net P/T |
 | card | `counters` | `{type: n}` over every named type |
 | card | `designations`, `x_paid`, `chosen`, `costs_paid`, `history`, `order_rank`, `real_face`, `printed_loyalty`, `printed_defense`, `mana_cost` | below, "A card's facts" |
-| entity | `role` | `null` on an entity of the four tiers; else `library_card`, `exiled_with`, `mutate_component` or `last_known` (below, "Entities beyond the tiers") |
+| entity | `role` | `null` on an entity of the four tiers; else `library_card`, `exiled_with`, `mutate_component` or `last_known` (below, "Entities beyond the tiers"); `last_known` too on a referenced card the game no longer holds (below, the referenced tier) |
+| entity | `combat.attacking` | changed meaning: the defender's ref, as the `attacks` link names it: `P<id>`, or `E<id>` for a planeswalker or battle; `E-1` for the placeholder an attacker attacks once its planeswalker or battle has left (506.4c, Forge's `Combat.isRemovedDefender`), which no entity carries; `null` for a creature not attacking |
 | player | `max_land_plays`, `speed`, `city_blessing`, `rad`, `monarch`, `initiative`, `turn_counts` | below, "A player's facts" |
 | global | `day_night` | `"day"` \| `"night"` \| `null` |
 | global | `floating_effects`, `delayed_triggers` | `{id, source_lines, affected, remembered, duration, shield_left}`; `duration` ∈ `end_of_turn`, `until_leaves`, `permanent` (below, "Command-zone objects") |
@@ -268,7 +269,7 @@ Appended to `state.entities` after the four tiers, each card once:
 
 | `role` | which cards | written as |
 |---|---|---|
-| `library_card` | each library's top card; every library card the pending event names; every library card named by the events of a resolution's effect half (live or interventional) or of a `turn_action` record | `zone: library`, `order_rank` its position when the board was captured |
+| `library_card` | each library's top card; every library card the pending event names; every library card named by the events of a resolution's effect half (live or interventional) or of a `turn_action` record | `zone: library`, `order_rank` its position when the board was captured; its owner's `controls` and `owns` links, in their families' places |
 | `exiled_with` | the cards exiled with a permanent of the tiers (`getExiledCards`) | the card as it is |
 | `mutate_component` | a mutated permanent's merged cards | the card as it is |
 | `last_known` | the pending event's subject as it last existed (the run parameters' `CardLKI`); on an effect half, a target as cast that has ceased to exist or become a new object (`refs.targets_at_cast`), with `zone` and `order_rank` null | id `L<card id>`; `zone` the zone it was last in |
@@ -290,9 +291,9 @@ once.
 An end is a ref (`E<id>`, `P<id>`, `L<id>`, `F<timestamp>`, `D<id>`) or a line
 `{entity, key}`: a link an ability made ends at that ability's line. Where Forge keeps no record of
 the ability, or the trait keys to no line, the end is the card. An end the snapshot carries no
-entity for is still named. A card that has left the game (a token that died) is no end: a link
-to it is not written, though Forge's lists (`getGainControlTargets`, `getDamageHistory`) may
-still hold it.
+entity for is still named. A card that has left the game (a token that died) is no end unless the snapshot writes it
+as an entity (a referenced token as it last existed): a link to it is not written, though Forge's
+lists (`getGainControlTargets`, `getDamageHistory`) may still hold it.
 
 | `type` | from | to | Forge source |
 |---|---|---|---|
@@ -505,7 +506,11 @@ position a card left a library from, and a search of another player's library.
   half, a modal double-faced card's back face; its `zone` and `order_rank` are the card's own.
 - A record's referenced card (tier 1) is the game's own object for it: a dies trigger's host and
   the host of an ability that sacrificed it are the card in the graveyard, written once as
-  `E<id>` with its zone; the last-known copy is only the `L<id>` entity.
+  `E<id>` with its zone; the last-known copy is only the `L<id>` entity. A referenced card the
+  game no longer holds, a token that ceased to exist (a Food sacrificed for its own ability),
+  is written as it last existed under its `E<id>`, the
+  ref `refs.source`, its lines and the events name it by: role `last_known`, `zone` and
+  `order_rank` null, and an end of links as any entity is (its `source_of`, `controls`, `owns`).
 - `refs.x` is the X paid into the mana cost, else the ability's `SVar:X` when a parameter of its
   chain names X (`NumDmg$ X`, `NumAtt$ +X`, `cmcLEX`), else `null`; a `Count$Random` X is never
   read. It is read once: when a cast item goes on the stack, its costs paid, and when the

@@ -226,11 +226,14 @@ public final class SnapshotBuilder {
     private Snapshot snapshot(
             Iterable<Card> referenced, StaticSuppression board, SpellAbility acting, Card source,
             EffectEvent pending, boolean chosen, ChainTargets atCast) {
-        Set<Card> tiers = collectEntities(referenced);
+        Set<Card> ceased = new HashSet<>();
+        Set<Card> tiers = collectEntities(referenced, ceased);
         List<String> entities = new ArrayList<>();
         Set<String> present = new HashSet<>();
         for (Card card : tiers) {
-            entities.add(renderTier(card, acting, atCast, board));
+            entities.add(ceased.contains(card)
+                    ? renderCeased(card, acting, atCast, board)
+                    : renderTier(card, acting, atCast, board));
             present.add(Refs.of(card));
         }
         for (Card gone : lastKnownOf(atCast)) {
@@ -277,6 +280,20 @@ public final class SnapshotBuilder {
         }
         return EntityJson.render(game, shown, board,
                 beyond.withStackTargets(stackTargetsOf(card, acting, atCast)));
+    }
+
+    /**
+     * A referenced card the game no longer holds, a token that ceased to
+     * exist (a Food sacrificed for its own ability): as it last existed, role {@code last_known}, with no
+     * zone and no rank, as a target as cast that ceased to exist is. It keeps
+     * its {@code E<id>}, the id {@code refs.source}, its lines and the
+     * record's events name it by, since the game holds no other object
+     * under that id.
+     */
+    private String renderCeased(
+            Card card, SpellAbility acting, ChainTargets atCast, StaticSuppression board) {
+        return EntityJson.render(game, card, board, EntityJson.Beyond.lastKnown(null, ROLE_LAST_KNOWN)
+                .withStackTargets(stackTargetsOf(card, acting, atCast)));
     }
 
     /**
@@ -426,12 +443,16 @@ public final class SnapshotBuilder {
      * permanent that left, which shares the card's id: kept, it would stand
      * in for the card in the graveyard with its old battlefield state and no
      * zone. A last-known copy is written only as the {@code L<id>} entity.
+     * Where the game holds none (a token that ceased to exist), the card is
+     * kept as it last existed and noted in {@code ceased}.
+     *
+     * @param ceased where the referenced cards the game no longer holds go
      */
-    private Set<Card> collectEntities(Iterable<Card> referenced) {
+    private Set<Card> collectEntities(Iterable<Card> referenced, Set<Card> ceased) {
         Set<Card> entities = new LinkedHashSet<>();
         for (Card card : referenced) {
             if (card != null) {
-                entities.add(game.getCardState(card, card));
+                entities.add(heldOrCeased(card, ceased));
             }
         }
         // Phased-out permanents too, which getCardsIn leaves out: they are
@@ -441,6 +462,16 @@ public final class SnapshotBuilder {
         entities.addAll(game.getCardsIn(ZoneType.Stack));
         entities.addAll(game.getCardsIn(EnumSet.of(ZoneType.Hand, ZoneType.Graveyard)));
         return entities;
+    }
+
+    /** The game's own object for {@code card}, else {@code card}, noted in {@code ceased}. */
+    private Card heldOrCeased(Card card, Set<Card> ceased) {
+        Card held = game.getCardState(card, null);
+        if (held != null) {
+            return held;
+        }
+        ceased.add(card);
+        return card;
     }
 
     private String globalToJson(Collection<Card> cards, StaticSuppression board) {

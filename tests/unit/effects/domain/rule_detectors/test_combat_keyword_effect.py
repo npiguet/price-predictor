@@ -72,7 +72,7 @@ def _combat(entities, events=(), substep="regular"):
 
 
 def _attacking(blocked_by=()):
-    return CombatStatus(attacking="p2", blocked_by=tuple(blocked_by))
+    return CombatStatus(attacking="P1", blocked_by=tuple(blocked_by))
 
 
 @pytest.mark.parametrize("keyword", ["toxic", "poisonous"])
@@ -134,7 +134,7 @@ def test_trample_over_planeswalkers_judges_only_the_step_it_strikes_in():
     board = [_at_walker("E1", ("trample",)), _walker()]
     assert FAMILY.match(_combat(board, substep="first_strike"), None,
                         {"keyword": "trample_over_planeswalkers"}) is None
-    gone = [_at_walker("E1", (), defender="<Nothing>")]
+    gone = [_at_walker("E1", (), defender="E-1")]
     assert FAMILY.match(_combat(gone, substep="first_strike"), None,
                         {"keyword": "trample_over_planeswalkers", "defender": "gone"}) is None
 
@@ -177,7 +177,7 @@ def _walker(loyalty=2, zone="battlefield"):
                        counters={"LOYALTY": loyalty})
 
 
-def _at_walker(entity_id, keywords, defender="walker (9)"):
+def _at_walker(entity_id, keywords, defender="E9"):
     return _creature(entity_id, keywords, combat=CombatStatus(attacking=defender))
 
 
@@ -206,7 +206,7 @@ def test_no_excess_over_loyalty_shows_nothing():
 
 def test_a_gone_planeswalker_flips_with_fires_when_absent():
     """702.19f: without the keyword, nothing reaches the player once the planeswalker is gone."""
-    board = [_at_walker("E1", (), defender="<Nothing>")]
+    board = [_at_walker("E1", (), defender="E-1")]
     params = {"keyword": "trample_over_planeswalkers", "defender": "gone"}
     carried = FAMILY.match(_combat(board), None, params)
     assert (carried.polarity, carried.observed) == (Polarity.DOES_NOT_FIRE, False)
@@ -355,7 +355,7 @@ def _thrasta_combat(*, thrasta: bool):
         attacker.update(name="Colossal Dreadmaw", base_pt=[6, 6],
                         lines=[_keyword_line(script, 0, "Trample")])
         attacker["granted_temporary"]["keywords"] = ["trample"]
-    attacker["combat"]["attacking"] = "Liliana, Dreadhorde General (90)"
+    attacker["combat"]["attacking"] = "E90"
     walker.update(id="E90", name="Liliana, Dreadhorde General", owner="P0", controller="P0",
                   types=["planeswalker"], subtypes=["liliana"], base_pt=None, pt_boosts=None,
                   tapped=False, combat=None, counters={"LOYALTY": 3}, lines=[])

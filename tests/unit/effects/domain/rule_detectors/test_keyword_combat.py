@@ -75,7 +75,7 @@ def _unblocked_attack(keywords: tuple[str, ...], blocker=None):
     carrier = make_entity(
         "E1", "carrier", pt=PowerToughness((3, 3)),
         granted_temporary=GrantedTemporary(keywords=keywords),
-        combat=CombatStatus(attacking="p2", blocked_by=(blocker,) if blocker else ()))
+        combat=CombatStatus(attacking="P1", blocked_by=(blocker,) if blocker else ()))
     board = [carrier]
     if blocker:
         board.append(make_entity(blocker, "blocker", controller="P1", pt=PowerToughness((1, 1)),

@@ -745,7 +745,7 @@ def test_the_manifest_records_how_its_records_were_collected_and_read(
     unrooted = _combat("g-clean-1.variant", "g-clean-1")
     unrooted = replace(unrooted, state=replace(unrooted.state, entities=(
         make_entity("E0", "x variant", lines=lines_of(printed=(variant,)),
-                    combat=CombatStatus(attacking="p2")),)))
+                    combat=CombatStatus(attacking="P1")),)))
     from tests.unit.effects.builders import game_end_marker
 
     # The game ends in this shard too: a game without its marker is cut.
@@ -827,7 +827,7 @@ def test_one_raw_corpus_builds_to_one_digest_wherever_it_sits_and_whatever_ran_b
     unrooted = _combat("g-clean-1.variant", "g-clean-1")
     unrooted = replace(unrooted, state=replace(unrooted.state, entities=(
         make_entity("E0", "x variant", lines=lines_of(printed=(variant,)),
-                    combat=CombatStatus(attacking="p2")),)))
+                    combat=CombatStatus(attacking="P1")),)))
     write_ended_shard(a_corpus.records / "full-strength" / "run.0-variant.jsonl.gz", [unrooted])
 
     first = a_corpus.build(tmp_path / "first").load()

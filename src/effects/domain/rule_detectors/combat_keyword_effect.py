@@ -75,6 +75,7 @@ from effects.domain.damage_step_keywords import (
     CombatParticipant,
     KeywordResolver,
     combat_participant,
+    defender_ref,
 )
 from effects.domain.event_schema import EventType
 from effects.domain.provenance import SidecarLookup
@@ -270,23 +271,20 @@ _FLIPPABLE = frozenset({"vigilance", "trample_over_planeswalkers"})
 
 
 def _attacked_card(state: StateSnapshot, attacker: EntityState) -> EntityState | None:
-    """The permanent ``attacker`` attacks, from Forge's ``Name (id)`` rendering."""
-    attacking = attacker.combat.attacking if attacker.combat else None
-    if not attacking or not attacking.endswith(")") or " (" not in attacking:
-        return None
-    card_id = attacking.rsplit(" (", 1)[1][:-1]
-    return state.entity(f"E{card_id}") if card_id.isdigit() else None
+    """The permanent ``attacker`` attacks: the entity its defender's ref
+    names, None for a player or a permanent the board does not hold."""
+    defender = defender_ref(state, attacker)
+    return state.entity(defender) if defender else None
 
 
 def _defender_gone(state: StateSnapshot, attacker: EntityState) -> bool:
-    """Whether the permanent ``attacker`` attacked has left: Forge renders
-    the defender as ``<Nothing>``, or names a card no longer on the battlefield."""
-    attacking = attacker.combat.attacking if attacker.combat else None
-    if attacking == "<Nothing>":
-        return True
-    if not attacking or not attacking.endswith(")") or " (" not in attacking:
+    """Whether the permanent ``attacker`` attacked has left: its defender's
+    ref names no player and no card on the battlefield (the placeholder
+    ``E-1`` a departed planeswalker or battle leaves, 506.4c, among them)."""
+    defender = defender_ref(state, attacker)
+    if not defender or any(p.id == defender for p in state.players):
         return False
-    card = _attacked_card(state, attacker)
+    card = state.entity(defender)
     return card is None or card.zone != "battlefield"
 
 

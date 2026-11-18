@@ -52,12 +52,11 @@ from tests.unit.effects.builders import (
 
 _WHITE_KNIGHT = ProvenanceKey("cardsfolder/w/white_knight.txt", 0, "static", 0)
 
-#: How Forge renders a planeswalker defender into ``CombatStatus.attacking``:
-#: its name and its card id, which the snapshot's ``name`` does not carry.
-_PLANESWALKER_DEFENDER = "Chandra, Torch of Defiance (9)"
+#: ``CombatStatus.attacking`` for an attack on a planeswalker: its entity ref.
+_PLANESWALKER_DEFENDER = "E9"
 
-#: How Forge renders a player defender: the player's name, not its ``P`` id.
-_PLAYER_DEFENDER = "p2"
+#: ``CombatStatus.attacking`` for an attack on a player: the player's ref.
+_PLAYER_DEFENDER = "P1"
 
 
 
@@ -212,10 +211,10 @@ class TestCombatParticipant:
         state, carrier = _attacker_and_blockers(substep="first_strike")
         assert combat_participant(state, carrier).combat_substep == "first_strike"
 
-    def test_the_defending_player_survives_forges_defender_spelling(self):
-        """Forge writes the defender object, not a player id."""
+    def test_the_defending_player_is_the_ref_the_attack_names(self):
+        """The defender's ref is the defending player as it is."""
         carrier = _creature(
-            "A", 2, 2, combat=CombatStatus(attacking="Ai(1)-Sam"),
+            "A", 2, 2, combat=CombatStatus(attacking="P1"),
         )
         participant = combat_participant(_board(carrier), carrier)
         assert participant.defending_player == "P1"
@@ -242,16 +241,17 @@ class TestCombatParticipant:
         assert participant.defending_player is None
 
     def test_an_attack_on_a_battle_off_the_snapshot_has_no_defending_player(self):
-        """The card spelling alone says the defender is not a player."""
+        """A card ref names no player, whether or not the board holds it."""
         carrier = _creature(
-            "A", 4, 4, combat=CombatStatus(attacking="Invasion of Belenon (51)"),
+            "A", 4, 4, combat=CombatStatus(attacking="E51"),
         )
         participant = combat_participant(_board(carrier), carrier)
         assert participant.defending_player is None
 
-    def test_an_attack_on_nothing_has_no_defending_player(self):
+    def test_an_attack_on_a_departed_planeswalker_has_no_defending_player(self):
+        """The placeholder a departed defender leaves (506.4c) is ``E-1``."""
         carrier = _creature(
-            "A", 4, 4, combat=CombatStatus(attacking="<Nothing>"),
+            "A", 4, 4, combat=CombatStatus(attacking="E-1"),
         )
         participant = combat_participant(_board(carrier), carrier)
         assert participant.defending_player is None

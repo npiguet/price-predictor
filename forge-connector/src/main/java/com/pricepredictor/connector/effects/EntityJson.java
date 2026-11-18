@@ -198,10 +198,13 @@ final class EntityJson {
                 blocking.add(Refs.of(attacker));
             }
         }
-        Object defender = combat.isAttacking(card)
-                ? combat.getDefenderByAttacker(card) : null;
+        // The defender's ref, as the attacks link names it: a player's P<id>,
+        // a planeswalker's or battle's E<id>; E-1 for the placeholder an
+        // attacker attacks once its planeswalker or battle has left (506.4c).
+        String defender = combat.isAttacking(card)
+                ? Refs.ofAny(combat.getDefenderByAttacker(card)).orElse(null) : null;
         return Json.object()
-                .value("attacking", defender == null ? null : String.valueOf(defender))
+                .value("attacking", defender)
                 .raw("blocking", Json.stringArray(blocking))
                 .raw("blocked_by", Json.stringArray(blockedBy))
                 .value("became_blocked", combat.isBlocked(card))

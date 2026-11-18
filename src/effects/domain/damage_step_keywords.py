@@ -24,7 +24,6 @@ their signal is in playability records.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
@@ -166,29 +165,38 @@ def combat_participant(
     )
 
 
-#: Forge renders a card defender (a planeswalker or a battle) as ``Name (id)``,
-#: and a player defender by the player's name, which carries no such suffix.
-_CARD_DEFENDER = re.compile(r" \(\d+\)$")
+def defender_ref(state: StateSnapshot, attacker: EntityState) -> str | None:
+    """The ref of what ``attacker`` attacks, or None when it is not attacking.
 
-#: Forge's rendering of an attack whose defender is gone.
-_NO_DEFENDER = "<Nothing>"
+    ``CombatStatus.attacking`` is that ref: a player's ``P<id>``, a
+    planeswalker's or battle's ``E<id>``, ``E-1`` for the placeholder a
+    departed one leaves (506.4c). A record written while the member held
+    Forge's rendering of the defender (a player's name, ``Name (id)``,
+    ``<Nothing>``), as the gen-3 test fixtures are until they are
+    regenerated, joins no player and no entity: its ``attacks`` link names
+    the same ref.
+    """
+    attacking = attacker.combat.attacking if attacker.combat else None
+    if attacking is None or _joins_board(state, attacking):
+        return attacking
+    ends = (link.to for link in state.links
+            if link.type == "attacks" and link.from_ == attacker.id)
+    return next((end for end in ends if isinstance(end, str)), attacking)
+
+
+def _joins_board(state: StateSnapshot, ref: str) -> bool:
+    return state.entity(ref) is not None or any(p.id == ref for p in state.players)
 
 
 def defending_player(
     state: StateSnapshot, carrier: EntityState,
 ) -> str | None:
-    """Which player the carrier is attacking.
-
-    ``CombatStatus.attacking`` holds Forge's rendering of the defender object,
-    not a player id, so the id is recovered from the board: the one player who
-    is not the attacker's controller. An attack on a planeswalker or battle
+    """Which player the carrier is attacking: the defender's ref when it
+    names one of the board's players. An attack on a planeswalker or battle
     has no defending player, since no player's life or poison can move.
     """
-    attacking = carrier.combat.attacking if carrier.combat else None
-    if attacking in (None, _NO_DEFENDER) or _CARD_DEFENDER.search(attacking):
-        return None
-    others = [p.id for p in state.players if p.id != carrier.controller]
-    return others[0] if len(others) == 1 else None
+    defender = defender_ref(state, carrier)
+    return defender if any(p.id == defender for p in state.players) else None
 
 
 # ── what the predicates read ────────────────────────────────────────────
