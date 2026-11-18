@@ -137,10 +137,11 @@ Shapes follow `rules/gen3-fields.json`; the collector writes the field names bel
 | card | `lines` | list of `{keys, kind, granted, grant?, active?, cast_with?, chosen?, fragment?, affected?}`; `kind` ∈ `spell`, `activated`, `trigger`, `static`, `replacement`, `keyword`; `active` on statics, and `false` on every line of a face not up |
 | card | `face_state` | `front` \| `back` \| `flipped` \| `melded` \| `face_down` |
 | card | `base_pt`, `pt_boosts` | `[p, t]`; boosts `{temporary: [p, t], counters: [p, t]}`; both `null` on a non-creature; base + temporary + counters = net P/T |
-| card | `counters` | `{type: n}` over every named type |
+| card | `counters` | `{type: n}` over every named type, in the order of the names as written (`+1/+1` before `CHARGE`) |
 | card | `designations`, `x_paid`, `chosen`, `costs_paid`, `history`, `order_rank`, `real_face`, `printed_loyalty`, `printed_defense`, `mana_cost` | below, "A card's facts" |
 | entity | `role` | `null` on an entity of the four tiers; else `library_card`, `exiled_with`, `mutate_component` or `last_known` (below, "Entities beyond the tiers"); `last_known` too on a referenced card the game no longer holds (below, the referenced tier) |
 | entity | `combat.attacking` | changed meaning: the defender's ref, as the `attacks` link names it: `P<id>`, or `E<id>` for a planeswalker or battle; `E-1` for the placeholder an attacker attacks once its planeswalker or battle has left (506.4c, Forge's `Combat.isRemovedDefender`), which no entity carries; `null` for a creature not attacking |
+| player | `this_turn.creatures_died` | changed meaning: the creatures that died under this player's control this turn, put into a graveyard from the battlefield (700.4), as morbid counts them: each graveyard's cards put there from the battlefield this turn (Forge's `Zone.getCardsAddedThisTurn`), judged as they last were on the battlefield. A token that died counts; a stolen creature counts for the player who controlled it; a bounced, blinked or exiled creature does not |
 | player | `max_land_plays`, `speed`, `city_blessing`, `rad`, `monarch`, `initiative`, `turn_counts` | below, "A player's facts" |
 | global | `day_night` | `"day"` \| `"night"` \| `null` |
 | global | `floating_effects`, `delayed_triggers` | `{id, source_lines, affected, remembered, duration, shield_left}`; `duration` ∈ `end_of_turn`, `until_leaves`, `permanent` (below, "Command-zone objects") |
@@ -149,6 +150,7 @@ Shapes follow `rules/gen3-fields.json`; the collector writes the field names bel
 | refs | `targets_at_cast` | after `targets`: on a resolution's effect half, live or interventional, the same links' targets before that check (608.2b), spelled as `targets`, except that a card that has ceased to exist (a destroyed token) or become a new object (a flickered creature; Forge's `Card.equalsWithGameTimestamp`) is `L<card id>`, an entity of role `last_known` with no zone and no `order_rank`, and never the new object's `E<card id>`; `null` where Forge could not copy them, on a worker without the resolution hook, and on every other refs block. Each card in it is an entity of the half's board |
 | refs | `targets_on_stack` | after `targets_at_cast`, on every refs block: the refs of `targets` and `targets_at_cast` that name a spell or an ability on the stack, by its host card's `E` ref (the card's entity is on the board, whatever zone it is in); `[]` when none. A ref in `targets` and not here is the card or player itself |
 | refs | `random` | `{dice: [n, …], coin_flips: {won, lost}}` on a resolution's effect half, live or interventional; `null` on every other refs block |
+| card | `granted_temporary.keywords` | changed order: the keywords sorted by name, as `token_created`'s `characteristics.keywords` |
 | card | `granted_temporary.hidden_keywords` | after `abilities`: Forge's hidden keywords on the card as Forge writes them (`CARDNAME can't block.`, `This card doesn't untap during your next untap step.`), in timestamp order; a `continuous` record's board leaves out its static's |
 | snapshot | `links` | `[{from, to, type, index?}]`; `type` a § 10.3 family name; `index` only for `targets` (below, "Links") |
 
@@ -302,7 +304,7 @@ lists (`getGainControlTargets`, `getDamageHistory`) may still hold it.
 | `attacks` | the attacker | the player, planeswalker or battle | `Combat.getDefenderByAttacker` |
 | `blocks` | the blocker | each attacker it blocks | `Combat.getAttackersBlockedBy` |
 | `in_band_with` | the lower card id of two attackers of one band | the other | `Combat.getAttackingBands` |
-| `must_block` | the creature | the attacker it must block | `getMustBlockCards` |
+| `must_block` | the creature | each attacker it must block, by card id | `getMustBlockCards` |
 | `goaded_by` | the goaded creature | each player who goaded it | `getGoaded` |
 | `targets` | a stack object's line (the acting ability's too, before it is on the stack) | each target: a card or player; a spell by its card; an ability by its line | each clause's targets |
 | `source_of` | the stack object's host card | its line | the stack object's host |
@@ -367,6 +369,7 @@ member, or the provenance `mode` any event may carry. `state_flag_change` gains 
 | `zone_change` into a library | `library_position` | int, after `to_zone`: where the card sits in the library as the bus publishes the move (after the add): `0` the top, `-1` the bottom of a library holding other cards, else its index from the top; a card alone in its library is `0`. Absent on every other move, where the card is not found in the library, and on a move into a library that a `library_shuffled` of that library's owner follows in the same event buffer (the shuffle takes it off). Never written for a move out of a library |
 | `pt_change` | `set_pt` | `[power, toughness]`, after `toughness_delta`: the base the change set (`getNetPowerBreakdown().currentValue`, the snapshot's `base_pt`), written when the base moved and the card is a creature after the change: a layer-7b setting effect, a CDA, a face change, an animation of a noncreature. A `pt_change` is written when the base moved even if the total did not (deltas `0`) |
 | `card_looked_at` | `mode` | `Scry` on a scry's look, `Surveil` on a surveil's look (bus events; a surveil keeping every card on top writes no `card_milled`, so only `mode` tells the two apart), `SearchedLibrary` on a search: `subjects` the searching player, `from_zone` `library`, no `count`; written by the `ChangeZone` clause rule when the player's `Player.getLibrarySearched()` rose across the clause, so only a search of one's own library (Forge counts no other) |
+| `token_created` | `characteristics.keywords` | changed order: sorted by name, spelled as an entity's `granted_temporary.keywords` |
 | `token_created` | `characteristics.controller` | player ref of the sample token's controller (null where it has none) |
 | `token_created` | `characteristics.counters` | `{counter name: count}` the sample entered with, names as an entity's `counters` spells them, `{}` for none. Forge batches tokens by controller and counters as well as by script and characteristics, so the sample speaks for its whole batch |
 | `ability_change` (`Animate`, `AnimateAll`) | `subjects` | refs of the animated cards still in play after the clause: `Animate` the clause's `getCardsfromTargets`, `AnimateAll` the cards of its `Zone$` (battlefield by default) of the targeted or defined players, or of everyone, matching `ValidCards$`, read before the clause |

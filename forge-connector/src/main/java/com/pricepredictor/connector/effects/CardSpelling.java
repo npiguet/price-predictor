@@ -73,7 +73,9 @@ final class CardSpelling {
 
     /**
      * An entity's keywords as the snapshot spells them: each keyword's
-     * original text, lower-cased, skipping the ones with none.
+     * original text, lower-cased, skipping the ones with none, sorted. Forge
+     * lists them in hash order over an enum hashed by identity, which
+     * differs from one JVM to the next.
      *
      * <p>Shared with the {@code token_created} outcome, whose description of
      * a token has to read the same as that token's entry on the board.
@@ -85,6 +87,7 @@ final class CardSpelling {
                 names.add(keyword.getOriginal().toLowerCase(java.util.Locale.ROOT));
             }
         }
+        names.sort(null);
         return names;
     }
 

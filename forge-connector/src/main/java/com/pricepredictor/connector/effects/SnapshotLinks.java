@@ -22,6 +22,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -175,9 +176,7 @@ final class SnapshotLinks {
             mergedWith(card);
             add(LinkFamily.ATTACHED_TO, card(card), card(card.getAttachedTo()));
             add(LinkFamily.ATTACHED_TO, card(card), player(card.getPlayerAttachedTo()));
-            for (Card attacker : card.getMustBlockCards()) {
-                add(LinkFamily.MUST_BLOCK, card(card), card(attacker));
-            }
+            mustBlock(card);
             for (Player goader : card.getGoaded()) {
                 add(LinkFamily.GOADED_BY, card(card), player(goader));
             }
@@ -203,6 +202,18 @@ final class SnapshotLinks {
             if (card.getType().isDungeon() && card.isInZone(ZoneType.Command)) {
                 add(LinkFamily.IN_DUNGEON, card(card), player(card.getOwner()));
             }
+        }
+    }
+
+    /**
+     * The attackers a creature must block, by card id: Forge keeps them in
+     * a hash map's order, which no rule of the game fixes.
+     */
+    private void mustBlock(Card card) {
+        List<Card> attackers = new ArrayList<>(card.getMustBlockCards());
+        attackers.sort(Comparator.comparingInt(Card::getId));
+        for (Card attacker : attackers) {
+            add(LinkFamily.MUST_BLOCK, card(card), card(attacker));
         }
     }
 

@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.google.common.collect.Multiset;
 import com.google.common.collect.Table;
 import com.pricepredictor.connector.json.Json;
 import forge.card.CardStateName;
@@ -14,6 +15,7 @@ import forge.game.card.ICardTraitChanges;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -106,7 +108,7 @@ final class EntityJson {
                 .value("tapped", card.isTapped())
                 .value("sick", board.sick(card))
                 .value("damage", card.getDamage())
-                .raw("counters", counterJson(card))
+                .raw("counters", countersJson(card.getCounters()))
                 .raw("combat", combatJson(game, card))
                 .value("attached_to", Refs.ofNullable(card.getAttachedTo()))
                 .value("face_down", card.isFaceDown())
@@ -165,10 +167,16 @@ final class EntityJson {
                 .render();
     }
 
-    private static String counterJson(Card card) {
+    /**
+     * A card's counters, {@code {type: n}}, by the type's name as written:
+     * Forge keeps them in hash order over an enum hashed by identity, which
+     * differs from one JVM to the next.
+     */
+    static String countersJson(Multiset<CounterType> held) {
+        List<Multiset.Entry<CounterType>> entries = new ArrayList<>(held.entrySet());
+        entries.sort(Comparator.comparing(entry -> CardSpelling.counterName(entry.getElement())));
         Json.ObjectWriter counters = Json.object();
-        for (com.google.common.collect.Multiset.Entry<CounterType> entry
-                : card.getCounters().entrySet()) {
+        for (Multiset.Entry<CounterType> entry : entries) {
             counters.value(CardSpelling.counterName(entry.getElement()), entry.getCount());
         }
         return counters.render();

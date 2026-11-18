@@ -36,7 +36,7 @@ final class PlayerJson {
                 .value("poison", player.getPoisonCounters())
                 .value("energy", player.getCounters(CounterEnumType.ENERGY))
                 .raw("this_turn", Json.object()
-                        .value("creatures_died", creaturesLost(game, player))
+                        .value("creatures_died", creaturesDied(game, player))
                         .value("spells_cast", player.getSpellsCastThisTurn())
                         .value("lands_played", player.getLandsPlayedThisTurn())
                         .render())
@@ -162,20 +162,34 @@ final class PlayerJson {
     }
 
     /**
-     * Creatures this player lost from the battlefield this turn.
+     * Creatures that died under this player's control this turn: put into a
+     * graveyard from the battlefield (700.4), as morbid counts them.
      *
-     * <p>The engine keeps what left the battlefield, not what died, so a
-     * bounced or exiled creature counts here too. It is a close reading of a
-     * condition many triggers ask about; an exact count would need a hook where
-     * the death is decided.
+     * <p>Read off every graveyard's cards put there from the battlefield this
+     * turn, the list {@code permanents_to_graveyard} counts for its owner:
+     * Forge keeps each as it last was on the battlefield, so an animated
+     * land that died counts, a token counts though it has ceased to exist,
+     * and a stolen creature counts for the player who controlled it, whose
+     * graveyard did not receive it. A bounced, blinked or exiled creature
+     * left without dying and does not count.
      *
      * <p>The controller is matched by id, as Forge matches players: a fork's
      * copy carries the live game's last-known copies, whose controller is the
      * live game's player.
      */
-    private static int creaturesLost(Game game, Player player) {
+    private static int creaturesDied(Game game, Player player) {
         int count = 0;
-        for (Card card : game.getLeftBattlefieldThisTurn()) {
+        for (Player owner : game.getRegisteredPlayers()) {
+            count += diedUnder(player, owner.getZone(ZoneType.Graveyard)
+                    .getCardsAddedThisTurn(ZoneType.Battlefield));
+        }
+        return count;
+    }
+
+    /** How many of {@code died} were creatures {@code player} controlled. */
+    private static int diedUnder(Player player, List<Card> died) {
+        int count = 0;
+        for (Card card : died) {
             if (card.isCreature() && player.equals(card.getController())) {
                 count++;
             }
