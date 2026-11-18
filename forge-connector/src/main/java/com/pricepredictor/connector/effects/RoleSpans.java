@@ -38,6 +38,66 @@ public final class RoleSpans {
     }
 
     private static final String[] TRIGGER_WORDS = {"when ", "whenever ", "at "};
+    /** An ability word of letters alone, what a line of any kind may open with. */
+    private static final Pattern STRICT_ABILITY_WORD = Pattern.compile("[a-z][a-z' -]*");
+    /** On a triggered line, any prefix without a colon: digits, punctuation and symbols included. */
+    private static final Pattern ANY_ABILITY_WORD = Pattern.compile("[^:]+");
+    private static final String ABILITY_WORD_DASH = " — ";
+    private static final String TARGET_WORD = "target ";
+
+    /**
+     * A line's prose with its lower-cased form, which every rule below reads,
+     * and the offset the rule being applied starts scanning from.
+     */
+    private record Prose(String text, String lower, int offset) {
+        static final Prose EMPTY = new Prose("", "", 0);
+
+        static Prose of(String text) {
+            return new Prose(text, text.toLowerCase(Locale.ROOT), 0);
+        }
+
+        static Prose ofNullable(String text) {
+            return text == null ? EMPTY : of(text);
+        }
+
+        Prose from(int newOffset) {
+            return new Prose(text, lower, newOffset);
+        }
+
+        int length() {
+            return text.length();
+        }
+
+        boolean isEmpty() {
+            return text.isEmpty();
+        }
+    }
+
+    /** What ends a top-level scan, and which characters open and close nesting. */
+    private record Scan(char separator, String opening, String closing, boolean lowered) {
+        static final Scan TRIGGER_COMMA = new Scan(',', "(", ")", true);
+        static final Scan COST_COLON = new Scan(':', "({", ")}", false);
+
+        int step(char c) {
+            if (opening.indexOf(c) >= 0) return 1;
+            return closing.indexOf(c) >= 0 ? -1 : 0;
+        }
+
+        /**
+         * One past the first separator at or after {@code from} that sits
+         * outside every nesting character, or -1.
+         */
+        int endIn(Prose prose) {
+            String text = lowered ? prose.lower() : prose.text();
+            int depth = 0;
+            for (int i = prose.offset(); i < text.length(); i++) {
+                char c = text.charAt(i);
+                if (depth == 0 && c == separator) return i + 1;
+                depth = Math.max(0, depth + step(c));
+            }
+            return -1;
+        }
+    }
 
     /**
      * Role spans over {@code text}, the rendered prose of one line without its
@@ -50,12 +110,7 @@ public final class RoleSpans {
      * whichever of them contains them, because a target phrase is part of the clause it appears in.
      */
     public static List<Span> of(String text, boolean activated) {
-        List<Span> spans = new ArrayList<>();
-        if (text == null || text.isEmpty()) return spans;
-        String lower = text.toLowerCase(Locale.ROOT);
-        spans.addAll(clauseSpans(text, lower, activated, STRICT_ABILITY_WORD));
-        spans.addAll(targetSpans(lower));
-        return spans;
+        return spansOf(Prose.ofNullable(text), activated ? Clauses.ACTIVATED : Clauses.PLAIN);
     }
 
     /**
@@ -63,30 +118,47 @@ public final class RoleSpans {
      * flavour text ("descend 4", "exterminate!", "do you like squirrels?").
      */
     static List<Span> ofTriggered(String text) {
+        return spansOf(Prose.ofNullable(text), Clauses.TRIGGERED);
+    }
+
+    /** Which clause rules apply to a line: whether it may carry a cost, and what an ability word may be. */
+    private enum Clauses {
+        PLAIN(false, STRICT_ABILITY_WORD),
+        ACTIVATED(true, STRICT_ABILITY_WORD),
+        TRIGGERED(false, ANY_ABILITY_WORD);
+
+        private final boolean costed;
+        private final Pattern abilityWord;
+
+        Clauses(boolean costed, Pattern abilityWord) {
+            this.costed = costed;
+            this.abilityWord = abilityWord;
+        }
+    }
+
+    private static List<Span> spansOf(Prose prose, Clauses clauses) {
         List<Span> spans = new ArrayList<>();
-        if (text == null || text.isEmpty()) return spans;
-        String lower = text.toLowerCase(Locale.ROOT);
-        spans.addAll(clauseSpans(text, lower, false, ANY_ABILITY_WORD));
-        spans.addAll(targetSpans(lower));
+        if (prose.isEmpty()) return spans;
+        spans.addAll(clauseSpans(prose, clauses));
+        spans.addAll(targetSpans(prose));
         return spans;
     }
 
     /** The target spans alone, for a line whose clauses the caller tags itself. */
     static List<Span> targets(String text) {
-        return targetSpans(text.toLowerCase(Locale.ROOT));
+        return targetSpans(Prose.of(text));
     }
 
     /** The condition, cost and effect spans: what remains once targets are set aside. */
-    private static List<Span> clauseSpans(String text, String lower, boolean activated,
-                                          Pattern abilityWord) {
-        int length = text.length();
-        int start = triggerStart(lower, abilityWord);
-        int triggerEnd = start < 0 ? -1 : triggerConditionEnd(lower, start);
+    private static List<Span> clauseSpans(Prose prose, Clauses clauses) {
+        int length = prose.length();
+        int start = triggerStart(prose, clauses.abilityWord);
+        int triggerEnd = start < 0 ? -1 : Scan.TRIGGER_COMMA.endIn(prose.from(start));
         if (triggerEnd > 0) {
             return List.of(new Span(start, triggerEnd, SpanRole.TRIGGER_CONDITION),
                     new Span(triggerEnd, length, SpanRole.EFFECT));
         }
-        int costEnd = activated ? costEnd(text) : -1;
+        int costEnd = clauses.costed ? Scan.COST_COLON.endIn(prose) : -1;
         if (costEnd > 0) {
             return List.of(new Span(0, costEnd, SpanRole.COST),
                     new Span(costEnd, length, SpanRole.EFFECT));
@@ -94,39 +166,26 @@ public final class RoleSpans {
         return List.of(new Span(0, length, SpanRole.EFFECT));
     }
 
-    /** An ability word of letters alone, what a line of any kind may open with. */
-    private static final Pattern STRICT_ABILITY_WORD = Pattern.compile("[a-z][a-z' -]*");
-    /** On a triggered line, any prefix without a colon: digits, punctuation and symbols included. */
-    private static final Pattern ANY_ABILITY_WORD = Pattern.compile("[^:]+");
-    private static final String ABILITY_WORD_DASH = " \u2014 ";
-
     /**
      * Where a trigger condition starts, or -1 when the line does not open with
      * one: at 0, or after an ability word ("landfall — whenever ...").
+     * The condition ends at the first top-level comma, top-level meaning
+     * outside any parenthesis, so a reminder-text comma does not split the line.
      */
-    private static int triggerStart(String lower, Pattern abilityWord) {
-        if (opensTrigger(lower, 0)) return 0;
+    private static int triggerStart(Prose prose, Pattern abilityWord) {
+        String lower = prose.lower();
+        if (opensTrigger(prose)) return 0;
         int dash = lower.indexOf(ABILITY_WORD_DASH);
         if (dash <= 0 || !abilityWord.matcher(lower.substring(0, dash)).matches()) return -1;
         int start = dash + ABILITY_WORD_DASH.length();
-        return opensTrigger(lower, start) ? start : -1;
+        return opensTrigger(prose.from(start)) ? start : -1;
     }
 
-    private static boolean opensTrigger(String lower, int from) {
+    private static boolean opensTrigger(Prose prose) {
         for (String word : TRIGGER_WORDS) {
-            if (lower.startsWith(word, from)) return true;
+            if (prose.lower().startsWith(word, prose.offset())) return true;
         }
         return false;
-    }
-
-    /**
-     * End of the trigger condition that opens at {@code from}, or -1.
-     *
-     * <p>The condition ends at the first top-level comma, top-level meaning
-     * outside any parenthesis, so a reminder-text comma does not split the line.
-     */
-    private static int triggerConditionEnd(String lower, int from) {
-        return topLevelEnd(lower, from, ',', false);
     }
 
     /**
@@ -138,32 +197,8 @@ public final class RoleSpans {
      * first one is the separator.
      */
     static int costEnd(String text) {
-        return topLevelEnd(text, 0, ':', true);
+        return Scan.COST_COLON.endIn(Prose.of(text));
     }
-
-    /**
-     * One past the first {@code separator} at or after {@code from} that sits
-     * outside every parenthesis (and, with {@code braces}, every mana symbol),
-     * or -1.
-     */
-    private static int topLevelEnd(String text, int from, char separator, boolean braces) {
-        String opening = braces ? "({" : "(";
-        String closing = braces ? ")}" : ")";
-        int depth = 0;
-        for (int i = from; i < text.length(); i++) {
-            char c = text.charAt(i);
-            if (depth == 0 && c == separator) return i + 1;
-            depth = Math.max(0, depth + bracketStep(c, opening, closing));
-        }
-        return -1;
-    }
-
-    private static int bracketStep(char c, String opening, String closing) {
-        if (opening.indexOf(c) >= 0) return 1;
-        return closing.indexOf(c) >= 0 ? -1 : 0;
-    }
-
-    private static final String TARGET_WORD = "target ";
 
     /**
      * Spans covering each "target …" phrase.
@@ -179,7 +214,8 @@ public final class RoleSpans {
      * token of context; missing a target entirely would hide the restriction
      * the model is meant to learn.
      */
-    private static List<Span> targetSpans(String lower) {
+    private static List<Span> targetSpans(Prose prose) {
+        String lower = prose.lower();
         List<Span> spans = new ArrayList<>();
         int from = 0;
         while (true) {
@@ -189,15 +225,17 @@ public final class RoleSpans {
                 from = start + 1;
                 continue;
             }
-            int end = phraseEnd(lower, start + TARGET_WORD.length());
+            int end = phraseEnd(prose.from(start + TARGET_WORD.length()));
             spans.add(new Span(start, end, SpanRole.TARGET_SPEC));
             from = end;
         }
         return spans;
     }
 
-    /** End of the target phrase whose words begin at {@code after}, trailing blanks trimmed. */
-    private static int phraseEnd(String lower, int after) {
+    /** End of the target phrase whose words begin at the prose's offset, trailing blanks trimmed. */
+    private static int phraseEnd(Prose prose) {
+        String lower = prose.lower();
+        int after = prose.offset();
         int end = lower.indexOf(TARGET_WORD, after);
         if (end < 0) end = lower.length();
         for (int i = after; i < end; i++) {

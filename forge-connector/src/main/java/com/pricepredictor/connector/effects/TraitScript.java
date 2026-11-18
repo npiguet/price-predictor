@@ -293,10 +293,8 @@ public record TraitScript(
             return Set.copyOf(keys);
         }
 
-        /** Where a root's unnamed effect or follower is reported from. */
-        private static final String EFFECT = "Effect";
-        /** Where an unnamed sub-ability is reported from. */
-        private static final String SUB_ABILITY = "SubAbility";
+        /** The parameter naming a trait's sub-ability. */
+        private static final String SUB_ABILITY_KEY = "SubAbility";
 
         /** The parameter whose value is a comma-separated list of labels. */
         private static final String CHOICES = "Choices";
@@ -325,6 +323,26 @@ public record TraitScript(
         private final StringBuilder out = new StringBuilder();
         private int unnamedLabels;
 
+        /** One parameter of a trait: its name and its value as written. */
+        private record Param(String name, String value) {
+        }
+
+        /** A reference to a label: the parameter naming it and the label itself. */
+        private record Ref(String parameter, String label) {
+        }
+
+        /** Where a root's unnamed effect or an unnamed sub-ability is reported from. */
+        private enum Unnamed {
+            EFFECT("Effect"),
+            SUB_ABILITY(SUB_ABILITY_KEY);
+
+            private final String parameter;
+
+            Unnamed(String parameter) {
+                this.parameter = parameter;
+            }
+        }
+
         /** A segment waiting its turn: the label it opens with and what to render. */
         private record Pending(String label, CardTraitBase trait) {
         }
@@ -348,7 +366,7 @@ public record TraitScript(
             }
             segment(label, root, params);
             for (CardTraitBase trait : unnamed) {
-                followUnnamed(EFFECT, trait);
+                followUnnamed(Unnamed.EFFECT, trait);
             }
             while (!queue.isEmpty()) {
                 Pending next = queue.removeFirst();
@@ -366,56 +384,59 @@ public record TraitScript(
             for (Map.Entry<String, String> entry : params.entrySet()) {
                 out.append(separator).append(entry.getKey()).append("$ ");
                 separator = " | ";
-                renderValue(entry.getKey(), entry.getValue(), trait);
+                renderValue(new Param(entry.getKey(), entry.getValue()), trait);
             }
             AbilitySub sub = unnamedSubAbility(trait, params);
             if (sub != null) {
-                followUnnamed(SUB_ABILITY, sub);
+                followUnnamed(Unnamed.SUB_ABILITY, sub);
             }
         }
 
         /** One parameter's value: a link renamed and followed, or as written. */
-        private void renderValue(String name, String value, CardTraitBase trait) {
+        private void renderValue(Param param, CardTraitBase trait) {
+            String name = param.name();
+            String value = param.value();
             if (value == null) {
                 out.append((String) null);
             } else if (SINGLE_LINK_KEYS.contains(name)) {
-                linkTo(name, value.trim(), linked(name, value, trait));
-            } else if (isAdditionalLink(name, trait)) {
-                linkTo(name, value.trim(), ((SpellAbility) trait).getAdditionalAbility(name));
-            } else if (!renderedAsLabels(name, value, trait)) {
+                linkTo(new Ref(name, value.trim()), linked(param, trait));
+            } else if (isAdditionalLink(param, trait)) {
+                linkTo(new Ref(name, value.trim()), ((SpellAbility) trait).getAdditionalAbility(name));
+            } else if (!renderedAsLabels(param, trait)) {
                 out.append(value);
             }
         }
 
         /**
-         * Render {@code value} as the labels {@code name} lists on {@code
+         * Render the value as the labels the parameter lists on {@code
          * trait} (a chooser's choices, a die roll's results, the SVars a
          * naming parameter holds) and say whether it lists any.
          */
-        private boolean renderedAsLabels(String name, String value, CardTraitBase trait) {
+        private boolean renderedAsLabels(Param param, CardTraitBase trait) {
+            String name = param.name();
             if (CHOICES.equals(name) && isChooser(trait)) {
-                renderChoices(value, (SpellAbility) trait);
+                renderChoices(param, (SpellAbility) trait);
                 return true;
             }
             if (RESULTS.equals(name) && isRoller(trait)) {
-                renderResults(value, (SpellAbility) trait);
+                renderResults(param, (SpellAbility) trait);
                 return true;
             }
             GrantedTraits.Grant grant = GrantedTraits.grantOf(name, trait);
             if (grant == null) return false;
-            renderGrants(new Named(name, grant), value, trait);
+            renderGrants(new Named(param, grant), trait);
             return true;
         }
 
-        private void linkTo(String parameter, String reference, CardTraitBase linked) {
-            out.append(number(reference));
-            follow(parameter, reference, linked);
+        private void linkTo(Ref ref, CardTraitBase linked) {
+            out.append(number(ref.label()));
+            follow(ref, linked);
         }
 
-        /** Whether {@code name} is an additional ability Forge holds on {@code trait}. */
-        private static boolean isAdditionalLink(String name, CardTraitBase trait) {
-            if (!ADDITIONAL_LINK_KEYS.contains(name)) return false;
-            return trait instanceof SpellAbility sa && sa.getAdditionalAbility(name) != null;
+        /** Whether the parameter is an additional ability Forge holds on {@code trait}. */
+        private static boolean isAdditionalLink(Param param, CardTraitBase trait) {
+            if (!ADDITIONAL_LINK_KEYS.contains(param.name())) return false;
+            return trait instanceof SpellAbility sa && sa.getAdditionalAbility(param.name()) != null;
         }
 
         /**
@@ -425,27 +446,27 @@ public record TraitScript(
          */
         private static AbilitySub unnamedSubAbility(CardTraitBase trait,
                                                     Map<String, String> params) {
-            if (!(trait instanceof SpellAbility sa) || params.containsKey(SUB_ABILITY)) return null;
+            if (!(trait instanceof SpellAbility sa) || params.containsKey(SUB_ABILITY_KEY)) return null;
             return sa.getSubAbility();
         }
 
         /** A naming parameter and the grant it makes on the trait it is on. */
-        private record Named(String parameter, GrantedTraits.Grant grant) {
+        private record Named(Param param, GrantedTraits.Grant grant) {
         }
 
         /**
          * The SVars a naming parameter lists, each renamed, written with
          * the parameter's own separator, and followed as the trait it holds.
          */
-        private void renderGrants(Named named, String value, CardTraitBase granter) {
+        private void renderGrants(Named named, CardTraitBase granter) {
             GrantedTraits.Listing listing = named.grant().listing();
-            String[] names = listing.names(value);
+            String[] names = listing.names(named.param().value());
             for (int i = 0; i < names.length; i++) {
                 if (i > 0) out.append(listing.separator());
                 String name = names[i].trim();
                 out.append(number(name));
                 if (!reached.contains(name)) {
-                    follow(named.parameter(), name, named.grant().build(name, granter));
+                    follow(new Ref(named.param().name(), name), named.grant().build(name, granter));
                 }
             }
         }
@@ -459,8 +480,8 @@ public record TraitScript(
             return trait instanceof SpellAbility sa && CHOOSER_APIS.contains(sa.getApi());
         }
 
-        private void renderChoices(String value, SpellAbility chooser) {
-            String[] labels = value.split(",");
+        private void renderChoices(Param param, SpellAbility chooser) {
+            String[] labels = param.value().split(",");
             boolean charm = chooser.getApi() == ApiType.Charm;
             List<AbilitySub> choices = chooser.getAdditionalAbilityList(CHOICES);
             for (int i = 0; i < labels.length; i++) {
@@ -468,7 +489,7 @@ public record TraitScript(
                 String label = labels[i].trim();
                 out.append(number(label));
                 if (!charm) {
-                    follow(CHOICES, label, i < choices.size() ? choices.get(i) : null);
+                    follow(new Ref(CHOICES, label), i < choices.size() ? choices.get(i) : null);
                 }
             }
         }
@@ -481,8 +502,8 @@ public record TraitScript(
          * A die roll's results, each label renamed after its range and its
          * ability followed, split as {@code AbilityFactory} splits them.
          */
-        private void renderResults(String value, SpellAbility roller) {
-            String[] results = value.split(",");
+        private void renderResults(Param param, SpellAbility roller) {
+            String[] results = param.value().split(",");
             for (int i = 0; i < results.length; i++) {
                 if (i > 0) out.append(',');
                 String[] rangeAndLabel = results[i].split(":");
@@ -492,15 +513,15 @@ public record TraitScript(
                 }
                 String label = rangeAndLabel[1].trim();
                 out.append(rangeAndLabel[0]).append(':').append(number(label));
-                follow(RESULTS, label, roller.getAdditionalAbility(rangeAndLabel[0]));
+                follow(new Ref(RESULTS, label), roller.getAdditionalAbility(rangeAndLabel[0]));
             }
         }
 
         /** The ability a chain parameter names, as the trait resolved it, or null. */
-        private static SpellAbility linked(String name, String value, CardTraitBase trait) {
-            if (value == null) return null;
-            if (trait instanceof SpellAbility sa) return linkedBelow(name, sa);
-            return switch (name) {
+        private static SpellAbility linked(Param param, CardTraitBase trait) {
+            if (param.value() == null) return null;
+            if (trait instanceof SpellAbility sa) return linkedBelow(param, sa);
+            return switch (param.name()) {
                 case "Execute" -> trait instanceof Trigger trigger
                         ? trigger.getOverridingAbility() : null;
                 case "ReplaceWith" -> trait instanceof ReplacementEffect replacement
@@ -510,10 +531,10 @@ public record TraitScript(
         }
 
         /** The ability a chain parameter of an ability names, or null. */
-        private static SpellAbility linkedBelow(String name, SpellAbility sa) {
-            return switch (name) {
-                case "Execute", "RepeatSubAbility" -> sa.getAdditionalAbility(name);
-                case SUB_ABILITY -> sa.getSubAbility();
+        private static SpellAbility linkedBelow(Param param, SpellAbility sa) {
+            return switch (param.name()) {
+                case "Execute", "RepeatSubAbility" -> sa.getAdditionalAbility(param.name());
+                case SUB_ABILITY_KEY -> sa.getSubAbility();
                 default -> null;
             };
         }
@@ -529,11 +550,12 @@ public record TraitScript(
          * defines is one the accessor could not resolve: reported, and its
          * segment left out.
          */
-        private void follow(String parameter, String label, CardTraitBase trait) {
+        private void follow(Ref ref, CardTraitBase trait) {
+            String label = ref.label();
             if (!firstReach(label)) return;
             if (trait == null) {
                 if (report != null) {
-                    report.add(cardName(), key, parameter, label);
+                    report.add(cardName(), key, ref.parameter(), label);
                 }
                 return;
             }
@@ -551,9 +573,9 @@ public record TraitScript(
          * script holds it, and like every label it prints as its {@code SV}
          * number, so it only has to differ from every SVar name.
          */
-        private void followUnnamed(String parameter, CardTraitBase trait) {
+        private void followUnnamed(Unnamed origin, CardTraitBase trait) {
             unnamedLabels++;
-            follow(parameter, "<unnamed " + unnamedLabels + ">", trait);
+            follow(new Ref(origin.parameter, "<unnamed " + unnamedLabels + ">"), trait);
         }
 
         /** The label's number on this line, assigned at its first appearance. */
