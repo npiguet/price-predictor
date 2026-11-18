@@ -112,10 +112,7 @@ def recycled_run(tmp_path_factory):
         deadline = time.monotonic() + _RUN_SECONDS
         while time.monotonic() < deadline:
             time.sleep(_POLL_SECONDS)
-            shards = sorted(iter_shards(run_dir), key=lambda shard: shard.stat().st_ctime)
-            if supervisor._pool.stops.recycled >= 1 and len(shards) >= 2 and ended_games(
-                shards[-1],
-            ):
+            if _successor_has_played(supervisor, run_dir):
                 successor_played.set()
                 break
         supervisor._pool.request_shutdown()
@@ -137,6 +134,14 @@ def recycled_run(tmp_path_factory):
         "successor_played": successor_played.is_set(), "rules": rules,
         "seconds": time.monotonic() - started,
     }
+
+
+def _successor_has_played(supervisor, run_dir: Path) -> bool:
+    """A worker was recycled and the newest shard holds an ended game."""
+    shards = sorted(iter_shards(run_dir), key=lambda shard: shard.stat().st_ctime)
+    if supervisor._pool.stops.recycled < 1 or len(shards) < 2:
+        return False
+    return bool(ended_games(shards[-1]))
 
 
 def _entry(run_dir: Path) -> dict:
@@ -180,22 +185,32 @@ def test_both_lifetimes_shards_decode_and_no_game_is_cut(recycled_run) -> None:
     assert {lifetime.split("-", 1)[0] for lifetime in lifetimes} == {"0"}
     ids: set[str] = set()
     for shard in shards:
-        records = [record_from_dict(json.loads(line)) for line in iter_shard_lines(shard)]
-        assert records, f"{shard.name} is empty"
-        assert {record.generation for record in records} == {3}, shard.name
-        played = {record.game_id for record in records}
-        assert played == ended_games(shard), f"{shard.name}: a game without its marker"
-        assert all(record.game_id.split(".")[-2] == _lifetime(shard) for record in records)
-        markers = [r for r in records if r.subkind is TurnActionSubkind.GAME_END]
-        assert len(markers) == len(played), shard.name
-        for marker in markers:
-            assert marker.mode.value == "patched" and marker.state is not None
-            # match-outcomes aims no record of a live game.
-            assert marker.aimed_at is None, marker.aimed_at
-        shard_ids = [record.record_id for record in records]
-        assert len(shard_ids) == len(set(shard_ids))
+        shard_ids = _assert_shard_whole(shard)
         assert not ids & set(shard_ids), "a successor reissued a record id"
         ids |= set(shard_ids)
+
+
+def _assert_game_end_markers(records: list, played: set[str], shard: Path) -> None:
+    markers = [r for r in records if r.subkind is TurnActionSubkind.GAME_END]
+    assert len(markers) == len(played), shard.name
+    for marker in markers:
+        assert marker.mode.value == "patched" and marker.state is not None
+        # match-outcomes aims no record of a live game.
+        assert marker.aimed_at is None, marker.aimed_at
+
+
+def _assert_shard_whole(shard: Path) -> list[str]:
+    """Every record of the shard decodes, every game has its marker; returns the record ids."""
+    records = [record_from_dict(json.loads(line)) for line in iter_shard_lines(shard)]
+    assert records, f"{shard.name} is empty"
+    assert {record.generation for record in records} == {3}, shard.name
+    played = {record.game_id for record in records}
+    assert played == ended_games(shard), f"{shard.name}: a game without its marker"
+    assert all(record.game_id.split(".")[-2] == _lifetime(shard) for record in records)
+    _assert_game_end_markers(records, played, shard)
+    shard_ids = [record.record_id for record in records]
+    assert len(shard_ids) == len(set(shard_ids))
+    return shard_ids
 
 
 def test_run_json_and_the_logs(recycled_run) -> None:

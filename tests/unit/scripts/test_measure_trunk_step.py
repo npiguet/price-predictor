@@ -63,9 +63,10 @@ def test_without_relations_no_triple_is_built_and_every_slot_stays(records, surf
 def test_measure_reports_both_arms_on_cpu(records):
     import torch
 
-    common = dict(batch_size=4, steps=2, warmup=1, e_dim=8, device=torch.device("cpu"), seed=0)
-    on = mts.measure(records, with_relations=True, **common)
-    off = mts.measure(records, with_relations=False, **common)
+    settings = mts.StepSettings(batch_size=4, steps=2, warmup=1, e_dim=8,
+                                device=torch.device("cpu"), seed=0)
+    on = mts.measure(records, settings, with_relations=True)
+    off = mts.measure(records, settings, with_relations=False)
     assert on["relations"] and not off["relations"]
     assert on["triples_per_record_max"] > 0 and off["triples_per_record_max"] == 0
     assert on["triples_by_family"] and off["triples_by_family"] == {}
@@ -77,8 +78,9 @@ def test_too_short_a_shard_is_refused(records):
     import torch
 
     with pytest.raises(SystemExit):
-        mts.measure(records, batch_size=64, steps=50, warmup=5, e_dim=8,
-                    device=torch.device("cpu"), seed=0, with_relations=True)
+        settings = mts.StepSettings(batch_size=64, steps=50, warmup=5, e_dim=8,
+                                    device=torch.device("cpu"), seed=0)
+        mts.measure(records, settings, with_relations=True)
 
 
 def test_a_raw_shard_is_read_without_its_turn_actions(records):

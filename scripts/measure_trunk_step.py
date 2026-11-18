@@ -37,7 +37,7 @@ import statistics
 import sys
 import time
 from collections import Counter
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import torch
@@ -100,35 +100,43 @@ def _percentile(values: list[int], share: float) -> int:
     return ordered[min(len(ordered) - 1, int(share * len(ordered)))] if ordered else 0
 
 
-def measure(records: list[EffectRecord], *, batch_size: int, steps: int, warmup: int,
-            e_dim: int, with_relations: bool, device: torch.device, seed: int) -> dict:
-    """Time ``steps`` training steps after ``warmup`` untimed ones."""
-    needed = (steps + warmup) * batch_size
-    if len(records) < needed:
-        raise SystemExit(f"the shard holds {len(records)} records; {needed} are needed")
-    records = records[:needed]
-    widths = feature_widths(records)
-    surfaces = surfaces_of(records, with_relations=with_relations)
-    torch.manual_seed(seed)
+@dataclass(frozen=True)
+class StepSettings:
+    """What a measurement runs: the step counts, widths, device and seed."""
+
+    batch_size: int
+    steps: int
+    warmup: int
+    e_dim: int
+    device: torch.device
+    seed: int
+
+
+def _batches(surfaces: list[EffectHeadInput], widths: dict, settings: StepSettings) -> list:
+    """The collated batches, each ability slot reading a random ``e``."""
     batches = []
-    for start in range(0, needed, batch_size):
-        chunk = surfaces[start:start + batch_size]
-        inputs = collate_surfaces(chunk, e_dim=e_dim, widths=widths)
+    for start in range(0, len(surfaces), settings.batch_size):
+        chunk = surfaces[start:start + settings.batch_size]
+        inputs = collate_surfaces(chunk, e_dim=settings.e_dim, widths=widths)
         abilities = inputs.slot_kinds != int(SlotKind.ABILITY)
         e = torch.randn(inputs.e_vectors.shape).masked_fill(abilities[..., None], 0.0)
         batches.append((replace(inputs, e_vectors=e, e_rows=None), entity_index(chunk)))
+    return batches
 
+
+def _build_model(widths: dict, e_dim: int, device: torch.device) -> EffectModel:
     config = EffectModelConfig(
         global_features=widths[SlotKind.GLOBAL], act_features=widths[SlotKind.ACT],
         player_features=widths[SlotKind.PLAYER], card_features=widths[SlotKind.CARD],
         ability_features=widths[SlotKind.ABILITY],
         e_dim=e_dim)
-    model = EffectModel(config).to(device).train()
+    return EffectModel(config).to(device).train()
+
+
+def _step_function(model: EffectModel, device: torch.device):
+    """One training step: forward, a stand-in loss over every head, backward, update."""
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
     cuda = device.type == "cuda"
-    if cuda:
-        torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats(device)
 
     def step(inputs, index) -> None:
         inputs = inputs.to(device, non_blocking=True)
@@ -145,25 +153,35 @@ def measure(records: list[EffectRecord], *, batch_size: int, steps: int, warmup:
         if cuda:
             torch.cuda.synchronize(device)
 
+    return step
+
+
+def _time_steps(batches: list, step, warmup: int) -> list[float]:
     times = []
     for number, (inputs, index) in enumerate(batches):
         started = time.perf_counter()
         step(inputs, index)
         if number >= warmup:
             times.append(time.perf_counter() - started)
-    triples = [len(s.relations) for s in surfaces]
-    slots = [len(s.slots) for s in surfaces]
-    families = Counter(relation_family(kind) for s in surfaces for _, _, kind in s.relations)
+    return times
+
+
+def _peak_memory_mb(device: torch.device) -> dict:
+    cuda = device.type == "cuda"
     return {
-        "relations": with_relations,
-        "batch_size": batch_size,
-        "steps": steps,
-        "step_ms_median": round(1000 * statistics.median(times), 2),
-        "step_ms_mean": round(1000 * statistics.fmean(times), 2),
         "peak_memory_mb": (round(torch.cuda.max_memory_allocated(device) / 2**20, 1)
                            if cuda else None),
         "peak_reserved_mb": (round(torch.cuda.max_memory_reserved(device) / 2**20, 1)
                              if cuda else None),
+    }
+
+
+def _layout_statistics(surfaces: list[EffectHeadInput]) -> dict:
+    """The triples and slots per record, and the triples per relation family."""
+    triples = [len(s.relations) for s in surfaces]
+    slots = [len(s.slots) for s in surfaces]
+    families = Counter(relation_family(kind) for s in surfaces for _, _, kind in s.relations)
+    return {
         "triples_per_record_mean": round(statistics.fmean(triples), 1),
         "triples_per_record_p50": _percentile(triples, 0.5),
         "triples_per_record_p99": _percentile(triples, 0.99),
@@ -172,6 +190,35 @@ def measure(records: list[EffectRecord], *, batch_size: int, steps: int, warmup:
         "slots_per_record_p99": _percentile(slots, 0.99),
         "slots_per_record_max": max(slots),
         "triples_by_family": dict(families.most_common()),
+    }
+
+
+def measure(records: list[EffectRecord], settings: StepSettings, *,
+            with_relations: bool) -> dict:
+    """Time ``settings.steps`` training steps after ``settings.warmup`` untimed ones."""
+    needed = (settings.steps + settings.warmup) * settings.batch_size
+    if len(records) < needed:
+        raise SystemExit(f"the shard holds {len(records)} records; {needed} are needed")
+    records = records[:needed]
+    widths = feature_widths(records)
+    surfaces = surfaces_of(records, with_relations=with_relations)
+    torch.manual_seed(settings.seed)
+    batches = _batches(surfaces, widths, settings)
+
+    device = settings.device
+    model = _build_model(widths, settings.e_dim, device)
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats(device)
+    times = _time_steps(batches, _step_function(model, device), settings.warmup)
+    return {
+        "relations": with_relations,
+        "batch_size": settings.batch_size,
+        "steps": settings.steps,
+        "step_ms_median": round(1000 * statistics.median(times), 2),
+        "step_ms_mean": round(1000 * statistics.fmean(times), 2),
+        **_peak_memory_mb(device),
+        **_layout_statistics(surfaces),
     }
 
 
@@ -211,14 +258,14 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _run(args: argparse.Namespace) -> int:
-    device = torch.device(args.device)
+    settings = StepSettings(
+        batch_size=args.batch_size, steps=args.steps, warmup=args.warmup, e_dim=args.e_dim,
+        device=torch.device(args.device), seed=args.seed)
     records = read_records(args.shard, (args.steps + args.warmup) * args.batch_size)
     print(f"{len(records)} records read from {args.shard}", flush=True)
     results = []
     for with_relations in (True, False):
-        result = measure(records, batch_size=args.batch_size, steps=args.steps,
-                         warmup=args.warmup, e_dim=args.e_dim, with_relations=with_relations,
-                         device=device, seed=args.seed)
+        result = measure(records, settings, with_relations=with_relations)
         results.append(result)
         print(json.dumps(result), flush=True)
     if args.output is not None:
