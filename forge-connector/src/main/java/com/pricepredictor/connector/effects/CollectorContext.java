@@ -56,6 +56,8 @@ final class CollectorContext {
      * (FR-010c); nothing for a live game's or any other fork's.
      */
     private final KeptRecords kept;
+    /** Whether a record this context wrote holds the game's outcome. */
+    private boolean outcomeWritten;
 
     CollectorContext(
             RecordShardWriter writer, String gameId, AttributionMode mode,
@@ -214,7 +216,7 @@ final class CollectorContext {
     /** {@link #emit}, for a record written at the game's end ({@link #endOfGameOut}). */
     void emitAtGameEnd(EffectRecord record) {
         stamp(record);
-        endOfGameOut.accept(record.toJson());
+        write(endOfGameOut, record.toJson());
     }
 
     /**
@@ -226,7 +228,21 @@ final class CollectorContext {
      */
     void emit(EffectRecord record) {
         stamp(record);
-        out.accept(record.toJson());
+        write(out, record.toJson());
+    }
+
+    /** Hand a finished line to {@code to}, noting whether it holds the game's outcome. */
+    private void write(Consumer<String> to, String line) {
+        outcomeWritten |= RecordShardWriter.holdsTheOutcome(line);
+        to.accept(line);
+    }
+
+    /**
+     * Whether a record this context wrote holds the game's outcome ({@code
+     * player_lost}, {@code player_won}).
+     */
+    boolean wroteTheOutcome() {
+        return outcomeWritten;
     }
 
     /** A fork's flags, {@code random_seat} and the game's {@code aimed_at}. */

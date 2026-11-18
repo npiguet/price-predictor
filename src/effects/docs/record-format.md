@@ -11,7 +11,7 @@ What a reader or writer of effect records has to know that no single source file
 - `{run_id}.{worker}-{lifetime}.jsonl.gz` at the top level of the collecting run's directory (its `--effect-records`, a `records` or `scratch` run of the layout), one JSON record per line, append-only.
 - One shard per worker JVM lifetime, not per worker slot and not one shared file. Records are large enough that concurrent appends would interleave mid-record, and the supervisor replaces worker JVMs hundreds of times per run.
 - Each file is a concatenation of complete gzip members, one per block of 256 records and one more at each game's end, after its game-end marker. A worker killed mid-write truncates the last member and the reader stops there, so a killed worker loses only the game in progress.
-- A game that ended writes a `turn_action` / `game_end` marker as its last record. A game whose shard holds no marker was cut; `build-corpus`, the collectors' counters and `rule-counts` take nothing from it (`domain/game_ends.py`).
+- A game that ended with its outcome and its end-of-game records written writes a `turn_action` / `game_end` marker as its last record. A game whose shard holds no marker was cut; `build-corpus`, the collectors' counters and `rule-counts` take nothing from it (`domain/game_ends.py`).
 - Damage is located, never skipped silently:
   - A last member that does not decompress ends the read with a warning naming the shard and byte.
   - A damaged member with another after it stops the read with `CorruptShardError`, because reading on would drop every later member unsaid.

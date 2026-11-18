@@ -144,6 +144,15 @@ abstract class BusEventReader {
      */
     abstract void fileOutcome(EffectEvent event, String namedCause);
 
+    /**
+     * File the game's outcome, a {@code player_lost} or {@code player_won}:
+     * an outcome like any other, unless the reader gives it a filing of its
+     * own.
+     */
+    void fileGameOutcome(EffectEvent event) {
+        fileOutcome(event, null);
+    }
+
     /** File a completed move; leaving the battlefield can mean a death. */
     abstract void fileMove(GameEventCardChangeZone event, EffectEvent moved);
 
@@ -318,9 +327,12 @@ abstract class BusEventReader {
     public void onGameOutcome(GameEventGameOutcome event) {
         if (game != null) {
             for (EffectEvent lost : BusEvents.playersLost(game)) {
-                fileOutcome(lost, null);
+                fileGameOutcome(lost);
             }
-            file(BusEvents.gameOutcome(event, game), null);
+            EffectEvent won = BusEvents.gameOutcome(event, game);
+            if (won != null) {
+                fileGameOutcome(won);
+            }
         }
     }
 

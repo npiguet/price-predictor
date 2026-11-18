@@ -6,8 +6,10 @@ import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCardDamaged;
+import forge.game.event.GameEventGameOutcome;
 import forge.game.event.GameEventPlayerRadiation;
 import forge.game.phase.PhaseType;
+import forge.game.player.GameLossReason;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.Zone;
@@ -280,27 +282,30 @@ class BusBracketCollectorTest {
 
     /**
      * The game ends while a bracket is still open on an item that never
-     * resolved (its own cost payment reaching 0 life, in the shape this
-     * stands in for), with an event filed into it: no record claims the
-     * item resolved. {@code flushOrphanedEvents()} writes the orphans only,
-     * never an open bracket's events.
+     * resolved (its own cost payment reaching 0 life): the outcome the
+     * state-based check then publishes is not the item's, and the game-end
+     * record holds it, the loss before the win. No record claims the item
+     * resolved.
      */
     @Test
-    void aStillOpenBracketAtTheEndIsNotGivenAResolutionItNeverHad() throws IOException {
-        BusBracketCollector collector = collector();
+    void theOutcomeOfAGameEndingWithABracketOpenIsWrittenInTheGameEndRecord() throws IOException {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        BusBracketCollector collector = collector(game);
         SpellAbility bolt = damageAbility();
-        Card victim = TestCards.build("Runeclaw Bear");
+        game.getPlayers().get(1).loseConditionMet(GameLossReason.LifeReachedZero, null);
 
         collector.beginBracket(bolt);
-        collector.onCardDamaged(new GameEventCardDamaged(
-                victim.getView(), bolt.getHostCard().getView(), 3,
-                GameEventCardDamaged.DamageType.Normal));
+        collector.onGameOutcome(new GameEventGameOutcome(
+                1, List.of("a has won"), "a", "a: 1 b: 0 "));
         collector.finishGame(Set.of(bolt.getId()));
 
         List<String> records = written();
-        assertEquals(1, records.size(), records.toString());
-        assertFalse(records.get(0).contains("\"moment\":\"resolution\""),
-                "no record may claim bolt resolved: " + records.get(0));
+        assertEquals(2, records.size(), records.toString());
+        assertTrue(records.get(0).contains("\"moment\":\"activation\""), records.get(0));
+        String end = records.get(1);
+        assertEquals(List.of("player_lost", "player_won"), RecordLines.eventTypes(end), end);
+        assertEquals(null, RecordLines.payload(end).get("outcome"),
+                "no record may claim bolt resolved: " + end);
     }
 
     /**

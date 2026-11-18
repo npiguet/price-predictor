@@ -21,7 +21,7 @@ import java.util.Map;
  * <p>Three ways an event reaches none: it arrives during a player's action at
  * priority that is no cast (a special action, a mana ability outside any
  * payment); it is kept with the orphans while no bracket is open and then
- * discarded rather than rescued at the game's end; or it is a state-based
+ * discarded, at the next cast, resolution end or the game's end; or it is a state-based
  * death with no held resolution and no open damage step to take it.
  *
  * <p>Counted whatever the run, since a count costs one map entry; only a run

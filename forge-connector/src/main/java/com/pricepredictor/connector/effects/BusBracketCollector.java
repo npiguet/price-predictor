@@ -15,6 +15,7 @@ import forge.game.event.GameEventTurnPhase;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -79,6 +80,11 @@ public final class BusBracketCollector extends BusEventReader {
 
     /** One bracket per stack item this collector saw cast, and the open one. */
     private final StackBrackets brackets = new StackBrackets(dropped);
+
+    /** The game's outcome no resolution or combat took, for the game-end record. */
+    private final List<EffectEvent> gameEnd = new ArrayList<>();
+    /** Whether the game's outcome has been filed ({@link #fileGameOutcome}). */
+    private boolean outcomeFiled;
 
     /** The cast on its way onto the stack, if one is, and what it set off ({@link Cause#CAST}). */
     private final CastsUnderWay castsUnderWay;
@@ -522,15 +528,13 @@ public final class BusBracketCollector extends BusEventReader {
         }
         // Held rather than written: the deaths this resolution causes have
         // not happened yet. An activation that paid nothing the game keeps is
-        // one the random seat could repeat at will (research C9).
+        // one the random seat could repeat at will (research C9). A
+        // resolution that ended the game ("you lose the game") is held too:
+        // its card's move off the stack is still to come, and the game's end
+        // writes the half (finishGame).
         boolean free = resolved.costs != null && resolved.ability.isActivatedAbility()
                 && resolved.costs.spentNoManaAndMovedNoCard();
         heldResolution.hold(resolved, outcome, free);
-        if (game != null && game.isGameOver()) {
-            // The resolution ended the game (a "loses the game", a "wins the
-            // game" ability): no next action or loop end will write it.
-            onNextAction();
-        }
     }
 
     /**
@@ -765,6 +769,41 @@ public final class BusBracketCollector extends BusEventReader {
         fileOutcome(event, namedCause, Filing.OUTCOME);
     }
 
+    /**
+     * The game's outcome, {@code player_lost} and {@code player_won}, has a
+     * filing of its own and is never an open cast's: a cast whose own cost
+     * ended the game (life paid to 0) never resolves, and its bracket is
+     * never written. The resolving item's half takes it when a resolution
+     * ended the game ({@code LosesGame}, {@code WinsGame}); else the combat
+     * record, while a damage step's window is open; else the game-end
+     * record ({@link #writeGameEnd}). Never a tap's, and never dropped.
+     */
+    @Override
+    void fileGameOutcome(EffectEvent event) {
+        outcomeFiled = true;
+        if (classifyNow().cause() == Cause.RESOLUTION && resolvingTakesTheOutcome()) {
+            brackets.file(EventAttribution.stamp(event, brackets.resolving(), null),
+                    DroppedEvents.phaseOf(game));
+        } else if (combatStep.takesEventsNow()) {
+            combatStep.file(EventAttribution.stampAt(event, null, null, null));
+        } else {
+            gameEnd.add(EventAttribution.stampAt(event, null, null, null));
+        }
+    }
+
+    /** Whether a resolution is open to take the outcome as its own, its step not handed on. */
+    private boolean resolvingTakesTheOutcome() {
+        return brackets.open() != null && !stepTakenOver;
+    }
+
+    /**
+     * Whether the game's outcome, if one was filed, is in a record written:
+     * the game-end marker is written only then.
+     */
+    boolean outcomeIsWritten() {
+        return !outcomeFiled || context.wroteTheOutcome();
+    }
+
     private void fileOutcome(EffectEvent event, String namedCause, Filing filing) {
         if (event.type() == EventType.UNATTACHED && heldResolution.isHolding()
                 && (inStateBasedLoop || game.getTracker().isFrozen())
@@ -962,8 +1001,10 @@ public final class BusBracketCollector extends BusEventReader {
      *
      * <p>An event that arrives while no record is open — at a player's action
      * at priority, for the orphans, or a state-based death nothing takes — is
-     * counted as dropped ({@link DroppedEvents}); an orphan only once it is
-     * discarded rather than rescued at the game's end ({@link StackBrackets}).
+     * counted as dropped ({@link DroppedEvents}); an orphan once it is
+     * discarded, at the next cast, resolution end or the game's end ({@link
+     * StackBrackets}). The game's outcome is never routed here ({@link
+     * #fileGameOutcome}).
      *
      * @param filing what kind of event it is, which narrows where it may go
      */
@@ -1216,14 +1257,13 @@ public final class BusBracketCollector extends BusEventReader {
      * lethal damage step, and without this the combat that decided the game
      * would never be written.
      *
-     * <p>The <b>resolution bracket's own leftovers</b> are closed and
-     * cleared by the killing ability's own {@link
-     * #endBracket} the moment it resolves -- before the state-based check that
-     * discovers the game is over ever runs (CR 704.3, next main-loop
-     * iteration). A bus event filed after that point, with no bracket open
-     * (the ordinary case for {@code player_won}: burn, drain, decking out,
-     * anything that is not a combat-damage kill), has nowhere left to be
-     * flushed to. See {@link #flushOrphanedEvents}.
+     * <p>The <b>held half</b> of a resolution that ended the game ("you
+     * lose the game") is written here, with its card's move off the stack:
+     * no next action or state-based loop follows it.
+     *
+     * <p>The <b>game's outcome</b>, when no resolution or combat took it
+     * (the ordinary case: burn, drain, decking out, a life cost paid to 0),
+     * is the game-end record's ({@link #writeGameEnd}).
      *
      * <p>An item still on the stack had its cost half written at its cast,
      * and its effect half never comes: nothing is written for it.
@@ -1262,13 +1302,10 @@ public final class BusBracketCollector extends BusEventReader {
         // across the phase event that opened the window.
         turnActions.close();
         // Next, because it is the oldest of the rest: the resolution it
-        // describes ended before anything the two below hold. The winner is not one of its
-        // consequences -- player_won is not a permanent leaving the
-        // battlefield -- so it stays where flushOrphanedEvents puts it, in a
-        // record of its own after this one.
+        // describes ended before anything the two below hold.
         onNextAction();
         combatStep.flush();
-        flushOrphanedEvents();
+        writeGameEnd();
         writeOffRemoved(onStack);
     }
 
@@ -1352,42 +1389,25 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
-     * Write a leftover resolution-bracket buffer as its own record, the
-     * rescue {@link CombatStepBracket#flush} gives the combat bracket, for the
-     * same reason: something can end the game between the last bracket close
-     * and the next one, which never comes.
+     * Write the game-end record: the game's outcome that no resolution or
+     * combat took ({@link #fileGameOutcome}), and nothing else. Every orphan
+     * still kept — an attack's taps, a land played, a stat change since the
+     * last cast or resolution — is counted as dropped: none is the outcome's
+     * doing, and the board is read after them.
      *
-     * <p>Reachable by the most ordinary kind of win. {@code MagicStack} fires
-     * {@code GameEventSpellResolved} as soon as a resolving ability's effect
-     * returns, so {@link #endBracket} closes the bracket before {@code
-     * checkStateBasedEffects} asks whether anyone lost (CR 704.3, at the start
-     * of the next main-loop iteration). The {@code GameEventGameOutcome} of a
-     * burn spell, a drain, a mill-out or a scripted "you lose the game" then
-     * lands in the orphans ({@link StackBrackets}), with no bracket open, and
-     * no later resolution comes to flush it: without this, {@code player_won}
-     * is lost for every non-combat kill.
-     *
-     * <p>{@code ability} is absent, as on a combat record: with no resolution
-     * open there is no acting line. {@code state} is read fresh, as {@link
-     * CombatStepBracket#file} reads it, since the board captured at a cast
-     * went with the resolution that closed.
-     *
-     * <p>Only the orphans are written, never an open bracket's events. A cast
-     * whose own cost payment ends the game (life paid to 0) leaves its bracket
-     * open on an ability {@code X} that is still on the stack and never
-     * resolved, and the win lands in it. A record here would name {@code X}
-     * as resolving in the same {@code finishGame()} call that counts {@code
-     * X} as abandoned. Its events are as unfinished as {@code X}, so they are
-     * dropped with it.
+     * <p>{@code ability} is absent, as on a combat record: no resolution is
+     * open, so there is no acting line. {@code state} is read now, the board
+     * the game ended on.
      */
-    private void flushOrphanedEvents() {
-        if (!brackets.hasOrphans()) {
+    private void writeGameEnd() {
+        brackets.discardOrphans();
+        if (gameEnd.isEmpty()) {
             return;
         }
         context.emit(context.newResolution(Moment.RESOLUTION)
                 .ability(ProvenanceKey.Resolved.UNKNOWN)
                 .state(snapshots.ofBoard().render())
-                .payload(RecordPayloads.resolutionPayload(
-                        brackets.drainOrphans(), List.of(), null)));
+                .payload(RecordPayloads.resolutionPayload(List.copyOf(gameEnd), List.of(), null)));
+        gameEnd.clear();
     }
 }

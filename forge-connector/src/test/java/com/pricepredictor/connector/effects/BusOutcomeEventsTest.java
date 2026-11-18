@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.event.GameEventGameFinished;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
@@ -168,7 +169,8 @@ class BusOutcomeEventsTest {
     /**
      * Door to Nothingness makes its target lose: Forge ends the game while
      * the ability resolves, and the ability's effect half holds the loss and
-     * the win it made, written once in the game.
+     * the win it made, written once in the game. The half is written at the
+     * game's end, which a match publishes when its game loop returns.
      */
     @Test
     void aLoseTheGameAbilitysHalfHoldsTheLossAndTheWin() throws Throwable {
@@ -185,6 +187,7 @@ class BusOutcomeEventsTest {
             game.getStack().add(loses);
             game.getStack().resolveStack();
             assertTrue(game.isGameOver(), "the opponent lost");
+            game.fireEvent(new GameEventGameFinished());
         });
 
         String half = only(records, "resolution", "cardsfolder/d/door_to_nothingness.txt");
@@ -208,6 +211,7 @@ class BusOutcomeEventsTest {
             game.getStack().add(wins);
             game.getStack().resolveStack();
             assertTrue(game.isGameOver(), "the caster won");
+            game.fireEvent(new GameEventGameFinished());
         });
 
         String half = only(records, "resolution", "cardsfolder/h/halo_fountain.txt");

@@ -328,14 +328,22 @@ public final class GameRecording implements AutoCloseable {
         }
         try {
             // Last of the game's records, and only for a game that ended
-            // with all of them written: one that threw mid-match, or whose
-            // flush threw, gets none (D2).
-            if (flushed && game.isGameOver()) {
+            // with all of them written: one that threw mid-match, whose
+            // flush threw, or whose outcome reached no record, gets none (D2).
+            if (endedWhole(flushed)) {
                 writeMarker(envelope.gameId(), () -> GameEndMarker.write(game, envelope));
             }
         } finally {
             envelope.endGame();
         }
+    }
+
+    /**
+     * Whether the game ended with every end-of-game write done: its flush
+     * did not throw, and the record holding its outcome was written.
+     */
+    private boolean endedWhole(boolean flushed) {
+        return flushed && game.isGameOver() && bracket.outcomeIsWritten();
     }
 
     /** The first marker that could not be written, printed once per worker. */

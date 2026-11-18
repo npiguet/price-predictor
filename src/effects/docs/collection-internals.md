@@ -49,7 +49,9 @@ What the collectors must read of the hooks:
 - Forge's bus publishes an event of its own only for outcomes that have one: damage, counters, zone changes, taps. A pump, an anthem recompute, an animation and a colour change all publish only "this card's stats changed".
 - `StatDiffer` remembers each card's computed characteristics and describes the difference. That is the source of `pt_change`, `keyword_change` (Forge's hidden keywords too, flagged `hidden`), `ability_change` (abilities gained by line key, or lost; not during an `Animate` clause, whose rule writes its own), `type_change`, `color_change` and `control_change`. A draw, a discard and a mill are classified from the zone pair. Without these the "gets +2/+2 and gains flying" family resolved into an empty event list.
 - A destruction and a sacrifice are told just before the permanent moves and are filed where its move is filed (`destroyed`, `sacrificed`). A face turning is read off the stats change as the face now up (`face_change`).
-- The game's outcome names each loser (`player_lost`) in the effect half of a `LosesGame` or `WinsGame` ability that ended the game, else in the game-end record.
+- The game's outcome (`player_lost`, `player_won`) has a filing of its own (`BusBracketCollector.fileGameOutcome`): the effect half of a `LosesGame` or `WinsGame` ability that ended the game, else the combat record while a damage step's window is open, else the game-end record. It never joins the bracket of a cast or activation still on the stack, which is never written: a "pay life" cost paid to 0 would otherwise lose the game's result.
+- The game-end record holds the outcome only, on the board read at the game's end. The held half of a resolution that ended the game is written by `finishGame`, after its spell's card's move off the stack.
+- The game-end marker follows only a game whose outcome reached a written record (`CollectorContext.wroteTheOutcome`, `GameRecording.endedWhole`); one whose outcome was lost reads as cut.
 - A record's stat changes are changes after its own snapshot. The differ re-reads the battlefield whenever a bracket opened at a cast, a mode's half, a damage step or a fork's forced cast takes its snapshot, because Forge can apply a change long before publishing it. A change the re-read swallows reaches no record and is counted as dropped. It does not re-read while an ability resolves.
 - An event's `duration` is read from the acting script's `Duration$`. An undeclared one is what Forge applies: instant for an outcome with no lasting state, end of turn for the APIs Forge ends at end of turn by default (Pump, Animate, Debuff, Protection, Effect and their `All` forms, ChangeText, ExchangePower), permanent otherwise. A duration ending when an object changes (host leaves, untaps, unattached, "as long as") reads `permanent`.
 - `attributed_to` is the resolving sub-ability's chain index, counted upward from the clause via `getParent()`, never downward from the bracket's root: Forge resolves a copy, and the two chains are not the same objects.
@@ -69,7 +71,7 @@ What the collectors must read of the hooks:
 
 ## Dropped events
 
-- Every event that reaches no record is counted per game by event type and engine phase (`FE/DroppedEvents.java`): one at a player's action at priority that is no cast, one a cost payment publishes, an orphan discarded at game end, a state-based death nothing took.
+- Every event that reaches no record is counted per game by event type and engine phase (`FE/DroppedEvents.java`): one at a player's action at priority that is no cast, one a cost payment publishes, an orphan (filed while no bracket was open) discarded at the next cast, resolution end or game end, a state-based death nothing took.
 - The counts are written per game, not at exit, because workers are killed with their process tree and run no shutdown hook. File format: `record-format.md`.
 
 ## Continuous records

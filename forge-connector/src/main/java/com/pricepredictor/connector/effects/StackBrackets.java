@@ -42,8 +42,8 @@ import java.util.function.Supplier;
  * something resolves, the resolving item's ({@link #followResolving}). It
  * changes only through the transitions below; which events it takes is the
  * collector's cause to say. What is filed while none is open is kept as the
- * orphans, and counted as dropped when it is discarded rather than rescued
- * ({@link DroppedEvents}).
+ * orphans, and counted as dropped when it is discarded ({@link
+ * DroppedEvents}).
  */
 final class StackBrackets {
 
@@ -64,9 +64,8 @@ final class StackBrackets {
     /**
      * What the bus filed while no bracket was open: the aftermath of a
      * resolution, the state-based check before anything is cast again.
-     *
-     * <p>The collector rescues it if the game ends before a cast or a
-     * resolution empties it again — the ordinary place of a win.
+     * Never rescued: discarded at the next cast, resolution end or the
+     * game's end, and counted as dropped.
      */
     private final EventBuffer orphans = new EventBuffer();
     /** The engine phase each orphan arrived in, in the orphans' order. */
@@ -149,19 +148,12 @@ final class StackBrackets {
                 && (open.ability == acting || open.ability.getOriginalAbility() == acting);
     }
 
-    /** Whether anything was filed while no bracket was open, and is still kept. */
-    boolean hasOrphans() {
-        return !orphans.isEmpty();
-    }
-
-    /** What was filed while no bracket was open, no longer kept: rescued, so not dropped. */
-    List<EffectEvent> drainOrphans() {
-        orphanPhases.clear();
-        return orphans.drain();
-    }
-
-    /** What was filed while no bracket was open, discarded: every one is dropped. */
-    private void discardOrphans() {
+    /**
+     * What was filed while no bracket was open, discarded: every one is
+     * dropped. At a cast, a resolution's end, and the game's end, where no
+     * record takes them: the game-end record holds the game's outcome only.
+     */
+    void discardOrphans() {
         List<EffectEvent> discarded = orphans.drain();
         for (int i = 0; i < discarded.size(); i++) {
             dropped.count(discarded.get(i).type(), orphanPhases.get(i));

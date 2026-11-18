@@ -443,16 +443,12 @@ class OutcomeHandlerTest {
         params.put("results", List.of(roll));
         params.put("by_side", new java.util.LinkedHashMap<>(Map.of("z", 1)));
 
-        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
-            collectors.clauses().outcomeHandler().invoke(null, ON_OUTCOME,
-                    new Object[]{sa, "dice_rolled", params});
-            bracket.finishGame(Set.of());
-        });
+        List<String> records = reportedWhileResolving(new Object[]{sa, "dice_rolled", params});
 
-        assertEquals(1, records.size(), records.toString());
-        assertTrue(records.get(0).contains(
+        String half = records.get(records.size() - 1);
+        assertTrue(half.contains(
                 "\"by_side\":{\"z\":1},\"results\":[{\"final\":4,\"natural\":3}],\"sides\":6"),
-                records.get(0));
+                half);
     }
 
     /**
@@ -467,22 +463,47 @@ class OutcomeHandlerTest {
 
     /**
      * The events the outcome hook filed for these reports, in order, as the
-     * shard records them.
-     *
-     * <p>No resolution is open around them, as around the engine's own choke
-     * points: the events wait as the game's orphans and the end of the game
-     * writes them in a record of their own, with no bracket to stamp a cause
-     * on them.
+     * shard records them: the effect half of the ability resolving around
+     * them ({@link #reportedWhileResolving}), less the {@code cause} that
+     * ability stamped on each, which no report carries.
      */
     private List<Map<String, Object>> outcomeEvents(Object[]... reports) throws Throwable {
-        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
-            for (Object[] report : reports) {
-                collectors.clauses().outcomeHandler().invoke(null, ON_OUTCOME, report);
+        List<String> records = reportedWhileResolving(reports);
+        assertEquals(2, records.size(), "the cost half and the effect half: " + records);
+        return events(records.get(1)).stream().map(OutcomeHandlerTest::unstamped).toList();
+    }
+
+    /** An event without the {@code cause} its record's resolving ability stamped on it. */
+    private static Map<String, Object> unstamped(Map<String, Object> event) {
+        Map<String, Object> reported = new java.util.LinkedHashMap<>(params(event));
+        reported.remove("cause");
+        Map<String, Object> copy = new java.util.LinkedHashMap<>(event);
+        copy.put("params", reported);
+        return copy;
+    }
+
+    /**
+     * Hand the outcome hook each report while a live ability resolves, then
+     * end its resolution, which writes its effect half with the events the
+     * reports became. A report that comes with no resolution open is an
+     * orphan, discarded and counted as dropped, so no record would show it.
+     */
+    private List<String> reportedWhileResolving(Object[]... reports) throws Throwable {
+        Game game = TestCards.game();
+        SpellAbility resolving = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+        return ShardRun.records(tempDir, game, (bracket, collectors) -> {
+            bracket.beginBracket(resolving);
+            game.getStack().setResolving(true);
+            try {
+                for (Object[] report : reports) {
+                    collectors.clauses().outcomeHandler().invoke(null, ON_OUTCOME, report);
+                }
+            } finally {
+                game.getStack().setResolving(false);
             }
-            bracket.finishGame(Set.of());
+            bracket.endBracket(resolving.getId(), false);
+            bracket.onNextAction();
         });
-        assertEquals(1, records.size(), records.toString());
-        return events(records.get(0));
     }
 
     // ── a null-ability outcome's own game signal, at the shapes ──────────
@@ -658,13 +679,17 @@ class OutcomeHandlerTest {
      * and nothing on the resolving-clause pointer, which is why {@link
      * Forks#isForkRunningOnThisThread()} exists. FORK_RUNNING
      * is set directly here, without needing a real combat to
-     * fork. No live bracket is open, matching a probe's own
+     * fork. No live resolution is open, matching a probe's own
      * timing: like {@code intervene}, it does not run nested inside a live
      * resolution.
      */
     @Test
     void aNullAbilityOutcomeFromAProbesOwnCombatDoesNotReachTheLiveShard() throws Throwable {
-        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
+        // Mid combat-damage, in a game of its own, as the live report in
+        // aNullAbilityOutcomeDuringLiveCombatDamageReachesTheShard: the
+        // combat record is where an admitted report is written.
+        Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DAMAGE);
+        List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             var forkRunning = Forks.class.getDeclaredField("FORK_RUNNING");
             forkRunning.setAccessible(true);
             @SuppressWarnings("unchecked")
@@ -682,7 +707,7 @@ class OutcomeHandlerTest {
             collectors.clauses().outcomeHandler().invoke(null, ON_OUTCOME,
                     new Object[]{null, "damage_prevented", Map.of("amount", 4)});
 
-            // The events reach the bracket's buffer, which only a flush
+            // The events reach the combat bracket, which only a flush
             // writes; without one the shard is empty whether or not the gate
             // exists.
             bracket.finishGame(Set.of());
