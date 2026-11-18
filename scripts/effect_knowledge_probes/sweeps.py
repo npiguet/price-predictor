@@ -200,28 +200,55 @@ def set_untapped_lands(record, player_id: str, pips: list[str], amount: int):
     lands = [index for index, entity in enumerate(entities)
              if entity.zone == "battlefield" and entity.controller == player_id
              and "land" in entity.types]
+    untapped, added = _plan_lands(entities, lands, wanted, coloured)
+    for index in lands:
+        entities[index] = replace(entities[index], tapped=index not in untapped)
+    _append_basics(entities, added, player_id)
+    made = [basic_land_colour(entities[index]) for index in untapped] + added
+    production = {colour: made.count(colour) for colour in _PRODUCTION_COLOURS}
+    return _with_production(record, entities, player_id, production)
+
+
+def _can_supply(entity, colour: str | None) -> bool:
+    """Whether a basic land taps for ``colour``, or for anything when it is None."""
+    land_colour = basic_land_colour(entity)
+    return land_colour is not None and colour in (None, land_colour)
+
+
+def _plan_lands(entities, lands: list[int], wanted: list, coloured: list[str]):
+    """``(untapped, added)``: the player's lands to leave untapped, one per wanted
+    mana, and the colours of the fresh basics for the mana they cannot supply."""
     untapped: list[int] = []
     added: list[str] = []
     for colour in wanted:
         spare = next((index for index in lands if index not in untapped
-                      and basic_land_colour(entities[index]) is not None
-                      and colour in (None, basic_land_colour(entities[index]))), None)
+                      and _can_supply(entities[index], colour)), None)
         if spare is not None:
             untapped.append(spare)
-        elif colour is not None or coloured:
-            added.append(colour or coloured[0])
         else:
-            raise ValueError("generic mana past the player's basics needs a coloured pip")
-    for index in lands:
-        entities[index] = replace(entities[index], tapped=index not in untapped)
+            added.append(_fresh_colour(colour, coloured))
+    return untapped, added
+
+
+def _fresh_colour(colour: str | None, coloured: list[str]) -> str:
+    """The colour of the basic added for ``colour``; generic mana takes the cost's first."""
+    if colour is None and not coloured:
+        raise ValueError("generic mana past the player's basics needs a coloured pip")
+    return colour or coloured[0]
+
+
+def _append_basics(entities: list, added: list[str], player_id: str) -> None:
+    """Append a fresh untapped basic of each colour in ``added``, on fresh ids."""
     ids = {entity.id for entity in entities}
     for colour in added:
         fresh = next(f"{player_id}~land{k}" for k in range(len(ids) + 1)
                      if f"{player_id}~land{k}" not in ids)
         ids.add(fresh)
         entities.append(basic_land(colour, fresh, player_id))
-    made = [basic_land_colour(entities[index]) for index in untapped] + added
-    production = {colour: made.count(colour) for colour in _PRODUCTION_COLOURS}
+
+
+def _with_production(record, entities: list, player_id: str, production: dict):
+    """``record`` on ``entities``, the player's production set and floating mana cleared."""
     players = tuple(
         replace(p, untapped_production=production, floating_mana={})
         if p.id == player_id else p
@@ -249,17 +276,24 @@ def affordability_ready(record, sidecars) -> bool:
     would pay on the side, and the production count cannot be trusted to show
     one, because the collector counts no colourless mana.
     """
-    payload = record.payload
-    if not payload.candidates or not land_payable(candidate_mana(record)):
+    if not _first_candidate_payable(record):
         return False
-    player = record.actor_player
     mine = [e for e in record.state.entities
-            if e.zone == "battlefield" and e.controller == player]
-    candidate = set(payload.candidates[0].ability)
-    if any(candidate & set(e.printed) for e in mine if "land" in e.types):
+            if e.zone == "battlefield" and e.controller == record.actor_player]
+    if _candidate_is_land_ability(record, mine):
         return False
     return not any(_has_mana_ability(e, sidecars) for e in mine
                    if "land" not in e.types and not e.tapped)
+
+
+def _first_candidate_payable(record) -> bool:
+    return bool(record.payload.candidates) and land_payable(candidate_mana(record))
+
+
+def _candidate_is_land_ability(record, mine: list) -> bool:
+    """Whether the first candidate is an ability of one of ``mine``'s lands."""
+    candidate = set(record.payload.candidates[0].ability)
+    return any(candidate & set(e.printed) for e in mine if "land" in e.types)
 
 
 def opposing_creatures(record) -> list:
@@ -302,18 +336,37 @@ def set_amount(text: str, key: str, amount: int) -> str:
 # ── which records each sweep runs on ────────────────────────────────────
 
 
-def _damaged_creature(record):
+def _is_damaged_creature(entity, targets: dict) -> bool:
     from effects.domain.effect_head_layout import HeadField
+
+    entry = targets.get(entity.id)
+    if entry is None or not _is_battlefield_creature(entity):
+        return False
+    return (entry.fields.get(HeadField.DAMAGE_TAKEN) or 0) > 0
+
+
+def _is_battlefield_creature(entity) -> bool:
+    return entity.zone == "battlefield" and "creature" in entity.types
+
+
+def _damaged_creature(record):
     from effects.domain.effect_targets import derive_targets
 
     targets = derive_targets(record)
-    for entity in record.state.entities:
-        entry = targets.get(entity.id)
-        if (entry is not None and entity.zone == "battlefield"
-                and "creature" in entity.types
-                and (entry.fields.get(HeadField.DAMAGE_TAKEN) or 0) > 0):
-            return entity.id
-    return None
+    return next((e.id for e in record.state.entities if _is_damaged_creature(e, targets)),
+                None)
+
+
+def _resolves_an_ability(record) -> bool:
+    from effects.domain.records import Moment, RecordKind
+
+    return (record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION
+            and bool(record.ability))
+
+
+def _is_any_target_ping(line) -> bool:
+    return line.line_kind == "activated" and root_param(
+        line.script_text or "", "ValidTgts") == "Any"
 
 
 class SweepSelector:
@@ -331,34 +384,37 @@ class SweepSelector:
             "activated_damage": [],
         }
 
+    def _add(self, name: str, order: int, row: dict) -> None:
+        self._found[name].append((order, row))
+
     def observe(self, record) -> None:
-        from effects.domain.records import Moment, PlayabilityDecisionPayload, RecordKind
+        from effects.domain.records import PlayabilityDecisionPayload
 
         order = id_hash(record.record_id)
-        rid = record.record_id
         if isinstance(record.payload, PlayabilityDecisionPayload):
             if affordability_ready(record, self.sidecars):
-                self._found["affordability"].append((order, {"record_id": rid}))
-            return
-        if record.kind is not RecordKind.RESOLUTION or record.moment is not Moment.RESOLUTION:
-            return
-        if not record.ability:
-            return
+                self._add("affordability", order, {"record_id": record.record_id})
+        elif _resolves_an_ability(record):
+            self._observe_resolution(record, order)
+
+    def _observe_resolution(self, record, order: int) -> None:
+        rid = record.record_id
         line = self.sidecars.line_or_none(record.ability[0])
         script = (line.script_text or "") if line is not None else ""
         api = line.script_api_type if line is not None else None
         target = _damaged_creature(record)
         if target is not None and _NUMDMG_RE.search(script):
-            self._found["toughness"].append((order, {"record_id": rid, "entity": target}))
-            if line.line_kind in ("spell", "triggered"):
-                host = "spell" if line.line_kind == "spell" else "triggered"
-                self._found["damage"].append(
-                    (order, {"record_id": rid, "entity": target, "host": host}))
-            if line.line_kind == "activated" and root_param(script, "ValidTgts") == "Any":
-                self._found["activated_damage"].append(
-                    (order, {"record_id": rid, "entity": target}))
+            self._observe_damage(order, {"record_id": rid, "entity": target}, line)
         if api in _SWEEPER_APIS and opposing_creatures(record):
-            self._found["board_size"].append((order, {"record_id": rid}))
+            self._add("board_size", order, {"record_id": rid})
+
+    def _observe_damage(self, order: int, row: dict, line) -> None:
+        """The damaged creature's row on the sweeps its ability's kind takes."""
+        self._add("toughness", order, dict(row))
+        if line.line_kind in ("spell", "triggered"):
+            self._add("damage", order, {**row, "host": line.line_kind})
+        if _is_any_target_ping(line):
+            self._add("activated_damage", order, dict(row))
 
     def result(self) -> dict:
         def first(rows):
@@ -374,43 +430,63 @@ class SweepSelector:
 # ── running them ────────────────────────────────────────────────────────
 
 
+def _points(values, predictions) -> list[dict]:
+    return [{"value": int(v), "prediction": p} for v, p in zip(values, predictions)]
+
+
+def _toughness_sweep(probe_model, record, row: dict) -> list[dict]:
+    edited = [BoardEdit(record).set_toughness(row["entity"], t).record
+              for t in TOUGHNESS_VALUES]
+    dies = readout.at_card("dies", row.get("entity"))
+    return _points(TOUGHNESS_VALUES, predict(probe_model, edited, dies))
+
+
+def _affordability_sweep(probe_model, record, row: dict) -> list[dict]:
+    pips = candidate_cost(record)
+    values = tuple(range(0, len(pips) + 3))
+    edited = [set_untapped_lands(record, record.actor_player, pips, v) for v in values]
+    return _points(values, predict(probe_model, edited, readout.of_record("affordable")))
+
+
+def _board_size_sweep(probe_model, record, row: dict) -> list[dict]:
+    edited = [set_opposing_creatures(record, n) for n in BOARD_SIZES]
+    deaths = readout.at_every_card("dies")
+
+    def summed(o, v, s, r):
+        return float(np.nansum([p for entity, p in deaths(o, v, s, r).items()
+                                if _is_opposing(edited[r], entity)]))
+    return _points(BOARD_SIZES, predict(probe_model, edited, summed))
+
+
+def _damage_sweep(probe_model, record, row: dict) -> list[dict]:
+    dies = readout.at_card("dies", row.get("entity"))
+    base = BoardEdit(record).set_toughness(row["entity"], DAMAGE_TARGET_TOUGHNESS).record
+    predictions = []
+    batcher = probe_model.batcher
+    key = record.ability[0]
+    original = batcher.text_of(key)
+    for amount in DAMAGE_VALUES:
+        with batcher.reading_as(key, set_amount(original, "NumDmg", amount)):
+            predictions += predict(probe_model, [base], dies)
+    return _points(DAMAGE_VALUES, predictions)
+
+
+def _activated_damage_sweep(probe_model, record, row: dict) -> list[dict]:
+    return activated_damage_sweep(probe_model, record, row["entity"])
+
+
+_SWEEPS = {
+    "toughness": _toughness_sweep,
+    "affordability": _affordability_sweep,
+    "board_size": _board_size_sweep,
+    "damage": _damage_sweep,
+    "activated_damage": _activated_damage_sweep,
+}
+
+
 def run_sweep(name: str, probe_model, record, row: dict) -> list[dict]:
     """``[{value, prediction}]`` for one record of one sweep."""
-    dies = readout.at_card("dies", row.get("entity"))
-    if name == "toughness":
-        values = TOUGHNESS_VALUES
-        edited = [BoardEdit(record).set_toughness(row["entity"], t).record for t in values]
-        predictions = predict(probe_model, edited, dies)
-    elif name == "affordability":
-        pips = candidate_cost(record)
-        values = tuple(range(0, len(pips) + 3))
-        edited = [set_untapped_lands(record, record.actor_player, pips, v) for v in values]
-        predictions = predict(probe_model, edited, readout.of_record("affordable"))
-    elif name == "board_size":
-        values = BOARD_SIZES
-        edited = [set_opposing_creatures(record, n) for n in values]
-
-        deaths = readout.at_every_card("dies")
-
-        def summed(o, v, s, r):
-            return float(np.nansum([p for entity, p in deaths(o, v, s, r).items()
-                                    if _is_opposing(edited[r], entity)]))
-        predictions = predict(probe_model, edited, summed)
-    elif name == "damage":
-        values = DAMAGE_VALUES
-        base = BoardEdit(record).set_toughness(row["entity"], DAMAGE_TARGET_TOUGHNESS).record
-        predictions = []
-        batcher = probe_model.batcher
-        key = record.ability[0]
-        original = batcher.text_of(key)
-        for amount in values:
-            with batcher.reading_as(key, set_amount(original, "NumDmg", amount)):
-                predictions += predict(probe_model, [base], dies)
-    elif name == "activated_damage":
-        return activated_damage_sweep(probe_model, record, row["entity"])
-    else:
-        raise KeyError(name)
-    return [{"value": int(v), "prediction": p} for v, p in zip(values, predictions)]
+    return _SWEEPS[name](probe_model, record, row)
 
 
 def activated_damage_sweep(probe_model, record, entity: str) -> list[dict]:
@@ -445,19 +521,24 @@ def _is_opposing(record, entity_id: str) -> bool:
             and "creature" in entity.types)
 
 
+def _points_by_value(curves: list[list[dict]]) -> dict[tuple, list[dict]]:
+    by_value: dict[tuple, list[dict]] = {}
+    for point in (point for curve in curves for point in curve):
+        by_value.setdefault((point.get("wording", ""), point["value"]), []).append(point)
+    return by_value
+
+
+def _mean_row(wording: str, value: int, points: list[dict]) -> dict:
+    row = {"value": value, "n": len(points),
+           "prediction": float(np.nanmean([p["prediction"] for p in points]))}
+    if wording:
+        row["wording"] = wording
+        row["affected"] = float(np.nanmean([p["affected"] for p in points]))
+    return row
+
+
 def summarize(curves: list[list[dict]]) -> list[dict]:
     """The mean prediction per value over a sweep's records; per wording and
     value, the gate's mean beside it, for the activated-damage sweep."""
-    by_value: dict[tuple, list[dict]] = {}
-    for curve in curves:
-        for point in curve:
-            by_value.setdefault((point.get("wording", ""), point["value"]), []).append(point)
-    out = []
-    for (wording, value), points in sorted(by_value.items()):
-        row = {"value": value, "n": len(points),
-               "prediction": float(np.nanmean([p["prediction"] for p in points]))}
-        if wording:
-            row["wording"] = wording
-            row["affected"] = float(np.nanmean([p["affected"] for p in points]))
-        out.append(row)
-    return out
+    return [_mean_row(wording, value, points)
+            for (wording, value), points in sorted(_points_by_value(curves).items())]
