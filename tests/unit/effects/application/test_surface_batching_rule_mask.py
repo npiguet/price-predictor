@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from types import SimpleNamespace
 
 import torch
@@ -66,14 +67,21 @@ def _mask_targets() -> dict:
     }
 
 
-def _copy(*, natural_share: int, copies: int, drawn_rule=None, drawn_rules=(),
-          rule_entities=(), aimed_at=None) -> SimpleNamespace:
+@dataclass(frozen=True)
+class _Copy:
     """One curated copy of a record, as the rule mask reads it."""
-    return SimpleNamespace(
-        curation=Curation(natural_share, copies, drawn_rule, tuple(drawn_rules),
-                          tuple(rule_entities)),
-        aimed_at=aimed_at,
-    )
+
+    natural_share: int
+    copies: int
+    drawn_rule: str | None = None
+    drawn_rules: tuple = ()
+    rule_entities: tuple = ()
+    aimed_at: tuple | None = None
+
+    @property
+    def curation(self) -> Curation:
+        return Curation(self.natural_share, self.copies, self.drawn_rule,
+                        tuple(self.drawn_rules), tuple(self.rule_entities))
 
 
 def _mask_batch(records, mode, targets=None):
@@ -116,9 +124,9 @@ def test_a_hard_masked_copy_drawn_for_702_2_trains_only_its_rules_outputs():
     """Story 7 acceptance 1: only the outputs the map names for 702.2, plus
     the affected gate on the rule's own entities; a natural copy of the same
     record trains everything."""
-    added = _copy(natural_share=1, copies=2, drawn_rule="702.2",
+    added = _Copy(natural_share=1, copies=2, drawn_rule="702.2",
                   drawn_rules=("702.2",), rule_entities=("E1",))
-    natural = _copy(natural_share=1, copies=2, drawn_rules=("702.2",))
+    natural = _Copy(natural_share=1, copies=2, drawn_rules=("702.2",))
     gradient = _gradients([added, natural], RuleMask.HARD)
 
     assert _trains(gradient, 0, "zone_outcome") == {"E1", "E2"}
@@ -135,7 +143,7 @@ def test_a_hard_masked_copy_trains_the_gate_on_its_rules_entities_alone():
     """The gate's mask lives in ``effect_losses._gate_term``, apart from the
     host-built field masks (plan: easy to lose): the copy's gate loss is the
     BCE at its rule's entities, the others adding neither loss nor gradient."""
-    added = _copy(natural_share=0, copies=1, drawn_rule="702.2",
+    added = _Copy(natural_share=0, copies=1, drawn_rule="702.2",
                   drawn_rules=("702.2",), rule_entities=("E2", "P0"))
     assert _trains(_gradients([added], RuleMask.HARD), 0, "gate") == {"E2", "P0"}
 
@@ -155,7 +163,7 @@ def test_a_hard_masked_copy_whose_rule_names_no_entity_trains_no_gate():
     """A detector naming no entity (an outcome on a created token, a
     ``does_not_fire`` tag) leaves the gate nothing to train on; the rule's
     outputs still train."""
-    added = _copy(natural_share=0, copies=1, drawn_rule="702.2",
+    added = _Copy(natural_share=0, copies=1, drawn_rule="702.2",
                   drawn_rules=("702.2",), rule_entities=())
     gradient = _gradients([added], RuleMask.HARD)
     assert _trains(gradient, 0, "gate") == set()
@@ -166,7 +174,7 @@ def test_a_hard_masked_copy_whose_rule_names_a_missing_output_trains_only_the_ga
     """Edge case: 702.15 names ``poison_delta``, which this record does not
     carry, so its copy trains the gate on the rule's entities and nothing
     else."""
-    added = _copy(natural_share=1, copies=2, drawn_rule="702.15",
+    added = _Copy(natural_share=1, copies=2, drawn_rule="702.15",
                   drawn_rules=("702.15",), rule_entities=("E1",))
     gradient = _gradients([added], RuleMask.HARD)
     assert _trains(gradient, 0, "gate") == {"E1"}
@@ -178,8 +186,8 @@ def test_a_soft_masked_record_weighs_other_outputs_n_over_d():
     """Story 7 acceptance 2: natural share 1, written 4 times; outputs other
     than those of its drawn rules weigh 1/4 on each copy, natural and added,
     its drawn rules' outputs 1 on every copy."""
-    natural = _copy(natural_share=1, copies=4, drawn_rules=("702.2",))
-    added = _copy(natural_share=1, copies=4, drawn_rule="702.2",
+    natural = _Copy(natural_share=1, copies=4, drawn_rules=("702.2",))
+    added = _Copy(natural_share=1, copies=4, drawn_rule="702.2",
                   drawn_rules=("702.2",), rule_entities=("E1",))
     soft = _gradients([natural, added], RuleMask.SOFT)
     full = _gradients([natural, added], None)
@@ -196,7 +204,7 @@ def test_a_soft_masked_record_weighs_other_outputs_n_over_d():
 def test_an_aimed_natural_copy_and_an_uncurated_record_train_at_full_weight():
     """A directed fork's natural copy is a natural record like any other
     (FR-061), and a lethality copy or uncurated record carries no curation."""
-    aimed = _copy(natural_share=1, copies=4, drawn_rules=("702.2",), aimed_at=("704.5f",))
+    aimed = _Copy(natural_share=1, copies=4, drawn_rules=("702.2",), aimed_at=("704.5f",))
     uncurated = SimpleNamespace(curation=None, aimed_at=None)
     for mode in RuleMask:
         assert copy_weights(aimed, mode, _RULE_OUTPUTS) is FULL_WEIGHT
@@ -208,8 +216,8 @@ def test_a_natural_copy_of_a_coverage_record_aimed_at_no_rule_trains_at_full_wei
     no rule) is aimed all the same (FR-009: whatever its value), so its
     natural copy trains every output at full weight under both masks, as an
     absent one does not under ``soft``."""
-    aimed = _copy(natural_share=1, copies=4, drawn_rules=("702.2",), aimed_at=())
-    natural = _copy(natural_share=1, copies=4, drawn_rules=("702.2",), aimed_at=None)
+    aimed = _Copy(natural_share=1, copies=4, drawn_rules=("702.2",), aimed_at=())
+    natural = _Copy(natural_share=1, copies=4, drawn_rules=("702.2",), aimed_at=None)
     for mode in RuleMask:
         assert copy_weights(aimed, mode, _RULE_OUTPUTS) is FULL_WEIGHT
     assert copy_weights(natural, RuleMask.SOFT, _RULE_OUTPUTS).elsewhere == 0.25
@@ -219,8 +227,8 @@ def test_the_verdict_head_takes_the_rule_mask():
     """A verdict or global field is an output the map names too (FR-060a)."""
     names = [str(spec.name) for spec in VERDICT_LAYOUT.fields]
     outputs = {"603.2": ("trigger_fired",)}
-    hard = _copy(natural_share=1, copies=2, drawn_rule="603.2", drawn_rules=("603.2",))
-    soft = _copy(natural_share=1, copies=4, drawn_rules=("603.2",))
+    hard = _Copy(natural_share=1, copies=2, drawn_rule="603.2", drawn_rules=("603.2",))
+    soft = _Copy(natural_share=1, copies=4, drawn_rules=("603.2",))
     weights = [copy_weights(hard, RuleMask.HARD, outputs),
                copy_weights(soft, RuleMask.SOFT, outputs)]
     every = [True] * len(names)
@@ -241,9 +249,9 @@ def test_the_created_objects_head_is_masked_whole(monkeypatch):
         lambda record: ([1.0] * CREATED_OBJECTS_WIDTH, [True] * CREATED_OBJECTS_WIDTH),
     )
     outputs = {"111.5": ("created_objects",), "702.2": ("zone_outcome",)}
-    named = _copy(natural_share=0, copies=1, drawn_rule="111.5", drawn_rules=("111.5",))
-    other = _copy(natural_share=0, copies=1, drawn_rule="702.2", drawn_rules=("702.2",))
-    soft = _copy(natural_share=1, copies=4, drawn_rules=("702.2",))
+    named = _Copy(natural_share=0, copies=1, drawn_rule="111.5", drawn_rules=("111.5",))
+    other = _Copy(natural_share=0, copies=1, drawn_rule="702.2", drawn_rules=("702.2",))
+    soft = _Copy(natural_share=1, copies=4, drawn_rules=("702.2",))
     weights = [copy_weights(named, RuleMask.HARD, outputs),
                copy_weights(other, RuleMask.HARD, outputs),
                copy_weights(soft, RuleMask.SOFT, outputs)]
