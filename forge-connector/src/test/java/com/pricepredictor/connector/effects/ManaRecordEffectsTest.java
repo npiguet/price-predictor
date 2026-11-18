@@ -86,17 +86,74 @@ class ManaRecordEffectsTest {
     }
 
     @Test
-    void aManaAbilityWithoutSubAbilityStillWritesTapAndMana() throws Throwable {
+    void aManaAbilityWithoutSubAbilityStillWritesItsStampedTapAndMana() throws Throwable {
         Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player you = game.getPlayers().get(0);
         Card mountain = TestBoard.inPlay(game, you, "Mountain");
-        SpellAbility red = TestBoard.ability(mountain, ApiType.Mana);
-        red.setActivatingPlayer(you);
 
-        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () ->
-                assertTrue(ComputerUtil.playNoStack(you, red, game, false)));
+        String record = manaRecordOf(
+                activated(game, you, TestBoard.ability(mountain, ApiType.Mana)),
+                "cardsfolder/m/mountain.txt");
 
-        String record = manaRecordOf(records, "cardsfolder/m/mountain.txt");
         assertEquals(List.of("tapped", "mana_produced"), eventTypes(record), record);
+        assertStamped(events(record).get(0), "unresolved", record);
+        assertStamped(events(record).get(1), "root", record);
+    }
+
+    private static List<String> manaRecordsOf(List<String> records, String script) {
+        return records.stream()
+                .filter(record -> record.contains("\"kind\":\"resolution\""))
+                .filter(record -> record.contains(script))
+                .toList();
+    }
+
+    private static void assertStamped(
+            java.util.Map<String, Object> event, String attributedTo, String record) {
+        assertEquals(attributedTo, event.get("attributed_to"), record);
+        assertEquals("instant", event.get("duration"), record);
+    }
+
+    /** The mana records of {@code ability} activated once by {@code you}, through the engine. */
+    private List<String> activated(Game game, Player you, SpellAbility ability) throws Throwable {
+        ability.setActivatingPlayer(you);
+        return ShardRun.recordsWithClauseHook(tempDir, game, WHY, () ->
+                assertTrue(ComputerUtil.playNoStack(you, ability, game, false)));
+    }
+
+    @Test
+    void aManaAbilityComputingZeroWritesItsTapsAndNoManaProduced() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player you = game.getPlayers().get(0);
+        Card cradle = TestBoard.inPlay(game, you, "Gaea's Cradle");
+
+        String record = manaRecordOf(
+                activated(game, you, cradle.getManaAbilities().get(0)),
+                "cardsfolder/g/gaeas_cradle.txt");
+
+        assertEquals(List.of("tapped"), eventTypes(record), record);
+        assertStamped(events(record).get(0), "unresolved", record);
+    }
+
+    @Test
+    void aManaAbilityThatProducedNothingEndsItsActivation() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player you = game.getPlayers().get(0);
+        Card cradle = TestBoard.inPlay(game, you, "Gaea's Cradle");
+        SpellAbility green = cradle.getManaAbilities().get(0);
+        green.setActivatingPlayer(you);
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            assertTrue(ComputerUtil.playNoStack(you, green, game, false), "no creature: zero");
+            cradle.untap();
+            TestBoard.inPlay(game, you, "Grizzly Bears");
+            assertTrue(ComputerUtil.playNoStack(you, green, game, false), "one creature: one");
+        });
+
+        List<String> cradleRecords = manaRecordsOf(records, "cardsfolder/g/gaeas_cradle.txt");
+        assertEquals(2, cradleRecords.size(), records.toString());
+        assertEquals(List.of("tapped"), eventTypes(cradleRecords.get(0)), cradleRecords.toString());
+        assertEquals(List.of("tapped", "mana_produced"), eventTypes(cradleRecords.get(1)),
+                cradleRecords.toString());
+        assertStamped(events(cradleRecords.get(1)).get(1), "root", cradleRecords.get(1));
     }
 }

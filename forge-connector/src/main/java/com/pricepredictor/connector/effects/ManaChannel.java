@@ -199,55 +199,98 @@ final class ManaChannel implements BusBracketCollector.EventTap {
     PatchHooks.Listener handler() {
         return PatchHooks.MANA_LISTENER.listener((callback, args) -> {
             SpellAbility ability = args.get(0, SpellAbility.class);
+            if (ability == null) {
+                return;
+            }
             String produced = String.valueOf(args.get(2));
-            if (ability == null || produced.isEmpty()) {
-                return;
-            }
             String player = live.playerIdOrActive(args.get(1, Player.class));
-            EffectEvent event = new EffectEvent(EventType.MANA_PRODUCED)
-                    .subject(player)
-                    .param("mana_by_color", RunParamNormalizer.manaByColor(produced));
-            // A fork's own mana abilities can resolve through the inline path
-            // too (forceResolution's forced ability, or costs it pays along
-            // the way), and this hook is a JVM static like the others.
-            if (!live.owns(ability)) {
-                if (!ability.isManaAbility()) {
-                    Forks.forkHooks().manaProduced(ability, event);
-                }
-                return;
-            }
-            if (!ability.isManaAbility()) {
-                // A resolving spell's or trigger's mana: its effect half's (C3).
-                if (bracket != null) {
-                    bracket.recordClauseEvent(event);
-                }
-                return;
-            }
-            produced(ability, player, produced, event);
+            made(ability, player, produced, manaEvent(player, produced));
         });
     }
 
+    /**
+     * The {@code mana_produced} event for mana the engine reports, or null
+     * when it reports none: Forge passes {@code "0"} when a mana effect
+     * computes zero (Songs of the Damned with no creature in the graveyard),
+     * and zero mana is not an event.
+     */
+    private static EffectEvent manaEvent(String player, String produced) {
+        Map<String, Integer> byColor = RunParamNormalizer.manaByColor(produced);
+        if (byColor.values().stream().noneMatch(count -> count > 0)) {
+            return null;
+        }
+        return new EffectEvent(EventType.MANA_PRODUCED)
+                .subject(player)
+                .param("mana_by_color", byColor);
+    }
+
+    /** Route the mana the engine reported; {@code event} is null for zero mana. */
+    private void made(SpellAbility ability, String player, String produced, EffectEvent event) {
+        // A fork's own mana abilities can resolve through the inline path
+        // too (forceResolution's forced ability, or costs it pays along
+        // the way), and this hook is a JVM static like the others.
+        if (!live.owns(ability)) {
+            forked(ability, event);
+        } else if (ability.isManaAbility()) {
+            produced(ability, player, produced, event);
+        } else if (event != null && bracket != null) {
+            // A resolving spell's or trigger's mana: its effect half's (C3).
+            bracket.recordClauseEvent(event);
+        }
+    }
+
+    private static void forked(SpellAbility ability, EffectEvent event) {
+        if (event != null && !ability.isManaAbility()) {
+            Forks.forkHooks().manaProduced(ability, event);
+        }
+    }
+
+    /**
+     * A mana ability's mana, or its producing nothing ({@code event} null):
+     * either way its activation is over, and its record holds what the
+     * activation did. A mana ability's mana is a root clause's, at an instant.
+     */
     private void produced(
             SpellAbility ability, String player, String produced, EffectEvent event) {
         Activation activation = pending.remove(ability);
         if (activation == null) {
-            if (building != null && (ability.isTrigger() || building.source() == ability)) {
-                // A triggered mana ability the building activation set off,
-                // or the same ability adding mana a second time.
-                building.events().add(event);
-            }
+            joinBuilding(ability, event);
             return;
         }
         finishBuilding();
         List<EffectEvent> events = new ArrayList<>();
         for (String tapped : activation.tapped) {
-            events.add(new EffectEvent(EventType.TAPPED).subject(tapped));
+            events.add(EventAttribution.stampAt(
+                    new EffectEvent(EventType.TAPPED).subject(tapped), null, null, null));
         }
         events.addAll(activation.paid);
-        events.add(event);
+        if (event != null) {
+            events.add(rootAtInstant(event));
+        }
+        if (events.isEmpty()) {
+            return;
+        }
         building = new Building(
                 ability, capKey(ability, produced), player, ProvenanceResolver.resolve(ability),
                 activation.state, events);
+    }
+
+    /**
+     * A triggered mana ability the building activation set off, or the same
+     * ability adding mana a second time.
+     */
+    private void joinBuilding(SpellAbility ability, EffectEvent event) {
+        if (event != null && joins(ability)) {
+            building.events().add(rootAtInstant(event));
+        }
+    }
+
+    private boolean joins(SpellAbility ability) {
+        return building != null && (ability.isTrigger() || building.source() == ability);
+    }
+
+    private static EffectEvent rootAtInstant(EffectEvent event) {
+        return event.attributedTo(EventAttribution.ROOT).duration(EventDuration.INSTANT);
     }
 
     /**
