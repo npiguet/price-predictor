@@ -245,7 +245,7 @@ class BufferedRewriteTest {
         ReplacementEffect moved = replacementOfMode("Moved");
         Card card = TestCards.build("Mountain");
         Map<String, Object> after = new LinkedHashMap<>(Map.of(
-                "Origin", ZoneType.Battlefield, "Destination", ZoneType.Exile, "Card", card));
+                "Origin", ZoneType.Battlefield, "Destination", ZoneType.Exile, "Affected", card));
 
         List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) ->
                 collectors.rewrites().handler().invoke(null, ON_REPLACEMENT, new Object[]{

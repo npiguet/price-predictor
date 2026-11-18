@@ -564,7 +564,7 @@ position a card left a library from, and a search of another player's library.
   | `CounterRemovedOnce` | `counter_change` | `delta` −`CounterAmount` |
   | `RemoveCounter` (replacement) | `counter_change` | `delta` the count the removal leaves (`Result`) less the card's count: 0 or negative |
   | `Drawn`, `Discarded`, `Milled`, `TokenCreated` / `Draw` | `card_drawn`, `card_discarded`, `card_milled`, `token_created` | `count` 1: one event per card |
-  | `TokenCreatedOnce` | `token_created` | `count` the tokens named |
+  | `TokenCreatedOnce` | `token_created` | subjects the tokens made (`Cards`), `count` how many |
   | `DrawCards`, `Mill` (replacement) | `card_drawn`, `card_milled` | `count` `Number` |
   | `CopySpell` (replacement) | `spell_copied` | `count` `Amount` |
   | `DamagePreventedOnce` | `damage_prevented` | subject the player or permanent, `amount` the damage prevented |
@@ -572,16 +572,28 @@ position a card left a library from, and a search of another player's library.
   | `Attached` / `Attached` | `attached` | subject the Aura or Equipment, `attached_to` what it hangs on |
   | `Unattached` | `unattached` | subject the Aura or Equipment, `detached_from` what it left |
   | `DamageDoneOnce` | `damage_dealt` | subject the damaged, `amount` the summed `DamageMap`, `source` when one source dealt it |
-  | `ChangesZoneAll` | `zone_change` | subjects the batch's cards, `from_zone` and `to_zone` when every card made one move |
+  | `DamageDealtOnce` | `damage_dealt` | subjects the damaged (the `DamageMap`'s keys), `amount` the map's amounts summed, `combat`, `source` the `DamageSource` |
+  | `DamageAll` | `damage_dealt` | subjects the damaged (the `CardDamageTable`'s targets), `amount` its amounts summed, `combat`, `source` when one source dealt it all |
+  | `ChangesZoneAll` | `zone_change` | subjects the batch's cards, its moves taken in the order of their origin's and then their destination's zone name; `from_zone` and `to_zone` when every card made one move |
   | `Exploited` | `sacrificed` | subject the exploited creature as it last was |
   | `DiscardedAll` | `card_discarded` | subjects the cards, `count` how many |
   | `RolledDie`, `RolledDieOnce` | `dice_rolled` | `sides`, `results` (`[{natural, final}]` for one die; `[{final}]` per die of a roll) |
   | `CounterPlayerAddedAll` | `counter_change` | subject the object, `delta` the counters put, summed over their types, `counter_type` when one type; a trigger record is one firing, never written once per type |
-  | `Scry` (replacement) | `card_looked_at` | `count` the scry's number |
-  | `CreateToken` (replacement) | `token_created` | `count` the tokens its table makes |
+  | `Scry` / `Scry` | `card_looked_at` | subject the player, `count` the scry's number (`ScryNum` on the trigger, `Num` on the replacement) |
+  | `Surveil` | `card_looked_at` | subject the player, no `count`: Forge puts no number in the map |
+  | `CreateToken` (replacement) | `token_created` | subject the affected player, `count` the tokens its table makes for that player (the table's `Affected` row): Forge runs the replacement once per player with one table |
+  | `LoseMana` (replacement) | `mana_lost` | subject the affected player, no `mana_by_color`: the map's `Mana` is the replacement's default answer, never the mana lost |
 
-  Every other Forge trigger and replacement mode carries no magnitude a declared event holds
-  (`Explore` and `Proliferate` among them) and is a `state_flag_change` with its `mode`.
+  A mode's row (`RunParamRows`) names its event type, the keys its subject is read from (the first
+  that names an entity), and every parameter it reads; a mode reads nothing its row does not name. A replacement's subject is `Affected`. The rows not in the table above give their
+  event type its plain reading: `ChangesZone` / `Moved` a `zone_change` (`from_zone`, `to_zone`),
+  `DamageDone` / `DamageDone`, `DealtDamage` a `damage_dealt` (`amount`, `combat`, `source`),
+  `TapsForMana` / `ProduceMana` a `mana_produced` (`mana_by_color`), and the rest their type with
+  the slot that type declares. Every Forge trigger and replacement mode with no row carries no
+  magnitude a declared event holds (`Explore` and `Proliferate` among them) and is a
+  `state_flag_change` with its `mode`, about the first entity its map names under `Affected`,
+  `Card`, `Player`, `DamageTarget`, `Attacker`, `Blocker`, `Attackers`, `Attached`, `AttachSource`
+  or `CardLKI`.
 
   An `AddCounter` replacement whose `CounterMap` names several counter types, on either side
   of the call, writes one rewrite record per counter type whose count the call changed, in

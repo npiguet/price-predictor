@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@link RunParamNormalizer}'s per-mode table, checked against Forge's own
+ * {@link RunParamRows}' per-mode tables, checked against Forge's own
  * mode names, and each mode that moves a life total or a counter count read
  * off a trigger or replacement the engine really runs: its amount signed as
  * the bus signs it (positive a gain, negative a loss), and a face change in
@@ -50,7 +50,7 @@ class RunParamNormalizerTest {
     @Test
     void everyTriggerRowIsAForgeTriggerMode() {
         List<String> unknown = new ArrayList<>();
-        for (String mode : RunParamNormalizer.TRIGGER_MODES.keySet()) {
+        for (String mode : RunParamRows.TRIGGER_MODES.keySet()) {
             try {
                 TriggerType.valueOf(mode);
             } catch (IllegalArgumentException e) {
@@ -64,7 +64,7 @@ class RunParamNormalizerTest {
     @Test
     void everyReplacementRowIsAForgeReplacementMode() {
         List<String> unknown = new ArrayList<>();
-        for (String mode : RunParamNormalizer.REPLACEMENT_MODES.keySet()) {
+        for (String mode : RunParamRows.REPLACEMENT_MODES.keySet()) {
             try {
                 ReplacementType.valueOf(mode);
             } catch (IllegalArgumentException e) {
@@ -390,8 +390,8 @@ class RunParamNormalizerTest {
     void everyForgeTriggerModeIsReadOrListed() {
         List<String> missing = new ArrayList<>();
         for (TriggerType mode : TriggerType.values()) {
-            boolean read = RunParamNormalizer.TRIGGER_MODES.containsKey(mode.name());
-            boolean listed = RunParamNormalizer.TRIGGER_MODES_UNREAD.contains(mode.name());
+            boolean read = RunParamRows.TRIGGER_MODES.containsKey(mode.name());
+            boolean listed = RunParamRows.TRIGGER_MODES_UNREAD.contains(mode.name());
             if (read == listed) {
                 missing.add(mode.name());
             }
@@ -404,8 +404,8 @@ class RunParamNormalizerTest {
     void everyForgeReplacementModeIsReadOrListed() {
         List<String> missing = new ArrayList<>();
         for (ReplacementType mode : ReplacementType.values()) {
-            boolean read = RunParamNormalizer.REPLACEMENT_MODES.containsKey(mode.name());
-            boolean listed = RunParamNormalizer.REPLACEMENT_MODES_UNREAD.contains(mode.name());
+            boolean read = RunParamRows.REPLACEMENT_MODES.containsKey(mode.name());
+            boolean listed = RunParamRows.REPLACEMENT_MODES_UNREAD.contains(mode.name());
             if (read == listed) {
                 missing.add(mode.name());
             }

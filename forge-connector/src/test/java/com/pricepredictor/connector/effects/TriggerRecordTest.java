@@ -313,7 +313,7 @@ class TriggerRecordTest {
         Map<String, Object> event = eventOf(replacementOfMode("Moved"), Map.of(
                 "Origin", ZoneType.Hand,
                 "Destination", ZoneType.Graveyard,
-                "Card", TestCards.build("Mountain")));
+                "Affected", TestCards.build("Mountain")));
 
         assertEquals("zone_change", event.get("type"), event.toString());
         assertEquals("hand", params(event).get("from_zone"), event.toString());
@@ -348,7 +348,7 @@ class TriggerRecordTest {
     void theCauseIsAnEntityRefRatherThanAListOfKeyNames() {
         Card cause = TestCards.build("Lightning Bolt");
         Map<String, Object> event = eventOf(replacementOfMode("Moved"), Map.of(
-                "Card", TestCards.build("Mountain"),
+                "Affected", TestCards.build("Mountain"),
                 "Destination", ZoneType.Graveyard,
                 "Cause", cause));
 
@@ -373,7 +373,7 @@ class TriggerRecordTest {
                 "DamageAmount", 3,
                 "IsCombatDamage", Boolean.FALSE,
                 "DamageSource", source,
-                "Affected", TestCards.build("Mountain")));
+                "DamageTarget", TestCards.build("Mountain")));
 
         assertEquals(3L, params(event).get("amount"), event.toString());
         assertEquals(false, params(event).get("combat"), event.toString());

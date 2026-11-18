@@ -298,7 +298,7 @@ class RecordCharacterizationTest {
             SpellAbility ran = exile.ensureAbility();
             ran.setReplacementEffect(exile);
             Map<AbilityKey, Object> dying = AbilityKey.newMap();
-            dying.put(AbilityKey.Card, bears);
+            dying.put(AbilityKey.Affected, bears);
             dying.put(AbilityKey.Origin, ZoneType.Battlefield.name());
             dying.put(AbilityKey.Destination, ZoneType.Graveyard.name());
             listener.onReplacement(exile, dying, AbilityKey.newMap(dying),

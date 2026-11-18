@@ -76,7 +76,7 @@ class RewriteContractTest {
         Card card = TestCards.build("Mountain");
         String json = recording(tempDir).rewrites().record(
                 replacementOfMode("Moved"),
-                Map.of("Card", card), Map.of("Card", card), null, null).toJson();
+                Map.of("Affected", card), Map.of("Affected", card), null, null).toJson();
 
         assertTrue(json.contains("\"result\":null"), json);
     }
@@ -124,7 +124,7 @@ class RewriteContractTest {
         SpellAbility ran = replacement.ensureAbility();
         ran.setReplacementEffect(replacement);
         Map<String, Object> params = Map.of(
-                "Card", rest, "Destination", ZoneType.Graveyard);
+                "Affected", rest, "Destination", ZoneType.Graveyard);
 
         String json = recording(tempDir).rewrites().record(
                 replacement, params, params, ReplacementResult.Replaced, ran).toJson();
@@ -145,7 +145,7 @@ class RewriteContractTest {
         Card card = TestCards.build("Mountain");
         String json = recording(tempDir).rewrites().record(
                 replacementOfMode("Untap"),
-                Map.of("Card", card), Map.of("Card", card),
+                Map.of("Affected", card), Map.of("Affected", card),
                 ReplacementResult.Prevented, null).toJson();
 
         assertTrue(json.contains("\"replaced_by\":[]"), json);
@@ -164,7 +164,7 @@ class RewriteContractTest {
         Card card = TestCards.build("Mountain");
         String json = recording(tempDir).rewrites().record(
                 replacementOfMode("Moved"),
-                Map.of("Card", card), Map.of("Card", card),
+                Map.of("Affected", card), Map.of("Affected", card),
                 ReplacementResult.Replaced, "not an ability").toJson();
 
         assertTrue(json.contains("\"replaced_by\":[]"), json);
@@ -188,7 +188,7 @@ class RewriteContractTest {
         SpellAbility ran = replacement.ensureAbility();
         ran.setReplacementEffect(replacement);
         Map<AbilityKey, Object> before = new LinkedHashMap<>();
-        before.put(AbilityKey.Card, rest);
+        before.put(AbilityKey.Affected, rest);
         before.put(AbilityKey.Destination, ZoneType.Graveyard);
         Map<AbilityKey, Object> after = new LinkedHashMap<>(before);
         after.put(AbilityKey.Destination, ZoneType.Exile);
@@ -216,7 +216,7 @@ class RewriteContractTest {
     void anOlderJarsThreeArgumentsStillWriteARecord() throws Throwable {
         Card card = TestCards.build("Mountain");
         Map<AbilityKey, Object> params = new LinkedHashMap<>();
-        params.put(AbilityKey.Card, card);
+        params.put(AbilityKey.Affected, card);
 
         String line = oneRecordFrom(
                 new Object[]{null, params, params}, HookShapes.OlderReplacement.class);
@@ -237,7 +237,7 @@ class RewriteContractTest {
     void aDeclinedReplacementReachesTheShard() throws Throwable {
         Card card = TestCards.build("Mountain");
         Map<AbilityKey, Object> params = new LinkedHashMap<>();
-        params.put(AbilityKey.Card, card);
+        params.put(AbilityKey.Affected, card);
 
         String line = oneRecordFrom(new Object[]{
                 null, params, params, ReplacementResult.NotReplaced, null},
@@ -265,7 +265,7 @@ class RewriteContractTest {
                 List.copyOf(archelos.getCurrentState().getReplacementEffects());
         assertEquals(2, replacements.size(), "Archelos prints two R: lines");
         Map<AbilityKey, Object> params = new LinkedHashMap<>();
-        params.put(AbilityKey.Card, TestCards.build("Mountain"));
+        params.put(AbilityKey.Affected, TestCards.build("Mountain"));
         params.put(AbilityKey.Destination, ZoneType.Battlefield);
 
         List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
@@ -305,7 +305,7 @@ class RewriteContractTest {
         Card forkHost = TestBoard.cardInAnotherGame("Rest in Peace");
         ReplacementEffect forkReplacement = replacementOf(forkHost);
         Map<String, Object> params = Map.of(
-                "Card", forkHost, "Destination", ZoneType.Graveyard);
+                "Affected", forkHost, "Destination", ZoneType.Graveyard);
 
         Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collector) ->
                 collector.rewrites().handler().invoke(null, onReplacement(HookShapes.Replacement.class),
@@ -337,8 +337,8 @@ class RewriteContractTest {
 
         String json = recording(tempDir).rewrites().record(
                 replacement,
-                Map.of("Card", rest, "Destination", ZoneType.Graveyard),
-                Map.of("Card", rest, "Destination", ZoneType.Exile),
+                Map.of("Affected", rest, "Destination", ZoneType.Graveyard),
+                Map.of("Affected", rest, "Destination", ZoneType.Exile),
                 ReplacementResult.Replaced, null).toJson();
 
         assertTrue(json.contains("\"kind\":\"rewrite\""), json);
@@ -374,7 +374,7 @@ class RewriteContractTest {
         assertEquals("Untap", String.valueOf(prevention.getMode()));
 
         EffectRecord record = recording(tempDir).rewrites().record(
-                prevention, Map.of("Card", paralyze), Map.of("Card", paralyze),
+                prevention, Map.of("Affected", paralyze), Map.of("Affected", paralyze),
                 ReplacementResult.Skipped, null);
 
         assertNotNull(record, "a skipped replacement is this channel's negative");
@@ -431,7 +431,7 @@ class RewriteContractTest {
         Card card = TestCards.build("Mountain");
         Map<String, Object> before = new LinkedHashMap<>(Map.of(
                 "Origin", ZoneType.Battlefield, "Destination", ZoneType.Graveyard,
-                "Card", card));
+                "Affected", card));
         Map<String, Object> after = new LinkedHashMap<>(before);
         after.put("Destination", ZoneType.Exile);
 
@@ -459,7 +459,7 @@ class RewriteContractTest {
         Card card = TestCards.build("Mountain");
         Map<String, Object> moved = new LinkedHashMap<>(Map.of(
                 "Origin", ZoneType.Battlefield, "Destination", ZoneType.Graveyard,
-                "Card", card));
+                "Affected", card));
 
         Tally start = tallyAfter(moved, moved, ReplacementResult.NotReplaced);
         Tally twice = tallyAfter(moved, moved, ReplacementResult.NotReplaced, 2);
