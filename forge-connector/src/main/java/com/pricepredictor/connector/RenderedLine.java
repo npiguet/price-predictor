@@ -52,9 +52,13 @@ public record RenderedLine(String prefix, String prose, Ability owner, int face)
      */
     public static void appendLine(
             List<RenderedLine> lines, String prefix, String text, Ability owner, int face) {
-        String folded = LINE_BREAK.matcher(text).replaceAll(" ");
         lines.add(new RenderedLine(
-                prefix, BLANK_RUN.matcher(folded).replaceAll(" "), owner, face));
+                prefix, BLANK_RUN.matcher(foldLineBreaks(text)).replaceAll(" "), owner, face));
+    }
+
+    /** {@code text} with each line break, Forge's {@code ,,,} marker included, read as a space. */
+    public static String foldLineBreaks(String text) {
+        return LINE_BREAK.matcher(text).replaceAll(" ");
     }
 
     /** The line as the converted file holds it. */

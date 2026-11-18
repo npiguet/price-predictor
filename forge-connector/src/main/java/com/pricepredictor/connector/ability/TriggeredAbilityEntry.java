@@ -77,7 +77,7 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
         String text = DescriptionMarkers.hasAbilityPlaceholder(rawDesc) && !children.isEmpty()
                 ? withDiceRoll(rawDesc, normalized, execute) : normalized;
         if (execute != null && isTransparent(execute)) {
-            text = DescriptionText.appendMissing(text, SpellAbilityUtils.chainText(execute));
+            text = RepeatedSentences.appendMissing(text, SpellAbilityUtils.chainHead(execute));
         }
         return new TriggeredAbilityEntry(type, text, children);
     }

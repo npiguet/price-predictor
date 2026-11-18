@@ -38,19 +38,4 @@ final class DescriptionText {
         Matcher last = LAST_WORD.matcher(text);
         return last.find() && last.group(1).equalsIgnoreCase(word);
     }
-
-    /**
-     * {@code text} followed by the sentences of {@code extra} it does not
-     * already hold: an effect the description states is not printed twice.
-     */
-    static String appendMissing(String text, String extra) {
-        StringBuilder result = new StringBuilder(text);
-        for (String sentence : extra.split("(?<=[.!?])\\s+")) {
-            if (!sentence.isEmpty() && !result.toString().contains(sentence)) {
-                if (result.length() > 0) result.append(' ');
-                result.append(sentence);
-            }
-        }
-        return result.toString();
-    }
 }

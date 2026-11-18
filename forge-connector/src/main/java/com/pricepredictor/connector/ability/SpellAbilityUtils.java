@@ -102,8 +102,14 @@ final class SpellAbilityUtils {
      * split into lines of its own.
      */
     static String chainText(SpellAbility sa) {
+        List<Ability> head = chainHead(sa);
+        return head.isEmpty() ? "" : treeText(head.get(0));
+    }
+
+    /** The first node of {@code sa}'s effect tree, the one {@link #chainText} reads, or none. */
+    static List<Ability> chainHead(SpellAbility sa) {
         List<Ability> chain = SpellEffect.fromChain(sa);
-        return chain.isEmpty() ? "" : treeText(chain.get(0));
+        return chain.isEmpty() ? List.of() : List.of(chain.get(0));
     }
 
     static String treeText(Ability node) {

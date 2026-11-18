@@ -27,13 +27,13 @@ public record ActivatedAbilityEntry(AbilityType type, String descriptionText, Li
 
         // Concatenate sub-ability chain descriptions into the root line so that oracle
         // lines (one paragraph = one activated ability) are not over-split.
-        String subText = SpellAbilityUtils.chainText(sa.getSubAbility());
+        List<Ability> sub = SpellAbilityUtils.chainHead(sa.getSubAbility());
         String rootDesc = sa.getDescription();
         if (!described) {
             // Some activated abilities have no SpellDescription on the root SA but carry their
             // description on a SubAbility$ SVar (e.g. Arachnus Spinner); with neither, there is
             // nothing to print. The root contributes only its cost.
-            if (subText.isEmpty()) return null;
+            if (sub.isEmpty()) return null;
             if (rootDesc.isEmpty()) rootDesc = sa.getCostDescription();
         }
         // For dice-roll activated abilities, getDescription() appends outcome lines after a
@@ -43,8 +43,7 @@ public record ActivatedAbilityEntry(AbilityType type, String descriptionText, Li
         // A cost Forge has no words for prints as its raw selector: no line, its key dropped.
         if (DescriptionText.hasRawSelector(normalized)) return null;
 
-        String fullDesc = normalized == null ? subText
-                : DescriptionText.appendMissing(normalized, subText);
+        String fullDesc = RepeatedSentences.appendMissing(normalized == null ? "" : normalized, sub);
         return new ActivatedAbilityEntry(type, type.formatDescription(fullDesc),
                 DiceOutcomes.of(sa, DiceOutcomes::optionLine));
     }

@@ -6,7 +6,6 @@ import forge.game.spellability.SpellAbility;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.StringJoiner;
 
 /**
  * The one line a spell prints: its additional cost's sentence, then the
@@ -40,40 +39,39 @@ public record SpellLine(String descriptionText, int costLength, List<Ability> su
      * cost line of its own.
      */
     public static List<Ability> linesOf(SpellAbility sa) {
-        return linesOf(sa, chainSentences(sa));
+        return spellLines(sa, SpellEffect.fromChain(sa));
     }
 
     /**
-     * The lines {@code sa} prints with {@code effect} as its effect's text:
-     * its chain's, or, for a spell whose chain states nothing, the text
-     * {@link UndescribedSpellText} finds for it. A null or empty effect
-     * prints the additional cost alone.
+     * The lines {@code sa} prints with {@code effect} as its effect's text,
+     * the text {@link UndescribedSpellText} finds for a spell whose chain
+     * states nothing. A null or empty effect prints the additional cost alone.
      */
     public static List<Ability> linesOf(SpellAbility sa, String effect) {
-        if (effect == null || effect.isEmpty()) return costLineOf(sa);
+        return spellLines(sa, effect == null || effect.isEmpty()
+                ? List.of() : List.of(new SpellEffect(effect, List.of())));
+    }
+
+    /**
+     * The spell line of the cost sentence then the sentences of
+     * {@code effect}'s nodes, each sentence once ({@link RepeatedSentences}):
+     * a chain restating the additional cost does not print it twice.
+     */
+    private static List<Ability> spellLines(SpellAbility sa, List<Ability> effect) {
+        if (effect.isEmpty()) return costLineOf(sa);
         String cost = SpellAdditionalCost.sentenceOf(sa);
+        String text = RepeatedSentences.appendMissing(cost == null ? "" : cost, effect);
         List<Ability> outcomes = DiceOutcomes.of(sa, DiceOutcomes::optionLine);
-        return List.of(cost == null
-                ? new SpellLine(effect, 0, outcomes)
-                : new SpellLine(cost + " " + effect, cost.length(), outcomes));
+        return List.of(new SpellLine(text, cost == null ? 0 : cost.length(), outcomes));
     }
 
     /** Whether no ability of {@code sa}'s chain states a sentence. */
     public static boolean statesNothing(SpellAbility sa) {
-        return chainSentences(sa).isEmpty();
+        return SpellEffect.fromChain(sa).isEmpty();
     }
 
     private static List<Ability> costLineOf(SpellAbility sa) {
         SpellAdditionalCost cost = SpellAdditionalCost.of(sa);
         return cost == null ? List.of() : List.of(cost);
-    }
-
-    /** Every sentence of {@code sa}'s chain, in chain order, joined by spaces. */
-    private static String chainSentences(SpellAbility sa) {
-        StringJoiner joined = new StringJoiner(" ");
-        for (Ability node : SpellEffect.fromChain(sa)) {
-            joined.add(SpellAbilityUtils.treeText(node));
-        }
-        return joined.toString();
     }
 }

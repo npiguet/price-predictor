@@ -69,11 +69,17 @@ final class LineRoleSpans {
         return result;
     }
 
-    /** The cost sentence and the effect after it, then the line's target spans. */
+    /**
+     * The cost sentence and the effect after it, then the line's target spans.
+     * A spell whose description states only its additional cost has no effect
+     * after it (Warlord's Elite), so no effect span.
+     */
     private static List<RoleSpans.Span> withCostSentence(Line line) {
-        List<RoleSpans.Span> result = new ArrayList<>(List.of(
-                new RoleSpans.Span(0, line.costLength(), SpanRole.COST),
-                new RoleSpans.Span(line.costLength(), line.length(), SpanRole.EFFECT)));
+        List<RoleSpans.Span> result = new ArrayList<>();
+        result.add(new RoleSpans.Span(0, line.costLength(), SpanRole.COST));
+        if (line.costLength() < line.length()) {
+            result.add(new RoleSpans.Span(line.costLength(), line.length(), SpanRole.EFFECT));
+        }
         result.addAll(RoleSpans.targets(line.prose()));
         return result;
     }

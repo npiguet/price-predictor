@@ -181,36 +181,11 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
         if (host == null) return result;
         for (EffectSVars source : EffectSVars.values()) {
             for (String desc : source.descriptions(host, sa)) {
-                if (!isRedundantDescription(desc, parent.text())) {
+                if (!RepeatedSentences.restatesAncestor(desc, parent.text())) {
                     result.add(new SpellEffect(desc, List.of()));
                 }
             }
         }
         return result;
-    }
-
-    /**
-     * Returns true when the child description should be suppressed because it is
-     * already covered by the parent's oracle text, or is a Forge-internal display string.
-     */
-    private static boolean isRedundantDescription(String childDesc, String parentDesc) {
-        // Forge-internal placeholder — "effectsource" is never valid oracle text.
-        // Checked unconditionally (before parentDesc null guard) so it fires even when
-        // ActivatedAbilityEntry calls fromChain() without threading parentDesc.
-        if (childDesc.contains("effectsource")) return true;
-        if (parentDesc == null) return false;
-        // Exact match — child is identical to the parent's description
-        if (parentDesc.equals(childDesc)) return true;
-        // Substring — child text is already contained in the parent description
-        if (parentDesc.contains(childDesc)) return true;
-        // "this card/creature/permanent/spell" in replacement-effect Description$ SVars refers to
-        // the same card as CARDNAME in SpellDescription; normalise before substring check.
-        String childNorm = childDesc
-                .replace("this card", "CARDNAME")
-                .replace("this creature", "CARDNAME")
-                .replace("this permanent", "CARDNAME")
-                .replace("this spell", "CARDNAME");
-        if (parentDesc.equals(childNorm) || parentDesc.contains(childNorm)) return true;
-        return false;
     }
 }
