@@ -52,7 +52,7 @@ fixed number (class levels). Non-actionable abilities get no number.
 | Class | Package | Forge Source | Type |
 |-------|---------|-------------|------|
 | `TextAbility` | `ability/` | Pre-computed text | Configurable (any AbilityType) |
-| `StandardKeyword` | `ability/` | `KeywordInterface` + `Keyword` | Classified by `AbilityType.classifyKeyword()` |
+| `StandardKeyword` | `ability/` | `KeywordInterface` + `Keyword` | Classified by `KeywordTypes.classify()` |
 | `GiftKeyword` | `ability/` | `KeywordInterface` + `SpellAbility` | STATIC |
 | `CompanionKeyword` | `ability/` | `KeywordInterface` + `Companion` | STATIC |
 | `ChapterAbility` | `ability/` | `KeywordInterface` (Chapter:) | CHAPTER |
@@ -94,7 +94,7 @@ having separate KEYWORD_PASSIVE / KEYWORD_ACTIVE categories.
 **Cost type grouping**: `isCostType()` returns true for ALTERNATE_COST, ADDITIONAL_COST, COST_REDUCTION.
 Cost-type abilities are sorted before non-cost abilities in output.
 
-**Keyword classification** (`classifyKeyword()`): Maps keywords to types based on game behavior:
+**Keyword classification** (`KeywordTypes.classify()` in `ability/`): Maps keywords to types based on game behavior:
 - Explicit cost-type keywords (e.g., flashback → ALTERNATE_COST, kicker → ADDITIONAL_COST, affinity → COST_REDUCTION)
 - Keywords with activated abilities → ACTIVATED
 - Keywords with triggers → TRIGGERED
