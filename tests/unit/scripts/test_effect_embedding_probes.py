@@ -333,3 +333,14 @@ class TestStoredCorpus:
         assert corpus is not None
         assert corpus.texts == ["a", "b"]
         assert cache_file.exists()
+
+
+class TestPcaVarianceTable:
+    def test_the_participation_ratio_note_is_written_under_the_title(self, tmp_path):
+        from effect_embedding_probes import pca_directions
+
+        share = np.array([0.5, 0.3, 0.2])
+        paths = SimpleNamespace(out=tmp_path)
+        pca_directions.write_variance(paths, "full", [1, 2, 3], share)
+        text = (tmp_path / "pca_full_variance.md").read_text(encoding="utf-8")
+        assert "Participation ratio" in text

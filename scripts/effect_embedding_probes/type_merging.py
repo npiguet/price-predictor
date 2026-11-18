@@ -120,8 +120,9 @@ def main() -> None:
     frame = pd.DataFrame(rows)
     write_markdown(frame, paths.out / "amounts_within_type.md",
                    "Amounts read within an API type (out-of-fold R²)",
-                   "Both the embedding and the amount have their API-type mean "
-                   "subtracted; ridge alpha 10, GroupKFold(5) by carrying card.")
+                   MarkdownStyle(note="Both the embedding and the amount have their "
+                                      "API-type mean subtracted; ridge alpha 10, "
+                                      "GroupKFold(5) by carrying card."))
     print(frame.to_string(index=False))
 
 

@@ -107,8 +107,8 @@ def write_variance(paths, space: str, table: pd.DataFrame, share: np.ndarray) ->
     write_markdown(variance, paths.out / f"pca_{space}_variance.md",
                    f"Variance share by principal component ({space}, "
                    f"{len(table)} unique texts)",
-                   f"Participation ratio (Σλ)² / Σλ² over all {len(share)} "
-                   f"eigenvalues: {ratio:.2f}.")
+                   MarkdownStyle(note=f"Participation ratio (Σλ)² / Σλ² over all "
+                                      f"{len(share)} eigenvalues: {ratio:.2f}."))
     print(f"participation ratio ({space}): {ratio:.2f} of {len(share)} dimensions")
     return variance
 
@@ -167,8 +167,8 @@ def write_feature_attribution(paths, space: str, table: pd.DataFrame, E: np.ndar
         })
     write_markdown(pd.DataFrame(top), paths.out / f"pca_{space}_top_features.md",
                    f"Features explaining the most variance per component ({space})",
-                   "η² for categoricals, r² for numeric and 0/1 features. "
-                   "Full table: pca_" + space + "_feature_r2.csv.")
+                   MarkdownStyle(note="η² for categoricals, r² for numeric and 0/1 features. "
+                                      "Full table: pca_" + space + "_feature_r2.csv."))
 
 
 def write_nested_r2(paths, space: str, table: pd.DataFrame, E: np.ndarray,
@@ -198,9 +198,9 @@ def write_nested_r2(paths, space: str, table: pd.DataFrame, E: np.ndarray,
     frame = pd.DataFrame(nested)
     write_markdown(frame, paths.out / f"pca_{space}_nested_r2.md",
                    f"Cross-validated R² of nested feature sets ({space})",
-                   "Ridge (alpha 10), 5 folds grouped by carrying card. "
-                   f"'whole space' is the pooled R² over all {E.shape[1]} "
-                   "dimensions.")
+                   MarkdownStyle(note="Ridge (alpha 10), 5 folds grouped by carrying card. "
+                                      f"'whole space' is the pooled R² over all {E.shape[1]} "
+                                      "dimensions."))
     return frame
 
 
@@ -256,9 +256,9 @@ def write_effect_correlations(paths, space: str, table: pd.DataFrame,
     write_markdown(pd.DataFrame(summary), paths.out / f"pca_{space}_effect_corr.md",
                    f"Observed-effect statistics most correlated with each "
                    f"component ({space})",
-                   "Weighted Pearson correlation over acting texts, weight "
-                   "n/(n+5) with n the text's records of the statistic's kind. "
-                   "Full table: pca_" + space + "_effect_corr.csv.")
+                   MarkdownStyle(note="Weighted Pearson correlation over acting texts, weight "
+                                      "n/(n+5) with n the text's records of the statistic's "
+                                      "kind. Full table: pca_" + space + "_effect_corr.csv."))
 
 
 def main() -> None:
