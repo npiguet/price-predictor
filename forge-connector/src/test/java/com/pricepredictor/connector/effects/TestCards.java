@@ -11,6 +11,8 @@ import forge.game.spellability.SpellAbility;
 import forge.item.IPaperCard;
 import forge.item.PaperToken;
 
+import java.util.List;
+
 
 /**
  * Real Forge cards for the provenance tests.
@@ -126,5 +128,17 @@ final class TestCards {
             }
         }
         throw new AssertionError("no " + api + " ability on " + cardName);
+    }
+
+    /**
+     * A clause's one event, for the emitter tests of an API that writes at
+     * most one: null when it wrote none, a failure when it wrote several.
+     */
+    static EffectEvent onlyEvent(ApiEvents.ClauseObservation<?> observed) {
+        List<EffectEvent> events = observed.finish();
+        if (events.size() > 1) {
+            throw new AssertionError("one event at most, got " + events);
+        }
+        return events.isEmpty() ? null : events.get(0);
     }
 }

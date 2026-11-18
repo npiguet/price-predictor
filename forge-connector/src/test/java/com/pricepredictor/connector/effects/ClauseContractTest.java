@@ -233,7 +233,7 @@ class ClauseContractTest {
         inner.resetTargets();
         inner.getTargets().add(innerTarget);
 
-        ApiEvents.Rule<Object> throwingMemo = new ApiEvents.Rule<>(
+        ApiEvents.Rule<Object> throwingMemo = ApiEvents.Rule.one(
                 EventType.TURN_SKIPPED,
                 (sa, host) -> {
                     throw new IllegalStateException("boom (memo)");

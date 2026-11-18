@@ -190,7 +190,7 @@ class UnannouncedOutcomesTest {
         SpellAbility animate = TestBoard.ability(den, ApiType.Animate);
         animate.setActivatingPlayer(a);
 
-        EffectEvent event = observe(animate).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(animate));
 
         assertNotNull(event);
         assertEquals(EventType.ABILITY_CHANGE, event.type());
@@ -210,7 +210,7 @@ class UnannouncedOutcomesTest {
         ApiEvents.ClauseObservation<?> observed = observe(search);
 
         a.incLibrarySearched();
-        EffectEvent event = observed.finish();
+        EffectEvent event = TestCards.onlyEvent(observed);
 
         assertNotNull(event);
         assertEquals(EventType.CARD_LOOKED_AT, event.type());
@@ -228,7 +228,7 @@ class UnannouncedOutcomesTest {
         SpellAbility bounce = scripted(
                 "SP$ ChangeZone | Origin$ Battlefield | Destination$ Hand | Defined$ Self", host, a);
 
-        assertNull(observe(bounce).finish());
+        assertNull(TestCards.onlyEvent(observe(bounce)));
     }
 
     /**
@@ -255,7 +255,7 @@ class UnannouncedOutcomesTest {
         ApiEvents.ClauseObservation<?> observed = observe(token);
 
         combat.addAttacker(made, b);
-        EffectEvent event = observed.finish();
+        EffectEvent event = TestCards.onlyEvent(observed);
 
         assertNotNull(event);
         assertEquals(EventType.STATE_FLAG_CHANGE, event.type());
@@ -280,7 +280,7 @@ class UnannouncedOutcomesTest {
         ApiEvents.ClauseObservation<?> observed = observe(vines);
 
         combat.setBlocked(attacker, true);
-        EffectEvent event = observed.finish();
+        EffectEvent event = TestCards.onlyEvent(observed);
 
         assertNotNull(event);
         assertEquals(EventType.BECAME_BLOCKED, event.type());
@@ -307,7 +307,7 @@ class UnannouncedOutcomesTest {
 
         combat.addBlocker(attacker, blocker);
         combat.setBlocked(attacker, true);
-        EffectEvent event = observed.finish();
+        EffectEvent event = TestCards.onlyEvent(observed);
 
         assertNotNull(event);
         assertEquals(EventType.BECAME_BLOCKED, event.type());
@@ -325,7 +325,7 @@ class UnannouncedOutcomesTest {
         ApiEvents.ClauseObservation<?> observed = observe(levelUp);
 
         sorcerer.setClassLevel(sorcerer.getClassLevel() + 1);
-        EffectEvent event = observed.finish();
+        EffectEvent event = TestCards.onlyEvent(observed);
 
         assertNotNull(event);
         assertEquals("class_level", event.params().get("flag"));
@@ -342,7 +342,7 @@ class UnannouncedOutcomesTest {
         ApiEvents.ClauseObservation<?> observed = observe(unlock);
 
         room.unlockRoom(a, CardStateName.LeftSplit);
-        EffectEvent event = observed.finish();
+        EffectEvent event = TestCards.onlyEvent(observed);
 
         assertNotNull(event);
         assertEquals("door_unlocked", event.params().get("flag"));
@@ -361,7 +361,7 @@ class UnannouncedOutcomesTest {
 
         paladin.setPairedWith(bears);
         bears.setPairedWith(paladin);
-        EffectEvent event = observed.finish();
+        EffectEvent event = TestCards.onlyEvent(observed);
 
         assertNotNull(event);
         assertEquals("paired", event.params().get("flag"));
@@ -379,7 +379,7 @@ class UnannouncedOutcomesTest {
         ApiEvents.ClauseObservation<?> observed = observe(mutate);
 
         mutating.setMergedToCard(bears);
-        EffectEvent event = observed.finish();
+        EffectEvent event = TestCards.onlyEvent(observed);
 
         assertNotNull(event);
         assertEquals("merged", event.params().get("flag"));

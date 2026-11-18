@@ -8,6 +8,7 @@ import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
 import forge.game.combat.Combat;
+import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
@@ -65,16 +66,40 @@ final class ApiEvents {
     }
 
     /**
+     * The events, given the clause and whatever its memo captured: one per
+     * object the clause made or changed, where each is an outcome of its own
+     * (an effect card, a healed permanent). Empty when the clause did nothing
+     * its API promises. The memo is null as for {@link Emitter}.
+     */
+    @FunctionalInterface
+    interface Emitters<M> {
+        List<EffectEvent> emit(SpellAbility sa, Card host, M memo);
+    }
+
+    /**
      * @param <M> what the memo takes and the emitter reads; {@code Object}
      *            for a rule with no memo
      * @param eventType named in the once-only failure line an emitter's throw prints
      */
-    record Rule<M>(EventType eventType, Memo<M> memo, Emitter<M> emitter) {
+    record Rule<M>(EventType eventType, Memo<M> memo, Emitters<M> emitters) {
+
+        /** A rule that writes at most one event per clause: {@code emitter}'s, unless null. */
+        static <M> Rule<M> one(EventType eventType, Memo<M> memo, Emitter<M> emitter) {
+            return new Rule<>(eventType, memo, (sa, host, taken) -> {
+                EffectEvent event = emitter.emit(sa, host, taken);
+                return event == null ? List.of() : List.of(event);
+            });
+        }
 
         /** A rule whose emitter fills in a fresh event of {@code eventType}. */
         static <M> Rule<M> shaped(EventType eventType, Memo<M> memo, Shaper<M> shaper) {
-            return new Rule<>(eventType, memo, (sa, host, taken) ->
+            return one(eventType, memo, (sa, host, taken) ->
                     shaper.shape(new EffectEvent(eventType), sa, host, taken));
+        }
+
+        /** A rule that writes one event per object its clause made or changed. */
+        static <M> Rule<M> each(EventType eventType, Memo<M> memo, Emitters<M> emitters) {
+            return new Rule<>(eventType, memo, emitters);
         }
     }
 
@@ -118,7 +143,9 @@ final class ApiEvents {
         }
 
         /**
-         * The event this clause promises, or null when its API promises none.
+         * The events this clause promises: none when its API promises none
+         * or its effect did nothing, one for most APIs, one per object made
+         * or changed for a {@link Rule#each} rule.
          *
          * <p>Contained: an emitter reads engine state that a fizzled or
          * redirected clause may have left in a shape it did not expect. A
@@ -127,15 +154,15 @@ final class ApiEvents {
          * swallowed and "this mechanic never happens" must not look
          * identical, so the first one is not silent.
          */
-        EffectEvent finish() {
+        List<EffectEvent> finish() {
             if (rule == null) {
-                return null;
+                return List.of();
             }
             try {
-                return rule.emitter().emit(clause, clause.getHostCard(), memo);
+                return rule.emitters().emit(clause, clause.getHostCard(), memo);
             } catch (RuntimeException e) {
                 reportEmitterFailure(rule.eventType(), e);
-                return null;
+                return List.of();
             }
         }
     }
@@ -323,10 +350,34 @@ final class ApiEvents {
                 .param("count", amount(sa, host, "NumPhases", "1"));
     }
 
-    /** The phase skipped, for each player affected. */
+    /**
+     * The phase or step skipped, for each player affected.
+     *
+     * <p>{@code SkipPhaseEffect} reads {@code Phase$}, else {@code Step$}
+     * (Elfhame Sanctuary's {@code Step$ Draw}). Spelled as the snapshot spells
+     * its {@code phase} ({@link SnapshotBuilder#phaseName}), never as the
+     * script does: {@code BeginCombat} is {@code combat_begin}. Fatespinner's
+     * {@code Phase$ Main} is both main phases, which Forge's replacement reads
+     * it as, joined by a comma; a value Forge cannot read is {@code "?"}.
+     */
     private static EffectEvent skippedPhase(
             EffectEvent event, SpellAbility sa, Card host, List<Player> players) {
-        return withSubjects(event.param("phase", sa.getParamOrDefault("Phase", "?")), players);
+        String named = sa.hasParam("Phase") ? sa.getParam("Phase") : sa.getParam("Step");
+        return withSubjects(event.param("phase", phaseSpelling(named)), players);
+    }
+
+    /** A script's phase or step as the snapshot's {@code phase}, members of a range joined by commas. */
+    private static String phaseSpelling(String scripted) {
+        if (scripted == null) {
+            return "?";
+        }
+        try {
+            List<String> spelled = new ArrayList<>();
+            PhaseType.parseRange(scripted).forEach(phase -> spelled.add(SnapshotBuilder.phaseName(phase)));
+            return String.join(",", spelled);
+        } catch (IllegalArgumentException e) {
+            return "?";
+        }
     }
 
     /**
@@ -353,9 +404,22 @@ final class ApiEvents {
         put(rules, Rule.shaped(EventType.X_CHANGED, null, (event, sa, host, memo) ->
                         event.param("value", amount(sa, host, "Value", "0"))),
                 "ChangeX");
-        put(rules, Rule.shaped(EventType.OWNERSHIP_CHANGE, null, (event, sa, host, memo) ->
-                        event.param("owner", ownerOf(sa))),
+        put(rules, Rule.shaped(EventType.OWNERSHIP_CHANGE,
+                        (sa, host) -> ClauseTargets.affectedCards(sa), ApiEvents::ownershipChange),
                 "GainOwnership");
+    }
+
+    /**
+     * The cards the clause hands over, read before it runs, as {@code
+     * OwnershipGainEffect.resolve} reads them ({@code getTargetCards}), and
+     * their new owner.
+     */
+    private static EffectEvent ownershipChange(
+            EffectEvent event, SpellAbility sa, Card host, List<Card> cards) {
+        if (cards != null) {
+            cards.forEach(card -> event.subject(Refs.of(card)));
+        }
+        return event.param("owner", ownerOf(sa));
     }
 
     /**
@@ -422,7 +486,7 @@ final class ApiEvents {
 
     /** The rule of a Choose* API: the choice it leaves in its own accessor, of {@code kind}. */
     private static void choiceRule(Map<String, Rule<?>> rules, String api, String kind) {
-        put(rules, new Rule<>(EventType.CHOICE_MADE, null, (sa, host, memo) -> choice(host, kind)),
+        put(rules, Rule.one(EventType.CHOICE_MADE, null, (sa, host, memo) -> choice(host, kind)),
                 api);
     }
 
@@ -504,22 +568,75 @@ final class ApiEvents {
     // ── healed damage, granted abilities, retargets ─────────────────────
 
     private static void healGrantAndRetargetRules(Map<String, Rule<?>> rules) {
-        put(rules, Rule.shaped(EventType.DAMAGE_HEALED, ApiEvents::damageBefore,
-                        (event, sa, host, memo) -> event.param("amount", memo == null ? 0 : memo)),
+        put(rules, Rule.each(EventType.DAMAGE_HEALED, ApiEvents::damageBefore,
+                        (sa, host, before) -> healed(before)),
                 "HealDamage");
         put(rules, Rule.shaped(EventType.ABILITY_CHANGE, ApiEvents::animated,
                         ApiEvents::grantedAbilities),
                 "Animate", "AnimateAll");
-        put(rules, Rule.shaped(EventType.CONTINUOUS_EFFECT_CREATED, null,
-                        (event, sa, host, memo) ->
-                                event.param("layers", sa.getParamOrDefault("StaticAbilities", ""))),
+        put(rules, Rule.each(EventType.CONTINUOUS_EFFECT_CREATED, ApiEvents::commandZone,
+                        ApiEvents::effectsMade),
                 "Effect");
-        put(rules, new Rule<>(EventType.TARGETS_CHANGED, null, (sa, host, memo) -> retargeted(sa)),
+        put(rules, Rule.one(EventType.TARGETS_CHANGED, null, (sa, host, memo) -> retargeted(sa)),
                 "ChangeTargets");
     }
 
     /**
-     * Damage on the clause's affected cards, before it heals any of it away.
+     * One {@code continuous_effect_created} per effect card that reached the
+     * command zone while the clause ran, so none for an {@code Effect} clause
+     * that made nothing and one per owner for one that made several.
+     *
+     * <p>{@code EffectEffect.resolve} returns before making anything on an
+     * invalid duration, an empty remembered list it was told to forget on a
+     * move (Planeswalker's Mischief having exiled nothing), or no effect
+     * owner left, and makes one effect card per {@code EffectOwner$} player
+     * (Chandra, Roaring Flame's emblem, one per player dealt damage). Counting
+     * the cards themselves sidesteps replicating either.
+     */
+    private static List<EffectEvent> effectsMade(SpellAbility sa, Card host, Set<Integer> before) {
+        List<EffectEvent> events = new ArrayList<>();
+        if (before == null) {
+            return events;
+        }
+        String layers = sa.getParamOrDefault("StaticAbilities", "");
+        for (Card card : host.getGame().getCardsIn(ZoneType.Command)) {
+            if (card.isImmutable() && !before.contains(card.getId())) {
+                events.add(new EffectEvent(EventType.CONTINUOUS_EFFECT_CREATED).param("layers", layers));
+            }
+        }
+        return events;
+    }
+
+    /** The ids of every card in a command zone. */
+    private static Set<Integer> commandZone(SpellAbility sa, Card host) {
+        Set<Integer> ids = new HashSet<>();
+        host.getGame().getCardsIn(ZoneType.Command).forEach(card -> ids.add(card.getId()));
+        return ids;
+    }
+
+    /**
+     * One {@code damage_healed} per permanent the clause removed damage from,
+     * naming it, with the damage removed: the damage before the clause less
+     * the damage after, never the damage before alone.
+     */
+    private static List<EffectEvent> healed(Map<Card, Integer> before) {
+        List<EffectEvent> events = new ArrayList<>();
+        if (before == null) {
+            return events;
+        }
+        before.forEach((card, damage) -> {
+            int removed = damage - card.getDamage();
+            if (removed > 0) {
+                events.add(new EffectEvent(EventType.DAMAGE_HEALED)
+                        .subject(Refs.of(card))
+                        .param("amount", removed));
+            }
+        });
+        return events;
+    }
+
+    /**
+     * Damage on each of the clause's affected cards, before it heals any of it away.
      *
      * <p>Read through {@link ClauseTargets#affectedCards} rather than off {@code
      * sa.getTargets().getTargetCards()}, the clause's own {@code
@@ -533,17 +650,14 @@ final class ApiEvents {
      * getReplacingObject}, which never touches {@code sa.getTargets()}. A
      * direct read would find the clause's own (always-empty, per {@code
      * SpellAbility.targetChosen}'s eager initialisation) {@code
-     * TargetChoices} on every real firing and report {@code amount: 0} -- a
-     * wrong value indistinguishable from a real "healed an undamaged
-     * creature," worse than a missing record because nothing downstream
-     * could tell the two apart.
+     * TargetChoices} on every real firing and find nothing healed.
      */
-    private static Integer damageBefore(SpellAbility sa, Card host) {
-        int total = 0;
+    private static Map<Card, Integer> damageBefore(SpellAbility sa, Card host) {
+        Map<Card, Integer> damage = new LinkedHashMap<>();
         for (Card card : ClauseTargets.affectedCards(sa)) {
-            total += card.getDamage();
+            damage.put(card, card.getDamage());
         }
-        return total;
+        return damage;
     }
 
     /**
@@ -615,7 +729,7 @@ final class ApiEvents {
     }
 
     /**
-     * What the retargeted spells point at now.
+     * The retargeted spells, named by their cards, and what they point at now.
      *
      * <p>Read after the clause rather than reported by it, because a spell it
      * retargeted is still on the stack carrying its new {@code TargetChoices}
@@ -635,18 +749,24 @@ final class ApiEvents {
      * {@link Refs#ofAny}.
      */
     private static EffectEvent retargeted(SpellAbility sa) {
+        EffectEvent event = new EffectEvent(EventType.TARGETS_CHANGED);
         List<String> targets = new ArrayList<>();
         if (sa.getTargets() != null) {
             for (SpellAbility changed : sa.getTargets().getTargetSpells()) {
-                if (changed.getTargets() == null) {
-                    continue;
-                }
-                for (GameEntity target : changed.getTargets().getTargetEntities()) {
-                    Refs.ofAny(target).ifPresent(targets::add);
-                }
+                event.subject(Refs.of(changed.getHostCard()));
+                addTargets(changed, targets);
             }
         }
-        return new EffectEvent(EventType.TARGETS_CHANGED).param("targets", targets);
+        return event.param("targets", targets);
+    }
+
+    /** What {@code changed} targets now, as refs, onto {@code targets}. */
+    private static void addTargets(SpellAbility changed, List<String> targets) {
+        if (changed.getTargets() != null) {
+            for (GameEntity target : changed.getTargets().getTargetEntities()) {
+                Refs.ofAny(target).ifPresent(targets::add);
+            }
+        }
     }
 
     // ── schedules and replacements ──────────────────────────────────────
@@ -812,14 +932,18 @@ final class ApiEvents {
     // ── combat removals ─────────────────────────────────────────────────
 
     private static void combatRemovalRules(Map<String, Rule<?>> rules) {
-        put(rules, new Rule<>(EventType.REMOVED_FROM_COMBAT,
+        put(rules, Rule.one(EventType.REMOVED_FROM_COMBAT,
                         ApiEvents::combatantsBefore,
                         (sa, host, memo) -> noLongerInCombat(host, memo)),
                 "RemoveFromCombat");
-        put(rules, new Rule<>(EventType.REMOVED_FROM_COMBAT,
+        put(rules, Rule.one(EventType.REMOVED_FROM_COMBAT,
                         ApiEvents::attackerDefendersBefore,
                         (sa, host, memo) -> reselectedAttackers(host, memo)),
                 "ChangeCombatants");
+        put(rules, Rule.one(EventType.REMOVED_FROM_COMBAT,
+                        ApiEvents::everyCombatant,
+                        (sa, host, memo) -> noLongerInCombat(host, memo)),
+                "Regeneration", "GainControl", "Phases");
         put(rules, Rule.shaped(EventType.COMBAT_ENDED,
                         ApiEvents::combatAttacker, ApiEvents::endedCombatOf),
                 "EndCombatPhase");
@@ -846,6 +970,30 @@ final class ApiEvents {
                     inCombat.add(c);
                 }
             }
+        }
+        return inCombat;
+    }
+
+    /**
+     * Every attacker and blocker, before a clause that removes a creature
+     * from combat as a side of what it does: a regeneration (701.15),
+     * a change of control (506.4) or a phasing out (702.26), each of which
+     * Forge applies by {@code Combat.removeFromCombat} inside the clause
+     * ({@code RegenerationEffect}, {@code ControlGainEffect}'s zone
+     * correction, {@code Card.phase}). Every combatant rather than the
+     * clause's own cards, because each of the three APIs finds its cards its
+     * own way; only a combatant the clause removed is no longer one after it.
+     *
+     * <p>Not {@code ExchangeControl} and the other control APIs: they set the
+     * new controller and leave the zone correction, and with it the removal,
+     * to the static check after the clause.
+     */
+    private static List<Card> everyCombatant(SpellAbility sa, Card host) {
+        Combat combat = host.getGame().getCombat();
+        List<Card> inCombat = new ArrayList<>();
+        if (combat != null) {
+            inCombat.addAll(combat.getAttackers());
+            inCombat.addAll(combat.getAllBlockers());
         }
         return inCombat;
     }
@@ -947,7 +1095,7 @@ final class ApiEvents {
      * cheaply replicable from outside without duplicating engine logic.
      */
     private static void textRules(Map<String, Rule<?>> rules) {
-        put(rules, new Rule<>(EventType.TEXT_CHANGE, null, (sa, host, memo) -> changeTextEvent(sa)),
+        put(rules, Rule.one(EventType.TEXT_CHANGE, null, (sa, host, memo) -> changeTextEvent(sa)),
                 "ChangeText");
     }
 
@@ -994,13 +1142,13 @@ final class ApiEvents {
      * attacking reports the attack.
      */
     private static void combatEntryAndSearchRules(Map<String, Rule<?>> rules) {
-        put(rules, new Rule<>(EventType.STATE_FLAG_CHANGE, ApiEvents::combatants,
+        put(rules, Rule.one(EventType.STATE_FLAG_CHANGE, ApiEvents::combatants,
                         (sa, host, before) -> enteredCombat(host, before)),
                 "Token", "CopyPermanent", "ChangeZoneAll");
-        put(rules, new Rule<>(EventType.STATE_FLAG_CHANGE, ApiEvents::beforeChangeZone,
+        put(rules, Rule.one(EventType.STATE_FLAG_CHANGE, ApiEvents::beforeChangeZone,
                         (sa, host, before) -> changedZone(host, before)),
                 "ChangeZone");
-        put(rules, new Rule<>(EventType.BECAME_BLOCKED, ApiEvents::unblockedAttackers,
+        put(rules, Rule.one(EventType.BECAME_BLOCKED, ApiEvents::unblockedAttackers,
                         (sa, host, before) -> becameBlocked(host, before)),
                 "BecomesBlocked", "Block");
     }
@@ -1126,7 +1274,7 @@ final class ApiEvents {
      * changed nothing reports nothing.
      */
     private static void permanentStateRules(Map<String, Rule<?>> rules) {
-        put(rules, new Rule<>(EventType.STATE_FLAG_CHANGE,
+        put(rules, Rule.one(EventType.STATE_FLAG_CHANGE,
                         (sa, host) -> host.getClassLevel(),
                         (sa, host, before) -> before == null || host.getClassLevel() <= before
                                 ? null
@@ -1135,13 +1283,13 @@ final class ApiEvents {
                                         .param("flag", "class_level")
                                         .param("value", host.getClassLevel())),
                 "ClassLevelUp");
-        put(rules, new Rule<>(EventType.STATE_FLAG_CHANGE, ApiEvents::unlockedDoors,
+        put(rules, Rule.one(EventType.STATE_FLAG_CHANGE, ApiEvents::unlockedDoors,
                         (sa, host, before) -> doorsUnlocked(host, before)),
                 "UnlockDoor");
-        put(rules, new Rule<>(EventType.STATE_FLAG_CHANGE, ApiEvents::pairedCreatures,
+        put(rules, Rule.one(EventType.STATE_FLAG_CHANGE, ApiEvents::pairedCreatures,
                         (sa, host, before) -> newlyPaired(host, before)),
                 "Bond");
-        put(rules, new Rule<>(EventType.STATE_FLAG_CHANGE, null,
+        put(rules, Rule.one(EventType.STATE_FLAG_CHANGE, null,
                         (sa, host, memo) -> merged(host)),
                 "Mutate");
     }

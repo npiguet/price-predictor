@@ -518,7 +518,8 @@ public final class SnapshotBuilder {
         return List.copyOf(keys);
     }
 
-    private static String phaseName(Object phase) {
+    /** A phase or step as a snapshot's {@code phase} spells it: Forge's constant name in lower case. */
+    static String phaseName(Object phase) {
         return phase == null
                 ? null
                 : phase.toString().toLowerCase(java.util.Locale.ROOT);

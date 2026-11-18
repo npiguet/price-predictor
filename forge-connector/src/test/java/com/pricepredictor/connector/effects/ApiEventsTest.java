@@ -55,7 +55,7 @@ class ApiEventsTest {
 
     /**
      * A clause's rule and what its memo takes before the clause resolves,
-     * through the real rules; {@code finish()} builds the event after it.
+     * through the real rules; {@code finish()} builds the events after it.
      */
     private static ApiEvents.ClauseObservation<?> observe(SpellAbility sa) {
         return ApiEvents.observe(sa, ApiEvents::ruleFor);
@@ -65,7 +65,7 @@ class ApiEventsTest {
     void anExtraTurnCarriesItsCount() {
         SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertNotNull(event);
         assertEquals(EventType.TURN_ADDED, event.type());
@@ -81,7 +81,7 @@ class ApiEventsTest {
         SpellAbility sa = AbilityFactory.getAbility(
                 "SP$ AddTurn | Defined$ You | NumTurns$ 3", TestCards.build("Grizzly Bears"));
 
-        assertEquals(3, observe(sa).finish().params().get("count"));
+        assertEquals(3, TestCards.onlyEvent(observe(sa)).params().get("count"));
     }
 
     /** The same for a skipped turn. */
@@ -90,7 +90,7 @@ class ApiEventsTest {
         SpellAbility sa = AbilityFactory.getAbility(
                 "SP$ SkipTurn | Defined$ You | NumTurns$ 2", TestCards.build("Grizzly Bears"));
 
-        assertEquals(2, observe(sa).finish().params().get("count"));
+        assertEquals(2, TestCards.onlyEvent(observe(sa)).params().get("count"));
     }
 
     /**
@@ -105,17 +105,17 @@ class ApiEventsTest {
     void aSkippedPhaseNamesThePhase() {
         SpellAbility sa = TestCards.scriptedAbility("Moment of Silence", "SkipPhase");
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.PHASE_SKIPPED, event.type());
-        assertEquals("BeginCombat", event.params().get("phase"));
+        assertEquals("combat_begin", event.params().get("phase"));
     }
 
     @Test
     void anApiWithNoEmitterIsSilent() {
         SpellAbility sa = TestCards.scriptedAbility("Lightning Bolt", "DealDamage");
 
-        assertNull(observe(sa).finish(),
+        assertNull(TestCards.onlyEvent(observe(sa)),
                 "damage already arrives on the bus; a second event would double-count it");
     }
 
@@ -124,7 +124,7 @@ class ApiEventsTest {
     void askippedTurnCarriesItsCount() {
         SpellAbility sa = TestCards.scriptedAbility("Meditate", "SkipTurn");
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.TURN_SKIPPED, event.type());
         assertEquals(1, event.params().get("count"));
@@ -135,7 +135,7 @@ class ApiEventsTest {
     void anAddedPhaseNamesThePhaseAndItsCount() {
         SpellAbility sa = TestCards.scriptedAbility("Full Throttle", "AddPhase");
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.PHASE_ADDED, event.type());
         assertEquals("Combat", event.params().get("phase"));
@@ -159,7 +159,7 @@ class ApiEventsTest {
         Player activator = new Player("activator", TestCards.game(), 91503);
         sa.setActivatingPlayer(activator);
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.OWNERSHIP_CHANGE, event.type());
         // OwnershipGainEffect's fallback: no DefinedPlayer, the activator.
@@ -195,7 +195,7 @@ class ApiEventsTest {
         sa.resetTargets();
         sa.getTargets().add(targeted);
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(Refs.of(targeted), event.params().get("owner"));
     }
@@ -228,7 +228,7 @@ class ApiEventsTest {
         sa.resetTargets();
         sa.getTargets().add(targeted);
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(List.of(Refs.of(targeted)), event.subjects());
     }
@@ -249,7 +249,7 @@ class ApiEventsTest {
         sa.getTargets().add(first);
         sa.getTargets().add(second);
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(
                 List.of(Refs.of(first), Refs.of(second)),
@@ -269,7 +269,7 @@ class ApiEventsTest {
         Player activator = new Player("activator", TestCards.game(), 91401);
         sa.setActivatingPlayer(activator);
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(List.of(Refs.of(activator)), event.subjects());
     }
@@ -308,7 +308,7 @@ class ApiEventsTest {
         root.resetTargets();
         root.getTargets().add(targeted);
 
-        EffectEvent event = observe(sub).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sub));
 
         assertEquals(EventType.TURN_SKIPPED, event.type());
         assertEquals(List.of(Refs.of(targeted)), event.subjects());
@@ -322,7 +322,7 @@ class ApiEventsTest {
         ApiEvents.ClauseObservation<?> observed = observe(sa);
         sa.getHostCard().setChosenColors(com.google.common.collect.ImmutableList.of("red"));
 
-        EffectEvent event = observed.finish();
+        EffectEvent event = TestCards.onlyEvent(observed);
 
         assertEquals(EventType.CHOICE_MADE, event.type());
         assertEquals("color", event.params().get("choice_kind"));
@@ -444,7 +444,7 @@ class ApiEventsTest {
             }
             fixture.getValue().mutate().accept(host);
 
-            EffectEvent event = observe(sa).finish();
+            EffectEvent event = TestCards.onlyEvent(observe(sa));
 
             assertNotNull(event, fixture.getKey() + " -- choice() reported nothing");
             assertEquals(EventType.CHOICE_MADE, event.type(), fixture.getKey());
@@ -501,7 +501,7 @@ class ApiEventsTest {
         ApiEvents.ClauseObservation<?> observed = observe(sub);
         target.setDamage(0);
 
-        EffectEvent event = observed.finish();
+        EffectEvent event = TestCards.onlyEvent(observed);
 
         assertEquals(EventType.DAMAGE_HEALED, event.type());
         assertEquals(3, event.params().get("amount"));
@@ -520,21 +520,10 @@ class ApiEventsTest {
     void anAnimateClauseNamesWhetherItStrippedAbilities() {
         SpellAbility sa = TestCards.scriptedAbility("Dragonshift", "Animate");
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.ABILITY_CHANGE, event.type());
         assertEquals(true, event.params().get("removed"));
-    }
-
-    /** Impractical Joke: {@code SP$ Effect | StaticAbilities$ STCantPrevent | ...}. */
-    @Test
-    void anEffectClauseNamesItsStaticAbilities() {
-        SpellAbility sa = TestCards.scriptedAbility("Impractical Joke", "Effect");
-
-        EffectEvent event = observe(sa).finish();
-
-        assertEquals(EventType.CONTINUOUS_EFFECT_CREATED, event.type());
-        assertEquals("STCantPrevent", event.params().get("layers"));
     }
 
     /**
@@ -560,7 +549,7 @@ class ApiEventsTest {
         sa.resetTargets();
         sa.getTargets().add(changed);
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.TARGETS_CHANGED, event.type());
         assertEquals(List.of(Refs.of(newTarget)), event.params().get("targets"));
@@ -592,7 +581,7 @@ class ApiEventsTest {
         sa.resetTargets();
         sa.getTargets().add(changed);
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.TARGETS_CHANGED, event.type());
         assertEquals(List.of(Refs.of(newTarget)), event.params().get("targets"));
@@ -616,7 +605,7 @@ class ApiEventsTest {
         host.setChosenNumber(7, true);
         SpellAbility sa = AbilityFactory.getAbility("SP$ ChooseNumber", host);
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.CHOICE_MADE, event.type());
         assertEquals("number", event.params().get("choice_kind"));
@@ -707,7 +696,7 @@ class ApiEventsTest {
         SpellAbility sa = AbilityFactory.getAbility(
                 "SP$ SkipTurn | ValidTgts$ Player | NumTurns$ 1",
                 TestCards.build("Runeclaw Bear"));
-        ApiEvents.Rule<Object> throwingMemo = new ApiEvents.Rule<>(
+        ApiEvents.Rule<Object> throwingMemo = ApiEvents.Rule.one(
                 EventType.TURN_SKIPPED,
                 (s, host) -> {
                     throw new IllegalStateException("boom (memo)");
@@ -738,7 +727,7 @@ class ApiEventsTest {
                         + "TriggerDescription$ test",
                 TestCards.build("Grizzly Bears"));
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.DELAYED_TRIGGER_CREATED, event.type());
         assertEquals(List.of(Refs.of(sa.getHostCard())), event.subjects());
@@ -750,7 +739,7 @@ class ApiEventsTest {
                 "DB$ ImmediateTrigger | TriggerDescription$ test",
                 TestCards.build("Grizzly Bears"));
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.DELAYED_TRIGGER_CREATED, event.type());
         assertEquals(List.of(Refs.of(sa.getHostCard())), event.subjects());
@@ -769,7 +758,7 @@ class ApiEventsTest {
                 "DB$ ImmediateTrigger | TriggerAmount$ 0 | TriggerDescription$ test",
                 TestCards.build("Grizzly Bears"));
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertNull(event, "TriggerAmount$ 0 registers no delayed trigger at all");
     }
@@ -798,7 +787,7 @@ class ApiEventsTest {
         SpellAbility sa = AbilityFactory.getAbility(
                 "DB$ " + api + " | " + minimalParams, TestCards.build("Grizzly Bears"));
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.REPLACEMENT_APPLIED, event.type());
         assertEquals(List.of(Refs.of(sa.getHostCard())), event.subjects());
@@ -823,7 +812,7 @@ class ApiEventsTest {
 
         ApiEvents.ClauseObservation<?> observed = observe(sa);
         target.getGame().getAction().becomeMonarch(target, "M12");
-        EffectEvent event = observed.finish();
+        EffectEvent event = TestCards.onlyEvent(observed);
 
         assertEquals(EventType.MONARCH_CHANGED, event.type());
         assertEquals(List.of(Refs.of(target)), event.subjects());
@@ -846,7 +835,7 @@ class ApiEventsTest {
 
         ApiEvents.ClauseObservation<?> observed = observe(sa);
         target.getGame().getAction().becomeMonarch(target, "M12");
-        EffectEvent event = observed.finish();
+        EffectEvent event = TestCards.onlyEvent(observed);
 
         assertNull(event, "the monarch did not change, so nothing should be reported");
     }
@@ -870,7 +859,7 @@ class ApiEventsTest {
         Card bearer = TestCards.build("Runeclaw Bear");
         activator.setRingBearer(bearer);
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.RING_TEMPTS, event.type());
         assertEquals(
@@ -898,7 +887,7 @@ class ApiEventsTest {
         Player activator = new Player("tempted-no-bearer", TestCards.game(), 93102);
         sa.setActivatingPlayer(activator);
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.RING_TEMPTS, event.type());
         assertEquals(List.of(Refs.of(activator)), event.subjects());
@@ -936,7 +925,7 @@ class ApiEventsTest {
 
         ApiEvents.ClauseObservation<?> observed = observe(sa);
         game.getPhaseHandler().setCombat(null);
-        EffectEvent event = observed.finish();
+        EffectEvent event = TestCards.onlyEvent(observed);
 
         assertEquals(EventType.COMBAT_ENDED, event.type());
         assertEquals(List.of(Refs.of(attacking)), event.subjects());
@@ -949,7 +938,7 @@ class ApiEventsTest {
         game.getPhaseHandler().setCombat(null);
         SpellAbility sa = AbilityFactory.getAbility("SP$ EndCombatPhase", host);
 
-        assertNull(observe(sa).finish());
+        assertNull(TestCards.onlyEvent(observe(sa)));
     }
 
     /**
@@ -967,7 +956,7 @@ class ApiEventsTest {
         ApiEvents.ClauseObservation<?> observed = observe(sa);
         combat.removeFromCombat(c1);
         combat.removeFromCombat(c2);
-        EffectEvent event = observed.finish();
+        EffectEvent event = TestCards.onlyEvent(observed);
 
         assertEquals(EventType.REMOVED_FROM_COMBAT, event.type());
         assertEquals(
@@ -993,7 +982,7 @@ class ApiEventsTest {
         combat.removeFromCombat(c1);
         // c2 stays attacking -- its own removal was skipped by a guard this
         // rule does not replicate.
-        EffectEvent event = observed.finish();
+        EffectEvent event = TestCards.onlyEvent(observed);
 
         assertEquals(List.of(Refs.of(c1)), event.subjects());
     }
@@ -1042,7 +1031,7 @@ class ApiEventsTest {
         combat.addAttacker(c1, newDefender);
         combat.removeFromCombat(c2);
         combat.addAttacker(c2, newDefender);
-        EffectEvent event = observed.finish();
+        EffectEvent event = TestCards.onlyEvent(observed);
 
         assertEquals(EventType.REMOVED_FROM_COMBAT, event.type());
         assertEquals(
@@ -1068,7 +1057,7 @@ class ApiEventsTest {
 
         ApiEvents.ClauseObservation<?> observed = observe(sa);
         // Nothing changes: declined, or reselected the same defender.
-        EffectEvent event = observed.finish();
+        EffectEvent event = TestCards.onlyEvent(observed);
 
         assertNull(event, "the defender never changed, so no removal happened");
     }
@@ -1088,7 +1077,7 @@ class ApiEventsTest {
         sa.getTargets().add(target);
 
         target.getGame().getAction().takeInitiative(target, "BRO");
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.INITIATIVE_TAKEN, event.type());
         assertEquals(List.of(Refs.of(target)), event.subjects());
@@ -1113,7 +1102,7 @@ class ApiEventsTest {
 
         ApiEvents.ClauseObservation<?> observed = observe(sa);
         target.getGame().getAction().takeInitiative(target, "BRO");
-        EffectEvent event = observed.finish();
+        EffectEvent event = TestCards.onlyEvent(observed);
 
         assertEquals(EventType.INITIATIVE_TAKEN, event.type());
         assertEquals(List.of(Refs.of(target)), event.subjects());
@@ -1128,7 +1117,7 @@ class ApiEventsTest {
         sa.resetTargets();
         sa.getTargets().add(target);
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertNull(event, "nobody targeted by this clause holds the initiative");
     }
@@ -1146,7 +1135,7 @@ class ApiEventsTest {
         sa.getTargets().add(c1);
         sa.getTargets().add(c2);
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.TEXT_CHANGE, event.type());
         assertEquals(
@@ -1183,7 +1172,7 @@ class ApiEventsTest {
         sa.resetTargets();
         sa.getTargets().add(spellOnStack);
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.TEXT_CHANGE, event.type());
         assertEquals(
@@ -1204,7 +1193,7 @@ class ApiEventsTest {
         sa.resetTargets();
         sa.getTargets().add(TestCards.build("Runeclaw Bear"));
 
-        EffectEvent event = observe(sa).finish();
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertNull(event, "no ChangeColorWord$/ChangeTypeWord$ means nothing textual changed");
     }

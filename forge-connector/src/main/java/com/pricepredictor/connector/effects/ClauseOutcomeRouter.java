@@ -134,25 +134,32 @@ final class ClauseOutcomeRouter {
         ApiEvents.ClauseObservation<?> observed = observations.isEmpty()
                 ? ApiEvents.unobserved(clause, rules)
                 : observations.pop();
+        boolean ran = run == null || "RAN".equals(run);
         if (!live.owns(clause)) {
-            Forks.forkHooks().clauseResolved(clause, run);
-            // The clause's events too, as the live bracket files them: built
-            // only for a fork listening, which a fork played on is not (its
-            // own recording's router files them).
-            if ((run == null || "RAN".equals(run)) && Forks.forkHooksListening()) {
-                EffectEvent event = observed.finish();
-                if (event != null) {
-                    Forks.forkHooks().clauseEvent(clause, event);
-                }
-            }
+            forkClauseResolved(clause, run, ran ? observed : null);
             return;
         }
         FloatingEffects.of(live.game()).clauseResolved(live.game(), clause);
         // Filed into the half the clause resolved in: a later mode's first
         // clause has not begun yet (A1).
         bracket.recordClauseCondition(clause, ConditionsMet.of(clause, run));
-        if (run == null || "RAN".equals(run)) {
-            bracket.recordClauseEvent(observed.finish());
+        if (ran) {
+            observed.finish().forEach(bracket::recordClauseEvent);
+        }
+    }
+
+    /**
+     * A fork's clause, told to the fork hooks, with its events as the live
+     * bracket files them: built only for a fork listening, which a fork
+     * played on is not (its own recording's router files them).
+     *
+     * @param ran the clause's observation when its own effect ran, else null
+     */
+    private static void forkClauseResolved(
+            SpellAbility clause, String run, ApiEvents.ClauseObservation<?> ran) {
+        Forks.forkHooks().clauseResolved(clause, run);
+        if (ran != null && Forks.forkHooksListening()) {
+            ran.finish().forEach(event -> Forks.forkHooks().clauseEvent(clause, event));
         }
     }
 
