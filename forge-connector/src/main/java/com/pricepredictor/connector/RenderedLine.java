@@ -33,8 +33,11 @@ public record RenderedLine(String prefix, String prose, Ability owner, int face)
      * A line break inside a text, with the blanks around it: Forge joins some
      * generated descriptions with {@code \r\n}, and a carriage return left in
      * a line is a character the converted file would carry into every reader.
+     * A run of three or more commas is Forge's line-break marker ({@code ,,,},
+     * {@code ,,,,,,}), which its card view shows as a line break and its stack
+     * text as a space.
      */
-    private static final Pattern LINE_BREAK = Pattern.compile("[ \t]*\r?\n[ \t]*");
+    private static final Pattern LINE_BREAK = Pattern.compile("[ \t]*(?:\r?\n|,{3,})[ \t]*");
 
     /** A run of blanks inside a line: one space to every reader. */
     private static final Pattern BLANK_RUN = Pattern.compile("[ \t]{2,}");
@@ -44,7 +47,8 @@ public record RenderedLine(String prefix, String prose, Ability owner, int face)
      * that runs onto several lines (a Class level's continuation, a saga's
      * modes) is folded into one, each line break read as a space: a line is
      * one ability's whole text, and a join reads the one line a key names.
-     * A run of blanks in a text is one space.
+     * Forge's {@code ,,,} marker is such a line break. A run of blanks in a
+     * text is one space.
      */
     public static void appendLine(
             List<RenderedLine> lines, String prefix, String text, Ability owner, int face) {
