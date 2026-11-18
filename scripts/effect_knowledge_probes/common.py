@@ -98,6 +98,58 @@ class LineItem:
     e: np.ndarray | None = None
 
 
+def _cached_matrix(cache, sidecar) -> tuple[bool, np.ndarray | None]:
+    """``(usable, matrix)``: a sidecar is usable without a cache, or with a cached
+    matrix that has one row per line."""
+    if cache is None:
+        return True, None
+    matrix = cache.read(sidecar.script_file)
+    if matrix is None or len(matrix) != len(sidecar.lines):
+        return False, None
+    return True, matrix
+
+
+def _row_text(line, rendered, surface: Surface) -> str | None:
+    """A line's encoding text, None for one without provenance."""
+    from effects.domain.ability_encoder import encoding_text
+
+    if not line.provenance:
+        return None
+    return encoding_text(line, line.prose_in(rendered), surface)
+
+
+def _new_item(sidecar, line, text: str, e) -> LineItem:
+    return LineItem(
+        key=line.provenance[0], text=text, script_text=line.script_text,
+        line_kind=line.line_kind, api=line.script_api_type,
+        card=sidecar.card, script_file=sidecar.script_file,
+        e=None if e is None else e.astype(np.float32),
+    )
+
+
+@dataclass(frozen=True)
+class _SidecarRead:
+    """One sidecar with its rendered prose and its cached matrix, when there is one."""
+
+    sidecar: object
+    rendered: list
+    matrix: np.ndarray | None
+
+
+def _add_sidecar_items(items: dict[str, LineItem], read: _SidecarRead,
+                       surface: Surface) -> None:
+    sidecar = read.sidecar
+    for row, line in enumerate(sidecar.lines):
+        text = _row_text(line, read.rendered, surface)
+        if not text:
+            continue
+        item = items.get(text)
+        if item is None:
+            item = items[text] = _new_item(
+                sidecar, line, text, None if read.matrix is None else read.matrix[row])
+        item.carriers.add(sidecar.card)
+
+
 def line_items(
     cards_folders: Iterable[Path], surface: Surface, abilities_root: Path | None = None,
 ) -> list[LineItem]:
@@ -106,7 +158,6 @@ def line_items(
     One item per text on the checkpoint's surface, since two lines that read the
     same share one ``e``. ``abilities_root`` None reads labels only.
     """
-    from effects.domain.ability_encoder import encoding_text
     from effects.infrastructure.ability_cache_store import AbilityCacheStore
     from effects.infrastructure.sidecar_io import (
         converted_text_path,
@@ -118,29 +169,11 @@ def line_items(
     items: dict[str, LineItem] = {}
     for path in sidecar_paths(cards_folders):
         sidecar = read_sidecar(path)
-        matrix = None
-        if cache is not None:
-            matrix = cache.read(sidecar.script_file)
-            if matrix is None:
-                continue
-            if len(matrix) != len(sidecar.lines):
-                continue
+        usable, matrix = _cached_matrix(cache, sidecar)
+        if not usable:
+            continue
         rendered = prose_lines(converted_text_path(path)) if surface == Surface.PROSE else []
-        for row, line in enumerate(sidecar.lines):
-            if not line.provenance:
-                continue
-            text = encoding_text(line, line.prose_in(rendered), surface)
-            if not text:
-                continue
-            item = items.get(text)
-            if item is None:
-                item = items[text] = LineItem(
-                    key=line.provenance[0], text=text, script_text=line.script_text,
-                    line_kind=line.line_kind, api=line.script_api_type,
-                    card=sidecar.card, script_file=sidecar.script_file,
-                    e=None if matrix is None else matrix[row].astype(np.float32),
-                )
-            item.carriers.add(sidecar.card)
+        _add_sidecar_items(items, _SidecarRead(sidecar, rendered, matrix), surface)
     return list(items.values())
 
 
@@ -173,6 +206,32 @@ def stratum_dir(corpus: Path, stratum: str) -> Path:
     return Path(corpus) / "validation" / stratum
 
 
+@dataclass(frozen=True)
+class GameFilter:
+    """The games, and optionally the records, a probing run reads."""
+
+    game_ids: set[str] | frozenset[str]
+    record_ids: set[str] | frozenset[str] | None = None
+
+    def wants(self, record_id: str, game_id: str) -> bool:
+        return game_id in self.game_ids and (
+            self.record_ids is None or record_id in self.record_ids)
+
+
+def _shard_records(shard: Path, wanted: GameFilter) -> Iterator[object]:
+    from effects.infrastructure.record_codec import parse_record_line, record_from_dict
+    from effects.infrastructure.shard_io import iter_shard_lines, peek_envelope
+
+    for line in iter_shard_lines(shard):
+        head = peek_envelope(line)
+        if head is not None and not wanted.wants(head.record_id, head.game_id):
+            continue
+        record = record_from_dict(parse_record_line(line))
+        if head is None and not wanted.wants(record.record_id, record.game_id):
+            continue
+        yield record
+
+
 def read_games(
     shards: Iterable[Path], game_ids: set[str] | frozenset[str],
     record_ids: set[str] | frozenset[str] | None = None,
@@ -184,26 +243,13 @@ def read_games(
     for, and parsing them would cost most of the read. ``record_ids`` narrows
     it further to the records a probing run actually reads.
     """
-    from effects.infrastructure.record_codec import parse_record_line, record_from_dict
-    from effects.infrastructure.shard_io import (
-        iter_shard_lines,
-        peek_envelope,
-        require_generation,
-    )
+    from effects.infrastructure.shard_io import require_generation
 
-    def wanted(record_id: str, game_id: str) -> bool:
-        return game_id in game_ids and (record_ids is None or record_id in record_ids)
-
+    wanted = GameFilter(game_ids, record_ids)
     shards = list(shards)
     require_generation(shards)
     for shard in shards:
-        for line in iter_shard_lines(shard):
-            head = peek_envelope(line)
-            if head is not None and not wanted(head.record_id, head.game_id):
-                continue
-            record = record_from_dict(parse_record_line(line))
-            if head is None and not wanted(record.record_id, record.game_id):
-                continue
+        for record in _shard_records(shard, wanted):
             yield shard, record
 
 
@@ -224,15 +270,22 @@ class ProbeModel:
     e_dim: int
 
 
+@dataclass(frozen=True)
+class ModelSources:
+    """Where :func:`load_probe_model` reads beyond the checkpoint file: the
+    vocabulary and keyword files, an already loaded checkpoint, the variant-script tree."""
+
+    vocab_path: Path | None = None
+    keyword_path: Path | None = None
+    checkpoint: object = None
+    variant_scripts: Path | None = None
+
+
 def load_probe_model(
     checkpoint_path: Path,
     cards_folders: list[Path],
     records: list,
-    *,
-    vocab_path: Path | None = None,
-    keyword_path: Path | None = None,
-    checkpoint=None,
-    variant_scripts: Path | None = None,
+    sources: ModelSources = ModelSources(),  # noqa: B008  (frozen)
 ) -> ProbeModel:
     """Encoder, model and batcher at the checkpoint's own size and surface.
 
@@ -244,13 +297,14 @@ def load_probe_model(
     from effects.application.model_loading import load_runnable
     from effects.infrastructure.effect_model_store import inference_files
 
-    checkpoint = checkpoint or load_checkpoint(checkpoint_path)
+    checkpoint = sources.checkpoint or load_checkpoint(checkpoint_path)
     # Hash-checked like every inference command: a probe over a vocabulary
     # that moved since training reads vectors that look valid and mean nothing.
-    files = inference_files(checkpoint, vocab=vocab_path, keywords=keyword_path)
+    files = inference_files(checkpoint, vocab=sources.vocab_path,
+                            keywords=sources.keyword_path)
     runnable = load_runnable(
         checkpoint, files=files,
-        sidecars=sidecar_cache(cards_folders, variant_scripts), records=records,
+        sidecars=sidecar_cache(cards_folders, sources.variant_scripts), records=records,
     )
     return ProbeModel(
         checkpoint=checkpoint, encoder=runnable.encoder, model=runnable.model,
@@ -358,9 +412,39 @@ class ProbeContext:
         """The checkpoint ready to run over ``records``, on this context's trees."""
         return load_probe_model(
             self.checkpoint_path, list(self.cards_folders), records,
-            vocab_path=vocab_path, keyword_path=keyword_path,
-            checkpoint=self.checkpoint, variant_scripts=self.variant_scripts,
+            ModelSources(vocab_path=vocab_path, keyword_path=keyword_path,
+                         checkpoint=self.checkpoint, variant_scripts=self.variant_scripts),
         )
+
+
+def _curated_corpus(checkpoint, corpus: Path | None) -> Path:
+    """The explicit corpus, else the one the checkpoint recorded; exits on none."""
+    recorded = checkpoint.provenance.corpus_path
+    corpus = Path(corpus) if corpus is not None else (rooted(recorded) if recorded else None)
+    if corpus is None or not (corpus / "manifest.json").exists():
+        raise SystemExit("no curated corpus: pass --corpus, or probe a checkpoint "
+                         "trained with --corpus")
+    return corpus
+
+
+def _verified_manifest(corpus: Path, checkpoint_path: Path, provenance):
+    """``(manifest, digest)`` of the corpus; exits on one rebuilt since training."""
+    from effects.infrastructure.corpus_store import CorpusStore
+
+    manifest = CorpusStore(corpus).load()
+    digest = manifest.digest()
+    if provenance.corpus_digest and provenance.corpus_digest != digest:
+        raise SystemExit(
+            f"{corpus} has been rebuilt since {checkpoint_path} trained on it "
+            f"(recorded {provenance.corpus_digest}, found {digest})")
+    return manifest, digest
+
+
+def _probe_folders(checkpoint, cards_folders: Iterable[Path] | None) -> Iterable[Path]:
+    if cards_folders is not None:
+        return cards_folders
+    recorded_folders = getattr(checkpoint, "cards_folders", ())
+    return tuple(rooted(f) for f in recorded_folders) or DEFAULT_CARDS_FOLDERS
 
 
 def probe_context(
@@ -376,31 +460,16 @@ def probe_context(
     since the checkpoint trained on it: a selection set frozen against the rebuild
     describes different games.
     """
-    from effects.infrastructure.corpus_store import CorpusStore
-
     checkpoint = load_checkpoint(checkpoint_path)
-    provenance = checkpoint.provenance
-    recorded = provenance.corpus_path
-    corpus = Path(corpus) if corpus is not None else (rooted(recorded) if recorded else None)
-    if corpus is None or not (corpus / "manifest.json").exists():
-        raise SystemExit("no curated corpus: pass --corpus, or probe a checkpoint "
-                         "trained with --corpus")
-    manifest = CorpusStore(corpus).load()
-    digest = manifest.digest()
-    if provenance.corpus_digest and provenance.corpus_digest != digest:
-        raise SystemExit(
-            f"{corpus} has been rebuilt since {checkpoint_path} trained on it "
-            f"(recorded {provenance.corpus_digest}, found {digest})")
-    if cards_folders is None:
-        recorded_folders = getattr(checkpoint, "cards_folders", ())
-        cards_folders = (tuple(rooted(f) for f in recorded_folders)
-                         or DEFAULT_CARDS_FOLDERS)
+    corpus = _curated_corpus(checkpoint, corpus)
+    manifest, digest = _verified_manifest(corpus, checkpoint_path, checkpoint.provenance)
+    folders = _probe_folders(checkpoint, cards_folders)
     if variant_scripts is None and manifest.variant_scripts:
         variant_scripts = rooted(manifest.variant_scripts)
     return ProbeContext(
         checkpoint_path=Path(checkpoint_path), checkpoint=checkpoint, corpus=corpus,
         manifest=manifest, corpus_digest=digest,
-        cards_folders=tuple(Path(f) for f in cards_folders),
+        cards_folders=tuple(Path(f) for f in folders),
         variant_scripts=variant_scripts,
     )
 

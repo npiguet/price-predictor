@@ -59,31 +59,56 @@ def _literal(value: str | None) -> int:
     return int(value) if value.lstrip("+").isdigit() else 0
 
 
+def _printed_static(line) -> bool:
+    """A printed static line in force that affects something."""
+    return bool(line.kind == "static" and not line.granted and line.keys
+                and line.in_force and line.affected)
+
+
+def _toughness_params(line, lines) -> dict | None:
+    """The ``Continuous`` static's parameters when it adds toughness, else None."""
+    sidecar = lines.line_or_none(line.keys[0])
+    if sidecar is None or not sidecar.script_text:
+        return None
+    found = params(root(sidecar.script_text))
+    if found.get("Mode") != "Continuous" or _literal(found.get("AddToughness")) <= 0:
+        return None
+    return found
+
+
+def _reached_creatures(record, line) -> tuple[str, ...]:
+    """The line's affected cards that are creatures with a power and toughness."""
+    def creature(ref) -> bool:
+        card = record.state.entity(ref)
+        return card is not None and card.is_creature and card.pt is not None
+
+    return tuple(ref for ref in line.affected if creature(ref))
+
+
+def _line_anthem(record, entity, line, lines) -> Anthem | None:
+    found = _toughness_params(line, lines)
+    if found is None:
+        return None
+    affected = _reached_creatures(record, line)
+    if not affected:
+        return None
+    boost = (_literal(found.get("AddPower")), _literal(found.get("AddToughness")))
+    return Anthem(entity.id, line.keys[0], boost, affected)
+
+
+def _entity_anthems(record, entity, lines) -> list[Anthem]:
+    found = (_line_anthem(record, entity, line, lines)
+             for line in entity.lines if _printed_static(line))
+    return [anthem for anthem in found if anthem is not None]
+
+
 def anthems(record, lines) -> list[Anthem]:
     """Every in-force, printed static on the battlefield that adds a stated
     toughness to the creatures it affects, in board order."""
-    out = []
+    out: list[Anthem] = []
     for entity in record.state.entities:
-        if not entity.on_battlefield:
-            continue
-        for line in entity.lines:
-            if (line.kind != "static" or line.granted or not line.keys
-                    or not line.in_force or not line.affected):
-                continue
-            sidecar = lines.line_or_none(line.keys[0])
-            if sidecar is None or not sidecar.script_text:
-                continue
-            found = params(root(sidecar.script_text))
-            toughness = _literal(found.get("AddToughness"))
-            if found.get("Mode") != "Continuous" or toughness <= 0:
-                continue
-            affected = tuple(
-                ref for ref in line.affected
-                if (creature := record.state.entity(ref)) is not None
-                and creature.is_creature and creature.pt is not None)
-            if affected:
-                out.append(Anthem(entity.id, line.keys[0],
-                                  (_literal(found.get("AddPower")), toughness), affected))
+        if entity.on_battlefield:
+            out += _entity_anthems(record, entity, lines)
     return out
 
 
@@ -113,32 +138,48 @@ def destroyed(record, anthem: Anthem):
 # ── which records qualify ───────────────────────────────────────────────
 
 
+def _effect_half_or_combat(record) -> bool:
+    """A non-fork, non-interventional resolution's effect half or combat damage step."""
+    from effects.domain.records import Moment, RecordKind
+
+    if record.fork or record.interventional:
+        return False
+    if record.kind is RecordKind.COMBAT:
+        return True
+    return record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION
+
+
+def _kept_alive(record, anthem: Anthem) -> list[str]:
+    """The creatures the anthem keeps alive that carry damage."""
+    return [e for e in anthem.affected
+            if record.state.entity(e).damage > 0 and dies_without(record, anthem, e)]
+
+
+def _already_died(targets, anthem: Anthem) -> bool:
+    """Whether the record already has one of the anthem's creatures dying."""
+    from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
+
+    died = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
+    return any(targets.get(e) is not None
+               and targets[e].fields.get(HeadField.ZONE_OUTCOME) == died
+               for e in anthem.affected)
+
+
 def chosen(record, lines):
     """``(record, anthem)`` for the first anthem keeping a creature alive
     that the record saw survive, on a resolution's effect half or a combat
     damage step that is no fork; None otherwise."""
-    from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
     from effects.domain.effect_targets import derive_targets
-    from effects.domain.records import Moment, RecordKind
 
-    if record.fork or record.interventional:
+    if not _effect_half_or_combat(record):
         return None
-    if not (record.kind is RecordKind.COMBAT or (
-            record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION)):
-        return None
-    died = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
     targets = None
     for anthem in anthems(record, lines):
-        kept = [e for e in anthem.affected
-                if record.state.entity(e).damage > 0 and dies_without(record, anthem, e)]
-        if not kept:
+        if not _kept_alive(record, anthem):
             continue
         targets = targets if targets is not None else derive_targets(record)
-        if any(targets.get(e) is not None
-               and targets[e].fields.get(HeadField.ZONE_OUTCOME) == died
-               for e in anthem.affected):
-            continue
-        return record, anthem
+        if not _already_died(targets, anthem):
+            return record, anthem
     return None
 
 

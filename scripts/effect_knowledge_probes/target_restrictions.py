@@ -62,26 +62,49 @@ def masked(restriction: str) -> str:
     return re.sub(r"\d+", "#", restriction)
 
 
+def _controller_qualifier(qualifier: str) -> bool:
+    return qualifier in ("OppCtrl", "YouCtrl", "YouDontCtrl")
+
+
+def _supertype_qualifier(qualifier: str) -> bool:
+    return qualifier.lower().removeprefix("non") in ("legendary", "basic", "snow")
+
+
+def _colour_qualifier(qualifier: str) -> bool:
+    return qualifier in COLOUR_QUALIFIERS
+
+
+def _keyword_qualifier(qualifier: str) -> bool:
+    return qualifier.startswith(("with", "without"))
+
+
+def _number_qualifier(qualifier: str) -> bool:
+    return bool(re.match(r"(power|toughness|cmc|manaValue)(LT|LE|EQ|GE|GT)", qualifier))
+
+
+def _combat_qualifier(qualifier: str) -> bool:
+    return qualifier in ("tapped", "untapped", "attacking", "blocking", "attackingYou")
+
+
+#: Each family with the test of one qualifier that puts a restriction in it, in the
+#: order the first match is taken.
+FAMILY_TESTS = (
+    ("controller", _controller_qualifier),
+    ("supertype", _supertype_qualifier),
+    ("colour", _colour_qualifier),
+    ("keyword", _keyword_qualifier),
+    ("number", _number_qualifier),
+    ("combat or tapped", _combat_qualifier),
+)
+
+
 def family(restriction: str) -> str:
     """The kind of condition a restriction states, first match wins."""
     qualifiers = [q for alt in restriction.split(",") for q in re.split(r"[.+]", alt)[1:]]
-    if any(q in ("OppCtrl", "YouCtrl", "YouDontCtrl") for q in qualifiers):
-        return "controller"
-    if any(q.lower().removeprefix("non") in ("legendary", "basic", "snow") for q in qualifiers):
-        return "supertype"
-    if any(q in COLOUR_QUALIFIERS for q in qualifiers):
-        return "colour"
-    if any(q.startswith("with") or q.startswith("without") for q in qualifiers):
-        return "keyword"
-    if any(re.match(r"(power|toughness|cmc|manaValue)(LT|LE|EQ|GE|GT)", q)
-           for q in qualifiers):
-        return "number"
-    if any(q in ("tapped", "untapped", "attacking", "blocking", "attackingYou")
-           for q in qualifiers):
-        return "combat or tapped"
-    if not qualifiers:
-        return "card type only"
-    return "other"
+    for name, test in FAMILY_TESTS:
+        if any(test(q) for q in qualifiers):
+            return name
+    return "other" if qualifiers else "card type only"
 
 
 # ── the flips ───────────────────────────────────────────────────────────
@@ -122,23 +145,37 @@ def flipped(record, entity_id: str, flip: str):
 # ── which records qualify ───────────────────────────────────────────────
 
 
-def decision_items(record, sidecars):
-    """``(restriction, [(entity or player, legal)])`` for one targeting
-    decision, or None: every card of the board, in any zone, and every player,
-    as ``target_legal`` is trained on them."""
+def _targeting_candidate(record):
+    """The first candidate of a non-fork playability decision with legal targets, or None."""
     from effects.domain.records import PlayabilityDecisionPayload
 
     payload = record.payload
-    if (not isinstance(payload, PlayabilityDecisionPayload) or record.fork
-            or not payload.candidates or not payload.candidates[0].legal_targets):
+    if not isinstance(payload, PlayabilityDecisionPayload) or record.fork:
         return None
-    candidate = payload.candidates[0]
+    if not payload.candidates or not payload.candidates[0].legal_targets:
+        return None
+    return payload.candidates[0]
+
+
+def _restriction_of(candidate, sidecars):
+    """The ``ValidTgts`` value of the candidate's first ability line that has one."""
     restriction = None
     for key in candidate.ability or ():
         line = sidecars.line_or_none(key)
         restriction = root_param(line.script_text if line is not None else None, "ValidTgts")
         if restriction:
             break
+    return restriction
+
+
+def decision_items(record, sidecars):
+    """``(restriction, [(entity or player, legal)])`` for one targeting
+    decision, or None: every card of the board, in any zone, and every player,
+    as ``target_legal`` is trained on them."""
+    candidate = _targeting_candidate(record)
+    if candidate is None:
+        return None
+    restriction = _restriction_of(candidate, sidecars)
     if not restriction:
         return None
     legal = set(candidate.legal_targets)
@@ -157,21 +194,44 @@ def read_items(probe_model, records: list) -> dict[str, list[dict[str, float]]]:
             for name in READOUTS}
 
 
+def _new_cell() -> dict:
+    return {r: ([], []) for r in READOUTS}
+
+
+def _scores_at(readings, row: int, entity: str) -> dict[str, float] | None:
+    """Both readouts' answers at ``entity`` of record ``row``, None if either lacks it."""
+    if any(entity not in readings[name][row] for name in READOUTS):
+        return None
+    return {name: readings[name][row][entity] for name in READOUTS}
+
+
+def _add_item(out: dict, keys, legal: bool, scores: dict[str, float]) -> None:
+    for table, key in keys:
+        cell = out[table][key]
+        for name in READOUTS:
+            cell[name][0].append(legal)
+            cell[name][1].append(scores[name])
+
+
 def breakdowns(chosen, readings) -> dict[str, dict]:
     """``{"family" | "restriction": {key: {readout: (labels, scores)}}}``."""
-    out: dict[str, dict] = {"family": defaultdict(lambda: {r: ([], []) for r in READOUTS}),
-                            "restriction": defaultdict(
-                                lambda: {r: ([], []) for r in READOUTS})}
-    for row, (record, restriction, items) in enumerate(chosen):
+    out: dict[str, dict] = {"family": defaultdict(_new_cell),
+                            "restriction": defaultdict(_new_cell)}
+    for row, (_, restriction, items) in enumerate(chosen):
         for entity, legal in items:
-            if any(entity not in readings[name][row] for name in READOUTS):
-                continue
-            for table, key in (("family", family(restriction)),
-                               ("restriction", masked(restriction))):
-                for name in READOUTS:
-                    out[table][key][name][0].append(legal)
-                    out[table][key][name][1].append(readings[name][row][entity])
+            scores = _scores_at(readings, row, entity)
+            if scores is not None:
+                keys = (("family", family(restriction)),
+                        ("restriction", masked(restriction)))
+                _add_item(out, keys, legal, scores)
     return out
+
+
+def _legal_on_battlefield(record, entity: str, legal: bool) -> bool:
+    if not legal:
+        return False
+    target = record.state.entity(entity)
+    return target is not None and target.zone == "battlefield"
 
 
 def flip_items(chosen) -> list[tuple[str, str, object, object]]:
@@ -180,13 +240,66 @@ def flip_items(chosen) -> list[tuple[str, str, object, object]]:
     out = []
     for record, restriction, items in chosen:
         flip = flip_for(restriction)
-        if flip is None:
-            continue
-        for entity, legal in items:
-            target = record.state.entity(entity)
-            if legal and target is not None and target.zone == "battlefield":
-                out.append((flip, entity, record, flipped(record, entity, flip)))
+        if flip is not None:
+            out += [(flip, entity, record, flipped(record, entity, flip))
+                    for entity, legal in items if _legal_on_battlefield(record, entity, legal)]
     return out
+
+
+# ── the report ──────────────────────────────────────────────────────────
+
+
+def _largest_first(table):
+    return sorted(table.items(), key=lambda kv: -len(kv[1][READOUTS[0]][0]))
+
+
+def _aucs(by_readout) -> list[str]:
+    return [f"{common.auc(*by_readout[name]):.3f}" for name in READOUTS]
+
+
+def _enough_of_both(cell, min_each: int) -> bool:
+    legal = sum(cell[READOUTS[0]][0])
+    return min_each <= legal <= len(cell[READOUTS[0]][0]) - min_each
+
+
+def _print_by_family(tables) -> None:
+    print("\nby family")
+    print_table(["family", "items", "legal", "AUC, target_legal", "AUC, gate"],
+                [[key, len(cell[READOUTS[0]][0]), sum(cell[READOUTS[0]][0]), *_aucs(cell)]
+                 for key, cell in _largest_first(tables["family"])], "lrrrr")
+
+
+def _print_by_restriction(tables, min_each: int) -> None:
+    print("\nby restriction")
+    print_table(["restriction", "family", "items", "legal", "AUC, target_legal", "AUC, gate"],
+                [[f"`{key}`", family(key), len(cell[READOUTS[0]][0]),
+                  sum(cell[READOUTS[0]][0]), *_aucs(cell)]
+                 for key, cell in _largest_first(tables["restriction"])
+                 if _enough_of_both(cell, min_each)], "llrrrr")
+
+
+def _flip_readings(probe_model, chosen, readings) -> dict:
+    """``{flip: ([before], [after])}`` of predicted ``target_legal`` per flipped target."""
+    flips = defaultdict(lambda: ([], []))
+    index = flip_items(chosen)
+    after = common.predict_all(probe_model, [row[3] for row in index],
+                               readout.at_every_entity("target_legal"))
+    before_of = {c[0].record_id: reading for c, reading in zip(chosen, readings["target_legal"])}
+    for (flip, entity, record, _), a in zip(index, after):
+        b = before_of[record.record_id]
+        if entity in b and entity in a:
+            flips[flip][0].append(b[entity])
+            flips[flip][1].append(a[entity])
+    return flips
+
+
+def _print_flips(flips) -> None:
+    print("\ncounterfactual flips: a legal target changed so the restriction fails "
+          "(rule: legal -> illegal), predicted target_legal")
+    print_table(["flip", "targets", "predicted legal before", "after"],
+                [[flip, len(b), f"{np.mean(b):.3f}", f"{np.mean(a):.3f}"]
+                 for flip, (b, a) in sorted(flips.items(), key=lambda kv: -len(kv[1][0]))],
+                "lrrr")
 
 
 def main() -> None:
@@ -205,41 +318,9 @@ def main() -> None:
     readings = read_items(probe_model, [c[0] for c in chosen])
     tables = breakdowns(chosen, readings)
 
-    def largest_first(table):
-        return sorted(table.items(), key=lambda kv: -len(kv[1][READOUTS[0]][0]))
-
-    def aucs(by_readout) -> list[str]:
-        return [f"{common.auc(*by_readout[name]):.3f}" for name in READOUTS]
-
-    print("\nby family")
-    print_table(["family", "items", "legal", "AUC, target_legal", "AUC, gate"],
-                [[key, len(cell[READOUTS[0]][0]), sum(cell[READOUTS[0]][0]), *aucs(cell)]
-                 for key, cell in largest_first(tables["family"])], "lrrrr")
-
-    print("\nby restriction")
-    print_table(["restriction", "family", "items", "legal", "AUC, target_legal", "AUC, gate"],
-                [[f"`{key}`", family(key), len(cell[READOUTS[0]][0]),
-                  sum(cell[READOUTS[0]][0]), *aucs(cell)]
-                 for key, cell in largest_first(tables["restriction"])
-                 if args.min_each <= sum(cell[READOUTS[0]][0])
-                 <= len(cell[READOUTS[0]][0]) - args.min_each], "llrrrr")
-
-    flips = defaultdict(lambda: ([], []))
-    index = flip_items(chosen)
-    after = common.predict_all(probe_model, [row[3] for row in index],
-                               readout.at_every_entity("target_legal"))
-    before_of = {c[0].record_id: reading for c, reading in zip(chosen, readings["target_legal"])}
-    for (flip, entity, record, _), a in zip(index, after):
-        b = before_of[record.record_id]
-        if entity in b and entity in a:
-            flips[flip][0].append(b[entity])
-            flips[flip][1].append(a[entity])
-    print("\ncounterfactual flips: a legal target changed so the restriction fails "
-          "(rule: legal -> illegal), predicted target_legal")
-    print_table(["flip", "targets", "predicted legal before", "after"],
-                [[flip, len(b), f"{np.mean(b):.3f}", f"{np.mean(a):.3f}"]
-                 for flip, (b, a) in sorted(flips.items(), key=lambda kv: -len(kv[1][0]))],
-                "lrrr")
+    _print_by_family(tables)
+    _print_by_restriction(tables, args.min_each)
+    _print_flips(_flip_readings(probe_model, chosen, readings))
 
 
 if __name__ == "__main__":
