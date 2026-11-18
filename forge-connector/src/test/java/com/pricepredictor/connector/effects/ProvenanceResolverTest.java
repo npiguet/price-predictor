@@ -171,6 +171,7 @@ class ProvenanceResolverTest {
             ProvenanceKey key = ProvenanceResolver.of(wrapped);
 
             assertNotNull(key, "wrapped trigger " + i + " must key");
+            // A wrapped trigger keys to its trigger line, not to a spell.
             assertKeyedTo(key, "cardsfolder/p/paralyze.txt", TraitKind.TRIGGER, i);
         }
     }
