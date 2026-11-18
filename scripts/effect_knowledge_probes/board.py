@@ -47,6 +47,10 @@ SHARDS_PER_STRATUM = 200
 UNLISTED_KINDS = frozenset({"static", "trigger", "replacement"})
 
 
+def _unlisted(line) -> bool:
+    return line.kind in UNLISTED_KINDS and not line.granted and line.in_force
+
+
 def unlisted_kinds(entity) -> frozenset[str]:
     """The non-keyword static, trigger and replacement lines on ``entity``'s face.
 
@@ -54,9 +58,7 @@ def unlisted_kinds(entity) -> frozenset[str]:
     line is left out whatever trait it folds in, because the keyword flags
     already carry it.
     """
-    return frozenset(line.kind for line in entity.lines
-                     if line.kind in UNLISTED_KINDS and not line.granted
-                     and line.in_force)
+    return frozenset(line.kind for line in entity.lines if _unlisted(line))
 
 
 def _keyword_static(keys, sidecars) -> bool | None:
@@ -68,33 +70,42 @@ def _keyword_static(keys, sidecars) -> bool | None:
     return None
 
 
+def _legality_subset(record, sidecars) -> str | None:
+    """The subset of an attackers or blockers record, or None."""
+    forbidden = record.payload.forbidden
+    if not forbidden:
+        return "legality-none"
+    verdicts = [_keyword_static(entry.responsible_static, sidecars)
+                for entry in forbidden if entry.responsible_static]
+    if any(verdict is False for verdict in verdicts):
+        return "legality-static"
+    if verdicts and all(verdict is True for verdict in verdicts):
+        return "legality-keyword"
+    return None
+
+
+def _resolution_subset(record) -> str | None:
+    """The subset of a resolution half by the lines on the battlefield's other permanents."""
+    source = record.state.refs.source
+    kinds = frozenset().union(*(
+        unlisted_kinds(entity) for entity in record.state.entities
+        if entity.zone == "battlefield" and entity.id != source))
+    if "replacement" in kinds:
+        return "resolution-replacement"
+    if "static" in kinds:
+        return "resolution-static"
+    return None if kinds else "resolution-none"
+
+
 def subset_of(record, sidecars) -> str | None:
     """The subset ``record`` belongs to, or None."""
     from effects.domain.records import Moment, PlayabilitySubkind, RecordKind
 
     if record.kind is RecordKind.PLAYABILITY and record.subkind in (
             PlayabilitySubkind.ATTACKERS, PlayabilitySubkind.BLOCKERS):
-        verdicts = [_keyword_static(entry.responsible_static, sidecars)
-                    for entry in record.payload.forbidden if entry.responsible_static]
-        if not record.payload.forbidden:
-            return "legality-none"
-        if any(verdict is False for verdict in verdicts):
-            return "legality-static"
-        if verdicts and all(verdict is True for verdict in verdicts):
-            return "legality-keyword"
-        return None
+        return _legality_subset(record, sidecars)
     if record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION:
-        source = record.state.refs.source
-        kinds: set[str] = set()
-        for entity in record.state.entities:
-            if entity.zone == "battlefield" and entity.id != source:
-                kinds |= unlisted_kinds(entity)
-        if "replacement" in kinds:
-            return "resolution-replacement"
-        if "static" in kinds:
-            return "resolution-static"
-        if not kinds:
-            return "resolution-none"
+        return _resolution_subset(record)
     return None
 
 
@@ -103,12 +114,22 @@ def collect(records: Iterable, sidecars, *, per_subset: int = RECORDS_PER_SUBSET
     """The first ``per_subset`` records of each subset, in the order read."""
     chosen: dict[str, list] = {name: [] for name in SUBSETS}
     for record in records:
-        name = subset_of(record, sidecars)
-        if name is not None and len(chosen[name]) < per_subset:
-            chosen[name].append(record)
-            if all(len(rows) >= per_subset for rows in chosen.values()):
-                break
+        if _add(chosen, record, sidecars, per_subset) and _full(chosen, per_subset):
+            break
     return chosen
+
+
+def _add(chosen: dict[str, list], record, sidecars, per_subset: int) -> bool:
+    """File ``record`` under its subset unless that is full; whether it was filed."""
+    name = subset_of(record, sidecars)
+    if name is None or len(chosen[name]) >= per_subset:
+        return False
+    chosen[name].append(record)
+    return True
+
+
+def _full(chosen: dict[str, list], per_subset: int) -> bool:
+    return all(len(rows) >= per_subset for rows in chosen.values())
 
 
 def run(probe_model, chosen: Mapping[str, Mapping[str, list]], stats) -> dict:
@@ -127,32 +148,6 @@ def run(probe_model, chosen: Mapping[str, Mapping[str, list]], stats) -> dict:
 
 def table(result: Mapping[str, dict]) -> str:
     """Per field, each subset's loss and the cost of noise in the card slots."""
-    from math import isnan
+    from effect_knowledge_probes.board_table import render
 
-    from _lib.markdown import md_table
-
-    from effect_knowledge_probes.common import fmt
-
-    def shown(values) -> bool:
-        """A row is worth a line when some subset measured more than rounding."""
-        return any(v is not None and not isnan(v) and abs(v) >= 0.0005 for v in values)
-
-    present = [name for name in SUBSETS if result.get(name, {}).get("ablation")]
-    fields = sorted({field for name in present for field in result[name]["ablation"]})
-    lines = ["# Board abilities", "",
-             "Records per subset: " + ", ".join(
-                 f"{name} {sum(result[name]['n'].values())}" for name in SUBSETS
-                 if name in result) + ".", "",
-             "## Loss per field", ""]
-
-    def per_field(value_of) -> str:
-        rows = [[field, *(value_of(result[name]["ablation"].get(field, {}))
-                          for name in present)] for field in fields]
-        return md_table(["field", *present],
-                        [[row[0], *map(fmt, row[1:])] for row in rows if shown(row[1:])],
-                        "l" + "r" * len(present))
-
-    lines += [per_field(lambda entry: entry.get("base_loss")),
-              "", "## Loss increase with noise in the card slots", "",
-              per_field(lambda entry: entry.get("noise", {}).get("cards"))]
-    return "\n".join(lines) + "\n"
+    return render(result)

@@ -15,6 +15,15 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
+from typing import TypedDict, Unpack
+
+
+def _first_seen(rows: Iterable, seen: set[str]) -> Iterator:
+    """``rows`` less those whose record id ``seen`` already holds, adding the rest to it."""
+    for record in rows:
+        if record.record_id not in seen:
+            seen.add(record.record_id)
+            yield record
 
 
 def records(directories: Iterable[Path], *, shards: int | None = None,
@@ -32,32 +41,36 @@ def records(directories: Iterable[Path], *, shards: int | None = None,
         chosen = iter_shards(Path(directory))[:shards]
         require_generation(chosen)
         for shard in chosen:
-            for record in read_shard(shard):
-                if distinct:
-                    if record.record_id in seen:
-                        continue
-                    seen.add(record.record_id)
-                yield record
+            rows = read_shard(shard)
+            yield from _first_seen(rows, seen) if distinct else rows
+
+
+class WalkLimits(TypedDict, total=False):
+    """The keyword limits of ``qualifying``."""
+
+    #: At most this many qualifying records from one game; None takes every one.
+    per_game: int | None
+    #: The shards read per directory.
+    shards: int | None
 
 
 def qualifying(
     directories: Iterable[Path],
     choose: Callable[[object], object | None],
     count: int,
-    *,
-    per_game: int | None = 1,
-    shards: int | None = None,
+    **limits: Unpack[WalkLimits],
 ) -> list:
     """The first ``count`` non-None ``choose(record)`` values, at most ``per_game`` a game.
 
     ``choose`` returns what to keep for a qualifying record — the record
     itself, or the record with what made it qualify — and None for one that
     does not. ``shards`` bounds the shards read per directory; ``per_game``
-    None takes every qualifying record of a game.
+    (1 by default) None takes every qualifying record of a game.
     """
+    per_game = limits.get("per_game", 1)
     chosen: list = []
     per: Counter[str] = Counter()
-    for record in records(directories, shards=shards):
+    for record in records(directories, shards=limits.get("shards")):
         if per_game is not None and per[record.game_id] >= per_game:
             continue
         found = choose(record)
