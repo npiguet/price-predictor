@@ -70,6 +70,28 @@ class ConvertMainTest {
         }
     }
 
+    private void assertEndedWith(Ended ended, ExitCode code, String stderrFragment) {
+        assertEquals(code, ended.exit().code());
+        assertTrue(ended.stderr().contains(stderrFragment), ended.stderr());
+    }
+
+    private void assertBoltConverted() {
+        assertTrue(Files.isRegularFile(output.resolve("l/lightning_bolt.txt")));
+    }
+
+    private void assertNothingConvertedFor(String stem) {
+        assertFalse(Files.exists(output.resolve(stem + ".txt")));
+        assertFalse(Files.exists(output.resolve(stem + ".provenance.json")));
+    }
+
+    private Path writeConvertedOldCard() throws IOException {
+        Path old = output.resolve("o/old_card.txt");
+        Files.createDirectories(old.getParent());
+        Files.writeString(old, "old");
+        Files.writeString(old.resolveSibling("old_card.provenance.json"), "{}");
+        return old;
+    }
+
     @Test
     void aBatchWithAFailingScriptExitsNonZeroNamingItAndLeavesNoFileForIt() throws IOException {
         sourceWithBolt();
@@ -78,12 +100,10 @@ class ConvertMainTest {
 
         Ended ended = run(args());
 
-        assertEquals(ExitCode.FAILURE, ended.exit().code());
-        assertTrue(ended.stderr().contains("1 of 2"), ended.stderr());
+        assertEndedWith(ended, ExitCode.FAILURE, "1 of 2");
         assertTrue(ended.stderr().contains("malformed_card"), ended.stderr());
-        assertTrue(Files.isRegularFile(output.resolve("l/lightning_bolt.txt")));
-        assertFalse(Files.exists(output.resolve("m/malformed_card.txt")));
-        assertFalse(Files.exists(output.resolve("m/malformed_card.provenance.json")));
+        assertBoltConverted();
+        assertNothingConvertedFor("m/malformed_card");
     }
 
     @Test
@@ -92,24 +112,20 @@ class ConvertMainTest {
 
         ConvertMain.work(args());
 
-        assertTrue(Files.isRegularFile(output.resolve("l/lightning_bolt.txt")));
+        assertBoltConverted();
         assertTrue(Files.isRegularFile(output.resolve("l/lightning_bolt.provenance.json")));
     }
 
     @Test
     void aTreeHoldingConvertedFilesIsRefusedWithoutReplace() throws IOException {
         sourceWithBolt();
-        Path old = output.resolve("o/old_card.txt");
-        Files.createDirectories(old.getParent());
-        Files.writeString(old, "old");
-        Files.writeString(old.resolveSibling("old_card.provenance.json"), "{}");
+        Path old = writeConvertedOldCard();
 
         Ended ended = run(args());
 
-        assertEquals(ExitCode.BAD_CONFIG, ended.exit().code());
-        assertTrue(ended.stderr().contains("--replace"), ended.stderr());
+        assertEndedWith(ended, ExitCode.BAD_CONFIG, "--replace");
         assertEquals("old", Files.readString(old));
-        assertFalse(Files.exists(output.resolve("l/lightning_bolt.txt")));
+        assertNothingConvertedFor("l/lightning_bolt");
     }
 
     /**
@@ -131,7 +147,7 @@ class ConvertMainTest {
         ConvertMain.work(args("--replace"));
 
         assertFalse(Files.exists(output.resolve("s")), "the emptied directory is removed");
-        assertTrue(Files.isRegularFile(output.resolve("l/lightning_bolt.txt")));
+        assertBoltConverted();
         assertEquals("{}", Files.readString(manifest));
         assertArrayEquals("keep me".getBytes(StandardCharsets.UTF_8), Files.readAllBytes(sibling));
     }
@@ -143,8 +159,7 @@ class ConvertMainTest {
 
         Ended ended = run(args("--replace"));
 
-        assertEquals(ExitCode.BAD_CONFIG, ended.exit().code());
-        assertTrue(ended.stderr().contains(output.toString()), ended.stderr());
+        assertEndedWith(ended, ExitCode.BAD_CONFIG, output.toString());
     }
 
     @Test
@@ -166,17 +181,13 @@ class ConvertMainTest {
 
         Ended ended = run(args("--replace"));
 
-        assertEquals(ExitCode.BAD_CONFIG, ended.exit().code());
-        assertTrue(ended.stderr().contains("repository"), ended.stderr());
+        assertEndedWith(ended, ExitCode.BAD_CONFIG, "repository");
     }
 
     @Test
     void aMissingHookEndsTheRunBeforeAnyTreeIsSwept() throws Exception {
         sourceWithBolt();
-        Path old = output.resolve("o/old_card.txt");
-        Files.createDirectories(old.getParent());
-        Files.writeString(old, "old");
-        Files.writeString(old.resolveSibling("old_card.provenance.json"), "{}");
+        Path old = writeConvertedOldCard();
 
         IllegalStateException e = assertThrows(IllegalStateException.class, () -> ConvertMain.work(
                 args("--replace"), () -> CopiedFaces.requireHook(null)));

@@ -486,11 +486,7 @@ class ProvenanceSidecarTest {
         Converted converted = convert("b/blast_from_the_past.txt");
         CardState state = TestCards.build("Blast from the Past").getCurrentState();
 
-        Map<String, Integer> sharedOrdinal = new LinkedHashMap<>();
-        for (KeywordInterface keyword : state.getIntrinsicKeywords()) {
-            sharedOrdinal.put(keyword.getOriginal(),
-                    FaceOrder.keywordIndex(state, keyword));
-        }
+        Map<String, Integer> sharedOrdinal = sharedKeywordOrdinals(state);
         assertEquals(5, sharedOrdinal.size(),
                 "Blast from the Past prints five keywords");
 
@@ -501,22 +497,42 @@ class ProvenanceSidecarTest {
             if (!"Keyword".equals(line.script().apiType())) continue;
             Integer expected = sharedOrdinal.get(line.script().scriptText());
             if (expected == null) continue;
-            for (ProvenanceKey key : line.provenance()) {
-                if (!TraitKind.KEYWORD.equals(key.traitKind())) continue;
-                compared++;
-                assertEquals(expected, key.indexWithinKind(),
-                        "the sidecar numbered \"" + line.script().scriptText()
-                                + "\" as keyword@" + key.indexWithinKind()
-                                + " but FaceOrder.keywordIndex says keyword@"
-                                + expected + ". FaceParser.parseKeywords must compute"
-                                + " the ordinal with FaceOrder.keywordIndex("
-                                + "card.getCurrentState(), ki) rather than with a"
-                                + " running counter over card.getKeywords(), or"
-                                + " every keyword record in the next corpus names"
-                                + " a key the sidecar does not contain.");
-            }
+            compared += assertKeywordKeysNumberedAs(line, expected);
         }
         assertTrue(compared > 0, "no keyword line was compared");
+    }
+
+    private static Map<String, Integer> sharedKeywordOrdinals(CardState state) {
+        Map<String, Integer> sharedOrdinal = new LinkedHashMap<>();
+        for (KeywordInterface keyword : state.getIntrinsicKeywords()) {
+            sharedOrdinal.put(keyword.getOriginal(),
+                    FaceOrder.keywordIndex(state, keyword));
+        }
+        return sharedOrdinal;
+    }
+
+    /** Asserts each keyword key of the line carries the ordinal; returns how many it compared. */
+    private static int assertKeywordKeysNumberedAs(ProvenanceSidecar.Line line, Integer expected) {
+        int compared = 0;
+        for (ProvenanceKey key : line.provenance()) {
+            if (!TraitKind.KEYWORD.equals(key.traitKind())) continue;
+            compared++;
+            assertEquals(expected, key.indexWithinKind(), keywordOrdinalMismatch(line, key, expected));
+        }
+        return compared;
+    }
+
+    private static String keywordOrdinalMismatch(ProvenanceSidecar.Line line, ProvenanceKey key,
+                                                 Integer expected) {
+        return "the sidecar numbered \"" + line.script().scriptText()
+                + "\" as keyword@" + key.indexWithinKind()
+                + " but FaceOrder.keywordIndex says keyword@"
+                + expected + ". FaceParser.parseKeywords must compute"
+                + " the ordinal with FaceOrder.keywordIndex("
+                + "card.getCurrentState(), ki) rather than with a"
+                + " running counter over card.getKeywords(), or"
+                + " every keyword record in the next corpus names"
+                + " a key the sidecar does not contain.";
     }
 
     @Test

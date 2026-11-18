@@ -38,11 +38,11 @@ class TraitScriptChainTest {
         return new Converted(converted.texts(), converted.sidecar(), parser.missingSVars());
     }
 
-    private static Converted convertInline(String relativePath, String script) {
+    private static Converted convertInline(String relativePath, List<String> scriptLines) {
         RulesParser parser = new RulesParser();
         String scriptFile = new ScriptFile(SourceTree.CARDSFOLDER, relativePath).key();
         RulesParser.ParsedCard parsed =
-                parser.parseScript(List.of(script.split("\n")), scriptFile);
+                parser.parseScript(scriptLines, scriptFile);
         return converted(parsed, scriptFile, parser);
     }
 
@@ -52,15 +52,74 @@ class TraitScriptChainTest {
         return new Converted(converted.texts(), converted.sidecar(), parser.missingSVars());
     }
 
-    private static List<ProvenanceSidecar.Line> linesOfKind(Converted converted, String kind) {
-        return converted.sidecar().lines().stream()
-                .filter(line -> line.lineKind().equals(kind)).toList();
+    /** The {@code line_kind} values the sidecar's lines carry. */
+    private enum LineKind {
+        SPELL, TRIGGERED, REPLACEMENT, OPTION, STATIC;
+
+        final String label = name().toLowerCase(java.util.Locale.ROOT);
     }
 
-    private static ProvenanceSidecar.Line onlyLineOfKind(Converted converted, String kind) {
+    private static List<ProvenanceSidecar.Line> linesOfKind(Converted converted, LineKind kind) {
+        return converted.sidecar().lines().stream()
+                .filter(line -> line.lineKind().equals(kind.label)).toList();
+    }
+
+    private static ProvenanceSidecar.Line onlyLineOfKind(Converted converted, LineKind kind) {
         List<ProvenanceSidecar.Line> lines = linesOfKind(converted, kind);
-        assertEquals(1, lines.size(), kind + " lines in " + converted.lines());
+        assertEquals(1, lines.size(), kind.label + " lines in " + converted.lines());
         return lines.get(0);
+    }
+
+    /** What a fragment of a script text should count, and why that is the right count. */
+    private record Occurs(String fragment, int times, String why) {
+    }
+
+    /** A script text under assertion; each check returns it, so a test chains them. */
+    private record Chain(String text) {
+
+        Chain startsWith(String prefix) {
+            assertTrue(text.startsWith(prefix), text);
+            return this;
+        }
+
+        Chain endsWith(String suffix) {
+            assertTrue(text.endsWith(suffix), text);
+            return this;
+        }
+
+        Chain hasAll(List<String> fragments) {
+            for (String fragment : fragments) {
+                assertTrue(text.contains(fragment), text);
+            }
+            return this;
+        }
+
+        Chain lacksAll(List<String> fragments) {
+            for (String fragment : fragments) {
+                assertFalse(text.contains(fragment), text);
+            }
+            return this;
+        }
+
+        Chain lacksLabels(List<String> labels) {
+            for (String label : labels) {
+                assertFalse(text.contains(label), "no author label survives: " + text);
+            }
+            return this;
+        }
+
+        Chain segments(int expected) {
+            assertEquals(expected, RecordLines.count(text, "[SEG]"), text);
+            return this;
+        }
+
+        Chain counts(List<Occurs> expected) {
+            for (Occurs occurs : expected) {
+                assertEquals(occurs.times(), RecordLines.count(text, occurs.fragment()),
+                        occurs.why() + ": " + text);
+            }
+            return this;
+        }
     }
 
     // ── Story 1, scenario 1: a trigger's Execute and its SubAbility chain ──
@@ -68,24 +127,28 @@ class TraitScriptChainTest {
     @Test
     void aTriggersChainFollowsExecuteThenEachSubAbility() {
         Converted vestige = convert("a/anticausal_vestige.txt");
-        String text = onlyLineOfKind(vestige, "triggered").script().scriptText();
+        String text = onlyLineOfKind(vestige, LineKind.TRIGGERED).script().scriptText();
 
-        assertTrue(text.startsWith("Execute$ SV1 | Mode$ ChangesZone | "), text);
-        assertTrue(text.contains(" [SEG] SV1: DB$ Draw | SubAbility$ SV2 [SEG] SV2: "), text);
-        assertTrue(text.contains("SV2: ") && text.contains("DB$ ChangeZone"), text);
-        assertEquals(2, RecordLines.count(text, "[SEG]"), text);
-        assertFalse(text.contains("TrigDraw") || text.contains("DBChangeZone"),
-                "no author label survives: " + text);
+        new Chain(text)
+                .startsWith("Execute$ SV1 | Mode$ ChangesZone | ")
+                .hasAll(List.of(" [SEG] SV1: DB$ Draw | SubAbility$ SV2 [SEG] SV2: ",
+                        "SV2: ", "DB$ ChangeZone"))
+                .segments(2)
+                .lacksLabels(List.of("TrigDraw", "DBChangeZone"));
     }
 
     @Test
     void theRootSegmentKeepsItsParameterKeysAndApiType() {
         Converted vestige = convert("a/anticausal_vestige.txt");
-        TraitScript script = onlyLineOfKind(vestige, "triggered").script();
+        TraitScript script = onlyLineOfKind(vestige, LineKind.TRIGGERED).script();
 
         assertEquals(List.of("Execute", "Mode", "Origin", "TriggerDescription", "ValidCard"),
                 script.paramKeys(), "script_param_keys stay the root segment's keys");
         assertEquals("Draw", script.apiType());
+        assertSoleSubAbilityLabelIsTheAuthors(script);
+    }
+
+    private static void assertSoleSubAbilityLabelIsTheAuthors(TraitScript script) {
         assertEquals(1, script.subAbilityLinks().size());
         assertEquals("DBChangeZone", script.subAbilityLinks().get(0).label(),
                 "sub_ability_links keep the author's label: attributed_to reads it");
@@ -96,7 +159,7 @@ class TraitScriptChainTest {
     @Test
     void aCharmRootIsItsOwnSegmentWithRenamedChoicesAndNoModeInlined() {
         Converted cryptic = convert("c/cryptic_command.txt");
-        ProvenanceSidecar.Line root = onlyLineOfKind(cryptic, "spell");
+        ProvenanceSidecar.Line root = onlyLineOfKind(cryptic, LineKind.SPELL);
 
         assertEquals("CharmNum$ 2 | Choices$ SV1,SV2,SV3,SV4 | SP$ Charm",
                 root.script().scriptText());
@@ -109,7 +172,7 @@ class TraitScriptChainTest {
     @Test
     void eachCharmModeLineCarriesItsKeyItsChainAndItsOwnApiType() {
         Converted cryptic = convert("c/cryptic_command.txt");
-        List<ProvenanceSidecar.Line> options = linesOfKind(cryptic, "option");
+        List<ProvenanceSidecar.Line> options = linesOfKind(cryptic, LineKind.OPTION);
         assertEquals(4, options.size());
         List<String> apis = List.of("Counter", "ChangeZone", "TapAll", "Draw");
 
@@ -129,7 +192,7 @@ class TraitScriptChainTest {
     @Test
     void aModeKeySpellsItsOptionMemberAfterTheIndex() {
         Converted cryptic = convert("c/cryptic_command.txt");
-        ProvenanceKey third = linesOfKind(cryptic, "option").get(2).provenance().get(0);
+        ProvenanceKey third = linesOfKind(cryptic, LineKind.OPTION).get(2).provenance().get(0);
 
         assertEquals("{\"face\":0,\"trait_kind\":\"spell\",\"index_within_kind\":0,\"option\":2}",
                 third.toSidecarJson());
@@ -138,8 +201,8 @@ class TraitScriptChainTest {
     @Test
     void optionLinesFollowTheirRootInChoicesOrder() {
         Converted cryptic = convert("c/cryptic_command.txt");
-        ProvenanceSidecar.Line root = onlyLineOfKind(cryptic, "spell");
-        List<ProvenanceSidecar.Line> options = linesOfKind(cryptic, "option");
+        ProvenanceSidecar.Line root = onlyLineOfKind(cryptic, LineKind.SPELL);
+        List<ProvenanceSidecar.Line> options = linesOfKind(cryptic, LineKind.OPTION);
 
         for (int i = 0; i < options.size(); i++) {
             assertEquals(root.lineIndex() + 1 + i, options.get(i).lineIndex());
@@ -151,13 +214,13 @@ class TraitScriptChainTest {
     @Test
     void aReplacementsChainFollowsReplaceWithThenItsSubAbility() {
         Converted leader = convert("l/leader_super_genius.txt");
-        TraitScript script = onlyLineOfKind(leader, "replacement").script();
+        TraitScript script = onlyLineOfKind(leader, LineKind.REPLACEMENT).script();
         String text = script.scriptText();
 
-        assertTrue(text.contains("ReplaceWith$ SV1"), text);
-        assertTrue(text.contains(" [SEG] SV1: DB$ Draw | SubAbility$ SV2 [SEG] SV2: DB$ Connive"),
-                text);
-        assertEquals(2, RecordLines.count(text, "[SEG]"), text);
+        new Chain(text)
+                .hasAll(List.of("ReplaceWith$ SV1",
+                        " [SEG] SV1: DB$ Draw | SubAbility$ SV2 [SEG] SV2: DB$ Connive"))
+                .segments(2);
         assertEquals("Draw", script.apiType(),
                 "a replacement's API type is its replacing ability's, no longer null");
     }
@@ -165,11 +228,9 @@ class TraitScriptChainTest {
     @Test
     void aReplacementWithoutASubAbilityHasOneReplacingSegment() {
         Converted swans = convert("s/swans_of_bryn_argoll.txt");
-        String text = onlyLineOfKind(swans, "replacement").script().scriptText();
+        String text = onlyLineOfKind(swans, LineKind.REPLACEMENT).script().scriptText();
 
-        assertTrue(text.contains("ReplaceWith$ SV1"), text);
-        assertTrue(text.contains(" [SEG] SV1: DB$ Draw"), text);
-        assertEquals(1, RecordLines.count(text, "[SEG]"), text);
+        new Chain(text).hasAll(List.of("ReplaceWith$ SV1", " [SEG] SV1: DB$ Draw")).segments(1);
     }
 
     // ── Story 1, scenario 12: label names never reach the text ───────────
@@ -178,18 +239,15 @@ class TraitScriptChainTest {
     void twoChainsDifferingOnlyInLabelNamesRenderTheSameText() {
         // The sub-ability's own SpellDescription is the second sentence of
         // the spell's one line, which carries the whole chain.
-        List<ProvenanceSidecar.Line> a = linesOfKind(convert("l/label_a.txt"), "spell");
-        List<ProvenanceSidecar.Line> b = linesOfKind(convert("l/label_b.txt"), "spell");
-        assertEquals(1, a.size());
-        assertEquals(1, b.size());
+        String textA = onlyLineOfKind(convert("l/label_a.txt"), LineKind.SPELL).script().scriptText();
+        String textB = onlyLineOfKind(convert("l/label_b.txt"), LineKind.SPELL).script().scriptText();
 
-        String textA = a.get(0).script().scriptText();
-        String textB = b.get(0).script().scriptText();
         assertEquals(textA, textB);
-        assertTrue(textA.contains("| SubAbility$ SV1 |"), textA);
-        assertTrue(textA.endsWith(" [SEG] SV1: DB$ Draw | Defined$ You | NumCards$ 1"
-                + " | SpellDescription$ Draw a card."), textA);
-        assertFalse(textA.contains("DBDraw"), textA);
+        new Chain(textA)
+                .hasAll(List.of("| SubAbility$ SV1 |"))
+                .endsWith(" [SEG] SV1: DB$ Draw | Defined$ You | NumCards$ 1"
+                        + " | SpellDescription$ Draw a card.")
+                .lacksAll(List.of("DBDraw"));
     }
 
     // ── FR-003: once per chain, and undefined labels reported ────────────
@@ -197,15 +255,17 @@ class TraitScriptChainTest {
     @Test
     void anSVarTwoBranchesShareIsEmittedOnceAndTheChainTerminates() {
         Converted loop = convert("r/repeat_loop.txt");
-        String text = onlyLineOfKind(loop, "spell").script().scriptText();
+        String text = onlyLineOfKind(loop, LineKind.SPELL).script().scriptText();
 
         // Root references DBDamage (SV1) then DBCleanup (SV2); DBDamage's
         // chain reaches DBCount (SV3), whose chain reaches DBCleanup again.
-        assertTrue(text.contains("RepeatSubAbility$ SV1"), text);
-        assertTrue(text.contains("| SubAbility$ SV2 [SEG] SV1: DB$ DealDamage"), text);
-        assertEquals(3, RecordLines.count(text, "[SEG]"), "three defined SVars, three segments: " + text);
-        assertEquals(1, RecordLines.count(text, "SV2: "), "DBCleanup rendered once: " + text);
-        assertEquals(2, RecordLines.count(text, "SubAbility$ SV2"), "but referenced twice: " + text);
+        new Chain(text)
+                .hasAll(List.of("RepeatSubAbility$ SV1",
+                        "| SubAbility$ SV2 [SEG] SV1: DB$ DealDamage"))
+                .counts(List.of(
+                        new Occurs("[SEG]", 3, "three defined SVars, three segments"),
+                        new Occurs("SV2: ", 1, "DBCleanup rendered once"),
+                        new Occurs("SubAbility$ SV2", 2, "but referenced twice")));
         assertTrue(text.indexOf("SV2: ") < text.indexOf("SV3: "),
                 "segments follow their reference order: " + text);
     }
@@ -213,23 +273,27 @@ class TraitScriptChainTest {
     @Test
     void anUndefinedSVarIsNumberedReportedAndLeftOut() {
         Converted undefined = convert("u/undefined_svar.txt");
-        ProvenanceSidecar.Line trigger = onlyLineOfKind(undefined, "triggered");
+        ProvenanceSidecar.Line trigger = onlyLineOfKind(undefined, LineKind.TRIGGERED);
         String text = trigger.script().scriptText();
 
-        assertTrue(text.contains(" [SEG] SV1: DB$ Draw | Defined$ You | NumCards$ 1 | SubAbility$ SV2"),
-                text);
+        new Chain(text)
+                .hasAll(List.of(" [SEG] SV1: DB$ Draw | Defined$ You | NumCards$ 1 | SubAbility$ SV2"))
+                .segments(1);
         assertFalse(text.contains("SV2: "), "the undefined segment is left out: " + text);
-        assertEquals(1, RecordLines.count(text, "[SEG]"), text);
 
         List<MissingSVarReport.Entry> entries = undefined.report().drain();
         assertEquals(1, entries.size(), entries.toString());
         MissingSVarReport.Entry entry = entries.get(0);
-        assertEquals("Undefined SVar", entry.card());
-        assertEquals("SubAbility", entry.parameter());
-        assertEquals("DBMissing", entry.label());
+        assertEntryNamesTheMissingLabel(entry);
         assertEquals(trigger.provenance().get(0), entry.line());
         assertEquals("Undefined SVar (cardsfolder/u/undefined_svar.txt) face0/trigger[0]:"
                 + " SubAbility$ DBMissing", entry.format());
+    }
+
+    private static void assertEntryNamesTheMissingLabel(MissingSVarReport.Entry entry) {
+        assertEquals("Undefined SVar", entry.card());
+        assertEquals("SubAbility", entry.parameter());
+        assertEquals("DBMissing", entry.label());
     }
 
     @Test
@@ -243,15 +307,14 @@ class TraitScriptChainTest {
     @Test
     void twoModesNamingOneSubAbilityEachCarryItInTheirOwnChain() {
         Converted lonely = convert("l/lonely_end.txt");
-        List<ProvenanceSidecar.Line> options = linesOfKind(lonely, "option");
+        List<ProvenanceSidecar.Line> options = linesOfKind(lonely, LineKind.OPTION);
         assertEquals(2, options.size());
 
         for (ProvenanceSidecar.Line option : options) {
             String text = option.script().scriptText();
-            assertTrue(text.contains("| SubAbility$ SV2"), text);
-            assertTrue(text.contains(" [SEG] SV2: "), text);
-            assertTrue(text.contains("DB$ GainLife"), text);
-            assertEquals(1, RecordLines.count(text, "[SEG]"), text);
+            new Chain(text)
+                    .hasAll(List.of("| SubAbility$ SV2", " [SEG] SV2: ", "DB$ GainLife"))
+                    .segments(1);
         }
     }
 
@@ -261,12 +324,12 @@ class TraitScriptChainTest {
         ProvenanceKey root = new ProvenanceKey(
                 "cardsfolder/d/doomsday_confluence.txt", 0, TraitKind.SPELL, 0);
 
-        List<ProvenanceSidecar.Line> roots = linesOfKind(doomsday, "spell");
+        List<ProvenanceSidecar.Line> roots = linesOfKind(doomsday, LineKind.SPELL);
         assertEquals(1, roots.size(), doomsday.lines().toString());
         assertEquals(List.of(root), roots.get(0).provenance());
         assertTrue(doomsday.sidecar().droppedKeys().isEmpty(),
                 doomsday.sidecar().droppedKeys().toString());
-        List<ProvenanceSidecar.Line> options = linesOfKind(doomsday, "option");
+        List<ProvenanceSidecar.Line> options = linesOfKind(doomsday, LineKind.OPTION);
         assertEquals(3, options.size());
         for (int i = 0; i < options.size(); i++) {
             assertEquals(List.of(root.withOption(i)), options.get(i).provenance());
@@ -278,7 +341,7 @@ class TraitScriptChainTest {
     @Test
     void aDieRollOutcomeLineKeysToNothingAndHasNoChain() {
         Converted sorcerer = convert("a/aberrant_mind_sorcerer.txt");
-        List<ProvenanceSidecar.Line> options = linesOfKind(sorcerer, "option");
+        List<ProvenanceSidecar.Line> options = linesOfKind(sorcerer, LineKind.OPTION);
         assertEquals(2, options.size(), sorcerer.lines().toString());
 
         for (ProvenanceSidecar.Line option : options) {
@@ -287,37 +350,41 @@ class TraitScriptChainTest {
             assertNull(option.script().apiType());
         }
         // The trigger line still chains through to the die roll itself.
-        String trigger = onlyLineOfKind(sorcerer, "triggered").script().scriptText();
+        String trigger = onlyLineOfKind(sorcerer, LineKind.TRIGGERED).script().scriptText();
         assertTrue(trigger.contains("DB$ RollDice"), trigger);
     }
 
     @Test
     void aTriggeredCharmChainsToTheCharmAndKeysItsModesToTheTrigger() {
         Converted grace = convert("a/abiding_grace.txt");
-        ProvenanceSidecar.Line trigger = onlyLineOfKind(grace, "triggered");
+        ProvenanceSidecar.Line trigger = onlyLineOfKind(grace, LineKind.TRIGGERED);
         String text = trigger.script().scriptText();
 
-        assertTrue(text.startsWith("Execute$ SV1 | Mode$ Phase"), text);
-        assertTrue(text.endsWith(" [SEG] SV1: Choices$ SV2,SV3 | DB$ Charm"),
-                "the charm names its modes and inlines none: " + text);
+        // The charm names its modes and inlines none.
+        new Chain(text)
+                .startsWith("Execute$ SV1 | Mode$ Phase")
+                .endsWith(" [SEG] SV1: Choices$ SV2,SV3 | DB$ Charm");
         ProvenanceKey root = new ProvenanceKey(
                 "cardsfolder/a/abiding_grace.txt", 0, TraitKind.TRIGGER, 0);
         assertEquals(List.of(root), trigger.provenance());
 
-        List<ProvenanceSidecar.Line> options = linesOfKind(grace, "option");
+        List<ProvenanceSidecar.Line> options = linesOfKind(grace, LineKind.OPTION);
         assertEquals(2, options.size());
-        assertEquals(List.of(root.withOption(0)), options.get(0).provenance());
-        assertEquals(List.of(root.withOption(1)), options.get(1).provenance());
-        assertEquals("GainLife", options.get(0).script().apiType());
-        assertEquals("ChangeZone", options.get(1).script().apiType());
-        assertTrue(options.get(1).script().scriptText().startsWith("SV1: "),
-                options.get(1).script().scriptText());
+        assertOptionKeyAndApi(options.get(0), root.withOption(0), "GainLife");
+        assertOptionKeyAndApi(options.get(1), root.withOption(1), "ChangeZone");
+        new Chain(options.get(1).script().scriptText()).startsWith("SV1: ");
+    }
+
+    private static void assertOptionKeyAndApi(ProvenanceSidecar.Line option, ProvenanceKey key,
+                                              String apiType) {
+        assertEquals(List.of(key), option.provenance());
+        assertEquals(apiType, option.script().apiType());
     }
 
     @Test
     void aChapterCharmKeysItsModesToTheChapterTrigger() {
         Converted saga = convert("l/life_of_toshiro_umezawa_memory_of_toshiro.txt");
-        List<ProvenanceSidecar.Line> options = linesOfKind(saga, "option");
+        List<ProvenanceSidecar.Line> options = linesOfKind(saga, LineKind.OPTION);
         assertEquals(3, options.size(), saga.lines().toString());
         List<String> apis = List.of("Pump", "Pump", "GainLife");
 
@@ -367,7 +434,7 @@ class TraitScriptChainTest {
         assertEquals(List.of(builtTrigger(file, 0), builtTrigger(file, 1)),
                 keysOfLine(saga, "chapter: I, II "));
         assertEquals(List.of(builtTrigger(file, 2)), keysOfLine(saga, "chapter: III "));
-        for (ProvenanceSidecar.Line option : linesOfKind(saga, "option")) {
+        for (ProvenanceSidecar.Line option : linesOfKind(saga, LineKind.OPTION)) {
             assertFalse(option.provenance().stream().anyMatch(
                     key -> builtTrigger(file, 2).equals(key.root())),
                     "chapter III has no modes: " + option.provenance());
@@ -378,7 +445,7 @@ class TraitScriptChainTest {
     @Test
     void aSagaOfThreeAbilitiesKeysOneTriggerToEachChapterLine() {
         Converted konda = convertInline("t/the_fall_of_lord_konda_fragment_of_konda.txt",
-                String.join("\n",
+                List.of(
                         "Name:The Fall of Lord Konda",
                         "ManaCost:2 W",
                         "Types:Enchantment Saga",
@@ -406,7 +473,7 @@ class TraitScriptChainTest {
      */
     @Test
     void aHauntingCreaturesTwoLinesEachCarryTheirOwnTriggers() {
-        Converted thrull = convertInline("a/absolver_thrull.txt", String.join("\n",
+        Converted thrull = convertInline("a/absolver_thrull.txt", List.of(
                 "Name:Absolver Thrull",
                 "ManaCost:3 W",
                 "Types:Creature Thrull Cleric",
@@ -425,7 +492,7 @@ class TraitScriptChainTest {
     /** A haunting sorcery: its spell line keeps the spell, the haunt lines the triggers. */
     @Test
     void aHauntingSpellsSpellLineCarriesTheSpellAlone() {
-        Converted moons = convertInline("b/benediction_of_moons.txt", String.join("\n",
+        Converted moons = convertInline("b/benediction_of_moons.txt", List.of(
                 "Name:Benediction of Moons",
                 "ManaCost:W",
                 "Types:Sorcery",
@@ -446,11 +513,11 @@ class TraitScriptChainTest {
     @Test
     void aPawprintCharmKeepsItsBudgetOnTheRootAndItsCostsOnTheModes() {
         Converted season = convert("s/season_of_gathering.txt");
-        String root = onlyLineOfKind(season, "spell").script().scriptText();
+        String root = onlyLineOfKind(season, LineKind.SPELL).script().scriptText();
 
         assertEquals("CanRepeatModes$ True | CharmNum$ 5 | Choices$ SV1,SV2,SV3"
                 + " | MinCharmNum$ 0 | Pawprint$ 5 | SP$ Charm", root);
-        List<ProvenanceSidecar.Line> options = linesOfKind(season, "option");
+        List<ProvenanceSidecar.Line> options = linesOfKind(season, LineKind.OPTION);
         assertEquals(3, options.size());
         assertTrue(options.get(0).script().scriptText().contains("Pawprint$ 1"),
                 options.get(0).script().scriptText());
@@ -463,7 +530,7 @@ class TraitScriptChainTest {
         // Season of Gathering's first mode is a PutCounter whose Choices$ is
         // the set of creatures to choose among, not a list of abilities.
         Converted season = convert("s/season_of_gathering.txt");
-        String mode = linesOfKind(season, "option").get(0).script().scriptText();
+        String mode = linesOfKind(season, LineKind.OPTION).get(0).script().scriptText();
 
         assertTrue(mode.contains("Choices$ Creature.YouCtrl"), mode);
         List<MissingSVarReport.Entry> left = season.report().drain();
@@ -475,13 +542,13 @@ class TraitScriptChainTest {
         // Season of Gathering's second mode is a GenericChoice: not a charm, so
         // its two choices are sub-abilities of the mode and follow it.
         Converted season = convert("s/season_of_gathering.txt");
-        String mode = linesOfKind(season, "option").get(1).script().scriptText();
+        String mode = linesOfKind(season, LineKind.OPTION).get(1).script().scriptText();
 
-        assertTrue(mode.startsWith("SV1: "), mode);
-        assertTrue(mode.contains("Choices$ SV2,SV3 | DB$ GenericChoice"), mode);
-        assertTrue(mode.contains(" [SEG] SV2: DB$ DestroyAll"), mode);
-        assertTrue(mode.contains(" [SEG] SV3: DB$ DestroyAll"), mode);
-        assertEquals(2, RecordLines.count(mode, "[SEG]"), mode);
+        new Chain(mode)
+                .startsWith("SV1: ")
+                .hasAll(List.of("Choices$ SV2,SV3 | DB$ GenericChoice",
+                        " [SEG] SV2: DB$ DestroyAll", " [SEG] SV3: DB$ DestroyAll"))
+                .segments(2);
     }
 
     @Test
@@ -489,12 +556,12 @@ class TraitScriptChainTest {
         // Blood on the Snow: a charm root with a SubAbility$ of its own, and
         // two modes that share one sub-ability.
         Converted blood = convert("b/blood_on_the_snow.txt");
-        String root = onlyLineOfKind(blood, "spell").script().scriptText();
+        String root = onlyLineOfKind(blood, LineKind.SPELL).script().scriptText();
 
         assertTrue(root.startsWith("Choices$ SV1,SV2 | SP$ Charm | SubAbility$ SV3 [SEG] SV3: "),
                 root);
         assertEquals(1, RecordLines.count(root, "[SEG]"), "the modes are not inlined: " + root);
-        for (ProvenanceSidecar.Line option : linesOfKind(blood, "option")) {
+        for (ProvenanceSidecar.Line option : linesOfKind(blood, LineKind.OPTION)) {
             assertTrue(option.script().scriptText().contains(" [SEG] SV2: "),
                     option.script().scriptText());
         }
@@ -516,7 +583,7 @@ class TraitScriptChainTest {
     @Test
     void aStaticAbilityIsOneSegmentWithItsModeAsApiType() {
         Converted anthem = convert("g/glorious_anthem.txt");
-        TraitScript script = onlyLineOfKind(anthem, "static").script();
+        TraitScript script = onlyLineOfKind(anthem, LineKind.STATIC).script();
 
         assertNotNull(script.scriptText());
         assertFalse(script.scriptText().contains("[SEG]"), script.scriptText());
@@ -541,7 +608,7 @@ class TraitScriptChainTest {
      */
     @Test
     void aModeLineCarriesTheModeUnderEveryTriggerItsCharmLineMerged() {
-        Converted appa = convertInline("a/appa_loyal_sky_bison.txt", String.join("\n",
+        Converted appa = convertInline("a/appa_loyal_sky_bison.txt", List.of(
                 "Name:Appa, Loyal Sky Bison",
                 "ManaCost:4 W W",
                 "Types:Legendary Creature Bison Ally",
@@ -553,7 +620,7 @@ class TraitScriptChainTest {
                 "SVar:DBPump:DB$ Pump | ValidTgts$ Creature.YouCtrl | KW$ Flying | SpellDescription$ Target creature you control gains flying until end of turn.",
                 "SVar:DBAirbend:DB$ Airbend | ValidTgts$ Permanent.Other+nonLand+YouCtrl | SpellDescription$ Airbend another target nonland permanent you control.",
                 "Oracle:Flying"));
-        List<ProvenanceSidecar.Line> options = linesOfKind(appa, "option");
+        List<ProvenanceSidecar.Line> options = linesOfKind(appa, LineKind.OPTION);
         assertEquals(2, options.size(), appa.lines().toString());
         for (int i = 0; i < options.size(); i++) {
             String file = "cardsfolder/a/appa_loyal_sky_bison.txt";
@@ -580,7 +647,7 @@ class TraitScriptChainTest {
     /** A coin flip's win and lose abilities are segments of its chain. */
     @Test
     void aCoinFlipsOutcomesAreSegmentsOfItsChain() {
-        Converted coin = convertInline("t/test_coin.txt", String.join("\n",
+        Converted coin = convertInline("t/test_coin.txt", List.of(
                 "Name:Test Coin",
                 "ManaCost:1 R",
                 "Types:Instant",
@@ -588,13 +655,13 @@ class TraitScriptChainTest {
                 "SVar:DBDraw:DB$ Draw | NumCards$ 1",
                 "SVar:DBDamage:DB$ DealDamage | Defined$ You | NumDmg$ 1",
                 "Oracle:Flip a coin."));
-        String text = onlyLineOfKind(coin, "spell").script().scriptText();
+        String text = onlyLineOfKind(coin, LineKind.SPELL).script().scriptText();
 
-        assertTrue(text.contains("LoseSubAbility$ SV") && text.contains("WinSubAbility$ SV"), text);
-        assertTrue(text.contains("DB$ Draw") && text.contains("DB$ DealDamage"), text);
-        assertEquals(2, RecordLines.count(text, "[SEG]"), text);
-        assertFalse(text.contains("DBDraw") || text.contains("DBDamage"),
-                "no author label survives: " + text);
+        new Chain(text)
+                .hasAll(List.of("LoseSubAbility$ SV", "WinSubAbility$ SV",
+                        "DB$ Draw", "DB$ DealDamage"))
+                .segments(2)
+                .lacksLabels(List.of("DBDraw", "DBDamage"));
         assertTrue(coin.report().drain().isEmpty(), "nothing is reported missing");
     }
 }
