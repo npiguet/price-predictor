@@ -12,6 +12,7 @@ from effects.infrastructure.shard_io import write_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 from effects.infrastructure.tokenizer_loading import load_keyword_definitions
 from price_predictor.infrastructure.tokenizer_store import save_vocabulary
+from tests.unit.effects.application.geometry_checks_support import _write_source
 from tests.unit.effects.builders import (
     FIXTURE_KEYWORD_DEFINITIONS,
     FIXTURE_TRAINING_SHARDS,
@@ -89,3 +90,22 @@ def fake_supervisor(monkeypatch):
         collector_connector.CollectorSupervisor, return_value=supervisor)
     monkeypatch.setattr(collector_connector, "CollectorSupervisor", supervisor.constructor)
     return supervisor
+
+
+@pytest.fixture
+def cache(tmp_path):
+    cards = tmp_path / "cardsfolder"
+    (cards / "s").mkdir(parents=True)
+    abilities = tmp_path / "abilities"
+    _write_source(
+        cards, abilities, "Serra Angel", "s/serra_angel",
+        ["Flying", "Vigilance"], [[1.0, 0.0], [0.0, 1.0]],
+        prose=["flying", "vigilance"],
+    )
+    _write_source(
+        cards, abilities, "Shock", "s/shock",
+        ["DealDamage | NumDmg$ 2"], [[0.7, 0.7]],
+        prose=["CARDNAME deals 2 damage to any target."],
+    )
+    return cards, abilities
+
