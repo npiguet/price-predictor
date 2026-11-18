@@ -133,21 +133,41 @@ def phase_holds(value: str | None, phase: str) -> bool | None:
 def static_holds(found: dict[str, str], facts: TurnFacts) -> bool | None:
     """Whether a static's turn or step condition holds under ``facts``; None
     where it states none, or one beyond whose turn and the step."""
-    answers = []
-    condition = found.get("Condition")
-    if condition is not None:
-        if condition not in _TURN_CONDITIONS:
-            return None
-        answers.append(facts.own_turn is _TURN_CONDITIONS[condition])
+    condition = _turn_condition(found.get("Condition"), facts.own_turn)
+    if condition is None:
+        return None
     turn = whose_turn_holds(found, facts.own_turn)
-    if turn is not None:
-        answers.append(turn)
-    if "Phases" in found:
-        held = phase_holds(found["Phases"], facts.phase)
-        if held is None:
-            return None
-        answers.append(held)
+    phases = _phase_condition(found, "Phases", facts.phase)
+    if phases is None:
+        return None
+    return _all_stated((*condition, *_stated(turn), *phases))
+
+
+def _stated(answer: bool | None) -> tuple[bool, ...]:
+    return () if answer is None else (answer,)
+
+
+def _all_stated(answers: tuple[bool, ...]) -> bool | None:
     return all(answers) if answers else None
+
+
+def _turn_condition(condition: str | None, own_turn: bool) -> tuple[bool, ...] | None:
+    """A static's ``Condition$`` answer: none where it states none, None where
+    it names a condition beyond whose turn it is."""
+    if condition is None:
+        return ()
+    if condition not in _TURN_CONDITIONS:
+        return None
+    return (own_turn is _TURN_CONDITIONS[condition],)
+
+
+def _phase_condition(found: dict[str, str], name: str, phase: str) -> tuple[bool, ...] | None:
+    """The step parameter ``name``'s answer: none where it is absent, None
+    where its steps are unknown."""
+    if name not in found:
+        return ()
+    held = phase_holds(found[name], phase)
+    return None if held is None else (held,)
 
 
 def clause_holds(found: dict[str, str], facts: TurnFacts) -> bool | None:
@@ -208,18 +228,34 @@ def resync_statics(record, lines):
     set to what the board makes it: the snapshot states that answer beside
     whose turn it is, and an edit to one must move the other."""
     edit = BoardEdit(record)
-    for entity in record.state.entities:
-        for line in entity.lines:
-            if line.active is None or not line.keys or line.kind != "static":
-                continue
-            sidecar = lines.line_or_none(line.keys[0])
-            if sidecar is None or not sidecar.script_text:
-                continue
-            held = static_holds(params(root(sidecar.script_text)),
-                                TurnFacts.of(record, entity.controller))
-            if held is not None and held != line.active:
-                edit = edit.set_line_active(entity.id, line.keys[0], held)
+    for entity, line in _flagged_statics(record):
+        held = _static_held(record, entity, line, lines)
+        if held is not None and held != line.active:
+            edit = edit.set_line_active(entity.id, line.keys[0], held)
     return edit.record
+
+
+def _is_flagged_static(line) -> bool:
+    """A keyed static line whose snapshot states whether it holds."""
+    return line.active is not None and bool(line.keys) and line.kind == "static"
+
+
+def _flagged_statics(record) -> list[tuple[object, object]]:
+    return [(entity, line) for entity in record.state.entities for line in entity.lines
+            if _is_flagged_static(line)]
+
+
+def _has_script(line) -> bool:
+    return line is not None and bool(line.script_text)
+
+
+def _static_held(record, entity, line, lines) -> bool | None:
+    """Whether ``entity``'s static ``line`` holds on ``record``'s board, by its script."""
+    sidecar = lines.line_or_none(line.keys[0])
+    if not _has_script(sidecar):
+        return None
+    return static_holds(params(root(sidecar.script_text)),
+                        TurnFacts.of(record, entity.controller))
 
 
 def _edits(record, lines, named_phases) -> list[tuple[str, object]]:
@@ -238,12 +274,19 @@ def _edits(record, lines, named_phases) -> list[tuple[str, object]]:
 # ── which records qualify ───────────────────────────────────────────────
 
 
-def _candidate(record):
+def _decision_payload(record):
+    """The payload of a decision record as collected, else None."""
     from effects.domain.records import PlayabilityDecisionPayload
 
     payload = record.payload
-    if (not isinstance(payload, PlayabilityDecisionPayload) or record.fork
-            or not payload.candidates):
+    if not isinstance(payload, PlayabilityDecisionPayload) or record.fork:
+        return None
+    return payload
+
+
+def _candidate(record):
+    payload = _decision_payload(record)
+    if payload is None or not payload.candidates:
         return None
     candidate = payload.candidates[0]
     if candidate.failed_checks is None or not candidate.ability:
@@ -261,28 +304,34 @@ def restriction_items(record, lines) -> list[ConditionItem]:
     if candidate is None:
         return []
     line = lines.first_line(candidate.ability)
-    if line is None or not line.script_text:
+    if not _has_script(line):
         return []
     found = params(root(line.script_text))
-    holder = record.actor_player
+    checks, named = _restriction_checks(found, record.actor_player)
+    if not checks or not _agrees_with_forge(record, candidate, checks):
+        return []
+    return [ConditionItem("restriction", record.record_id, edit, edited,
+                          f"failed_{check}", None, not holds(edited))
+            for edit, edited in _edits(record, lines, named)
+            for check, holds in checks.items()]
+
+
+def _restriction_checks(found: dict[str, str], holder: str | None):
+    """``({check: record -> holds}, named steps)`` of a candidate's restriction:
+    the whose-turn and step checks its script states."""
     checks = {}
     if whose_turn_holds(found, True) is not None:
         checks["whose_turn"] = lambda r: whose_turn_holds(found, TurnFacts.of(r, holder).own_turn)
     named = forge_phases(found.get("ActivationPhases"))
     if named is not None:
         checks["phase"] = lambda r: r.state.global_.phase in named
-    if not checks:
-        return []
+    return checks, named
+
+
+def _agrees_with_forge(record, candidate, checks) -> bool:
+    """The rule says what Forge said of the record as collected."""
     failed = _failed(candidate)
-    # The rule must say what Forge said of the record as collected.
-    if any(holds(record) == (check in failed) for check, holds in checks.items()):
-        return []
-    items = []
-    for edit, edited in _edits(record, lines, named):
-        for check, holds in checks.items():
-            items.append(ConditionItem("restriction", record.record_id, edit, edited,
-                                       f"failed_{check}", None, not holds(edited)))
-    return items
+    return not any(holds(record) == (check in failed) for check, holds in checks.items())
 
 
 def sorcery_speed(record, candidate, line, keywords_of) -> bool | None:
@@ -296,13 +345,24 @@ def sorcery_speed(record, candidate, line, keywords_of) -> bool | None:
     card = record.state.entity(record.state.refs.source or "")
     found = params(root(line.script_text or "")) if line is not None else {}
     if line is None or "SP" in found:
-        if card is not None and "land" in card.types and candidate.land_play is None:
-            return None
-        if card is None:
-            return None
-        return "instant" not in card.types and "flash" not in keywords_of(card)
-    return (found.get("SorcerySpeed", "").lower() == "true"
-            or found.get("Planeswalker", "").lower() == "true")
+        return _spell_sorcery_speed(card, candidate, keywords_of)
+    return _is_true(found, "SorcerySpeed") or _is_true(found, "Planeswalker")
+
+
+def _is_true(found: dict[str, str], name: str) -> bool:
+    return found.get(name, "").lower() == "true"
+
+
+def _spell_sorcery_speed(card, candidate, keywords_of) -> bool | None:
+    """A spell is cast at sorcery speed unless an instant or flash; None for
+    no card, or a land whose record cannot say whether it was played."""
+    if card is None or _land_play_unknown(card, candidate):
+        return None
+    return "instant" not in card.types and "flash" not in keywords_of(card)
+
+
+def _land_play_unknown(card, candidate) -> bool:
+    return "land" in card.types and candidate.land_play is None
 
 
 def casting_speed_items(record, lines, keywords_of) -> list[ConditionItem]:
@@ -350,6 +410,14 @@ def without_split_second(entity):
         granted, keywords=tuple(k for k in granted.keywords if k != "split_second")))
 
 
+def _split_second_taken_away(record, stack: list):
+    """``record`` with split second taken from every object on its ``stack``."""
+    board = BoardEdit(record)
+    for entity in stack:
+        board = board.edit_entity(entity.id, without_split_second)
+    return board.record
+
+
 def split_second_items(record) -> list[ConditionItem]:
     """A decision with an object on the stack: as collected, with split second
     given to the stack's first object, and with every split second taken away."""
@@ -371,10 +439,7 @@ def split_second_items(record) -> list[ConditionItem]:
              (SPLIT_SECOND_ADDED, BoardEdit(record).grant_keyword(
                  stack[0].id, "split_second").record)]
     if forbids(record):
-        board = BoardEdit(record)
-        for entity in stack:
-            board = board.edit_entity(entity.id, without_split_second)
-        edits.append((SPLIT_SECOND_REMOVED, board.record))
+        edits.append((SPLIT_SECOND_REMOVED, _split_second_taken_away(record, stack)))
     return [ConditionItem("split-second", record.record_id, edit, edited,
                           "failed_split_second", None, forbids(edited))
             for edit, edited in edits]
@@ -391,96 +456,178 @@ def static_items(record, lines) -> list[ConditionItem]:
     """A ``continuous`` record of a turn- or step-conditioned static, read at
     each creature it affects (its host where it affects the host alone), or a
     legality record such a static keeps creatures out of, read at each one."""
+    static = _conditioned_static(record, lines)
+    if static is None:
+        return []
+    named = forge_phases(static.found.get("Phases"))
+    readings = _static_readings(record.payload, static)
+    if readings is None:
+        return []
+    items = []
+    for edit, edited in _edits(record, lines, named):
+        holds = static_holds(static.found, TurnFacts.of(edited, static.host.controller))
+        if holds is not None:
+            items += [ConditionItem("static", record.record_id, edit, edited, target,
+                                    entity, holds == when_held)
+                      for target, entity, when_held in readings]
+    return items
+
+
+@dataclass(frozen=True, slots=True)
+class _ConditionedStatic:
+    """A record's turn- or step-conditioned static: its key, its script's
+    parameters, the entity hosting it, and whether it holds as collected."""
+
+    key: object
+    found: dict[str, str]
+    host: object
+    held: bool
+
+
+def _conditioned_static(record, lines) -> _ConditionedStatic | None:
+    """The static a record as collected carries a turn or step condition of,
+    where the rule's answer for it is what Forge recorded; else None."""
     from effects.domain.corpus_curation import turn_step_condition
+
+    if record.fork:
+        return None
+    condition = turn_step_condition(record, lines)
+    if condition is None:
+        return None
+    key = condition.carrier
+    line = lines.line_for(key)
+    host = _host(record, key)
+    if not _has_script(line) or host is None:
+        return None
+    found = params(root(line.script_text))
+    held = static_holds(found, TurnFacts.of(record, host.controller))
+    if held is None or held != (str(condition.side) == "met"):
+        return None
+    return _ConditionedStatic(key, found, host, held)
+
+
+def _static_readings(payload, static: _ConditionedStatic) -> list[tuple[str, str, bool]] | None:
+    """``(readout, entity, yes when it holds)`` of each entity the static
+    decides; None where its reach is unknown."""
     from effects.domain.records import (
         ContinuousPayload,
         PlayabilityAttackersPayload,
         PlayabilityBlockersPayload,
     )
 
-    if record.fork:
-        return []
-    condition = turn_step_condition(record, lines)
-    if condition is None:
-        return []
-    key = condition.carrier
-    line = lines.line_for(key)
-    host = _host(record, key)
-    if line is None or not line.script_text or host is None:
-        return []
-    found = params(root(line.script_text))
-    held = static_holds(found, TurnFacts.of(record, host.controller))
-    if held is None or held != (str(condition.side) == "met"):
-        return []
-    payload = record.payload
-    named = forge_phases(found.get("Phases"))
-    readings: list[tuple[str, str, bool]] = []  # (readout, entity, yes when it holds)
     if isinstance(payload, ContinuousPayload):
-        affected = {c.entity for c in payload.contributions}
-        if found.get("Affected") == "Card.Self":
-            affected.add(host.id)
-        elif not held:
-            return []  # an unmet static's reach is unknown
-        readings = [("affected", entity, True) for entity in sorted(affected)]
-    elif isinstance(payload, PlayabilityAttackersPayload | PlayabilityBlockersPayload):
-        target = ("may_attack" if isinstance(payload, PlayabilityAttackersPayload)
-                  else "may_block")
-        # Only where this static alone keeps a creature out does its condition
-        # decide the creature's legality.
-        kept = sorted({entry.entity for entry in payload.forbidden
-                       if tuple(entry.responsible_static) == (key,)})
-        readings = [(target, entity, False) for entity in kept]
-    items = []
-    for edit, edited in _edits(record, lines, named):
-        holds = static_holds(found, TurnFacts.of(edited, host.controller))
-        if holds is None:
-            continue
-        for target, entity, when_held in readings:
-            items.append(ConditionItem("static", record.record_id, edit, edited, target,
-                                       entity, holds == when_held))
-    return items
+        return _affected_readings(payload, static)
+    if isinstance(payload, PlayabilityAttackersPayload | PlayabilityBlockersPayload):
+        return _kept_out_readings(payload, static.key)
+    return []
+
+
+def _affected_readings(payload, static: _ConditionedStatic) -> list[tuple[str, str, bool]] | None:
+    affected = {c.entity for c in payload.contributions}
+    if static.found.get("Affected") == "Card.Self":
+        affected.add(static.host.id)
+    elif not static.held:
+        return None  # an unmet static's reach is unknown
+    return [("affected", entity, True) for entity in sorted(affected)]
+
+
+def _kept_out_readings(payload, key) -> list[tuple[str, str, bool]]:
+    """Only where this static alone keeps a creature out does its condition
+    decide the creature's legality."""
+    from effects.domain.records import PlayabilityAttackersPayload
+
+    target = ("may_attack" if isinstance(payload, PlayabilityAttackersPayload)
+              else "may_block")
+    kept = sorted({entry.entity for entry in payload.forbidden
+                   if tuple(entry.responsible_static) == (key,)})
+    return [(target, entity, False) for entity in kept]
 
 
 def clause_items(record, lines) -> list[ConditionItem]:
     """A resolution whose conditional clause names whose turn or the steps
     and resolved, read at each entity only that clause's events touched."""
+    payload = _clause_payload(record)
+    if payload is None:
+        return []
+    line = lines.first_line(record.ability)
+    if not _has_script(line):
+        return []
+    chain = segments(line.script_text)
+    for entry in payload.conditions_met:
+        items = _clause_entry_items(record, lines, chain, entry)
+        if items is not None:
+            return items
+    return []
+
+
+def _clause_payload(record):
+    """The payload of a resolution as collected whose conditional clauses
+    resolved, with an acting ability; else None."""
     from effects.domain.records import Moment, RecordKind, ResolutionPayload
 
     payload = record.payload
-    if (record.kind is not RecordKind.RESOLUTION or record.moment is not Moment.RESOLUTION
-            or record.fork or not isinstance(payload, ResolutionPayload)
-            or not payload.conditions_met or not record.ability):
-        return []
-    line = lines.first_line(record.ability)
-    if line is None or not line.script_text:
-        return []
-    chain = segments(line.script_text)
+    if record.kind is not RecordKind.RESOLUTION or record.moment is not Moment.RESOLUTION:
+        return None
+    if record.fork or not isinstance(payload, ResolutionPayload):
+        return None
+    if not payload.conditions_met or not record.ability:
+        return None
+    return payload
+
+
+def _chain_index(segment: str) -> int | None:
+    """A clause's position in its line's chain, from its ``attributed_to`` name."""
+    if segment == "root":
+        return 0
+    return int(segment) + 1 if segment.isdigit() else None
+
+
+def _met_clause(chain: list[str], entry) -> dict[str, str] | None:
+    """The parameters of the chain segment a met clause ``entry`` names, else None."""
+    index = _chain_index(entry.segment)
+    if index is None or index >= len(chain):
+        return None
+    if not entry.met:
+        return None
+    return params(chain[index])
+
+
+def _touched_by(events) -> dict[str, set[str]]:
+    """``entity -> the clauses whose events touched it``."""
+    touched: dict[str, set[str]] = defaultdict(set)
+    for event in events:
+        for subject in event.subjects:
+            touched[subject].add(event.attributed_to or "")
+    return touched
+
+
+def _own_entities(record, segment: str) -> list[str]:
+    """The board entities only the clause ``segment``'s events touched."""
+    touched = _touched_by(record.payload.events)
+    return sorted(e for e, by in touched.items()
+                  if by == {segment} and record.state.entity(e) is not None)
+
+
+def _clause_entry_items(record, lines, chain: list[str], entry) -> list[ConditionItem] | None:
+    """One met clause's items; None where the clause states no turn or step
+    condition that holds as collected, or its events touched nothing of its own."""
+    found = _met_clause(chain, entry)
+    if found is None:
+        return None
     holder = record.actor_player
-    for entry in payload.conditions_met:
-        index = 0 if entry.segment == "root" else (
-            int(entry.segment) + 1 if entry.segment.isdigit() else None)
-        if index is None or index >= len(chain) or not entry.met:
-            continue
-        found = params(chain[index])
-        if clause_holds(found, TurnFacts.of(record, holder)) is not True:
-            continue
-        touched: dict[str, set[str]] = defaultdict(set)
-        for event in payload.events:
-            for subject in event.subjects:
-                touched[subject].add(event.attributed_to or "")
-        own = sorted(e for e, by in touched.items() if by == {entry.segment}
-                     and record.state.entity(e) is not None)
-        if not own:
-            continue
-        named = forge_phases(found.get("ConditionPhases"))
-        items = []
-        for edit, edited in _edits(record, lines, named):
-            holds = clause_holds(found, TurnFacts.of(edited, holder))
-            for entity in own:
-                items.append(ConditionItem("clause", record.record_id, edit, edited,
-                                           "affected", entity, bool(holds)))
-        return items
-    return []
+    if clause_holds(found, TurnFacts.of(record, holder)) is not True:
+        return None
+    own = _own_entities(record, entry.segment)
+    if not own:
+        return None
+    named = forge_phases(found.get("ConditionPhases"))
+    items = []
+    for edit, edited in _edits(record, lines, named):
+        holds = bool(clause_holds(found, TurnFacts.of(edited, holder)))
+        items += [ConditionItem("clause", record.record_id, edit, edited, "affected", entity,
+                                holds)
+                  for entity in own]
+    return items
 
 
 def record_items(record, lines, keywords_of) -> list[ConditionItem]:
@@ -513,29 +660,35 @@ def score(items: Iterable[ConditionItem], predictions: Iterable[float]) -> dict:
     """``{subset: {"items", "records", "auc", "by_edit": {edit: {...}}}}``:
     each subset's AUC over every item against the rule, and per edit the
     mean prediction where the rule says yes and where it says no."""
-    import numpy as np
-
     grouped: dict[str, list[tuple[ConditionItem, float]]] = defaultdict(list)
     for item, prediction in zip(items, predictions):
         grouped[item.subset].append((item, prediction))
-    out: dict = {}
-    for subset in SUBSETS:
-        rows = grouped.get(subset, [])
-        labels = [item.rule for item, _ in rows]
-        scores = [p for _, p in rows]
-        by_edit: dict = {}
-        for edit in dict.fromkeys(item.edit for item, _ in rows):
-            yes = [p for item, p in rows if item.edit == edit and item.rule]
-            no = [p for item, p in rows if item.edit == edit and not item.rule]
-            by_edit[edit] = {"yes": len(yes), "no": len(no),
-                             "mean_yes": float(np.mean(yes)) if yes else None,
-                             "mean_no": float(np.mean(no)) if no else None}
-        out[subset] = {
-            "items": len(rows), "records": len({item.record_id for item, _ in rows}),
-            "auc": float(common.auc(labels, scores)) if rows else float("nan"),
-            "by_edit": by_edit,
-        }
-    return out
+    return {subset: _subset_score(grouped.get(subset, [])) for subset in SUBSETS}
+
+
+def _subset_score(rows: list[tuple[ConditionItem, float]]) -> dict:
+    labels = [item.rule for item, _ in rows]
+    scores = [p for _, p in rows]
+    by_edit = {edit: _edit_score(rows, edit)
+               for edit in dict.fromkeys(item.edit for item, _ in rows)}
+    return {
+        "items": len(rows), "records": len({item.record_id for item, _ in rows}),
+        "auc": float(common.auc(labels, scores)) if rows else float("nan"),
+        "by_edit": by_edit,
+    }
+
+
+def _edit_score(rows: list[tuple[ConditionItem, float]], edit: str) -> dict:
+    """One edit's counts and mean predictions where the rule says yes and no."""
+    yes = [p for item, p in rows if item.edit == edit and item.rule]
+    no = [p for item, p in rows if item.edit == edit and not item.rule]
+    return {"yes": len(yes), "no": len(no), "mean_yes": _mean(yes), "mean_no": _mean(no)}
+
+
+def _mean(values: list[float]) -> float | None:
+    import numpy as np
+
+    return float(np.mean(values)) if values else None
 
 
 def report(scores: dict) -> None:
