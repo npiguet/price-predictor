@@ -112,6 +112,16 @@ _MANA_SYMBOL_PATTERN = re.compile(r"\{[^}]+\}")
 _LETTER_FRAGMENT_PATTERN = re.compile(r"[a-z]+")
 
 
+def _referenced_set_codes(data: dict) -> set[str]:
+    """The set codes that appear in some card's ``printings`` list."""
+    referenced_codes: set[str] = set()
+    for set_info in data.get("data", {}).values():
+        cards = set_info if isinstance(set_info, list) else set_info.get("cards", [])
+        for card in cards:
+            referenced_codes.update(card.get("printings", ()))
+    return referenced_codes
+
+
 def _extract_set_code_tokens(printings_path: Path) -> list[str]:
     """Extract alphabetic token fragments from set codes a card was printed in.
 
@@ -130,16 +140,9 @@ def _extract_set_code_tokens(printings_path: Path) -> list[str]:
     """
     with open(printings_path, encoding="utf-8") as f:
         data = json.load(f)
-    referenced_codes: set[str] = set()
-    for set_info in data.get("data", {}).values():
-        cards = set_info if isinstance(set_info, list) else set_info.get("cards", [])
-        for card in cards:
-            for code in card.get("printings", ()):
-                referenced_codes.add(code)
     tokens: set[str] = set()
-    for code in referenced_codes:
-        for fragment in _LETTER_FRAGMENT_PATTERN.findall(code.lower()):
-            tokens.add(fragment)
+    for code in _referenced_set_codes(data):
+        tokens.update(_LETTER_FRAGMENT_PATTERN.findall(code.lower()))
     return sorted(tokens)
 
 
