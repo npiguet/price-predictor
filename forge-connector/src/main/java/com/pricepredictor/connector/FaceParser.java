@@ -641,7 +641,16 @@ final class FaceParser {
         }
     }
 
-    /** A trigger the face states itself, under its kind-indexed {@code key}. */
+    /**
+     * A trigger the face states itself, under its kind-indexed {@code key}.
+     *
+     * <p>A secondary trigger that is also static prints no line and its key
+     * is dropped: Forge's card view prints no secondary trait
+     * ({@code Card.getAbilityText}), and a static one, resolving with no stack,
+     * is the script's bookkeeping (Diabolic Servitude's "forget remembered
+     * card if it goes into exile") or repeats a static's own text (Serra
+     * Paragon).
+     */
     private void parseOwnTrigger(Trigger t, ProvenanceKey key, Set<String> primaryExecuteSVars,
                                  Map<String, Ability> primaryByExecute) {
         recorder.declare(key);
@@ -652,6 +661,7 @@ final class FaceParser {
             recorder.attribute(primaryByExecute.get(exec), key, t);
             return;
         }
+        if (isBookkeeping(t)) return;
         if (exec != null && !secondary) {
             primaryExecuteSVars.add(exec);
         }
@@ -659,6 +669,11 @@ final class FaceParser {
         addIfNotNull(abilities, triggered);
         recorder.attribute(triggered, key, t);
         if (triggered != null && exec != null) primaryByExecute.put(exec, triggered);
+    }
+
+    /** Whether {@code t} is a secondary trigger that is also static: no card text. */
+    private static boolean isBookkeeping(Trigger t) {
+        return t.isSecondary() && t.isStatic();
     }
 
     /** Wrap each static or replacement trait directly in its entry. */
