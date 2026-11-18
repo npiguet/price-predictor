@@ -14,8 +14,8 @@ parameter means one thing whichever family a declaration names.
   is found through the card while the spell acts through its own line.
 - A script parameter (:func:`script_params_match`): a root-segment ``Key$``
   present, or holding a value.
-- The game-end rescue record (:func:`is_rescued_orphans`), whose board is
-  read after its events rather than before them.
+- The game-end record (:func:`is_rescued_orphans`), whose board is read
+  after its events rather than before them.
 - The acting ability's source entity (:func:`source_entities`): the record's
   ``refs.source``, else, on a record that names none (a ``continuous``
   record), the battlefield entities printed from the acting script file or,
@@ -38,12 +38,13 @@ ANY = "*"
 
 
 def is_rescued_orphans(record: EffectRecord) -> bool:
-    """Whether ``record`` is the collector's game-end rescue of events no
-    bracket held: an effect half naming no acting line and no cost half.
+    """Whether ``record`` is the collector's game-end record: an effect half
+    naming no acting line and no cost half.
 
-    Its events span whatever stretch of the game no resolution was open
-    over, and its snapshot is the board at the game's end, after them, with
-    the loser already gone, so no family reading the board as it stood
+    It holds the game's outcome only (``player_lost``, ``player_won``) when
+    no resolution or combat record took it; every other event no record
+    held is counted as dropped. Its snapshot is the board at the game's end,
+    with the loser already gone, so no family reading the board as it stood
     before the events can read one.
     """
     return (record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION

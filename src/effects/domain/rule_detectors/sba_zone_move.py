@@ -79,8 +79,8 @@ exile where a replacement sends the dying permanent there instead
 (Disintegrate, Rest in Peace), attributed ``unresolved``, and not followed by
 its return to the battlefield (a flicker).
 
-Two records show no check at all: the game-end rescue of orphaned events,
-whose board is read after its events, and a record whose changes end the
+Two records show no check at all: the game-end record, which holds the
+game's outcome alone on a board read after it, and a record whose changes end the
 game (a player at 0 life or 10 poison, or a game-end event): Forge stops the
 check at the game's end, so nothing else of it happens.
 

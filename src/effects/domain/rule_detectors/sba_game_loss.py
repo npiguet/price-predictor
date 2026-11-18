@@ -19,12 +19,12 @@ lethal damage and the tenth poison counter at once) is on neither side: the
 game's end cannot say which rule ended it.
 
 The collector writes a non-combat kill's game end in a record of its own
-after the resolution, the game-end rescue of orphaned events, never in the
+after the resolution, the game-end record (the outcome alone), never in the
 resolution's effect half (gen-3's held half takes the check's moves from the
 battlefield, not the game's end; only an ability that ends the game outright,
 a ``WinsGame`` or ``LosesGame`` line, holds it, ``emittable_events``), so an
 effect half holding no game-end event (:data:`_GAME_END`) has its outcome
-unreadable (``observed`` None). The rescue record itself
+unreadable (``observed`` None). The game-end record itself
 shows no side: its board is read at the game's end, with the loser gone. A
 combat record holds its damage step's game end.
 """
