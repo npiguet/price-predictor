@@ -113,6 +113,32 @@ class HoldoutSelection:
     keys: frozenset[str] = frozenset()
 
 
+def _normalized_by_card(
+    texts_by_card: Mapping[str, Iterable[str]],
+) -> dict[str, set[str]]:
+    return {
+        card: {normalize_script_text(t) for t in texts if t}
+        for card, texts in texts_by_card.items()
+    }
+
+
+def _count_carriers(
+    normalized: Mapping[str, set[str]],
+) -> tuple[dict[str, str], Counter[str]]:
+    """Each text's holdout key, and how many cards carry each key."""
+    key_of: dict[str, str] = {}
+    carriers: Counter[str] = Counter()
+    for texts in normalized.values():
+        keys = set()
+        for text in texts:
+            key = key_of.get(text)
+            if key is None:
+                key = key_of[text] = holdout_key(text)
+            keys.add(key)
+        carriers.update(keys)
+    return key_of, carriers
+
+
 def select_holdout(
     texts_by_card: Mapping[str, Iterable[str]],
     *,
@@ -124,20 +150,8 @@ def select_holdout(
     Carriers are counted, and eligibility and the ``crc32`` test applied, per
     :func:`holdout_key` (FR-040); every text whose key is held out is held out.
     """
-    normalized: dict[str, set[str]] = {}
-    for card, texts in texts_by_card.items():
-        normalized[card] = {normalize_script_text(t) for t in texts if t}
-
-    key_of: dict[str, str] = {}
-    carriers: Counter[str] = Counter()
-    for texts in normalized.values():
-        keys = set()
-        for text in texts:
-            key = key_of.get(text)
-            if key is None:
-                key = key_of[text] = holdout_key(text)
-            keys.add(key)
-        carriers.update(keys)
+    normalized = _normalized_by_card(texts_by_card)
+    key_of, carriers = _count_carriers(normalized)
 
     held_keys = {
         key
