@@ -306,7 +306,10 @@ final class HeldResolutionWindow {
      * the legend rule, the Aura that falls off a creature the resolution
      * killed. Only the move is filed here: the window takes no stat change,
      * and the static's own, published while the resolution resolves, is the
-     * resolution's as any change after its snapshot is.
+     * resolution's as any change after its snapshot is. That includes the
+     * static check after the last clause (an Equip's +2/+0): the patched
+     * branch runs it before publishing the resolution, so its changes reach
+     * the bracket while it is still open, never this window.
      * The window closes at the loop's end (or, without the hook, at the next
      * action), so a check after a land or a new cast is not this
      * resolution's.

@@ -49,8 +49,14 @@ class ForcedAndLiveHalvesTest {
 
     private final java.util.concurrent.atomic.AtomicInteger runs = new java.util.concurrent.atomic.AtomicInteger();
 
-    /** A board, built afresh for each side, and the spell its first player holds. */
-    private record Play(Function<Boolean, Game> board, String spell, Consumer<SpellAbility> liveChoices) {
+    /** A board, built afresh for each side, and the spell or ability its first player plays on it. */
+    private record Play(Function<Boolean, Game> board, String spell, Function<Game, SpellAbility> pick,
+                        Consumer<SpellAbility> liveChoices) {
+
+        /** The spell named {@code spell}, from its first player's hand. */
+        Play(Function<Boolean, Game> board, String spell, Consumer<SpellAbility> liveChoices) {
+            this(board, spell, game -> spellInHand(game, spell), liveChoices);
+        }
     }
 
     private static Game game(boolean declining) {
@@ -76,7 +82,7 @@ class ForcedAndLiveHalvesTest {
     /** The effect half of the play resolved live, hooks on. */
     private String liveHalf(Play play, boolean declining) throws Throwable {
         Game game = play.board().apply(declining);
-        SpellAbility spell = spellInHand(game, play.spell());
+        SpellAbility spell = play.pick().apply(game);
         play.liveChoices().accept(spell);
         List<String> records = ShardRun.recordsWithClauseHook(tempDir.resolve("live" + runs.incrementAndGet()), game, WHY, () -> {
             game.getStack().addAndUnfreeze(spell);
@@ -95,7 +101,7 @@ class ForcedAndLiveHalvesTest {
     /** The effect half of the same play forced in a fork of the same board. */
     private String forcedHalf(Play play, boolean declining) throws java.io.IOException {
         Game game = play.board().apply(declining);
-        SpellAbility spell = spellInHand(game, play.spell());
+        SpellAbility spell = play.pick().apply(game);
         CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(1).probes(0).build();
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(tempDir.resolve("fork" + runs.incrementAndGet()), game, caps, 1L, spell, WHY);
         assertTrue(fork.wrote(), "the forced play wrote nothing");
@@ -111,7 +117,13 @@ class ForcedAndLiveHalvesTest {
     }
 
     private void assertAlike(Play play, boolean declining) throws Throwable {
+        assertAlike(play, declining, live -> { });
+    }
+
+    /** The same, with a check of the live half, which the forced one then matches. */
+    private void assertAlike(Play play, boolean declining, Consumer<String> checkLive) throws Throwable {
         String live = liveHalf(play, declining);
+        checkLive.accept(live);
         String forced = forcedHalf(play, declining);
         Map<String, Object> liveMembers = withoutForkMembers(live);
         Map<String, Object> forcedMembers = withoutForkMembers(forced);
@@ -196,5 +208,35 @@ class ForcedAndLiveHalvesTest {
             return game;
         }, "Hurricane", spell -> spell.setXManaCostPaid(1));
         assertAlike(play, false);
+    }
+
+    /**
+     * Bonesplitter equipped to the one creature out: the half holds the
+     * attaching and the +2/+0 the static check after it applies, live and
+     * forced alike (finding 2.1).
+     */
+    @Test
+    void anEquip() throws Throwable {
+        Play play = new Play(declining -> {
+            Game game = game(declining);
+            Player caster = game.getPlayers().get(0);
+            TestBoard.inPlay(game, caster, "Grizzly Bears");
+            TestBoard.inPlay(game, caster, "Bonesplitter");
+            return game;
+        }, "Bonesplitter", ForcedAndLiveHalvesTest::equipOfBonesplitter, equip -> {
+            equip.resetTargets();
+            equip.getTargets().add(equip.getActivatingPlayer().getCreaturesInPlay().get(0));
+        });
+        assertAlike(play, false, live -> assertEquals(List.of("attached", "pt_change"),
+                RecordLines.eventTypes(live), live));
+    }
+
+    private static SpellAbility equipOfBonesplitter(Game game) {
+        Player caster = game.getPlayers().get(0);
+        Card splitter = caster.getCardsIn(forge.game.zone.ZoneType.Battlefield).stream()
+                .filter(card -> card.getName().equals("Bonesplitter")).findFirst().orElseThrow();
+        SpellAbility equip = TestBoard.ability(splitter, ApiType.Attach);
+        equip.setActivatingPlayer(caster);
+        return equip;
     }
 }

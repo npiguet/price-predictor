@@ -478,7 +478,9 @@ public final class BusBracketCollector extends BusEventReader {
      * now, with no events. Any other is held until the deaths it causes have
      * happened ({@link HeldResolutionWindow}), and a spell's half takes its
      * card's move off the stack, which comes after the resolution is
-     * published.
+     * published. What a static does because of the last clause (an Equip's
+     * +2/+0) is already in the bracket: the patched branch publishes the
+     * resolution after the static check that follows it.
      */
     @Subscribe
     public void onResolved(GameEventSpellResolved event) {

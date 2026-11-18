@@ -209,11 +209,13 @@ final class StackBrackets {
      * however little it showed.
      *
      * <p>The stack still reads as resolving after a resolution has been
-     * published: {@code MagicStack.resolveStack} publishes
-     * {@code GameEventSpellResolved} first, then runs the static check and
+     * published: {@code MagicStack.resolveStack} runs the static check,
+     * publishes {@code GameEventSpellResolved}, then runs
      * {@code finishResolving}, which moves the card off the stack — to the
      * graveyard, to exile, out of existence for a copy — before it stops
-     * resolving. That window is the resolved item's, which has no bracket any
+     * resolving. (The patched branch runs the check before the event, so
+     * what a static does because of the last clause, an Equip's +2/+0, is
+     * filed in the bracket while it is still open.) That window is the resolved item's, which has no bracket any
      * more, and not the item below it: while the resolved item is still on
      * the stack ({@link #finishing}), nothing is opened.
      *

@@ -111,8 +111,11 @@ final class ForkEventSink extends BusEventReader {
      *   <li>{@link #HELD}: the forced spell's own card leaving the stack, the
      *   last event of its resolution (FR-042b), and the permanents leaving
      *   the battlefield in a state-based check, as live holds a resolved half
-     *   for both. A stat change a static makes once the ability is gone is
-     *   not the ability's.</li>
+     *   for both. A stat change is not filed here: the static check after
+     *   the last clause (an Equip's +2/+0) runs before the patched branch
+     *   publishes the resolution, so its changes are filed in
+     *   {@link #RESOLVING}, and one a static makes once the ability is gone
+     *   is not the ability's.</li>
      *   <li>{@link #CLOSED}: once the next ability reaches the stack or
      *   resolves, as the next action closes live's held window. A trigger the
      *   resolution caused is that next ability, and has a record of its own

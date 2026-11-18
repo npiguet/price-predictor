@@ -611,7 +611,7 @@ its events and payload are what the moment changed. No board after the moment is
 |---|---|---|---|
 | cost half of a spell | casting | before the card moves to the stack (601.2a): the card where it was cast from, its costs unpaid | the card's `zone_change` to the stack; the costs paid |
 | cost half of an activated ability | activation | before its costs are paid | the costs paid |
-| effect half | resolution | when the resolution starts, before its first clause; a modal resolution's half, before its mode's first clause | the resolution's events; for a spell, the card's own move off the stack after them and before the state-based check's deaths: to the graveyard, or onto the battlefield for a permanent spell |
+| effect half | resolution | when the resolution starts, before its first clause; a modal resolution's half, before its mode's first clause | the resolution's events, including what a static does because of its last clause (an Equip's +2/+0, a keyword an Equipment grants); for a spell, the card's own move off the stack after them and before the state-based check's deaths: to the graveyard, or onto the battlefield for a permanent spell |
 | mana record | a mana ability's activation | before its costs are paid and its mana is added | a `tapped` event for each permanent its cost tapped, then `mana_produced` |
 
 - The cost half carries no outcome. It is written when its costs are paid.
