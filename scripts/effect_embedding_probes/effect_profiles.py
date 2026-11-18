@@ -41,6 +41,7 @@ import argparse
 import pickle
 import sys
 from collections import defaultdict
+from dataclasses import dataclass
 from multiprocessing import Pool
 from pathlib import Path
 
@@ -108,78 +109,158 @@ def _side(subject: str, actor: str, entities: dict) -> str | None:
     return "own" if entity["controller"] == actor else "opp"
 
 
-def _zone_change(params: dict, entity: dict, side: str | None, is_creature: bool,
-                 present: set[str]) -> None:
-    origin = (params.get("from_zone") or entity.get("zone") or "").lower()
+@dataclass(frozen=True)
+class _Focus:
+    """An event's first subject: its id, side of the table, entity and creature-ness."""
+
+    subject: str
+    side: str | None
+    entity: dict
+    is_creature: bool
+
+
+class _EventFold:
+    """One record's resolution events folded into outcome kinds and amounts.
+
+    ``present`` holds the outcome kinds seen, ``sums`` the amounts, ``sides``
+    how many subjects landed on each side and ``subjects`` the distinct ones.
+    """
+
+    def __init__(self, actor: str | None, entities: dict) -> None:
+        self.actor = actor
+        self.entities = entities
+        self.present: set[str] = set()
+        self.sums: dict[str, float] = defaultdict(float)
+        self.sides = {"own": 0, "opp": 0}
+        self.subjects: set[str] = set()
+
+    def add(self, event: dict) -> None:
+        """One resolution event's outcome kinds into ``present``, amounts into ``sums``."""
+        kind = event["type"]
+        self.present.add(kind)
+        subjects = event.get("subjects") or ()
+        for subject in subjects:
+            self.subjects.add(subject)
+            subject_side = _side(subject, self.actor, self.entities)
+            if subject_side is not None:
+                self.sides[subject_side] += 1
+        handler = _EVENT_HANDLERS.get(kind)
+        if handler is not None:
+            handler(self, kind, event.get("params") or {}, self._focus(subjects))
+
+    def _focus(self, subjects) -> _Focus:
+        first = subjects[0] if subjects else ""
+        side = _side(first, self.actor, self.entities) if first else None
+        entity = self.entities.get(first, {})
+        return _Focus(first, side, entity, "creature" in (entity.get("types") or ()))
+
+
+def _zone_change(fold: _EventFold, kind: str, params: dict, focus: _Focus) -> None:
+    origin = (params.get("from_zone") or focus.entity.get("zone") or "").lower()
     dest = (params.get("to_zone") or "").lower()
+    _transition(fold, origin, dest)
+    if origin != "battlefield" or not focus.is_creature:
+        return
+    if dest in ("graveyard", "exile"):
+        _creature_removed(fold, focus)
+    elif dest == "hand":
+        fold.present.add("creature_bounced")
+
+
+def _transition(fold: _EventFold, origin: str, dest: str) -> None:
+    """The named zone transition ``origin`` to ``dest`` feeds, if it has one."""
     name = TRANSITIONS.get((origin, dest))
     if name:
-        present.add(name)
-    if origin == "battlefield" and dest in ("graveyard", "exile") and is_creature:
-        present.add("creature_removed")
-        present.add(f"creature_removed_{side}" if side else "creature_removed")
-    if origin == "battlefield" and dest == "hand" and is_creature:
-        present.add("creature_bounced")
+        fold.present.add(name)
 
 
-def _fold_event(event: dict, actor: str | None, entities: dict, present: set[str],
-                sums: dict, sides: dict, subjects: set[str]) -> None:
-    """One resolution event's outcome kinds into ``present``, amounts into ``sums``."""
-    kind = event["type"]
-    present.add(kind)
-    params = event.get("params") or {}
-    for subject in event.get("subjects") or ():
-        subjects.add(subject)
-        subject_side = _side(subject, actor, entities)
-        if subject_side is not None:
-            sides[subject_side] += 1
-    subs = event.get("subjects") or ()
-    first = subs[0] if subs else ""
-    side = _side(first, actor, entities) if first else None
-    entity = entities.get(first, {})
-    is_creature = "creature" in (entity.get("types") or ())
-    if kind == "zone_change":
-        _zone_change(params, entity, side, is_creature, present)
-    elif kind == "destroyed" and is_creature:
-        present.add("creature_removed")
-        if side:
-            present.add(f"creature_removed_{side}")
-    elif kind == "life_change" and side:
-        sums[f"life_{side}"] += float(params.get("delta") or 0)
-    elif kind == "damage_dealt":
-        amount = float(params.get("amount") or 0)
-        target = "player" if first.startswith("P") else "permanent"
-        sums["damage_total"] += amount
-        sums[f"damage_to_{target}"] += amount
-        if side:
-            sums[f"damage_{side}"] += amount
-    elif kind in ("card_drawn", "card_discarded", "card_milled") and side:
-        sums[f"{kind}_{side}"] += float(params.get("count") or 1)
-    elif kind == "counter_change":
-        counter = str(params.get("counter_type") or "")
-        family = {"P1P1": "p1p1", "M1M1": "m1m1", "LOYALTY": "loyalty"}.get(
-            counter, "other")
-        delta = float(params.get("delta") or 0)
-        sums[f"counters_{family}"] += delta
-        if side and family == "p1p1":
-            sums[f"counters_p1p1_{side}"] += delta
-    elif kind == "pt_change":
-        power = float(params.get("power_delta") or 0)
-        sums["power_delta"] += power
-        sums["toughness_delta"] += float(params.get("toughness_delta") or 0)
-        if side:
-            sums[f"power_delta_{side}"] += power
-    elif kind == "token_created":
-        sums["tokens"] += float(params.get("count") or 1)
-        chars = params.get("characteristics") or {}
-        if "creature" in str(chars.get("types", "")).lower():
-            sums["creature_tokens"] += float(params.get("count") or 1)
-    elif kind == "mana_produced":
-        sums["mana"] += float(sum((params.get("mana_by_color") or {}).values()))
-    elif kind == "energy_change":
-        sums["energy"] += float(params.get("delta") or 0)
-    elif kind in ("keyword_change", "tapped", "untapped", "control_change") and side:
-        present.add(f"{kind}_{side}")
+def _creature_removed(fold: _EventFold, focus: _Focus) -> None:
+    fold.present.add("creature_removed")
+    if focus.side:
+        fold.present.add(f"creature_removed_{focus.side}")
+
+
+def _destroyed(fold: _EventFold, kind: str, params: dict, focus: _Focus) -> None:
+    if focus.is_creature:
+        _creature_removed(fold, focus)
+
+
+def _life_change(fold: _EventFold, kind: str, params: dict, focus: _Focus) -> None:
+    if focus.side:
+        fold.sums[f"life_{focus.side}"] += float(params.get("delta") or 0)
+
+
+def _damage_dealt(fold: _EventFold, kind: str, params: dict, focus: _Focus) -> None:
+    amount = float(params.get("amount") or 0)
+    target = "player" if focus.subject.startswith("P") else "permanent"
+    fold.sums["damage_total"] += amount
+    fold.sums[f"damage_to_{target}"] += amount
+    if focus.side:
+        fold.sums[f"damage_{focus.side}"] += amount
+
+
+def _cards_moved(fold: _EventFold, kind: str, params: dict, focus: _Focus) -> None:
+    if focus.side:
+        fold.sums[f"{kind}_{focus.side}"] += float(params.get("count") or 1)
+
+
+def _counter_change(fold: _EventFold, kind: str, params: dict, focus: _Focus) -> None:
+    family = _COUNTER_FAMILIES.get(str(params.get("counter_type") or ""), "other")
+    delta = float(params.get("delta") or 0)
+    fold.sums[f"counters_{family}"] += delta
+    if focus.side and family == "p1p1":
+        fold.sums[f"counters_p1p1_{focus.side}"] += delta
+
+
+def _pt_change(fold: _EventFold, kind: str, params: dict, focus: _Focus) -> None:
+    power = float(params.get("power_delta") or 0)
+    fold.sums["power_delta"] += power
+    fold.sums["toughness_delta"] += float(params.get("toughness_delta") or 0)
+    if focus.side:
+        fold.sums[f"power_delta_{focus.side}"] += power
+
+
+def _token_created(fold: _EventFold, kind: str, params: dict, focus: _Focus) -> None:
+    fold.sums["tokens"] += float(params.get("count") or 1)
+    chars = params.get("characteristics") or {}
+    if "creature" in str(chars.get("types", "")).lower():
+        fold.sums["creature_tokens"] += float(params.get("count") or 1)
+
+
+def _mana_produced(fold: _EventFold, kind: str, params: dict, focus: _Focus) -> None:
+    fold.sums["mana"] += float(sum((params.get("mana_by_color") or {}).values()))
+
+
+def _energy_change(fold: _EventFold, kind: str, params: dict, focus: _Focus) -> None:
+    fold.sums["energy"] += float(params.get("delta") or 0)
+
+
+def _sided_flag(fold: _EventFold, kind: str, params: dict, focus: _Focus) -> None:
+    if focus.side:
+        fold.present.add(f"{kind}_{focus.side}")
+
+
+_COUNTER_FAMILIES = {"P1P1": "p1p1", "M1M1": "m1m1", "LOYALTY": "loyalty"}
+
+#: What each event type contributes, beyond its own presence in ``present``.
+_EVENT_HANDLERS = {
+    "zone_change": _zone_change,
+    "destroyed": _destroyed,
+    "life_change": _life_change,
+    "damage_dealt": _damage_dealt,
+    "card_drawn": _cards_moved,
+    "card_discarded": _cards_moved,
+    "card_milled": _cards_moved,
+    "counter_change": _counter_change,
+    "pt_change": _pt_change,
+    "token_created": _token_created,
+    "mana_produced": _mana_produced,
+    "energy_change": _energy_change,
+    "keyword_change": _sided_flag,
+    "tapped": _sided_flag,
+    "untapped": _sided_flag,
+    "control_change": _sided_flag,
+}
 
 
 def _resolution(acc: dict, record: dict) -> None:
@@ -189,20 +270,17 @@ def _resolution(acc: dict, record: dict) -> None:
     acc["res_n"] += 1
     if not events:
         acc["res_empty"] += 1
-    present: set[str] = set()
-    sides = {"own": 0, "opp": 0}
-    subjects: set[str] = set()
-    sums = defaultdict(float)
+    fold = _EventFold(actor, entities)
     for event in events:
-        _fold_event(event, actor, entities, present, sums, sides, subjects)
-    for name in present:
+        fold.add(event)
+    for name in fold.present:
         acc[f"has_{name}"] += 1
-    for name, value in sums.items():
+    for name, value in fold.sums.items():
         acc[f"sum_{name}"] += value
     acc["sum_events"] += len(events)
-    acc["sum_subjects"] += len(subjects)
-    acc["sum_side_own"] += sides["own"]
-    acc["sum_side_opp"] += sides["opp"]
+    acc["sum_subjects"] += len(fold.subjects)
+    acc["sum_side_own"] += fold.sides["own"]
+    acc["sum_side_opp"] += fold.sides["opp"]
 
 
 def _activation(acc: dict, record: dict) -> None:
@@ -223,37 +301,61 @@ def _continuous(acc: dict, record: dict) -> None:
     acc["sum_cont_entities"] += len(contributions)
     for contribution in contributions:
         side = _side(contribution.get("entity") or "", actor, entities)
-        boost = contribution.get("pt_boost") or [0, 0]
-        acc["sum_cont_power"] += float(boost[0] or 0)
-        acc["sum_cont_toughness"] += float(boost[1] or 0)
+        _fold_boost(acc, contribution)
         if side:
             acc[f"sum_cont_{side}"] += 1
-        if contribution.get("keywords"):
-            acc["sum_cont_keywords"] += 1
-        if contribution.get("types") or contribution.get("colors"):
-            acc["sum_cont_typecolour"] += 1
+        _fold_changes(acc, contribution)
+
+
+def _fold_boost(acc: dict, contribution: dict) -> None:
+    boost = contribution.get("pt_boost") or [0, 0]
+    acc["sum_cont_power"] += float(boost[0] or 0)
+    acc["sum_cont_toughness"] += float(boost[1] or 0)
+
+
+def _fold_changes(acc: dict, contribution: dict) -> None:
+    if contribution.get("keywords"):
+        acc["sum_cont_keywords"] += 1
+    if contribution.get("types") or contribution.get("colors"):
+        acc["sum_cont_typecolour"] += 1
+
+
+def _fold_resolution_record(acc: dict, record: dict) -> None:
+    if record.get("moment") == "activation":
+        acc["n_cost"] += 1
+        _activation(acc, record)
+    else:
+        acc["n_effect"] += 1
+        _resolution(acc, record)
+
+
+def _fold_continuous_record(acc: dict, record: dict) -> None:
+    acc["n_continuous"] += 1
+    _continuous(acc, record)
+
+
+def _fold_trigger_record(acc: dict, record: dict) -> None:
+    acc["n_trigger"] += 1
+    if (record["payload"] or {}).get("fired"):
+        acc["trigger_fired"] += 1
+
+
+def _fold_other_record(acc: dict, record: dict) -> None:
+    acc[f"n_{record['kind']}"] += 1
+
+
+_RECORD_FOLDERS = {
+    "resolution": _fold_resolution_record,
+    "continuous": _fold_continuous_record,
+    "trigger": _fold_trigger_record,
+}
 
 
 def fold_record(acc: dict, record: dict) -> None:
     """One record's contribution to its acting text's sums."""
     kind = record["kind"]
     acc["n_records"] += 1
-    if kind == "resolution":
-        if record.get("moment") == "activation":
-            acc["n_cost"] += 1
-            _activation(acc, record)
-        else:
-            acc["n_effect"] += 1
-            _resolution(acc, record)
-    elif kind == "continuous":
-        acc["n_continuous"] += 1
-        _continuous(acc, record)
-    elif kind == "trigger":
-        acc["n_trigger"] += 1
-        if (record["payload"] or {}).get("fired"):
-            acc["trigger_fired"] += 1
-    else:
-        acc[f"n_{kind}"] += 1
+    _RECORD_FOLDERS.get(kind, _fold_other_record)(acc, record)
 
 
 def fold_shard(path: str) -> list[tuple[str, str, str, dict]]:
@@ -330,29 +432,35 @@ def main() -> None:
           f"-> {paths.profile_table}")
 
 
+def _nonzero(frame: pd.DataFrame, column: str):
+    """``frame[column]`` with 0 as NaN, NaN when the column is absent."""
+    return frame[column].replace(0, np.nan) if column in frame else np.nan
+
+
+def _columns(frame: pd.DataFrame, prefix: str, skip: tuple[str, ...] = ()) -> list[str]:
+    """The columns starting with ``prefix`` and none of ``skip``."""
+    return [c for c in frame.columns if c.startswith(prefix) and not c.startswith(skip)]
+
+
+def _divide(frame: pd.DataFrame, columns: list[str], new_prefix: str, denominator) -> None:
+    """``<new_prefix><rest>`` = column / denominator, for each column of the form ``xxx_<rest>``."""
+    for column in columns:
+        frame[f"{new_prefix}{column[4:]}"] = frame[column] / denominator
+
+
 def derive(frame: pd.DataFrame) -> pd.DataFrame:
     """Per-record shares and means from the sums (NaN where undefined)."""
-    res = frame["res_n"].replace(0, np.nan) if "res_n" in frame else np.nan
-    for column in [c for c in frame.columns if c.startswith("has_") and
-                   not c.startswith("has_cost_")]:
-        frame[f"p_{column[4:]}"] = frame[column] / res
-    for column in [c for c in frame.columns if c.startswith("sum_") and
-                   not c.startswith(("sum_cost_", "sum_cont_"))]:
-        frame[f"mean_{column[4:]}"] = frame[column] / res
+    res = _nonzero(frame, "res_n")
+    _divide(frame, _columns(frame, "has_", ("has_cost_",)), "p_", res)
+    _divide(frame, _columns(frame, "sum_", ("sum_cost_", "sum_cont_")), "mean_", res)
     side_total = (frame.get("sum_side_own", 0) + frame.get("sum_side_opp", 0)).replace(0, np.nan)
     frame["share_opp_side"] = frame.get("sum_side_opp", 0) / side_total
-    cost = frame["cost_n"].replace(0, np.nan) if "cost_n" in frame else np.nan
-    for column in [c for c in frame.columns if c.startswith("has_cost_")]:
-        frame[f"p_{column[4:]}"] = frame[column] / cost
-    for column in ("sum_cost_mana", "sum_cost_life"):
-        if column in frame:
-            frame[f"mean_{column[4:]}"] = frame[column] / cost
-    cont = frame["cont_n"].replace(0, np.nan) if "cont_n" in frame else np.nan
-    for column in [c for c in frame.columns if c.startswith("sum_cont_")]:
-        frame[f"mean_{column[4:]}"] = frame[column] / cont
-    trig = frame["n_trigger"].replace(0, np.nan) if "n_trigger" in frame else np.nan
+    cost = _nonzero(frame, "cost_n")
+    _divide(frame, _columns(frame, "has_cost_"), "p_", cost)
+    _divide(frame, [c for c in ("sum_cost_mana", "sum_cost_life") if c in frame], "mean_", cost)
+    _divide(frame, _columns(frame, "sum_cont_"), "mean_", _nonzero(frame, "cont_n"))
     if "trigger_fired" in frame:
-        frame["p_trigger_fired"] = frame["trigger_fired"] / trig
+        frame["p_trigger_fired"] = frame["trigger_fired"] / _nonzero(frame, "n_trigger")
     total = frame["n_records"]
     for kind in ("effect", "cost", "continuous", "trigger", "rewrite", "combat",
                  "playability"):
