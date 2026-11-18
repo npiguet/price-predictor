@@ -143,4 +143,78 @@ class LibraryMovementTest {
 
         assertEquals(1, total(all, "card_drawn"), all.toString());
     }
+
+    /**
+     * Fact or Fiction puts the cards of the pile the caster does not take
+     * into the graveyard: moves out of the library that Forge never counts as
+     * a mill, so none is written.
+     */
+    @Test
+    void aDigsRestInTheGraveyardMillsNothing() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        library(game, caster, "Hill Giant", 12);
+
+        List<String> all = resolved(game, caster, "Fact or Fiction");
+
+        assertTrue(caster.getCardsIn(ZoneType.Graveyard).stream()
+                .anyMatch(card -> card.getName().equals("Hill Giant")),
+                "a pile reached the graveyard");
+        assertEquals(0, total(all, "card_milled"), all.toString());
+    }
+
+    /** Entomb puts a chosen card from the library into the graveyard: a move, no mill. */
+    @Test
+    void anEntombMillsNothing() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        library(game, caster, "Hill Giant", 4);
+
+        List<String> all = resolved(game, caster, "Entomb");
+
+        assertTrue(caster.getCardsIn(ZoneType.Graveyard).stream()
+                .anyMatch(card -> card.getName().equals("Hill Giant")), "a card was entombed");
+        assertEquals(0, total(all, "card_milled"), all.toString());
+    }
+
+    /**
+     * A discard that madness sends to exile instead of the graveyard is still
+     * a discard (702.35a: the card is discarded, then exiled by the madness
+     * replacement).
+     */
+    @Test
+    void aDiscardReplacedByMadnessIsStillADiscard() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player victim = game.getPlayers().get(1);
+        TestBoard.inHand(game, victim, "Fiery Temper");
+        Card rot = TestBoard.inHand(game, caster, "Mind Rot");
+
+        List<String> all = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            TestBoard.castAndResolve(game, TestBoard.cast(game, rot, caster, victim));
+            nextStep(game);
+        });
+
+        assertEquals(0, victim.getCardsIn(ZoneType.Graveyard).stream()
+                .filter(card -> card.getName().equals("Fiery Temper")).count(),
+                "madness took the card away from the graveyard");
+        assertEquals(1, total(all, "card_discarded"), all.toString());
+    }
+
+    /** An ordinary discard still reads as one. */
+    @Test
+    void anOrdinaryDiscardIsADiscard() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player victim = game.getPlayers().get(1);
+        TestBoard.inHand(game, victim, "Hill Giant");
+        Card rot = TestBoard.inHand(game, caster, "Mind Rot");
+
+        List<String> all = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            TestBoard.castAndResolve(game, TestBoard.cast(game, rot, caster, victim));
+            nextStep(game);
+        });
+
+        assertEquals(1, total(all, "card_discarded"), all.toString());
+    }
 }

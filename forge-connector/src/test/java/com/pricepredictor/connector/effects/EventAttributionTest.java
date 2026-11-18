@@ -137,6 +137,22 @@ class EventAttributionTest {
     }
 
     /**
+     * A sub-ability with no {@code Duration$} gets Forge's default for its own
+     * API, never the line's: Hypnotic Pattern's perpetual root and its
+     * until-end-of-turn pump.
+     */
+    @Test
+    void aClauseDeclaringNoDurationDoesNotInheritTheLines() {
+        SpellAbility root = TestCards.build("Hypnotic Pattern").getFirstSpellAbility();
+        SpellAbility sub = root.getSubAbility();
+
+        assertEquals(EventDuration.PERMANENT,
+                EventAttribution.duration(root, root, EventType.PT_CHANGE));
+        assertEquals(EventDuration.END_OF_TURN,
+                EventAttribution.duration(root, sub, EventType.PT_CHANGE));
+    }
+
+    /**
      * Every {@code Duration$} Forge's scripts spell, and the event
      * {@code duration} it reads: one that ends only when an object changes
      * outlasts the turn, as {@code Permanent} does; one that ends at a step

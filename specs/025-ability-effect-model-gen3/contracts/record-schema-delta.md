@@ -481,7 +481,16 @@ position a card left a library from, and a search of another player's library.
   not listed.
 - An event's `duration` buckets a declared `Duration$` as a floating effect's `duration` is
   bucketed (above, "Command-zone objects"): `permanent` and `until_leaves` read `permanent`, every
-  other reads `end_of_turn`; an undeclared one stays what Forge applies.
+  other reads `end_of_turn`; an undeclared one stays what Forge applies to the resolving clause's
+  API (end of turn for `Pump`, `PumpAll`, `Animate`, `AnimateAll`, `Debuff`, `Protection`,
+  `ProtectionAll`, `Effect`, `ChangeText` and `ExchangePower`, permanent for any other). Only the
+  resolving clause's own `Duration$` is read: a sub-ability with none never takes its line's.
+- The bus tells a card's move between zones as a discard or a mill only where Forge counted one.
+  A hand-to-graveyard move is a `card_discarded`, and so is a hand-to-exile move of the card
+  Forge's `Player.discard` has just listed as discarded (a discard a madness replacement sends to
+  exile). A library-to-graveyard move is a `card_milled` only when Forge flagged the card milled
+  (`Player.mill`) or surveilled (`Player.surveil`); a dig's rest or an Entomb writes the
+  `zone_change` alone.
 - A state transition (`zone_change`, `tapped`, `untapped`, `attached`, `unattached`, `phased`,
   `face_change`, `destroyed`, `sacrificed`, `regenerated`) that repeats, line for line, the last
   transition a record holds for the same subjects is written once; the same transition after

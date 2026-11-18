@@ -28,6 +28,7 @@ import forge.game.event.GameEventSurveil;
 import forge.game.event.GameEventTurnPhase;
 import forge.game.event.GameEventZone;
 import forge.game.player.Player;
+import forge.game.player.PlayerView;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.CostPaymentStack;
 import forge.game.zone.ZoneType;
@@ -76,6 +77,9 @@ abstract class BusEventReader {
 
     /** The library-to-hand moves filed as draws whose draw counter is still read live. */
     private final DrawCheck.Pending draws = new DrawCheck.Pending();
+
+    /** The library-to-graveyard moves filed as mills whose card flag is still read live. */
+    private final MillCheck.Pending mills = new MillCheck.Pending();
 
     /**
      * Each battlefield card's face as last read ({@link CardFacts#faceState}),
@@ -373,6 +377,7 @@ abstract class BusEventReader {
         Player libraryOwner = libraryLeftBy(event);
         if (libraryOwner != null) {
             draws.settle(libraryOwner);
+            mills.settle(libraryOwner);
         }
         EffectEvent moved = BusEvents.cardMoved(event);
         for (EffectEvent how : howItLeft(event)) {
@@ -384,11 +389,7 @@ abstract class BusEventReader {
             placeInLibrary(event, moved);
             fileMove(event, moved);
         }
-        EffectEvent movement = BusEvents.libraryMovement(event);
-        if (movement != null && movement.type() == EventType.CARD_DRAWN && libraryOwner != null) {
-            movement.onlyIf(draws.open(libraryOwner)::drawn);
-        }
-        file(movement, null);
+        file(checkedMovement(event, libraryOwner), null);
         if (event.card() == null) {
             return;
         }
@@ -627,6 +628,7 @@ abstract class BusEventReader {
     @Subscribe
     public void onStepBoundary(GameEventTurnPhase event) {
         draws.settleAll();
+        mills.settleAll();
         // A sacrifice or a destruction whose move never came names nothing.
         sacrificesPending.clear();
         destroyPending = false;
@@ -639,6 +641,31 @@ abstract class BusEventReader {
             return null;
         }
         return game.getPlayer(event.card().getOwner());
+    }
+
+    /**
+     * The draw, discard or mill a move may be, a draw or a mill gated on what
+     * Forge counted for it ({@link DrawCheck}, {@link MillCheck}); null for
+     * none.
+     */
+    private EffectEvent checkedMovement(GameEventCardChangeZone event, Player libraryOwner) {
+        EffectEvent movement = BusEvents.libraryMovement(event, ownerOf(event));
+        if (movement == null || libraryOwner == null) {
+            return movement;
+        }
+        if (movement.type() == EventType.CARD_DRAWN) {
+            movement.onlyIf(draws.open(libraryOwner)::drawn);
+        } else if (movement.type() == EventType.CARD_MILLED) {
+            movement.onlyIf(mills.open(libraryOwner, event.card().getId())::milled);
+        }
+        return movement;
+    }
+
+    /** The live owner of the card a move names, or null. */
+    private Player ownerOf(GameEventCardChangeZone event) {
+        CardView card = event.card();
+        PlayerView owner = card == null ? null : card.getOwner();
+        return game == null || owner == null ? null : game.getPlayer(owner);
     }
 
     /** File an outcome a {@link BusEvents} factory may have answered null for. */

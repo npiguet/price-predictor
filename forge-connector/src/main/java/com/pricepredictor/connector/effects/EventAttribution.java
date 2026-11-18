@@ -141,9 +141,10 @@ final class EventAttribution {
     /**
      * How long the acting script says an event of {@code eventType} lasts.
      *
-     * <p>Read from the resolving clause's own {@code Duration$}, falling back to
-     * the root line's — a sub-ability that declares none inherits the line's.
-     * The source is the script rather than the engine's cleanup registration
+     * <p>Read from the resolving clause's own {@code Duration$} only: a
+     * sub-ability that declares none does not inherit the line's (Hypnotic
+     * Pattern's perpetual line and its until-end-of-turn sub-clause), as
+     * Forge's effects read their own clause's. The source is the script rather than the engine's cleanup registration
      * because the script is where the answer is written down.
      *
      * <p>A declared {@code Duration$} is bucketed as a floating effect's is
@@ -209,17 +210,18 @@ final class EventAttribution {
         return ability == null || ability.getApi() == null ? null : ability.getApi().name();
     }
 
+    /**
+     * The {@code Duration$} of the clause resolving, and of that clause only:
+     * Forge's effects read their own clause's, so a sub-ability that declares
+     * none gets its API's default, not the line's. The root's is read only
+     * when no clause is named.
+     */
     private static String declaredDuration(SpellAbility root, Object pointer) {
-        if (pointer instanceof SpellAbility resolving) {
-            String own = resolving.getParam("Duration");
-            if (own != null && !own.isEmpty()) {
-                return own;
-            }
-        }
-        if (root == null) {
+        SpellAbility clause = pointer instanceof SpellAbility resolving ? resolving : root;
+        if (clause == null) {
             return null;
         }
-        String own = root.getParam("Duration");
+        String own = clause.getParam("Duration");
         return own == null || own.isEmpty() ? null : own;
     }
 

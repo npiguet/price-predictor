@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import forge.LobbyPlayer;
 import forge.game.Game;
+import forge.game.card.Card;
 import forge.game.card.CardView;
 import forge.game.event.GameEventCardAttachment;
 import forge.game.event.GameEventCardChangeZone;
@@ -410,9 +411,14 @@ final class BusEvents {
      *
      * <p>A library-to-hand move is only a draw candidate here: a tutor or an
      * explore moves a card the same way. The reader keeps it only when
-     * Forge's draw counter moved for it ({@link DrawCheck}).
+     * Forge's draw counter moved for it ({@link DrawCheck}). A
+     * library-to-graveyard move is likewise only a mill candidate, kept when
+     * Forge flagged the card milled ({@link MillCheck}): a dig's rest and an
+     * Entomb move cards the same way. A hand-to-exile move is a discard when
+     * the player's discarded list says that card was just discarded, which is
+     * how a madness discard reads.
      */
-    static EffectEvent libraryMovement(GameEventCardChangeZone event) {
+    static EffectEvent libraryMovement(GameEventCardChangeZone event, Player owner) {
         if (event.card() == null || event.card().getOwner() == null
                 || event.from() == null || event.to() == null) {
             return null;
@@ -429,6 +435,8 @@ final class BusEvents {
                 case Library -> EventType.CARD_MILLED;
                 default -> null;
             };
+            case Exile -> from == ZoneType.Hand && justDiscarded(owner, event)
+                    ? EventType.CARD_DISCARDED : null;
             default -> null;
         };
         if (type == null) {
@@ -437,6 +445,23 @@ final class BusEvents {
         return new EffectEvent(type)
                 .subject(Refs.of(event.card().getOwner()))
                 .param("count", 1);
+    }
+
+    /**
+     * Whether the card leaving {@code owner}'s hand is the one Forge counted
+     * as discarded a moment ago: {@code Player.discard} appends the card to
+     * the player's discarded-this-turn list <i>before</i> it moves it, so a
+     * discard that a madness replacement sends to exile instead of the
+     * graveyard (702.35a) is the list's last card when its move is
+     * published. Any other move from the hand to exile is no discard.
+     */
+    private static boolean justDiscarded(Player owner, GameEventCardChangeZone event) {
+        if (owner == null) {
+            return false;
+        }
+        List<Card> discarded = owner.getDiscardedThisTurn();
+        return !discarded.isEmpty()
+                && discarded.get(discarded.size() - 1).getId() == event.card().getId();
     }
 
     /**
