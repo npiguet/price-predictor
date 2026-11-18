@@ -62,8 +62,8 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
         if (placeholder && !children.isEmpty()) {
             String diceDesc = DiceOutcomes.rollDescription(execute);
             if (diceDesc != null) {
-                normalized = AbilityDescription.normalize(
-                        rawDesc.replace("ABILITY", AbilityDescription.replaceVert(diceDesc)));
+                normalized = AbilityDescription.normalize(DescriptionText.fill(
+                        rawDesc, "ABILITY", AbilityDescription.replaceVert(diceDesc)));
             }
         }
 

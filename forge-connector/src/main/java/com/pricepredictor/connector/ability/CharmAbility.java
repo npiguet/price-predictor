@@ -181,7 +181,7 @@ public record CharmAbility(AbilityType type, String descriptionText, List<Abilit
                                              CardTraitBase owner) {
         String header = CharmHeader.of(charm);
         return new Expanded(
-                AbilityDescription.normalize(desc.replace("ABILITY", header)),
+                AbilityDescription.normalize(DescriptionText.fill(desc, "ABILITY", header)),
                 optionsFrom(charm, owner));
     }
 }
