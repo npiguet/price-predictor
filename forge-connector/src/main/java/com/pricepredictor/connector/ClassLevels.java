@@ -1,25 +1,21 @@
 package com.pricepredictor.connector;
 
-import com.pricepredictor.connector.ability.ClassLevelAbility;
 import com.pricepredictor.connector.ability.TextAbility;
-import com.pricepredictor.connector.effects.ProvenanceRecorder;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
+import java.util.EnumSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
  * A Class face's ability list, rearranged so it reads as the printed card
  * does: one line per level, level one first, the levels in order.
  *
- * <p>Three steps, in this order: drop each level's duplicate trait entry,
- * re-type the remaining unlevelled abilities as level one, then sort the
- * levels ahead of everything else. The recorder follows every step, because
- * each one either removes or replaces an ability the recorder keys by
- * identity.
+ * <p>Two steps, in this order: re-type the unlevelled abilities as level
+ * one, then sort the levels ahead of everything else. A level's own traits
+ * render no line of their own (the Class keyword prints the level), so no
+ * line here duplicates a level.
  */
 final class ClassLevels {
 
@@ -32,75 +28,35 @@ final class ClassLevels {
             Comparator.comparing((Ability a) -> !isLevel(a))
                     .thenComparingInt(a -> isLevel(a) ? a.ordinal() : 0);
 
-    private final List<Ability> abilities;
-    private final ProvenanceRecorder recorder;
+    /** The kinds of line a Class card's level one is made of. */
+    private static final Set<AbilityType> LEVEL_ONE_KINDS =
+            EnumSet.of(AbilityType.STATIC, AbilityType.TRIGGERED, AbilityType.REPLACEMENT);
 
-    private ClassLevels(List<Ability> abilities, ProvenanceRecorder recorder) {
-        this.abilities = new ArrayList<>(abilities);
-        this.recorder = recorder;
-    }
+    private ClassLevels() {}
 
     /**
-     * {@code abilities} rearranged as a Class face prints them.
-     *
-     * @param levelDescriptions each Class level's inner text, which is how its
-     *                          duplicate trait entry is recognised
+     * {@code abilities} rearranged as a Class face prints them; a re-typed
+     * line takes the keys of the one it replaces through {@code duplicates}.
      */
-    static List<Ability> arrange(List<Ability> abilities, Set<String> levelDescriptions,
-                                 ProvenanceRecorder recorder) {
-        ClassLevels levels = new ClassLevels(abilities, recorder);
-        levels.mergeLevelDuplicates(levelDescriptions);
-        levels.retypeLevelOne();
-        levels.abilities.sort(LEVELS_FIRST);
-        return levels.abilities;
-    }
-
-    /**
-     * Remove each trait entry a level already prints.
-     *
-     * <p>A level's effect reaches the parser twice — once through the Class
-     * keyword that prints the level, once as the trait itself — and only the
-     * keyword's entry survives. It therefore takes over the removed entry's
-     * keys, or a record fired by that trait names no line at all.
-     */
-    private void mergeLevelDuplicates(Set<String> levelDescriptions) {
-        Map<String, Ability> levelByDescription = new HashMap<>();
-        for (Ability a : abilities) {
-            if (!isLevel(a)) continue;
-            // A Class level prints its level-up cost ahead of its text, so the
-            // description the removal below matches is the level's inner text,
-            // not its printed line. Keyed by the printed line, every lookup
-            // misses and the removed trait's keys are lost.
-            levelByDescription.putIfAbsent(
-                    a instanceof ClassLevelAbility level
-                            ? level.innerDescription() : a.descriptionText(), a);
-        }
-        abilities.removeIf(a -> {
-            boolean duplicate = !isLevel(a)
-                    && levelDescriptions.contains(a.descriptionText());
-            if (duplicate) {
-                recorder.merge(levelByDescription.get(a.descriptionText()), a);
-            }
-            return duplicate;
-        });
+    static List<Ability> arrange(List<Ability> abilities, DuplicateLines duplicates) {
+        List<Ability> levels = new ArrayList<>(abilities);
+        retypeLevelOne(levels, duplicates);
+        levels.sort(LEVELS_FIRST);
+        return levels;
     }
 
     /**
      * Re-type each static, triggered or replacement ability as level one: on
      * a Class card, whatever no level keyword claims is the level the card
-     * starts at.
+     * starts at. The level-one line is a fresh object, and the recorder keys
+     * by identity, so it replaces the ability's line with its keys.
      */
-    private void retypeLevelOne() {
+    private static void retypeLevelOne(List<Ability> abilities, DuplicateLines duplicates) {
         for (int i = 0; i < abilities.size(); i++) {
             Ability a = abilities.get(i);
-            if (a.type() == AbilityType.STATIC || a.type() == AbilityType.TRIGGERED
-                    || a.type() == AbilityType.REPLACEMENT) {
-                // The level-one ability is re-typed as a fresh object, and the
-                // recorder keys by identity, so its attribution moves with it.
-                TextAbility level =
-                        new TextAbility(AbilityType.LEVEL, a.descriptionText(), 1);
-                recorder.transfer(a, level);
-                abilities.set(i, level);
+            if (LEVEL_ONE_KINDS.contains(a.type())) {
+                abilities.set(i, duplicates.replace(
+                        a, new TextAbility(AbilityType.LEVEL, a.descriptionText(), 1)));
             }
         }
     }

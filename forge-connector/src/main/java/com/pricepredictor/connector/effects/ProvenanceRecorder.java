@@ -29,11 +29,13 @@ import java.util.Set;
  * end up in the sidecar's {@code dropped_keys}, which holds the traits no
  * line states — a permanent's implicit cast spell, say, or a charm whose
  * modes are its only lines, and a trait whose text the converter does not
- * render. A trait the converter deduplicated, merged or
- * derived from a keyword keeps its attribution on the line that carries its
- * text, because it is still live at runtime and a record naming it must reach
- * the words it produced. A mode key is never declared: it is claimed by the
- * mode's line or it does not exist, so it can never be dropped.
+ * render. A trait whose line the converter left out as another's duplicate
+ * ({@link #fold}) or derived from a keyword keeps its attribution on the line
+ * that carries its text, because it is still live at runtime and a record
+ * naming it must reach the words it produced. A mode key is never declared:
+ * it is claimed by the mode's line or it does not exist, so it can never be
+ * dropped. A mode line is keyed under every root key its charm line carries,
+ * as each key reaches the charm line.
  *
  * <p>A trait a keyword built is named through its keyword's key, never by its
  * kind-indexed key, which is declared nowhere: a keyword printing one line
@@ -122,8 +124,22 @@ public final class ProvenanceRecorder {
 
     private void attributeModesBelow(Ability ability, ProvenanceKey key, CardTraitBase trait) {
         for (Ability sub : ability.subAbilities()) {
-            if (sub instanceof OptionAbility option) attributeMode(option, key, trait);
+            if (sub instanceof OptionAbility option && option.belongsTo(trait)) {
+                attributeMode(option, key, ability);
+            }
         }
+    }
+
+    /**
+     * Claim {@code option} under its root's {@code rootKey} with its mode, and
+     * under every other key its {@code root} line carries.
+     */
+    private void attributeMode(OptionAbility option, ProvenanceKey rootKey, Ability root) {
+        ProvenanceKey modeKey = rootKey.withOption(option.modeIndex());
+        claim(option, modeKey, TraitScript.ofMode(
+                option.mode(), option.label(), modeKey, missingSVars));
+        Source rootSource = byAbility.get(root);
+        if (rootSource != null) claimModeUnder(byAbility.get(option), option, rootSource.keys());
     }
 
     private void attributeMode(OptionAbility option, ProvenanceKey rootKey,
@@ -134,6 +150,15 @@ public final class ProvenanceRecorder {
                 option.mode(), option.label(), modeKey, missingSVars));
     }
 
+    /**
+     * Claim {@code ability} under {@code key}, and each charm mode below it
+     * under {@code key} with the mode's option.
+     *
+     * <p>A charm line can carry several keys: two triggers sharing one charm,
+     * which the converter merged, or the triggers a keyword generated. Forge
+     * resolves a mode through whichever of them fired, so a mode line keyed
+     * under one root alone leaves the others' records with no line.
+     */
     private void claim(Ability ability, ProvenanceKey key, TraitScript script) {
         Source existing = byAbility.get(ability);
         if (existing == null) {
@@ -141,6 +166,7 @@ public final class ProvenanceRecorder {
         } else {
             existing.addKey(key);
         }
+        claimModesBelow(ability, Set.of(key));
     }
 
     /** Attribute a single parsed ability. */
@@ -257,59 +283,25 @@ public final class ProvenanceRecorder {
     }
 
     /**
-     * Fold a discarded duplicate's attribution into the ability that stays.
-     *
-     * <p>The converter deduplicates two traits that render one description. The
-     * survivor carries the text of both, so it has to carry both keys: dropping
-     * the duplicate's key would leave every record fired by that live trait
-     * with no line to join to.
+     * Fold the attribution of {@code dropped}, a line the converter leaves
+     * out as {@code survivor}'s duplicate, into {@code survivor}, the line
+     * that stays and carries the text of both: both traits stay live at
+     * runtime, so a record fired by either has to join to that line. The
+     * survivor's charm modes take each key it gains with their option.
      */
-    public void merge(Ability survivor, Ability duplicate) {
-        // Tested before the removal, so a merge that cannot land leaves the
-        // duplicate's attribution where it was rather than discarding it.
-        if (survivor == null || duplicate == null) return;
-        Source from = byAbility.remove(duplicate);
+    public void fold(Ability survivor, Ability dropped) {
+        // Tested before the removal, so a fold that cannot land leaves the
+        // dropped line's attribution where it was rather than discarding it.
+        if (survivor == null || dropped == null) return;
+        Source from = byAbility.remove(dropped);
         if (from == null) return;
         Source into = byAbility.get(survivor);
         if (into == null) {
             byAbility.put(survivor, from);
-            return;
+        } else {
+            from.keys().forEach(into::addKey);
         }
-        for (ProvenanceKey key : from.keys()) {
-            into.addKey(key);
-        }
-    }
-
-    /**
-     * Move an ability's attribution to the object that replaces it.
-     *
-     * <p>Post-processing rebuilds some abilities as fresh objects — a Class
-     * card's level lines, for one — and the recorder keys by identity, so
-     * without this the replacement would be textless to the model and the
-     * original's key would look dropped.
-     */
-    public void transfer(Ability from, Ability to) {
-        Source source = byAbility.remove(from);
-        if (source != null && to != null) byAbility.put(to, source);
-    }
-
-    /**
-     * Give each mode line its mode under every root key its charm line carries.
-     *
-     * <p>A charm line can carry several keys: two triggers sharing one charm,
-     * which the converter merged, or the triggers a keyword generated. Forge
-     * resolves a mode through whichever of them fired, so a mode line keyed
-     * under one root alone leaves the others' records with no line. Run once
-     * on the face's finished lines, every merge and keyword attribution
-     * having landed, which no single attribution site can know; each line is
-     * a root before the lines below it, as the file prints them.
-     */
-    public void claimModesUnderEveryRoot(Iterable<Ability> faceLines) {
-        for (Ability ability : faceLines) {
-            Source root = byAbility.get(ability);
-            if (root != null) claimModesBelow(ability, root.keys());
-            claimModesUnderEveryRoot(ability.subAbilities());
-        }
+        claimModesBelow(survivor, from.keys());
     }
 
     private void claimModesBelow(Ability parent, Set<ProvenanceKey> rootKeys) {
@@ -336,7 +328,7 @@ public final class ProvenanceRecorder {
         return byAbility.get(ability);
     }
 
-    /** Keys that no surviving ability claims — the deduplicated traits. */
+    /** Keys that no surviving ability claims: the traits no line states. */
     public List<ProvenanceKey> droppedKeys(Iterable<Ability> surviving) {
         Set<ProvenanceKey> claimed = new LinkedHashSet<>();
         for (Ability ability : surviving) {

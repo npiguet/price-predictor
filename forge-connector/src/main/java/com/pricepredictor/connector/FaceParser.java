@@ -44,11 +44,9 @@ import forge.game.trigger.Trigger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -108,10 +106,8 @@ final class FaceParser {
     /** The tree-prefixed script path keys name, or null when not recording. */
     private final String scriptFile;
     private final List<Ability> abilities = new ArrayList<>();
-    /** Each Class level's inner text, so its duplicate trait entry can be removed. */
-    /** The lines of secondary triggers whose Execute$ no primary shares (identity set). */
-    private final Set<Ability> secondaryLines = Collections.newSetFromMap(new IdentityHashMap<>());
-    private final Set<String> classLevelDescriptions = new HashSet<>();
+    /** The lines left out as another's duplicate, and where their keys go. */
+    private final DuplicateLines duplicates;
     /** The synthetic mana line of a basic-typed face, or null. */
     private final String landManaDescription;
     /**
@@ -154,6 +150,7 @@ final class FaceParser {
         this.faceIndex = faceIndex;
         this.scriptFile = scriptFile;
         this.landManaDescription = buildLandManaDescription(face);
+        this.duplicates = new DuplicateLines(recorder);
     }
 
     /** Run every phase, in order, and build the face from what they produced. */
@@ -167,9 +164,7 @@ final class FaceParser {
         appendLandMana();
         addUndescribedSpells();
         claimAlternateCostSpells();
-        List<Ability> finished = postProcessed();
-        recorder.claimModesUnderEveryRoot(finished);
-        return buildCardFace(face, finished);
+        return buildCardFace(face, postProcessed());
     }
 
     /**
@@ -259,7 +254,7 @@ final class FaceParser {
         handlers.put("CARDNAME ", nameStatic);
         handlers.put("NICKNAME ", nameStatic);
         handlers.put("Chapter:", (ki, p) -> ChapterAbility.fromKeyword(ki, p.oracle()));
-        handlers.put("Class:", (ki, p) -> p.renderClassLevel(ki));
+        handlers.put("Class:", (ki, p) -> renderClassLevel(ki));
         KeywordRenderer etb = (ki, p) -> EtbReplacementAbility.fromKeyword(ki, p.oracle());
         handlers.put("etbCounter:", etb);
         handlers.put("ETBReplacement:", etb);
@@ -286,14 +281,12 @@ final class FaceParser {
     }
 
     /**
-     * A Class level's line, its inner text kept so its duplicate trait entry
-     * can go; the line is the text of the level-up ability and of the static
-     * granting what the level adds, which Forge builds from the keyword.
+     * A Class level's line, the text of the level-up ability and of the
+     * static granting what the level adds, which Forge builds from the keyword.
      */
-    private KeywordRendering renderClassLevel(KeywordInterface ki) {
+    private static KeywordRendering renderClassLevel(KeywordInterface ki) {
         ClassLevelAbility level = ClassLevelAbility.of(ki);
         if (level == null) return KeywordRendering.of(List.of());
-        classLevelDescriptions.add(level.innerDescription());
         KeywordRendering.Builder rendering = new KeywordRendering.Builder();
         rendering.add(level);
         ki.getAbilities().forEach(levelUp -> rendering.printed(levelUp, level));
@@ -672,13 +665,9 @@ final class FaceParser {
         }
         Ability triggered = TriggeredAbilityEntry.of(t);
         addIfNotNull(abilities, triggered);
-        noteSecondary(triggered, secondary);
+        duplicates.noteTriggerLine(triggered, t);
         recorder.attribute(triggered, key, t);
         if (triggered != null && exec != null) primaryByExecute.put(exec, triggered);
-    }
-
-    private void noteSecondary(Ability line, boolean secondary) {
-        if (secondary && line != null) secondaryLines.add(line);
     }
 
     /** Whether {@code t} is a secondary trigger that is also static: no card text. */
@@ -756,71 +745,19 @@ final class FaceParser {
 
     // -- the finished face -------------------------------------------------
 
-    /** The phases' abilities, reshaped into the order and set the face prints. */
+    /**
+     * The phases' abilities, reshaped into the order and set the face prints:
+     * a Class face's levels first, then without the lines another line
+     * duplicates ({@link DuplicateLines}), cost lines first.
+     */
     private List<Ability> postProcessed() {
         List<Ability> result = abilities;
         if (face.getType().hasSubtype("Class")) {
-            result = ClassLevels.arrange(result, classLevelDescriptions, recorder);
+            result = ClassLevels.arrange(result, duplicates);
         }
-        // Remove abilities whose description duplicates an earlier one.
-        // This eliminates the spurious second trigger that Forge registers for
-        // the "enters or attacks" pattern (two T: lines, identical TriggerDescription).
-        result = deduplicateByDescription(result);
+        result = duplicates.withoutIdentical(result);
         result.sort(COSTS_FIRST);
-        result = withoutRepeatedSecondaries(result);
-        return result;
-    }
-
-    /**
-     * Remove abilities whose descriptionText duplicates an earlier entry.
-     *
-     * <p>The survivor inherits the discarded duplicate's provenance: one line
-     * now carries the text of both traits, and both stay live at runtime, so a
-     * record fired by either has to join to that line.
-     */
-    private List<Ability> deduplicateByDescription(List<Ability> list) {
-        Map<String, Ability> survivors = new HashMap<>();
-        List<Ability> result = new ArrayList<>();
-        for (Ability a : list) {
-            String desc = a.descriptionText();
-            Ability survivor = desc == null ? null : survivors.putIfAbsent(desc, a);
-            if (survivor == null) {
-                result.add(a);
-            } else {
-                mergeDuplicate(survivor, a);
-            }
-        }
-        return result;
-    }
-
-    /** The survivor takes the duplicate's keys, and is no secondary line if the duplicate was not. */
-    private void mergeDuplicate(Ability survivor, Ability duplicate) {
-        if (!secondaryLines.contains(duplicate)) secondaryLines.remove(survivor);
-        recorder.merge(survivor, duplicate);
-    }
-
-    /**
-     * Drop each secondary trigger's line whose text another line of the face
-     * restates (Coffin Queen's triggers repeat its activated line). The
-     * trigger fires in play, so its keys go to the first line, in line order,
-     * that states it, as a deduplicated trait's do. Forge's card view prints
-     * no secondary trait, and a line that says something no other line does
-     * keeps its place.
-     */
-    private List<Ability> withoutRepeatedSecondaries(List<Ability> list) {
-        List<Ability> result = new ArrayList<>(list);
-        for (Ability a : list) {
-            if (!secondaryLines.contains(a) || a.descriptionText() == null) continue;
-            Ability cover = result.stream().filter(other -> other != a
-                    && other.descriptionText() != null
-                    && RepeatedLines.repeats(a.descriptionText(), other.descriptionText()))
-                    .findFirst().orElse(null);
-            if (cover != null) {
-                result.removeIf(x -> x == a);
-                recorder.merge(cover, a);
-            }
-        }
-        return result;
+        return duplicates.withoutRestatedSecondaries(result);
     }
 
     private static CardFace buildCardFace(ICardFace face, List<Ability> abilities) {
