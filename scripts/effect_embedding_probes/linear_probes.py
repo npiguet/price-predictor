@@ -64,6 +64,7 @@ from effect_embedding_probes.common import (  # noqa: E402
     CARD,
     NUMERIC_SCRIPT,
     SCRIPT_CATS,
+    MarkdownStyle,
     add_probe_arguments,
     design,
     group_means_residual,
@@ -255,7 +256,7 @@ def main() -> None:
         slug = metric.replace("²", "2").replace(" ", "_")
         write_markdown(part, paths.out / f"probes_{args.targets}_{slug}.md",
                        f"Linear probes, {args.targets} targets, {metric}",
-                       notes[args.targets])
+                       MarkdownStyle(note=notes[args.targets]))
     print(frame.to_string(index=False, max_colwidth=30))
 
 

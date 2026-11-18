@@ -39,6 +39,7 @@ from sklearn.preprocessing import StandardScaler
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from effect_embedding_probes.common import (  # noqa: E402
+    MarkdownStyle,
     add_probe_arguments,
     group_means_residual,
     has_taxonomy,
@@ -94,9 +95,11 @@ def main() -> None:
             f"{np.mean(knn == y):.3f}, majority class "
             f"{counts.iloc[0] / len(y):.3f}.")
     write_markdown(pairs, paths.out / "api_confusion.md",
-                   "API-type pairs the linear probe confuses most", note)
+                   "API-type pairs the linear probe confuses most",
+                   MarkdownStyle(note=note))
     write_markdown(per_type, paths.out / "api_recall.md",
-                   "Per-type recall of the API-type probes (40 largest types)", note)
+                   "Per-type recall of the API-type probes (40 largest types)",
+                   MarkdownStyle(note=note))
     print(note)
     print(pairs.head(15).to_string(index=False))
 

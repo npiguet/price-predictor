@@ -50,6 +50,7 @@ from effect_embedding_probes.common import (  # noqa: E402
     CORPUS,
     NUMERIC_SCRIPT,
     SCRIPT_CATS,
+    MarkdownStyle,
     add_probe_arguments,
     design,
     eta_squared,
@@ -210,7 +211,7 @@ def write_api_positions(paths, space: str, table: pd.DataFrame, z: np.ndarray) -
     by_type = by_type[by_type["count"] >= 150].sort_values("mean")
     write_markdown(by_type, paths.out / f"pca_{space}_pc1_by_api.md",
                    f"Mean PC1 position by API type, SD units ({space}; types "
-                   "with at least 150 texts)", floatfmt=".2f")
+                   "with at least 150 texts)", style=MarkdownStyle(floatfmt=".2f"))
     split = (pd.DataFrame({"api": table.api, "target": table.target,
                            "z1": z[:, 0], "z2": z[:, 1], "z3": z[:, 2]})
              .groupby(["api", "target"])
@@ -220,7 +221,7 @@ def write_api_positions(paths, space: str, table: pd.DataFrame, z: np.ndarray) -
     split = split[split["count"] >= 30].sort_values(["api", "pc1"])
     write_markdown(split, paths.out / f"pca_{space}_by_api_target.md",
                    f"Mean position on PCs 1-3 by API type and target ({space})",
-                   floatfmt=".2f")
+                   style=MarkdownStyle(floatfmt=".2f"))
 
 
 def write_effect_correlations(paths, space: str, table: pd.DataFrame,

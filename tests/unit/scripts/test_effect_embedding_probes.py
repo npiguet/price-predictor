@@ -68,7 +68,7 @@ class TestResolvePaths:
     def test_the_width_of_e_is_read_from_the_cache(self, tree):
         paths = common.paths_for(
             tree.root / "arm" / "latest.pt", tree.abilities, _provenance(),
-            cards_folders=[tree.cards],
+            options=common.PathOptions(cards_folders=[tree.cards]),
         )
         assert paths.e_width == _WIDTH
 
@@ -84,7 +84,7 @@ class TestResolvePaths:
     def test_output_is_named_by_checkpoint_and_date(self, tree):
         paths = common.paths_for(
             tree.root / "2026-10-gen3-a" / "latest.pt", tree.abilities, _provenance(),
-            today=datetime.date(2026, 10, 8),
+            options=common.PathOptions(today=datetime.date(2026, 10, 8)),
         )
         assert paths.out.name == "embedding-probes-2026-10-gen3-a-latest-20261008"
         assert paths.out.parent == common.REPORTS
@@ -93,7 +93,8 @@ class TestResolvePaths:
         arm = tree.root / "2026-10-gen3-a"
         paths = common.paths_for(
             arm / "latest.pt", tree.abilities, _provenance(),
-            today=datetime.date(2026, 10, 8), reports_dir=arm / "reports",
+            options=common.PathOptions(
+                today=datetime.date(2026, 10, 8), reports_dir=arm / "reports"),
         )
         assert paths.out == (
             arm / "reports" / "embedding-probes-2026-10-gen3-a-latest-20261008"
@@ -102,7 +103,7 @@ class TestResolvePaths:
     def test_sidecar_trees_default_to_what_the_checkpoint_recorded(self, tree):
         paths = common.paths_for(
             Path("c.pt"), tree.abilities, _provenance(),
-            recorded_folders=(str(tree.cards),),
+            options=common.PathOptions(recorded_folders=(str(tree.cards),)),
         )
         assert paths.cards_folders == (tree.cards,)
         assert paths.tree_root("cardsfolder") == tree.cards
@@ -125,13 +126,13 @@ class TestResolvePaths:
         checkpoint = tree.root / "arm" / "latest.pt"
         yesterday = common.paths_for(
             checkpoint, tree.abilities, _provenance(),
-            today=datetime.date(2026, 10, 7),
+            options=common.PathOptions(today=datetime.date(2026, 10, 7)),
         )
         yesterday.text_table.parent.mkdir(parents=True)
         yesterday.text_table.write_bytes(b"")
         today = common.paths_for(
             checkpoint, tree.abilities, _provenance(),
-            today=datetime.date(2026, 10, 8),
+            options=common.PathOptions(today=datetime.date(2026, 10, 8)),
         )
         assert today.reusable("cache/texts.pkl") == yesterday.text_table
 
@@ -148,7 +149,7 @@ class TestTheTextTable:
         monkeypatch.setattr(common, "REPORTS", tree.root / "reports")
         paths = common.paths_for(
             tree.root / "arm" / "latest.pt", tree.abilities, _provenance(),
-            cards_folders=[tree.cards],
+            options=common.PathOptions(cards_folders=[tree.cards]),
         )
         paths.out.mkdir(parents=True)
         table = build_texts.build(paths)
@@ -163,7 +164,7 @@ class TestTheTextTable:
         monkeypatch.setattr(common, "REPORTS", tree.root / "reports")
         paths = common.paths_for(
             tree.root / "arm" / "latest.pt", tree.abilities, _provenance(),
-            cards_folders=[tree.cards],
+            options=common.PathOptions(cards_folders=[tree.cards]),
         )
         paths.out.mkdir(parents=True)
         build_texts.build(paths)

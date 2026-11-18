@@ -176,36 +176,44 @@ def cache_e_width(abilities_root: Path) -> int:
     )
 
 
+@dataclass(frozen=True)
+class PathOptions:
+    """What :func:`paths_for` may override: where the sidecar trees come from
+    (``cards_folders`` first, then ``recorded_folders``, the trees the checkpoint
+    trained against) and where the report directory goes."""
+
+    recorded_folders: tuple = ()
+    cards_folders: list | tuple | None = None
+    today: datetime.date | None = None
+    reports_dir: Path | None = None
+    output: Path | None = None
+
+
 def paths_for(
     checkpoint: Path,
     abilities_root: Path,
     provenance,
-    *,
-    recorded_folders=(),
-    cards_folders=None,
-    today: datetime.date | None = None,
-    reports_dir: Path | None = None,
-    output: Path | None = None,
+    options: PathOptions = PathOptions(),
 ) -> ProbePaths:
     """The run's paths from a checkpoint's recorded provenance.
 
     ``provenance`` is the checkpoint's ``SplitProvenance``: its vocabulary
     fixes the encoding surface and its corpus path the manifest. Sidecar trees
-    come from ``cards_folders`` when given, else from what the checkpoint
-    recorded it trained against, else the converted defaults.
+    come from ``options.cards_folders`` when given, else from what the
+    checkpoint recorded it trained against, else the converted defaults.
     """
     from effects.domain.ability_encoder import surface_of
 
     checkpoint = Path(checkpoint)
     folders = tuple(Path(f) for f in (
-        cards_folders or recorded_folders or DEFAULT_CARDS_FOLDERS
+        options.cards_folders or options.recorded_folders or DEFAULT_CARDS_FOLDERS
     ))
     corpus = getattr(provenance, "corpus_path", "") or ""
     manifest = Path(corpus) / "manifest.json" if corpus else None
     return ProbePaths(
         checkpoint=checkpoint,
         abilities_root=Path(abilities_root),
-        out=report_dir(checkpoint, reports_dir, today, output=output),
+        out=report_dir(checkpoint, options.reports_dir, options.today, output=options.output),
         cards_folders=folders,
         surface=surface_of(Path(provenance.vocab_path)),
         e_width=cache_e_width(abilities_root),
@@ -252,13 +260,12 @@ def resolve_paths(args: argparse.Namespace) -> ProbePaths:
 
     checkpoint = Path(args.checkpoint)
     loaded = load_effect_checkpoint(checkpoint)
-    paths = paths_for(
-        checkpoint, args.abilities_root, loaded.provenance,
+    paths = paths_for(checkpoint, args.abilities_root, loaded.provenance, PathOptions(
         recorded_folders=getattr(loaded, "cards_folders", ()),
         cards_folders=getattr(args, "cards_folders", None),
         reports_dir=getattr(args, "reports_dir", None),
         output=getattr(args, "output", None),
-    )
+    ))
     if loaded.encoder_config.e_dim != paths.e_width:
         raise ValueError(
             f"{args.abilities_root} holds {paths.e_width}-wide e but "
@@ -342,75 +349,90 @@ def target_type(pairs: dict[str, str]) -> str:
         return "spell"
     if not valid:
         return "none"
-    heads = {segment.split(".")[0].split("+")[0] for segment in valid.split(",")}
+    return _head_category({segment.split(".")[0].split("+")[0] for segment in valid.split(",")})
+
+
+def _head_category(heads: set[str]) -> str:
+    """The target category of a set of ``ValidTgts`` head words."""
     if "Any" in heads:
         return "any"
     has_player = bool(heads & {"Player", "Opponent"})
     has_creature = "Creature" in heads
     has_permanent = bool(heads & _PERMANENT_WORDS)
-    if has_player and (has_creature or has_permanent):
-        return "any"
     if has_player:
-        return "player"
-    if has_creature and not has_permanent:
-        return "creature"
-    if has_creature or has_permanent:
+        return "any" if has_creature or has_permanent else "player"
+    if has_permanent:
         return "permanent"
+    if has_creature:
+        return "creature"
     if heads & {"Card", "Instant", "Sorcery"}:
         return "card"
     return "other"
 
 
+_DESCRIPTION_KEYS = ("SpellDescription", "TriggerDescription", "Description",
+                     "StackDescription", "TgtPrompt")
+
+
 def affected_features(pairs: dict[str, str], api: str) -> dict[str, float]:
     """Who the script names as affected, read off its parameter values."""
-    values = " ".join(
-        v for k, v in pairs.items()
-        if k not in ("SpellDescription", "TriggerDescription", "Description",
-                     "StackDescription", "TgtPrompt")
-    )
+    values = " ".join(v for k, v in pairs.items() if k not in _DESCRIPTION_KEYS)
     defined = pairs.get("Defined", "")
     return {
         "aff_you": float(
             defined in ("You", "Self", "Remembered")
             or "YouCtrl" in values or bool(re.search(r"\bYou\b", values))
         ),
-        "aff_opponent": float(
-            "Opponent" in values or "OppCtrl" in values
-        ),
-        "aff_each": float(
-            api.endswith("All") or api.endswith("EachPlayer")
-            or defined == "Player" or "ValidCards" in pairs
-            or defined.startswith("Player")
-        ),
+        "aff_opponent": float("Opponent" in values or "OppCtrl" in values),
+        "aff_each": float(_names_each(pairs, api, defined)),
     }
+
+
+def _names_each(pairs: dict[str, str], api: str, defined: str) -> bool:
+    """Whether the script's ``Defined`` or API names every player or card."""
+    return (
+        api.endswith(("All", "EachPlayer")) or defined == "Player"
+        or "ValidCards" in pairs or defined.startswith("Player")
+    )
+
+
+def _amount(pairs: dict[str, str], *keys: str) -> float:
+    """The first of ``keys`` the script gives, 0 when it gives none."""
+    for key in keys:
+        if key in pairs:
+            return as_int(pairs[key])
+    return 0.0
+
+
+def _amount_if(applies: bool, pairs: dict[str, str], *keys: str) -> float:
+    return _amount(pairs, *keys) if applies else 0.0
+
+
+def _implied_one(pairs: dict[str, str], api: str) -> list[str]:
+    """The amounts a script leaves unwritten that count as one."""
+    implied = []
+    if api == "Token" and "TokenAmount" not in pairs:
+        implied.append("amt_tokens")
+    if api == "Draw" and "NumCards" not in pairs:
+        implied.append("amt_cards")
+    if "CounterType" in pairs and "CounterNum" not in pairs:
+        implied.append("amt_counters")
+    return implied
 
 
 def count_amounts(pairs: dict[str, str], api: str) -> dict[str, float]:
     """Numeric amounts; 0 where the line has no such amount, NaN for ``X``."""
-    def amount(*keys: str) -> float:
-        for key in keys:
-            if key in pairs:
-                return as_int(pairs[key])
-        return 0.0
-
+    draws = api in ("Draw", "Discard", "Mill", "Dig", "Surveil", "Scry")
     out = {
-        "amt_damage": amount("NumDmg") if "Damage" in api or "NumDmg" in pairs
-        else 0.0,
-        "amt_counters": amount("CounterNum") if "CounterType" in pairs else 0.0,
-        "amt_power": amount("NumAtt", "AddPower"),
-        "amt_toughness": amount("NumDef", "AddToughness"),
-        "amt_cards": amount("NumCards") if api in ("Draw", "Discard", "Mill",
-                                                     "Dig", "Surveil", "Scry")
-        else 0.0,
-        "amt_life": amount("LifeAmount"),
-        "amt_tokens": amount("TokenAmount") if api == "Token" else 0.0,
+        "amt_damage": _amount_if("Damage" in api or "NumDmg" in pairs, pairs, "NumDmg"),
+        "amt_counters": _amount_if("CounterType" in pairs, pairs, "CounterNum"),
+        "amt_power": _amount(pairs, "NumAtt", "AddPower"),
+        "amt_toughness": _amount(pairs, "NumDef", "AddToughness"),
+        "amt_cards": _amount_if(draws, pairs, "NumCards"),
+        "amt_life": _amount(pairs, "LifeAmount"),
+        "amt_tokens": _amount_if(api == "Token", pairs, "TokenAmount"),
     }
-    if api == "Token" and "TokenAmount" not in pairs:
-        out["amt_tokens"] = 1.0
-    if api == "Draw" and "NumCards" not in pairs:
-        out["amt_cards"] = 1.0
-    if "CounterType" in pairs and "CounterNum" not in pairs:
-        out["amt_counters"] = 1.0
+    out.update({name: 1.0 for name in _implied_one(pairs, api)})
     return out
 
 
@@ -424,27 +446,39 @@ def card_facts(converted_txt: Path) -> dict[str, object]:
     facts: dict[str, object] = {"type_line": "", "mana_cost": "", "is_token": 0}
     if not converted_txt.exists():
         return facts
-    for line in converted_txt.read_text(encoding="utf-8").splitlines():
-        if line.startswith("types: ") and not facts["type_line"]:
-            facts["type_line"] = line[len("types: "):]
-        elif line.startswith("mana cost: ") and not facts["mana_cost"]:
-            facts["mana_cost"] = line[len("mana cost: "):]
-        elif line == "ALTERNATE":
-            break
-    mana_value, colours = 0, set()
-    for pip in _PIP_RE.findall(str(facts["mana_cost"])):
-        if pip.isdigit():
-            mana_value += int(pip)
-        elif pip == "X":
-            continue
-        else:
-            mana_value += 1
-            colours.update(c for c in pip if c in "WUBRG")
+    facts["type_line"], facts["mana_cost"] = _first_face(
+        converted_txt.read_text(encoding="utf-8").splitlines())
+    mana_value, colours = _mana_value_and_colours(str(facts["mana_cost"]))
     facts["cmc"] = mana_value
     for colour in "WUBRG":
         facts[f"colour_{colour}"] = int(colour in colours)
     facts["n_colours"] = len(colours)
     return facts
+
+
+def _first_face(lines: list[str]) -> tuple[str, str]:
+    """``(type line, mana cost)`` of the converted text's first face."""
+    type_line = mana_cost = ""
+    for line in lines:
+        if line == "ALTERNATE":
+            break
+        if line.startswith("types: ") and not type_line:
+            type_line = line[len("types: "):]
+        elif line.startswith("mana cost: ") and not mana_cost:
+            mana_cost = line[len("mana cost: "):]
+    return type_line, mana_cost
+
+
+def _mana_value_and_colours(mana_cost: str) -> tuple[int, set[str]]:
+    """The mana value a cost spells and the colours its pips name."""
+    mana_value, colours = 0, set()
+    for pip in _PIP_RE.findall(mana_cost):
+        if pip.isdigit():
+            mana_value += int(pip)
+        elif pip != "X":
+            mana_value += 1
+            colours.update(c for c in pip if c in "WUBRG")
+    return mana_value, colours
 
 
 CARD_TYPES = ("creature", "instant", "sorcery", "land", "artifact",
@@ -565,10 +599,20 @@ def top_keys(texts: pd.Series, min_share: float = 0.01) -> list[str]:
     return sorted(k for k, c in counts.items() if c >= floor and k not in skip)
 
 
+@dataclass(frozen=True)
+class MarkdownStyle:
+    """What a written table carries besides its title: a note under it and
+    the float format of its cells."""
+
+    note: str = ""
+    floatfmt: str = ".3f"
+
+
 def write_markdown(frame: pd.DataFrame, path: Path, title: str,
-                   note: str = "", floatfmt: str = ".3f") -> None:
+                   style: MarkdownStyle = MarkdownStyle()) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    body = to_markdown(frame, floatfmt)
+    body = to_markdown(frame, style.floatfmt)
+    note = style.note
     text = f"# {title}\n\n{note}\n\n{body}\n" if note else f"# {title}\n\n{body}\n"
     path.write_text(text, encoding="utf-8")
 
