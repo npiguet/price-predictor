@@ -36,18 +36,26 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
      * regular {@code SubAbility} chain so those descriptions are not missed.
      */
     public static List<Ability> fromChain(SpellAbility sa) {
-        return fromChain(sa, null);
+        return fromChain(sa, Ancestor.NONE);
     }
 
     /**
-     * Internal overload that threads {@code parentDesc} (the nearest ancestor's cased description)
+     * The nearest ancestor's cased description ({@code text} null when there
+     * is none), against which sub-ability descriptions are compared.
+     */
+    private record Ancestor(String text) {
+        static final Ancestor NONE = new Ancestor(null);
+    }
+
+    /**
+     * Internal overload that threads {@code parent} (the nearest ancestor's cased description)
      * through the recursive walk. Used to suppress redundant sub-ability descriptions that merely
      * duplicate (or are contained in) text already emitted by the parent.
      */
-    private static List<Ability> fromChain(SpellAbility sa, String parentDesc) {
+    private static List<Ability> fromChain(SpellAbility sa, Ancestor parent) {
         if (sa == null) return List.of();
 
-        String rawDesc = ownDescription(sa, parentDesc);
+        String rawDesc = ownDescription(sa, parent);
         String stripped = rawDesc == null ? null : AbilityDescription.stripReminderText(rawDesc);
         // The node's own line, or null when it is transparent. A raw description
         // that strips to nothing still counts as one below: an all-reminder
@@ -56,13 +64,13 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
                 ? null : AbilityDescription.applyCasing(stripped);
         // A described node's children compare against its own text; a
         // transparent node's against the caller's.
-        String childParentDesc = cased != null ? cased : parentDesc;
+        Ancestor childParent = cased != null ? new Ancestor(cased) : parent;
 
-        List<Ability> children = new ArrayList<>(fromChain(sa.getSubAbility(), childParentDesc));
+        List<Ability> children = new ArrayList<>(fromChain(sa.getSubAbility(), childParent));
         if (rawDesc == null) {
-            children.addAll(effectSVarChildren(sa, childParentDesc));
+            children.addAll(effectSVarChildren(sa, childParent));
         }
-        children.addAll(repeatChildren(sa, childParentDesc, cased));
+        children.addAll(repeatChildren(sa, childParent, cased));
 
         return cased != null ? List.of(new SpellEffect(cased, children)) : children;
     }
@@ -72,18 +80,18 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
      * is transparent.
      *
      * <p>A declared description wins; failing one, a literal stack
-     * description, unless it only repeats {@code parentDesc}: Forge often
+     * description, unless it only repeats {@code parent}: Forge often
      * copies the parent's SpellDescription onto a sub-ability's
      * StackDescription for stack display (Bifurcate's DBChangeZone).
      */
-    private static String ownDescription(SpellAbility sa, String parentDesc) {
+    private static String ownDescription(SpellAbility sa, Ancestor parent) {
         String declared = SpellAbilityUtils.declaredDescription(sa);
         if (declared != null) return declared;
         String stack = SpellAbilityUtils.literalStackDescription(sa);
         if (stack == null) return null;
         String stackNorm = AbilityDescription.applyCasing(
                 AbilityDescription.stripReminderText(stack));
-        return stackNorm.equals(parentDesc) ? null : stack;
+        return stackNorm.equals(parent.text()) ? null : stack;
     }
 
     /**
@@ -92,9 +100,9 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
      * caller like the rest of a transparent node's children. Empty for any
      * other API.
      */
-    private static List<Ability> effectSVarChildren(SpellAbility sa, String parentDesc) {
+    private static List<Ability> effectSVarChildren(SpellAbility sa, Ancestor parent) {
         return sa.getApi() == ApiType.Effect
-                ? collectEffectDescriptions(sa, parentDesc) : List.of();
+                ? collectEffectDescriptions(sa, parent) : List.of();
     }
 
     /**
@@ -106,16 +114,59 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
      * onto the RepeatSubAbility SVar for stack display, and keeping it would
      * emit the line twice.
      */
-    private static List<Ability> repeatChildren(SpellAbility sa, String parentDesc,
+    private static List<Ability> repeatChildren(SpellAbility sa, Ancestor parent,
                                                 String ownLine) {
         SpellAbility repeatSub = sa.getAdditionalAbility("RepeatSubAbility");
         if (repeatSub == null) return List.of();
         List<Ability> result = new ArrayList<>();
-        for (Ability rc : fromChain(repeatSub, parentDesc)) {
+        for (Ability rc : fromChain(repeatSub, parent)) {
             if (ownLine != null && ownLine.equals(rc.descriptionText())) continue;
             result.add(rc);
         }
         return result;
+    }
+
+    /**
+     * The SVar lists of a DB$ Effect that name the lines it creates, and the
+     * parameter each SVar's description is read from.
+     */
+    private enum EffectSVars {
+        /**
+         * Trigger SVars that fire from a specific zone (TriggerZones$) are also
+         * registered as top-level triggers and would duplicate the triggered ability.
+         */
+        TRIGGERS("Triggers", "TriggerDescription", "TriggerZones$"),
+        REPLACEMENTS("ReplacementEffects", "Description", null);
+
+        private final String listParam;
+        private final String descriptionParam;
+        private final String skipMarker;
+
+        EffectSVars(String listParam, String descriptionParam, String skipMarker) {
+            this.listParam = listParam;
+            this.descriptionParam = descriptionParam;
+            this.skipMarker = skipMarker;
+        }
+
+        /** The description {@code svarText} holds, or null when it is empty or marked to skip. */
+        private String describe(String svarText) {
+            if (svarText == null || svarText.isEmpty()) return null;
+            if (skipMarker != null && svarText.contains(skipMarker)) return null;
+            return AbilityDescription.normalize(
+                    SpellAbilityUtils.svarParam(svarText, descriptionParam));
+        }
+
+        /** The descriptions of the SVars {@code sa} names in this list, in order. */
+        List<String> descriptions(forge.game.card.Card host, SpellAbility sa) {
+            String names = sa.getParam(listParam);
+            List<String> result = new ArrayList<>();
+            if (names == null || names.isEmpty()) return result;
+            for (String name : names.split(",")) {
+                String desc = describe(host.getSVar(name.trim()));
+                if (desc != null) result.add(desc);
+            }
+            return result;
+        }
     }
 
     /**
@@ -124,37 +175,18 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
      * {@code parentDesc} is the nearest ancestor's cased description; descriptions that duplicate
      * or are contained in it are suppressed.
      */
-    private static List<Ability> collectEffectDescriptions(SpellAbility sa, String parentDesc) {
+    private static List<Ability> collectEffectDescriptions(SpellAbility sa, Ancestor parent) {
         List<Ability> result = new ArrayList<>();
         forge.game.card.Card host = sa.getHostCard();
         if (host == null) return result;
-        // Trigger SVars that fire from a specific zone (TriggerZones$) are also registered
-        // as top-level triggers and would duplicate the triggered ability.
-        addSVarDescriptions(host, sa.getParam("Triggers"), "TriggerDescription",
-                "TriggerZones$", parentDesc, result);
-        addSVarDescriptions(host, sa.getParam("ReplacementEffects"), "Description",
-                null, parentDesc, result);
-        return result;
-    }
-
-    /**
-     * One SpellEffect per SVar named in {@code svarNames} (comma-separated), from its
-     * {@code descParam} value, skipping SVars containing {@code skipMarker} and
-     * descriptions redundant with {@code parentDesc}.
-     */
-    private static void addSVarDescriptions(forge.game.card.Card host, String svarNames,
-                                            String descParam, String skipMarker,
-                                            String parentDesc, List<Ability> result) {
-        if (svarNames == null || svarNames.isEmpty()) return;
-        for (String name : svarNames.split(",")) {
-            String svarText = host.getSVar(name.trim());
-            if (svarText == null || svarText.isEmpty()) continue;
-            if (skipMarker != null && svarText.contains(skipMarker)) continue;
-            String desc = extractParam(svarText, descParam);
-            if (desc != null && !isRedundantDescription(desc, parentDesc)) {
-                result.add(new SpellEffect(desc, List.of()));
+        for (EffectSVars source : EffectSVars.values()) {
+            for (String desc : source.descriptions(host, sa)) {
+                if (!isRedundantDescription(desc, parent.text())) {
+                    result.add(new SpellEffect(desc, List.of()));
+                }
             }
         }
+        return result;
     }
 
     /**
@@ -181,13 +213,4 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
         if (parentDesc.equals(childNorm) || parentDesc.contains(childNorm)) return true;
         return false;
     }
-
-    /**
-     * The normalized value of {@code paramName} in a "Key$ value | ..." SVar
-     * text, or null if absent or empty.
-     */
-    private static String extractParam(String svarText, String paramName) {
-        return AbilityDescription.normalize(SpellAbilityUtils.svarParam(svarText, paramName));
-    }
-
 }

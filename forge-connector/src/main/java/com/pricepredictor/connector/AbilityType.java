@@ -1,15 +1,10 @@
 package com.pricepredictor.connector;
 
-import forge.game.keyword.Keyword;
 import forge.game.trigger.Trigger;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
-import java.util.EnumMap;
-import java.util.EnumSet;
 import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -97,58 +92,5 @@ public enum AbilityType {
             return "[" + m.group(1) + "]: " + text.substring(m.end());
         }
         return text;
-    }
-
-    // --- Keyword classification ---
-
-    private static final Map<Keyword, AbilityType> KEYWORD_COST_TYPES = buildKeywordCostTypes();
-
-    private static Map<Keyword, AbilityType> buildKeywordCostTypes() {
-        Map<Keyword, AbilityType> map = new EnumMap<>(Keyword.class);
-        for (Keyword kw : EnumSet.of(
-                Keyword.BESTOW, Keyword.BLITZ, Keyword.DASH, Keyword.DISTURB,
-                Keyword.EMERGE, Keyword.ESCAPE, Keyword.EVOKE, Keyword.FLASHBACK,
-                Keyword.FORETELL, Keyword.FREERUNNING, Keyword.MADNESS,
-                Keyword.MEGAMORPH, Keyword.MORPH, Keyword.DISGUISE,
-                Keyword.MORE_THAN_MEETS_THE_EYE, Keyword.MUTATE,
-                Keyword.OVERLOAD, Keyword.PLOT, Keyword.PROTOTYPE,
-                Keyword.PROWL, Keyword.RETRACE, Keyword.SNEAK,
-                Keyword.SPECTACLE, Keyword.SURGE,
-                Keyword.AWAKEN, Keyword.EMBALM, Keyword.ENCORE,
-                Keyword.ETERNALIZE, Keyword.HARMONIZE, Keyword.IMPENDING,
-                Keyword.JUMP_START, Keyword.MIRACLE, Keyword.NINJUTSU,
-                Keyword.OFFERING, Keyword.SUSPEND, Keyword.UNEARTH)) {
-            map.put(kw, ALTERNATE_COST);
-        }
-        for (Keyword kw : EnumSet.of(
-                Keyword.BUYBACK, Keyword.ENTWINE, Keyword.KICKER,
-                Keyword.MULTIKICKER, Keyword.REPLICATE, Keyword.SQUAD,
-                Keyword.STRIVE, Keyword.CASUALTY, Keyword.OFFSPRING,
-                Keyword.BARGAIN, Keyword.CONSPIRE, Keyword.ESCALATE,
-                Keyword.MAYFLASHCOST, Keyword.SPLICE, Keyword.SPREE,
-                Keyword.TIERED)) {
-            map.put(kw, ADDITIONAL_COST);
-        }
-        for (Keyword kw : EnumSet.of(
-                Keyword.AFFINITY, Keyword.ASSIST, Keyword.CONVOKE,
-                Keyword.DELVE, Keyword.IMPROVISE, Keyword.UNDAUNTED)) {
-            map.put(kw, COST_REDUCTION);
-        }
-        return map;
-    }
-
-    // Keywords that should always be classified as STATIC regardless of trigger presence.
-    private static final Set<Keyword> FORCE_STATIC_KEYWORDS = EnumSet.of(
-            Keyword.WARD  // Ward is effectively a static ability in oracle, not triggered
-    );
-
-    /** Classify a keyword into an AbilityType. Cost keywords get a fixed type, others by trait presence. */
-    public static AbilityType classifyKeyword(Keyword kw, boolean hasAbilities, boolean hasTriggers) {
-        AbilityType costType = KEYWORD_COST_TYPES.get(kw);
-        if (costType != null) return costType;
-        if (FORCE_STATIC_KEYWORDS.contains(kw)) return STATIC;
-        if (hasAbilities) return ACTIVATED;
-        if (hasTriggers) return TRIGGERED;
-        return STATIC;
     }
 }

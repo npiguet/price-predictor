@@ -29,11 +29,7 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
     }
 
     public static TriggeredAbilityEntry of(Trigger trigger) {
-        // Skip keyword-associated triggers except for Tribute's "if tribute wasn't paid" ability.
-        // Most keyword triggers merely restate the keyword (already output by StandardKeyword),
-        // but Tribute's TrigNotTribute trigger is a distinct oracle ability.
-        if (trigger.getKeyword() != null
-                && trigger.getKeyword().getKeyword() != Keyword.TRIBUTE) return null;
+        if (!printsOwnLine(trigger)) return null;
         String rawDesc = trigger.getParam("TriggerDescription");
         String normalized = AbilityDescription.normalize(rawDesc);
         if (normalized == null) return null;
@@ -41,45 +37,74 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
         if (trigger.getKeyword() != null) {
             // For Tribute, TriggerDescription is the full oracle text (built directly from
             // TrigNotTribute's SpellDescription), so the execute chain would duplicate it.
-            // Return with empty children — the description is self-contained.
+            // Return with empty children: the description is self-contained.
             return new TriggeredAbilityEntry(type, normalized, List.of());
         }
 
         SpellAbility execute = trigger.getOverridingAbility();
-        boolean placeholder = rawDesc.contains("ABILITY");
         SpellAbility charm = execute == null ? null : charmOf(execute);
         if (charm != null) return charmEntry(type, trigger, charm, normalized);
+        return executeEntry(type, rawDesc, normalized, execute);
+    }
 
-        // Do NOT walk the execute SA chain for SpellEffect descriptions: TriggerDescription
-        // is the authoritative oracle text for triggered abilities.  Walking the chain would
-        // re-emit SVars that are already covered by ETBReplacement / replacement keywords,
-        // causing duplicates (e.g. sigarda's_splendor's NoteNum SVar).
-        // Dice-outcome options are the one exception — they represent distinct result lines.
+    /**
+     * Whether the trigger prints a line of its own. Keyword-associated
+     * triggers do not, except for Tribute's "if tribute was not paid" ability:
+     * most keyword triggers merely restate the keyword (already output by
+     * StandardKeyword), but Tribute's TrigNotTribute trigger is a distinct
+     * oracle ability.
+     */
+    private static boolean printsOwnLine(Trigger trigger) {
+        return trigger.getKeyword() == null
+                || trigger.getKeyword().getKeyword() == Keyword.TRIBUTE;
+    }
+
+    /**
+     * The line of a trigger whose execute chain is no charm: the description,
+     * with the execute chain's text only where the description leaves it out.
+     *
+     * <p>The chain's SpellEffect descriptions are not walked:
+     * TriggerDescription is the authoritative oracle text, and walking the
+     * chain would re-emit SVars already covered by ETBReplacement /
+     * replacement keywords, causing duplicates (sigarda's_splendor's NoteNum
+     * SVar). Dice-outcome options are the one exception: they are distinct
+     * result lines.
+     */
+    private static TriggeredAbilityEntry executeEntry(AbilityType type, String rawDesc,
+                                                      String normalized, SpellAbility execute) {
         List<Ability> children = execute != null
                 ? DiceOutcomes.of(execute, DiceOutcomes::optionLine) : List.of();
-
-        // If ABILITY placeholder remains and dice outcomes were found, replace with dice-roll description.
-        if (placeholder && !children.isEmpty()) {
-            String diceDesc = DiceOutcomes.rollDescription(execute);
-            if (diceDesc != null) {
-                normalized = AbilityDescription.normalize(DescriptionText.fill(
-                        rawDesc, "ABILITY", AbilityDescription.replaceVert(diceDesc)));
-            }
+        String text = DescriptionMarkers.hasAbilityPlaceholder(rawDesc) && !children.isEmpty()
+                ? withDiceRoll(rawDesc, normalized, execute) : normalized;
+        if (execute != null && isTransparent(execute)) {
+            text = DescriptionText.appendMissing(text, SpellAbilityUtils.chainText(execute));
         }
+        return new TriggeredAbilityEntry(type, text, children);
+    }
 
-        // Walk the execute chain for trailing sub-SpellDescriptions.
-        // Only when the execute SA itself is transparent (has no description of its own):
-        // in that case, sub-ability SpellDescriptions contain oracle text not in TriggerDescription.
-        // Guard: also skip ImmediateTrigger (processed separately) and ETBReplacement (registered
-        // as replacement effects) to avoid duplicates (sigarda's_splendor concern).
-        if (execute != null
-                && !SpellAbilityUtils.hasOwnDescription(execute)
+    /**
+     * The description with its ABILITY placeholder replaced by the dice-roll
+     * description of {@code execute}, or {@code normalized} when it has none.
+     */
+    private static String withDiceRoll(String rawDesc, String normalized, SpellAbility execute) {
+        String diceDesc = DiceOutcomes.rollDescription(execute);
+        if (diceDesc == null) return normalized;
+        return AbilityDescription.normalize(DescriptionText.fill(
+                rawDesc, DescriptionMarkers.ABILITY_PLACEHOLDER,
+                AbilityDescription.replaceVert(diceDesc)));
+    }
+
+    /**
+     * Whether the sub-ability descriptions of {@code execute}'s chain hold
+     * oracle text the TriggerDescription lacks: only when the execute itself
+     * has no description of its own. ImmediateTrigger (processed separately)
+     * and ETBReplacement (registered as replacement effects) are skipped to
+     * avoid duplicates (sigarda's_splendor concern).
+     */
+    private static boolean isTransparent(SpellAbility execute) {
+        return !SpellAbilityUtils.hasOwnDescription(execute)
                 && execute.getApi() != ApiType.ImmediateTrigger
-                && !"ETBReplacement".equals(execute.getParam("Mode"))) {
-            String extra = SpellAbilityUtils.chainText(execute);
-            normalized = DescriptionText.appendMissing(normalized, extra);
-        }
-        return new TriggeredAbilityEntry(type, normalized, children);
+                && !"ETBReplacement".equals(execute.getParam("Mode"));
     }
 
     /**
@@ -100,7 +125,7 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
     private static TriggeredAbilityEntry charmEntry(AbilityType type, Trigger trigger,
                                                     SpellAbility charm, String normalized) {
         String rawDesc = trigger.getParam("TriggerDescription");
-        if (!rawDesc.contains("ABILITY")) {
+        if (!DescriptionMarkers.hasAbilityPlaceholder(rawDesc)) {
             return new TriggeredAbilityEntry(type, normalized, CharmAbility.optionsFrom(charm, trigger));
         }
         CharmAbility.Expanded expanded = CharmAbility.expandPlaceholder(rawDesc, charm, trigger);

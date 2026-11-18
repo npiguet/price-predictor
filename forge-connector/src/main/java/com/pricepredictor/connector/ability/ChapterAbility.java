@@ -73,7 +73,7 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
         // If TriggerDescription contains the ABILITY placeholder and execute is a Charm,
         // replace with charm header and attach OPTION sub-abilities.
         SpellAbility execute = trigger.getOverridingAbility();
-        if (stripped.contains("ABILITY") && isCharm(execute)) {
+        if (DescriptionMarkers.hasAbilityPlaceholder(stripped) && isCharm(execute)) {
             return charmChapter(stripped, execute, trigger);
         }
 

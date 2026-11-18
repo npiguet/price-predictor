@@ -8,6 +8,7 @@ import com.pricepredictor.connector.ability.CharmAbility;
 import com.pricepredictor.connector.ability.CharmHeader;
 import com.pricepredictor.connector.ability.ClassLevelAbility;
 import com.pricepredictor.connector.ability.CompanionKeyword;
+import com.pricepredictor.connector.ability.DescriptionMarkers;
 import com.pricepredictor.connector.ability.EtbReplacementAbility;
 import com.pricepredictor.connector.ability.FaceOracle;
 import com.pricepredictor.connector.ability.GiftKeyword;
@@ -364,7 +365,7 @@ final class FaceParser {
     /** A trigger's normalized first description line, or null if it prints none. */
     private static String triggerHeader(Trigger t) {
         String tDesc = t.getParam("TriggerDescription");
-        if (tDesc == null || "Blank".equals(tDesc)) return null;
+        if (DescriptionMarkers.printsNoLine(tDesc)) return null;
         return AbilityDescription.normalize(AbilityDescription.firstLine(tDesc));
     }
 
@@ -758,7 +759,7 @@ final class FaceParser {
     /** The phases' abilities, reshaped into the order and set the face prints. */
     private List<Ability> postProcessed() {
         List<Ability> result = abilities;
-        if (face.getType().toString().contains("Class")) {
+        if (face.getType().hasSubtype("Class")) {
             result = ClassLevels.arrange(result, classLevelDescriptions, recorder);
         }
         // Remove abilities whose description duplicates an earlier one.

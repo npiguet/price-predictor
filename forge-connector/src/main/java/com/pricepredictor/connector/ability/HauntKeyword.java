@@ -63,9 +63,7 @@ public final class HauntKeyword {
             String d = sa.getParam("SpellDescription");
             if (d != null && !d.isEmpty()) return d;
         }
-        String svarName = new KeywordSpec(ki.getOriginal()).rest(1); // "Haunt:SvarName"
-        if (svarName == null) return null;
-        return SpellAbilityUtils.svarParam(card.getSVar(svarName), "SpellDescription");
+        return Haunt.of(ki).effectDescription(card);
     }
 
     /** {@code text} with the card's own name written as CARDNAME, as every other entry has it. */
@@ -103,7 +101,7 @@ public final class HauntKeyword {
 
         void add(Trigger t) {
             String tDesc = cardnamed(t.getParam("TriggerDescription"), card);
-            if (tDesc == null || "Blank".equals(tDesc)) {
+            if (DescriptionMarkers.printsNoLine(tDesc)) {
                 blank.add(t);
                 return;
             }
@@ -113,7 +111,7 @@ public final class HauntKeyword {
                 return;
             }
             // Replace ABILITY placeholder with the actual effect description
-            if (effectDesc != null) tDesc = tDesc.replace("ABILITY", effectDesc);
+            if (effectDesc != null) tDesc = tDesc.replace(DescriptionMarkers.ABILITY_PLACEHOLDER, effectDesc);
             String normalized = AbilityDescription.normalize(tDesc);
             if (normalized == null) return;
             Ability line = emitted.computeIfAbsent(normalized,
@@ -124,7 +122,7 @@ public final class HauntKeyword {
 
         /** The charm {@code t}'s ABILITY placeholder names, or null. */
         private static SpellAbility placeholderCharm(Trigger t, String tDesc) {
-            if (!tDesc.contains("ABILITY")) return null;
+            if (!DescriptionMarkers.hasAbilityPlaceholder(tDesc)) return null;
             SpellAbility overrideSa = t.getOverridingAbility();
             return overrideSa != null && overrideSa.getApi() == ApiType.Charm ? overrideSa : null;
         }

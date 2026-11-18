@@ -25,7 +25,7 @@ public record ClassLevelAbility(
     }
 
     public static ClassLevelAbility of(KeywordInterface ki) {
-        int level = Integer.parseInt(new KeywordSpec(ki.getOriginal()).part(1));
+        int level = ClassLevel.of(ki).number();
 
         var it = ki.getAbilities().iterator();
         String cost = it.hasNext() ? it.next().getCostDescription() : null;
