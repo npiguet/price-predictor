@@ -53,7 +53,8 @@ import java.util.Set;
  *
  * <p>The faces that are not up are listed too, every line flagged inactive:
  * that is how a face-down permanent carries its real face, and how a
- * double-faced card carries the face it would turn to.
+ * double-faced card carries the face it would turn to, and a Room its locked
+ * doors. Which lines are in force ({@code active}) is {@link LineInForce}'s.
  */
 final class CardLines {
 
@@ -109,6 +110,8 @@ final class CardLines {
         private final Game game;
         private final Card card;
         private final StaticSuppression board;
+        /** Whether each line is in force: its {@code active}. */
+        private final LineInForce inForce;
         /**
          * Why a line is granted, the lines a layer-6 change appended on this
          * board (a static's, an attachment's, a pump's grant) among them.
@@ -126,6 +129,7 @@ final class CardLines {
             this.game = game;
             this.card = card;
             this.board = board;
+            this.inForce = new LineInForce(card);
             this.grants = new LineGrant(card, board.grantedLines(card));
             this.onStack = stackAbilityOf(game, card);
             this.cast = castSpellOf(card, onStack);
@@ -158,7 +162,7 @@ final class CardLines {
                 int castWith = faceUp ? castWithCount(keyword) : 0;
                 add(new Line(keysOf(key), "keyword",
                         grants.ofKeyword(keyword, printed.contains(keyword), key),
-                        faceUp ? null : Boolean.FALSE,
+                        inForce.ofKeyword(keyword, faceUp),
                         castWith > 0 ? castWith : null, null, keyword.getOriginal(), null),
                         key, faceUp);
             }
@@ -234,9 +238,7 @@ final class CardLines {
                 }
             }
             ProvenanceKey key = ProvenanceResolver.of(trait);
-            Boolean active = faceUp
-                    ? (trait instanceof StaticAbility stat ? holds(stat) : null)
-                    : Boolean.FALSE;
+            Boolean active = inForce.ofTrait(trait, faceUp);
             List<Integer> chosen = faceUp && key != null && key.equals(stackKey)
                     ? chosenModes(onStack) : null;
             List<String> affected = faceUp && trait instanceof StaticAbility stat
@@ -274,19 +276,6 @@ final class CardLines {
         private static boolean isRulesSpell(SpellAbility ability) {
             return ability.isLandAbility()
                     || (ability instanceof SpellPermanent && ability.isBasicSpell());
-        }
-
-        /**
-         * Forge's answer to whether a static's condition holds now; false when
-         * the question cannot be asked of this card, such as a static on a
-         * card no player controls.
-         */
-        private static Boolean holds(StaticAbility stat) {
-            try {
-                return stat.checkConditions();
-            } catch (RuntimeException e) {
-                return Boolean.FALSE;
-            }
         }
 
         /** The {@code Choices$} positions of the modes a modal ability chose, or null. */
@@ -328,13 +317,13 @@ final class CardLines {
         }
 
         /**
-         * The printed faces that are not up. None for a split card, whose
-         * printed state already carries both halves.
+         * The printed faces that are not up. For a split card, whose printed
+         * state already carries both halves, only a Room's locked doors.
          */
         private List<CardState> facesNotUp() {
             List<CardStateName> order = FaceOrder.faceOrder(card);
             if (order.get(0) == CardStateName.LeftSplit) {
-                return List.of();
+                return inForce.lockedDoors();
             }
             CardStateName up = card.getCurrentStateName();
             List<CardState> faces = new ArrayList<>();

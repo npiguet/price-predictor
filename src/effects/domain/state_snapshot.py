@@ -328,8 +328,10 @@ class CardLine:
     #: :class:`LineGrant` on a granted line; None on a printed one, and on a
     #: granted line of a record written before the member existed.
     grant: str | None = None
-    #: Forge's answer to whether a static's condition holds; False on every
-    #: line of a face not up; None on any other line.
+    #: Whether the line is in force: Forge's answer to whether a static's
+    #: condition holds; on a ``Class:N`` keyword line, whether the Class has
+    #: reached level N; on a Room door's line, whether the door is unlocked;
+    #: False on every line of a face not up; None on any other line.
     active: bool | None = None
     #: Keyword lines of a card cast with them: how many times the spell paid
     #: the line's cost (1 for an alternative cost or kicker, the count for
@@ -348,8 +350,8 @@ class CardLine:
 
     @property
     def in_force(self) -> bool:
-        """Whether the line applies now: neither an unmet static nor a line
-        of a face not up."""
+        """Whether the line applies now: not an unmet static, a Class level
+        not reached, a locked Room door's line or a line of a face not up."""
         return self.active is not False
 
     @property
