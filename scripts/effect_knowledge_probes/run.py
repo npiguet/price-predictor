@@ -52,21 +52,8 @@ if __package__ in (None, ""):
     # Run by path: put scripts/ on the path so the suite imports as a package.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-# The suite's entry points, which callers and tests reach through this script.
-from effect_knowledge_probes import (  # noqa: E402
-    common,
-    halves,
-    labels,
-    ladder,  # noqa: E402, F401
-)
+from effect_knowledge_probes import common, halves, labels  # noqa: E402
 from effect_knowledge_probes.freeze_run import freeze_selection  # noqa: E402
-from effect_knowledge_probes.line_labelling import ObservedOutcomes  # noqa: E402, F401
-from effect_knowledge_probes.line_ladders import (  # noqa: E402, F401
-    MIN_LADDER_ITEMS,
-    line_split,
-)
-from effect_knowledge_probes.method_c_probe import method_c  # noqa: E402, F401
-from effect_knowledge_probes.pair_ladders import pair_ladder  # noqa: E402, F401
 from effect_knowledge_probes.probe_stages import HALF_CHOICES  # noqa: E402
 from effect_knowledge_probes.probing import probe  # noqa: E402
 from effect_knowledge_probes.tables import write_tables  # noqa: E402

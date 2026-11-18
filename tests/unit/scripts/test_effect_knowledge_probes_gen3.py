@@ -34,6 +34,9 @@ from effect_knowledge_probes import (
     target_restrictions,
 )
 from effect_knowledge_probes.board_edits import BoardEdit
+from effect_knowledge_probes.line_labelling import ObservedOutcomes
+from effect_knowledge_probes.method_c_probe import method_c
+from effect_knowledge_probes.tables import write_tables
 
 from effects.domain.records import (
     CombatPayload,
@@ -841,7 +844,7 @@ class TestTheProbingRun:
         data = json.loads(json.dumps(scorecard.to_json()))
         again = Scorecard.from_json(data)
         assert again.halves == data["halves"]
-        run.write_tables(tmp_path, again)
+        write_tables(tmp_path, again)
         text = (tmp_path / "halves.md").read_text(encoding="utf-8")
         assert "## Rule tests" in text and f"{GD}/reporting" in text
 
@@ -863,7 +866,7 @@ class TestLineProbesReadEachRecordOnce:
         record = next(r for r in records if r.kind is RecordKind.RESOLUTION
                       and r.moment is Moment.RESOLUTION and r.ability
                       and acting(r.ability[0]) and labels.effect_profile(r) is not None)
-        outcomes = run.ObservedOutcomes(acting)
+        outcomes = ObservedOutcomes(acting)
         for _ in range(3):
             outcomes.observe(record)
         assert sum(len(v) for v in outcomes.profiles.values()) == 1
@@ -1022,7 +1025,7 @@ class TestExtraction:
         (tmp_path / "training").mkdir()
         write_shard(tmp_path / "training" / "shard-00001.jsonl.gz", records[:24])
         args = SimpleNamespace(method_c_layers=layers, method_c_steps=2)
-        result = run.method_c(args, loaded, tmp_path, records[:16])
+        result = method_c(args, loaded, tmp_path, records[:16])
         assert result["steps"] == 2 and result["layers"] == layers
         assert set(result["shallow"]) == set(result["full"])
         assert all(np.isfinite(v) for v in result["shallow"].values())
