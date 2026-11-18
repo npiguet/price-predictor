@@ -5,6 +5,10 @@ A key a line declares resolves to that line; a ``built`` key no line declares
 resolves as the keyword's bare key; a bare key naming a keyword of several
 lines is all of them on the board and ``AMBIGUOUS`` acting. No key is
 declared by two lines of a face: a reader refuses such a sidecar.
+
+A charm's mode keys (``trigger 0 option m``, an activated charm's
+``spell 1`` and its options) resolve to their own lines, over real converter
+sidecars.
 """
 
 from __future__ import annotations
@@ -32,6 +36,7 @@ from effects.infrastructure.sidecar_io import SidecarCache, read_sidecar, sideca
 from tests.unit.effects.builders import GEN3_RECORDS, GEN3_SIDECAR_FOLDERS
 
 _TRIBUTE_TREE = Path(__file__).resolve().parents[3] / "fixtures" / "effects" / "tribute-sidecars"
+_CHARM_TREE = Path(__file__).resolve().parents[3] / "fixtures" / "effects" / "charm-sidecars"
 _SAGA = "cardsfolder/b/binding_the_old_gods.txt"
 #: Binding the Old Gods' saga keyword, which builds one trigger per chapter.
 _SAGA_KEY = ProvenanceKey(_SAGA, 0, "keyword", 0)
@@ -167,6 +172,60 @@ class TestEveryTextlessAnswerIsCounted:
         gaps = cache.join_gaps()
         assert (gaps.dropped, gaps.runtime_only) == ({script: 1}, {script: 1})
         assert any("runtime_only" in line for line in gaps.report_lines())
+
+
+def _charm_cache() -> SidecarCache:
+    return SidecarCache({"cardsfolder": _CHARM_TREE / "cardsfolder"})
+
+
+def _joined_prose(key: ProvenanceKey) -> tuple[int, str | None]:
+    """The line index the join gives ``key`` and that line's converted prose."""
+    cache = _charm_cache()
+    joined = cache.join(key)
+    assert joined.resolution is KeyResolution.LINE
+    return joined.line.line_index, cache.prose_for(key)
+
+
+_FANTASTIC_FOUR = "cardsfolder/t/the_fantastic_four.txt"
+_WAR_RIDERS = "cardsfolder/v/varchilds_war_riders.txt"
+_BOW = "cardsfolder/b/bow_of_nylea.txt"
+
+
+class TestACharmModeKeyResolvesToItsOptionLine:
+    @pytest.mark.parametrize(("option", "line_index", "prose"), [
+        (0, 5, "create a 0/4 colorless wall creature token with defender."),
+        (1, 6, "CARDNAME deal 3 damage to each opponent."),
+        (2, 7, "put two +1/+1 counters on target creature."),
+        (3, 8, "draw a card."),
+    ])
+    def test_the_fantastic_four_trigger_options(self, option, line_index, prose):
+        key = ProvenanceKey(_FANTASTIC_FOUR, 0, "trigger", 0, option=option)
+        assert _joined_prose(key) == (line_index, prose)
+
+    @pytest.mark.parametrize(("option", "line_index", "prose"), [
+        (0, 7, "have an opponent create a 1/1 red survivor creature token"
+               " for each age counter on CARDNAME."),
+        (1, 8, "sacrifice CARDNAME."),
+    ])
+    def test_varchild_s_war_riders_trigger_options(self, option, line_index, prose):
+        key = ProvenanceKey(_WAR_RIDERS, 0, "trigger", 0, option=option)
+        assert _joined_prose(key) == (line_index, prose)
+
+    def test_the_trigger_key_without_an_option_reads_the_triggered_line(self):
+        key = ProvenanceKey(_WAR_RIDERS, 0, "trigger", 0)
+        assert _joined_prose(key) == (6, (
+            "cumulative upkeep—have an opponent create a 1/1 red survivor creature token."))
+
+
+class TestAnActivatedCharmKeyResolvesToItsActivatedLine:
+    def test_bow_of_nylea_s_spell_1_is_the_activated_line(self):
+        key = ProvenanceKey(_BOW, 0, "spell", 1)
+        assert _joined_prose(key) == (3, "{1}{G}, {T}: choose one")
+        assert _charm_cache().line_for(key).line_kind == "activated"
+
+    def test_its_first_option_is_the_counter_line_not_the_activated_one(self):
+        key = ProvenanceKey(_BOW, 0, "spell", 1, option=0)
+        assert _joined_prose(key) == (4, "put a +1/+1 counter on target creature.")
 
 
 class TestNoKeyIsDeclaredByTwoLines:

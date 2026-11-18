@@ -1,0 +1,9 @@
+name: bow of nylea
+mana cost: {1}{G}{G}
+types: legendary artifact enchantment
+activated[1]: {1}{G}, {T}: choose one
+option[2]: put a +1/+1 counter on target creature.
+option[3]: CARDNAME deals 2 damage to target creature with flying.
+option[4]: you gain 3 life.
+option[5]: put up to four target cards from your graveyard on the bottom of your library in any order.
+static: attacking creatures you control have deathtouch.

@@ -1,0 +1,9 @@
+name: the fantastic four
+mana cost: {R}{G}{W}{U}
+types: legendary creature human hero
+power toughness: 4/4
+triggered: when CARDNAME enter and whenever you cast a spell with power, toughness, or mana value 4, choose one that hasn't been chosen this turn.
+option[1]: create a 0/4 colorless wall creature token with defender.
+option[2]: CARDNAME deal 3 damage to each opponent.
+option[3]: put two +1/+1 counters on target creature.
+option[4]: draw a card.

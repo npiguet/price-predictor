@@ -1,0 +1,9 @@
+name: varchild's war-riders
+mana cost: {1}{R}
+types: creature human warrior
+power toughness: 3/4
+triggered: rampage 1
+static: trample
+triggered: cumulative upkeep—have an opponent create a 1/1 red survivor creature token.
+option[1]: have an opponent create a 1/1 red survivor creature token for each age counter on CARDNAME.
+option[2]: sacrifice CARDNAME.
