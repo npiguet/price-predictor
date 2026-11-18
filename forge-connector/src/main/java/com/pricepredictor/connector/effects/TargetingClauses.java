@@ -6,13 +6,17 @@ import forge.game.ability.ApiType;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 import forge.game.spellability.SpellAbilityStackInstance;
+import forge.game.spellability.TargetChoices;
 import forge.game.spellability.TargetRestrictions;
 import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * The targeting clauses of a spell ability, what each may target and whether
@@ -27,7 +31,11 @@ import java.util.Set;
  * the chosen ones it is about to cast.
  *
  * <p>Read-only on the ability: counting a clause's candidates never chooses
- * one.
+ * one. It does read what is chosen, though: Forge's {@code canTarget} judges
+ * a cross-target rule (unique targets, different controllers, a shared type,
+ * a total mana value) against the targets already chosen on the clause and
+ * its parents, so a reader that wants what the rules offer before any choice
+ * counts inside {@link #withNoneChosen}.
  */
 public final class TargetingClauses {
 
@@ -101,6 +109,36 @@ public final class TargetingClauses {
 
     private static GameEntity entityOf(GameObject candidate) {
         return candidate instanceof SpellAbility item ? item.getHostCard() : (GameEntity) candidate;
+    }
+
+    /**
+     * Run {@code body} with no target chosen on any clause {@code ability}
+     * offers, then give each clause back its own choices: the same
+     * {@code TargetChoices} object, so a divided allocation returns with it.
+     * The divided total is the ability's, not the choices', and is left as it
+     * was.
+     *
+     * <p>For the decision a candidate is read at, taken before any target is
+     * chosen: the AI's evaluation leaves its picks on a spell it did not cast,
+     * and Forge's {@code canTarget} reads them and the parent clauses' for a
+     * cross-target rule, so "two target creatures controlled by different
+     * players" left with one of each side's would offer only those two. Never
+     * around the random seat's own draw, which fills one clause after another
+     * and needs the earlier clauses' picks.
+     */
+    public static <T> T withNoneChosen(SpellAbility ability, Supplier<T> body) {
+        Map<SpellAbility, TargetChoices> chosen = new IdentityHashMap<>();
+        for (SpellAbility clause : offered(ability)) {
+            if (clause.usesTargeting()) {
+                chosen.putIfAbsent(clause, clause.getTargets());
+                clause.resetTargets();
+            }
+        }
+        try {
+            return body.get();
+        } finally {
+            chosen.forEach(SpellAbility::setTargets);
+        }
     }
 
     /**

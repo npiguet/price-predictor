@@ -11,6 +11,7 @@ import forge.game.card.CounterEnumType;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
+import forge.game.spellability.TargetChoices;
 import forge.game.staticability.StaticAbility;
 import forge.game.staticability.StaticAbilityMode;
 import forge.game.zone.ZoneType;
@@ -20,10 +21,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -66,18 +70,27 @@ class PlayabilityVerdictTest {
         return TestBoard.inHand(game, owner, "Fiery Intervention").getFirstSpellAbility();
     }
 
-    /** One choosable mode is all a choose-one charm asks for, and none is too few. */
-    @Test
-    void aCharmIsPlayableWhenEnoughOfItsModesCanBeChosen() {
+    /**
+     * A choose-one charm whose modes damage a creature or destroy an
+     * artifact: on an empty board neither mode can be chosen, and a creature
+     * makes the damage mode choosable.
+     */
+    private static void assertOnlyACreatureMakesItPlayable(String charmName) {
         Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player a = game.getPlayers().get(0);
-        SpellAbility charm = fieryIntervention(game, a);
+        SpellAbility charm = TestBoard.inHand(game, a, charmName).getFirstSpellAbility();
 
         assertFalse(PlayabilityVerdict.of(charm, a).hasLegalTarget(),
                 "no creature and no artifact: neither mode can be chosen");
         TestBoard.inPlay(game, a, "Grizzly Bears");
         assertTrue(PlayabilityVerdict.of(charm, a).hasLegalTarget(),
                 "a creature makes the damage mode choosable");
+    }
+
+    /** One choosable mode is all a choose-one charm asks for, and none is too few. */
+    @Test
+    void aCharmIsPlayableWhenEnoughOfItsModesCanBeChosen() {
+        assertOnlyACreatureMakesItPlayable("Fiery Intervention");
     }
 
     /**
@@ -405,6 +418,95 @@ class PlayabilityVerdictTest {
 
         assertTrue(read.verdict().hasLegalTarget());
         assertEquals(List.of(Refs.of(bears.getHostCard())), read.legalTargets());
+    }
+
+    // ── targets left chosen on the live ability (finding 8.3) ───────────
+
+    /**
+     * Run Away Together, "two target creatures controlled by different
+     * players", in A's hand with {@code leftover} chosen on its live spell,
+     * as an evaluation that did not cast it leaves them.
+     */
+    private static SpellAbility runAwayTogether(Game game, Player a, Card... leftover) {
+        SpellAbility spell = TestBoard.inHand(game, a, "Run Away Together").getFirstSpellAbility();
+        spell.setActivatingPlayer(a);
+        spell.getTargets().addAll(List.of(leftover));
+        return spell;
+    }
+
+    /**
+     * Two creatures left chosen, one on each side, made every other creature
+     * read illegal beside them; the rules offer all four, and the live
+     * spell's choices are put back as they were.
+     */
+    @Test
+    void leftoverTargetsDoNotNarrowTheLegalTargets() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        Player b = game.getPlayers().get(1);
+        Card mine = TestBoard.inPlay(game, a, "Grizzly Bears");
+        Card mineToo = TestBoard.inPlay(game, a, "Llanowar Elves");
+        Card theirs = TestBoard.inPlay(game, b, "Hill Giant");
+        Card theirsToo = TestBoard.inPlay(game, b, "Craw Wurm");
+        SpellAbility spell = runAwayTogether(game, a, mine, theirs);
+        TargetChoices left = spell.getTargets();
+
+        DecisionCandidate read = DecisionCandidate.read(spell, a).orElseThrow();
+
+        assertEquals(Set.of(Refs.of(mine), Refs.of(mineToo), Refs.of(theirs), Refs.of(theirsToo)),
+                Set.copyOf(read.legalTargets()));
+        assertSame(left, spell.getTargets());
+        assertEquals(List.of(mine, theirs), List.copyOf(spell.getTargets()));
+    }
+
+    /** Two of A's creatures left chosen hid the one pair the rules allow. */
+    @Test
+    void leftoverTargetsDoNotHideTheLegalPair() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        Card mine = TestBoard.inPlay(game, a, "Grizzly Bears");
+        Card mineToo = TestBoard.inPlay(game, a, "Llanowar Elves");
+        TestBoard.inPlay(game, game.getPlayers().get(1), "Hill Giant");
+
+        assertTrue(PlayabilityVerdict.of(runAwayTogether(game, a, mine, mineToo), a).hasLegalTarget());
+    }
+
+    /**
+     * The body sees no chosen target, and the choices come back when it
+     * throws, a divided clause's allocation with them.
+     */
+    @Test
+    void theChosenTargetsComeBackWhenTheBodyThrows() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        Player b = game.getPlayers().get(1);
+        SpellAbility forkedBolt = TestBoard.inHand(game, a, "Forked Bolt").getFirstSpellAbility();
+        forkedBolt.setActivatingPlayer(a);
+        forkedBolt.clearTargets();
+        forkedBolt.getTargets().add(b);
+        forkedBolt.addDividedAllocation(b, 2);
+        TargetChoices left = forkedBolt.getTargets();
+
+        assertThrows(IllegalStateException.class, () -> PlayabilityVerdict.asActivator(forkedBolt, a, () -> {
+            assertTrue(forkedBolt.getTargets().isEmpty(), "the body reads no chosen target");
+            throw new IllegalStateException("unreadable");
+        }));
+
+        assertSame(left, forkedBolt.getTargets());
+        assertEquals(2, forkedBolt.getDividedValue(b));
+        assertEquals(2, forkedBolt.getDividedValue());
+    }
+
+    /**
+     * A-Ready to Rumble: "damage can't be prevented this turn" then 5 damage
+     * to target creature or planeswalker, or destroy target artifact. The
+     * first mode targets in its second clause only, so on a board with
+     * neither mode's target no mode can be chosen, where judging the mode by
+     * its untargeted first clause read it choosable.
+     */
+    @Test
+    void aCharmModeIsJudgedOverItsWholeChain() {
+        assertOnlyACreatureMakesItPlayable("A-Ready to Rumble");
     }
 
     // ── land plays (FR-033a) ────────────────────────────────────────────

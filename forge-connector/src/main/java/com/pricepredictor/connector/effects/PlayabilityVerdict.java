@@ -29,7 +29,9 @@ import java.util.function.Supplier;
  * either: it honours the AI's mana reservations and draws from the random
  * stream. So affordability is a rules-only mana check
  * ({@link ManaAffordability}) and Forge's additional-cost check, and target
- * legality counts candidates rather than reading choices.
+ * legality counts candidates rather than reading choices, with the choices
+ * left on the ability set aside while it counts: Forge judges a cross-target
+ * rule against them ({@link TargetingClauses#withNoneChosen}).
  *
  * <p>{@code canPlay} is the record's {@code can_play}: Forge's
  * {@code canPlay}, its {@code canCastTiming} and no static forbidding the
@@ -42,8 +44,8 @@ import java.util.function.Supplier;
  * {@code canPlayLand} ({@link PlayabilityChecks#failedLand}).
  *
  * <p>Never writes to the game: the activating player and the host's cast
- * ability, the two things a check sets, are put back after it
- * ({@link #asActivator}).
+ * ability, the two things a check sets, and the targets set aside are put
+ * back after it ({@link #asActivator}).
  *
  * @param timing       Forge's {@code canCastTiming} for the activator
  * @param failedChecks every check the candidate failed, once each
@@ -79,7 +81,11 @@ public record PlayabilityVerdict(
      * player, then put back every activating player and the host's cast
      * ability as they were: the checks set the candidate's activating player,
      * the mana check those of the mana abilities it counts on, and Forge's
-     * cast-prohibition check the host's cast ability.
+     * cast-prohibition check the host's cast ability. The body runs with no
+     * target chosen on any clause the candidate offers, and the choices come
+     * back after it, also when it throws ({@link TargetingClauses#withNoneChosen}),
+     * so every reader inside it, the verdict, {@code legal_targets} and the
+     * sample, counts what the rules offer before a choice.
      */
     public static <T> T asActivator(SpellAbility candidate, Player activator, Supplier<T> body) {
         Map<SpellAbility, Player> activators = new IdentityHashMap<>();
@@ -93,7 +99,7 @@ public record PlayabilityVerdict(
         SpellAbility castBefore = host == null ? null : host.getCastSA();
         candidate.setActivatingPlayer(activator);
         try {
-            return body.get();
+            return TargetingClauses.withNoneChosen(candidate, body);
         } finally {
             activators.forEach((ability, before) -> {
                 if (ability.getActivatingPlayer() != before) {

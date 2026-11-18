@@ -479,13 +479,15 @@ bracket they follow.
 - The collector's `PlayabilityVerdict` computes `can_play`, `affordable` and
   `has_legal_target` for both seats, from the rules alone:
   - mana and additional costs without the AI's cost preferences;
-  - each targeting clause's candidates counted against the clause's minimum;
+  - each targeting clause's candidates counted against the clause's minimum, with no target
+    chosen on any clause of the candidate: targets left on the ability by an evaluation that
+    did not cast it narrow no cross-target rule, and are left on it as they were;
   - a charm judged by how many of its offered modes have reachable targets in every clause of
     the mode.
 - The random seat filters its own plays on the same verdict.
 - `legal_targets` lists every card and player the rules allow as a target of the
-  candidate, whatever the AI would choose. A spell or ability on the stack it may target
-  is listed as its card.
+  candidate before any target is chosen, whatever the AI would choose or left chosen. A
+  spell or ability on the stack it may target is listed as its card.
 - Each candidate carries a fourth verdict bit, `timing`: Forge's `canCastTiming`.
 - `can_play` is `canPlay` and `canCastTiming` together, and false when a static forbids the
   play.

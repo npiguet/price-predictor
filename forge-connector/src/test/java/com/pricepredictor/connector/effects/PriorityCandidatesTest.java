@@ -405,7 +405,8 @@ class PriorityCandidatesTest {
 
     /**
      * What a verdict could write: the board a snapshot renders, every card's
-     * cast ability and every spell ability's activating player.
+     * cast ability, every spell ability's activating player and the targets
+     * chosen on each clause of its chain.
      */
     private static String digest(Game game) {
         StringBuilder digest = new StringBuilder(new SnapshotBuilder(game).ofBoard().render());
@@ -414,17 +415,39 @@ class PriorityCandidatesTest {
                     .append(" cast=").append(System.identityHashCode(card.getCastSA()));
             for (SpellAbility ability : card.getSpellAbilities()) {
                 digest.append(" | ").append(ability.getId())
-                        .append(" by ").append(ability.getActivatingPlayer());
+                        .append(" by ").append(ability.getActivatingPlayer())
+                        .append(chosenTargets(ability));
             }
         }
         return digest.toString();
+    }
+
+    /** The targets chosen on each clause of the chain, and which object holds them. */
+    private static String chosenTargets(SpellAbility ability) {
+        StringBuilder chosen = new StringBuilder();
+        for (SpellAbility clause = ability; clause != null; clause = clause.getSubAbility()) {
+            chosen.append(" targets@").append(System.identityHashCode(clause.getTargets()))
+                    .append(clause.getTargets());
+        }
+        return chosen.toString();
+    }
+
+    /** Each clause of the spell's chain left with one chosen target, in order. */
+    private static void leaveChosen(SpellAbility spell, Player caster, Card... targets) {
+        spell.setActivatingPlayer(caster);
+        SpellAbility clause = spell;
+        for (Card target : targets) {
+            clause.getTargets().add(target);
+            clause = clause.getSubAbility();
+        }
     }
 
     /**
      * Enumerating and evaluating both players' candidates leaves the game as
      * it was: spells and abilities, a charm, a static prohibition, a
      * split-second spell on the stack, in both seats' hands and on both
-     * sides of the battlefield.
+     * sides of the battlefield, and a spell with targets an evaluation left
+     * chosen on each of its two clauses, which the verdict reads without.
      */
     @Test
     void theGameIsUnchangedByEnumeration() {
@@ -436,11 +459,11 @@ class PriorityCandidatesTest {
             TestBoard.inPlay(game, b, land);
         }
         TestBoard.inPlay(game, a, "Grand Abolisher");
-        TestBoard.inPlay(game, a, "Prodigal Sorcerer");
-        TestBoard.inPlay(game, b, "Llanowar Elves");
+        Card sorcerer = TestBoard.inPlay(game, a, "Prodigal Sorcerer");
+        Card elves = TestBoard.inPlay(game, b, "Llanowar Elves");
         TestBoard.inPlay(game, b, "Jace Beleren");
         TestBoard.inHand(game, a, "Fiery Intervention");
-        TestBoard.inHand(game, a, "Prey Upon");
+        leaveChosen(TestBoard.inHand(game, a, "Prey Upon").getFirstSpellAbility(), a, sorcerer, elves);
         TestBoard.inHand(game, b, "Lightning Bolt");
         TestBoard.inHand(game, b, "Divination");
         TestBoard.inGraveyard(game, b, "Grizzly Bears");
