@@ -166,7 +166,8 @@ A card's `lines` members:
 | `affected` | list of refs: the permanents the static applies to, then the players (`P…`), from Forge's static effect (`StaticEffect.getAffectedCards`, `getAffectedPlayers`) | statics of the face up that Forge applies as a continuous effect; absent on every line of a `continuous` record's board, whose answer it would be |
 
 A `keyword` line's keys name the keyword line the card prints, else the static that granted the
-keyword; a keyword a resolved effect granted has `keys: []` and is read by its `fragment`. A copy
+keyword, a static a keyword built as that keyword's bare key (a dashed Mardu Scout's haste keys as
+its Dash line); a keyword a resolved effect granted has `keys: []` and is read by its `fragment`. A copy
 (a Clone's, a Phantasmal Image's) prints what it copies: its keyword lines key into the copied
 card's script file, through a copy of a copy to the original; a keyword, trigger or ability the copy
 effect itself adds (`AddTriggers$`, `AddAbilities$`) keys to the line that made the copy. None of

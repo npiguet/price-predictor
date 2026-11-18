@@ -14,6 +14,7 @@ import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;
 import forge.game.replacement.ReplacementEffect;
 import forge.game.spellability.SpellAbility;
+import forge.game.staticability.StaticAbility;
 import forge.game.trigger.Trigger;
 import forge.game.trigger.WrappedAbility;
 import forge.util.FileSection;
@@ -414,7 +415,18 @@ public final class ProvenanceResolver {
             ProvenanceKey printed = keyOfPrinted(state, keyword, null, 0);
             if (printed != null) return printed;
         }
-        return keyword.getStatic() == null ? null : of(keyword.getStatic());
+        return grantingLine(keyword.getStatic());
+    }
+
+    /**
+     * The line of the static that granted a keyword, or null. A static a
+     * keyword built (Dash's or Blitz's haste, a Class level's) grants as its
+     * keyword's line, bare as that line keys, so a keyword it grants its own
+     * card is one slot with the granting keyword's line, not a second one.
+     */
+    private static ProvenanceKey grantingLine(StaticAbility granting) {
+        ProvenanceKey key = granting == null ? null : of(granting);
+        return key == null ? null : key.withoutBuilt();
     }
 
     /** How many copies of copies are followed before giving up. */
