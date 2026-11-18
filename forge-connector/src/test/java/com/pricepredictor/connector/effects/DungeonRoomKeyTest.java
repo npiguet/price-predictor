@@ -14,10 +14,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The key a dungeon's room trigger reaches a record with (finding R2-3).
@@ -25,9 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertSame;
  * <p>Forge builds a dungeon from its token script ({@code VentureEffect}
  * makes it with {@code CardFactory.getCard} from the token's paper card)
  * and its {@code K:Dungeon} keyword builds one {@code RoomEntered} trigger
- * per room, in the keyword's room order. The script file and the room's
- * {@code built} index are the ones the converter declares on the room's
- * line.
+ * per room, in the keyword's room order. A resolving room trigger keys to
+ * the dungeon keyword in the token script with the room's {@code built}
+ * index, the key the converter declares on the room's line.
  */
 @ExtendWith(ForgeExtension.class)
 class DungeonRoomKeyTest {
@@ -95,19 +96,13 @@ class DungeonRoomKeyTest {
                 "Dark Pool", "Fungi Cavern", "Temple of Dumathoin"), rooms);
     }
 
-    /**
-     * The key the collector gives the resolving room trigger today: none,
-     * with the reason {@code engine_effect}. {@code ProvenanceResolver}
-     * counts a {@code DUNGEON} game piece among the engine-built cards with
-     * no script file, so a room's record names no line of the dungeon's
-     * sidecar, though the dungeon has a token script and the room trigger a
-     * {@code built} index (above). The key the converter can declare is
-     * {@code (tokenscripts/lost_mine_of_phandelver.txt, 0, keyword, 0,
-     * built = trigger 0)}; were the collector to give it, this test would
-     * expect that key.
-     */
+    private static ProvenanceKey room(int index) {
+        return new ProvenanceKey(LOST_MINE, 0, TraitKind.KEYWORD, 0).withBuilt(TraitKind.TRIGGER, index);
+    }
+
+    /** Cave Entrance, the first room, keys to the dungeon keyword's first built trigger. */
     @Test
-    void aResolvingRoomIsReportedAsAnEngineEffectWithNoKey() {
+    void aResolvingRoomKeysToItsBuiltTriggerOfTheDungeonKeyword() {
         CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
         lostMine(board);
         Card host = board.hand("Kick in the Door", board.you);
@@ -115,7 +110,54 @@ class DungeonRoomKeyTest {
         SpellAbility room = ventureAndStackTheRoom(board, host);
 
         ProvenanceKey.Resolved resolved = ProvenanceResolver.resolve(room);
-        assertNull(resolved.key());
-        assertEquals(UnresolvedReason.ENGINE_EFFECT, resolved.reason());
+        assertEquals(room(0), resolved.key(), "reason " + resolved.reason());
+    }
+
+    /**
+     * A second venture leads on from Cave Entrance to Goblin Lair or Mine
+     * Tunnels, whichever the player chose: that room's trigger keys to its
+     * own place in the keyword's list.
+     */
+    @Test
+    void aLaterRoomKeysToItsOwnBuiltTrigger() {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card dungeon = lostMine(board);
+        Card host = board.hand("Kick in the Door", board.you);
+        ventureAndStackTheRoom(board, host);
+
+        SpellAbility later = ventureAndStackTheRoom(board, host);
+
+        List<String> rooms = dungeonKeyword(dungeon).getTriggers().stream()
+                .map(trigger -> trigger.getOverridingAbility().getParam("RoomName")).toList();
+        int entered = rooms.indexOf(dungeon.getCurrentRoom());
+        assertTrue(entered == 1 || entered == 2, "entered " + dungeon.getCurrentRoom());
+        assertEquals(room(entered), ProvenanceResolver.of(later));
+    }
+
+    /**
+     * On a board the dungeon is a command-zone entity with one line, its
+     * keyword's, under the bare key; the converter declares that key on no
+     * line, so the join reads it as the room lines, one slot each. The room
+     * triggers are the keyword's, not lines of their own.
+     */
+    @Test
+    void aDungeonsBoardLineIsItsKeywordUnderTheBareKey() {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card dungeon = lostMine(board);
+
+        List<Map<String, Object>> lines = linesOf(board, dungeon);
+
+        assertEquals(1, lines.size(), lines.toString());
+        Map<String, Object> line = lines.get(0);
+        assertEquals("keyword", line.get("kind"), line.toString());
+        assertEquals(Boolean.FALSE, line.get("granted"), line.toString());
+        assertEquals(List.of(Map.of("script_file", LOST_MINE, "face", 0L,
+                "trait_kind", "keyword", "index_within_kind", 0L)), line.get("keys"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> linesOf(CharacterizationBoard board, Card card) {
+        return (List<Map<String, Object>>) RecordLines.parse(
+                EntityJson.render(board.game, card, StaticSuppression.NONE)).get("lines");
     }
 }

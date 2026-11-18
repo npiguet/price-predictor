@@ -775,11 +775,12 @@ public final class ProvenanceResolver {
     /**
      * Why a trait that reached the end of the chain names no printed line.
      *
-     * <p>The engine-built case is checked first and wins: The Monarch, The
-     * Initiative and the dungeons are {@code new Card(...)} with their traits
-     * built inline, no paper card and no rules, so no script file exists to
-     * name. That is expected rather than a resolver failure, and the two have
-     * to be distinguishable — an empty key alone cannot tell them apart.
+     * <p>The engine-built case is checked first and wins: an effect card
+     * (The Monarch, The Initiative, a resolved effect's card) is
+     * {@code new Card(...)} with its traits built inline, no paper card and
+     * no rules, so no script file exists to name. That is expected rather
+     * than a resolver failure, and the two have to be distinguishable — an
+     * empty key alone cannot tell them apart.
      *
      * <p>The two granted cases exist for the same reason one layer down. A
      * trait Forge grants at runtime — a poisonous trigger on the Sliver that
@@ -823,14 +824,13 @@ public final class ProvenanceResolver {
      * which is where the printed line actually is, and what makes The Monarch
      * report {@code engine_effect} instead of a fabricated key.
      *
-     * <p>Tokens are deliberately not included: a token <em>does</em> have a
-     * script, in {@code tokenscripts}, and {@link ScriptLocator#scriptFileOf}
-     * finds it.
+     * <p>Tokens and dungeons are deliberately not included: each <em>does</em>
+     * have a script, in {@code tokenscripts} (a venture builds its dungeon
+     * from the token's paper card), and {@link ScriptLocator#scriptFileOf}
+     * finds it, so a room's trigger keys to its dungeon keyword's line.
      */
     private static boolean isScriptless(Card host) {
-        if (host == null) return false;
-        GamePieceType type = host.getGamePieceType();
-        return type == GamePieceType.EFFECT || type == GamePieceType.DUNGEON;
+        return host != null && host.getGamePieceType() == GamePieceType.EFFECT;
     }
 
     /**

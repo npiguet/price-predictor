@@ -21,7 +21,7 @@ Rules to respect when changing the input layout, the relation attention or an ou
 - The input reads targets as cast (`Refs.as_cast`: `targets_at_cast`, else `targets`) for `[ACT]`'s target count, every "targeted" bit and `[ACT]`'s `targets` relations. Reading `targets` on an effect half would hand the model the fizzle it is to predict. On a record without `targets_at_cast` the fallback still leaks it.
 - A keyword reads in one spelling, defined in `domain/keyword_names.py` (`Ward:2` → `ward`, `Protection:Goblin` → `protection_from_goblin`, `Trample:Planeswalker` → `trample_over_planeswalkers`, which is trample too).
 - Floating effects and delayed triggers with no entity in the snapshot are card slots after the board's. They are no per-entity target.
-- A dungeon is a card slot with one keyword line for all its rooms, so a room has no line of its own.
+- A dungeon is a card slot whose one keyword line, under the dungeon keyword's bare key, reads as one slot per room line (`board_keys`), as a saga's keyword line reads as its chapters.
 
 ## Relations
 

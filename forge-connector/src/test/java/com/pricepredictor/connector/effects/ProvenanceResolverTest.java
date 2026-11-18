@@ -258,10 +258,11 @@ class ProvenanceResolverTest {
     // ── engine-built command-zone cards ─────────────────────────────────
 
     /**
-     * The Monarch, The Initiative and the dungeons are built inline with no
+     * The Monarch and The Initiative are effect cards built inline with no
      * paper card and no rules. There is no printed line to name, which is a
      * different thing from a resolver that failed — and an empty key alone
-     * cannot say which, so the reason has to.
+     * cannot say which, so the reason has to. A dungeon is no such card: it
+     * has a token script ({@link DungeonRoomKeyTest}).
      */
     @Test
     void anEngineBuiltEffectCardReportsThatRatherThanAKey() {
