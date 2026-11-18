@@ -13,7 +13,7 @@ from effect_knowledge_probes import (
 )
 
 from tests.unit.effects.builders import player_of
-from tests.unit.scripts.knowledge_probe_support import _decision
+from tests.unit.scripts.knowledge_probe_support import decision_record
 
 
 class TestTargetRestrictions:
@@ -95,7 +95,7 @@ class TestColourPips:
         assert not colour_pips.missing_colour_present("{W}{U}")
 
     def test_a_configuration_edits_the_lands_to_its_colours(self, records):
-        record = _decision(records, "{U}")
+        record = decision_record(records, "{U}")
         actor = record.actor_player
         lands, _ = colour_pips.configurations("{2}{U}")["pip missing"]
         edited = sweeps.set_untapped_lands(record, actor, list(lands), len(lands))

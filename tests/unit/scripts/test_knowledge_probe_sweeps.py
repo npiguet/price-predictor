@@ -12,9 +12,9 @@ from effect_knowledge_probes.board_edits import BoardEdit
 
 from tests.unit.effects.builders import player_of
 from tests.unit.scripts.knowledge_probe_support import (
-    _decision,
-    _differences,
-    _select_sweep_records,
+    decision_record,
+    differences,
+    select_sweep_records,
 )
 
 # ── the sweep editor ────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ class TestSweepEditor:
         target = next(e for e in record.state.entities if e.pt is not None)
         edited = BoardEdit(record).set_toughness(target.id, 7).record
         assert edited.state.entity(target.id).pt.total[1] == 7
-        assert _differences(record, edited) == {"entities"}
+        assert differences(record, edited) == {"entities"}
         for before, after in zip(record.state.entities, edited.state.entities):
             if before.id != target.id:
                 assert before == after
@@ -39,7 +39,7 @@ class TestSweepEditor:
             assert len(sweeps.opposing_creatures(edited)) == count
             ids = [e.id for e in edited.state.entities]
             assert len(ids) == len(set(ids))
-            assert _differences(record, edited) <= {"entities"}
+            assert differences(record, edited) <= {"entities"}
 
     def test_an_amount_edit_changes_only_the_amount(self):
         text = "NumDmg$ 3 | SP$ DealDamage | ValidTgts$ Creature [SEG] SV1: DB$ Draw"
@@ -51,7 +51,7 @@ class TestSweepEditor:
         assert sweeps.cost_pips("{2}{G}") == ["1", "1", "G"]
 
     def test_sweep_records_are_chosen_from_real_records(self, records, sidecars):
-        chosen = _select_sweep_records(records, sidecars)
+        chosen = select_sweep_records(records, sidecars)
         assert set(chosen) == {"toughness", "affordability", "board_size", "damage",
                                "activated_damage"}
         assert chosen["affordability"]
@@ -65,12 +65,16 @@ def _lands(record, player: str) -> list:
             and e.controller == player and "land" in e.types]
 
 
+def _other_players(record, actor: str) -> list:
+    return [p for p in record.state.players if p.id != actor]
+
+
 class TestAffordabilityEdit:
     """The sweep's mana is the player's untapped lands, and the count beside them."""
 
     def test_the_untapped_lands_make_exactly_the_swept_mana(self, records):
         # The actor's untapped Swamp is the board the collector wrote.
-        record = _decision(records, "{U}")
+        record = decision_record(records, "{U}")
         actor = record.actor_player
         assert [(e.name, e.tapped) for e in _lands(record, actor)] == [("Swamp", False)]
         pips = sweeps.candidate_cost(record)
@@ -78,24 +82,30 @@ class TestAffordabilityEdit:
             edited = sweeps.set_untapped_lands(record, actor, pips, amount)
             untapped = [e for e in _lands(edited, actor) if not e.tapped]
             assert len(untapped) == amount
-            colours = [sweeps.basic_land_colour(e) for e in untapped]
-            assert None not in colours
-            player = player_of(edited.state, actor)
-            assert player.untapped_production == {
-                c: colours.count(c) for c in ("W", "U", "B", "R", "G")}
-            assert player.floating_mana == {}
-            ids = [e.id for e in edited.state.entities]
-            assert len(ids) == len(set(ids))
-            for before, after in zip(record.state.players, edited.state.players):
-                if before.id != actor:
-                    assert before == after
-            kept = {e.id: e for e in edited.state.entities}
-            for before in record.state.entities:
-                if before not in _lands(record, actor):
-                    assert kept[before.id] == before
+            self._assert_untapped_production(edited, actor, untapped)
+            self._assert_everything_else_kept(record, edited, actor)
+
+    @staticmethod
+    def _assert_untapped_production(edited, actor, untapped) -> None:
+        colours = [sweeps.basic_land_colour(e) for e in untapped]
+        assert None not in colours
+        player = player_of(edited.state, actor)
+        assert player.untapped_production == {
+            c: colours.count(c) for c in ("W", "U", "B", "R", "G")}
+        assert player.floating_mana == {}
+
+    @staticmethod
+    def _assert_everything_else_kept(record, edited, actor) -> None:
+        ids = [e.id for e in edited.state.entities]
+        assert len(ids) == len(set(ids))
+        assert _other_players(record, actor) == _other_players(edited, actor)
+        kept = {e.id: e for e in edited.state.entities}
+        for before in record.state.entities:
+            if before not in _lands(record, actor):
+                assert kept[before.id] == before
 
     def test_coloured_pips_are_fed_first_and_the_player_s_basics_reused(self, records):
-        record = _decision(records, "{U}")
+        record = decision_record(records, "{U}")
         actor = record.actor_player
         pips = sweeps.candidate_cost(record)
 
@@ -111,7 +121,7 @@ class TestAffordabilityEdit:
         assert board(4) == ({"U": 3, "B": 1}, False)
 
     def test_every_other_land_of_the_player_is_tapped(self, records):
-        record = _decision(records, "{1}{U}")
+        record = decision_record(records, "{1}{U}")
         actor = record.actor_player
         lands = _lands(record, actor)
         assert next(e for e in lands if e.name == "Island").tapped is False
@@ -135,7 +145,7 @@ class TestAffordabilityEdit:
         assert sweeps.land_payable(cost) is payable
 
     def test_an_untapped_mana_creature_keeps_a_record_out(self, records, sidecars):
-        record = _decision(records, "{U}")
+        record = decision_record(records, "{U}")
         assert sweeps.affordability_ready(record, sidecars)
         elves = next(e for r in records for e in r.state.entities
                      if e.name == "Llanowar Elves")
@@ -151,7 +161,7 @@ class TestAffordabilityEdit:
 
     def test_a_candidate_on_the_player_s_own_land_keeps_a_record_out(self, records,
                                                                       sidecars):
-        record = _decision(records, "{U}")
+        record = decision_record(records, "{U}")
         swamp = _lands(record, record.actor_player)[0]
         candidate = replace(record.payload.candidates[0], ability=(swamp.printed[0],))
         on_land = replace(record, payload=replace(record.payload, candidates=(candidate,)))

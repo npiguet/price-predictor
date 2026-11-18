@@ -11,7 +11,7 @@ from effect_knowledge_probes import (
 )
 from effect_knowledge_probes.board_edits import BoardEdit
 
-from tests.unit.scripts.knowledge_probe_support import _FIXTURES
+from tests.unit.scripts.knowledge_probe_support import FIXTURES
 
 # ── board abilities ─────────────────────────────────────────────────────
 
@@ -154,18 +154,29 @@ class TestRung3ReadsTheRightOutput:
 # ── a granted keyword on a gen-3 board (research M5) ────────────────────
 
 
+def _is_battlefield_creature_with_lines(entity) -> bool:
+    return bool(entity.lines is not None and entity.on_battlefield and entity.is_creature)
+
+
+def _plain_battlefield_creature(entity) -> bool:
+    """A battlefield creature with lines and neither flying nor fear, granted or lined."""
+    if not _is_battlefield_creature_with_lines(entity):
+        return False
+    flying_or_fear = {"flying", "fear"}
+    granted = flying_or_fear & set(entity.granted_temporary.keywords)
+    lined = {line.keyword for line in entity.lines} & flying_or_fear
+    return not granted and not lined
+
+
 @pytest.fixture(scope="module")
 def gen3_creature():
     """A gen-3 fixture record and one battlefield creature on it with neither
     flying nor fear nor any line of either."""
     from effects.infrastructure.shard_io import read_shard
 
-    for record in read_shard(_FIXTURES / "gen3-records.jsonl.gz"):
+    for record in read_shard(FIXTURES / "gen3-records.jsonl.gz"):
         for entity in record.state.entities:
-            if (entity.lines is not None and entity.on_battlefield and entity.is_creature
-                    and not {"flying", "fear"} & set(entity.granted_temporary.keywords)
-                    and not any(line.keyword in ("flying", "fear")
-                                for line in entity.lines)):
+            if _plain_battlefield_creature(entity):
                 return record, entity.id
     raise AssertionError("no gen-3 fixture creature without flying or fear")
 

@@ -11,7 +11,7 @@ import pytest  # noqa: E402
 from effect_knowledge_probes import common, labels  # noqa: E402
 
 from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS, curated_fixture_records  # noqa: E402
-from tests.unit.scripts.knowledge_probe_support import _join_triggers  # noqa: E402
+from tests.unit.scripts.knowledge_probe_support import join_triggers  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -32,5 +32,5 @@ def acting(sidecars):
 @pytest.fixture(scope="module")
 def items_by_record(records, sidecars, acting) -> dict[str, list]:
     """Every fixture record's board items by record id, triggers joined as a freeze joins them."""
-    join = _join_triggers(records)
+    join = join_triggers(records)
     return {r.record_id: labels.record_items(r, sidecars, join, acting) for r in records}

@@ -11,17 +11,17 @@ from effect_knowledge_probes import combat_grid, labels, sweeps
 from effect_knowledge_probes.board_edits import BoardEdit
 
 _ROOT = Path(__file__).resolve().parents[3]
-_FIXTURES = _ROOT / "tests" / "fixtures" / "effects"
+FIXTURES = _ROOT / "tests" / "fixtures" / "effects"
 
 
-def _join_triggers(records):
+def join_triggers(records):
     join = labels.TriggerJoin()
     for record in records:
         join.observe(record)
     return join.result()
 
 
-def _select_sweep_records(records, sidecars) -> dict:
+def select_sweep_records(records, sidecars) -> dict:
     selector = sweeps.SweepSelector(sidecars)
     for record in records:
         selector.observe(record)
@@ -32,24 +32,36 @@ def _select_sweep_records(records, sidecars) -> dict:
 LETHAL_STEP = np.array([[float(p >= t) for t in range(1, 9)] for p in range(1, 9)])
 
 
-def _fixture_lines():
+def fixture_lines():
     from effects.infrastructure.sidecar_io import read_sidecar
 
-    for path in sorted((_FIXTURES / "gen3-sidecars").rglob("*.provenance.json")):
+    for path in sorted((FIXTURES / "gen3-sidecars").rglob("*.provenance.json")):
         sidecar = read_sidecar(path)
         for line in sidecar.lines:
             if line.script_text:
                 yield line
 
 
-def _line(*needles: str):
-    for line in _fixture_lines():
+def fixture_line(*needles: str):
+    for line in fixture_lines():
         if all(n in line.script_text for n in needles):
             return line
     raise AssertionError(f"no fixture line holds {needles}")
 
 
-def _one_on_one(records):
+def _cleared_entity(entity, attacker, blocker):
+    """``entity`` with the pair's damage and keywords cleared and their block set."""
+    if entity.id in (attacker, blocker):
+        entity = replace(entity, damage=0, granted_temporary=replace(
+            entity.granted_temporary, keywords=()))
+    if entity.id == attacker:
+        entity = replace(entity, combat=replace(entity.combat, blocked_by=(blocker,)))
+    if entity.id == blocker:
+        entity = replace(entity, combat=replace(entity.combat, blocking=(attacker,)))
+    return entity
+
+
+def one_on_one(records):
     """A fixture combat turned into one attacker blocked by one blocker, both
     cleared of damage and keywords."""
     from effects.domain.records import RecordKind
@@ -57,16 +69,7 @@ def _one_on_one(records):
     record = next(r for r in records if r.kind is RecordKind.COMBAT
                   and sum(1 for b in r.payload.blocks.values() if b) == 1)
     attacker, (blocker, *_) = next((a, b) for a, b in record.payload.blocks.items() if b)
-    entities = []
-    for entity in record.state.entities:
-        if entity.id in (attacker, blocker):
-            entity = replace(entity, damage=0, granted_temporary=replace(
-                entity.granted_temporary, keywords=()))
-        if entity.id == attacker:
-            entity = replace(entity, combat=replace(entity.combat, blocked_by=(blocker,)))
-        if entity.id == blocker:
-            entity = replace(entity, combat=replace(entity.combat, blocking=(attacker,)))
-        entities.append(entity)
+    entities = [_cleared_entity(e, attacker, blocker) for e in record.state.entities]
     record = replace(
         record, fork=False, interventional=False, mirror_of=None,
         payload=replace(record.payload, blocks={attacker: (blocker,)}, probed_keyword=None),
@@ -75,11 +78,11 @@ def _one_on_one(records):
     return record, attacker, blocker
 
 
-def _keywords(entity):
+def keyword_set(entity):
     return set(entity.granted_temporary.keywords)
 
 
-def _outcome_by_the_rule(monkeypatch, record, attacker: str, blocker: str) -> dict:
+def outcome_by_the_rule(monkeypatch, record, attacker: str, blocker: str) -> dict:
     """``derive_targets`` patched to report the deaths the damage-step rule gives the
     block; returned so a test can change one creature's outcome."""
     import effects.domain.effect_targets as effect_targets
@@ -94,7 +97,7 @@ def _outcome_by_the_rule(monkeypatch, record, attacker: str, blocker: str) -> di
     return outcome
 
 
-def _block_pair(records):
+def block_pair(records):
     """A fixture block-legality record made to qualify: a red attacker, a green blocker."""
     from effects.domain.records import PlayabilityBlockersPayload
 
@@ -109,7 +112,7 @@ def _block_pair(records):
     return board.record, attacker, blocker
 
 
-def _differences(before, after) -> set[str]:
+def differences(before, after) -> set[str]:
     """Which top-level parts of a record's state differ."""
     changed = set()
     if before.state.players != after.state.players:
@@ -121,7 +124,7 @@ def _differences(before, after) -> set[str]:
     return changed
 
 
-def _decision(records, cost: str):
+def decision_record(records, cost: str):
     """The fixture's decision record whose first candidate costs ``cost``."""
     return next(r for r in records if r.subkind is not None
                 and r.subkind.value == "decision"

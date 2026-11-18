@@ -19,10 +19,10 @@ from effect_knowledge_probes.line_ladders import line_split
 from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS
 from tests.unit.scripts.knowledge_probe_support import (
     LETHAL_STEP,
-    _block_pair,
-    _keywords,
-    _one_on_one,
-    _outcome_by_the_rule,
+    block_pair,
+    keyword_set,
+    one_on_one,
+    outcome_by_the_rule,
 )
 
 # ── what a checkpoint's probes read (FR-075) ─────────────────────────────
@@ -165,9 +165,9 @@ class TestFreezeSelectionSet:
     ):
         from effect_knowledge_probes import selection
 
-        record, attacker, blocker = _one_on_one(records)
-        _outcome_by_the_rule(monkeypatch, record, attacker, blocker)
-        grids = {g.name: g for g in selection.grid_sources(None, _keywords)}
+        record, attacker, blocker = one_on_one(records)
+        outcome_by_the_rule(monkeypatch, record, attacker, blocker)
+        grids = {g.name: g for g in selection.grid_sources(None, keyword_set)}
         found = grids["combat/none/blocker"].qualify(record)
         assert found.entities == (attacker, blocker)
         assert found.outcomes == tuple(LETHAL_STEP.ravel())
@@ -177,8 +177,8 @@ class TestFreezeSelectionSet:
     def test_the_evasion_grid_qualifies_a_block_with_the_rules_outcomes(self, records):
         from effect_knowledge_probes.selection import EvasionGrid
 
-        record, attacker, blocker = _block_pair(records)
-        grid = EvasionGrid(_keywords)
+        record, attacker, blocker = block_pair(records)
+        grid = EvasionGrid(keyword_set)
         found = grid.qualify(record)
         assert found.entities == (attacker, blocker)
         assert len(found.outcomes) == len(grid.cells)
