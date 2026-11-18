@@ -18,7 +18,7 @@ Commands are PowerShell, run from the repository root. The interpreter is
 dependencies). Paste this block once per session; no command below needs editing.
 
 - `$stage0` is the day the Stage 0 runs started, the date in their `inputs\` directory names, not
-  today: `2026-11-15` for the runs that wrote `output\effects\gen3\inputs\2026-11-15-*`.
+  today: `2026-11-18` for the runs that wrote `output\effects\gen3\inputs\2026-11-18-*`.
 - Every later run's directory is `<parent>\<start>-<slug>`, its start date held in a variable set
   on the line before its directory's (`$pilotStart` before `$pilot`). A run's start date is the day
   it started, and a run that is resumed or restarted keeps its directory. `Run-Start` gives the
@@ -61,7 +61,7 @@ function Run-Start($parent, $slug) {
 }
 
 # Inputs every later step reads. Stage 0 wrote the first three, on the day $stage0 names.
-$stage0   = "2026-11-15"
+$stage0   = "2026-11-18"
 $cards    = "--cards-folder $gen3\converted\cardsfolder --cards-folder $gen3\converted\tokenscripts"
 $kw       = "$gen3\inputs\$stage0-keyword-definitions\keyword-definitions.json"
 $vocab    = "$gen3\inputs\$stage0-vocab\vocab.txt"
