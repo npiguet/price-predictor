@@ -280,11 +280,6 @@ public final class ProvenanceRecorder {
         }
     }
 
-    /** Leave an ability unclaimed: its text is stated by another line, so its keys are dropped. */
-    public void drop(Ability ability) {
-        byAbility.remove(ability);
-    }
-
     /**
      * Move an ability's attribution to the object that replaces it.
      *

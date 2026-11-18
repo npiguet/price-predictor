@@ -75,9 +75,26 @@ class HelperTriggerLineTest {
                 "activated[1]: {2}{B}, {T}: put target creature card from a graveyard onto the"
                         + " battlefield under your control. when CARDNAME becomes untapped or you"
                         + " lose control of CARDNAME, exile that creature."), queen.texts());
-        assertTrue(queen.sidecar().droppedKeys().containsAll(
-                List.of(trigger(path, 0), trigger(path, 1), trigger(path, 2), trigger(path, 3))),
-                queen.sidecar().droppedKeys().toString());
+        // The repeated triggers fire in play: their keys sit on the line that states them.
+        List<ProvenanceKey> onActivated = queen.sidecar().lines().stream()
+                .filter(l -> l.lineKind().startsWith("activated")).findFirst().orElseThrow().provenance();
+        assertTrue(onActivated.containsAll(
+                List.of(trigger(path, 0), trigger(path, 1), trigger(path, 2))), onActivated.toString());
+        // Only the implicit permanent spell and the static bookkeeping trigger (AR9) are dropped.
+        assertEquals(List.of(new ProvenanceKey("cardsfolder/" + path, 0, TraitKind.SPELL, 0),
+                trigger(path, 3)), queen.sidecar().droppedKeys());
+    }
+
+    @Test
+    void aRepeatedUpkeepTriggerIsClaimedByTheLineThatStatesIt() {
+        // Wellspring's upkeep trigger (trigger 1) is the tail of its enters line.
+        String path = "w/wellspring.txt";
+        ConvertedScript wellspring = ConvertedScript.fromFile(parser, CARDS, path);
+        List<ProvenanceKey> onEnters = wellspring.sidecar().lines().stream()
+                .filter(l -> l.lineKind().startsWith("triggered")).findFirst().orElseThrow().provenance();
+        assertTrue(onEnters.contains(trigger(path, 1)), onEnters.toString());
+        assertTrue(wellspring.sidecar().droppedKeys().stream()
+                .noneMatch(k -> k.traitKind() == TraitKind.TRIGGER), wellspring.sidecar().droppedKeys().toString());
     }
 
     @Test

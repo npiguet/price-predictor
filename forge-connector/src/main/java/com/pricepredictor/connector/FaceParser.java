@@ -765,8 +765,8 @@ final class FaceParser {
         // This eliminates the spurious second trigger that Forge registers for
         // the "enters or attacks" pattern (two T: lines, identical TriggerDescription).
         result = deduplicateByDescription(result);
-        result = withoutRepeatedSecondaries(result);
         result.sort(COSTS_FIRST);
+        result = withoutRepeatedSecondaries(result);
         return result;
     }
 
@@ -800,20 +800,23 @@ final class FaceParser {
 
     /**
      * Drop each secondary trigger's line whose text another line of the face
-     * restates (Coffin Queen's triggers repeat its activated line), its keys
-     * going to {@code dropped_keys}: Forge's card view prints no secondary
-     * trait, and a line that says something no other line does keeps its place.
+     * restates (Coffin Queen's triggers repeat its activated line). The
+     * trigger fires in play, so its keys go to the first line, in line order,
+     * that states it, as a deduplicated trait's do. Forge's card view prints
+     * no secondary trait, and a line that says something no other line does
+     * keeps its place.
      */
     private List<Ability> withoutRepeatedSecondaries(List<Ability> list) {
         List<Ability> result = new ArrayList<>(list);
         for (Ability a : list) {
             if (!secondaryLines.contains(a) || a.descriptionText() == null) continue;
-            boolean repeated = result.stream().anyMatch(other -> other != a
+            Ability cover = result.stream().filter(other -> other != a
                     && other.descriptionText() != null
-                    && RepeatedLines.repeats(a.descriptionText(), other.descriptionText()));
-            if (repeated) {
+                    && RepeatedLines.repeats(a.descriptionText(), other.descriptionText()))
+                    .findFirst().orElse(null);
+            if (cover != null) {
                 result.removeIf(x -> x == a);
-                recorder.drop(a);
+                recorder.merge(cover, a);
             }
         }
         return result;
