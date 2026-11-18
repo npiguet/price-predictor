@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -24,7 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * keyword's line, bare (finding 1.1): Mardu Scout cast for its dash cost
  * gains haste from the static its Dash keyword builds, and the haste line
  * and the Dash line are one line of the sidecar, so they carry one key and
- * the board reads them as one slot.
+ * the board reads them as one slot. The haste line is printed, as any
+ * keyword a card's own static gives it.
  */
 @ExtendWith(ForgeExtension.class)
 class KeywordStaticSelfGrantKeyTest {
@@ -45,6 +47,22 @@ class KeywordStaticSelfGrantKeyTest {
 
         assertEquals(dash.get("keys"), haste.get("keys"), lines.toString());
         assertTrue(declared(scout, keyOf(scout, "Haste")), "the sidecar declares the haste key");
+    }
+
+    /**
+     * The dashed Scout's haste is printed, as a keyword a card's own static
+     * gives it is (Iymrith's ward), though Forge leaves the Dash static's
+     * host the Scout's object from before it entered the battlefield.
+     */
+    @Test
+    void aKeywordItsOwnKeywordsStaticGrantsIsPrinted() {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card scout = dashed(board);
+
+        Map<String, Object> haste = only(linesOf(board, scout), "Haste"::equals);
+
+        assertEquals(false, haste.get("granted"), haste.toString());
+        assertFalse(haste.containsKey("grant"), haste.toString());
     }
 
     // ── the board ───────────────────────────────────────────────────────

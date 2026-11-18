@@ -124,10 +124,19 @@ final class LineGrant {
 
     /** Whether a static of the card's own gives it a line it prints. */
     private boolean grantsItself(StaticAbility stat, ProvenanceKey key) {
-        if (stat.getHostCard() != card || isHidden(stat)) {
+        if (!isOwn(stat) || isHidden(stat)) {
             return false;
         }
         return printed(key);
+    }
+
+    /**
+     * Whether a static is the card's: hosted by it, or in its own list,
+     * where Forge can leave the host the card's object from before it
+     * changed zones (a dashed creature's Dash static).
+     */
+    private boolean isOwn(StaticAbility stat) {
+        return stat.getHostCard() == card || card.getStaticAbilities().contains(stat);
     }
 
     /**
