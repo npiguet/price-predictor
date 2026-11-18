@@ -226,8 +226,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--replace", action="store_true",
         help=(
             "Sweep the converted files out of both output trees before "
-            "converting. Without it, an output tree that already holds "
-            "converted files is refused."
+            "converting: card texts that have a provenance sidecar beside "
+            "them, the sidecars and their temporary files; any other file "
+            "(check-convert's check_report.txt, run.json) stays. Without "
+            "it, an output tree that already holds converted files is "
+            "refused."
         ),
     )
     convert_parser.set_defaults(func=run_convert)

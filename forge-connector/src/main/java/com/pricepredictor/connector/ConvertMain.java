@@ -44,6 +44,11 @@ public class ConvertMain {
      * {@link ToolMain#run}.
      */
     static void work(String[] args) throws IOException {
+        work(args, CopiedFaces::requireHook);
+    }
+
+    /** {@link #work(String[])} with the Forge hook probe given, for a test. */
+    static void work(String[] args, Runnable hookProbe) throws IOException {
         ToolMain.Args cli = ToolMain.args(args, Set.of("--replace"),
                 "--cards-path", "--output-path", "--tokens-path", "--tokens-output-path");
         List<Conversion> conversions = conversions(cli);
@@ -57,6 +62,9 @@ public class ConvertMain {
         }
 
         ForgeEnvironmentInitializer.initialize();
+        // Before the sweep: a Forge without the hook ends the run with both
+        // old trees still whole.
+        hookProbe.run();
         if (replace) {
             for (Path output : outputs) {
                 System.out.println("Swept " + ConvertedTrees.sweep(output)

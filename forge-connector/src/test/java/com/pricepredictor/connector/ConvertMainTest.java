@@ -102,6 +102,7 @@ class ConvertMainTest {
         Path old = output.resolve("o/old_card.txt");
         Files.createDirectories(old.getParent());
         Files.writeString(old, "old");
+        Files.writeString(old.resolveSibling("old_card.provenance.json"), "{}");
 
         Ended ended = run(args());
 
@@ -167,5 +168,21 @@ class ConvertMainTest {
 
         assertEquals(ExitCode.BAD_CONFIG, ended.exit().code());
         assertTrue(ended.stderr().contains("repository"), ended.stderr());
+    }
+
+    @Test
+    void aMissingHookEndsTheRunBeforeAnyTreeIsSwept() throws Exception {
+        sourceWithBolt();
+        Path old = output.resolve("o/old_card.txt");
+        Files.createDirectories(old.getParent());
+        Files.writeString(old, "old");
+        Files.writeString(old.resolveSibling("old_card.provenance.json"), "{}");
+
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> ConvertMain.work(
+                args("--replace"), () -> CopiedFaces.requireHook(null)));
+
+        assertTrue(e.getMessage().contains("supplyPlaceholderFaces"), e.getMessage());
+        assertEquals("old", Files.readString(old));
+        assertTrue(Files.exists(old.resolveSibling("old_card.provenance.json")));
     }
 }

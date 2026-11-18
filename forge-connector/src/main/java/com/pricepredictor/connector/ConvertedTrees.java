@@ -20,7 +20,8 @@ import java.util.stream.Stream;
  * converted files are swept out first. The sweep takes only what a
  * conversion writes ({@link #isConverted}) and the directories it leaves
  * empty, never the tree itself, a file of another kind (the {@code run.json}
- * a caller keeps there) or anything outside the tree.
+ * a caller keeps there, {@code check-convert}'s {@code check_report.txt}) or
+ * anything outside the tree.
  *
  * <p>Whatever is asked, a tree that is a filesystem root, holds the working
  * directory, is a repository's root, or overlaps a source tree or the other
@@ -78,38 +79,77 @@ final class ConvertedTrees {
      * @throws IOException naming the file or directory that could not be removed
      */
     static int sweep(Path output) throws IOException {
-        if (!Files.isDirectory(output)) {
-            return 0;
-        }
-        List<Path> deepestFirst;
-        try (Stream<Path> paths = Files.walk(output)) {
-            deepestFirst = paths.filter(path -> !path.equals(output))
-                    .sorted(Comparator.reverseOrder())
-                    .toList();
-        }
-        int removed = 0;
-        for (Path path : deepestFirst) {
-            if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
-                removeIfEmpty(path);
-            } else if (isConverted(path)) {
-                remove(path);
-                removed++;
-            }
-        }
-        return removed;
+        return sweep(output, Files::delete);
+    }
+
+    /** Removes one path; a test substitutes one that fails. */
+    @FunctionalInterface
+    interface Remover {
+        void remove(Path path) throws IOException;
     }
 
     /**
-     * Whether a conversion writes files by this name: a converted text, a
-     * provenance sidecar, or either one's temporary name ({@link AtomicFiles})
-     * left by a killed run.
+     * {@link #sweep(Path)} through {@code remover}. The converted files go
+     * pair by pair, each sidecar before its text, so a file that cannot be
+     * removed leaves only whole pairs behind (and the failure names it).
+     */
+    static int sweep(Path output, Remover remover) throws IOException {
+        if (!Files.isDirectory(output)) {
+            return 0;
+        }
+        List<Path> files;
+        List<Path> directoriesDeepestFirst;
+        try (Stream<Path> paths = Files.walk(output)) {
+            List<Path> all = paths.filter(path -> !path.equals(output)).toList();
+            // Decided before anything is removed: a text is converted only
+            // while its sidecar is there.
+            files = all.stream()
+                    .filter(path -> !Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))
+                    .filter(ConvertedTrees::isConverted)
+                    .sorted(Comparator.comparing((Path path) -> path.getParent().toString())
+                            .thenComparing(ConvertedTrees::stem)
+                            .thenComparing(path -> path.getFileName().toString().endsWith(".txt")))
+                    .toList();
+            directoriesDeepestFirst = all.stream()
+                    .filter(path -> Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))
+                    .sorted(Comparator.reverseOrder())
+                    .toList();
+        }
+        for (Path file : files) {
+            remove(file, remover);
+        }
+        for (Path directory : directoriesDeepestFirst) {
+            removeIfEmpty(directory, remover);
+        }
+        return files.size();
+    }
+
+    /**
+     * Whether a conversion writes this file: a provenance sidecar, a
+     * converted text (a {@code .txt} with its sidecar beside it; any other
+     * text, such as {@code check-convert}'s report, is the caller's), or
+     * either one's temporary name ({@link AtomicFiles}) left by a killed run.
      */
     static boolean isConverted(Path file) {
         String name = file.getFileName().toString();
         if (name.endsWith(AtomicFiles.TEMPORARY_SUFFIX)) {
-            name = name.substring(0, name.length() - AtomicFiles.TEMPORARY_SUFFIX.length());
+            String written = name.substring(0, name.length() - AtomicFiles.TEMPORARY_SUFFIX.length());
+            return written.endsWith(".txt") || written.endsWith(PROVENANCE_SUFFIX);
         }
-        return name.endsWith(".txt") || name.endsWith(PROVENANCE_SUFFIX);
+        if (name.endsWith(PROVENANCE_SUFFIX)) {
+            return true;
+        }
+        return name.endsWith(".txt")
+                && Files.isRegularFile(file.resolveSibling(stem(file) + PROVENANCE_SUFFIX));
+    }
+
+    /** The file name without its {@code .txt} or sidecar suffix. */
+    private static String stem(Path file) {
+        String name = file.getFileName().toString();
+        if (name.endsWith(PROVENANCE_SUFFIX)) {
+            return name.substring(0, name.length() - PROVENANCE_SUFFIX.length());
+        }
+        return name.endsWith(".txt") ? name.substring(0, name.length() - ".txt".length()) : name;
     }
 
     private static boolean holdsConvertedFiles(Path output) throws IOException {
@@ -160,19 +200,19 @@ final class ConvertedTrees {
         return existing == null ? absolute : existing.toRealPath().resolve(existing.relativize(absolute));
     }
 
-    private static void removeIfEmpty(Path directory) throws IOException {
+    private static void removeIfEmpty(Path directory, Remover remover) throws IOException {
         boolean empty;
         try (DirectoryStream<Path> entries = Files.newDirectoryStream(directory)) {
             empty = !entries.iterator().hasNext();
         }
         if (empty) {
-            remove(directory);
+            remove(directory, remover);
         }
     }
 
-    private static void remove(Path path) throws IOException {
+    private static void remove(Path path, Remover remover) throws IOException {
         try {
-            Files.delete(path);
+            remover.remove(path);
         } catch (IOException e) {
             throw new IOException("cannot sweep " + path + ": " + BatchConverter.describe(e), e);
         }
