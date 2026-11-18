@@ -11,6 +11,7 @@ from effects.application.evaluation_context import (
 )
 from effects.domain.baselines import Baseline
 from tests.unit.effects.application.geometry_checks_support import (
+    SourceRows,
     _two_cards_one_prose,
     _write_source,
 )
@@ -58,7 +59,7 @@ class TestLoadingTheCache:
         (cards / "a").mkdir(parents=True)
         abilities = tmp_path / "abilities"
         for stem in ("a/one", "a/two"):
-            _write_source(cards, abilities, stem, stem, ["flying"], [[1.0, 0.0]])
+            _write_source(cards, abilities, SourceRows(stem, stem, ["flying"], [[1.0, 0.0]]))
         assert len(read_cache(abilities, cards, surface="script")) == 1
 
     def test_a_reprint_is_one_point_even_when_its_vectors_differ_in_float_noise(
@@ -72,9 +73,10 @@ class TestLoadingTheCache:
         cards = tmp_path / "cardsfolder"
         (cards / "a").mkdir(parents=True)
         abilities = tmp_path / "abilities"
-        _write_source(cards, abilities, "one", "a/one", ["Flying"], [[1.0, 0.0]])
+        _write_source(cards, abilities, SourceRows("one", "a/one", ["Flying"], [[1.0, 0.0]]))
         _write_source(
-            cards, abilities, "two", "a/two", ["Flying"], [[1.0 + 1.5e-5, 0.0]],
+            cards, abilities,
+            SourceRows("two", "a/two", ["Flying"], [[1.0 + 1.5e-5, 0.0]]),
         )
         assert len(read_cache(abilities, cards, surface="script")) == 1
 
@@ -89,9 +91,7 @@ class TestLoadingTheCache:
         cards = tmp_path / "cardsfolder"
         (cards / "s").mkdir(parents=True)
         abilities = tmp_path / "abilities"
-        _write_source(
-            cards, abilities, "Broken", "s/broken", ["a", "b"], [[1.0, 0.0]],
-        )
+        _write_source(cards, abilities, SourceRows("Broken", "s/broken", ["a", "b"], [[1.0, 0.0]]))
         with caplog.at_level("WARNING"):
             assert len(read_cache(abilities, cards, surface="script")) == 0
         assert "cache rows" in caplog.text
@@ -104,9 +104,15 @@ class TestLoadingTheCache:
     def test_a_variant_cache_loads_separately(self, cache):
         cards, abilities = cache
         _write_source(
-            cards, abilities, "Serra Angel", "s/serra_angel",
-            ["Flying", "Vigilance"], [[9.0, 9.0], [9.0, 9.0]],
-            variant=Baseline.NO_STATE, prose=["flying", "vigilance"],
+            cards, abilities,
+            SourceRows(
+                "Serra Angel",
+                "s/serra_angel",
+                ["Flying", "Vigilance"],
+                [[9.0, 9.0], [9.0, 9.0]],
+                variant=Baseline.NO_STATE,
+                prose=["flying", "vigilance"],
+            ),
         )
         variant = read_cache(
             abilities, cards, variant=Baseline.NO_STATE, surface="script",
@@ -125,9 +131,15 @@ class TestLoadingTheCache:
 
         cards, abilities = cache
         _write_source(
-            cards, abilities, "Serra Angel", "s/serra_angel",
-            ["Flying", "Vigilance"], [[9.0, 9.0], [9.0, 9.0]],
-            variant=Baseline.NO_STATE, prose=["flying", "vigilance"],
+            cards, abilities,
+            SourceRows(
+                "Serra Angel",
+                "s/serra_angel",
+                ["Flying", "Vigilance"],
+                [[9.0, 9.0], [9.0, 9.0]],
+                variant=Baseline.NO_STATE,
+                prose=["flying", "vigilance"],
+            ),
         )
         expected = {
             variant: read_cache(abilities, cards, surface="script", variant=variant)
@@ -155,17 +167,29 @@ class TestTheShippingCache:
             folder.mkdir(parents=True)
         abilities = tmp_path / "abilities"
         _write_source(
-            cards, abilities, "Serra Angel", "s/serra_angel", ["Flying"],
-            [[1.0, 0.0]], prose=["flying"],
+            cards, abilities,
+            SourceRows("Serra Angel", "s/serra_angel", ["Flying"], [[1.0, 0.0]], prose=["flying"]),
         )
         _write_source(
-            tokens, abilities, "Food", "c_a_food_sac", ["Sacrifice | GainLife$ 3"],
-            [[0.0, 1.0]], prose=["{2}, {T}, sacrifice CARDNAME: you gain 3 life."],
-            tree="tokenscripts",
+            tokens, abilities,
+            SourceRows(
+                "Food",
+                "c_a_food_sac",
+                ["Sacrifice | GainLife$ 3"],
+                [[0.0, 1.0]],
+                prose=["{2}, {T}, sacrifice CARDNAME: you gain 3 life."],
+                tree="tokenscripts",
+            ),
         )
         _write_source(
-            variants, abilities, "Shock (variant)", "shock_variant",
-            ["DealDamage | NumDmg$ 5"], [[0.5, 0.5]], tree="variant-scripts",
+            variants, abilities,
+            SourceRows(
+                "Shock (variant)",
+                "shock_variant",
+                ["DealDamage | NumDmg$ 5"],
+                [[0.5, 0.5]],
+                tree="variant-scripts",
+            ),
         )
         return EvaluateEffectModelConfig(
             cards_folders=(cards, tokens), variant_scripts=variants,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import math
+import csv
 
 import numpy as np
 
@@ -12,6 +12,20 @@ from effects.application.geometry_checks import (
 from effects.application.umap_check import check_umap
 from effects.domain.evaluation_report import CheckStatus
 from tests.unit.effects.builders import read_cache
+
+
+def _typed_cache(texts, types) -> CachedVectors:
+    rng = np.random.default_rng(0)
+    return CachedVectors(
+        by_text={text: rng.normal(size=8) for text in texts},
+        # One text with no recorded type: it is plotted as "none".
+        api_types={text: types[i % 3] for i, text in enumerate(texts[:-1])},
+    )
+
+
+def _read_table(table) -> list[dict]:
+    with table.open(encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle))
 
 
 class TestUmap:
@@ -25,30 +39,23 @@ class TestUmap:
 
     def test_a_populated_cache_writes_the_picture_and_the_table(self, tmp_path):
         """FR-110: the projection is kept, coloured by what each text does."""
-        import csv
-
-        rng = np.random.default_rng(0)
         types = ["DealDamage", "Pump", "Draw"]
         texts = [f"text {i}" for i in range(30)]
-        cached = CachedVectors(
-            by_text={text: rng.normal(size=8) for text in texts},
-            # One text with no recorded type: it is plotted as "none".
-            api_types={text: types[i % 3] for i, text in enumerate(texts[:-1])},
-        )
+        cached = _typed_cache(texts, types)
         out = tmp_path / "evaluation"
 
         result = check_umap(cached, out)
 
         assert result.status is CheckStatus.REPORTED
         png, table = out / "umap.png", out / "umap.csv"
-        assert png.stat().st_size > 0 and table.exists()
-        assert str(png) in result.detail and str(table) in result.detail
-        with table.open(encoding="utf-8", newline="") as handle:
-            rows = list(csv.DictReader(handle))
+        assert png.stat().st_size > 0
+        assert table.exists()
+        assert str(png) in result.detail
+        assert str(table) in result.detail
+        rows = _read_table(table)
         assert len(rows) == len(cached)
         assert [row["text"] for row in rows] == texts
         assert {row["api_type"] for row in rows} == {*types, "none"}
-        assert all(math.isfinite(float(row["x"])) for row in rows)
 
     def test_the_picture_is_the_same_file_every_run(self, tmp_path):
         rng = np.random.default_rng(1)

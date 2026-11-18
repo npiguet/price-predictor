@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from effects.domain.ability_cache_layout import ARRAY_KEY
@@ -13,17 +15,28 @@ from effects.infrastructure.sidecar_io import sidecar_path_for
 from tests.unit.effects.builders import read_cache, write_sidecar
 
 
-def _write_source(
-    cards_root, abilities_root, card: str, stem: str, texts: list[str],
-    vectors: list[list[float]], *, variant: str = "full",
-    prose: list[str] | None = None, tree: str = "cardsfolder",
-):
-    """One converted source plus its cache rows, row-aligned.
+@dataclass(frozen=True)
+class SourceRows:
+    """One converted source's rows: the card, its stem and each line's text and vector.
 
     ``texts`` are the lines' script; ``prose``, when given, is written into the
     converted ``.txt`` beside the sidecar, one ``static:`` line per ability, so
     the two surfaces can differ the way they do on a real card.
     """
+
+    card: str
+    stem: str
+    texts: list[str]
+    vectors: list[list[float]]
+    variant: str = "full"
+    prose: list[str] | None = None
+    tree: str = "cardsfolder"
+
+
+def _write_source(cards_root, abilities_root, rows: SourceRows):
+    """One converted source plus its cache rows, row-aligned."""
+    card, stem, texts, vectors = rows.card, rows.stem, rows.texts, rows.vectors
+    variant, prose, tree = rows.variant, rows.prose, rows.tree
     script_file = f"{tree}/{stem}.txt"
     write_sidecar(
         ProvenanceSidecar(
@@ -60,12 +73,18 @@ def _two_cards_one_prose(tmp_path):
     abilities = tmp_path / "abilities"
     prose = [TAX_PROSE]
     _write_source(
-        cards, abilities, "one", "a/one", ["RaiseCost | Amount$ 2"],
-        [[1.0, 0.0]], prose=prose,
+        cards, abilities,
+        SourceRows("one", "a/one", ["RaiseCost | Amount$ 2"], [[1.0, 0.0]], prose=prose),
     )
     _write_source(
-        cards, abilities, "two", "a/two", ["RaiseCost | Amount$ 2 | Type$ Spell"],
-        [[0.0, 1.0]], prose=prose,
+        cards, abilities,
+        SourceRows(
+            "two",
+            "a/two",
+            ["RaiseCost | Amount$ 2 | Type$ Spell"],
+            [[0.0, 1.0]],
+            prose=prose,
+        ),
     )
     return cards, abilities
 
@@ -80,21 +99,37 @@ def _ward_cache(tmp_path, *, missing: tuple[LineQuery, ...] = ()):
     abilities = tmp_path / "abilities"
     rng = np.random.default_rng(1)
     _write_source(
-        cards, abilities, "Aboleth Spawn", "w/aboleth_spawn", ["Ward:2"],
-        [[1.0, 0.0, 0.0]], prose=[WARD.prose],
+        cards, abilities,
+        SourceRows(
+            "Aboleth Spawn",
+            "w/aboleth_spawn",
+            ["Ward:2"],
+            [[1.0, 0.0, 0.0]],
+            prose=[WARD.prose],
+        ),
     )
     for number, twin in enumerate(WARD_TWINS):
         if twin in missing:
             continue
         _write_source(
-            cards, abilities, twin.card or f"twin {number}", f"w/twin_{number}",
-            [f"Trigger | Twin$ {number}"], [[0.99, 0.14, 0.0]],
-            prose=[twin.prose],
+            cards, abilities,
+            SourceRows(
+                twin.card or f"twin {number}",
+                f"w/twin_{number}",
+                [f"Trigger | Twin$ {number}"],
+                [[0.99, 0.14, 0.0]],
+                prose=[twin.prose],
+            ),
         )
     for number, keyword in enumerate(BARE_KEYWORDS):
         _write_source(
-            cards, abilities, f"bare {number}", f"w/bare_{number}",
-            [keyword.prose.title()], [rng.normal(size=3).tolist()],
-            prose=[keyword.prose],
+            cards, abilities,
+            SourceRows(
+                f"bare {number}",
+                f"w/bare_{number}",
+                [keyword.prose.title()],
+                [rng.normal(size=3).tolist()],
+                prose=[keyword.prose],
+            ),
         )
     return read_cache(abilities, cards, surface="script")
