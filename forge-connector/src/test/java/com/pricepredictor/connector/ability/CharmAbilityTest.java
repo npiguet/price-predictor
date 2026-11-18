@@ -237,6 +237,13 @@ class CharmAbilityTest {
                 "dropped: " + doomsday.sidecar().droppedKeys());
     }
 
+    @Test
+    void anEmDashClosingTheHeadersOwnSentenceStays() {
+        // Common Black Removal: "Choose one. Destroy target creature, then —"
+        assertEquals("spell[1]: choose one. destroy target creature, then —",
+                rootOf("c/common_black_removal.txt"));
+    }
+
     private static String rootOf(String card) {
         return lineOf(card, "spell");
     }

@@ -17,9 +17,10 @@ import java.util.regex.Pattern;
  * choice (a modal spell, an activated charm, a trigger's {@code ABILITY}
  * placeholder, a chapter, an Attraction's visit) prints this one.
  *
- * <p>Two departures from Forge, each toward the printed card: no trailing em
- * dash (Forge ends a header followed by bullets with one), and a count Forge
- * can only work out in a game reads as the card prints it. A count named
+ * <p>Two departures from Forge, each toward the printed card: no em dash
+ * closing the choice (Forge ends a header followed by bullets with one; a
+ * sentence of the card's own the modes complete keeps the card's), and a
+ * count Forge can only work out in a game reads as the card prints it. A count named
  * {@code X} that the {@code AdditionalDescription$} does not follow with a
  * sentence of its own is the printed X ("Choose X", "choose up to X, where X
  * is…"); any other expression reads as its minimum ("choose one. If it was
@@ -29,17 +30,28 @@ import java.util.regex.Pattern;
  */
 public final class CharmHeader {
 
+    private static final Pattern CHOICE = Pattern.compile("(?i)(?:an opponent chooses|choose)\\b");
     private static final Pattern TRAILING_EM_DASH = Pattern.compile("\\s*\u2014\\s*$");
 
     private CharmHeader() {}
 
-    /** The choice sentence of {@code sa}, a charm, without a trailing em dash. */
+    /** The choice sentence of {@code sa}, a charm, without an em dash closing the choice. */
     public static String of(SpellAbility sa) {
         String pawprint = pawprintHeader(sa);
         StringBuilder header = new StringBuilder(pawprint != null ? pawprint : choice(sa));
         if (pawprint == null) appendLimits(sa, header);
         appendAdditionalDescription(sa, header);
-        return TRAILING_EM_DASH.matcher(header).replaceAll("").trim();
+        String text = header.toString().trim();
+        return endsOnTheChoice(text) ? TRAILING_EM_DASH.matcher(text).replaceAll("") : text;
+    }
+
+    /**
+     * Whether the header's last sentence is the choice ("Choose one —"), whose
+     * em dash goes, and not a sentence of the card's own the modes complete
+     * (Common Black Removal's "Destroy target creature, then —"), whose stays.
+     */
+    private static boolean endsOnTheChoice(String header) {
+        return CHOICE.matcher(header.substring(header.lastIndexOf(". ") + 1).trim()).lookingAt();
     }
 
     /** A pawprint charm's header, built from its {@code Pawprint} total; null for any other charm. */
