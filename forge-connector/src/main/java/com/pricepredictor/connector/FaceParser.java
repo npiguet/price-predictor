@@ -772,7 +772,7 @@ final class FaceParser {
     }
 
     private static CardFace buildCardFace(ICardFace face, List<Ability> abilities) {
-        String name = AbilityDescription.applyCasing(face.getName());
+        String name = AbilityDescription.lowerCase(face.getName());
         ManaCost manaCost = face.getManaCost();
         String manaCostStr = (manaCost == null || manaCost == ManaCost.NO_COST)
                 ? null : manaCost.getSimpleString();
@@ -788,7 +788,7 @@ final class FaceParser {
             text = DEVELOPER_NOTE.matcher(text).replaceAll("").strip();
             if (text.isEmpty()) text = null;
         }
-        if (text != null) text = AbilityDescription.applyCasing(text);
+        if (text != null) text = AbilityDescription.lowerCase(text);
 
         return new CardFace(name, manaCostStr, typeLine, pt, loyalty, defense, text, abilities);
     }

@@ -78,8 +78,19 @@ public final class AbilityDescription {
         return text.replace(" VERT ", " | ").replace("VERT", "");
     }
 
-    /** Lowercase text, preserving brace symbols, placeholders, and standalone X. */
+    /**
+     * A description as its line prints it: the name of the face being parsed
+     * written as CARDNAME ({@link OwnNameScope}), then {@link #lowerCase lower-cased}.
+     */
     public static String applyCasing(String text) {
+        return text == null ? null : lowerCase(OwnNameScope.writtenIn(text));
+    }
+
+    /**
+     * Lowercase text, preserving brace symbols, placeholders, and standalone X;
+     * a card's own name stays (a header line's name).
+     */
+    public static String lowerCase(String text) {
         if (text == null) {
             return null;
         }

@@ -53,11 +53,6 @@ public record RenderedLine(String prefix, String prose, Ability owner, int face)
                 prefix, BLANK_RUN.matcher(folded).replaceAll(" "), owner, face));
     }
 
-    /** This line with its prose replaced. */
-    public RenderedLine withProse(String replacement) {
-        return new RenderedLine(prefix, replacement, owner, face);
-    }
-
     /** The line as the converted file holds it. */
     public String text() {
         return prefix + prose;

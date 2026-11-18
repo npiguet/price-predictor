@@ -74,4 +74,41 @@ class OwnNameInLinesTest {
         assertTrue(anyLine(lines, "named keeper of kookus"), lines.toString());
         assertTrue(anyLine(lines, "CARDNAME deals 3 damage to you"), lines.toString());
     }
+
+    @Test
+    void aCardNamedByAKeywordActionKeepsTheAction() {
+        // Exile: "Exile target nonwhite attacking creature. You gain life equal to its toughness."
+        assertTrue(texts("e/exile.txt").contains(
+                "spell[1]: exile target nonwhite attacking creature."
+                        + " you gain life equal to its toughness."));
+    }
+
+    @Test
+    void aCardNamedByAKeywordKeepsTheKeyword() {
+        // Fear: "Enchanted creature has fear."
+        assertTrue(texts("f/fear.txt").contains("static: enchanted creature has fear."));
+    }
+
+    @Test
+    void aFaceNamedByAnOrdinaryWordKeepsTheWordInItsProse() {
+        // Turn // Burn: "Until end of turn, target creature loses all abilities..."; "Burn deals 2 damage..."
+        List<String> lines = texts("t/turn_burn.txt");
+        assertTrue(anyLine(lines, "spell[2]: until end of turn, target creature loses all abilities"),
+                lines.toString());
+        assertTrue(lines.contains("spell[1]: CARDNAME deals 2 damage to any target."), lines.toString());
+    }
+
+    @Test
+    void theNameWrittenInLowerCaseIsNoSelfReference() {
+        // Six-Sided Die: "Roll a six-sided die."
+        List<String> lines = texts("s/six_sided_die.txt");
+        assertTrue(anyLine(lines, "roll a six-sided die."), lines.toString());
+        assertFalse(anyLine(lines, "roll a CARDNAME"), lines.toString());
+    }
+
+    @Test
+    void aTokensNameHoldingTheCardsNameStays() {
+        // Stangg: "When Stangg enters, create Stangg Twin, a legendary 3/4 ... token."
+        assertTrue(anyLine(texts("s/stangg.txt"), "when CARDNAME enters, create stangg twin, a legendary"));
+    }
 }

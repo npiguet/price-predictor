@@ -41,9 +41,8 @@ public record MultiCard(String layout, List<CardFace> faces) {
      */
     public List<RenderedLine> renderLines() {
         if (layout == null) {
-            return ownNamed(faces.get(0).renderLines(0), faces.get(0).name(), faces.get(0).name());
+            return faces.get(0).renderLines(0);
         }
-        String wholeName = String.join(" // ", faces.stream().map(CardFace::name).toList());
         List<RenderedLine> lines = new ArrayList<>();
         lines.add(new RenderedLine("layout: ", layout, null, -1));
         for (int i = 0; i < faces.size(); i++) {
@@ -53,23 +52,8 @@ public record MultiCard(String layout, List<CardFace> faces) {
                     lines.add(new RenderedLine("", separator, null, -1));
                 }
             }
-            CardFace face = faces.get(i);
-            lines.addAll(ownNamed(face.renderLines(i), face.name(), wholeName));
+            lines.addAll(faces.get(i).renderLines(i));
         }
         return lines;
-    }
-
-    /**
-     * The face's lines with the card's own name in each ability's line written
-     * as CARDNAME; a header or separator line keeps it.
-     */
-    private static List<RenderedLine> ownNamed(
-            List<RenderedLine> lines, String faceName, String wholeName) {
-        OwnName ownName = OwnName.of(faceName, wholeName);
-        List<RenderedLine> named = new ArrayList<>();
-        for (RenderedLine line : lines) {
-            named.add(line.owner() == null ? line : line.withProse(ownName.apply(line.prose())));
-        }
-        return named;
     }
 }

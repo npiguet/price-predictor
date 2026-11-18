@@ -11,19 +11,27 @@ import java.util.regex.Pattern;
  * A card's own name inside its ability lines, written as the {@code CARDNAME}
  * placeholder every other mention of the card already is.
  *
- * <p>The names are a face's own and, for a split card, the whole card's
- * ({@code fire // ice}); the longer is tried first so the whole name is one
- * placeholder. A name matches as whole words and in any case, since the
- * converted text is lower-cased but for its placeholders. Three things are
- * not the card's name and stay:
+ * <p>The name is matched as Forge writes a self-reference it does not write
+ * as {@code CARDNAME}: the literal name, in its own case, as whole words, in
+ * the raw description before it is lower-cased ({@link AbilityDescription#applyCasing}).
+ * The same word in another case is prose ("until end of turn" on Turn, "roll
+ * a six-sided die" on Six-Sided Die). The names are a face's own and, for a
+ * split card, the whole card's ({@code Fire // Ice}); the longer is tried
+ * first so the whole name is one placeholder. These are not the card's name
+ * and stay:
  * <ul>
- *   <li>the short name of a legendary card ("chandra"): a common word or
- *       another card's name too often ("eleven", "storm", a token's name);</li>
- *   <li>a face name that is a creature type (Aurochs, Assembly-Worker):
- *       Forge scripts write a self-reference as CARDNAME, so the literal is
- *       the type;</li>
- *   <li>a match inside a longer card's name ("keeper of kookus" on Kookus).</li>
+ *   <li>the short name of a legendary card ("Chandra"): a common word or
+ *       another card's name too often ("Eleven", "Storm", a token's name);</li>
+ *   <li>a face name Forge writes as something else in title case: a creature
+ *       type (Aurochs, Assembly-Worker), a keyword (Fear, Flashback), a
+ *       keyword action (Exile, Regenerate) or a set's name (War of the Spark);</li>
+ *   <li>a match inside a longer card's or token's name ("Keeper of Kookus" on
+ *       Kookus, "Stangg Twin" on Stangg).</li>
  * </ul>
+ *
+ * <p>The substitution holds while a face is parsed ({@link OwnNameScope}):
+ * every description of the face is cased then, and its name header, cased
+ * with {@link AbilityDescription#lowerCase}, keeps the name.
  */
 final class OwnName {
 
@@ -43,7 +51,7 @@ final class OwnName {
     /** The substitution for a face named {@code faceName} of a card with {@code wholeName}. */
     static OwnName of(String faceName, String wholeName) {
         List<String> names = new ArrayList<>();
-        if (!ForgeCardNames.isCreatureType(faceName)) names.add(faceName);
+        if (!ForgeCardNames.namesSomethingElse(faceName)) names.add(faceName);
         if (!wholeName.equals(faceName)) names.add(wholeName);
         if (names.isEmpty()) return new OwnName(faceName, wholeName, null);
         names.sort(Comparator.comparingInt(String::length).reversed());
@@ -53,8 +61,7 @@ final class OwnName {
             alternatives.append(Pattern.quote(name));
         }
         return new OwnName(faceName, wholeName, Pattern.compile(
-                "(?<![\\p{L}\\p{N}_])(?:" + alternatives + ")(?![\\p{L}\\p{N}_])",
-                Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE));
+                "(?<![\\p{L}\\p{N}_])(?:" + alternatives + ")(?![\\p{L}\\p{N}_])"));
     }
 
     /** {@code prose} with the name written as the placeholder. */
@@ -70,7 +77,7 @@ final class OwnName {
         return matcher.appendTail(out).toString();
     }
 
-    /** Whether the match is the face's name within another card's longer name. */
+    /** Whether the match is the face's name within another card's or a token's longer name. */
     private boolean isPartOfLongerName(String prose, int start, int end) {
         if (!prose.regionMatches(true, start, faceName, 0, end - start)
                 || end - start != faceName.length()) {

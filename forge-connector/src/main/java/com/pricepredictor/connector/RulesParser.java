@@ -11,8 +11,10 @@ import forge.card.ICardFace;
 import forge.game.card.Card;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Parses Forge card scripts into domain objects (MultiCard/CardFace/Ability).
@@ -104,26 +106,41 @@ public class RulesParser {
         Card card = buildFullCard(rules);
 
         if (splitType == CardSplitType.None) {
-            return MultiCard.singleFace(new FaceParser(card, rules.getMainPart(),
-                    nextRecorder(recorders), 0, scriptFile).parse());
+            ICardFace main = rules.getMainPart();
+            FaceParser parser = new FaceParser(card, main, nextRecorder(recorders), 0, scriptFile);
+            return MultiCard.singleFace(OwnNameScope.within(
+                    OwnName.of(main.getName(), main.getName()), parser::parse));
         }
 
         String layout = splitType.name().toLowerCase(Locale.ROOT);
+        Map<CardStateName, ICardFace> parts = printedFaces(rules, card);
+        String wholeName = String.join(" // ",
+                parts.values().stream().map(ICardFace::getName).toList());
         List<CardFace> faces = new ArrayList<>();
-        // In the order the collectors number faces, read from the same method,
-        // because a key's face ordinal is joined by value: CardRules holds the
-        // specialize parts in a HashMap keyed by enum constants, whose order
-        // changes from one JVM to the next.
-        for (CardStateName state : FaceOrder.faceOrder(card)) {
-            ICardFace part = FaceOrder.printedFace(rules, state);
-            if (part != null) {
-                card.setState(state, false);
-                faces.add(new FaceParser(card, part,
-                        nextRecorder(recorders), faces.size(), scriptFile).parse());
-            }
+        for (Map.Entry<CardStateName, ICardFace> part : parts.entrySet()) {
+            card.setState(part.getKey(), false);
+            faces.add(OwnNameScope.within(OwnName.of(part.getValue().getName(), wholeName),
+                    new FaceParser(card, part.getValue(), nextRecorder(recorders),
+                            faces.size(), scriptFile)::parse));
         }
 
         return MultiCard.multiFace(layout, faces);
+    }
+
+    /**
+     * The printed faces of a multi-face card by state, in the order the
+     * collectors number faces, read from the same method, because a key's
+     * face ordinal is joined by value: CardRules holds the specialize parts in
+     * a HashMap keyed by enum constants, whose order changes from one JVM to
+     * the next.
+     */
+    private static Map<CardStateName, ICardFace> printedFaces(CardRules rules, Card card) {
+        Map<CardStateName, ICardFace> parts = new LinkedHashMap<>();
+        for (CardStateName state : FaceOrder.faceOrder(card)) {
+            ICardFace part = FaceOrder.printedFace(rules, state);
+            if (part != null) parts.put(state, part);
+        }
+        return parts;
     }
 
     /** Append and return a fresh recorder for the next face. */
