@@ -15,13 +15,14 @@ costs nothing and does not depend on torch.
 from __future__ import annotations
 
 import ast
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
 
 from tests.unit.effects.builders import fresh_interpreter_env
 
-_SRC =Path(__file__).resolve().parents[3] / "src"
+_SRC = Path(__file__).resolve().parents[3] / "src"
 
 # FR-002's declared surface. A value of ``None`` allows the whole module; a set
 # restricts the import to those names, which is how FR-002 words the two rows
@@ -80,7 +81,25 @@ def _python_files(package: str) -> list[Path]:
     return sorted(p for p in root.rglob("*.py") if "__pycache__" not in p.parts)
 
 
-def _imported_modules(path: Path) -> list[tuple[str, tuple[str, ...], int]]:
+_Import = tuple[str, tuple[str, ...], int]
+
+
+def _imports_of_node(node: ast.AST) -> list[_Import]:
+    """The absolute imports one syntax node makes, as ``(module, names, lineno)``."""
+    if isinstance(node, ast.Import):
+        return [(alias.name, (), node.lineno) for alias in node.names]
+    if isinstance(node, ast.ImportFrom):
+        return _absolute_from_import(node)
+    return []
+
+
+def _absolute_from_import(node: ast.ImportFrom) -> list[_Import]:
+    if node.level or node.module is None:
+        return []
+    return [(node.module, tuple(a.name for a in node.names), node.lineno)]
+
+
+def _imported_modules(path: Path) -> list[_Import]:
     """Every absolute import in ``path`` as ``(module, names, lineno)``.
 
     ``names`` is empty for a plain ``import x.y`` and holds the imported
@@ -88,61 +107,76 @@ def _imported_modules(path: Path) -> list[tuple[str, tuple[str, ...], int]]:
     they can only reach within the importing package.
     """
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    found: list[tuple[str, tuple[str, ...], int]] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                found.append((alias.name, (), node.lineno))
-        elif isinstance(node, ast.ImportFrom):
-            if node.level or node.module is None:
-                continue
-            found.append(
-                (node.module, tuple(a.name for a in node.names), node.lineno)
-            )
-    return found
+    return [found for node in ast.walk(tree) for found in _imports_of_node(node)]
+
+
+def _import_sites(
+    packages: tuple[str, ...], in_scope: Callable[[Path], bool] = lambda path: True,
+) -> Iterator[tuple[Path, str, tuple[str, ...], int]]:
+    """Every import of the ``packages``' files that ``in_scope`` keeps, with
+    the file's path relative to ``src``."""
+    files = (path for package in packages for path in _python_files(package))
+    for path in filter(in_scope, files):
+        for module, names, lineno in _imported_modules(path):
+            yield path.relative_to(_SRC), module, names, lineno
+
+
+def _imports_matching(
+    packages: tuple[str, ...],
+    reaches: Callable[[str], bool],
+    in_scope: Callable[[Path], bool] = lambda path: True,
+) -> list[str]:
+    """One ``file:line imports module`` line per import ``reaches`` accepts."""
+    return [
+        f"{where}:{lineno} imports {module}"
+        for where, module, _names, lineno in _import_sites(packages, in_scope)
+        if reaches(module)
+    ]
+
+
+def _is_under(root: str) -> Callable[[str], bool]:
+    """Whether a module is ``root`` itself or one of its submodules."""
+    return lambda module: module == root or module.startswith(root + ".")
 
 
 @pytest.mark.parametrize("package", _GOVERNED_PACKAGES)
 def test_lower_packages_never_import_effects(package: str) -> None:
     """``price_predictor`` and ``sealed`` must not reach up into ``effects``."""
-    violations = [
-        f"{path.relative_to(_SRC)}:{lineno} imports {module}"
-        for path in _python_files(package)
-        for module, _names, lineno in _imported_modules(path)
-        if module == "effects" or module.startswith("effects.")
-    ]
+    violations = _imports_matching((package,), _is_under("effects"))
     assert not violations, (
         f"{package} imports effects, inverting the dependency direction "
         f"FR-002 fixes:\n  " + "\n  ".join(violations)
     )
 
 
+def _surface_violations(
+    where: Path, module: str, names: tuple[str, ...], lineno: int,
+) -> list[str]:
+    """What one cross-package import of ``effects`` takes beyond FR-002's surface."""
+    if module not in _ALLOWED:
+        return [f"{where}:{lineno} imports {module}"]
+    allowed_names = _ALLOWED[module]
+    if allowed_names is None:
+        return []
+    declared = f"FR-002 declares only {sorted(allowed_names)}"
+    if not names:
+        # ``import pkg.module`` reaches every name the module has.
+        return [f"{where}:{lineno} imports {module} whole; {declared}"]
+    return [
+        f"{where}:{lineno} imports {module}.{name}; {declared}"
+        for name in names
+        if name not in allowed_names
+    ]
+
+
 def test_effects_imports_only_the_declared_surface() -> None:
     """Every cross-package import out of ``effects`` is one FR-002 declares."""
-    violations: list[str] = []
-    for path in _python_files("effects"):
-        where = path.relative_to(_SRC)
-        for module, names, lineno in _imported_modules(path):
-            if not module.startswith(_GOVERNED_PACKAGES):
-                continue
-            if module not in _ALLOWED:
-                violations.append(f"{where}:{lineno} imports {module}")
-                continue
-            allowed_names = _ALLOWED[module]
-            if allowed_names is None:
-                continue
-            if not names:
-                # ``import pkg.module`` reaches every name the module has.
-                violations.append(
-                    f"{where}:{lineno} imports {module} whole; FR-002 declares "
-                    f"only {sorted(allowed_names)}"
-                )
-            for name in names:
-                if name not in allowed_names:
-                    violations.append(
-                        f"{where}:{lineno} imports {module}.{name}; FR-002 "
-                        f"declares only {sorted(allowed_names)}"
-                    )
+    violations = [
+        violation
+        for where, module, names, lineno in _import_sites(("effects",))
+        if module.startswith(_GOVERNED_PACKAGES)
+        for violation in _surface_violations(where, module, names, lineno)
+    ]
     assert not violations, (
         "effects imports outside the surface FR-002 declares:\n  "
         + "\n  ".join(violations)
@@ -154,33 +188,33 @@ def test_effects_imports_only_the_declared_surface() -> None:
 _COMPOSITION_ROOT = "cli.py"
 
 
+def _is_infrastructure_adapter(path: Path) -> bool:
+    return path.parent.name == "infrastructure" and path.name != _COMPOSITION_ROOT
+
+
 def test_infrastructure_never_imports_application() -> None:
     """Infrastructure is the adapters' layer; orchestration lives above it.
 
     Lazy imports count too, since ``ast.walk`` reaches inside functions: a
     deferred import is still a dependency, only a later one.
     """
-    violations = [
-        f"{path.relative_to(_SRC)}:{lineno} imports {module}"
-        for path in _python_files("effects")
-        if path.parent.name == "infrastructure" and path.name != _COMPOSITION_ROOT
-        for module, _names, lineno in _imported_modules(path)
-        if module == "effects.application" or module.startswith("effects.application.")
-    ]
+    violations = _imports_matching(
+        ("effects",), _is_under("effects.application"), _is_infrastructure_adapter,
+    )
     assert not violations, (
         "effects.infrastructure imports effects.application:\n  "
         + "\n  ".join(violations)
     )
 
 
+def _is_above_the_domain(module: str) -> bool:
+    return module.startswith(("effects.application", "effects.infrastructure"))
+
+
 def test_the_domain_imports_neither_layer_above_it() -> None:
-    violations = [
-        f"{path.relative_to(_SRC)}:{lineno} imports {module}"
-        for path in _python_files("effects")
-        if path.parent.name == "domain"
-        for module, _names, lineno in _imported_modules(path)
-        if module.startswith(("effects.application", "effects.infrastructure"))
-    ]
+    violations = _imports_matching(
+        ("effects",), _is_above_the_domain, lambda path: path.parent.name == "domain",
+    )
     assert not violations, (
         "effects.domain imports a layer above it:\n  " + "\n  ".join(violations)
     )
@@ -194,13 +228,7 @@ def test_no_package_imports_the_scripts() -> None:
     a package reaching into ``scripts/`` would make a run depend on a tree
     that is not installed.
     """
-    violations = [
-        f"{path.relative_to(_SRC)}:{lineno} imports {module}"
-        for package in ("effects", *_GOVERNED_PACKAGES)
-        for path in _python_files(package)
-        for module, _names, lineno in _imported_modules(path)
-        if module == "scripts" or module.startswith("scripts.")
-    ]
+    violations = _imports_matching(("effects", *_GOVERNED_PACKAGES), _is_under("scripts"))
     assert not violations, "a package imports scripts/:\n  " + "\n  ".join(violations)
 
 
