@@ -75,13 +75,13 @@ def check(data, records, games, kind) -> list[tuple[str, dict]]:
     y = data.y
     predictions = {
         "rung 2 linear, folds by card (published)":
-            ladder.probe(data.features["2"], y, card_folds, kind, None, "linear"),
+            ladder.probe(data.features["2"], y, card_folds, kind, probe_type="linear"),
         "rung 2 MLP, folds by card (published)":
-            ladder.probe(data.features["2"], y, card_folds, kind, None, "mlp"),
+            ladder.probe(data.features["2"], y, card_folds, kind, probe_type="mlp"),
         "rung 2 linear, folds by game":
-            ladder.probe(data.features["2"], y, game_folds, kind, None, "linear"),
+            ladder.probe(data.features["2"], y, game_folds, kind, probe_type="linear"),
         "rung 2 MLP, folds by game":
-            ladder.probe(data.features["2"], y, game_folds, kind, None, "mlp"),
+            ladder.probe(data.features["2"], y, game_folds, kind, probe_type="mlp"),
         "rung 3, the head (published)": data.rung3,
         "rung 3 recalibrated, folds by game": recalibrated(data.rung3, y, game_folds, kind),
     }

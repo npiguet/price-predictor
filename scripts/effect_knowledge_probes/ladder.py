@@ -107,103 +107,212 @@ def _standardize(train: np.ndarray, test: np.ndarray) -> tuple[np.ndarray, np.nd
 # ── the two probes ──────────────────────────────────────────────────────
 
 
-def linear_oof(X: np.ndarray, y: np.ndarray, folds: np.ndarray, kind: str,
-               weight: np.ndarray | None = None) -> np.ndarray:
-    """Out-of-fold predictions of the linear probe, features standardized per fold.
 
-    Logistic regression (L2, C = 1) for a yes/no target, ridge (α = 1) for an
-    amount. A training fold holding one class predicts that class's base rate.
-    """
-    from sklearn.linear_model import LogisticRegression, Ridge
+@dataclass(frozen=True)
+class _Problem:
+    """One probe fit's data: features, labels, fold per item, kind and weights."""
 
-    out = np.full(len(y), np.nan)
-    for fold in np.unique(folds):
-        train, test = folds != fold, folds == fold
-        Xtr, Xte = _standardize(X[train], X[test])
-        w = None if weight is None else weight[train]
-        if kind == "binary":
-            if len(np.unique(y[train])) < 2:
-                out[test] = float(y[train].mean()) if train.any() else 0.5
-                continue
-            model = LogisticRegression(C=LINEAR_C, max_iter=1000)
-            model.fit(Xtr, y[train], sample_weight=w)
-            out[test] = model.decision_function(Xte)
-        else:
-            model = Ridge(alpha=RIDGE_ALPHA).fit(Xtr, y[train], sample_weight=w)
-            out[test] = model.predict(Xte)
+    X: np.ndarray
+    y: np.ndarray
+    folds: np.ndarray
+    kind: str
+    weight: np.ndarray | None
+
+
+@dataclass(frozen=True)
+class _Fold:
+    """One fold's standardized train and test features and its training labels."""
+
+    Xtr: np.ndarray
+    Xte: np.ndarray
+    ytr: np.ndarray
+    weight: np.ndarray | None
+    number: int
+    kind: str
+
+
+@dataclass(frozen=True)
+class LinearOptions:
+    """What :func:`linear_oof` takes beside the data."""
+
+    weight: np.ndarray | None = None
+
+
+@dataclass(frozen=True)
+class MlpOptions:
+    """What :func:`mlp_oof` takes beside the data."""
+
+    weight: np.ndarray | None = None
+    hidden: int = MLP_HIDDEN
+    epochs: int = MLP_EPOCHS
+    device: str | None = None
+
+
+def _out_of_fold(problem: _Problem, fit) -> np.ndarray:
+    """Each item's prediction from ``fit`` on the folds that do not hold it."""
+    out = np.full(len(problem.y), np.nan)
+    for fold in np.unique(problem.folds):
+        train, test = problem.folds != fold, problem.folds == fold
+        Xtr, Xte = _standardize(problem.X[train], problem.X[test])
+        weight = None if problem.weight is None else problem.weight[train]
+        out[test] = fit(_Fold(Xtr, Xte, problem.y[train], weight, int(fold), problem.kind))
     return out
 
 
-def mlp_oof(X: np.ndarray, y: np.ndarray, folds: np.ndarray, kind: str,
-            weight: np.ndarray | None = None, *, hidden: int = MLP_HIDDEN,
-            epochs: int = MLP_EPOCHS, device: str | None = None) -> np.ndarray:
+def _single_class_rate(fold: _Fold) -> float | None:
+    """The base rate of a yes/no training fold holding one class, else None."""
+    if fold.kind != "binary" or len(np.unique(fold.ytr)) >= 2:
+        return None
+    return float(fold.ytr.mean()) if len(fold.ytr) else 0.5
+
+
+def _linear_fit(fold: _Fold):
+    from sklearn.linear_model import LogisticRegression, Ridge
+
+    constant = _single_class_rate(fold)
+    if constant is not None:
+        return constant
+    if fold.kind == "binary":
+        model = LogisticRegression(C=LINEAR_C, max_iter=1000)
+        model.fit(fold.Xtr, fold.ytr, sample_weight=fold.weight)
+        return model.decision_function(fold.Xte)
+    model = Ridge(alpha=RIDGE_ALPHA).fit(fold.Xtr, fold.ytr, sample_weight=fold.weight)
+    return model.predict(fold.Xte)
+
+
+def linear_oof(*problem, **options) -> np.ndarray:
+    """Out-of-fold predictions of the linear probe, features standardized per fold.
+
+    ``problem`` is ``X, y, folds, kind``.
+
+    Logistic regression (L2, C = 1) for a yes/no target, ridge (α = 1) for an
+    amount. A training fold holding one class predicts that class's base rate.
+    ``options`` are :class:`LinearOptions`: the sample ``weight``.
+    """
+    weight = LinearOptions(**options).weight
+    return _out_of_fold(_Problem(*problem, weight), _linear_fit)
+
+
+def _target_scale(kind: str, ytr: np.ndarray) -> tuple[float, float]:
+    """The mean and spread an amount is trained in; a yes/no target is not scaled."""
+    if kind == "binary":
+        return 0.0, 1.0
+    return ytr.mean(), ytr.std() or 1.0
+
+
+class _Trainer:
+    """One MLP and its optimizer, trained on one fold's tensors."""
+
+    def __init__(self, model, tensors, kind: str) -> None:
+        import torch
+
+        self.model = model
+        self.xt, self.yt, self.wt = tensors
+        self.kind = kind
+        self.optimizer = torch.optim.AdamW(
+            model.parameters(), lr=MLP_LR, weight_decay=MLP_WEIGHT_DECAY,
+        )
+
+    def run(self, epochs: int, generator, device: str) -> None:
+        import torch
+
+        for _ in range(epochs):
+            order = torch.randperm(len(self.yt), generator=generator).to(device)
+            for start in range(0, len(self.yt), MLP_BATCH):
+                self._step(order[start : start + MLP_BATCH])
+
+    def _loss(self, logits, index):
+        from torch import nn
+
+        if self.kind == "binary":
+            return nn.functional.binary_cross_entropy_with_logits(
+                logits, self.yt[index], weight=self.wt[index])
+        return (self.wt[index] * (logits - self.yt[index]) ** 2).mean()
+
+    def _step(self, index) -> None:
+        logits = self.model(self.xt[index]).squeeze(-1)
+        loss = self._loss(logits, index)
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
+
+def _clip_to_training(prediction: np.ndarray, ytr: np.ndarray) -> np.ndarray:
+    """An amount is predicted within one span of what training saw: on a small
+    fold the network can extrapolate by orders of magnitude."""
+    low, high = ytr.min(), ytr.max()
+    span = max(high - low, 1.0)
+    return np.clip(prediction, low - span, high + span)
+
+
+class _MlpFit:
+    """The MLP probe's fit on one fold, on one device."""
+
+    def __init__(self, options: MlpOptions) -> None:
+        import torch
+
+        self.options = options
+        self.device = options.device or ("cuda" if torch.cuda.is_available() else "cpu")
+
+    def _network(self, width: int):
+        from torch import nn
+
+        layers: list[nn.Module] = []
+        for _ in range(MLP_LAYERS):
+            layers += [nn.Linear(width, self.options.hidden), nn.ReLU()]
+            width = self.options.hidden
+        layers.append(nn.Linear(width, 1))
+        return nn.Sequential(*layers).to(self.device)
+
+    def _tensor(self, values):
+        import torch
+
+        return torch.tensor(values, dtype=torch.float32, device=self.device)
+
+    def _tensors(self, fold: _Fold, ytr: np.ndarray, scale: tuple[float, float]):
+        weight = np.ones(len(ytr)) if fold.weight is None else fold.weight
+        return (self._tensor(fold.Xtr), self._tensor((ytr - scale[0]) / scale[1]),
+                self._tensor(weight))
+
+    def __call__(self, fold: _Fold):
+        import torch
+
+        constant = _single_class_rate(fold)
+        if constant is not None:
+            return constant
+        ytr = fold.ytr.astype(np.float64)
+        scale = _target_scale(fold.kind, ytr)
+        torch.manual_seed(SEED + fold.number)
+        model = self._network(fold.Xtr.shape[1])
+        trainer = _Trainer(model, self._tensors(fold, ytr, scale), fold.kind)
+        generator = torch.Generator().manual_seed(SEED + fold.number)
+        trainer.run(self.options.epochs, generator, self.device)
+        with torch.no_grad():
+            pred = model(self._tensor(fold.Xte))
+        prediction = pred.squeeze(-1).cpu().numpy() * scale[1] + scale[0]
+        return prediction if fold.kind == "binary" else _clip_to_training(prediction, ytr)
+
+
+def mlp_oof(*problem, **options) -> np.ndarray:
     """Out-of-fold predictions of the MLP probe.
+
+    ``problem`` is ``X, y, folds, kind``.
 
     Two hidden layers of ``hidden`` units with ReLU, AdamW at a fixed learning
     rate and weight decay, fixed batch and epoch counts. Tests pass a small
     ``hidden`` and the CPU; every real run uses the defaults on the GPU.
+    ``options`` are :class:`MlpOptions`: ``weight``, ``hidden``, ``epochs``, ``device``.
     """
-    import torch
-    from torch import nn
-
-    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-    out = np.full(len(y), np.nan)
-    for fold in np.unique(folds):
-        train, test = folds != fold, folds == fold
-        Xtr, Xte = _standardize(X[train], X[test])
-        ytr = y[train].astype(np.float64)
-        if kind == "binary" and len(np.unique(ytr)) < 2:
-            out[test] = float(ytr.mean()) if train.any() else 0.5
-            continue
-        y_mean, y_std = (0.0, 1.0) if kind == "binary" else (ytr.mean(), ytr.std() or 1.0)
-        torch.manual_seed(SEED + int(fold))
-        layers: list[nn.Module] = []
-        width = X.shape[1]
-        for _ in range(MLP_LAYERS):
-            layers += [nn.Linear(width, hidden), nn.ReLU()]
-            width = hidden
-        layers.append(nn.Linear(width, 1))
-        model = nn.Sequential(*layers).to(device)
-        optimizer = torch.optim.AdamW(
-            model.parameters(), lr=MLP_LR, weight_decay=MLP_WEIGHT_DECAY,
-        )
-        xt = torch.tensor(Xtr, dtype=torch.float32, device=device)
-        yt = torch.tensor((ytr - y_mean) / y_std, dtype=torch.float32, device=device)
-        wt = torch.tensor(
-            np.ones(len(ytr)) if weight is None else weight[train],
-            dtype=torch.float32, device=device,
-        )
-        generator = torch.Generator().manual_seed(SEED + int(fold))
-        for _ in range(epochs):
-            order = torch.randperm(len(yt), generator=generator).to(device)
-            for start in range(0, len(yt), MLP_BATCH):
-                index = order[start : start + MLP_BATCH]
-                logits = model(xt[index]).squeeze(-1)
-                if kind == "binary":
-                    loss = nn.functional.binary_cross_entropy_with_logits(
-                        logits, yt[index], weight=wt[index])
-                else:
-                    loss = (wt[index] * (logits - yt[index]) ** 2).mean()
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-        with torch.no_grad():
-            pred = model(torch.tensor(Xte, dtype=torch.float32, device=device))
-        prediction = pred.squeeze(-1).cpu().numpy() * y_std + y_mean
-        if kind != "binary":
-            # An amount is predicted within one span of what training saw: on a
-            # small fold the network can extrapolate by orders of magnitude.
-            low, high = ytr.min(), ytr.max()
-            span = max(high - low, 1.0)
-            prediction = np.clip(prediction, low - span, high + span)
-        out[test] = prediction
-    return out
+    config = MlpOptions(**options)
+    return _out_of_fold(_Problem(*problem, config.weight), _MlpFit(config))
 
 
-def probe(X, y, folds, kind, weight=None, probe_type="linear", **mlp) -> np.ndarray:
-    if probe_type == "linear":
-        return linear_oof(X, y, folds, kind, weight)
-    return mlp_oof(X, y, folds, kind, weight, **mlp)
+def probe(*problem, **options) -> np.ndarray:
+    """The linear or the MLP probe by ``probe_type`` (default linear); ``problem``
+    and the other ``options`` go to it (:func:`linear_oof`, :func:`mlp_oof`)."""
+    if options.pop("probe_type", "linear") == "linear":
+        return linear_oof(*problem, **options)
+    return mlp_oof(*problem, **options)
 
 
 # ── the share ───────────────────────────────────────────────────────────
@@ -224,32 +333,66 @@ def share(rung0: float, rung1: float, rung3: float,
     return float((rung1 - rung0) / gap)
 
 
-def bootstrap_share(kind, y, oof0, oof1, pred3, groups, weight=None, *,
-                    resamples: int = BOOTSTRAP_RESAMPLES,
-                    seed: int = SEED) -> tuple[float, float] | None:
+@dataclass(frozen=True)
+class BootstrapOptions:
+    """What :func:`bootstrap_share` takes beside the columns."""
+
+    weight: np.ndarray | None = None
+    resamples: int = BOOTSTRAP_RESAMPLES
+    seed: int = SEED
+
+
+@dataclass(frozen=True)
+class _ShareSample:
+    """The columns a share is read from; :meth:`share_at` reads it on a resample."""
+
+    kind: str
+    y: np.ndarray
+    oof0: np.ndarray
+    oof1: np.ndarray
+    pred3: np.ndarray
+    weight: np.ndarray | None
+
+    def share_at(self, index: np.ndarray) -> float | None:
+        w = None if self.weight is None else self.weight[index]
+        y = self.y[index]
+        return share(score(self.kind, y, self.oof0[index], w),
+                     score(self.kind, y, self.oof1[index], w),
+                     score(self.kind, y, self.pred3[index], w))
+
+
+def _resampled_shares(sample: _ShareSample, groups, options: BootstrapOptions) -> list[float]:
+    """The share on each group resample where it is defined."""
+    groups = np.asarray(groups, dtype=object)
+    unique = sorted(set(groups.tolist()))
+    members = defaultdict(list)
+    for index, group in enumerate(groups):
+        members[group].append(index)
+    rng = np.random.default_rng(options.seed)
+    values = []
+    for _ in range(options.resamples):
+        drawn = rng.integers(0, len(unique), len(unique))
+        value = sample.share_at(np.concatenate([members[unique[d]] for d in drawn]))
+        if value is not None:
+            values.append(value)
+    return values
+
+
+def bootstrap_share(kind, *columns, **options) -> tuple[float, float] | None:
     """The share's 95% interval over groups resampled with replacement.
+
+    ``columns`` are ``y, oof0, oof1, pred3, groups``; ``options`` are
+    :class:`BootstrapOptions`: ``weight``, ``resamples``, ``seed``.
 
     Resampled by group rather than by item, because items of one text are not
     independent: a text seen in fifty records would otherwise count fifty times.
     A resample whose gap falls under the minimum is skipped, so the interval is
     over resamples where the share is defined.
     """
-    groups = np.asarray(groups, dtype=object)
-    unique = sorted(set(groups.tolist()))
-    members = defaultdict(list)
-    for index, group in enumerate(groups):
-        members[group].append(index)
-    rng = np.random.default_rng(seed)
-    values = []
-    for _ in range(resamples):
-        drawn = rng.integers(0, len(unique), len(unique))
-        index = np.concatenate([members[unique[d]] for d in drawn])
-        w = None if weight is None else weight[index]
-        value = share(score(kind, y[index], oof0[index], w),
-                      score(kind, y[index], oof1[index], w),
-                      score(kind, y[index], pred3[index], w))
-        if value is not None:
-            values.append(value)
+    y, oof0, oof1, pred3, groups = columns
+    config = BootstrapOptions(**options)
+    values = _resampled_shares(_ShareSample(kind, y, oof0, oof1, pred3, config.weight),
+                               groups, config)
     if not values:
         return None
     tail = (1.0 - CI_LEVEL) / 2.0
@@ -271,6 +414,63 @@ class LadderInput:
     layers: list[np.ndarray] = field(default_factory=list)
 
 
+class _Fitter:
+    """Both probe types on one target's folds, and their scores."""
+
+    def __init__(self, data: LadderInput, mlp_options: dict | None) -> None:
+        self.data = data
+        self.folds = fold_assignment(data.groups)
+        self.mlp_options = mlp_options or {}
+
+    def predictions(self, X: np.ndarray) -> dict[str, np.ndarray]:
+        data = self.data
+        return {
+            probe_type: probe(X, data.y, self.folds, data.kind, weight=data.weight,
+                              probe_type=probe_type,
+                              **(self.mlp_options if probe_type == "mlp" else {}))
+            for probe_type in PROBE_MODELS
+        }
+
+    def scores(self, predictions: dict[str, np.ndarray]) -> dict[str, float]:
+        data = self.data
+        return {probe_type: score(data.kind, data.y, prediction, data.weight)
+                for probe_type, prediction in predictions.items()}
+
+
+def _share_entry(data: LadderInput, scores: tuple, oofs: tuple, bootstrap: int) -> dict | None:
+    """One probe type's share and its interval; None under the minimum gap.
+
+    ``scores`` are rung 0's, rung 1's and rung 3's; ``oofs`` rung 0's and rung 1's
+    out-of-fold predictions.
+    """
+    value = share(*scores)
+    if value is None:
+        return None
+    ci = bootstrap_share(
+        data.kind, data.y, oofs[0], oofs[1], data.rung3, data.groups,
+        weight=data.weight, resamples=bootstrap,
+    ) if bootstrap else None
+    return {"value": value, "ci": list(ci) if ci else None}
+
+
+def _shares(data: LadderInput, result: dict, oof: dict, bootstrap: int) -> dict:
+    """Each probe type's share, pairing rungs 0 and 1 of that type with rung 3."""
+    rung3 = result["rungs"]["3"]["model"]
+    shares = {}
+    for probe_type in PROBE_MODELS:
+        if "0" not in oof or "1" not in oof:
+            continue
+        scores = (result["rungs"]["0"][probe_type], result["rungs"]["1"][probe_type], rung3)
+        oofs = (oof["0"][probe_type], oof["1"][probe_type])
+        shares[probe_type] = _share_entry(data, scores, oofs, bootstrap)
+    return shares
+
+
+def _per_layer(data: LadderInput, fitter: _Fitter) -> list[dict]:
+    return [{"layer": depth, **fitter.scores(fitter.predictions(X))}
+            for depth, X in enumerate(data.layers)]
+
+
 def run_ladder(data: LadderInput, *, rungs=PROBED_RUNGS, mlp_options=None,
                bootstrap: int = BOOTSTRAP_RESAMPLES) -> dict:
     """Every probed rung's two scores, rung 3's, and each probe type's share.
@@ -278,57 +478,30 @@ def run_ladder(data: LadderInput, *, rungs=PROBED_RUNGS, mlp_options=None,
     The share pairs rung 0 and rung 1 of the **same** probe type with rung 3;
     the two probe types are never mixed in one computation.
     """
-    mlp_options = mlp_options or {}
-    folds = fold_assignment(data.groups)
+    fitter = _Fitter(data, mlp_options)
+    oof = {rung: fitter.predictions(data.features[rung])
+           for rung in rungs if rung in data.features}
     result: dict = {"n": int(len(data.y)), "rungs": {}, "share": None}
-    oof: dict[tuple[str, str], np.ndarray] = {}
-    for rung in rungs:
-        if rung not in data.features:
-            continue
-        X = data.features[rung]
-        scores = {}
-        for probe_type in PROBE_MODELS:
-            prediction = probe(X, data.y, folds, data.kind, data.weight, probe_type,
-                               **(mlp_options if probe_type == "mlp" else {}))
-            oof[(rung, probe_type)] = prediction
-            scores[probe_type] = score(data.kind, data.y, prediction, data.weight)
-        result["rungs"][rung] = scores
+    result["rungs"] = {rung: fitter.scores(predictions) for rung, predictions in oof.items()}
     if data.rung3 is not None:
-        rung3 = score(data.kind, data.y, data.rung3, data.weight)
-        result["rungs"]["3"] = {"model": rung3}
-        shares = {}
-        for probe_type in PROBE_MODELS:
-            if ("0", probe_type) not in oof or ("1", probe_type) not in oof:
-                continue
-            value = share(result["rungs"]["0"][probe_type],
-                          result["rungs"]["1"][probe_type], rung3)
-            if value is None:
-                shares[probe_type] = None
-                continue
-            ci = bootstrap_share(
-                data.kind, data.y, oof[("0", probe_type)], oof[("1", probe_type)],
-                data.rung3, data.groups, data.weight, resamples=bootstrap,
-            ) if bootstrap else None
-            shares[probe_type] = {"value": value, "ci": list(ci) if ci else None}
+        result["rungs"]["3"] = {"model": score(data.kind, data.y, data.rung3, data.weight)}
+        shares = _shares(data, result, oof, bootstrap)
         if any(v is not None for v in shares.values()):
             result["share"] = shares
     if data.layers:
-        result["per_layer"] = []
-        for depth, X in enumerate(data.layers):
-            row = {"layer": depth}
-            for probe_type in PROBE_MODELS:
-                prediction = probe(X, data.y, folds, data.kind, data.weight, probe_type,
-                                   **(mlp_options if probe_type == "mlp" else {}))
-                row[probe_type] = score(data.kind, data.y, prediction, data.weight)
-            result["per_layer"].append(row)
+        result["per_layer"] = _per_layer(data, fitter)
     return result
 
 
 # ── rung features from one forward pass ─────────────────────────────────
 
 
-def _readout(target: str, outputs, verdict, slot: int, row: int) -> float:
-    """Rung 3: the head's own prediction for one item (:mod:`readout`)."""
+def _readout(target: str, outputs, verdict, *at: int) -> float:
+    """Rung 3: the head's own prediction for one item (:mod:`readout`).
+
+    ``at`` is the item's ``slot`` and its ``row`` in the batch.
+    """
+    slot, row = at
     return readout.read(target, outputs, verdict, row, slot)
 
 
@@ -373,6 +546,29 @@ class BatchOutputs:
     partner_e: dict
 
 
+@dataclass
+class BatchContext:
+    """What every record of a batch is read through: the pass, the batcher, ``e``'s width."""
+
+    outputs: BatchOutputs
+    batcher: object
+    e_dim: int
+
+
+def _slot_index(surface) -> tuple[dict[str, int], dict[str, list[int]]]:
+    """A surface's slot of each player, and its ability rows by entity."""
+    from effects.domain.effect_head_input import SlotKind
+
+    player_slot: dict[str, int] = {}
+    rows_of: dict[str, list[int]] = defaultdict(list)
+    for index, slot in enumerate(surface.slots):
+        if slot.kind is SlotKind.PLAYER:
+            player_slot[slot.player_id] = index
+        elif slot.kind is SlotKind.ABILITY and isinstance(slot.e, int):
+            rows_of[slot.entity_id].append(slot.e)
+    return player_slot, rows_of
+
+
 class ItemFeatureBuilder:
     """The rung features of the items of one record of a batch (FR-080).
 
@@ -383,26 +579,17 @@ class ItemFeatureBuilder:
     script values the item depends on.
     """
 
-    def __init__(self, record, surface, row: int, outputs: BatchOutputs, batcher,
-                 e_dim: int) -> None:
-        from effects.domain.effect_head_input import SlotKind
-
+    def __init__(self, record, surface, row: int, context: BatchContext) -> None:
         self.record = record
         self.row = row
-        self.outputs = outputs
-        self.batcher = batcher
-        self.e_dim = e_dim
-        self.zero_e = np.zeros(e_dim, dtype=np.float32)
+        self.outputs = context.outputs
+        self.batcher = context.batcher
+        self.e_dim = context.e_dim
+        self.zero_e = np.zeros(self.e_dim, dtype=np.float32)
         self.card_slot = readout.card_slots(surface)
-        self.player_slot: dict[str, int] = {}
-        self.rows_of: dict[str, list[int]] = defaultdict(list)
-        for index, slot in enumerate(surface.slots):
-            if slot.kind is SlotKind.PLAYER:
-                self.player_slot[slot.player_id] = index
-            elif slot.kind is SlotKind.ABILITY and isinstance(slot.e, int):
-                self.rows_of[slot.entity_id].append(slot.e)
+        self.player_slot, self.rows_of = _slot_index(surface)
         self.act = surface.slots[1].e
-        self.act_text = outputs.texts[self.act] if isinstance(self.act, int) else None
+        self.act_text = self.outputs.texts[self.act] if isinstance(self.act, int) else None
         self._base = self._board()
 
     # ── what every item shares ──────────────────────────────────────────
@@ -484,15 +671,20 @@ class ItemFeatureBuilder:
                                _value_vector(self._partner_text(item))])
 
 
+def _note_partner_line(batcher, item, lines: dict) -> None:
+    if item.partner is None:
+        return
+    text = batcher.text_of(item.partner)
+    if text and text not in lines:
+        lines[text] = batcher.sidecars.line_or_none(item.partner)
+
+
 def _partner_e(batcher, encoder, chunk, items_by_record) -> dict:
     """The ``e`` of every partner the chunk's items name, encoded beside the batch."""
-    partner_lines = {}
+    partner_lines: dict = {}
     for record in chunk:
         for item in items_by_record.get(record.record_id, ()):
-            if item.partner is not None:
-                text = batcher.text_of(item.partner)
-                if text and text not in partner_lines:
-                    partner_lines[text] = batcher.sidecars.line_or_none(item.partner)
+            _note_partner_line(batcher, item, partner_lines)
     if not partner_lines:
         return {}
     rows, extra = batcher.encode_texts(partner_lines, encoder)
@@ -502,73 +694,136 @@ def _partner_e(batcher, encoder, chunk, items_by_record) -> dict:
     return {text: extra[row] for text, row in rows.items()}
 
 
-def extract_features(probe_model, records: list, items_by_record: dict, *,
-                     batch_size: int = 32, per_layer: bool = False,
-                     act_hidden: dict | None = None) -> list[ExtractedItem]:
+@dataclass
+class ExtractionOptions:
+    """What :func:`extract_features` takes beside the model, records and items."""
+
+    batch_size: int = 32
+    per_layer: bool = False
+    act_hidden: dict | None = None
+
+
+class _LayerCapture:
+    """Forward hooks on the trunk's layers, when ``--per-layer`` asked for them."""
+
+    def __init__(self, model, enabled: bool) -> None:
+        self.captured: list = []
+        self._hooks = []
+        if enabled:
+            for layer in model.trunk.layers:
+                self._hooks.append(layer.register_forward_hook(
+                    lambda _m, _i, output: self.captured.append(output.detach())))
+
+    def remove(self) -> None:
+        for hook in self._hooks:
+            hook.remove()
+
+    def arrays(self) -> list[np.ndarray]:
+        return [c.float().cpu().numpy() for c in self.captured]
+
+
+@dataclass
+class _ChunkPass:
+    """One chunk's forward pass: the host arrays, the surfaces and the head's reads."""
+
+    host: BatchOutputs
+    surfaces: list
+    outputs: object
+    verdict: object
+    layers: list[np.ndarray]
+
+
+class _Extractor:
+    """Reads the items of a batched forward pass, chunk by chunk."""
+
+    def __init__(self, probe_model, items_by_record: dict, options: ExtractionOptions) -> None:
+        self.probe_model = probe_model
+        self.items_by_record = items_by_record
+        self.options = options
+        self.capture = _LayerCapture(probe_model.model, options.per_layer)
+
+    def forward(self, chunk) -> _ChunkPass:
+        import torch
+
+        model, encoder = self.probe_model.model, self.probe_model.encoder
+        batcher = self.probe_model.batcher
+        self.capture.captured.clear()
+        batch, surfaces, encoded = batcher.build(chunk, encoder)
+        hidden = model(batch)
+        outputs = model.per_entity(hidden)
+        verdict = model.verdict(hidden)
+        host = BatchOutputs(
+            slot_features=torch.cat(
+                [batch.slot_features[k] for k in sorted(batch.slot_features)],
+                dim=-1,
+            ).float().cpu().numpy(),
+            hidden=hidden.float().cpu().numpy(),
+            e_matrix=(encoded.matrix.float().cpu().numpy()
+                      if encoded.matrix is not None else None),
+            texts=encoded.texts,
+            partner_e=_partner_e(batcher, encoder, chunk, self.items_by_record),
+        )
+        return _ChunkPass(host, surfaces, outputs, verdict, self.capture.arrays())
+
+    def chunk_items(self, chunk) -> list[ExtractedItem]:
+        done = self.forward(chunk)
+        extracted: list[ExtractedItem] = []
+        for b, (record, surface) in enumerate(zip(chunk, done.surfaces)):
+            extracted += self._record_items(record, surface, b, done)
+        return extracted
+
+    def _record_items(self, record, surface, b: int, done: _ChunkPass) -> list[ExtractedItem]:
+        context = BatchContext(done.host, self.probe_model.batcher, self.probe_model.e_dim)
+        builder = ItemFeatureBuilder(record, surface, b, context)
+        act_hidden = self.options.act_hidden
+        if act_hidden is not None and builder.act_text is not None:
+            act_hidden.setdefault(builder.act_text, []).append(done.host.hidden[b, 1])
+        found = []
+        for item in self.items_by_record.get(record.record_id, ()):
+            slot = builder.slot(item)
+            if slot is not None:
+                found.append(self._item(builder, item, (slot, b), done))
+        return found
+
+    @staticmethod
+    def _item(builder, item, at: tuple[int, int], done: _ChunkPass) -> ExtractedItem:
+        slot, b = at
+        features = {
+            "0": builder.rung0(item),
+            "1": builder.rung1(item),
+            "1w": builder.rung1w(item),
+            "1o": builder.rung1o(item),
+            "2": done.host.hidden[b, slot],
+        }
+        return ExtractedItem(
+            target=item.target, label=item.label, group=item.group,
+            features={k: v.astype(np.float32) for k, v in features.items()},
+            rung3=_readout(item.target, done.outputs, done.verdict, slot, b),
+            layers=[layer[b, slot] for layer in done.layers],
+            record_id=item.record_id,
+        )
+
+
+def extract_features(probe_model, records: list, items_by_record: dict,
+                     **options) -> list[ExtractedItem]:
     """Every item's rung features, from one batched forward pass over ``records``.
 
     ``items_by_record`` maps a record id to its probe items (``labels.RecordItem``).
-    ``act_hidden``, when given, accumulates the trunk's ``[ACT]`` output by
+    ``options`` are :class:`ExtractionOptions`: ``batch_size``, ``per_layer`` and
+    ``act_hidden``, which, when given, accumulates the trunk's ``[ACT]`` output by
     acting text — the line ladder's rung 2 — from the same pass.
     """
     import torch
 
-    model, encoder, batcher = probe_model.model, probe_model.encoder, probe_model.batcher
-    captured: list = []
-    hooks = []
-    if per_layer:
-        for layer in model.trunk.layers:
-            hooks.append(layer.register_forward_hook(
-                lambda _m, _i, output: captured.append(output.detach())))
+    config = ExtractionOptions(**options)
+    extractor = _Extractor(probe_model, items_by_record, config)
     extracted: list[ExtractedItem] = []
     try:
         with torch.no_grad():
-            for start in range(0, len(records), batch_size):
-                chunk = records[start : start + batch_size]
-                captured.clear()
-                batch, surfaces, encoded = batcher.build(chunk, encoder)
-                hidden = model(batch)
-                outputs = model.per_entity(hidden)
-                verdict = model.verdict(hidden)
-                host = BatchOutputs(
-                    slot_features=torch.cat(
-                        [batch.slot_features[k] for k in sorted(batch.slot_features)],
-                        dim=-1,
-                    ).float().cpu().numpy(),
-                    hidden=hidden.float().cpu().numpy(),
-                    e_matrix=(encoded.matrix.float().cpu().numpy()
-                              if encoded.matrix is not None else None),
-                    texts=encoded.texts,
-                    partner_e=_partner_e(batcher, encoder, chunk, items_by_record),
-                )
-                layer_np = [c.float().cpu().numpy() for c in captured]
-
-                for b, (record, surface) in enumerate(zip(chunk, surfaces)):
-                    builder = ItemFeatureBuilder(
-                        record, surface, b, host, batcher, probe_model.e_dim)
-                    if act_hidden is not None and builder.act_text is not None:
-                        act_hidden.setdefault(builder.act_text, []).append(host.hidden[b, 1])
-                    for item in items_by_record.get(record.record_id, ()):
-                        slot = builder.slot(item)
-                        if slot is None:
-                            continue
-                        features = {
-                            "0": builder.rung0(item),
-                            "1": builder.rung1(item),
-                            "1w": builder.rung1w(item),
-                            "1o": builder.rung1o(item),
-                            "2": host.hidden[b, slot],
-                        }
-                        extracted.append(ExtractedItem(
-                            target=item.target, label=item.label, group=item.group,
-                            features={k: v.astype(np.float32) for k, v in features.items()},
-                            rung3=_readout(item.target, outputs, verdict, slot, b),
-                            layers=[layer[b, slot] for layer in layer_np],
-                            record_id=item.record_id,
-                        ))
+            for start in range(0, len(records), config.batch_size):
+                extracted += extractor.chunk_items(records[start : start + config.batch_size])
     finally:
-        for hook in hooks:
-            hook.remove()
+        extractor.capture.remove()
     return extracted
 
 
@@ -577,23 +832,28 @@ def _controller(record, entity_id: str) -> str | None:
     return None if entity is None else entity.controller
 
 
+def _layers_of(items: list[ExtractedItem]) -> list[np.ndarray]:
+    """The items' per-layer outputs, stacked per layer; none when not captured."""
+    if not items[0].layers:
+        return []
+    return [np.stack([i.layers[d] for i in items]) for d in range(len(items[0].layers))]
+
+
+def _ladder_input(kind: str, items: list[ExtractedItem]) -> LadderInput:
+    return LadderInput(
+        kind=kind,
+        y=np.array([i.label for i in items], dtype=np.float64),
+        groups=np.array([i.group for i in items], dtype=object),
+        features={rung: np.stack([i.features[rung] for i in items])
+                  for rung in PROBED_RUNGS},
+        rung3=np.array([i.rung3 for i in items], dtype=np.float64),
+        layers=_layers_of(items),
+    )
+
+
 def ladder_inputs(extracted: list[ExtractedItem], kinds: dict[str, str]) -> dict:
     """Group extracted items into one :class:`LadderInput` per target."""
     by_target: dict[str, list[ExtractedItem]] = defaultdict(list)
     for item in extracted:
         by_target[item.target].append(item)
-    out = {}
-    for target, items in by_target.items():
-        rung3 = np.array([i.rung3 for i in items], dtype=np.float64)
-        out[target] = LadderInput(
-            kind=kinds[target],
-            y=np.array([i.label for i in items], dtype=np.float64),
-            groups=np.array([i.group for i in items], dtype=object),
-            features={rung: np.stack([i.features[rung] for i in items])
-                      for rung in PROBED_RUNGS},
-            rung3=rung3,
-            layers=([np.stack([i.layers[d] for i in items])
-                     for d in range(len(items[0].layers))]
-                    if items[0].layers else []),
-        )
-    return out
+    return {target: _ladder_input(kinds[target], items) for target, items in by_target.items()}
