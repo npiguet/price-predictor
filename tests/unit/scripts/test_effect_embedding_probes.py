@@ -306,3 +306,30 @@ class TestEffectProfiles:
         assert row["res_n"] == 2
         assert row["n_games"] == 2
         assert row["mean_card_drawn_own"] == 2.0
+
+
+class TestStoredCorpus:
+    """The corpus cache under ``encode_corpus``: read back when current, replaced when stale."""
+
+    @staticmethod
+    def _write(cache_file: Path, texts: list[str]) -> None:
+        rows = np.ones((len(texts), 3), dtype=np.float32)
+        np.savez(cache_file, texts=np.array(texts, dtype=object), plain=rows, forced=rows)
+
+    def test_a_cache_for_other_texts_is_dropped_and_deleted(self, tmp_path):
+        from effect_embedding_probes import keyword_expansion
+
+        cache_file = tmp_path / "corpus_encodings.npz"
+        self._write(cache_file, ["old text"])
+        assert keyword_expansion._stored_corpus(cache_file, [], ["new text"]) is None
+        assert not cache_file.exists()
+
+    def test_a_cache_for_the_same_texts_is_read_back(self, tmp_path):
+        from effect_embedding_probes import keyword_expansion
+
+        cache_file = tmp_path / "corpus_encodings.npz"
+        self._write(cache_file, ["a", "b"])
+        corpus = keyword_expansion._stored_corpus(cache_file, [], ["a", "b"])
+        assert corpus is not None
+        assert corpus.texts == ["a", "b"]
+        assert cache_file.exists()

@@ -421,9 +421,9 @@ def _stored_corpus(cache_file: Path, lines: list[dict], texts: list[str]) -> Cor
     """The corpus read back from ``cache_file`` if it holds these texts; a stale file is deleted."""
     if not cache_file.exists():
         return None
-    stored = np.load(cache_file, allow_pickle=True)
-    if list(stored["texts"]) == texts:
-        return Corpus(lines, texts, unit_rows(stored["plain"]), unit_rows(stored["forced"]))
+    with np.load(cache_file, allow_pickle=True) as stored:
+        if list(stored["texts"]) == texts:
+            return Corpus(lines, texts, unit_rows(stored["plain"]), unit_rows(stored["forced"]))
     cache_file.unlink()
     return None
 
