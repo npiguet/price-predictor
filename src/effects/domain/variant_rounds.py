@@ -23,7 +23,13 @@ from effects.domain.rule_catalogue import (
     RuleMapEntry,
     ScenarioCatalogue,
 )
-from effects.domain.script_text import CHAIN_KEYS, params, segments
+from effects.domain.script_text import (
+    CHOOSER_APIS,
+    RELABELLED_KEYS,
+    api_of,
+    params,
+    segments,
+)
 
 
 class VariantRound(StrEnum):
@@ -243,16 +249,28 @@ def _trait_body(line: str) -> str | None:
     return None
 
 
+def _elided_value(key: str, value: str, api: str | None) -> str:
+    """A parameter's value as a source line and a sidecar compare it: the
+    labels the converter renames elided, everything else whitespace-normalised."""
+    if key in RELABELLED_KEYS:
+        return "*"
+    if key == "Choices" and api in CHOOSER_APIS:
+        return "*"
+    if key == "ResultSubAbilities":
+        return ",".join(f"{item.partition(':')[0]}:*" for item in value.split(","))
+    return " ".join(value.split())
+
+
 def _signature(segment: str) -> tuple:
-    """A segment's parameters, a chain label's value elided, so a source line
-    and the sidecar's relabelled chain compare equal; a bare keyword is its
-    own text."""
+    """A segment's parameters, each renamed label's value elided, so a source
+    line and the sidecar's relabelled chain compare equal; a bare keyword is
+    its own text."""
     found = params(segment)
     if not found:
         return ("keyword", segment.strip())
+    api = api_of(found)
     return tuple(sorted(
-        (key, "*" if key in CHAIN_KEYS else " ".join(value.split()))
-        for key, value in found.items()
+        (key, _elided_value(key, value, api)) for key, value in found.items()
     ))
 
 
