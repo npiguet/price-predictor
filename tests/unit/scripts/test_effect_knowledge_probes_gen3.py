@@ -978,8 +978,9 @@ class TestExtraction:
     def test_every_rung_has_one_width_per_target(self, loaded, records, items_by_record):
         chosen = [r for r in records if r.record_id in items_by_record]
         act_hidden: dict = {}
-        extracted = ladder.extract_features(loaded, chosen, items_by_record, batch_size=8,
-                                            act_hidden=act_hidden)
+        extracted = ladder.extract_features(
+            loaded, chosen, items_by_record,
+            ladder.ExtractionOptions(batch_size=8, act_hidden=act_hidden))
         assert extracted and act_hidden
         assert loaded.device.type == "cpu"
         for target in {i.target for i in extracted}:
@@ -995,7 +996,7 @@ class TestExtraction:
         record = next(r for r in records if r.record_id in items_by_record)
         extracted = ladder.extract_features(
             loaded, [record], {record.record_id: items_by_record[record.record_id]},
-            per_layer=True)
+            ladder.ExtractionOptions(per_layer=True))
         depth = len(loaded.model.trunk.layers)
         assert depth == 2
         assert all(len(item.layers) == depth for item in extracted)

@@ -131,8 +131,9 @@ class TestShare:
         pred3 = y + rng.normal(scale=0.5, size=n)
         point = ladder.share(ladder.score("binary", y, oof0), ladder.score("binary", y, oof1),
                              ladder.score("binary", y, pred3))
-        low, high = ladder.bootstrap_share("binary", y, oof0, oof1, pred3, groups,
-                                           resamples=200)
+        low, high = ladder.bootstrap_share(
+            ladder.BootstrapColumns("binary", y, oof0, oof1, pred3, groups),
+            ladder.BootstrapOptions(resamples=200))
         assert low <= point <= high
 
     def test_run_ladder_reports_each_probe_type_s_own_share(self):
@@ -147,7 +148,7 @@ class TestShare:
             rung3=y + rng.normal(scale=0.3, size=n),
         )
         result = ladder.run_ladder(data, rungs=("0", "1"),
-                                   mlp_options={"hidden": 8, "epochs": 3, "device": "cpu"},
+                                   mlp_options=ladder.MlpOptions(hidden=8, epochs=3, device="cpu"),
                                    bootstrap=50)
         assert set(result["rungs"]) == {"0", "1", "3"}
         assert set(result["share"]) == {"linear", "mlp"}
@@ -166,7 +167,8 @@ class TestShare:
             rung3=y + rng.normal(scale=0.3, size=n),
         )
         result = ladder.run_ladder(data, rungs=("0", "1"),
-                                   mlp_options={"hidden": 16, "epochs": 150, "device": "cpu"},
+                                   mlp_options=ladder.MlpOptions(
+                                       hidden=16, epochs=150, device="cpu"),
                                    bootstrap=0)
         assert result["share"] is None
 
@@ -214,8 +216,9 @@ class TestProbes:
         X = rng.normal(size=(600, 2))
         y = ((X[:, 0] * X[:, 1]) > 0).astype(float)
         folds = ladder.fold_assignment([str(i) for i in range(600)])
-        mlp = ladder.mlp_oof(X, y, folds, "binary", hidden=32, epochs=60, device="cpu")
-        linear = ladder.linear_oof(X, y, folds, "binary")
+        mlp = ladder.mlp_oof(ladder.ProbeProblem(X, y, folds, "binary"),
+                             ladder.MlpOptions(hidden=32, epochs=60, device="cpu"))
+        linear = ladder.linear_oof(ladder.ProbeProblem(X, y, folds, "binary"))
         assert ladder.score("binary", y, mlp) > 0.8
         assert ladder.score("binary", y, linear) < 0.65
 
@@ -225,7 +228,8 @@ class TestProbes:
         X[-1] = 1e6
         y = rng.uniform(0, 3, size=60)
         folds = np.array([0] * 59 + [1])
-        prediction = ladder.mlp_oof(X, y, folds, "amount", hidden=8, epochs=5, device="cpu")
+        prediction = ladder.mlp_oof(ladder.ProbeProblem(X, y, folds, "amount"),
+                                    ladder.MlpOptions(hidden=8, epochs=5, device="cpu"))
         low, high = y[:59].min(), y[:59].max()
         span = max(high - low, 1.0)
         assert low - span - 1e-6 <= prediction[-1] <= high + span + 1e-6
@@ -235,7 +239,8 @@ class TestProbes:
         X = rng.normal(size=(300, 3))
         y = 2 * X[:, 0] + rng.normal(scale=0.1, size=300)
         folds = ladder.fold_assignment([str(i) for i in range(300)])
-        assert ladder.score("amount", y, ladder.linear_oof(X, y, folds, "amount")) > 0.95
+        prediction = ladder.linear_oof(ladder.ProbeProblem(X, y, folds, "amount"))
+        assert ladder.score("amount", y, prediction) > 0.95
 
 
 # ── line labels from real scripts ───────────────────────────────────────
@@ -902,7 +907,7 @@ class TestRung3ReadsTheRightOutput:
         import torch
 
         outputs = self._outputs(gate_logit=-3.0, legal_logit=5.0)
-        value = ladder._readout(target, outputs, None, 0, 0)
+        value = ladder._readout(target, outputs, None, ladder.ItemAt(0, 0))
         assert value == pytest.approx(float(torch.sigmoid(torch.tensor(5.0))))
 
     def test_damage_taken_reads_the_amount_alone(self):
@@ -914,7 +919,8 @@ class TestRung3ReadsTheRightOutput:
 
         outputs = self._outputs(gate_logit=-3.0, legal_logit=0.0)
         outputs[0, 0, FIELD_SLICES["damage_taken"][0]] = math.log(3.0)
-        assert ladder._readout("damage_taken", outputs, None, 0, 0) == pytest.approx(3.0)
+        value = ladder._readout("damage_taken", outputs, None, ladder.ItemAt(0, 0))
+        assert value == pytest.approx(3.0)
 
 
 # ── the combat grid ─────────────────────────────────────────────────────

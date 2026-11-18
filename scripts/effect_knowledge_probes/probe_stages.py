@@ -130,8 +130,8 @@ class _LadderRun:
         chosen = read.probe_records()
         progress(f"{read.name}: extracting rung features over {len(chosen)} records")
         extracted = ladder.extract_features(
-            self.probe_model, chosen, read.probe_items, per_layer=self.per_layer,
-            act_hidden=self.act_hidden)
+            self.probe_model, chosen, read.probe_items,
+            ladder.ExtractionOptions(per_layer=self.per_layer, act_hidden=self.act_hidden))
         inputs = ladder.ladder_inputs(extracted, self.kinds)
         self.scorecard.half(read.stratum, read.half)["probes"] = _probe_scores(inputs)
         self._ladders(read, inputs)

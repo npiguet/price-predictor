@@ -109,14 +109,14 @@ def _standardize(train: np.ndarray, test: np.ndarray) -> tuple[np.ndarray, np.nd
 
 
 @dataclass(frozen=True)
-class _Problem:
-    """One probe fit's data: features, labels, fold per item, kind and weights."""
+class ProbeProblem:
+    """One probe fit's data: features, labels, fold per item, kind and sample weights."""
 
     X: np.ndarray
     y: np.ndarray
     folds: np.ndarray
     kind: str
-    weight: np.ndarray | None
+    weight: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
@@ -132,23 +132,15 @@ class _Fold:
 
 
 @dataclass(frozen=True)
-class LinearOptions:
-    """What :func:`linear_oof` takes beside the data."""
-
-    weight: np.ndarray | None = None
-
-
-@dataclass(frozen=True)
 class MlpOptions:
-    """What :func:`mlp_oof` takes beside the data."""
+    """What :func:`mlp_oof` takes beside the problem."""
 
-    weight: np.ndarray | None = None
     hidden: int = MLP_HIDDEN
     epochs: int = MLP_EPOCHS
     device: str | None = None
 
 
-def _out_of_fold(problem: _Problem, fit) -> np.ndarray:
+def _out_of_fold(problem: ProbeProblem, fit) -> np.ndarray:
     """Each item's prediction from ``fit`` on the folds that do not hold it."""
     out = np.full(len(problem.y), np.nan)
     for fold in np.unique(problem.folds):
@@ -180,17 +172,14 @@ def _linear_fit(fold: _Fold):
     return model.predict(fold.Xte)
 
 
-def linear_oof(*problem, **options) -> np.ndarray:
+def linear_oof(problem: ProbeProblem) -> np.ndarray:
     """Out-of-fold predictions of the linear probe, features standardized per fold.
 
-    ``problem`` is ``X, y, folds, kind``.
 
     Logistic regression (L2, C = 1) for a yes/no target, ridge (α = 1) for an
     amount. A training fold holding one class predicts that class's base rate.
-    ``options`` are :class:`LinearOptions`: the sample ``weight``.
     """
-    weight = LinearOptions(**options).weight
-    return _out_of_fold(_Problem(*problem, weight), _linear_fit)
+    return _out_of_fold(problem, _linear_fit)
 
 
 def _target_scale(kind: str, ytr: np.ndarray) -> tuple[float, float]:
@@ -293,26 +282,23 @@ class _MlpFit:
         return prediction if fold.kind == "binary" else _clip_to_training(prediction, ytr)
 
 
-def mlp_oof(*problem, **options) -> np.ndarray:
+def mlp_oof(problem: ProbeProblem, options: MlpOptions = MlpOptions()) -> np.ndarray:
     """Out-of-fold predictions of the MLP probe.
 
-    ``problem`` is ``X, y, folds, kind``.
 
     Two hidden layers of ``hidden`` units with ReLU, AdamW at a fixed learning
     rate and weight decay, fixed batch and epoch counts. Tests pass a small
     ``hidden`` and the CPU; every real run uses the defaults on the GPU.
-    ``options`` are :class:`MlpOptions`: ``weight``, ``hidden``, ``epochs``, ``device``.
     """
-    config = MlpOptions(**options)
-    return _out_of_fold(_Problem(*problem, config.weight), _MlpFit(config))
+    return _out_of_fold(problem, _MlpFit(options))
 
 
-def probe(*problem, **options) -> np.ndarray:
-    """The linear or the MLP probe by ``probe_type`` (default linear); ``problem``
-    and the other ``options`` go to it (:func:`linear_oof`, :func:`mlp_oof`)."""
-    if options.pop("probe_type", "linear") == "linear":
-        return linear_oof(*problem, **options)
-    return mlp_oof(*problem, **options)
+def probe(problem: ProbeProblem, probe_type: str = "linear",
+          mlp_options: MlpOptions = MlpOptions()) -> np.ndarray:
+    """The linear or the MLP probe on ``problem``; ``mlp_options`` go to the MLP only."""
+    if probe_type == "linear":
+        return linear_oof(problem)
+    return mlp_oof(problem, mlp_options)
 
 
 # ── the share ───────────────────────────────────────────────────────────
@@ -337,21 +323,23 @@ def share(rung0: float, rung1: float, rung3: float,
 class BootstrapOptions:
     """What :func:`bootstrap_share` takes beside the columns."""
 
-    weight: np.ndarray | None = None
     resamples: int = BOOTSTRAP_RESAMPLES
     seed: int = SEED
 
 
 @dataclass(frozen=True)
-class _ShareSample:
-    """The columns a share is read from; :meth:`share_at` reads it on a resample."""
+class BootstrapColumns:
+    """The columns a share is read from, one item per row: the labels, rung 0's and
+    rung 1's out-of-fold predictions, rung 3's prediction, each item's group and
+    the sample weights. :meth:`share_at` reads the share on a resample."""
 
     kind: str
     y: np.ndarray
     oof0: np.ndarray
     oof1: np.ndarray
     pred3: np.ndarray
-    weight: np.ndarray | None
+    groups: np.ndarray
+    weight: np.ndarray | None = None
 
     def share_at(self, index: np.ndarray) -> float | None:
         w = None if self.weight is None else self.weight[index]
@@ -361,9 +349,9 @@ class _ShareSample:
                      score(self.kind, y, self.pred3[index], w))
 
 
-def _resampled_shares(sample: _ShareSample, groups, options: BootstrapOptions) -> list[float]:
+def _resampled_shares(sample: BootstrapColumns, options: BootstrapOptions) -> list[float]:
     """The share on each group resample where it is defined."""
-    groups = np.asarray(groups, dtype=object)
+    groups = np.asarray(sample.groups, dtype=object)
     unique = sorted(set(groups.tolist()))
     members = defaultdict(list)
     for index, group in enumerate(groups):
@@ -378,21 +366,16 @@ def _resampled_shares(sample: _ShareSample, groups, options: BootstrapOptions) -
     return values
 
 
-def bootstrap_share(kind, *columns, **options) -> tuple[float, float] | None:
+def bootstrap_share(columns: BootstrapColumns,
+                    options: BootstrapOptions = BootstrapOptions()) -> tuple[float, float] | None:
     """The share's 95% interval over groups resampled with replacement.
-
-    ``columns`` are ``y, oof0, oof1, pred3, groups``; ``options`` are
-    :class:`BootstrapOptions`: ``weight``, ``resamples``, ``seed``.
 
     Resampled by group rather than by item, because items of one text are not
     independent: a text seen in fifty records would otherwise count fifty times.
     A resample whose gap falls under the minimum is skipped, so the interval is
     over resamples where the share is defined.
     """
-    y, oof0, oof1, pred3, groups = columns
-    config = BootstrapOptions(**options)
-    values = _resampled_shares(_ShareSample(kind, y, oof0, oof1, pred3, config.weight),
-                               groups, config)
+    values = _resampled_shares(columns, options)
     if not values:
         return None
     tail = (1.0 - CI_LEVEL) / 2.0
@@ -417,19 +400,16 @@ class LadderInput:
 class _Fitter:
     """Both probe types on one target's folds, and their scores."""
 
-    def __init__(self, data: LadderInput, mlp_options: dict | None) -> None:
+    def __init__(self, data: LadderInput, mlp_options: MlpOptions) -> None:
         self.data = data
         self.folds = fold_assignment(data.groups)
-        self.mlp_options = mlp_options or {}
+        self.mlp_options = mlp_options
 
     def predictions(self, X: np.ndarray) -> dict[str, np.ndarray]:
         data = self.data
-        return {
-            probe_type: probe(X, data.y, self.folds, data.kind, weight=data.weight,
-                              probe_type=probe_type,
-                              **(self.mlp_options if probe_type == "mlp" else {}))
-            for probe_type in PROBE_MODELS
-        }
+        problem = ProbeProblem(X, data.y, self.folds, data.kind, data.weight)
+        return {probe_type: probe(problem, probe_type, self.mlp_options)
+                for probe_type in PROBE_MODELS}
 
     def scores(self, predictions: dict[str, np.ndarray]) -> dict[str, float]:
         data = self.data
@@ -447,8 +427,9 @@ def _share_entry(data: LadderInput, scores: tuple, oofs: tuple, bootstrap: int) 
     if value is None:
         return None
     ci = bootstrap_share(
-        data.kind, data.y, oofs[0], oofs[1], data.rung3, data.groups,
-        weight=data.weight, resamples=bootstrap,
+        BootstrapColumns(data.kind, data.y, oofs[0], oofs[1], data.rung3, data.groups,
+                         data.weight),
+        BootstrapOptions(resamples=bootstrap),
     ) if bootstrap else None
     return {"value": value, "ci": list(ci) if ci else None}
 
@@ -471,7 +452,8 @@ def _per_layer(data: LadderInput, fitter: _Fitter) -> list[dict]:
             for depth, X in enumerate(data.layers)]
 
 
-def run_ladder(data: LadderInput, *, rungs=PROBED_RUNGS, mlp_options=None,
+def run_ladder(data: LadderInput, *, rungs=PROBED_RUNGS,
+               mlp_options: MlpOptions = MlpOptions(),
                bootstrap: int = BOOTSTRAP_RESAMPLES) -> dict:
     """Every probed rung's two scores, rung 3's, and each probe type's share.
 
@@ -496,13 +478,17 @@ def run_ladder(data: LadderInput, *, rungs=PROBED_RUNGS, mlp_options=None,
 # ── rung features from one forward pass ─────────────────────────────────
 
 
-def _readout(target: str, outputs, verdict, *at: int) -> float:
-    """Rung 3: the head's own prediction for one item (:mod:`readout`).
+@dataclass(frozen=True)
+class ItemAt:
+    """Where an item sits in a batch: its ``slot`` and its ``row``."""
 
-    ``at`` is the item's ``slot`` and its ``row`` in the batch.
-    """
-    slot, row = at
-    return readout.read(target, outputs, verdict, row, slot)
+    slot: int
+    row: int
+
+
+def _readout(target: str, outputs, verdict, at: ItemAt) -> float:
+    """Rung 3: the head's own prediction for one item (:mod:`readout`)."""
+    return readout.read(target, outputs, verdict, at.row, at.slot)
 
 
 @dataclass
@@ -694,7 +680,7 @@ def _partner_e(batcher, encoder, chunk, items_by_record) -> dict:
     return {text: extra[row] for text, row in rows.items()}
 
 
-@dataclass
+@dataclass(frozen=True)
 class ExtractionOptions:
     """What :func:`extract_features` takes beside the model, records and items."""
 
@@ -798,30 +784,28 @@ class _Extractor:
         return ExtractedItem(
             target=item.target, label=item.label, group=item.group,
             features={k: v.astype(np.float32) for k, v in features.items()},
-            rung3=_readout(item.target, done.outputs, done.verdict, slot, b),
+            rung3=_readout(item.target, done.outputs, done.verdict, ItemAt(slot, b)),
             layers=[layer[b, slot] for layer in done.layers],
             record_id=item.record_id,
         )
 
 
 def extract_features(probe_model, records: list, items_by_record: dict,
-                     **options) -> list[ExtractedItem]:
+                     options: ExtractionOptions = ExtractionOptions()) -> list[ExtractedItem]:
     """Every item's rung features, from one batched forward pass over ``records``.
 
     ``items_by_record`` maps a record id to its probe items (``labels.RecordItem``).
-    ``options`` are :class:`ExtractionOptions`: ``batch_size``, ``per_layer`` and
-    ``act_hidden``, which, when given, accumulates the trunk's ``[ACT]`` output by
+    ``options.act_hidden``, when given, accumulates the trunk's ``[ACT]`` output by
     acting text — the line ladder's rung 2 — from the same pass.
     """
     import torch
 
-    config = ExtractionOptions(**options)
-    extractor = _Extractor(probe_model, items_by_record, config)
+    extractor = _Extractor(probe_model, items_by_record, options)
     extracted: list[ExtractedItem] = []
     try:
         with torch.no_grad():
-            for start in range(0, len(records), config.batch_size):
-                extracted += extractor.chunk_items(records[start : start + config.batch_size])
+            for start in range(0, len(records), options.batch_size):
+                extracted += extractor.chunk_items(records[start : start + options.batch_size])
     finally:
         extractor.capture.remove()
     return extracted

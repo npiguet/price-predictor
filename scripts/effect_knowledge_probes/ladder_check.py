@@ -49,7 +49,7 @@ def recalibrated(prediction, y, folds, kind) -> np.ndarray:
     """
     if kind == "binary":
         return prediction
-    return ladder.linear_oof(prediction.reshape(-1, 1), y, folds, kind)
+    return ladder.linear_oof(ladder.ProbeProblem(prediction.reshape(-1, 1), y, folds, kind))
 
 
 def within_record_auc(y, prediction, records) -> float:
@@ -64,40 +64,57 @@ def within_record_auc(y, prediction, records) -> float:
     return float(np.nanmean(values)) if values else float("nan")
 
 
-def check(data, records, games, kind) -> list[tuple[str, dict]]:
-    """``[(row, {column: value})]`` for one target in one stratum."""
+def _predictions(data, games, kind) -> dict[str, np.ndarray]:
+    """Rung 2 fitted with folds by card and by game, and rung 3 as is and recalibrated."""
     card_folds = ladder.fold_assignment(data.groups)
     game_folds = ladder.fold_assignment(np.asarray(games, dtype=object))
-    counts = defaultdict(int)
-    for record in records:
-        counts[record] += 1
-    alone = np.array([counts[r] == 1 for r in records])
     y = data.y
-    predictions = {
-        "rung 2 linear, folds by card (published)":
-            ladder.probe(data.features["2"], y, card_folds, kind, probe_type="linear"),
-        "rung 2 MLP, folds by card (published)":
-            ladder.probe(data.features["2"], y, card_folds, kind, probe_type="mlp"),
-        "rung 2 linear, folds by game":
-            ladder.probe(data.features["2"], y, game_folds, kind, probe_type="linear"),
-        "rung 2 MLP, folds by game":
-            ladder.probe(data.features["2"], y, game_folds, kind, probe_type="mlp"),
+
+    def rung2(folds, probe_type):
+        problem = ladder.ProbeProblem(data.features["2"], y, folds, kind)
+        return ladder.probe(problem, probe_type)
+
+    return {
+        "rung 2 linear, folds by card (published)": rung2(card_folds, "linear"),
+        "rung 2 MLP, folds by card (published)": rung2(card_folds, "mlp"),
+        "rung 2 linear, folds by game": rung2(game_folds, "linear"),
+        "rung 2 MLP, folds by game": rung2(game_folds, "mlp"),
         "rung 3, the head (published)": data.rung3,
         "rung 3 recalibrated, folds by game": recalibrated(data.rung3, y, game_folds, kind),
     }
-    rows = []
-    for name, prediction in predictions.items():
-        row = {"all": ladder.score(kind, y, prediction),
-               "records with one item": ladder.score(kind, y[alone], prediction[alone])}
-        if kind == "binary":
-            row["within records"] = within_record_auc(y, prediction, records)
+
+
+class _Scoring:
+    """One target's labels and records, and the scores of a read-out against them."""
+
+    def __init__(self, kind: str, y: np.ndarray, records: list) -> None:
+        self.kind = kind
+        self.y = y
+        self.records = records
+        counts = defaultdict(int)
+        for record in records:
+            counts[record] += 1
+        self.alone = np.array([counts[r] == 1 for r in records])
+
+    def row(self, prediction) -> dict:
+        row = {"all": ladder.score(self.kind, self.y, prediction),
+               "records with one item": ladder.score(
+                   self.kind, self.y[self.alone], prediction[self.alone])}
+        if self.kind == "binary":
+            row["within records"] = within_record_auc(self.y, prediction, self.records)
         else:
-            row["Spearman"] = spearman(y, prediction)
-        rows.append((name, row))
-    return rows
+            row["Spearman"] = spearman(self.y, prediction)
+        return row
 
 
-def main() -> None:
+def check(data, records, games, kind) -> list[tuple[str, dict]]:
+    """``[(row, {column: value})]`` for one target in one stratum."""
+    predictions = _predictions(data, games, kind)
+    scoring = _Scoring(kind, data.y, records)
+    return [(name, scoring.row(prediction)) for name, prediction in predictions.items()]
+
+
+def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("checkpoint", type=Path)
     parser.add_argument("--targets", default="damage_taken,may_block,dies")
@@ -105,13 +122,13 @@ def main() -> None:
                         default="reporting")
     parser.add_argument("--probe-set-dir", type=Path, default=common.REPORTS,
                         help="where the corpus's selection set is")
-    args = parser.parse_args()
-    context = common.probe_context(args.checkpoint)
+    return parser.parse_args()
 
-    targets = frozenset(args.targets.split(","))
-    selection = halves.load_selection(context, args.probe_set_dir)
-    kinds = {s.name: s.kind for s in labels.TARGETS}
-    settings = halves.ReadSettings(probe_types=targets, gen3_probes=False, sweeps=False)
+
+def _read_halves(context, selection, args: argparse.Namespace) -> list:
+    """Every chosen half of every stratum, read for the targets asked for."""
+    settings = halves.ReadSettings(probe_types=frozenset(args.targets.split(",")),
+                                   gen3_probes=False, sweeps=False)
     acting_text = common.acting_text_function(context.sidecars(),
                                              common.manifest_surface(context.manifest))
     chosen = halves.HALVES if args.half == "both" else (args.half,)
@@ -122,34 +139,54 @@ def main() -> None:
                                     acting_text=acting_text, keywords_of=None)
             print(f"{read.name}: {len(read.probe_items)} records", flush=True)
             reads.append(read)
-    every = [r for read in reads for r in read.probe_records()]
-    probe_model = context.model(every)
-    common.heading(args, context, f"{len(every)} selection-set records")
+    return reads
 
-    for read in reads:
-        records = read.probe_records()
-        game_of = {r.record_id: r.game_id for r in records}
-        extracted = ladder.extract_features(probe_model, records, read.probe_items)
+
+class _ReadReport:
+    """The three checks, printed for every target of one half's read."""
+
+    def __init__(self, read, kinds: dict[str, str]) -> None:
+        self.read = read
+        self.kinds = kinds
+        self.records = read.probe_records()
+        self.game_of = {r.record_id: r.game_id for r in self.records}
+
+    def run(self, probe_model) -> None:
+        extracted = ladder.extract_features(probe_model, self.records, self.read.probe_items)
         by_target = defaultdict(list)
         for item in extracted:
             by_target[item.target].append(item)
-        inputs = ladder.ladder_inputs(extracted, kinds)
+        inputs = ladder.ladder_inputs(extracted, self.kinds)
         for target in sorted(inputs):
-            data = inputs[target]
-            items = by_target[target]
-            record_ids = [i.record_id for i in items]
-            games = [game_of[r] for r in record_ids]
-            kind = kinds[target]
-            rows = check(data, record_ids, games, kind)
-            per_record = Counter(record_ids)
-            singles = sum(1 for r in record_ids if per_record[r] == 1)
-            print(f"\n{target}, {read.name}: {len(items)} items, {len(set(record_ids))} "
-                  f"records, {len(set(games))} games, {singles} items alone in their record "
-                  f"({'AUC' if kind == 'binary' else 'R²'})")
-            columns = list(rows[0][1])
-            print_table(["read-out", *columns],
-                        [[name, *(f"{row[c]:.3f}" for c in columns)] for name, row in rows],
-                        "l" + "r" * len(columns))
+            self._target(target, inputs[target], by_target[target])
+
+    def _target(self, target: str, data, items: list) -> None:
+        record_ids = [i.record_id for i in items]
+        games = [self.game_of[r] for r in record_ids]
+        kind = self.kinds[target]
+        rows = check(data, record_ids, games, kind)
+        per_record = Counter(record_ids)
+        singles = sum(1 for r in record_ids if per_record[r] == 1)
+        print(f"\n{target}, {self.read.name}: {len(items)} items, {len(set(record_ids))} "
+              f"records, {len(set(games))} games, {singles} items alone in their record "
+              f"({'AUC' if kind == 'binary' else 'R²'})")
+        columns = list(rows[0][1])
+        print_table(["read-out", *columns],
+                    [[name, *(f"{row[c]:.3f}" for c in columns)] for name, row in rows],
+                    "l" + "r" * len(columns))
+
+
+def main() -> None:
+    args = _parse_args()
+    context = common.probe_context(args.checkpoint)
+    selection = halves.load_selection(context, args.probe_set_dir)
+    kinds = {s.name: s.kind for s in labels.TARGETS}
+    reads = _read_halves(context, selection, args)
+    every = [r for read in reads for r in read.probe_records()]
+    probe_model = context.model(every)
+    common.heading(args, context, f"{len(every)} selection-set records")
+    for read in reads:
+        _ReadReport(read, kinds).run(probe_model)
 
 
 if __name__ == "__main__":
