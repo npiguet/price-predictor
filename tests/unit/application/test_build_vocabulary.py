@@ -167,6 +167,22 @@ class TestBuildVocabulary:
         assert abs(result.coverage_pct + result.unk_pct - 100.0) < 0.01
 
 
+_INSTANT_CARD = "name: Test\nmana cost: {R}\ntypes: instant\n"
+
+
+def _build_from_card(directory: Path, text: str = _INSTANT_CARD, **kwargs):
+    """Write ``text`` as the corpus's one card and build its vocabulary at threshold 1."""
+    from price_predictor.application.build_vocabulary import build_vocabulary
+
+    (directory / "card.txt").write_text(text, encoding="utf-8")
+    return build_vocabulary(directory, freq_threshold=1, **kwargs)
+
+
+def _assert_all_in_vocab(vocab: dict[str, int], tokens, what: str) -> None:
+    for token in tokens:
+        assert token in vocab, f"Missing {what}: {token!r}"
+
+
 class TestSC001SC002Validation:
     """Validate SC-001 (< 10,000 tokens) and SC-002 (≥ 95% coverage) against fixture corpus."""
 
@@ -180,127 +196,81 @@ class TestSC001SC002Validation:
         result = build_vocabulary(fixture_corpus, freq_threshold=1)
         assert result.vocab_size < 10000
 
-    def test_color_names_present_as_tokens(self):
-        import tempfile
+    def test_color_names_present_as_tokens(self, tmp_path: Path):
+        result = _build_from_card(tmp_path, "name: Test\nmana cost: {W}\ntypes: creature\n")
+        _assert_all_in_vocab(
+            result.vocab, ("white", "blue", "black", "red", "green", "colorless"), "color token",
+        )
 
-        from price_predictor.application.build_vocabulary import build_vocabulary
-
-        with tempfile.TemporaryDirectory() as td:
-            tmp_path = Path(td)
-            (tmp_path / "card.txt").write_text(
-                "name: Test\nmana cost: {W}\ntypes: creature\n",
-                encoding="utf-8",
-            )
-            result = build_vocabulary(tmp_path, freq_threshold=1)
-            for color in ("white", "blue", "black", "red", "green", "colorless"):
-                assert color in result.vocab, f"Expected color token: {color!r}"
-
-    def test_game_zones_present_as_tokens(self):
-        import tempfile
-
-        from price_predictor.application.build_vocabulary import build_vocabulary
-
-        with tempfile.TemporaryDirectory() as td:
-            tmp_path = Path(td)
-            (tmp_path / "card.txt").write_text(
-                "name: Test\nmana cost: {W}\ntypes: creature\n",
-                encoding="utf-8",
-            )
-            result = build_vocabulary(tmp_path, freq_threshold=1)
-            for zone in ("battlefield", "exile", "graveyard", "hand", "library", "stack"):
-                assert zone in result.vocab, f"Expected zone token: {zone!r}"
+    def test_game_zones_present_as_tokens(self, tmp_path: Path):
+        result = _build_from_card(tmp_path, "name: Test\nmana cost: {W}\ntypes: creature\n")
+        _assert_all_in_vocab(
+            result.vocab,
+            ("battlefield", "exile", "graveyard", "hand", "library", "stack"),
+            "zone token",
+        )
 
 
 class TestSC003DomainCoverage:
     """Validate SC-003: all MTG domain terms present in vocabulary."""
 
-    def test_all_24_multi_word_keywords_in_vocab(self):
-        import tempfile
+    def test_all_24_multi_word_keywords_in_vocab(self, tmp_path: Path):
+        from price_predictor.application.build_vocabulary import MULTI_WORD_KEYWORDS
 
-        from price_predictor.application.build_vocabulary import (
-            MULTI_WORD_KEYWORDS,
-            build_vocabulary,
+        result = _build_from_card(tmp_path)
+        _assert_all_in_vocab(result.vocab, MULTI_WORD_KEYWORDS, "multi-word keyword")
+
+    def test_basic_mana_symbols_in_vocab(self, tmp_path: Path):
+        from price_predictor.application.build_vocabulary import build_vocabulary
+
+        symbols = ("{W}", "{U}", "{B}", "{R}", "{G}", "{T}", "{X}")
+        # Include cards with each basic color
+        for sym in symbols:
+            (tmp_path / f"card_{sym[1]}.txt").write_text(
+                f"name: Card {sym}\nmana cost: {sym}\ntypes: instant\n",
+                encoding="utf-8",
+            )
+        result = build_vocabulary(tmp_path, freq_threshold=1)
+        _assert_all_in_vocab(result.vocab, symbols, "mana symbol")
+
+    def test_domain_terms_in_vocab(self, tmp_path: Path):
+        result = _build_from_card(
+            tmp_path,
+            "name: Test\nmana cost: {R}\ntypes: legendary creature\nkeyword[1]: flying\n"
+            "spell[1]: enters the battlefield.\n",
         )
-
-        with tempfile.TemporaryDirectory() as td:
-            tmp_path = Path(td)
-            (tmp_path / "card.txt").write_text(
-                "name: Test\nmana cost: {R}\ntypes: instant\n",
-                encoding="utf-8",
-            )
-            result = build_vocabulary(tmp_path, freq_threshold=1)
-            for kw in MULTI_WORD_KEYWORDS:
-                assert kw in result.vocab, f"Missing multi-word keyword: {kw!r}"
-
-    def test_basic_mana_symbols_in_vocab(self):
-        import tempfile
-
-        from price_predictor.application.build_vocabulary import build_vocabulary
-
-        with tempfile.TemporaryDirectory() as td:
-            tmp_path = Path(td)
-            # Include cards with each basic color
-            for sym in ("{W}", "{U}", "{B}", "{R}", "{G}", "{T}", "{X}"):
-                (tmp_path / f"card_{sym[1]}.txt").write_text(
-                    f"name: Card {sym}\nmana cost: {sym}\ntypes: instant\n",
-                    encoding="utf-8",
-                )
-            result = build_vocabulary(tmp_path, freq_threshold=1)
-            for sym in ("{W}", "{U}", "{B}", "{R}", "{G}", "{T}", "{X}"):
-                assert sym in result.vocab, f"Missing mana symbol: {sym!r}"
-
-    def test_domain_terms_in_vocab(self):
-        import tempfile
-
-        from price_predictor.application.build_vocabulary import build_vocabulary
-
-        with tempfile.TemporaryDirectory() as td:
-            tmp_path = Path(td)
-            (tmp_path / "card.txt").write_text(
-                "name: Test\nmana cost: {R}\ntypes: legendary creature\nkeyword[1]: flying\n"
-                "spell[1]: enters the battlefield.\n",
-                encoding="utf-8",
-            )
-            result = build_vocabulary(tmp_path, freq_threshold=1)
-            for term in ("creature", "flying", "battlefield", "legendary"):
-                assert term in result.vocab, f"Missing domain term: {term!r}"
+        _assert_all_in_vocab(
+            result.vocab, ("creature", "flying", "battlefield", "legendary"), "domain term",
+        )
 
 
 class TestPrintingDataTerms:
     """Printing-data field names/values are always seeded regardless of corpus."""
 
     def test_rarity_values_always_present(self, tmp_path: Path):
-        from price_predictor.application.build_vocabulary import build_vocabulary
-
-        (tmp_path / "card.txt").write_text(
-            "name: Test\nmana cost: {R}\ntypes: instant\n", encoding="utf-8"
+        result = _build_from_card(tmp_path)
+        _assert_all_in_vocab(
+            result.vocab, ("common", "uncommon", "rare", "mythic"), "rarity token",
         )
-        result = build_vocabulary(tmp_path, freq_threshold=1)
-        for rarity in ("common", "uncommon", "rare", "mythic"):
-            assert rarity in result.vocab, f"Missing rarity token: {rarity!r}"
 
     def test_format_names_always_present(self, tmp_path: Path):
-        from price_predictor.application.build_vocabulary import build_vocabulary
-
-        (tmp_path / "card.txt").write_text(
-            "name: Test\nmana cost: {R}\ntypes: instant\n", encoding="utf-8"
+        result = _build_from_card(tmp_path)
+        _assert_all_in_vocab(
+            result.vocab,
+            (
+                "standard", "pioneer", "modern", "brawl", "legacy",
+                "vintage", "pauper", "commander", "penny", "oathbreaker",
+            ),
+            "format token",
         )
-        result = build_vocabulary(tmp_path, freq_threshold=1)
-        for fmt in (
-            "standard", "pioneer", "modern", "brawl", "legacy",
-            "vintage", "pauper", "commander", "penny", "oathbreaker",
-        ):
-            assert fmt in result.vocab, f"Missing format token: {fmt!r}"
 
     def test_printing_data_field_names_always_present(self, tmp_path: Path):
-        from price_predictor.application.build_vocabulary import build_vocabulary
-
-        (tmp_path / "card.txt").write_text(
-            "name: Test\nmana cost: {R}\ntypes: instant\n", encoding="utf-8"
+        result = _build_from_card(tmp_path)
+        _assert_all_in_vocab(
+            result.vocab,
+            ("reserved", "rarity", "printings", "legalities", "true", "false"),
+            "printing-data field token",
         )
-        result = build_vocabulary(tmp_path, freq_threshold=1)
-        for field in ("reserved", "rarity", "printings", "legalities", "true", "false"):
-            assert field in result.vocab, f"Missing printing-data field token: {field!r}"
 
 
 class TestSetCodeExtraction:
