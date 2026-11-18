@@ -134,5 +134,5 @@ run is what catches them:
 - Declaring done when the target scores 10.0 but a new module doesn't.
 - Comparing gzip files byte for byte (header timestamps differ every run).
 - In a worktree, three `run_manifest` tests fail (`test_effect_embedding_probes`,
-  `test_effect_knowledge_probes`, `test_effect_sweep_arm`): the shared `.venv` resolves the repo
+  `test_knowledge_probe_compare`, `test_effect_sweep_arm`): the shared `.venv` resolves the repo
   root to the main checkout. Not caused by a refactor; the user has chosen to leave them.
