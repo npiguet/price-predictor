@@ -157,8 +157,8 @@ A card's `lines` members:
 |---|---|---|
 | `keys` | list of 0 or 1 provenance key | every line; `[]` when the line resolves to no printed line |
 | `kind` | one of the six kinds | every line |
-| `granted` | bool: the line is not printed on this card (a static's, an attachment's, an effect's, an emblem's, a keyword counter's or a splice's, or a basic land type's mana ability a type change gave a land not printed with that type, such as a Mountain's under Blood Moon, keyed past every line the land's sidecar declares). A copy prints what it copies and the lines its copy effect adds; a card prints a line it grants itself | every line |
-| `grant` | why the line is granted: `static` (a permanent's static ability grants it: an anthem, an attachment, an emblem, a type change such as Blood Moon's, the suspected designation), `effect` (a resolved effect grants it: a pump, an animation, a copy effect another card made, an emblem's own line; it lasts as long as that effect's duration, which the line does not carry), `counter` (a keyword counter on the card, such as a trample counter) or `splice` (a spliced card's spell, for one resolution) | after `granted`, on a granted line only |
+| `granted` | bool: the line is not printed on this card (a static's, an attachment's, an effect's, an emblem's, a keyword counter's or a splice's, or a basic land type's mana ability a type change gave a land not printed with that type, such as a Mountain's under Blood Moon, keyed past every line the land's sidecar declares). A copy prints what it copies and the lines its copy effect adds; a card prints a line its own static grants it | every line |
+| `grant` | why the line is granted: `static` (a permanent's static ability grants it: an anthem, an attachment, an emblem, a type change such as Blood Moon's, the suspected designation), `effect` (a resolved effect grants it: a pump, an animation, the card's own resolved effect too (a manland's animated trigger or activated ability), a copy effect another card made, an emblem's own line; it lasts as long as that effect's duration, which the line does not carry), `counter` (a keyword counter on the card, such as a trample counter) or `splice` (a spliced card's spell, for one resolution) | after `granted`, on a granted line only |
 | `active` | bool | statics of the face up (`checkConditions()`); `false` on every line of a face not up |
 | `cast_with` | int ≥ 1: times the spell this card was cast as paid the line's cost (1 for an alternative cost or kicker, the count for multikicker) | `keyword` lines of a card on the stack or a permanent cast so |
 | `chosen` | list of `Choices$` positions the ability on the stack chose, in chain order | the line of a modal ability on the stack |
@@ -185,8 +185,10 @@ trait a card granted itself (a Class level's, a "has ... as long as" trigger, a 
 animated trigger or activated ability, or a stack copy of one) keys to the line that granted it,
 a Class level's to its
 `Class:N` keyword's bare key, and past every declared line when none is found. Such a line is
-printed, not `granted`, and is listed beside its granting line under the same key; a keyword a
-card's own static grants it (Iymrith's ward) is printed too. A line another permanent's static
+listed beside its granting line under the same key. One a static of the card's grants (a Class
+level's, a "has ... as long as" trigger) is printed, not `granted`, and so is a keyword a card's own
+static grants it (Iymrith's ward); one the card's own resolved effect grants (a manland's animated
+trigger or activated ability, until end of turn) is `granted`, `grant: effect`. A line another permanent's static
 grants is `granted` even when it keys to the same line of the same script (a second Fungus
 Sliver's trigger). The
 triggers, statics and abilities a keyword instance builds are its line, not lines of their own; a

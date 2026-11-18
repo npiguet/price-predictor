@@ -19,18 +19,20 @@ import java.util.Set;
  * ({@link ScriptLocator#printedScriptOf}: a copy's is what it copies) and of
  * its own script, which for a copy holds the lines its copy effect adds, a
  * copiable exception (707.9b). A mutated permanent prints every merged
- * card's lines. A card also prints a line it grants itself: a
- * Class level's, a "has ... as long as" trigger, a manland's animated
- * trigger or activated ability, a keyword its own static gives it. Such a
- * line keys to the line that granted it, in the card's own script.
+ * card's lines. A card also prints a line its own static grants it: a
+ * Class level's, a "has ... as long as" trigger, a keyword its own static
+ * gives it. Such a line keys to the line that granted it, in the card's own
+ * script.
  *
  * <p>Every other line is granted, by one of:
  * <ul>
  *   <li>{@link #STATIC}: a permanent's static ability (an anthem, an
  *       attachment, an emblem, a type change such as Blood Moon's, the
  *       suspected designation's);</li>
- *   <li>{@link #EFFECT}: a resolved effect (a pump, an animation, a copy
- *       effect another card made), which lasts as long as its duration;</li>
+ *   <li>{@link #EFFECT}: a resolved effect (a pump, an animation, the card's
+ *       own included, such as a manland's animated trigger or activated
+ *       ability, which keys to its animation line; a copy effect another
+ *       card made), which lasts as long as its duration;</li>
  *   <li>{@link #COUNTER}: a keyword counter on the card (a trample counter);</li>
  *   <li>{@link #SPLICE}: a spliced card's spell, for one resolution.</li>
  * </ul>
@@ -101,12 +103,13 @@ final class LineGrant {
     }
 
     /**
-     * A layer-6 grant: a resolved effect's unless the line keys into what
-     * the card prints (its own animation), else its static's.
+     * A layer-6 grant: a resolved effect's, even where the line keys into
+     * what the card prints (a manland's own animation lasts until end of
+     * turn), else its static's.
      */
     private String ofLayerChange(Long staticId, ProvenanceKey key) {
         if (NO_STATIC.equals(staticId)) {
-            return printed(key) ? null : EFFECT;
+            return EFFECT;
         }
         StaticAbility own = ownStatic(staticId);
         return own == null ? STATIC : ofStatic(own, key);

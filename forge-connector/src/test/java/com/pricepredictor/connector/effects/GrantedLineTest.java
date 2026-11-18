@@ -20,8 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A line printed on its card is not {@code granted}, and a granted line says
  * why in {@code grant} (finding 1.7): a copy prints what it copies, a card
- * prints the lines it grants itself, and a keyword counter, a static and a
- * resolved effect each grant theirs.
+ * prints the lines its own statics grant it, and a keyword counter, a static
+ * and a resolved effect (the card's own animation too) each grant theirs.
  */
 @ExtendWith(ForgeExtension.class)
 class GrantedLineTest {
@@ -87,17 +87,6 @@ class GrantedLineTest {
 
         assertAllPrinted(linesOf(board, diviner));
         assertPrinted(triggerOf(board, diviner));
-    }
-
-    /** Raging Ravine's own animation gives it an attack trigger: printed on the Ravine. */
-    @Test
-    void aTriggerACardsOwnAnimationGrantsIsPrinted() {
-        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
-        Card ravine = board.battlefield("Raging Ravine", board.you);
-        board.resolve(board.ability(ravine, ApiType.Animate), board.you);
-        board.game.getAction().checkStaticAbilities();
-
-        assertPrinted(triggerOf(board, ravine));
     }
 
     /** Iymrith's own static gives it ward: the ward line is printed on Iymrith. */
@@ -192,6 +181,38 @@ class GrantedLineTest {
         assertGranted("effect", only(linesOf(board, bears), line -> "activated".equals(line.get("kind"))));
     }
 
+    /**
+     * Raging Ravine's own animation gives it an attack trigger until end of
+     * turn: a resolved effect's grant, {@code grant: effect}, though the line
+     * keys to the Ravine's own animation line.
+     */
+    @Test
+    void aTriggerACardsOwnAnimationGrantsSaysEffect() {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card ravine = board.battlefield("Raging Ravine", board.you);
+        animate(board, ravine);
+
+        assertGranted("effect", triggerOf(board, ravine));
+    }
+
+    /**
+     * Lavaclaw Reaches' own animation gives it a pump ability until end of
+     * turn: {@code grant: effect}; its printed abilities stay printed.
+     */
+    @Test
+    void anAbilityACardsOwnAnimationGrantsSaysEffect() {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card reaches = board.battlefield("Lavaclaw Reaches", board.you);
+        animate(board, reaches);
+
+        List<Map<String, Object>> abilities = linesOf(board, reaches).stream()
+                .filter(line -> "activated".equals(line.get("kind"))).toList();
+
+        assertGranted("effect", only(abilities, line -> Boolean.TRUE.equals(line.get("granted"))));
+        assertEquals(2, abilities.stream().filter(line -> Boolean.FALSE.equals(line.get("granted"))).count(),
+                abilities.toString());
+    }
+
     // ── the board ───────────────────────────────────────────────────────
 
     /** Cast a creature that enters as a copy and resolve it; the copy that entered. */
@@ -203,6 +224,11 @@ class GrantedLineTest {
         return board.game.getCardsIn(ZoneType.Battlefield).stream()
                 .filter(card -> card.getController() == board.you && card.getId() == hand.getId())
                 .findFirst().orElseThrow();
+    }
+
+    private static void animate(CharacterizationBoard board, Card manland) {
+        board.resolve(board.ability(manland, ApiType.Animate), board.you);
+        board.game.getAction().checkStaticAbilities();
     }
 
     private static void resolveAt(CharacterizationBoard board, String spell, Card target) {
