@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.regex.Pattern;
 
 /**
  * The script behind one runtime trait: its API type, its parameter keys, its
@@ -34,9 +33,12 @@ import java.util.regex.Pattern;
  * the root segment, then every ability a chain parameter of an emitted segment
  * names — a trigger's {@code Execute$}, each {@code SubAbility$}, a
  * {@code RepeatSubAbility$}, a replacement's {@code ReplaceWith$}, the
- * {@code Choices$} of a non-modal chooser, each trait a granting parameter
- * names ({@link GrantedTraits}: a static's {@code AddTrigger$}, an Animate's
- * {@code Triggers$}) — each segment its own parameters in
+ * {@code Choices$} of a non-modal chooser, each result of a die roll's
+ * {@code ResultSubAbilities$} (the label after each range), each trait a
+ * naming parameter names ({@link GrantedTraits}: a static's {@code
+ * AddTrigger$}, an Animate's {@code Triggers$}, an exert cost's {@code
+ * Trigger$}, a mana ability's {@code TriggersWhenSpent$}, an extra turn's
+ * delayed trigger) — each segment its own parameters in
  * key order, joined by {@value #SEGMENT_SEPARATOR} and opened by the label its
  * parent referenced it by. An ability Forge chained with no parameter naming
  * it (a trigger's or replacement's effect set directly, a sub-ability a
@@ -62,13 +64,15 @@ public record TraitScript(
     /**
      * Every parameter a chain is followed through: one label naming one
      * ability ({@code SubAbility$}, {@code Execute$}, {@code ReplaceWith$}
-     * and Forge's other additional abilities), and a chooser's {@code
-     * Choices$}.
+     * and Forge's other additional abilities), a chooser's {@code
+     * Choices$}, a die roll's results, and every parameter naming a trait
+     * Forge builds from its SVar ({@link GrantedTraits}).
      */
     static Set<String> chainKeys() {
         Set<String> keys = new HashSet<>(ChainRenderer.SINGLE_LINK_KEYS);
         keys.addAll(ChainRenderer.ADDITIONAL_LINK_KEYS);
         keys.add(ChainRenderer.CHOICES);
+        keys.add(ChainRenderer.RESULTS);
         keys.addAll(GrantedTraits.parameters());
         return keys;
     }
@@ -306,6 +310,12 @@ public record TraitScript(
                 ApiType.Charm, ApiType.GenericChoice, ApiType.AssignGroup,
                 ApiType.VillainousChoice, ApiType.Vote);
 
+        /**
+         * A die roll's results: {@code range:label} items joined by commas,
+         * each label an ability Forge holds under its range.
+         */
+        private static final String RESULTS = "ResultSubAbilities";
+
         private final CardTraitBase lineTrait;
         private final ProvenanceKey key;
         private final MissingSVarReport report;
@@ -372,13 +382,29 @@ public record TraitScript(
                 linkTo(name, value.trim(), linked(name, value, trait));
             } else if (isAdditionalLink(name, trait)) {
                 linkTo(name, value.trim(), ((SpellAbility) trait).getAdditionalAbility(name));
-            } else if (CHOICES.equals(name) && isChooser(trait)) {
-                renderChoices(value, (SpellAbility) trait);
-            } else if (GrantedTraits.separator(name, trait) != null) {
-                renderGrants(name, value, trait);
-            } else {
+            } else if (!renderedAsLabels(name, value, trait)) {
                 out.append(value);
             }
+        }
+
+        /**
+         * Render {@code value} as the labels {@code name} lists on {@code
+         * trait} (a chooser's choices, a die roll's results, the SVars a
+         * naming parameter holds) and say whether it lists any.
+         */
+        private boolean renderedAsLabels(String name, String value, CardTraitBase trait) {
+            if (CHOICES.equals(name) && isChooser(trait)) {
+                renderChoices(value, (SpellAbility) trait);
+                return true;
+            }
+            if (RESULTS.equals(name) && isRoller(trait)) {
+                renderResults(value, (SpellAbility) trait);
+                return true;
+            }
+            GrantedTraits.Grant grant = GrantedTraits.grantOf(name, trait);
+            if (grant == null) return false;
+            renderGrants(new Named(name, grant), value, trait);
+            return true;
         }
 
         private void linkTo(String parameter, String reference, CardTraitBase linked) {
@@ -403,19 +429,23 @@ public record TraitScript(
             return sa.getSubAbility();
         }
 
+        /** A naming parameter and the grant it makes on the trait it is on. */
+        private record Named(String parameter, GrantedTraits.Grant grant) {
+        }
+
         /**
-         * The SVars a granting parameter lists, each renamed, written with
+         * The SVars a naming parameter lists, each renamed, written with
          * the parameter's own separator, and followed as the trait it holds.
          */
-        private void renderGrants(String parameter, String value, CardTraitBase granter) {
-            String separator = GrantedTraits.separator(parameter, granter);
-            String[] names = value.split(Pattern.quote(separator), -1);
+        private void renderGrants(Named named, String value, CardTraitBase granter) {
+            GrantedTraits.Listing listing = named.grant().listing();
+            String[] names = listing.names(value);
             for (int i = 0; i < names.length; i++) {
-                if (i > 0) out.append(separator);
+                if (i > 0) out.append(listing.separator());
                 String name = names[i].trim();
                 out.append(number(name));
                 if (!reached.contains(name)) {
-                    follow(parameter, name, GrantedTraits.build(parameter, name, granter));
+                    follow(named.parameter(), name, named.grant().build(name, granter));
                 }
             }
         }
@@ -440,6 +470,29 @@ public record TraitScript(
                 if (!charm) {
                     follow(CHOICES, label, i < choices.size() ? choices.get(i) : null);
                 }
+            }
+        }
+
+        private static boolean isRoller(CardTraitBase trait) {
+            return trait instanceof SpellAbility sa && sa.getApi() == ApiType.RollDice;
+        }
+
+        /**
+         * A die roll's results, each label renamed after its range and its
+         * ability followed, split as {@code AbilityFactory} splits them.
+         */
+        private void renderResults(String value, SpellAbility roller) {
+            String[] results = value.split(",");
+            for (int i = 0; i < results.length; i++) {
+                if (i > 0) out.append(',');
+                String[] rangeAndLabel = results[i].split(":");
+                if (rangeAndLabel.length != 2) {
+                    out.append(results[i]);
+                    continue;
+                }
+                String label = rangeAndLabel[1].trim();
+                out.append(rangeAndLabel[0]).append(':').append(number(label));
+                follow(RESULTS, label, roller.getAdditionalAbility(rangeAndLabel[0]));
             }
         }
 
