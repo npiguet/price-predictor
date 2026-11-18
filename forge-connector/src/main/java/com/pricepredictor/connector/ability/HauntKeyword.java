@@ -117,7 +117,7 @@ public final class HauntKeyword {
             String normalized = AbilityDescription.normalize(tDesc);
             if (normalized == null) return;
             Ability line = emitted.computeIfAbsent(normalized,
-                    text -> append(new TextAbility(AbilityType.forTrigger(t), text)));
+                    text -> append(new TextAbility(AbilityType.forTrigger(t, text), text)));
             rendering.printed(t, line);
             if (tDesc.startsWith("Haunt")) hauntLine = line;
         }
@@ -141,7 +141,7 @@ public final class HauntKeyword {
             String charmDesc = expanded.description();
             if (charmDesc == null) return;
             Ability charm = emitted.computeIfAbsent(charmDesc, text -> append(
-                    new TextAbility(AbilityType.forTrigger(t), text, 0, expanded.options())));
+                    new TextAbility(AbilityType.forTrigger(t, text), text, 0, expanded.options())));
             rendering.printed(t, charm);
         }
 

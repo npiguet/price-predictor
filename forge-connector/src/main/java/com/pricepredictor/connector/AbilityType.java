@@ -49,13 +49,26 @@ public enum AbilityType {
         return this == ALTERNATE_COST || this == ADDITIONAL_COST || this == COST_REDUCTION;
     }
 
+    private static final String[] TRIGGER_WORDS = {"when ", "whenever ", "at "};
+
     /**
-     * The line kind a trigger renders as: a static trigger is a replacement in
-     * the printed text, since it changes how an event happens rather than
-     * responding to it.
+     * The line kind a trigger renders as, given its printed prose: a static
+     * trigger is a replacement in the printed text, since it changes how an
+     * event happens ("as CARDNAME enters") rather than responding to it. One
+     * whose prose opens with a trigger word is a triggered ability all the same
+     * (a triggered mana ability, rule 605.1b: "whenever you tap a land for
+     * mana, ...").
      */
-    public static AbilityType forTrigger(Trigger trigger) {
-        return trigger.isStatic() ? REPLACEMENT : TRIGGERED;
+    public static AbilityType forTrigger(Trigger trigger, String prose) {
+        return trigger.isStatic() && !opensWithTriggerWord(prose) ? REPLACEMENT : TRIGGERED;
+    }
+
+    private static boolean opensWithTriggerWord(String prose) {
+        String lower = prose.toLowerCase(Locale.ROOT);
+        for (String word : TRIGGER_WORDS) {
+            if (lower.startsWith(word)) return true;
+        }
+        return false;
     }
 
     /** Apply type-specific formatting to a description. Default is identity. */

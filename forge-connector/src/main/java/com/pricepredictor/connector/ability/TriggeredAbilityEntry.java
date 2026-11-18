@@ -37,7 +37,7 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
         String rawDesc = trigger.getParam("TriggerDescription");
         String normalized = AbilityDescription.normalize(rawDesc);
         if (normalized == null) return null;
-        AbilityType type = AbilityType.forTrigger(trigger);
+        AbilityType type = AbilityType.forTrigger(trigger, normalized);
         if (trigger.getKeyword() != null) {
             // For Tribute, TriggerDescription is the full oracle text (built directly from
             // TrigNotTribute's SpellDescription), so the execute chain would duplicate it.
