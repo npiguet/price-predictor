@@ -65,6 +65,7 @@ public record CardFace(
 
     private static void addHeader(
             List<RenderedLine> lines, int face, String label, String value) {
-        RenderedLine.appendLine(lines, label + ": ", value, null, face);
+        RenderedLine.appendLine(lines, label + ": ", value,
+                new RenderedLine.Origin(null, face));
     }
 }

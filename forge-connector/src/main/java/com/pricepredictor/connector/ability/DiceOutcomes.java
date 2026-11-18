@@ -54,13 +54,16 @@ public final class DiceOutcomes {
         for (SpellAbility cur = sa; cur != null; cur = cur.getSubAbility()) {
             String results = cur.getParam("ResultSubAbilities");
             if (results != null && !results.isEmpty()) return cur;
-            SpellAbility repeatSub = cur.getAdditionalAbility("RepeatSubAbility");
-            if (repeatSub != null) {
-                SpellAbility nested = findRoll(repeatSub);
-                if (nested != null) return nested;
-            }
+            SpellAbility nested = findRepeatedRoll(cur);
+            if (nested != null) return nested;
         }
         return null;
+    }
+
+    /** The roll under {@code cur}'s {@code RepeatSubAbility$}, or null. */
+    private static SpellAbility findRepeatedRoll(SpellAbility cur) {
+        SpellAbility repeatSub = cur.getAdditionalAbility("RepeatSubAbility");
+        return repeatSub == null ? null : findRoll(repeatSub);
     }
 
     /**

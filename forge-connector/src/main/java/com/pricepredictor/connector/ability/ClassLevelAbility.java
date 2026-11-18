@@ -10,12 +10,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Class level ability. Stores cost + description as the full text, exposes
- * innerDescription for class dedup matching, and ordinal = level number.
+ * Class level ability. Stores cost + description as the full text, and
+ * ordinal = level number.
  */
 public record ClassLevelAbility(
         String descriptionText,
-        String innerDescription,
         int ordinal
 ) implements Ability {
 
@@ -27,6 +26,23 @@ public record ClassLevelAbility(
     public static ClassLevelAbility of(KeywordInterface ki) {
         int level = ClassLevel.of(ki).number();
 
+        String cost = levelCost(ki);
+        if (cost == null) {
+            return null;
+        }
+        String rawDesc = withoutUndescribedTraits(levelDescription(ki));
+        if (rawDesc == null) {
+            return null;
+        }
+
+        String normalized = AbilityDescription.normalize(rawDesc);
+        if (normalized == null) return null;
+        String casedCost = AbilityDescription.applyCasing(cost);
+        return new ClassLevelAbility(casedCost + ": " + normalized, level);
+    }
+
+    /** The level's cost without its trailing colon, or null when it has none. */
+    private static String levelCost(KeywordInterface ki) {
         var it = ki.getAbilities().iterator();
         String cost = it.hasNext() ? it.next().getCostDescription() : null;
         if (cost == null || cost.isEmpty()) {
@@ -36,7 +52,11 @@ public record ClassLevelAbility(
         if (cost.endsWith(":")) {
             cost = cost.substring(0, cost.length() - 1).trim();
         }
+        return cost;
+    }
 
+    /** The first description among the level's triggers, statics and replacements, or null. */
+    private static String levelDescription(KeywordInterface ki) {
         String rawDesc = findFirstDescription(ki.getTriggers(), "TriggerDescription");
         if (rawDesc == null) {
             rawDesc = findFirstDescription(ki.getStaticAbilities(), "Description");
@@ -44,15 +64,7 @@ public record ClassLevelAbility(
         if (rawDesc == null) {
             rawDesc = findFirstDescription(ki.getReplacements(), "Description");
         }
-        rawDesc = withoutUndescribedTraits(rawDesc);
-        if (rawDesc == null) {
-            return null;
-        }
-
-        String normalized = AbilityDescription.normalize(rawDesc);
-        if (normalized == null) return null;
-        String casedCost = AbilityDescription.applyCasing(cost);
-        return new ClassLevelAbility(casedCost + ": " + normalized, normalized, level);
+        return rawDesc;
     }
 
     /**

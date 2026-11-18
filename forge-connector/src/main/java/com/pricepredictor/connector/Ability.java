@@ -51,7 +51,8 @@ public interface Ability {
             num = null;
         }
         RenderedLine.appendLine(
-                lines, linePrefix(num), String.valueOf(descriptionText()), this, face);
+                lines, linePrefix(num), String.valueOf(descriptionText()),
+                new RenderedLine.Origin(this, face));
         for (Ability sub : subAbilities()) {
             sub.appendBlock(counter, face, lines);
         }

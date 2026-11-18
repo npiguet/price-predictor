@@ -22,20 +22,13 @@ public record ActivatedAbilityEntry(AbilityType type, String descriptionText, Li
 
     public static ActivatedAbilityEntry of(SpellAbility sa) {
         AbilityType type = sa.isPwAbility() ? AbilityType.PLANESWALKER : AbilityType.ACTIVATED;
-        String spellDesc = sa.getParam("SpellDescription");
-        boolean described = spellDesc != null && !spellDesc.isEmpty();
+        boolean described = hasSpellDescription(sa);
 
         // Concatenate sub-ability chain descriptions into the root line so that oracle
         // lines (one paragraph = one activated ability) are not over-split.
         List<Ability> sub = SpellAbilityUtils.chainHead(sa.getSubAbility());
-        String rootDesc = sa.getDescription();
-        if (!described) {
-            // Some activated abilities have no SpellDescription on the root SA but carry their
-            // description on a SubAbility$ SVar (e.g. Arachnus Spinner); with neither, there is
-            // nothing to print. The root contributes only its cost.
-            if (sub.isEmpty()) return null;
-            if (rootDesc.isEmpty()) rootDesc = sa.getCostDescription();
-        }
+        if (!described && sub.isEmpty()) return null;
+        String rootDesc = rootDescription(sa, described);
         // For dice-roll activated abilities, getDescription() appends outcome lines after a
         // newline. Strip them here; they are re-emitted as OPTION sub-abilities below.
         String normalized = AbilityDescription.normalize(AbilityDescription.firstLine(rootDesc));
@@ -46,5 +39,20 @@ public record ActivatedAbilityEntry(AbilityType type, String descriptionText, Li
         String fullDesc = RepeatedSentences.appendMissing(normalized == null ? "" : normalized, sub);
         return new ActivatedAbilityEntry(type, type.formatDescription(fullDesc),
                 DiceOutcomes.of(sa, DiceOutcomes::optionLine));
+    }
+
+    private static boolean hasSpellDescription(SpellAbility sa) {
+        String spellDesc = sa.getParam("SpellDescription");
+        return spellDesc != null && !spellDesc.isEmpty();
+    }
+
+    /**
+     * Some activated abilities have no SpellDescription on the root SA but carry their
+     * description on a SubAbility$ SVar (e.g. Arachnus Spinner), with neither there is
+     * nothing to print; the root then contributes only its cost.
+     */
+    private static String rootDescription(SpellAbility sa, boolean described) {
+        String rootDesc = sa.getDescription();
+        return !described && rootDesc.isEmpty() ? sa.getCostDescription() : rootDesc;
     }
 }

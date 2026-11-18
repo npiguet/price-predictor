@@ -6,6 +6,7 @@ import forge.util.FileSection;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * Utility methods for walking SpellAbility chains and reading their SVars.
@@ -48,14 +49,14 @@ final class SpellAbilityUtils {
      */
     static String literalStackDescription(SpellAbility sa) {
         String stack = sa.getParam("StackDescription");
-        if (stack == null || stack.isEmpty()
-                || stack.equals("SpellDescription")
-                || stack.equals("None")
-                || isTemplate(stack)) {
+        if (stack == null || NON_TEXT_STACK.contains(stack)) {
             return null;
         }
-        return stack;
+        return isTemplate(stack) ? null : stack;
     }
+
+    /** Stack texts that are no oracle text: empty, the keyword reference and the no-display sentinel. */
+    private static final Set<String> NON_TEXT_STACK = Set.of("", "SpellDescription", "None");
 
     /** Stack text Forge fills in only on the stack: REP, {p:}, {c:} and {targeted}, in any case. */
     private static boolean isTemplate(String stack) {

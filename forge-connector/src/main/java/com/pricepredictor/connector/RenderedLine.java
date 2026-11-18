@@ -51,10 +51,17 @@ public record RenderedLine(String prefix, String prose, Ability owner, int face)
      * text is one space.
      */
     public static void appendLine(
-            List<RenderedLine> lines, String prefix, String text, Ability owner, int face) {
+            List<RenderedLine> lines, String prefix, String text, Origin origin) {
         lines.add(new RenderedLine(
-                prefix, BLANK_RUN.matcher(foldLineBreaks(text)).replaceAll(" "), owner, face));
+                prefix, BLANK_RUN.matcher(foldLineBreaks(text)).replaceAll(" "),
+                origin.owner(), origin.face()));
     }
+
+    /**
+     * What a line belongs to: the ability that rendered it (null for a header
+     * line) and the ordinal of its face.
+     */
+    public record Origin(Ability owner, int face) {}
 
     /** {@code text} with each line break, Forge's {@code ,,,} marker included, read as a space. */
     public static String foldLineBreaks(String text) {
