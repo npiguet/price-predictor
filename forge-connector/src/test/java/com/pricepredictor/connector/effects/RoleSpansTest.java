@@ -128,16 +128,16 @@ class RoleSpansTest {
     }
 
     @Test
-    void aZeroLoyaltyCostWithoutBracketsIsACostSpan() {
-        String prose = "0: draw three cards, then put two cards from your hand on top of your library in any order.";
-        assertEquals("0:", roleText(prose, AbilityType.PLANESWALKER, SpanRole.COST));
+    void aZeroLoyaltyCostIsACostSpan() {
+        String prose = "[0]: draw three cards, then put two cards from your hand on top of your library in any order.";
+        assertEquals("[0]:", roleText(prose, AbilityType.PLANESWALKER, SpanRole.COST));
     }
 
     @Test
     void aLevelCostIsACostSpanAndItsTriggerKeepsItsCondition() {
         String prose = "{B/G}: whenever a land you control enters, creature cards in your graveyard perpetually get +1/+1.";
         assertEquals("{B/G}:", roleText(prose, AbilityType.LEVEL, SpanRole.COST));
-        assertEquals("whenever a land you control enters,",
+        assertEquals(" whenever a land you control enters,",
                 roleText(prose, AbilityType.LEVEL, SpanRole.TRIGGER_CONDITION));
     }
 
@@ -147,6 +147,46 @@ class RoleSpansTest {
         assertEquals(null, roleText(prose, AbilityType.LEVEL, SpanRole.COST));
         assertEquals("whenever a land you control enters,",
                 roleText(prose, AbilityType.LEVEL, SpanRole.TRIGGER_CONDITION));
+    }
+
+    @Test
+    void anAbilityWordWithADigitIsLeftOutOfTheCondition() {
+        String prose = "descend 4 — when this creature enters, if there are four or more permanent cards in your graveyard, return target permanent card from your graveyard to your hand.";
+        assertEquals("when this creature enters,",
+                roleText(prose, AbilityType.TRIGGERED, SpanRole.TRIGGER_CONDITION));
+    }
+
+    @Test
+    void anAbilityWordWithPunctuationIsLeftOutOfTheCondition() {
+        String prose = "exterminate! — when this creature enters, destroy target creature.";
+        assertEquals("when this creature enters,",
+                roleText(prose, AbilityType.TRIGGERED, SpanRole.TRIGGER_CONDITION));
+    }
+
+    @Test
+    void aLoyaltyAbilityCreatingADelayedTriggerHasNoTriggerCondition() {
+        String prose = "[-2]: whenever one or more nontoken creatures attack this turn, create a 1/1 token.";
+        List<RoleSpans.Span> spans = of(prose, AbilityType.PLANESWALKER);
+        assertEquals(null, roleIn(spans, SpanRole.TRIGGER_CONDITION));
+        assertEquals("[-2]:", textOf(prose, roleIn(spans, SpanRole.COST)));
+        assertEquals(" whenever one or more nontoken creatures attack this turn, create a 1/1 token.",
+                textOf(prose, roleIn(spans, SpanRole.EFFECT)));
+    }
+
+    @Test
+    void aChapterCreatingADelayedTriggerIsAllEffect() {
+        String prose = "III — whenever you cast a spell this turn, draw a card.";
+        List<RoleSpans.Span> spans = of(prose, AbilityType.CHAPTER);
+        assertEquals(null, roleIn(spans, SpanRole.TRIGGER_CONDITION));
+        assertEquals(prose, textOf(prose, roleIn(spans, SpanRole.EFFECT)));
+    }
+
+    @Test
+    void aLevelTriggerStartsRightAfterItsCost() {
+        String prose = "{B/G}: whenever a land you control enters, draw a card.";
+        List<RoleSpans.Span> spans = of(prose, AbilityType.LEVEL);
+        assertEquals(" whenever a land you control enters,",
+                textOf(prose, roleIn(spans, SpanRole.TRIGGER_CONDITION)));
     }
 
     @Test

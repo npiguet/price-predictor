@@ -53,7 +53,20 @@ public final class RoleSpans {
         List<Span> spans = new ArrayList<>();
         if (text == null || text.isEmpty()) return spans;
         String lower = text.toLowerCase(Locale.ROOT);
-        spans.addAll(clauseSpans(text, lower, activated));
+        spans.addAll(clauseSpans(text, lower, activated, STRICT_ABILITY_WORD));
+        spans.addAll(targetSpans(lower));
+        return spans;
+    }
+
+    /**
+     * Role spans over a triggered ability's line, whose ability word may be any
+     * flavour text ("descend 4", "exterminate!", "do you like squirrels?").
+     */
+    static List<Span> ofTriggered(String text) {
+        List<Span> spans = new ArrayList<>();
+        if (text == null || text.isEmpty()) return spans;
+        String lower = text.toLowerCase(Locale.ROOT);
+        spans.addAll(clauseSpans(text, lower, false, ANY_ABILITY_WORD));
         spans.addAll(targetSpans(lower));
         return spans;
     }
@@ -64,9 +77,10 @@ public final class RoleSpans {
     }
 
     /** The condition, cost and effect spans: what remains once targets are set aside. */
-    private static List<Span> clauseSpans(String text, String lower, boolean activated) {
+    private static List<Span> clauseSpans(String text, String lower, boolean activated,
+                                          Pattern abilityWord) {
         int length = text.length();
-        int start = triggerStart(lower);
+        int start = triggerStart(lower, abilityWord);
         int triggerEnd = start < 0 ? -1 : triggerConditionEnd(lower, start);
         if (triggerEnd > 0) {
             return List.of(new Span(start, triggerEnd, SpanRole.TRIGGER_CONDITION),
@@ -80,17 +94,20 @@ public final class RoleSpans {
         return List.of(new Span(0, length, SpanRole.EFFECT));
     }
 
-    private static final Pattern ABILITY_WORD = Pattern.compile("[a-z][a-z' -]*");
+    /** An ability word of letters alone, what a line of any kind may open with. */
+    private static final Pattern STRICT_ABILITY_WORD = Pattern.compile("[a-z][a-z' -]*");
+    /** On a triggered line, any prefix without a colon: digits, punctuation and symbols included. */
+    private static final Pattern ANY_ABILITY_WORD = Pattern.compile("[^:]+");
     private static final String ABILITY_WORD_DASH = " \u2014 ";
 
     /**
      * Where a trigger condition starts, or -1 when the line does not open with
      * one: at 0, or after an ability word ("landfall — whenever ...").
      */
-    private static int triggerStart(String lower) {
+    private static int triggerStart(String lower, Pattern abilityWord) {
         if (opensTrigger(lower, 0)) return 0;
         int dash = lower.indexOf(ABILITY_WORD_DASH);
-        if (dash <= 0 || !ABILITY_WORD.matcher(lower.substring(0, dash)).matches()) return -1;
+        if (dash <= 0 || !abilityWord.matcher(lower.substring(0, dash)).matches()) return -1;
         int start = dash + ABILITY_WORD_DASH.length();
         return opensTrigger(lower, start) ? start : -1;
     }
