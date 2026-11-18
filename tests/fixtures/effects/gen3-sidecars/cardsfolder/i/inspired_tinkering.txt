@@ -1,5 +1,4 @@
 name: inspired tinkering
 mana cost: {4}{R}
 types: sorcery
-spell[1]: exile the top three cards of your library. until the end of your next turn, you may play those cards.
-spell[2]: create three treasure tokens.
+spell[1]: exile the top three cards of your library. until the end of your next turn, you may play those cards. create three treasure tokens.

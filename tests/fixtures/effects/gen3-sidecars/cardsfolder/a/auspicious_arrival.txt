@@ -1,5 +1,4 @@
 name: auspicious arrival
 mana cost: {1}{W}
 types: instant
-spell[1]: target creature gets +2/+2 until end of turn.
-spell[2]: investigate.
+spell[1]: target creature gets +2/+2 until end of turn. investigate.

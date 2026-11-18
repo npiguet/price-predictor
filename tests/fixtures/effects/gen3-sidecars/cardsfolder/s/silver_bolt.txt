@@ -1,4 +1,4 @@
 name: silver bolt
 mana cost: {1}
 types: artifact
-activated[1]: {3}, {T}, sacrifice CARDNAME: it deals 3 damage to target creature. if a werewolf is dealt damage this way, destroy it. if a werewolf is dealt damage this way, destroy it.
+activated[1]: {3}, {T}, sacrifice CARDNAME: it deals 3 damage to target creature. if a werewolf is dealt damage this way, destroy it.

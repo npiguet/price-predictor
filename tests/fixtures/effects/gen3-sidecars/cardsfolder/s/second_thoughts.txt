@@ -1,5 +1,4 @@
 name: second thoughts
 mana cost: {4}{W}
 types: instant
-spell[1]: exile target attacking creature.
-spell[2]: draw a card.
+spell[1]: exile target attacking creature. draw a card.

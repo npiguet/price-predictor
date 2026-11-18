@@ -3,6 +3,6 @@ mana cost: {3}{B}
 types: creature angel cleric
 power toughness: 2/3
 alternate cost: foretell {1}{B}
-static: flying
 static: deathtouch
+static: flying
 static: haste

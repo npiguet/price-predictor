@@ -1,4 +1,4 @@
 name: runesword
 mana cost: {6}
 types: artifact
-activated[1]: {3}, {T}: target attacking creature gets +2/+0 until end of turn. when that creature leaves the battlefield this turn, sacrifice CARDNAME. if the creature deals damage to a creature this turn, the creature dealt damage can't be regenerated this turn. if a creature dealt damage by the targeted creature would die this turn, exile that creature instead. when the targeted creature leaves the battlefield this turn, sacrifice CARDNAME. if a creature dealt damage by the targeted creature would die this turn, exile that creature instead.
+activated[1]: {3}, {T}: target attacking creature gets +2/+0 until end of turn. when that creature leaves the battlefield this turn, sacrifice CARDNAME. if the creature deals damage to a creature this turn, the creature dealt damage can't be regenerated this turn. if a creature dealt damage by the targeted creature would die this turn, exile that creature instead. when the targeted creature leaves the battlefield this turn, sacrifice CARDNAME.

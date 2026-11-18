@@ -13,5 +13,5 @@ types: legendary planeswalker gideon
 loyalty: 3
 planeswalker[1]: [+2]: up to one target creature an opponent controls attacks CARDNAME during its controller's next turn if able.
 planeswalker[2]: [+1]: until your next turn, target creature gains indestructible. untap that creature.
-planeswalker[3]: 0: until end of turn, CARDNAME becomes a 4/4 human soldier creature with indestructible that's still a planeswalker. prevent all damage that would be dealt to him this turn.
+planeswalker[3]: [0]: until end of turn, CARDNAME becomes a 4/4 human soldier creature with indestructible that's still a planeswalker. prevent all damage that would be dealt to him this turn.
 replacement: CARDNAME enters with three loyalty counters on it.

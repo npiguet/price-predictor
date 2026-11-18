@@ -2,4 +2,3 @@ name: riddle of lightning
 mana cost: {3}{R}{R}
 types: instant
 spell[1]: choose any target. scry 3, then reveal the top card of your library. CARDNAME deals damage equal to that card's mana value to that permanent or player.
-spell[2]: CARDNAME deals damage equal to that card's mana value to that permanent or player.

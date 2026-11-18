@@ -2,5 +2,5 @@ name: daggermaw megalodon
 mana cost: {4}{U}{U}
 types: creature shark
 power toughness: 5/7
-static: vigilance
 activated[1]: islandcycling {2}
+static: vigilance

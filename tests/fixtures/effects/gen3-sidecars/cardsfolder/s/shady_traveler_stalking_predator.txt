@@ -3,8 +3,8 @@ name: shady traveler
 mana cost: {2}{B}
 types: creature human werewolf
 power toughness: 2/3
-static: menace
 triggered: daybound
+static: menace
 
 ALTERNATE
 

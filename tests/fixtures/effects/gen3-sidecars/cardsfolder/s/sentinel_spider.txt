@@ -2,5 +2,5 @@ name: sentinel spider
 mana cost: {3}{G}{G}
 types: creature spider
 power toughness: 4/4
-static: vigilance
 static: reach
+static: vigilance

@@ -1,5 +1,4 @@
 name: keep safe
 mana cost: {1}{U}
 types: instant
-spell[1]: counter target spell that targets a permanent you control.
-spell[2]: draw a card.
+spell[1]: counter target spell that targets a permanent you control. draw a card.

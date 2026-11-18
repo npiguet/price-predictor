@@ -1,5 +1,4 @@
 name: flip the switch
 mana cost: {2}{U}
 types: instant
-spell[1]: counter target spell unless its controller pays {4}.
-spell[2]: create a 2/2 black zombie creature token with decayed.
+spell[1]: counter target spell unless its controller pays {4}. create a 2/2 black zombie creature token with decayed.

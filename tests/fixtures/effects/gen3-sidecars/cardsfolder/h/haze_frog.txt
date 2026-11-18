@@ -3,4 +3,4 @@ mana cost: {3}{G}{G}
 types: creature frog
 power toughness: 2/1
 static: flash
-triggered: when CARDNAME enters, prevent all combat damage that other creatures would deal this turn. prevent all combat damage that other creatures would deal this turn.
+triggered: when CARDNAME enters, prevent all combat damage that other creatures would deal this turn.

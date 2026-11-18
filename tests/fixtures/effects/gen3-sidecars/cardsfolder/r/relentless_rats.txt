@@ -3,4 +3,4 @@ mana cost: {1}{B}{B}
 types: creature rat
 power toughness: 2/2
 static: a deck can have any number of cards named CARDNAME.
-static: CARDNAME gets +1/+1 for each other creature on the battlefield named relentless rats.
+static: CARDNAME gets +1/+1 for each other creature on the battlefield named CARDNAME.

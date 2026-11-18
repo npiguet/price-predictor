@@ -1,5 +1,4 @@
 name: mind ravel
 mana cost: {2}{B}
 types: sorcery
-spell[1]: target player discards a card. draw a card at the beginning of the next turn's upkeep.
-spell[2]: draw a card.
+spell[1]: target player discards a card. draw a card at the beginning of the next turn's upkeep. draw a card.

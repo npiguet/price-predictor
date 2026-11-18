@@ -2,7 +2,7 @@ name: lyra dawnbringer
 mana cost: {3}{W}{W}
 types: legendary creature angel
 power toughness: 5/5
-static: flying
 static: first strike
+static: flying
 static: lifelink
 static: other angels you control get +1/+1 and have lifelink.

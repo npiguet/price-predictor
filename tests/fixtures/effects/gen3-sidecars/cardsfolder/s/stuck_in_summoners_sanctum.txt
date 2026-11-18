@@ -1,7 +1,7 @@
 name: stuck in summoner's sanctum
 mana cost: {2}{U}
 types: enchantment aura
-static: flash
 static: enchant artifact or creature
+static: flash
 triggered: when this aura enters, tap enchanted creature.
 static: enchanted permanent doesn't untap during its controller's untap step and its activated abilities can't be activated.

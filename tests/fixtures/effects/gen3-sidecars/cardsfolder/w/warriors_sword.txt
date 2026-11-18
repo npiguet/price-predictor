@@ -1,6 +1,6 @@
 name: warrior's sword
 mana cost: {3}{R}
 types: artifact equipment
-triggered: job select
 activated[1]: equip {5}
+triggered: job select
 static: equipped creature gets +3/+2 and is a warrior in addition to its other types.

@@ -2,4 +2,4 @@ name: plague rats
 mana cost: {2}{B}
 types: creature rat
 power toughness: */*
-static: CARDNAME's power and toughness are each equal to the number of creatures named plague rats on the battlefield.
+static: CARDNAME's power and toughness are each equal to the number of creatures named CARDNAME on the battlefield.

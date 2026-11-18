@@ -2,5 +2,5 @@ name: rescuer sphinx
 mana cost: {2}{U}{U}
 types: creature sphinx
 power toughness: 3/2
-static: flying
 replacement: as CARDNAME enters, you may return a nonland permanent you control to its owner's hand. if you do, CARDNAME enters with a +1/+1 counter on it.
+static: flying

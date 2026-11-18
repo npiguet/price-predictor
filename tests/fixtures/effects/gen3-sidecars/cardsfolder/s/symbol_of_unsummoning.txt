@@ -1,5 +1,4 @@
 name: symbol of unsummoning
 mana cost: {2}{U}
 types: sorcery
-spell[1]: return target creature to its owner's hand.
-spell[2]: draw a card.
+spell[1]: return target creature to its owner's hand. draw a card.

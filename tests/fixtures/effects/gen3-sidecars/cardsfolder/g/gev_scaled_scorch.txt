@@ -2,6 +2,6 @@ name: gev, scaled scorch
 mana cost: {B}{R}
 types: legendary creature lizard mercenary
 power toughness: 3/2
-static: ward—pay 2 life.
 replacement: other creatures you control enter with an additional +1/+1 counter on them for each opponent who lost life this turn.
+static: ward—pay 2 life.
 triggered: whenever you cast a lizard spell, CARDNAME deals 1 damage to target opponent.
