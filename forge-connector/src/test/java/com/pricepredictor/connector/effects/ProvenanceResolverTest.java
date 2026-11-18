@@ -74,6 +74,20 @@ class ProvenanceResolverTest {
         return copy;
     }
 
+    /** The key names the given script file and trait kind. */
+    private static void assertKeyedTo(ProvenanceKey key, String scriptFile, TraitKind kind) {
+        assertNotNull(key);
+        assertEquals(scriptFile, key.scriptFile());
+        assertEquals(kind, key.traitKind());
+    }
+
+    /** As {@link #assertKeyedTo(ProvenanceKey, String, TraitKind)}, at an index within the kind. */
+    private static void assertKeyedTo(
+            ProvenanceKey key, String scriptFile, TraitKind kind, int indexWithinKind) {
+        assertKeyedTo(key, scriptFile, kind);
+        assertEquals(indexWithinKind, key.indexWithinKind());
+    }
+
     // ── activated abilities the stack replaced with a copy ───────────────
 
     /**
@@ -96,8 +110,7 @@ class ProvenanceResolverTest {
         ProvenanceKey expected = ProvenanceResolver.of(printed);
 
         assertNotNull(expected, "the pristine ability must key");
-        assertEquals("cardsfolder/f/fountain_of_youth.txt", expected.scriptFile());
-        assertEquals(TraitKind.SPELL, expected.traitKind());
+        assertKeyedTo(expected, "cardsfolder/f/fountain_of_youth.txt", TraitKind.SPELL);
         assertEquals(expected, ProvenanceResolver.of(copy));
     }
 
@@ -158,10 +171,7 @@ class ProvenanceResolverTest {
             ProvenanceKey key = ProvenanceResolver.of(wrapped);
 
             assertNotNull(key, "wrapped trigger " + i + " must key");
-            assertEquals("cardsfolder/p/paralyze.txt", key.scriptFile());
-            assertEquals(TraitKind.TRIGGER, key.traitKind(),
-                    "a wrapped trigger keys to its trigger line, not to a spell");
-            assertEquals(i, key.indexWithinKind());
+            assertKeyedTo(key, "cardsfolder/p/paralyze.txt", TraitKind.TRIGGER, i);
         }
     }
 
@@ -178,10 +188,7 @@ class ProvenanceResolverTest {
         execute.setTrigger(trigger);
 
         ProvenanceKey key = ProvenanceResolver.of(execute);
-        assertNotNull(key);
-        assertEquals("cardsfolder/b/brass_man.txt", key.scriptFile());
-        assertEquals(TraitKind.TRIGGER, key.traitKind());
-        assertEquals(0, key.indexWithinKind());
+        assertKeyedTo(key, "cardsfolder/b/brass_man.txt", TraitKind.TRIGGER, 0);
     }
 
     /** A replacement effect keys where it stands, and always did. */
@@ -191,10 +198,7 @@ class ProvenanceResolverTest {
         ProvenanceKey key = ProvenanceResolver.of(
                 paralyze.getCurrentState().getReplacementEffects().iterator().next());
 
-        assertNotNull(key);
-        assertEquals("cardsfolder/p/paralyze.txt", key.scriptFile());
-        assertEquals(TraitKind.REPLACEMENT, key.traitKind());
-        assertEquals(0, key.indexWithinKind());
+        assertKeyedTo(key, "cardsfolder/p/paralyze.txt", TraitKind.REPLACEMENT, 0);
     }
 
     // ── faces other than the one that is up ─────────────────────────────
@@ -215,11 +219,9 @@ class ProvenanceResolverTest {
         SpellAbility fight = scriptedSpell(back, "Fight");
         ProvenanceKey key = ProvenanceResolver.of(fight);
 
-        assertNotNull(key);
-        assertEquals("cardsfolder/d/daybreak_ranger_nightfall_predator.txt",
-                key.scriptFile());
+        assertKeyedTo(key, "cardsfolder/d/daybreak_ranger_nightfall_predator.txt",
+                TraitKind.SPELL);
         assertEquals(1, key.face(), "the back face is ordinal 1");
-        assertEquals(TraitKind.SPELL, key.traitKind());
     }
 
     /** The front face of the same card stays ordinal 0. */
@@ -249,10 +251,8 @@ class ProvenanceResolverTest {
         SpellAbility gainLife = scriptedSpell(food.getCurrentState(), "GainLife");
         ProvenanceKey key = ProvenanceResolver.of(gainLife);
 
-        assertNotNull(key);
-        assertEquals("tokenscripts/c_a_food_sac.txt", key.scriptFile());
+        assertKeyedTo(key, "tokenscripts/c_a_food_sac.txt", TraitKind.SPELL);
         assertEquals(0, key.face());
-        assertEquals(TraitKind.SPELL, key.traitKind());
     }
 
     // ── engine-built command-zone cards ─────────────────────────────────
@@ -325,10 +325,8 @@ class ProvenanceResolverTest {
 
         ProvenanceKey key = ProvenanceResolver.of(derived);
         assertNotNull(key, "a keyword-derived ability must key");
-        assertEquals(TraitKind.KEYWORD, key.traitKind());
-        assertEquals(FaceOrder.keywordIndex(state, flashback),
-                key.indexWithinKind());
-        assertEquals("cardsfolder/b/blast_from_the_past.txt", key.scriptFile());
+        assertKeyedTo(key, "cardsfolder/b/blast_from_the_past.txt", TraitKind.KEYWORD,
+                FaceOrder.keywordIndex(state, flashback));
     }
 
     /**
@@ -473,12 +471,11 @@ class ProvenanceResolverTest {
                 grantedKeywordTrigger(recipient, "Poisonous:1", grantor));
 
         assertNotNull(key, "a granted keyword's trigger must key to its donor");
+        assertKeyedTo(key, "cardsfolder/v/virulent_sliver.txt", TraitKind.STATIC);
         // Never the recipient: keying a granted trigger where it now lives would
         // teach the model that Metallic Sliver, a vanilla 1/1, prints a poison
         // trigger, which is worse than naming no line at all.
-        assertEquals("cardsfolder/v/virulent_sliver.txt", key.scriptFile());
         assertNotEquals(ScriptLocator.scriptFileOf(recipient), key.scriptFile());
-        assertEquals(TraitKind.STATIC, key.traitKind());
         assertEquals(ProvenanceResolver.of(grantor), key);
     }
 
@@ -529,10 +526,7 @@ class ProvenanceResolverTest {
 
         ProvenanceKey key = ProvenanceResolver.of(delayedTriggerSpawnedBy(execute));
 
-        assertNotNull(key);
-        assertEquals("cardsfolder/b/brass_man.txt", key.scriptFile());
-        assertEquals(TraitKind.TRIGGER, key.traitKind());
-        assertEquals(0, key.indexWithinKind());
+        assertKeyedTo(key, "cardsfolder/b/brass_man.txt", TraitKind.TRIGGER, 0);
     }
 
     /**
@@ -607,11 +601,15 @@ class ProvenanceResolverTest {
 
         SpellAbility variant = printed.copy(adept, null, false, true);
 
+        assertIsTheBareCostVariantCase(printed, variant);
+        assertEquals(expected, ProvenanceResolver.of(variant));
+    }
+
+    private static void assertIsTheBareCostVariantCase(SpellAbility printed, SpellAbility variant) {
         assertNull(variant.getOriginalAbility(),
                 "a cost variant carries no back-reference; that is the case under test");
         assertTrue(printed.getOriginalMapParams().isEmpty(),
                 "a permanent spell has no script parameters to fingerprint");
-        assertEquals(expected, ProvenanceResolver.of(variant));
     }
 
     /**
@@ -650,10 +648,9 @@ class ProvenanceResolverTest {
 
         assertNotNull(key, "the aura's own Animate line granted this trigger");
         assertEquals(ProvenanceResolver.of(animate), key);
+        assertKeyedTo(key, "cardsfolder/g/genju_of_the_fields.txt", TraitKind.SPELL);
         // Never the creature that received it, which prints no such line.
-        assertEquals("cardsfolder/g/genju_of_the_fields.txt", key.scriptFile());
         assertNotEquals(ScriptLocator.scriptFileOf(plains), key.scriptFile());
-        assertEquals(TraitKind.SPELL, key.traitKind());
     }
 
     /**
@@ -676,10 +673,8 @@ class ProvenanceResolverTest {
                 aura.getCurrentState().getSVar(grantor.getParam("AddTrigger")), grantor);
 
         ProvenanceKey key = ProvenanceResolver.of(granted);
-        assertNotNull(key);
         assertEquals(ProvenanceResolver.of(grantor), key);
-        assertEquals("cardsfolder/c/commanding_presence.txt", key.scriptFile());
-        assertEquals(TraitKind.STATIC, key.traitKind());
+        assertKeyedTo(key, "cardsfolder/c/commanding_presence.txt", TraitKind.STATIC);
     }
 
     /**
