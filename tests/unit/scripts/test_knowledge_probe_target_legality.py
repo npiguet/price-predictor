@@ -9,7 +9,7 @@ from effect_knowledge_probes import (
 from effects.domain.records import (
     PlayabilityDecisionPayload,
 )
-from tests.unit.scripts.knowledge_probe_support import probabilities as _probabilities
+from tests.unit.scripts.knowledge_probe_support import probabilities
 
 
 class TestTargetLegality:
@@ -35,7 +35,7 @@ class TestTargetLegality:
         assert set(readings) == {"target_legal", "affected"}
         for (record, _, _), reading in zip(chosen, readings["target_legal"]):
             assert {p.id for p in record.state.players} <= set(reading)
-            _probabilities(list(reading.values()))
+            probabilities(list(reading.values()))
         tables = target_restrictions.breakdowns(chosen, readings)
         cell = next(iter(tables["family"].values()))
         assert len(cell["target_legal"][0]) == len(cell["affected"][0]) > 0

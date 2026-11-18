@@ -83,17 +83,23 @@ def keyword_set(entity):
     return set(entity.granted_temporary.keywords)
 
 
-def outcome_by_the_rule(monkeypatch, record, attacker: str, blocker: str) -> dict:
-    """``derive_targets`` patched to report the deaths the damage-step rule gives the
-    block; returned so a test can change one creature's outcome."""
-    import effects.domain.effect_targets as effect_targets
+def deaths_by_the_rule(record, attacker: str, blocker: str) -> dict:
+    """The ``derive_targets`` outcomes the damage-step rule gives one block."""
     from effects.domain.effect_head_layout import ZONE_OUTCOMES
 
     a, _ = combat_grid.side_of(record, attacker)
     b, _ = combat_grid.side_of(record, blocker)
     died = ZONE_OUTCOMES.index("died")
-    outcome = {e: SimpleNamespace(fields={"zone_outcome": died} if dies else {}, unknown=set())
-               for e, dies in zip((attacker, blocker), combat_grid.step_deaths(a, b))}
+    return {e: SimpleNamespace(fields={"zone_outcome": died} if dies else {}, unknown=set())
+            for e, dies in zip((attacker, blocker), combat_grid.step_deaths(a, b))}
+
+
+def outcome_by_the_rule(monkeypatch, record, attacker: str, blocker: str) -> dict:
+    """``derive_targets`` patched to report the deaths the damage-step rule gives the
+    block; returned so a test can change one creature's outcome."""
+    import effects.domain.effect_targets as effect_targets
+
+    outcome = deaths_by_the_rule(record, attacker, blocker)
     monkeypatch.setattr(effect_targets, "derive_targets", lambda r: outcome)
     return outcome
 

@@ -13,7 +13,32 @@ from effect_knowledge_probes.board_edits import BoardEdit
 from tests.unit.effects.builders import (
     GEN3_SIDECAR_FOLDERS,
 )
-from tests.unit.scripts.knowledge_probe_support import probabilities as _probabilities
+from tests.unit.scripts.knowledge_probe_support import probabilities
+
+
+def _assert_restriction_item(item, record, failed) -> None:
+    assert item.subset == "restriction" and item.entity is None
+    if item.edit == conditions.AS_COLLECTED:
+        assert item.rule == (item.readout.removeprefix("failed_") in failed)
+    if item.edit == conditions.WHOSE_TURN:
+        assert item.record.state.global_.active != record.state.global_.active
+
+
+def _assert_handing_over_flips_whose_turn(items) -> None:
+    """Handing the turn over flips a whose-turn restriction's answer."""
+    by = {(i.edit, i.readout): i.rule for i in items}
+    if ("as collected", "failed_whose_turn") in by:
+        assert by[("whose turn", "failed_whose_turn")] != by[
+            ("as collected", "failed_whose_turn")]
+
+
+def _is_player_turn_static(line) -> bool:
+    return "Condition$ PlayerTurn" in (line.script_text or "") and line.line_kind == "static"
+
+
+def _player_turn_static_key():
+    return next(line.provenance[0] for path in GEN3_SIDECAR_FOLDERS
+                for line in _sidecar_lines(path) if _is_player_turn_static(line))
 
 
 class TestConditions:
@@ -40,16 +65,8 @@ class TestConditions:
             record = items[0].record
             failed = conditions._failed(record.payload.candidates[0])
             for item in items:
-                assert item.subset == "restriction" and item.entity is None
-                if item.edit == conditions.AS_COLLECTED:
-                    assert item.rule == (item.readout.removeprefix("failed_") in failed)
-                if item.edit == conditions.WHOSE_TURN:
-                    assert item.record.state.global_.active != record.state.global_.active
-            # Handing the turn over flips a whose-turn restriction's answer.
-            by = {(i.edit, i.readout): i.rule for i in items}
-            if ("as collected", "failed_whose_turn") in by:
-                assert by[("whose turn", "failed_whose_turn")] != by[
-                    ("as collected", "failed_whose_turn")]
+                _assert_restriction_item(item, record, failed)
+            _assert_handing_over_flips_whose_turn(items)
 
     def test_a_casting_speed_item_follows_sorcery_timing(self, records, sidecars, keywords_of):
         found = [items for r in records
@@ -80,10 +97,7 @@ class TestConditions:
         from effects.domain.state_snapshot import CardLine
 
         record = next(r for r in records if r.state.entities and len(r.state.players) == 2)
-        key = next(line.provenance[0] for path in GEN3_SIDECAR_FOLDERS
-                   for line in _sidecar_lines(path)
-                   if "Condition$ PlayerTurn" in (line.script_text or "")
-                   and line.line_kind == "static")
+        key = _player_turn_static_key()
         host = record.state.entities[0]
         static = CardLine(keys=(key,), kind="static", granted=False,
                           active=host.controller == record.state.global_.active)
@@ -100,7 +114,7 @@ class TestConditions:
         items = [item for r in records
                  for item in conditions.record_items(r, sidecars, keywords_of)]
         predictions = conditions.predict_items(probe_model, items)
-        _probabilities(predictions)
+        probabilities(predictions)
         scores = conditions.score(items, predictions)
         assert set(scores) == set(conditions.SUBSETS)
         assert scores["casting-speed"]["items"] > 0

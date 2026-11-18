@@ -22,7 +22,7 @@ from effect_knowledge_probes.tables import write_tables
 from tests.unit.effects.builders import (
     GEN3_SIDECAR_FOLDERS,
 )
-from tests.unit.scripts.knowledge_probe_support import probabilities as _probabilities
+from tests.unit.scripts.knowledge_probe_support import probabilities
 
 GD = "game-disjoint"
 
@@ -103,6 +103,27 @@ def _context(frozen_corpus, sidecars, probe_model):
     )
 
 
+def _assert_items_match_frozen_labels(read, frozen) -> None:
+    labelled = {(row.record_id, probe_type, row.entity): row.label
+                for probe_type, rows in frozen.probes[GD]["reporting"].items()
+                for row in rows}
+    found = {(rid, item.target, item.entity): item.label
+             for rid, items in read.probe_items.items() for item in items}
+    assert found and set(found) <= set(labelled)
+    assert all(found[key] == labelled[key] for key in found)
+
+
+def _assert_read_within_frozen(read, frozen) -> None:
+    """The half's read records belong to its games, its items match the frozen labels."""
+    games = set(frozen.halves[GD]["reporting"])
+    assert all(r.game_id in games for r in read.records.values())
+    _assert_items_match_frozen_labels(read, frozen)
+    assert set(read.grids) <= set(frozen.grids[GD]["reporting"])
+    assert read.conditions or read.targeting
+    for rows in read.sweep_rows.values():
+        assert all(row["record_id"] in read.records for row in rows)
+
+
 class TestReadingAHalf:
     def test_repeated_rows_of_one_record_are_read_once(self, records):
         doubled = [*records[:5], *records[:5], records[0]]
@@ -130,19 +151,7 @@ class TestReadingAHalf:
             acting_text=common.acting_text_function(sidecars, "script"),
             keywords_of=keywords_of, observe=lambda r: seen.append(r.record_id))
         assert seen and len(seen) == len(set(seen))
-        games = set(frozen.halves[GD]["reporting"])
-        assert all(r.game_id in games for r in read.records.values())
-        labelled = {(row.record_id, probe_type, row.entity): row.label
-                    for probe_type, rows in frozen.probes[GD]["reporting"].items()
-                    for row in rows}
-        found = {(rid, item.target, item.entity): item.label
-                 for rid, items in read.probe_items.items() for item in items}
-        assert found and set(found) <= set(labelled)
-        assert all(found[key] == labelled[key] for key in found)
-        assert set(read.grids) <= set(frozen.grids[GD]["reporting"])
-        assert read.conditions or read.targeting
-        for rows in read.sweep_rows.values():
-            assert all(row["record_id"] in read.records for row in rows)
+        _assert_read_within_frozen(read, frozen)
 
 
 class TestRuleTests:
@@ -212,7 +221,7 @@ class TestGridsOfAHalf:
                 record, entities = read.grids[name][0]
                 values = halves.grid_predictions(probe_model, name, record, entities)
                 assert len(values) == len(cells)
-                _probabilities(values)
+                probabilities(values)
                 assert body["records"] == len(read.grids[name])
                 assert 0.0 <= body["mae"] <= 1.0
 

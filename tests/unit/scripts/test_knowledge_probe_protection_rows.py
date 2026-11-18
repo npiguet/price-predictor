@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import NamedTuple
 
 import pytest
 from effect_knowledge_probes import (
@@ -15,7 +16,7 @@ from effect_knowledge_probes.board_edits import BoardEdit
 from effects.domain.records import (
     PlayabilityBlockersPayload,
 )
-from tests.unit.scripts.knowledge_probe_support import probabilities as _probabilities
+from tests.unit.scripts.knowledge_probe_support import probabilities
 
 
 def _gen3_block_pair(records):
@@ -36,33 +37,45 @@ def _gen3_block_pair(records):
     return board.record, attacker, blocker
 
 
+class _Case(NamedTuple):
+    row: str
+    fragment: str | None
+    column: str | None
+    allowed: bool
+
+
+def _case_id(case: _Case) -> str:
+    return "-".join(str(part) for part in case)
+
+
+_CASES = [
+    _Case("protection-blocker", "Protection from green", None, False),
+    _Case("protection-other", None, None, True),
+    _Case("protection-type-blocker", "Protection:Elf", None, False),
+    _Case("protection-type-blocker", "Protection:Elf", "black", False),
+    _Case("protection-type-other", "Protection:Kraken", None, True),
+    _Case("protection-creatures", "Protection:Creature", "reach", False),
+    _Case("protection-artifacts", "Protection:Artifact", None, True),
+    _Case("protection-artifacts", "Protection:Artifact", "artifact", False),
+    _Case("protection-monocolored", "Protection:Card.MonoColor:monocolored", None, False),
+    _Case("protection-multicolored", "Protection:Card.MultiColor:multicolored", None, True),
+    _Case("protection-mana-value-3-or-less", "Protection:Card.cmcLE3:mana value 3 or less",
+     None, False),
+    _Case("protection-everything", "Protection from everything", "flying", False),
+]
+
+
 class TestProtectionRows:
-    @pytest.mark.parametrize("row, fragment, column, allowed", [
-        ("protection-blocker", "Protection from green", None, False),
-        ("protection-other", None, None, True),
-        ("protection-type-blocker", "Protection:Elf", None, False),
-        ("protection-type-blocker", "Protection:Elf", "black", False),
-        ("protection-type-other", "Protection:Kraken", None, True),
-        ("protection-creatures", "Protection:Creature", "reach", False),
-        ("protection-artifacts", "Protection:Artifact", None, True),
-        ("protection-artifacts", "Protection:Artifact", "artifact", False),
-        ("protection-monocolored", "Protection:Card.MonoColor:monocolored", None, False),
-        ("protection-multicolored", "Protection:Card.MultiColor:multicolored", None, True),
-        ("protection-mana-value-3-or-less", "Protection:Card.cmcLE3:mana value 3 or less",
-         None, False),
-        ("protection-everything", "Protection from everything", "flying", False),
-    ])
-    def test_each_quality_is_granted_as_forge_writes_it_and_ruled(
-        self, records, row, fragment, column, allowed,
-    ):
+    @pytest.mark.parametrize("case", _CASES, ids=_case_id)
+    def test_each_quality_is_granted_as_forge_writes_it_and_ruled(self, records, case):
         record, attacker, blocker = _gen3_block_pair(records)
-        cell, rule = evasion_grid.edited(record, attacker, blocker, row, column)
+        cell, rule = evasion_grid.edited(record, attacker, blocker, case.row, case.column)
         lines = cell.state.entity(attacker).lines
         granted = [line.fragment for line in lines if line.granted and line.kind == "keyword"]
         assert len(granted) == 1
-        if fragment is not None:
-            assert granted == [fragment]
-        assert rule is allowed
+        if case.fragment is not None:
+            assert granted == [case.fragment]
+        assert rule is case.allowed
 
     def test_every_row_is_a_grid_row_and_a_frozen_cell(self, keywords_of):
         assert set(evasion_grid.PROTECTION_ROWS) <= set(evasion_grid.ATTACKER_KEYWORDS)
@@ -85,4 +98,4 @@ class TestProtectionRows:
         record, attacker, blocker = _gen3_block_pair(records)
         cells = [evasion_grid.edited(record, attacker, blocker, row, None)[0]
                  for row in evasion_grid.PROTECTION_ROWS]
-        _probabilities(common.predict(probe_model, cells, readout.at_card("may_block", blocker)))
+        probabilities(common.predict(probe_model, cells, readout.at_card("may_block", blocker)))

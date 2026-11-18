@@ -9,29 +9,39 @@ from effect_knowledge_probes import (
 )
 from effect_knowledge_probes.board_edits import BoardEdit
 
-from effects.domain.records import (
-    RecordKind,
-)
-from tests.unit.scripts.knowledge_probe_support import probabilities as _probabilities
+from effects.domain.records import Moment, RecordKind
+from tests.unit.scripts.knowledge_probe_support import probabilities
+
+
+def _combat_or_resolution(record) -> bool:
+    if record.fork:
+        return False
+    if record.kind is RecordKind.COMBAT:
+        return True
+    return record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION
+
+
+def _kept_alive_board(record, found, sidecars):
+    """``record`` with the first creature ``found`` reaches given the damage the
+    anthem alone keeps from being lethal, or None when no such damage exists."""
+    creature = record.state.entity(found.affected[0])
+    damage = creature.toughness - found.boost[1]
+    if damage <= 0:
+        return None
+    edited = BoardEdit(record).set_marked_damage(creature.id, damage).record
+    if anthem.chosen(edited, sidecars) is None:
+        return None
+    return edited, found, creature.id
 
 
 def _anthem_board(records, sidecars):
     """A fixture board with an anthem, one creature it reaches given damage
     the anthem alone keeps from being lethal."""
-    from effects.domain.records import Moment
-
-    for record in records:
-        if record.fork or not (record.kind is RecordKind.COMBAT or (
-                record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION)):
-            continue
+    for record in filter(_combat_or_resolution, records):
         for found in anthem.anthems(record, sidecars):
-            creature = record.state.entity(found.affected[0])
-            damage = creature.toughness - found.boost[1]
-            if damage <= 0:
-                continue
-            edited = BoardEdit(record).set_marked_damage(creature.id, damage).record
-            if anthem.chosen(edited, sidecars) is not None:
-                return edited, found, creature.id
+            board = _kept_alive_board(record, found, sidecars)
+            if board is not None:
+                return board
     raise AssertionError("no fixture board holds an anthem")
 
 
@@ -58,7 +68,7 @@ class TestAnthem:
         assert all(not row[3] for row in rows if row[0] == anthem.AS_COLLECTED)
         assert any(row[3] for row in rows if row[0] == anthem.DESTROYED and row[2] == creature)
         predictions = anthem.predict_items(probe_model, rows)
-        _probabilities(predictions)
+        probabilities(predictions)
         result = anthem.score(rows, predictions)
         assert result["rule_dies"] >= 1 and result["creatures"] == len(found.affected)
         anthem.report(result, 1)

@@ -18,8 +18,7 @@ from effect_knowledge_probes.method_c_probe import method_c
 from tests.unit.effects.builders import (
     GEN3_SIDECAR_FOLDERS,
 )
-from tests.unit.scripts.knowledge_probe_support import E_DIM
-from tests.unit.scripts.knowledge_probe_support import probabilities as _probabilities
+from tests.unit.scripts.knowledge_probe_support import E_DIM, probabilities
 
 
 @pytest.fixture(scope="module")
@@ -116,6 +115,16 @@ def items_by_record(records, sidecars):
             if (found := labels.record_items(r, sidecars, joined, acting))}
 
 
+def _assert_one_width(rows) -> None:
+    """One feature width per rung over a target's rows, the rungs' widths related as built."""
+    for rung in ladder.PROBED_RUNGS:
+        assert len({r.features[rung].shape for r in rows}) == 1
+    zero = rows[0].features["0"].shape[0]
+    assert rows[0].features["1"].shape[0] == zero + 3 * E_DIM
+    assert rows[0].features["1w"].shape == rows[0].features["1"].shape
+    assert all(np.isfinite(r.rung3) for r in rows)
+
+
 class TestExtraction:
     """``ladder.extract_features`` on a gen-3 checkpoint loaded from disk."""
 
@@ -128,13 +137,7 @@ class TestExtraction:
         assert extracted and act_hidden
         assert loaded.device.type == "cpu"
         for target in {i.target for i in extracted}:
-            rows = [i for i in extracted if i.target == target]
-            for rung in ladder.PROBED_RUNGS:
-                assert len({r.features[rung].shape for r in rows}) == 1
-            zero = rows[0].features["0"].shape[0]
-            assert rows[0].features["1"].shape[0] == zero + 3 * E_DIM
-            assert rows[0].features["1w"].shape == rows[0].features["1"].shape
-            assert all(np.isfinite(r.rung3) for r in rows)
+            _assert_one_width([i for i in extracted if i.target == target])
 
     def test_the_per_layer_view_reads_every_trunk_layer(self, loaded, records, items_by_record):
         record = next(r for r in records if r.record_id in items_by_record)
@@ -155,7 +158,7 @@ class TestExtraction:
         record = next(r for r in records if r.record_id == rows[0]["record_id"])
         curve = sweeps.run_sweep("toughness", loaded, record, rows[0])
         assert [p["value"] for p in curve] == list(sweeps.TOUGHNESS_VALUES)
-        _probabilities([p["prediction"] for p in curve])
+        probabilities([p["prediction"] for p in curve])
 
     @pytest.mark.parametrize("layers", [0, 1])
     def test_method_c_trains_a_shallow_trunk_beside_the_full_model(

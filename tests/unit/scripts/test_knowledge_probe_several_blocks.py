@@ -11,56 +11,36 @@ from effect_knowledge_probes import (
     selection,
 )
 
-from effects.domain.records import (
-    CombatPayload,
-    RecordKind,
-)
+from tests.unit.scripts.knowledge_probe_support import deaths_by_the_rule, one_on_one
+
+
+def _copy_of_pair_member(entity, attacker, blocker, copy_ids):
+    """A copy of the attacker or the blocker under its new id and the new pair's block."""
+    a2, b2 = copy_ids
+    if entity.id == attacker:
+        return replace(entity, id=a2, combat=replace(entity.combat, blocked_by=(b2,)))
+    if entity.id == blocker:
+        return replace(entity, id=b2, combat=replace(entity.combat, blocking=(a2,)))
+    return None
 
 
 def _two_pairs(records, monkeypatch):
     """A fixture one-on-one block with a second pair beside it (copies of the
     first, under new ids), every outcome the rule's."""
     import effects.domain.effect_targets as effect_targets
-    from effects.domain.effect_head_layout import ZONE_OUTCOMES
 
-    record = next(r for r in records if r.kind is RecordKind.COMBAT
-                  and isinstance(r.payload, CombatPayload)
-                  and sum(1 for b in r.payload.blocks.values() if b) == 1)
-    attacker, (blocker, *_) = next((a, b) for a, b in record.payload.blocks.items() if b)
-    a2, b2 = f"{attacker}~2", f"{blocker}~2"
-    copies = []
-    for entity in record.state.entities:
-        if entity.id == attacker:
-            copies.append(replace(entity, id=a2, combat=replace(entity.combat,
-                                                                 blocked_by=(b2,))))
-        if entity.id == blocker:
-            copies.append(replace(entity, id=b2, combat=replace(entity.combat,
-                                                                 blocking=(a2,))))
-    entities = [replace(e, damage=0, granted_temporary=replace(e.granted_temporary, keywords=()))
-                if e.id in (attacker, blocker) else e for e in record.state.entities]
-    entities = [replace(e, combat=replace(e.combat, blocked_by=(blocker,)))
-                if e.id == attacker else e for e in entities]
-    entities = [replace(e, combat=replace(e.combat, blocking=(attacker,)))
-                if e.id == blocker else e for e in entities]
-    # The copies are of the cleared pair: no damage, no damage-step keyword.
-    entities += [replace(e, damage=0, granted_temporary=replace(e.granted_temporary, keywords=()))
-                 for e in copies]
+    record, attacker, blocker = one_on_one(records)
+    copy_ids = (f"{attacker}~2", f"{blocker}~2")
+    copies = [c for e in record.state.entities
+              if (c := _copy_of_pair_member(e, attacker, blocker, copy_ids))]
     record = replace(
-        record, fork=False, interventional=False, mirror_of=None,
-        payload=replace(record.payload, blocks={attacker: (blocker,), a2: (b2,)},
-                        probed_keyword=None),
-        state=replace(record.state, entities=tuple(entities),
-                      global_=replace(record.state.global_, combat_substep="regular")))
-    died = ZONE_OUTCOMES.index("died")
-    outcome = {}
-    for a, b in ((attacker, blocker), (a2, b2)):
-        deaths = combat_grid.step_deaths(combat_grid.side_of(record, a)[0],
-                                         combat_grid.side_of(record, b)[0])
-        for entity, dies in zip((a, b), deaths):
-            outcome[entity] = SimpleNamespace(
-                fields={"zone_outcome": died} if dies else {}, unknown=set())
+        record,
+        payload=replace(record.payload, blocks={attacker: (blocker,), copy_ids[0]: (copy_ids[1],)}),
+        state=replace(record.state, entities=(*record.state.entities, *copies)))
+    outcome = {**deaths_by_the_rule(record, attacker, blocker),
+               **deaths_by_the_rule(record, *copy_ids)}
     monkeypatch.setattr(effect_targets, "derive_targets", lambda r: outcome)
-    return record, (attacker, blocker), (a2, b2)
+    return record, (attacker, blocker), copy_ids
 
 
 def _plain_keywords(entity):
