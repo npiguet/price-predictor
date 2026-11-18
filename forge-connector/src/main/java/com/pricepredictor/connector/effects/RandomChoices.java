@@ -1,7 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import forge.ai.ComputerUtilMana;
-import forge.game.GameEntity;
 import forge.game.GameObject;
 import forge.game.ability.AbilityUtils;
 import forge.game.ability.ApiType;
@@ -84,7 +83,7 @@ public final class RandomChoices {
         }
         List<AbilitySub> options = new ArrayList<>();
         for (AbilitySub option : printed) {
-            if (hasItsTargets(option, charm.getActivatingPlayer())) {
+            if (TargetingClauses.chainReachesMinimum(option)) {
                 options.add(option);
             }
         }
@@ -153,33 +152,6 @@ public final class RandomChoices {
         }
     }
 
-    /**
-     * Whether every targeting clause of {@code mode}'s chain has as many
-     * legal candidates as its minimum, for {@code activator}: each counted
-     * alone, so a cross-target constraint is left to the targets draw.
-     */
-    static boolean hasItsTargets(SpellAbility mode, Player activator) {
-        for (SpellAbility clause = mode; clause != null; clause = clause.getSubAbility()) {
-            if (!clause.usesTargeting() || clause.getMinTargets() <= 0) {
-                continue;
-            }
-            Player was = clause.getActivatingPlayer();
-            if (was == null && activator != null) {
-                clause.setActivatingPlayer(activator);
-            }
-            int legal = 0;
-            for (GameEntity candidate : clause.getTargetRestrictions().getAllCandidates(clause)) {
-                if (clause.canTarget(candidate)) {
-                    legal++;
-                }
-            }
-            if (legal < clause.getMinTargets()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     private static int pawprintCost(AbilitySub option) {
         return AbilityUtils.calculateAmount(
                 option.getHostCard(), option.getParamOrDefault("Pawprint", "0"), option);
@@ -237,7 +209,9 @@ public final class RandomChoices {
     /**
      * One clause's targets: a count uniform in [min, max], then that many
      * distinct legal candidates (FR-022b), and a divided amount split among
-     * them.
+     * them. The candidates are {@link TargetingClauses#candidatesOf}'s, so a
+     * clause that targets a spell takes the spell on the stack, never its
+     * card.
      *
      * <p>The candidates are offered in a random order and each is taken only
      * if the clause can still target it beside those already taken
@@ -252,7 +226,7 @@ public final class RandomChoices {
     public boolean chooseTargetsFor(SpellAbility clause) {
         // clearTargets also sets the amount a divided clause splits.
         clause.clearTargets();
-        List<GameEntity> candidates = clause.getTargetRestrictions().getAllCandidates(clause);
+        List<GameObject> candidates = TargetingClauses.candidatesOf(clause);
         int min = Math.max(0, clause.getMinTargets());
         int max = Math.min(clause.getMaxTargets(), candidates.size());
         if (clause.isDividedAsYouChoose()) {
@@ -269,7 +243,7 @@ public final class RandomChoices {
             return false;
         }
         int count = between(min, max);
-        for (GameEntity target : drawDistinct(candidates, candidates.size(), random)) {
+        for (GameObject target : drawDistinct(candidates, candidates.size(), random)) {
             if (clause.getTargets().size() >= count || !clause.canAddMoreTarget()) {
                 break;
             }

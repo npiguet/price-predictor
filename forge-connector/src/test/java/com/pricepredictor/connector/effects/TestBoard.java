@@ -185,6 +185,17 @@ public final class TestBoard {
     }
 
     /**
+     * Cast a card's spell that targets nothing, a creature spell say: onto
+     * the stack zone, then onto the stack, as {@link #cast} does.
+     */
+    static SpellAbility castUntargeted(Game game, Player caster, String name) {
+        Card onStack = game.getAction().moveToStack(card(game, caster, name), null);
+        SpellAbility spell = spellOf(onStack, caster);
+        game.getStack().add(spell);
+        return spell;
+    }
+
+    /**
      * Put a spell or ability on the stack, resolve it, and run the
      * state-based check the next priority runs, in the order {@code
      * PhaseHandler.mainLoopStep} runs them.

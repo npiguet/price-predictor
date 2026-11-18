@@ -173,6 +173,29 @@ class RandomChoicesTest {
         assertTrue(new InterventionFork(null, null, null, 0L).hasChoices(charm, caster));
     }
 
+    /**
+     * A mode that counters a spell is drawn once the spell is on the stack
+     * (finding 3.1): Ojutai's Command over a creature spell draws its
+     * "counter target creature spell" mode, which no card of the stack
+     * zone could make choosable, and the targets draw then takes the spell.
+     */
+    @Test
+    void aModeThatCountersASpellIsDrawnWhenTheSpellIsOnTheStack() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        SpellAbility bears = TestBoard.castUntargeted(game, game.getPlayers().get(1), "Grizzly Bears");
+        SpellAbility charm = TestBoard.charmOf(TestBoard.inHand(game, caster, "Ojutai's Command"), caster);
+        AbilitySub counter = charm.getAdditionalAbilityList("Choices").get(2);
+
+        boolean drawn = false;
+        for (int seed = 0; seed < SEEDS && !drawn; seed++) {
+            drawn = drawsFor(seed).drawModes(charm).contains(counter);
+        }
+        assertTrue(drawn, "the counter mode is a legal choice");
+        assertTrue(drawsFor(0).chooseTargetsFor(counter));
+        assertEquals(List.of(bears), List.copyOf(counter.getTargets()));
+    }
+
     /** A count uniform in [MinCharmNum, CharmNum], repeats only where allowed. */
     @Test
     void aMinimumOfZeroAndRepeatsAreHonoured() {
@@ -369,6 +392,32 @@ class RandomChoicesTest {
             assertEquals(chosen, distinct.size(), "targets are distinct");
         }
         assertEquals(Set.of(0, 1, 2), counts);
+    }
+
+    /**
+     * A clause that targets a spell draws the spell on the stack, never its
+     * card (findings 3.1, 3.2): the effect reads spell targets only, so a
+     * card drawn there resolved into nothing. Essence Scatter takes a
+     * creature spell, which no card candidate ever offered, and Negate an
+     * instant, whose card it used to take.
+     */
+    @Test
+    void aClauseThatTargetsASpellDrawsTheSpellNeverItsCard() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player other = game.getPlayers().get(1);
+        SpellAbility bears = TestBoard.castUntargeted(game, other, "Grizzly Bears");
+        SpellAbility bolt = TestBoard.cast(
+                game, TestBoard.inHand(game, other, "Lightning Bolt"), other, caster);
+        SpellAbility scatter = TestBoard.spellOf(TestBoard.inHand(game, caster, "Essence Scatter"), caster);
+        SpellAbility negate = TestBoard.spellOf(TestBoard.inHand(game, caster, "Negate"), caster);
+
+        for (int seed = 0; seed < 20; seed++) {
+            assertTrue(drawsFor(seed).chooseTargetsFor(scatter), "seed " + seed);
+            assertEquals(List.of(bears), List.copyOf(scatter.getTargets()), "seed " + seed);
+            assertTrue(drawsFor(seed).chooseTargetsFor(negate), "seed " + seed);
+            assertEquals(List.of(bolt), List.copyOf(negate.getTargets()), "seed " + seed);
+        }
     }
 
     /** A clause that cannot reach its minimum is a failed draw, not a silent resolution. */

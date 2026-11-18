@@ -480,10 +480,12 @@ bracket they follow.
   `has_legal_target` for both seats, from the rules alone:
   - mana and additional costs without the AI's cost preferences;
   - each targeting clause's candidates counted against the clause's minimum;
-  - a charm judged by how many of its offered modes have reachable targets.
+  - a charm judged by how many of its offered modes have reachable targets in every clause of
+    the mode.
 - The random seat filters its own plays on the same verdict.
 - `legal_targets` lists every card and player the rules allow as a target of the
-  candidate, whatever the AI would choose.
+  candidate, whatever the AI would choose. A spell or ability on the stack it may target
+  is listed as its card.
 - Each candidate carries a fourth verdict bit, `timing`: Forge's `canCastTiming`.
 - `can_play` is `canPlay` and `canCastTiming` together, and false when a static forbids the
   play.

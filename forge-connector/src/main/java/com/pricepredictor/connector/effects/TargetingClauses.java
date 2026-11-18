@@ -1,9 +1,13 @@
 package com.pricepredictor.connector.effects;
 
 import forge.game.GameEntity;
+import forge.game.GameObject;
 import forge.game.ability.ApiType;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
+import forge.game.spellability.SpellAbilityStackInstance;
+import forge.game.spellability.TargetRestrictions;
+import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -11,9 +15,10 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The targeting clauses of a spell ability, and whether each can reach its
- * minimum: the one walk the verdict, the decision record and the random seat
- * share.
+ * The targeting clauses of a spell ability, what each may target and whether
+ * each can reach its minimum: the one enumeration ({@link #candidatesOf}) and
+ * the one chain walk ({@link #chainReachesMinimum}) the verdict, the decision
+ * record, the random seat and the forks share.
  *
  * <p>A clause is one link of a sub-ability chain. A charm's own chain is the
  * modes someone chose — the AI's last evaluation, or nobody's yet — not the
@@ -50,25 +55,52 @@ public final class TargetingClauses {
     /**
      * What the rules let one clause target, not what anyone picked: never
      * {@code getTargets()}, which is the chosen set.
+     *
+     * <p>Players and cards of the clause's target zone; for a clause whose
+     * target zone is the stack (Counter, CopySpellAbility, ChangeTargets,
+     * ControlSpell, {@code ChangeZone | Origin$ Stack}), players and the
+     * stack items it can target ({@code canTarget}, which asks
+     * {@code canTargetSpellAbility}), each as the {@code SpellAbility} on the
+     * stack and never as its card. The effect reads spell targets only, so a
+     * card there resolved into nothing, and {@code TargetType$ Spell} passes
+     * an instant's or sorcery's card but never a permanent spell's. That is
+     * how Forge's own target selection offers the stack. A clause that also
+     * targets another zone (Venser's "spell or permanent") keeps Forge's card
+     * candidates, which its effect reads as cards.
      */
-    static List<GameEntity> candidatesOf(SpellAbility clause) {
-        if (!clause.usesTargeting() || clause.getTargetRestrictions() == null) {
+    public static List<GameObject> candidatesOf(SpellAbility clause) {
+        if (!clause.usesTargeting()) {
             return List.of();
         }
-        return clause.getTargetRestrictions().getAllCandidates(clause);
+        TargetRestrictions restrictions = clause.getTargetRestrictions();
+        if (!List.of(ZoneType.Stack).equals(restrictions.getZone())) {
+            return new ArrayList<>(restrictions.getAllCandidates(clause));
+        }
+        List<GameObject> candidates = new ArrayList<>(restrictions.getAllCandidates(clause, true));
+        for (SpellAbilityStackInstance item : clause.getHostCard().getGame().getStack()) {
+            if (clause.canTarget(item.getSpellAbility())) {
+                candidates.add(item.getSpellAbility());
+            }
+        }
+        return candidates;
     }
 
     /**
      * What the rules let any clause the ability offers target, each entity
      * once, in the order the clauses first name them: the union a decision
-     * record's {@code legal_targets} lists (FR-031).
+     * record's {@code legal_targets} lists (FR-031). A stack item is listed
+     * as its card.
      */
     public static List<GameEntity> legalTargets(SpellAbility ability) {
         Set<GameEntity> union = new LinkedHashSet<>();
         for (SpellAbility clause : offered(ability)) {
-            union.addAll(candidatesOf(clause));
+            candidatesOf(clause).stream().map(TargetingClauses::entityOf).forEach(union::add);
         }
         return new ArrayList<>(union);
+    }
+
+    private static GameEntity entityOf(GameObject candidate) {
+        return candidate instanceof SpellAbility item ? item.getHostCard() : (GameEntity) candidate;
     }
 
     /**
@@ -91,10 +123,24 @@ public final class TargetingClauses {
         return clauses;
     }
 
+    /**
+     * Whether every targeting clause of the chain from {@code chain} has as
+     * many candidates as its minimum: each counted alone, so a constraint
+     * across targets is left to the targets draw. A charm's mode is
+     * choosable only when its whole chain passes (CR 700.2a).
+     */
+    public static boolean chainReachesMinimum(SpellAbility chain) {
+        for (SpellAbility clause = chain; clause != null; clause = clause.getSubAbility()) {
+            if (!canReachMinimum(clause)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** Whether one clause is untargeted or has as many candidates as its minimum. */
     static boolean canReachMinimum(SpellAbility clause) {
-        return !clause.usesTargeting()
-                || clause.getTargetRestrictions().getNumCandidates(clause) >= clause.getMinTargets();
+        return !clause.usesTargeting() || candidatesOf(clause).size() >= clause.getMinTargets();
     }
 
     /**
@@ -109,7 +155,7 @@ public final class TargetingClauses {
     private static boolean enoughChoosableModes(SpellAbility charm) {
         int choosable = 0;
         for (AbilitySub mode : charm.getAdditionalAbilityList("Choices")) {
-            if (canReachMinimum(mode)) {
+            if (chainReachesMinimum(mode)) {
                 choosable++;
             }
         }

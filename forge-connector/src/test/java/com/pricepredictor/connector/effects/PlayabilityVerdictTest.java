@@ -389,6 +389,24 @@ class PlayabilityVerdictTest {
         assertEquals(List.of(Refs.of(mine), Refs.of(theirs)), read.legalTargets());
     }
 
+    /**
+     * Counterspell in hand with a creature spell on the stack (finding 3.2):
+     * it has a legal target, and the record lists that spell as its card,
+     * where it read a target and listed none.
+     */
+    @Test
+    void aSpellOnTheStackIsListedAsItsCard() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        SpellAbility bears = TestBoard.castUntargeted(game, game.getPlayers().get(1), "Grizzly Bears");
+        SpellAbility counterspell = TestBoard.inHand(game, a, "Counterspell").getFirstSpellAbility();
+
+        DecisionCandidate read = DecisionCandidate.read(counterspell, a).orElseThrow();
+
+        assertTrue(read.verdict().hasLegalTarget());
+        assertEquals(List.of(Refs.of(bears.getHostCard())), read.legalTargets());
+    }
+
     // ── land plays (FR-033a) ────────────────────────────────────────────
 
     private static SpellAbility landPlayOf(Card land) {
