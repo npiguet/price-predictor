@@ -43,9 +43,11 @@ import forge.game.trigger.Trigger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -106,6 +108,8 @@ final class FaceParser {
     private final String scriptFile;
     private final List<Ability> abilities = new ArrayList<>();
     /** Each Class level's inner text, so its duplicate trait entry can be removed. */
+    /** The lines of secondary triggers whose Execute$ no primary shares (identity set). */
+    private final Set<Ability> secondaryLines = Collections.newSetFromMap(new IdentityHashMap<>());
     private final Set<String> classLevelDescriptions = new HashSet<>();
     /** The synthetic mana line of a basic-typed face, or null. */
     private final String landManaDescription;
@@ -667,8 +671,13 @@ final class FaceParser {
         }
         Ability triggered = TriggeredAbilityEntry.of(t);
         addIfNotNull(abilities, triggered);
+        noteSecondary(triggered, secondary);
         recorder.attribute(triggered, key, t);
         if (triggered != null && exec != null) primaryByExecute.put(exec, triggered);
+    }
+
+    private void noteSecondary(Ability line, boolean secondary) {
+        if (secondary && line != null) secondaryLines.add(line);
     }
 
     /** Whether {@code t} is a secondary trigger that is also static: no card text. */
@@ -756,6 +765,7 @@ final class FaceParser {
         // This eliminates the spurious second trigger that Forge registers for
         // the "enters or attacks" pattern (two T: lines, identical TriggerDescription).
         result = deduplicateByDescription(result);
+        result = withoutRepeatedSecondaries(result);
         result.sort(COSTS_FIRST);
         return result;
     }
@@ -772,15 +782,38 @@ final class FaceParser {
         List<Ability> result = new ArrayList<>();
         for (Ability a : list) {
             String desc = a.descriptionText();
-            if (desc == null) {
-                result.add(a);
-                continue;
-            }
-            Ability survivor = survivors.putIfAbsent(desc, a);
+            Ability survivor = desc == null ? null : survivors.putIfAbsent(desc, a);
             if (survivor == null) {
                 result.add(a);
             } else {
-                recorder.merge(survivor, a);
+                mergeDuplicate(survivor, a);
+            }
+        }
+        return result;
+    }
+
+    /** The survivor takes the duplicate's keys, and is no secondary line if the duplicate was not. */
+    private void mergeDuplicate(Ability survivor, Ability duplicate) {
+        if (!secondaryLines.contains(duplicate)) secondaryLines.remove(survivor);
+        recorder.merge(survivor, duplicate);
+    }
+
+    /**
+     * Drop each secondary trigger's line whose text another line of the face
+     * restates (Coffin Queen's triggers repeat its activated line), its keys
+     * going to {@code dropped_keys}: Forge's card view prints no secondary
+     * trait, and a line that says something no other line does keeps its place.
+     */
+    private List<Ability> withoutRepeatedSecondaries(List<Ability> list) {
+        List<Ability> result = new ArrayList<>(list);
+        for (Ability a : list) {
+            if (!secondaryLines.contains(a) || a.descriptionText() == null) continue;
+            boolean repeated = result.stream().anyMatch(other -> other != a
+                    && other.descriptionText() != null
+                    && RepeatedLines.repeats(a.descriptionText(), other.descriptionText()));
+            if (repeated) {
+                result.removeIf(x -> x == a);
+                recorder.drop(a);
             }
         }
         return result;

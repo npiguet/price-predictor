@@ -59,4 +59,39 @@ class HelperTriggerLineTest {
                 + " graveyard from the battlefield, exile it and you gain 2 life.\""), lines.toString());
         assertTrue(lines.stream().noneMatch(l -> l.startsWith("replacement:")), lines.toString());
     }
+    @Test
+    void aSecondaryTriggerAnotherLineRepeatsPrintsNoLine() {
+        // Coffin Queen's three "when ... exile creature controlled by CARDNAME" triggers
+        // restate its activated line's "when CARDNAME becomes untapped or you lose control of ...".
+        String path = "c/coffin_queen.txt";
+        ConvertedScript queen = ConvertedScript.fromFile(parser, CARDS, path);
+
+        assertEquals(List.of(
+                "name: coffin queen",
+                "mana cost: {2}{B}",
+                "types: creature zombie wizard",
+                "power toughness: 1/1",
+                "static: you may choose not to untap CARDNAME during your untap step.",
+                "activated[1]: {2}{B}, {T}: put target creature card from a graveyard onto the"
+                        + " battlefield under your control. when CARDNAME becomes untapped or you"
+                        + " lose control of CARDNAME, exile that creature."), queen.texts());
+        assertTrue(queen.sidecar().droppedKeys().containsAll(
+                List.of(trigger(path, 0), trigger(path, 1), trigger(path, 2), trigger(path, 3))),
+                queen.sidecar().droppedKeys().toString());
+    }
+
+    @Test
+    void aSecondaryTriggerWithTextOfItsOwnKeepsItsLine() {
+        // Free for All's upkeep trigger is secondary, and no other line states it.
+        List<String> lines = ConvertedScript.fromFile(parser, CARDS, "f/free_for_all.txt").texts();
+        assertTrue(lines.contains("triggered: at the beginning of each player's upkeep, that"
+                + " player chooses a card exiled with CARDNAME at random and puts it onto the"
+                + " battlefield."), lines.toString());
+    }
+
+    @Test
+    void aSelfNameWrittenInTheScriptsOwnCaseReadsCardname() {
+        List<String> lines = ConvertedScript.fromFile(parser, CARDS, "f/friendly_fire.txt").texts();
+        assertTrue(lines.stream().anyMatch(l -> l.contains("CARDNAME deals damage")), lines.toString());
+    }
 }
