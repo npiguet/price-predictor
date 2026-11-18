@@ -34,6 +34,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(ForgeExtension.class)
 class StaticSuppressionTest {
 
+    /** An {@code untapped_production} with no mana, and with one green. */
+    private static final String NO_MANA = "{\"W\":0,\"U\":0,\"B\":0,\"R\":0,\"G\":0,\"C\":0}";
+    private static final String ONE_GREEN = "{\"W\":0,\"U\":0,\"B\":0,\"R\":0,\"G\":1,\"C\":0}";
+
     @TempDir
     Path tempDir;
 
@@ -239,6 +243,90 @@ class StaticSuppressionTest {
                 lineKeys(entity(continuousRecordOf(board, sphere), Refs.of(angel)), "keyword")
                         .stream().sorted().toList(),
                 "the board without Gravity Sphere's static");
+    }
+
+    /**
+     * A player's {@code untapped_production} on a continuous record's board
+     * counts no mana ability the static granted: on Chromatic Lantern's
+     * record each land makes its own colour only, and the Lantern its own
+     * printed any-colour mana, where on the live board every land also
+     * makes any colour.
+     */
+    @Test
+    void aPlayersProductionLeavesOutTheManaAbilitiesTheStaticGranted() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card lantern = board.battlefield("Chromatic Lantern", board.you);
+        board.battlefield("Forest", board.you);
+        board.battlefield("Island", board.you);
+        board.game.getAction().checkStaticAbilities();
+
+        assertProduction(board, lantern,
+                "{\"W\":3,\"U\":4,\"B\":3,\"R\":3,\"G\":4,\"C\":0}",
+                "{\"W\":1,\"U\":2,\"B\":1,\"R\":1,\"G\":2,\"C\":0}");
+    }
+
+    /**
+     * A permanent's production counts for its controller on the board
+     * without the static: on Annex's record the opponent's Forest makes the
+     * opponent's green, not yours.
+     */
+    @Test
+    void aPlayersProductionCountsWhatTheyControlWithoutTheStatic() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card forest = board.battlefield("Forest", board.opponent);
+        Card annex = enchant(board, "Annex", forest);
+        assertEquals(board.you, forest.getController(), "Annex did not take the Forest");
+
+        assumeSuppression();
+        String record = continuousRecordOf(board, annex);
+        assertEquals(parse(NO_MANA), production(player(record, board.you)),
+                "your production without Annex");
+        assertEquals(parse(ONE_GREEN), production(player(record, board.opponent)),
+                "the opponent's production without Annex");
+    }
+
+    /**
+     * A creature that came under its controller's control this turn taps for
+     * mana only with the static's haste: on Fires of Yavimaya's record
+     * Llanowar Elves, summoning sick there, makes nothing.
+     */
+    @Test
+    void aPlayersProductionLeavesOutWhatTheStaticsHasteAllowed() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card fires = board.battlefield("Fires of Yavimaya", board.you);
+        Card elves = board.battlefield("Llanowar Elves", board.you);
+        board.game.getAction().checkStaticAbilities();
+        assertTrue(elves.isFirstTurnControlled() && !elves.isSick(), "the elves are not hasted");
+
+        assertProduction(board, fires, ONE_GREEN, NO_MANA);
+    }
+
+    /**
+     * Your production on the live board is {@code live}, and on the board of
+     * {@code host}'s continuous record {@code without}.
+     */
+    private void assertProduction(CharacterizationBoard board, Card host, String live, String without)
+            throws Throwable {
+        assertEquals(parse(live), production(parse(PlayerJson.render(
+                board.game, board.you, StaticSuppression.NONE))), "the live board's production");
+        assumeSuppression();
+        assertEquals(parse(without), production(player(continuousRecordOf(board, host), board.you)),
+                "the board without " + host.getName() + "'s static");
+    }
+
+    private static Map<String, Object> production(Map<String, Object> player) {
+        return asMap(player.get("untapped_production"));
+    }
+
+    private static Map<String, Object> player(String record, forge.game.player.Player player) {
+        Map<String, Object> state = asMap(parse(record).get("state"));
+        for (Object each : (List<?>) state.get("players")) {
+            Map<String, Object> map = asMap(each);
+            if (Refs.of(player).equals(map.get("id"))) {
+                return map;
+            }
+        }
+        throw new AssertionError("no " + Refs.of(player) + " in " + record);
     }
 
     /** The key of {@code card}'s printed keyword {@code name}, as {@link #lineKeys} spells it. */

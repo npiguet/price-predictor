@@ -775,9 +775,9 @@ class SnapshotBuilderTest {
             CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
 
             assertEquals(1L, playerOf(board, 0).get("max_land_plays"));
-            assertTrue(PlayerJson.render(board.game, board.you)
+            assertTrue(PlayerJson.render(board.game, board.you, StaticSuppression.NONE)
                     .matches(".*\"this_turn\":\\{[^}]*},\"max_land_plays\":1,.*"),
-                    PlayerJson.render(board.game, board.you));
+                    PlayerJson.render(board.game, board.you, StaticSuppression.NONE));
         }
 
         /** Exploration raises its controller's land plays, not the opponent's. */

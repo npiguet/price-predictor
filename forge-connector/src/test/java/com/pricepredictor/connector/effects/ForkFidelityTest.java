@@ -290,6 +290,32 @@ class ForkFidelityTest {
         assertEquals(List.of(), ForkFidelity.differences(live, fork));
     }
 
+    /**
+     * Mage-Ring Network's storage ability ("remove X storage counters") after
+     * an earlier activation or AI evaluation left X = 3 on the live ability,
+     * with one counter on the land: read as left, the live ability could not
+     * pay its cost and counted no colourless, while the copy's ability,
+     * rebuilt with no X, counted one. Production reads no leftover X, and
+     * leaves the live ability's X as it found it.
+     */
+    @Test
+    void aCopyAgreesOnWhatAManaAbilityWithALeftoverXMakes() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = live.getPlayers().get(0);
+        Card network = TestBoard.inPlay(live, you, "Mage-Ring Network");
+        network.addCounterInternal(CounterEnumType.STORAGE, 1, you, false, null, java.util.Map.of());
+        forge.game.spellability.SpellAbility storage = network.getManaAbilities().stream()
+                .filter(ability -> ability.getPayCosts().hasSpecificCostType(
+                        forge.game.cost.CostRemoveCounter.class))
+                .findFirst().orElseThrow();
+        storage.setXManaCostPaid(3);
+
+        Game fork = new GameCopier(live).makeCopy();
+
+        assertEquals(List.of(), ForkFidelity.differences(live, fork));
+        assertEquals(3, storage.getXManaCostPaid(), "the live ability's X was not put back");
+    }
+
     @Test
     void aCopyThatDiffersIsNamedByEntityAndField() {
         Game live = board();

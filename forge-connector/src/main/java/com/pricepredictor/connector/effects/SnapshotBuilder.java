@@ -247,7 +247,7 @@ public final class SnapshotBuilder {
         LibraryCapture libraries = LibraryCapture.of(game, board, present);
         List<Card> cards = new ArrayList<>(tiers);
         addBeyondTheTiers(entities, present, tiers, cards, board, libraries, pending);
-        String players = Json.array(game.getPlayers(), player -> PlayerJson.render(game, player));
+        String players = Json.array(game.getPlayers(), player -> PlayerJson.render(game, player, board));
         return new Snapshot(
                 globalToJson(tiers, board), players, "[" + String.join(",", entities) + "]",
                 SnapshotLinks.render(
