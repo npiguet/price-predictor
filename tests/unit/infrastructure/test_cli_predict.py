@@ -58,7 +58,7 @@ class TestThePredictorsNameTheirModel:
         from pathlib import Path
 
         from price_predictor.application import predict as predict_module
-        from price_predictor.infrastructure import cli
+        from price_predictor.infrastructure import cli, cli_predict
 
         seen = {}
 
@@ -69,7 +69,7 @@ class TestThePredictorsNameTheirModel:
                 return SimpleNamespace(predicted_price_eur=1.0, model_version="v")
 
         monkeypatch.setattr(predict_module, "PredictPriceUseCase", FakeUseCase)
-        monkeypatch.setattr(cli, "_resolve_optional_printing_data", lambda name: None)
+        monkeypatch.setattr(cli_predict, "_resolve_optional_printing_data", lambda name: None)
         model = tmp_path / "models" / "run" / "latest.joblib"
         args = build_parser().parse_args([
             "predict", "sklearn", "--card", "name: test\ntypes: creature",

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from price_predictor.infrastructure import cli, run_manifest
+from price_predictor.infrastructure import cli, cli_corpus, run_manifest
 from price_predictor.infrastructure.cli_run_manifest import (
     READ_ONLY,
     SUBCOMMAND_DEST,
@@ -154,7 +154,7 @@ class TestPricePredictorCli:
             (Path(args.output_dir) / "vocab.txt").write_text("[PAD]\n", encoding="utf-8")
             return 0
 
-        monkeypatch.setattr(cli, "run_vocabulary", build_vocabulary)
+        monkeypatch.setattr(cli_corpus, "run_vocabulary", build_vocabulary)
         argv = ["vocabulary", "--output-dir", str(out), "--cards-path", str(cards),
                 "--printings-path", str(tmp_path / "AllPrintings.json")]
         monkeypatch.setattr(sys, "argv", ["price_predictor", *argv])
