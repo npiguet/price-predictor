@@ -70,6 +70,27 @@ class LibraryMovementTest {
         });
     }
 
+    /** The first player of a fresh main-phase game, with {@code hillGiants} Hill Giants in the library. */
+    private static Player casterWithLibrary(int hillGiants) {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        library(game, caster, "Hill Giant", hillGiants);
+        return caster;
+    }
+
+    /** A card that a resolution must leave in a zone of its caster, and what to say if it does not. */
+    private record Reached(ZoneType zone, String card, String message) {
+    }
+
+    /** Resolve {@code name}, check the caster ended with the card {@code reached} names, return the records. */
+    private List<String> resolvedReaching(Player caster, String name, Reached reached)
+            throws Throwable {
+        List<String> all = resolved(caster.getGame(), caster, name);
+        assertTrue(caster.getCardsIn(reached.zone()).stream()
+                .anyMatch(card -> card.getName().equals(reached.card())), reached.message());
+        return all;
+    }
+
     /**
      * Notion Rain surveils 2 into the graveyard, then draws two: two cards
      * milled and two drawn, each told once.
@@ -93,15 +114,12 @@ class LibraryMovementTest {
     /** Lay of the Land puts a basic land from the library into the hand: nothing drawn. */
     @Test
     void aTutorToHandDrawsNothing() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        library(game, caster, "Hill Giant", 4);
-        library(game, caster, "Forest", 1);
+        Player caster = casterWithLibrary(4);
+        library(caster.getGame(), caster, "Forest", 1);
 
-        List<String> all = resolved(game, caster, "Lay of the Land");
+        List<String> all = resolvedReaching(caster, "Lay of the Land",
+                new Reached(ZoneType.Hand, "Forest", "the Forest was fetched"));
 
-        assertTrue(caster.getCardsIn(ZoneType.Hand).stream()
-                .anyMatch(card -> card.getName().equals("Forest")), "the Forest was fetched");
         assertEquals(0, total(all, "card_drawn"), all.toString());
     }
 
@@ -151,29 +169,22 @@ class LibraryMovementTest {
      */
     @Test
     void aDigsRestInTheGraveyardMillsNothing() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        library(game, caster, "Hill Giant", 12);
+        Player caster = casterWithLibrary(12);
 
-        List<String> all = resolved(game, caster, "Fact or Fiction");
+        List<String> all = resolvedReaching(caster, "Fact or Fiction",
+                new Reached(ZoneType.Graveyard, "Hill Giant", "a pile reached the graveyard"));
 
-        assertTrue(caster.getCardsIn(ZoneType.Graveyard).stream()
-                .anyMatch(card -> card.getName().equals("Hill Giant")),
-                "a pile reached the graveyard");
         assertEquals(0, total(all, "card_milled"), all.toString());
     }
 
     /** Entomb puts a chosen card from the library into the graveyard: a move, no mill. */
     @Test
     void anEntombMillsNothing() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        library(game, caster, "Hill Giant", 4);
+        Player caster = casterWithLibrary(4);
 
-        List<String> all = resolved(game, caster, "Entomb");
+        List<String> all = resolvedReaching(caster, "Entomb",
+                new Reached(ZoneType.Graveyard, "Hill Giant", "a card was entombed"));
 
-        assertTrue(caster.getCardsIn(ZoneType.Graveyard).stream()
-                .anyMatch(card -> card.getName().equals("Hill Giant")), "a card was entombed");
         assertEquals(0, total(all, "card_milled"), all.toString());
     }
 
