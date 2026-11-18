@@ -62,47 +62,53 @@ def within_r2(X, y, api, groups) -> float:
     return weighted_r2(yr, oof_predict(Ridge(alpha=10.0), Xr, yr, groups[ok]))
 
 
-def main() -> None:
-    parser = add_probe_arguments(
-        argparse.ArgumentParser(description=__doc__.splitlines()[0]),
-    )
-    paths = resolve_paths(parser.parse_args())
-    warnings.simplefilter("ignore", ConvergenceWarning)
-    table, _ = prepared(paths)
-    groups = table["group"].to_numpy()
-    X = StandardScaler().fit_transform(matrix(table, "e_full"))
-    y = table["api_c"].to_numpy(object)
-    linear = oof_predict(LogisticRegression(max_iter=500), X, y, groups)
-    knn = oof_predict(KNeighborsClassifier(n_neighbors=20), X, y, groups)
-    counts = pd.Series(y).value_counts()
+def confusion_note(y: np.ndarray, linear: np.ndarray, knn: np.ndarray, counts: pd.Series) -> str:
+    return (f"Out-of-fold over {len(y)} texts, GroupKFold(5) by carrying card. "
+            f"Accuracy: linear {np.mean(linear == y):.3f}, 20-nearest-neighbour "
+            f"{np.mean(knn == y):.3f}, majority class "
+            f"{counts.iloc[0] / len(y):.3f}.")
+
+
+def confused_pairs(y: np.ndarray, linear: np.ndarray, counts: pd.Series) -> pd.DataFrame:
+    """The 30 API-type pairs the linear probe confuses most, as a share of the first type."""
     confusion = pd.crosstab(pd.Series(y, name="true"), pd.Series(linear, name="pred"))
-    pairs = []
-    for true in confusion.index:
-        for pred in confusion.columns:
-            if true != pred and counts[true] >= 100:
-                pairs.append({"API type": true, "texts": int(counts[true]),
-                              "probe says": pred,
-                              "share": confusion.loc[true, pred] / counts[true]})
-    pairs = pd.DataFrame(pairs).sort_values("share", ascending=False).head(30)
-    per_type = pd.DataFrame({
+    pairs = [{"API type": true, "texts": int(counts[true]), "probe says": pred,
+              "share": confusion.loc[true, pred] / counts[true]}
+             for true in confusion.index for pred in confusion.columns
+             if true != pred and counts[true] >= 100]
+    return pd.DataFrame(pairs).sort_values("share", ascending=False).head(30)
+
+
+def type_recall(y: np.ndarray, linear: np.ndarray, knn: np.ndarray,
+                counts: pd.Series) -> pd.DataFrame:
+    """Per-type recall of both probes, for the 40 largest types."""
+    return pd.DataFrame({
         "API type": counts.index,
         "texts": counts.to_numpy(),
         "linear recall": [float((linear[y == t] == t).mean()) for t in counts.index],
         "20-NN recall": [float((knn[y == t] == t).mean()) for t in counts.index],
     }).head(40)
-    note = (f"Out-of-fold over {len(y)} texts, GroupKFold(5) by carrying card. "
-            f"Accuracy: linear {np.mean(linear == y):.3f}, 20-nearest-neighbour "
-            f"{np.mean(knn == y):.3f}, majority class "
-            f"{counts.iloc[0] / len(y):.3f}.")
+
+
+def write_api_confusion(paths, table: pd.DataFrame, groups: np.ndarray) -> None:
+    """Which API types the embedding merges: the confusion pairs and per-type recall."""
+    X = StandardScaler().fit_transform(matrix(table, "e_full"))
+    y = table["api_c"].to_numpy(object)
+    linear = oof_predict(LogisticRegression(max_iter=500), X, y, groups)
+    knn = oof_predict(KNeighborsClassifier(n_neighbors=20), X, y, groups)
+    counts = pd.Series(y).value_counts()
+    pairs = confused_pairs(y, linear, counts)
+    style = MarkdownStyle(note=confusion_note(y, linear, knn, counts))
     write_markdown(pairs, paths.out / "api_confusion.md",
-                   "API-type pairs the linear probe confuses most",
-                   MarkdownStyle(note=note))
-    write_markdown(per_type, paths.out / "api_recall.md",
-                   "Per-type recall of the API-type probes (40 largest types)",
-                   MarkdownStyle(note=note))
-    print(note)
+                   "API-type pairs the linear probe confuses most", style)
+    write_markdown(type_recall(y, linear, knn, counts), paths.out / "api_recall.md",
+                   "Per-type recall of the API-type probes (40 largest types)", style)
+    print(style.note)
     print(pairs.head(15).to_string(index=False))
 
+
+def write_amounts(paths, table: pd.DataFrame, groups: np.ndarray) -> None:
+    """Whether the embedding reads each amount within an API type."""
     rows = []
     api = table["api"].to_numpy(object)
     # The taxonomy columns only where that baseline's cache exists (FR-072).
@@ -124,6 +130,18 @@ def main() -> None:
                                       "API-type mean subtracted; ridge alpha 10, "
                                       "GroupKFold(5) by carrying card."))
     print(frame.to_string(index=False))
+
+
+def main() -> None:
+    parser = add_probe_arguments(
+        argparse.ArgumentParser(description=__doc__.splitlines()[0]),
+    )
+    paths = resolve_paths(parser.parse_args())
+    warnings.simplefilter("ignore", ConvergenceWarning)
+    table, _ = prepared(paths)
+    groups = table["group"].to_numpy()
+    write_api_confusion(paths, table, groups)
+    write_amounts(paths, table, groups)
 
 
 if __name__ == "__main__":

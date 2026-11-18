@@ -45,6 +45,7 @@ from __future__ import annotations
 import argparse
 import sys
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -135,47 +136,70 @@ def probe_numeric(X, y, groups, w=None) -> float:
     return weighted_r2(y, pred, w)
 
 
-def probe_nonlinear(X, y, groups, w, method: str) -> float:
+@dataclass(frozen=True)
+class Fit:
+    """The rows one profile probe fits: the space, the target, the card groups and the weights."""
+
+    X: np.ndarray
+    y: np.ndarray
+    groups: np.ndarray
+    w: np.ndarray
+
+    def where(self, keep: np.ndarray) -> "Fit":
+        """The rows ``keep`` selects."""
+        return Fit(self.X[keep], self.y[keep], self.groups[keep], self.w[keep])
+
+
+def probe_nonlinear(fit: Fit, method: str) -> float:
     """Out-of-fold weighted R² of a k-nearest-neighbour or boosted-tree fit."""
     if method == "knn":
         # k-nearest-neighbour takes no sample weights: its fit is unweighted, only the score is.
-        pred = oof_predict(KNeighborsRegressor(n_neighbors=20), X, y, groups, folds=FOLDS)
+        pred = oof_predict(KNeighborsRegressor(n_neighbors=20), fit.X, fit.y, fit.groups,
+                           folds=FOLDS)
     else:
         pred = oof_predict(HistGradientBoostingRegressor(max_iter=200, random_state=0),
-                           X, y, groups, folds=FOLDS, weight=w)
-    return weighted_r2(y, pred, w)
+                           fit.X, fit.y, fit.groups, folds=FOLDS, weight=fit.w)
+    return weighted_r2(fit.y, pred, fit.w)
+
+
+METRICS = {"binary": "AUC", "multiclass": "accuracy", "numeric": "R²", "profile": "weighted R²"}
+#: The non-linear probes by label, per space: k-nearest-neighbour is not run on script features.
+NONLINEAR_METHODS = {False: {"knn": "knn", "boosted trees": "hgb"},
+                     True: {"boosted trees": "hgb"}}
+SIMPLE_PROBES = {"binary": probe_binary, "multiclass": probe_multiclass, "numeric": probe_numeric}
+
+
+def describe(kind: str, y: np.ndarray, w) -> dict:
+    """The columns that say what a target is made of: its positives, classes or texts."""
+    if kind == "binary":
+        return {"positives": int(y.sum())}
+    if kind == "multiclass":
+        return {"baseline": float(pd.Series(y).value_counts(normalize=True).iloc[0]),
+                "classes": int(pd.Series(y).nunique())}
+    return {"texts": int(np.isfinite(y).sum() if w is None
+                         else (np.isfinite(y) & (w > 0)).sum())}
+
+
+def profile_scores(space: str, everything: Fit) -> dict:
+    """The weighted ridge score of a profile target in one space, and its non-linear probes."""
+    fit = everything.where(everything.w > 0)
+    scores = {space: probe_numeric(fit.X, fit.y, fit.groups, fit.w)}
+    if space in NONLINEAR_SPACES:
+        methods = NONLINEAR_METHODS[space == "script features"]
+        for label, method in methods.items():
+            scores[f"{space} ({label})"] = probe_nonlinear(fit, method)
+    return scores
 
 
 def run_one(task, spaces, groups):
     kind, name, y, w = task
     warnings.simplefilter("ignore", ConvergenceWarning)
-    out = {"target": name, "metric": {"binary": "AUC", "multiclass": "accuracy",
-                                       "numeric": "R²", "profile": "weighted R²"}[kind]}
-    if kind == "binary":
-        out["positives"] = int(y.sum())
-    elif kind == "multiclass":
-        out["baseline"] = float(pd.Series(y).value_counts(normalize=True).iloc[0])
-        out["classes"] = int(pd.Series(y).nunique())
-    else:
-        out["texts"] = int(np.isfinite(y).sum() if w is None
-                           else (np.isfinite(y) & (w > 0)).sum())
+    out = {"target": name, "metric": METRICS[kind], **describe(kind, y, w)}
     for space, X in spaces.items():
-        if kind == "binary":
-            out[space] = probe_binary(X, y, groups)
-        elif kind == "multiclass":
-            out[space] = probe_multiclass(X, y, groups)
-        elif kind == "numeric":
-            out[space] = probe_numeric(X, y, groups)
+        if kind == "profile":
+            out.update(profile_scores(space, Fit(X, y, groups, w)))
         else:
-            keep = w > 0
-            out[space] = probe_numeric(X[keep], y[keep], groups[keep], w[keep])
-            if space in NONLINEAR_SPACES:
-                for method in ("knn", "boosted trees"):
-                    if method == "knn" and space == "script features":
-                        continue
-                    out[f"{space} ({method})"] = probe_nonlinear(
-                        X[keep], y[keep], groups[keep], w[keep],
-                        "knn" if method == "knn" else "hgb")
+            out[space] = SIMPLE_PROBES[kind](X, y, groups)
     return out
 
 
@@ -194,28 +218,39 @@ def script_tasks(table: pd.DataFrame, key_columns: list[str]) -> list:
 
 
 def profile_tasks(table: pd.DataFrame) -> list:
-    tasks = []
-    for column in table.columns:
-        if not column.startswith(("p_", "mean_", "share_opp", "kind_share_")):
-            continue
-        y = table[column].to_numpy(float)
-        w = profile_weight(table, column)
-        w = np.where(np.isfinite(y), w, 0.0)
-        have = w > 0
-        if have.sum() < 1000:
-            continue
-        if column.startswith("p_") and np.average(y[have], weights=w[have]) < 0.005:
-            continue
-        if not column.startswith("p_"):
-            # A handful of texts reach extreme means (one X-counter ability
-            # averages 522 counters); winsorizing keeps one text from
-            # deciding a weighted R².
-            low, high = np.quantile(y[have], [0.005, 0.995])
-            y = np.clip(y, low, high)
-            if high <= low:
-                continue
-        tasks.append(("profile", column, np.nan_to_num(y), w))
-    return tasks
+    tasks = [profile_task(table, column) for column in table.columns
+             if column.startswith(("p_", "mean_", "share_opp", "kind_share_"))]
+    return [task for task in tasks if task is not None]
+
+
+def profile_task(table: pd.DataFrame, column: str):
+    """The weighted-ridge task of one statistic column, or ``None`` when too few texts carry it."""
+    y = table[column].to_numpy(float)
+    w = profile_weight(table, column)
+    w = np.where(np.isfinite(y), w, 0.0)
+    have = w > 0
+    if have.sum() < 1000 or is_rare_share(column, y, w, have):
+        return None
+    if not column.startswith("p_"):
+        y = clipped_mean(y, have)
+        if y is None:
+            return None
+    return ("profile", column, np.nan_to_num(y), w)
+
+
+def is_rare_share(column: str, y: np.ndarray, w: np.ndarray, have: np.ndarray) -> bool:
+    """Whether a ``p_`` statistic is almost never nonzero among the texts that have it."""
+    return column.startswith("p_") and np.average(y[have], weights=w[have]) < 0.005
+
+
+def clipped_mean(y: np.ndarray, have: np.ndarray):
+    """``y`` winsorized at its 0.5th/99.5th percentiles, ``None`` when it does not vary.
+
+    A handful of texts reach extreme means (one X-counter ability averages 522
+    counters); winsorizing keeps one text from deciding a weighted R².
+    """
+    low, high = np.quantile(y[have], [0.005, 0.995])
+    return np.clip(y, low, high) if high > low else None
 
 
 def main() -> None:

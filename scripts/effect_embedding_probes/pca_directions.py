@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -96,66 +97,88 @@ def space_r2_numeric(E: np.ndarray, x: np.ndarray) -> float:
     return float(((np.outer(xc, beta)) ** 2).sum() / (Ec ** 2).sum())
 
 
-def write_variance(paths, space: str, table: pd.DataFrame, share: np.ndarray) -> pd.DataFrame:
-    shown = min(20, len(share))
+@dataclass(frozen=True)
+class Decomposition:
+    """One space's principal components of the probed texts, and where they are written."""
+
+    paths: object
+    space: str
+    table: pd.DataFrame
+    E: np.ndarray
+    scores: np.ndarray
+    share: np.ndarray
+    key_columns: list
+
+    @property
+    def z(self) -> np.ndarray:
+        """The component scores in standard-deviation units."""
+        return self.scores / self.scores.std(axis=0)
+
+
+def per_pc(values) -> dict:
+    """``PC1``, ``PC2``, ... columns from one value per component."""
+    return {f"PC{k + 1}": value for k, value in enumerate(values)}
+
+
+def write_variance(d: Decomposition) -> pd.DataFrame:
+    shown = min(20, len(d.share))
     variance = pd.DataFrame({
         "component": np.arange(1, shown + 1),
-        "share": share[:shown],
-        "cumulative": np.cumsum(share)[:shown],
+        "share": d.share[:shown],
+        "cumulative": np.cumsum(d.share)[:shown],
     })
-    ratio = participation_ratio(share)
-    write_markdown(variance, paths.out / f"pca_{space}_variance.md",
-                   f"Variance share by principal component ({space}, "
-                   f"{len(table)} unique texts)",
+    ratio = participation_ratio(d.share)
+    write_markdown(variance, d.paths.out / f"pca_{d.space}_variance.md",
+                   f"Variance share by principal component ({d.space}, "
+                   f"{len(d.table)} unique texts)",
                    MarkdownStyle(note=f"Participation ratio (Σλ)² / Σλ² over all "
-                                      f"{len(share)} eigenvalues: {ratio:.2f}."))
-    print(f"participation ratio ({space}): {ratio:.2f} of {len(share)} dimensions")
+                                      f"{len(d.share)} eigenvalues: {ratio:.2f}."))
+    print(f"participation ratio ({d.space}): {ratio:.2f} of {len(d.share)} dimensions")
     return variance
 
 
-def write_extremes(paths, space: str, table: pd.DataFrame, z: np.ndarray,
-                   share: np.ndarray) -> None:
-    lines = [f"# Extreme texts along each principal component ({space})", ""]
+def extreme_rows(d: Decomposition, k: int, idx) -> list:
+    """The table rows of the texts ``idx`` along component ``k``."""
+    z = d.z
+    return [[f"{z[i, k]:+.2f}", row.card, row.api, row.line_kind,
+             str(row.prose)[:110], f"`{str(row.text)[:150]}`"]
+            for i, row in ((i, d.table.iloc[i]) for i in idx)]
+
+
+def write_extremes(d: Decomposition) -> None:
+    lines = [f"# Extreme texts along each principal component ({d.space})", ""]
     for k in range(N_PCS):
-        order = np.argsort(z[:, k])
-        lines.append(f"## PC{k + 1} ({share[k]:.1%} of variance)")
+        order = np.argsort(d.z[:, k])
+        lines.append(f"## PC{k + 1} ({d.share[k]:.1%} of variance)")
         for label, idx in (("negative end", order[:10]),
                            ("positive end", order[::-1][:10])):
             lines.append(f"\n**{label}**\n")
-            rows = [table.iloc[i] for i in idx]
-            lines.append(md_table(
-                ["SD", "card", "API", "kind", "prose", "script"],
-                [[f"{z[i, k]:+.2f}", row.card, row.api, row.line_kind,
-                  str(row.prose)[:110], f"`{str(row.text)[:150]}`"]
-                 for i, row in zip(idx, rows)], "rlllll"))
+            lines.append(md_table(["SD", "card", "API", "kind", "prose", "script"],
+                                  extreme_rows(d, k, idx), "rlllll"))
         lines.append("")
-    (paths.out / f"pca_{space}_extremes.md").write_text("\n".join(lines),
-                                                   encoding="utf-8")
+    (d.paths.out / f"pca_{d.space}_extremes.md").write_text("\n".join(lines),
+                                                          encoding="utf-8")
 
 
-def write_feature_attribution(paths, space: str, table: pd.DataFrame, E: np.ndarray,
-                              scores: np.ndarray, share: np.ndarray,
-                              key_columns: list[str]) -> None:
-    """The share of each component's variance, and of the whole space's, one feature explains."""
-    rows = []
-    for name, column in CATEGORICAL_FEATURES.items():
-        row = {"feature": name, "kind": "categorical"}
-        for k in range(N_PCS):
-            row[f"PC{k + 1}"] = eta_squared(scores[:, k], table[column])
-        row["whole space"] = multivariate_eta_squared(E, table[column])
-        rows.append(row)
-    numeric = list(BINARY_SCRIPT) + list(NUMERIC_SCRIPT) + list(CARD) + \
-        list(CORPUS) + key_columns
-    for column in numeric:
-        x = table[column].to_numpy(dtype=float)
-        row = {"feature": column,
-               "kind": "key" if column.startswith("key_") else "numeric/binary"}
-        for k in range(N_PCS):
-            row[f"PC{k + 1}"] = pearson(x, scores[:, k], min_n=30) ** 2
-        row["whole space"] = space_r2_numeric(E, x)
-        rows.append(row)
-    attribution = pd.DataFrame(rows)
-    attribution.to_csv(paths.out / f"pca_{space}_feature_r2.csv", index=False)
+def categorical_attribution(d: Decomposition) -> list:
+    """The η² rows: how much of each component's variance a categorical feature explains."""
+    return [{"feature": name, "kind": "categorical",
+             **per_pc(eta_squared(d.scores[:, k], d.table[column]) for k in range(N_PCS)),
+             "whole space": multivariate_eta_squared(d.E, d.table[column])}
+            for name, column in CATEGORICAL_FEATURES.items()]
+
+
+def numeric_attribution_row(d: Decomposition, column: str) -> dict:
+    """The r² row of one numeric or 0/1 feature."""
+    x = d.table[column].to_numpy(dtype=float)
+    return {"feature": column,
+            "kind": "key" if column.startswith("key_") else "numeric/binary",
+            **per_pc(pearson(x, d.scores[:, k], min_n=30) ** 2 for k in range(N_PCS)),
+            "whole space": space_r2_numeric(d.E, x)}
+
+
+def top_features(attribution: pd.DataFrame, share: np.ndarray) -> pd.DataFrame:
+    """The eight features explaining the most of each component, one row per component."""
     top = []
     for k in range(N_PCS):
         column = f"PC{k + 1}"
@@ -165,17 +188,28 @@ def write_feature_attribution(paths, space: str, table: pd.DataFrame, E: np.ndar
             "top features (variance explained alone)": "; ".join(
                 f"{f} {v:.2f}" for f, v in zip(best.feature, best[column])),
         })
-    write_markdown(pd.DataFrame(top), paths.out / f"pca_{space}_top_features.md",
-                   f"Features explaining the most variance per component ({space})",
+    return pd.DataFrame(top)
+
+
+def write_feature_attribution(d: Decomposition) -> None:
+    """The share of each component's variance, and of the whole space's, one feature explains."""
+    numeric = (list(BINARY_SCRIPT) + list(NUMERIC_SCRIPT) + list(CARD) + list(CORPUS)
+               + d.key_columns)
+    rows = categorical_attribution(d) + [numeric_attribution_row(d, c) for c in numeric]
+    attribution = pd.DataFrame(rows)
+    attribution.to_csv(d.paths.out / f"pca_{d.space}_feature_r2.csv", index=False)
+    write_markdown(top_features(attribution, d.share),
+                   d.paths.out / f"pca_{d.space}_top_features.md",
+                   f"Features explaining the most variance per component ({d.space})",
                    MarkdownStyle(note="η² for categoricals, r² for numeric and 0/1 features. "
-                                      "Full table: pca_" + space + "_feature_r2.csv."))
+                                      "Full table: pca_" + d.space + "_feature_r2.csv."))
 
 
-def write_nested_r2(paths, space: str, table: pd.DataFrame, E: np.ndarray,
-                    scores: np.ndarray, key_columns: list[str]) -> pd.DataFrame:
-    groups = table["group"].to_numpy()
-    script_nums = list(BINARY_SCRIPT) + list(NUMERIC_SCRIPT) + key_columns
-    sets = {
+def nested_feature_sets(d: Decomposition) -> dict:
+    """The design matrices of the nested feature sets, each adding to the one before."""
+    table = d.table
+    script_nums = list(BINARY_SCRIPT) + list(NUMERIC_SCRIPT) + d.key_columns
+    return {
         "API type": design(table, categorical=["api_c"]),
         "+ line kind": design(table, categorical=["api_c", "line_kind"]),
         "+ every script feature": design(table, categorical=SCRIPT_CATS,
@@ -185,27 +219,29 @@ def write_nested_r2(paths, space: str, table: pd.DataFrame, E: np.ndarray,
         "+ corpus facts": design(table, categorical=SCRIPT_CATS,
                                  numeric=script_nums + list(CARD) + list(CORPUS)),
     }
-    Y = scores[:, :N_PCS]
+
+
+def write_nested_r2(d: Decomposition) -> pd.DataFrame:
+    groups = d.table["group"].to_numpy()
+    Y = d.scores[:, :N_PCS]
     nested = []
-    for name, X in sets.items():
-        per_pc = ridge_cv_r2(X, Y, groups, alpha=10.0)
-        whole = ridge_cv_r2(X, E - E.mean(axis=0), groups, alpha=10.0)[-1]
-        row = {"feature set": name, "columns": X.shape[1]}
-        for k in range(N_PCS):
-            row[f"PC{k + 1}"] = per_pc[k]
-        row["whole space"] = whole
-        nested.append(row)
+    for name, X in nested_feature_sets(d).items():
+        scored = ridge_cv_r2(X, Y, groups, alpha=10.0)
+        whole = ridge_cv_r2(X, d.E - d.E.mean(axis=0), groups, alpha=10.0)[-1]
+        nested.append({"feature set": name, "columns": X.shape[1],
+                       **per_pc(scored[:N_PCS]), "whole space": whole})
     frame = pd.DataFrame(nested)
-    write_markdown(frame, paths.out / f"pca_{space}_nested_r2.md",
-                   f"Cross-validated R² of nested feature sets ({space})",
+    write_markdown(frame, d.paths.out / f"pca_{d.space}_nested_r2.md",
+                   f"Cross-validated R² of nested feature sets ({d.space})",
                    MarkdownStyle(note="Ridge (alpha 10), 5 folds grouped by carrying card. "
-                                      f"'whole space' is the pooled R² over all {E.shape[1]} "
+                                      f"'whole space' is the pooled R² over all {d.E.shape[1]} "
                                       "dimensions."))
     return frame
 
 
-def write_api_positions(paths, space: str, table: pd.DataFrame, z: np.ndarray) -> None:
+def write_api_positions(d: Decomposition) -> None:
     """Each API type's mean PC1 position, and the within-type target splits."""
+    paths, space, table, z = d.paths, d.space, d.table, d.z
     by_type = (pd.DataFrame({"api": table.api, "z": z[:, 0]})
                .groupby("api").z.agg(["count", "mean"]).reset_index())
     by_type = by_type[by_type["count"] >= 150].sort_values("mean")
@@ -224,9 +260,9 @@ def write_api_positions(paths, space: str, table: pd.DataFrame, z: np.ndarray) -
                    style=MarkdownStyle(floatfmt=".2f"))
 
 
-def write_effect_correlations(paths, space: str, table: pd.DataFrame,
-                              scores: np.ndarray) -> None:
+def write_effect_correlations(d: Decomposition) -> None:
     """The observed-effect statistics most correlated with each component."""
+    paths, space, table, scores = d.paths, d.space, d.table, d.scores
     stats = [c for c in table.columns
              if c.startswith(("p_", "mean_", "share_opp", "kind_share_"))]
     corr_rows = []
@@ -277,15 +313,15 @@ def main() -> None:
         return
     E = space_matrix(table, space)
     scores, _, share = pca(E)
-    z = scores / scores.std(axis=0)
+    d = Decomposition(paths, space, table, E, scores, share, key_columns)
 
-    variance = write_variance(paths, space, table, share)
-    write_extremes(paths, space, table, z, share)
-    write_feature_attribution(paths, space, table, E, scores, share, key_columns)
-    nested = write_nested_r2(paths, space, table, E, scores, key_columns)
-    write_api_positions(paths, space, table, z)
+    variance = write_variance(d)
+    write_extremes(d)
+    write_feature_attribution(d)
+    nested = write_nested_r2(d)
+    write_api_positions(d)
     if "res_n" in table:
-        write_effect_correlations(paths, space, table, scores)
+        write_effect_correlations(d)
     print(variance.head(10).to_string(index=False))
     print(nested.to_string(index=False))
 

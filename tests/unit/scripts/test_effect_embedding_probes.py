@@ -341,6 +341,7 @@ class TestPcaVarianceTable:
 
         share = np.array([0.5, 0.3, 0.2])
         paths = SimpleNamespace(out=tmp_path)
-        pca_directions.write_variance(paths, "full", [1, 2, 3], share)
+        pca_directions.write_variance(
+            pca_directions.Decomposition(paths, "full", [1, 2, 3], None, None, share, []))
         text = (tmp_path / "pca_full_variance.md").read_text(encoding="utf-8")
         assert "Participation ratio" in text
