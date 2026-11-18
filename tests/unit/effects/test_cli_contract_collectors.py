@@ -7,8 +7,9 @@ side collection is the whole point, on that side it is an opt-in.
 
 from __future__ import annotations
 
-from dataclasses import fields, replace
+from dataclasses import dataclass, fields, replace
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -55,6 +56,19 @@ def _workers_could_start():
 
     with patch(PREREQUISITES) as check:
         yield check
+
+
+@dataclass(frozen=True)
+class StartupProbe:
+    """What a startup-failure test watches: the prerequisite check and the log."""
+
+    prerequisites: MagicMock
+    caplog: pytest.LogCaptureFixture
+
+
+@pytest.fixture
+def startup_probe(_workers_could_start, caplog) -> StartupProbe:
+    return StartupProbe(prerequisites=_workers_could_start, caplog=caplog)
 
 
 #: Each collecting command, the application entry point its dispatcher calls,
@@ -471,15 +485,15 @@ class TestWorkersMustBeAbleToStart:
 
     @COLLECTORS
     def test_a_missing_prerequisite_exits_1_before_any_worker(
-        self, command, module, runner, caplog, _workers_could_start,
+        self, command, module, runner, startup_probe,
     ):
         from unittest.mock import patch
 
-        _workers_could_start.side_effect = FileNotFoundError("Connector JAR not found")
+        startup_probe.prerequisites.side_effect = FileNotFoundError("Connector JAR not found")
         with patch(module) as collect:
             assert runner(parse(command, "--exclude-cards", "h.txt")) == 1
         collect.assert_not_called()
-        assert "Connector JAR not found" in caplog.text
+        assert "Connector JAR not found" in startup_probe.caplog.text
 
     @COLLECTORS
     def test_the_list_files_are_checked(

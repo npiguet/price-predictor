@@ -9,6 +9,7 @@ games and the card-disjoint stratum would hold games that are not disjoint.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -27,15 +28,20 @@ from effects.infrastructure.sidecar_io import sidecar_path_for
 from tests.unit.effects.builders import write_sidecar
 
 
-def _report(
-    card_files, texts_by_card, *, canonical_names=None, split_faces=None,
-    **rule,
-):
+@dataclass(frozen=True)
+class _Printings:
+    """What MTGJSON says about the cards: printed spellings and split faces."""
+
+    canonical_names: dict | None = None
+    split_faces: dict | None = None
+
+
+def _report(card_files, texts_by_card, *, printings=_Printings(), **rule):
     """The report over ``text_keyed_holdout``, as ``run`` builds it from the trees."""
     return holdout_report(
         text_keyed_holdout(card_files, texts_by_card, HoldoutRule(**rule)),
-        converted_cards=len(card_files), canonical_names=canonical_names,
-        **({} if split_faces is None else {"split_faces": split_faces}),
+        converted_cards=len(card_files), canonical_names=printings.canonical_names,
+        **({} if printings.split_faces is None else {"split_faces": printings.split_faces}),
     )
 
 
@@ -153,7 +159,7 @@ class TestTheFileSpeaksForgesSpelling:
             {"soul echo": "cardsfolder/s/soul_echo.txt"},
             {"soul echo": ["SP$ Bespoke | Weird$ True"]},
             permille=1000, max_carriers=8,
-            canonical_names={"Soul Echo": "2004-10-01"},
+            printings=_Printings(canonical_names={"Soul Echo": "2004-10-01"}),
         ).names
 
         assert listed == ["Soul Echo"]
@@ -164,7 +170,7 @@ class TestTheFileSpeaksForgesSpelling:
             {"nonesuch": "cardsfolder/n/nonesuch.txt"},
             {"nonesuch": ["SP$ Bespoke | Weird$ True"]},
             permille=1000, max_carriers=8,
-            canonical_names={"Soul Echo": "2004-10-01"},
+            printings=_Printings(canonical_names={"Soul Echo": "2004-10-01"}),
         ).names
 
         assert listed == ["nonesuch"]
@@ -318,8 +324,10 @@ class TestSplitCardsAreListedByTheirCombinedName:
             {"fire": "cardsfolder/f/fire_ice.txt"},
             {"fire": [self._FIRE]},
             permille=1000, max_carriers=8,
-            canonical_names={"Fire // Ice": "2001-01-01", "Fire": "2001-01-01"},
-            split_faces={"fire": ("fire", "ice")},
+            printings=_Printings(
+                canonical_names={"Fire // Ice": "2001-01-01", "Fire": "2001-01-01"},
+                split_faces={"fire": ("fire", "ice")},
+            ),
         ).names
 
         assert listed == ["Fire // Ice"]

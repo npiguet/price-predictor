@@ -10,6 +10,7 @@ computed at all.
 from __future__ import annotations
 
 import random
+from dataclasses import dataclass
 from types import SimpleNamespace
 
 import pytest
@@ -95,13 +96,34 @@ class _Batcher:
         return SimpleNamespace(rows=len(self.encoded.texts))
 
 
-def _terms(monkeypatch, preparer, losses, records, batcher, model, hidden, *, training):
+@dataclass(frozen=True)
+class _Rig:
+    """What computes the terms: the patcher, the preparer and the losses."""
+
+    monkeypatch: pytest.MonkeyPatch
+    preparer: object
+    losses: object
+
+
+@dataclass(frozen=True)
+class _StepInputs:
+    """What the terms are computed over."""
+
+    records: list
+    batcher: _Batcher
+    model: EffectModel
+    hidden: torch.Tensor
+
+
+def _terms(rig: _Rig, step: _StepInputs, *, training):
     """Both halves of the head terms: targets on the host, losses after.
 
     The MLM term is computed after the main backward in training, so the step
     is finished here the way the loop finishes it; the MLM pass's encoder
     forward is stood in for by the token outputs it would read.
     """
+    preparer, losses, monkeypatch = rig.preparer, rig.losses, rig.monkeypatch
+    records, batcher, model, hidden = step.records, step.batcher, step.model, step.hidden
     targets = preparer._head_targets(
         records, preparer.rule_mask(records), batcher, batcher.prepared(),
         heads=(
@@ -206,7 +228,8 @@ class TestTheHeadTerms:
         hidden = torch.randn(len(batch), 6, 8)
         batcher = _Batcher(["NumDmg$ 2 | SP$ DealDamage", "SP$ Draw | NumCards$ 1"], {})
         terms = _terms(
-            monkeypatch, preparer, losses, batch, batcher, model, hidden, training=True,
+            _Rig(monkeypatch, preparer, losses),
+            _StepInputs(batch, batcher, model, hidden), training=True,
         )
         assert {"verdict", "value", "api", "mlm"} <= set(terms)
         assert all(torch.isfinite(value) for value in terms.values())
@@ -220,8 +243,9 @@ class TestTheHeadTerms:
         batch = _kinds(records)
         batcher = _Batcher(["SP$ Draw | NumCards$ 1"], {})
         terms = _terms(
-            monkeypatch, preparer, losses, batch, batcher, _model(),
-            torch.randn(len(batch), 6, 8), training=True,
+            _Rig(monkeypatch, preparer, losses),
+            _StepInputs(batch, batcher, _model(), torch.randn(len(batch), 6, 8)),
+            training=True,
         )
         assert "mlm" not in terms and "api" not in terms
         assert batcher.mlm_calls == 0
@@ -231,8 +255,11 @@ class TestTheHeadTerms:
         preparer = make_preparer(tmp_path, api_types=["Draw"])
         batch = _kinds(records)
         terms = _terms(
-            monkeypatch, preparer, losses, batch, _Batcher(["SP$ Draw"], {}), _model(),
-            torch.randn(len(batch), 6, 8), training=False,
+            _Rig(monkeypatch, preparer, losses),
+            _StepInputs(
+                batch, _Batcher(["SP$ Draw"], {}), _model(), torch.randn(len(batch), 6, 8),
+            ),
+            training=False,
         )
         assert set(terms) <= {"verdict", "created_objects", "global"}
 

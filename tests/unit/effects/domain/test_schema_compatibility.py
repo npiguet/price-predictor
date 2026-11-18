@@ -185,6 +185,16 @@ class TestTheEnvelopeEnumsAreTheWriters:
         assert constants and constants == [member.value for member in python]
 
 
+def _payload_pairs(kind) -> set:
+    """The ``(kind, discriminator)`` pairs a kind's records can carry."""
+    subkinds = {
+        RecordKind.RESOLUTION: Moment,
+        RecordKind.PLAYABILITY: PlayabilitySubkind,
+        RecordKind.TURN_ACTION: TurnActionSubkind,
+    }.get(kind)
+    return {(kind, None)} if subkinds is None else {(kind, d) for d in subkinds}
+
+
 class TestRuleTwoEnumValuesMayBeAddedNotReused:
     def test_the_frozen_kinds_all_survive(self):
         assert _FROZEN_KINDS <= {k.value for k in RecordKind}
@@ -204,14 +214,7 @@ class TestRuleTwoEnumValuesMayBeAddedNotReused:
     def test_every_kind_and_discriminator_pair_has_a_payload_type(self):
         expected = set()
         for kind in RecordKind:
-            if kind is RecordKind.RESOLUTION:
-                expected |= {(kind, m) for m in Moment}
-            elif kind is RecordKind.PLAYABILITY:
-                expected |= {(kind, s) for s in PlayabilitySubkind}
-            elif kind is RecordKind.TURN_ACTION:
-                expected |= {(kind, s) for s in TurnActionSubkind}
-            else:
-                expected.add((kind, None))
+            expected |= _payload_pairs(kind)
         assert set(PAYLOAD_TYPES) == expected, (
             "a new kind or subkind was introduced without a payload type; rule 2 "
             "permits the value, but the schema has to say what it carries"

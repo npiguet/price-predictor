@@ -36,12 +36,18 @@ def sidecars():
     return SidecarCache({folder.name: folder for folder in GEN3_SIDECAR_FOLDERS})
 
 
+def _has_discriminator(record, discriminator) -> bool:
+    found = record.discriminator
+    return discriminator is None or (found is not None and found.value == discriminator)
+
+
+def _matches(record, kind, discriminator, test) -> bool:
+    return record.kind is kind and _has_discriminator(record, discriminator) and test(record)
+
+
 def _first(records, kind, discriminator=None, test=lambda r: True):
     for record in records:
-        found = record.discriminator
-        if record.kind is kind and (
-            discriminator is None or (found is not None and found.value == discriminator)
-        ) and test(record):
+        if _matches(record, kind, discriminator, test):
             return record
     raise AssertionError(f"fixture holds no {kind} {discriminator}")
 
