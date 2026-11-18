@@ -10,6 +10,7 @@ import numpy as np
 from effect_knowledge_probes import combat_grid, labels, sweeps
 from effect_knowledge_probes.board_edits import BoardEdit
 
+E_DIM = 8
 _ROOT = Path(__file__).resolve().parents[3]
 FIXTURES = _ROOT / "tests" / "fixtures" / "effects"
 
@@ -129,3 +130,9 @@ def decision_record(records, cost: str):
     return next(r for r in records if r.subkind is not None
                 and r.subkind.value == "decision"
                 and sweeps.candidate_mana(r) == cost)
+
+
+def probabilities(values) -> None:
+    values = np.asarray(values, dtype=float)
+    assert values.size and np.all(np.isfinite(values))
+    assert np.all((values >= 0.0) & (values <= 1.0))
