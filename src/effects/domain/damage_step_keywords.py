@@ -165,27 +165,12 @@ def combat_participant(
     )
 
 
-def defender_ref(state: StateSnapshot, attacker: EntityState) -> str | None:
-    """The ref of what ``attacker`` attacks, or None when it is not attacking.
-
-    ``CombatStatus.attacking`` is that ref: a player's ``P<id>``, a
-    planeswalker's or battle's ``E<id>``, ``E-1`` for the placeholder a
-    departed one leaves (506.4c). A record written while the member held
-    Forge's rendering of the defender (a player's name, ``Name (id)``,
-    ``<Nothing>``), as the gen-3 test fixtures are until they are
-    regenerated, joins no player and no entity: its ``attacks`` link names
-    the same ref.
-    """
-    attacking = attacker.combat.attacking if attacker.combat else None
-    if attacking is None or _joins_board(state, attacking):
-        return attacking
-    ends = (link.to for link in state.links
-            if link.type == "attacks" and link.from_ == attacker.id)
-    return next((end for end in ends if isinstance(end, str)), attacking)
-
-
-def _joins_board(state: StateSnapshot, ref: str) -> bool:
-    return state.entity(ref) is not None or any(p.id == ref for p in state.players)
+def defender_ref(attacker: EntityState) -> str | None:
+    """The ref of what ``attacker`` attacks, or None when it is not attacking:
+    its ``CombatStatus.attacking``, a player's ``P<id>``, a planeswalker's or
+    battle's ``E<id>``, or ``E-1`` for the placeholder a departed one leaves
+    (506.4c), which no entity carries."""
+    return attacker.combat.attacking if attacker.combat else None
 
 
 def defending_player(
@@ -195,7 +180,7 @@ def defending_player(
     names one of the board's players. An attack on a planeswalker or battle
     has no defending player, since no player's life or poison can move.
     """
-    defender = defender_ref(state, carrier)
+    defender = defender_ref(carrier)
     return defender if any(p.id == defender for p in state.players) else None
 
 

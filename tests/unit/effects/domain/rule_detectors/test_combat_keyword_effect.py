@@ -419,10 +419,12 @@ def test_thrasta_is_still_a_trampler_for_gate_2(thrasta_sidecars):
 
 #: The combat records of ``DirectedForkPlayedForwardTest``'s two gone-planeswalker
 #: turns, as the connector wrote them: a live attacker (Thrasta; Craw Wurm)
-#: attacking Forge's ``<Nothing>`` placeholder beside a Grizzly Bears
-#: attacking B, and its directed fork's replacement (Colossal Dreadmaw;
+#: attacking Forge's 506.4c placeholder (``E-1``) beside a Grizzly Bears
+#: attacking B (``P1``), and its directed fork's replacement (Colossal Dreadmaw;
 #: Thrasta): for each rule, the fork's record (``aimed_at`` the rule), then the
-#: live game's.
+#: live game's. On 2026-11-18 (task B05a, the commit after cbe63ad6) each
+#: ``combat.attacking`` was rewritten from Forge's rendering of the defender to
+#: the ref its ``attacks`` link ends at, as the collector writes it since.
 _PLAYED = Path(__file__).parents[4] / "fixtures" / "effects" / "directed-702.19ef-combats.jsonl"
 
 

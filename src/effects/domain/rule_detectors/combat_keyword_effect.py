@@ -273,7 +273,7 @@ _FLIPPABLE = frozenset({"vigilance", "trample_over_planeswalkers"})
 def _attacked_card(state: StateSnapshot, attacker: EntityState) -> EntityState | None:
     """The permanent ``attacker`` attacks: the entity its defender's ref
     names, None for a player or a permanent the board does not hold."""
-    defender = defender_ref(state, attacker)
+    defender = defender_ref(attacker)
     return state.entity(defender) if defender else None
 
 
@@ -281,7 +281,7 @@ def _defender_gone(state: StateSnapshot, attacker: EntityState) -> bool:
     """Whether the permanent ``attacker`` attacked has left: its defender's
     ref names no player and no card on the battlefield (the placeholder
     ``E-1`` a departed planeswalker or battle leaves, 506.4c, among them)."""
-    defender = defender_ref(state, attacker)
+    defender = defender_ref(attacker)
     if not defender or any(p.id == defender for p in state.players):
         return False
     card = state.entity(defender)

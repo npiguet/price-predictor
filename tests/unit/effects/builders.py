@@ -90,7 +90,11 @@ def java_golden_entities() -> list[dict]:
 #: ``t/the_trickster_gods_heist``, whose chapter lines now declare ``built``
 #: keys, and the spells ``b/big_score``, ``f/fumarole``, ``l/laughing_mad``,
 #: ``t/thunderwave`` and ``w/weigh_down``, now one spell line each. The records
-#: keep their old keys: a saga's bare ``keyword 0`` reads as ambiguous.
+#: keep their old keys: a saga's bare ``keyword 0`` reads as ambiguous. On
+#: 2026-11-18 (task B05a, the commit after cbe63ad6) every entity's
+#: ``combat.attacking`` was rewritten from Forge's rendering of the defender to
+#: the ref its ``attacks`` link ends at, as the collector writes it since;
+#: no other byte of any line changed.
 GEN3_RECORDS = EFFECTS_FIXTURES / "gen3-records.jsonl.gz"
 GEN3_SIDECAR_FOLDERS = (
     EFFECTS_FIXTURES / "gen3-sidecars" / "cardsfolder",
@@ -102,7 +106,7 @@ GEN3_SIDECAR_FOLDERS = (
 #: three together, and with them every count a test pins on the fixture.
 GEN3_FIXTURE_RECORDS = 314
 GEN3_FIXTURE_GAMES = 57
-GEN3_FIXTURE_SHA256 = "b1ec5b6cbd7daf2d89734a911ad39cbdb56360800ca2a8061c9021a8b21df3a9"
+GEN3_FIXTURE_SHA256 = "091f2d27081860901519e2f16adfa8dd8a4000f0e6602ec851d1a0ed104b483a"
 
 
 def gen3_fixture_records() -> list[dict]:
