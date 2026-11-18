@@ -116,8 +116,15 @@ class TestJavaWrittenShards:
         inflater.decompress(data)
         return len(data) - len(inflater.unused_data)
 
-    def test_a_java_written_shard_reads_game_by_game_each_ended_by_its_marker(self, tmp_path):
+    @staticmethod
+    def _assert_ended_by_its_marker(own: list) -> None:
         from effects.domain.records import TurnActionSubkind
+
+        assert [r.subkind for r in own].count(TurnActionSubkind.GAME_END) == 1
+        assert own[-1].subkind is TurnActionSubkind.GAME_END
+        assert own[-1].payload.records_withheld == 0
+
+    def test_a_java_written_shard_reads_game_by_game_each_ended_by_its_marker(self, tmp_path):
         from effects.infrastructure.shard_io import ended_games, read_shard
 
         shard, data = self._gzip_shard(tmp_path)
@@ -127,10 +134,7 @@ class TestJavaWrittenShards:
         assert games == ["run.0-l1.0", "run.0-l1.1"]
         assert [r.record_id for r in records] == [f"run.0-l1.{i}" for i in range(len(records))]
         for game in games:
-            own = [r for r in records if r.game_id == game]
-            assert [r.subkind for r in own].count(TurnActionSubkind.GAME_END) == 1
-            assert own[-1].subkind is TurnActionSubkind.GAME_END
-            assert own[-1].payload.records_withheld == 0
+            self._assert_ended_by_its_marker([r for r in records if r.game_id == game])
         assert ended_games(shard) == {"run.0-l1.0", "run.0-l1.1"}
         # One member a game: the first ends exactly where game 0's marker does.
         first = gzip.decompress(data[:self._first_member_length(data)]).decode("utf-8")
