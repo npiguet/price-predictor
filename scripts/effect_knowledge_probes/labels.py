@@ -28,7 +28,7 @@ import re
 import zlib
 from collections import defaultdict
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -157,14 +157,12 @@ def _sum_amount(parsed: list[dict[str, str]], keys: tuple[str, ...]) -> float | 
     0 where no segment states it, so "deals no damage" is a label like any
     other.
     """
+    values = [_literal(found[key]) for found in parsed for key in keys if key in found]
+    if None in values:
+        return None
     total = 0.0
-    for found in parsed:
-        for key in keys:
-            if key in found:
-                value = _literal(found[key])
-                if value is None:
-                    return None
-                total += value
+    for value in values:
+        total += value
     return total
 
 
@@ -235,19 +233,35 @@ class _Script:
         return sum(self.cost_mana.values()) if self.cost_mana else 0.0
 
 
-def _magnitudes(script: _Script) -> dict[str, float]:
+def _is_charm_root(script: _Script) -> bool:
+    return script.root_api == "Charm" or (
+        "Choices" in script.root and script.root_api in {"Charm", "GenericChoice"})
+
+
+def _stated_amounts(script: _Script) -> dict[str, float]:
     labels: dict[str, float] = {}
-    root = script.root
-    is_charm_root = script.root_api == "Charm" or (
-        "Choices" in root and script.root_api in {"Charm", "GenericChoice"})
-    if not is_charm_root:
-        for name, keys in _AMOUNT_KEYS:
-            value = _sum_amount(script.parsed, keys)
-            if value is not None:
-                labels[name] = capped(value)
-    if labels.get("damage") and script.total_cost > 0 and script.line_kind != "spell":
+    for name, keys in _AMOUNT_KEYS:
+        value = _sum_amount(script.parsed, keys)
+        if value is not None:
+            labels[name] = capped(value)
+    return labels
+
+
+def _has_damage_per_mana(labels: dict[str, float], script: _Script) -> bool:
+    """Damage stated on a line with a mana cost of its own (never a spell's)."""
+    return bool(labels.get("damage")) and script.total_cost > 0 and script.line_kind != "spell"
+
+
+def _magnitudes(script: _Script) -> dict[str, float]:
+    labels = {} if _is_charm_root(script) else _stated_amounts(script)
+    if _has_damage_per_mana(labels, script):
         labels["damage_per_mana"] = labels["damage"] / script.total_cost
     return labels
+
+
+def _is_conditional_mana(parsed: list[dict[str, str]]) -> bool:
+    return any(k.startswith("Condition") or k == "ActivationLimit"
+               for found in parsed for k in found)
 
 
 def _mana_production(script: _Script) -> dict[str, float]:
@@ -262,9 +276,7 @@ def _mana_production(script: _Script) -> dict[str, float]:
     if amount is not None:
         labels["mana_amount"] = amount
     labels["restricted"] = float(any(k.startswith("Restrict") for k in mana))
-    labels["conditional"] = float(any(
-        k.startswith("Condition") or k == "ActivationLimit"
-        for found in script.parsed for k in found))
+    labels["conditional"] = float(_is_conditional_mana(script.parsed))
     return labels
 
 
@@ -300,22 +312,33 @@ def _timing_costs(script: _Script, types: str) -> dict[str, float]:
     return labels
 
 
-def _side(script: _Script) -> dict[str, float]:
-    root_api = script.root_api
-    if root_api is None:
-        return {}
-    values = " ".join(
+def _side_values(script: _Script) -> str:
+    """Every parameter value of the script but its descriptions, space-joined."""
+    return " ".join(
         v for found in script.parsed for k, v in found.items() if k not in _SIDE_SKIP
     )
+
+
+def _affects_you(defined: str, values: str) -> bool:
+    return (defined in ("You", "Self") or "YouCtrl" in values
+            or bool(re.search(r"\bYou\b", values)))
+
+
+def _affects_each(script: _Script, defined: str) -> bool:
+    root_api = script.root_api
+    return (root_api.endswith("All") or root_api.endswith("EachPlayer")
+            or defined == "Player" or "ValidCards" in script.root)
+
+
+def _side(script: _Script) -> dict[str, float]:
+    if script.root_api is None:
+        return {}
+    values = _side_values(script)
     defined = script.root.get("Defined", "")
     return {
-        "affects_you": float(
-            defined in ("You", "Self") or "YouCtrl" in values
-            or bool(re.search(r"\bYou\b", values))),
+        "affects_you": float(_affects_you(defined, values)),
         "affects_opponent": float("Opponent" in values or "OppCtrl" in values),
-        "affects_each": float(
-            root_api.endswith("All") or root_api.endswith("EachPlayer")
-            or defined == "Player" or "ValidCards" in script.root),
+        "affects_each": float(_affects_each(script, defined)),
     }
 
 
@@ -502,41 +525,80 @@ class TriggerJoin:
         self._games: dict[str, list[tuple]] = defaultdict(list)
 
     def observe(self, record) -> None:
-        from effects.domain.records import Moment, RecordKind, TriggerPayload, events_of
+        from effects.domain.records import TriggerPayload, events_of
 
         rows = self._games[record.game_id]
-        if (record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION
-                and record.ability):
+        if _is_acting_resolution(record):
             signatures = tuple(_event_signature(e) for e in events_of(record))
-            rows.append((record.timestamp, 0, signatures, record.ability[0], None, None))
+            rows.append((record.timestamp, _RESOLUTION_ROW, signatures, record.ability[0],
+                         None, None))
         elif isinstance(record.payload, TriggerPayload):
-            rows.append((record.timestamp, 1, (_event_signature(record.payload.event),),
+            rows.append((record.timestamp, _TRIGGER_ROW,
+                         (_event_signature(record.payload.event),),
                          None, record.record_id, record.payload.fired))
 
     def result(self) -> JoinResult:
-        cause: dict[str, object] = {}
-        fired = joined = 0
+        tally = _JoinTally()
         for rows in self._games.values():
-            ordered = sorted(rows, key=lambda row: (row[0], row[1]))
-            # signature -> the resolutions producing it, in time order.
-            producers: dict[tuple, list[tuple[str, object]]] = defaultdict(list)
-            for timestamp, kind, signatures, key, _, _ in ordered:
-                if kind == 0:
-                    for signature in signatures:
-                        producers[signature].append((timestamp, key))
-            for timestamp, kind, signatures, _, record_id, was_fired in ordered:
-                if kind == 0:
-                    continue
-                candidates = producers.get(signatures[0], ())
-                after = [k for t, k in candidates if t >= timestamp]
-                before = [k for t, k in candidates if t < timestamp]
-                found = after[0] if after else (before[-1] if before else None)
-                if was_fired:
-                    fired += 1
-                    joined += found is not None
-                if found is not None:
-                    cause[record_id] = found
-        return JoinResult(cause=cause, fired=fired, fired_joined=joined)
+            ordered = sorted(rows, key=_row_order)
+            producers = _producers(ordered)
+            triggers = [row for row in ordered if row[1] != _RESOLUTION_ROW]
+            for timestamp, _, signatures, _, record_id, was_fired in triggers:
+                found = _cause_of(producers.get(signatures[0], ()), timestamp)
+                tally.add(record_id, was_fired, found)
+        return JoinResult(cause=tally.cause, fired=tally.fired, fired_joined=tally.joined)
+
+
+#: A join row's kind: a resolution sorts before a trigger at the same timestamp.
+_RESOLUTION_ROW = 0
+_TRIGGER_ROW = 1
+
+
+def _is_acting_resolution(record) -> bool:
+    """A resolution record's effect half with an acting ability."""
+    from effects.domain.records import Moment, RecordKind
+
+    return (record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION
+            and bool(record.ability))
+
+
+def _row_order(row: tuple) -> tuple:
+    return (row[0], row[1])
+
+
+def _producers(ordered: list[tuple]) -> dict[tuple, list[tuple[str, object]]]:
+    """``signature ->`` the resolutions producing it, in time order."""
+    producers: dict[tuple, list[tuple[str, object]]] = defaultdict(list)
+    resolutions = [row for row in ordered if row[1] == _RESOLUTION_ROW]
+    for timestamp, _, signatures, key, _, _ in resolutions:
+        for signature in signatures:
+            producers[signature].append((timestamp, key))
+    return producers
+
+
+def _cause_of(candidates, timestamp):
+    """The first producer at or after ``timestamp``, else the latest before it."""
+    after = [k for t, k in candidates if t >= timestamp]
+    if after:
+        return after[0]
+    before = [k for t, k in candidates if t < timestamp]
+    return before[-1] if before else None
+
+
+@dataclass(slots=True)
+class _JoinTally:
+    """The join's running result: each trigger's cause, and the fired counts."""
+
+    cause: dict[str, object] = field(default_factory=dict)
+    fired: int = 0
+    joined: int = 0
+
+    def add(self, record_id: str, was_fired: bool, found) -> None:
+        if was_fired:
+            self.fired += 1
+            self.joined += found is not None
+        if found is not None:
+            self.cause[record_id] = found
 
 
 def mined_pairs(items: Iterable) -> list[tuple[object, object]]:
@@ -548,32 +610,64 @@ def mined_pairs(items: Iterable) -> list[tuple[object, object]]:
     pair every death trigger with the same few outlets, and a probe could then
     recognise a mined pair by its partner alone.
     """
-    death, sac, lifegain_trigger, lifegain = [], [], [], []
+    lines = _MinedLines()
     for item in items:
+        lines.add(item)
+    return [*_partnered(lines.death, lines.sac),
+            *_partnered(lines.lifegain_trigger, lines.lifegain)]
+
+
+def _is_death_trigger(root: dict[str, str]) -> bool:
+    return (root.get("Mode") == "ChangesZone" and root.get("Destination") == "Graveyard"
+            and root.get("Origin") == "Battlefield")
+
+
+def _has_sacrifice_cost(root: dict[str, str]) -> bool:
+    return "Sac<" in (root.get("Cost") or "")
+
+
+@dataclass(slots=True)
+class _MinedLines:
+    """The lines a mined pair is made of, by role, in the order seen."""
+
+    death: list = field(default_factory=list)
+    sac: list = field(default_factory=list)
+    lifegain_trigger: list = field(default_factory=list)
+    lifegain: list = field(default_factory=list)
+
+    def add(self, item) -> None:
         parsed = segments(item.script_text)
         if not parsed:
-            continue
+            return
         root = parsed[0]
         if item.line_kind == "triggered":
-            if (root.get("Mode") == "ChangesZone" and root.get("Destination") == "Graveyard"
-                    and root.get("Origin") == "Battlefield"):
-                death.append(item)
-            elif root.get("Mode") == "LifeGained":
-                lifegain_trigger.append(item)
-        if "Sac<" in (root.get("Cost") or "") and item.line_kind == "activated":
-            sac.append(item)
+            self._add_trigger(item, root)
+        if _has_sacrifice_cost(root) and item.line_kind == "activated":
+            self.sac.append(item)
         if any(api_of(found) == "GainLife" for found in parsed):
-            lifegain.append(item)
+            self.lifegain.append(item)
 
-    pairs: list[tuple[object, object]] = []
-    for triggers, causes in ((death, sac), (lifegain_trigger, lifegain)):
-        if not causes:
-            continue
-        for trigger in sorted(triggers, key=lambda i: i.text):
-            partner = min(causes, key=lambda c: zlib.crc32(
-                f"{trigger.text}|{c.text}".encode("utf-8")))
-            pairs.append((trigger.key, partner.key))
-    return pairs
+    def _add_trigger(self, item, root: dict[str, str]) -> None:
+        if _is_death_trigger(root):
+            self.death.append(item)
+        elif root.get("Mode") == "LifeGained":
+            self.lifegain_trigger.append(item)
+
+
+def _text_of(item) -> str:
+    return item.text
+
+
+def _partner(trigger, causes):
+    """The cause whose ``crc32`` with ``trigger``'s text is least."""
+    return min(causes, key=lambda c: zlib.crc32(f"{trigger.text}|{c.text}".encode("utf-8")))
+
+
+def _partnered(triggers: list, causes: list) -> list[tuple[object, object]]:
+    if not causes:
+        return []
+    return [(trigger.key, _partner(trigger, causes).key)
+            for trigger in sorted(triggers, key=_text_of)]
 
 
 # ── record items ────────────────────────────────────────────────────────
@@ -627,14 +721,6 @@ def record_items(record, sidecars, join: JoinResult, acting_text) -> list[Record
     ``acting_text`` is ``key -> text or None``, the checkpoint-independent text
     the fold groups key on.
     """
-    from effects.domain.effect_head_layout import (
-        DURATIONS,
-        ZONE_OUTCOMES,
-        Duration,
-        HeadField,
-        ZoneOutcome,
-    )
-    from effects.domain.effect_targets import derive_targets
     from effects.domain.records import (
         Moment,
         PlayabilityBlockersPayload,
@@ -643,71 +729,111 @@ def record_items(record, sidecars, join: JoinResult, acting_text) -> list[Record
         TriggerPayload,
     )
 
+    payload = record.payload
+    if record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION:
+        return _resolution_items(record)
+    if isinstance(payload, TriggerPayload):
+        return [RecordItem(record.record_id, "fires", float(payload.fired),
+                           partner=join.cause.get(record.record_id),
+                           group=_group_of(acting_text, record.ability))]
+    if isinstance(payload, PlayabilityDecisionPayload) and payload.candidates:
+        return _decision_items(record, sidecars, acting_text)
+    if isinstance(payload, PlayabilityBlockersPayload):
+        return _blocker_items(record)
+    return []
+
+
+def _group_of(acting_text, keys) -> str:
+    """The first of ``keys``' acting texts, the fold group of an ``[ACT]`` item."""
+    for key in keys or ():
+        text = acting_text(key)
+        if text:
+            return text
+    return ""
+
+
+def _battlefield(record) -> list:
+    return [entity for entity in record.state.entities if entity.zone == "battlefield"]
+
+
+def _resolution_items(record) -> list[RecordItem]:
+    """Each battlefield entity's outcome of a resolution's effect half."""
+    from effects.domain.effect_targets import derive_targets
+
+    targets = derive_targets(record)
     items: list[RecordItem] = []
+    for entity in _battlefield(record):
+        items += _outcome_items(record.record_id, entity, targets.get(entity.id))
+    return items
+
+
+def _outcome_items(rid: str, entity, entry) -> list[RecordItem]:
+    """Whether ``entity`` was affected, and what its target ``entry`` says it took."""
+    from effects.domain.effect_head_layout import DURATIONS, Duration, HeadField
+
+    group = card_of(entity)
+    items = [RecordItem(rid, "affected", float(bool(entry and entry.affected)),
+                        entity=entity.id, group=group)]
+    if entry is None:
+        return items
+    items += _damage_items(rid, entity, entry)
+    if entry.fields.get(HeadField.PT_DURATION) is not None:
+        eot = DURATIONS.index(Duration.END_OF_TURN)
+        items.append(RecordItem(
+            rid, "pt_until_end_of_turn", float(entry.fields[HeadField.PT_DURATION] == eot),
+            entity=entity.id, group=group))
+    return items
+
+
+def _damage_items(rid: str, entity, entry) -> list[RecordItem]:
+    """A damaged creature's death and the damage it took."""
+    from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
+
+    damage = entry.fields.get(HeadField.DAMAGE_TAKEN) or 0
+    if not ("creature" in entity.types and damage > 0):
+        return []
+    died = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
+    group = card_of(entity)
+    return [
+        RecordItem(rid, "dies", float(entry.fields.get(HeadField.ZONE_OUTCOME) == died),
+                   entity=entity.id, group=group),
+        RecordItem(rid, "damage_taken", capped(damage), entity=entity.id, group=group),
+    ]
+
+
+def _decision_items(record, sidecars, acting_text) -> list[RecordItem]:
+    """A decision's first candidate: affordable, and which entities it may target."""
+    candidate = record.payload.candidates[0]
+    group = _group_of(acting_text, candidate.ability)
+    items = [RecordItem(record.record_id, "affordable", float(candidate.affordable),
+                        group=group)]
+    if candidate.legal_targets:
+        items += _target_items(record, set(candidate.legal_targets), sidecars)
+    return items
+
+
+def _target_items(record, legal: set, sidecars) -> list[RecordItem]:
+    """Each battlefield entity's legality as a target, and again where it is protected."""
     rid = record.record_id
+    items: list[RecordItem] = []
+    for entity in _battlefield(record):
+        label = float(entity.id in legal)
+        group = card_of(entity)
+        items.append(RecordItem(rid, "legal_target", label, entity=entity.id, group=group))
+        if _is_protected(entity, sidecars):
+            items.append(RecordItem(rid, "legal_target_protected", label,
+                                    entity=entity.id, group=group))
+    return items
+
+
+def _blocker_items(record) -> list[RecordItem]:
+    """Whether each listed creature may block the anchored attacker."""
     payload = record.payload
     entities = {e.id: e for e in record.state.entities}
-
-    def group_of(keys) -> str:
-        for key in keys or ():
-            text = acting_text(key)
-            if text:
-                return text
-        return ""
-
-    if record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION:
-        targets = derive_targets(record)
-        died = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
-        eot = DURATIONS.index(Duration.END_OF_TURN)
-        for entity in record.state.entities:
-            if entity.zone != "battlefield":
-                continue
-            entry = targets.get(entity.id)
-            items.append(RecordItem(rid, "affected", float(bool(entry and entry.affected)),
-                                    entity=entity.id, group=card_of(entity)))
-            if entry is None:
-                continue
-            damage = entry.fields.get(HeadField.DAMAGE_TAKEN) or 0
-            if "creature" in entity.types and damage > 0:
-                items.append(RecordItem(
-                    rid, "dies", float(entry.fields.get(HeadField.ZONE_OUTCOME) == died),
-                    entity=entity.id, group=card_of(entity)))
-                items.append(RecordItem(rid, "damage_taken", capped(damage),
-                                        entity=entity.id, group=card_of(entity)))
-            if entry.fields.get(HeadField.PT_DURATION) is not None:
-                items.append(RecordItem(
-                    rid, "pt_until_end_of_turn",
-                    float(entry.fields[HeadField.PT_DURATION] == eot),
-                    entity=entity.id, group=card_of(entity)))
-    elif isinstance(payload, TriggerPayload):
-        items.append(RecordItem(rid, "fires", float(payload.fired),
-                                partner=join.cause.get(rid),
-                                group=group_of(record.ability)))
-    elif isinstance(payload, PlayabilityDecisionPayload) and payload.candidates:
-        candidate = payload.candidates[0]
-        group = group_of(candidate.ability)
-        items.append(RecordItem(rid, "affordable", float(candidate.affordable),
-                                group=group))
-        if candidate.legal_targets:
-            legal = set(candidate.legal_targets)
-            for entity in record.state.entities:
-                if entity.zone != "battlefield":
-                    continue
-                label = float(entity.id in legal)
-                items.append(RecordItem(rid, "legal_target", label,
-                                        entity=entity.id, group=card_of(entity)))
-                if _is_protected(entity, sidecars):
-                    items.append(RecordItem(rid, "legal_target_protected", label,
-                                            entity=entity.id, group=card_of(entity)))
-    elif isinstance(payload, PlayabilityBlockersPayload):
-        legal = set(payload.legal_blockers)
-        candidates = legal | {f.entity for f in payload.forbidden}
-        for entity_id in sorted(candidates):
-            entity = entities.get(entity_id)
-            if entity is None:
-                continue
-            items.append(RecordItem(rid, "may_block", float(entity_id in legal),
-                                    entity=entity_id,
-                                    partner_entity=payload.anchor_attacker,
-                                    group=card_of(entity)))
-    return items
+    legal = set(payload.legal_blockers)
+    candidates = legal | {f.entity for f in payload.forbidden}
+    listed = [entity_id for entity_id in sorted(candidates) if entity_id in entities]
+    return [RecordItem(record.record_id, "may_block", float(entity_id in legal),
+                       entity=entity_id, partner_entity=payload.anchor_attacker,
+                       group=card_of(entities[entity_id]))
+            for entity_id in listed]
