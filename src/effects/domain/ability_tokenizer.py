@@ -68,6 +68,12 @@ _CHOOSER_API_RE = re.compile(
 )
 #: The label opening a segment: at the start (an option line) or after ``[SEG]``.
 _SEGMENT_OPENER_RE = re.compile(rf"(?:^|{re.escape(SEG)})[ \t]*(SV\d+)(?=:)")
+#: A renamed chain label wherever it stands. The converter follows more
+#: parameters than ``CHAIN_KEYS`` lists (``AddTrigger$``, ``Trigger$``,
+#: ``ResultSubAbilities$`` after ``range:``... see ``TraitScript.java`` and
+#: ``GrantedTraits.java`` in forge-connector), and a label after any of them
+#: is as much one token as after ``Execute$``.
+_CHAIN_LABEL_RE = re.compile(r"(?<![A-Za-z0-9_])SV\d+(?![A-Za-z0-9_])")
 _TOKEN_SCRIPT_VALUE_RE = re.compile(r"(?<![A-Za-z])TokenScript\$[ \t]*([^\s|]+)")
 
 #: When two role spans cover a token, the more specific one wins: a target
@@ -646,6 +652,10 @@ def _script_regions(text: str) -> list[_Region]:
     regions.extend(
         _Region(match.start(1), match.end(1), whole=True)
         for match in _SEGMENT_OPENER_RE.finditer(text)
+    )
+    regions.extend(
+        _Region(match.start(), match.end(), whole=True)
+        for match in _CHAIN_LABEL_RE.finditer(text)
     )
     regions.extend(
         _Region(match.start(1), match.end(1), whole=False)
