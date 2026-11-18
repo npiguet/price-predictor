@@ -97,6 +97,8 @@ def coverage_run(tmp_path_factory):
         "--no-progress-rounds", "1",
         "--stop-timeout", str(_STOP_TIMEOUT),
         "--seed", "7",
+        "--cards-folder", "output/effects/gen3/converted/cardsfolder/",
+        "--cards-folder", "output/effects/gen3/converted/tokenscripts/",
     ]
     environment = {**os.environ, "PYTHONPATH": os.pathsep.join(["src", "."])}
     started = time.monotonic()

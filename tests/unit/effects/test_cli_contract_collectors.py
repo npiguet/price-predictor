@@ -102,7 +102,10 @@ class TestCollectCoverage:
         assert args.no_progress_rounds == 3
         assert args.seed == 42
         assert args.split_from is None
-        assert args.cards_folders == (Path("output/cardsfolder"), Path("output/tokenscripts"))
+        assert args.cards_folders == (
+            Path("output/effects/gen3/converted/cardsfolder"),
+            Path("output/effects/gen3/converted/tokenscripts"),
+        )
 
     def test_the_worker_count_has_the_repos_usual_default(self):
         assert parse("collect-coverage").workers == 12

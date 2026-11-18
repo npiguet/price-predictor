@@ -845,7 +845,10 @@ class TestTheCli:
         assert args.max_trigger_fired_share == 0.65
         assert args.min_zone_change_from_zone_rate is None
         assert args.min_attributed_rate is None
-        assert args.cards_folders == (Path("output/cardsfolder"), Path("output/tokenscripts"))
+        assert args.cards_folders == (
+            Path("output/effects/gen3/converted/cardsfolder"),
+            Path("output/effects/gen3/converted/tokenscripts"),
+        )
 
     def test_a_floor_passed_on_the_command_line_turns_a_watch_into_a_failure(
         self, tmp_path, capsys,

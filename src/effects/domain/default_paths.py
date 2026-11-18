@@ -12,8 +12,11 @@ from pathlib import Path
 
 #: The raw shard root every collector appends to and every reader walks.
 DEFAULT_RECORDS_DIR = "output/effects/records/"
-#: Both converted trees: cards, and the tokens kept out of the card tree.
-DEFAULT_CARDS_FOLDERS = ("output/cardsfolder/", "output/tokenscripts/")
+#: Both converted trees of generation 3: cards, and the tokens kept out of the card tree.
+DEFAULT_CARDS_FOLDERS = (
+    "output/effects/gen3/converted/cardsfolder/",
+    "output/effects/gen3/converted/tokenscripts/",
+)
 #: The same two trees as the paths a config holds.
 DEFAULT_CARDS_FOLDER_PATHS: tuple[Path, ...] = tuple(
     Path(folder) for folder in DEFAULT_CARDS_FOLDERS

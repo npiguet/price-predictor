@@ -11,7 +11,7 @@ below are contract, not suggestions.
 | Flag | Default | Meaning |
 |---|---|---|
 | `--surface` | `prose` | `prose` \| `script`; `script` adds the sidecars' script lines to the scan and switches the `--vocab-path` default |
-| `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | repeatable |
+| `--cards-folder` | `output/effects/gen3/converted/cardsfolder/`, `output/effects/gen3/converted/tokenscripts/` | repeatable |
 | `--vocab-path` | `models/effects/vocab.txt` (`vocab-script.txt` under `--surface script`) | separate paths so a script-surface rebuild never overwrites the vocabulary a prose-surface checkpoint recorded |
 | `--keyword-definitions` | `output/effects/keyword-definitions.json` | included in the scan |
 | `--target-size` | 5000 | post-truncates the corpus-frequency vocabulary, preserving seeded specials and domain tokens |
@@ -55,7 +55,7 @@ Adding the flag must not change `match-outcomes.txt` or `cards-played.txt` in fo
 | Flag | Default | Meaning |
 |---|---|---|
 | `--effect-records` | `output/effects/records/` | destination shard directory |
-| `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | repeatable; deck candidates and the coverage unit come from the `output/cardsfolder/` entry alone |
+| `--cards-folder` | `output/effects/gen3/converted/cardsfolder/`, `output/effects/gen3/converted/tokenscripts/` | repeatable; deck candidates and the coverage unit come from the `cardsfolder/` entry alone |
 | `--split-from` | none | a checkpoint whose held-out cards are excluded from every deck |
 | `--target-records` | 50 | per-card satisfaction goal |
 | `--decks-per-round` | 500 | decks played as matches per round |
@@ -100,7 +100,7 @@ them there costs minutes instead of the eight hours that run spent producing 14.
 | `--min-cause-rate` | *(unset)* | floor on the share of the cause-declaring event types that populate `cause`; unset means measure and watch |
 | `--min-rewrite-replaced-by-rate` | *(unset)* | floor on the share of `replaced` / `updated` rewrite records that name the ability that ran instead; unset means measure and watch. It has to stay watched until someone measures the healthy share — a replacement scripted with `ReplacementResult$` returns either outcome having run no ability, so the ceiling is below 1 and nobody knows by how much |
 | `--max-mirror-turn-disagreement-rate` | 0 | share of fork records whose `turn` may differ from the record they mirror. Judged, not watched: a fork is taken *at* the moment it mirrors |
-| `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | converted trees whose sidecars the corpus's provenance keys are joined against; repeatable |
+| `--cards-folder` | `output/effects/gen3/converted/cardsfolder/`, `output/effects/gen3/converted/tokenscripts/` | converted trees whose sidecars the corpus's provenance keys are joined against; repeatable |
 
 ### Judged and watched are separate
 
@@ -207,7 +207,7 @@ card name per line, every card carrying a held-out ability text.
 | Flag | Default |
 |---|---|
 | `--out` | required — destination file |
-| `--cards-folder` | repeatable; `output/cardsfolder/` and `output/tokenscripts/`. Token scripts count as carriers, as they do in `build-corpus` |
+| `--cards-folder` | repeatable; `output/effects/gen3/converted/cardsfolder/` and `output/effects/gen3/converted/tokenscripts/`. Token scripts count as carriers, as they do in `build-corpus` |
 | `--holdout-permille` / `--holdout-max-carriers` | 20 / 8, matching `build-corpus` |
 
 Reports the held-out text count, the card count, and the share of the corpus those cards are. The
@@ -225,7 +225,7 @@ differing only in hyperparameters read the same records.
 |---|---|
 | `--records-dir` | `output/effects/records/` — raw corpus root; discovery recurses |
 | `--output` | `output/effects/corpus/` |
-| `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` |
+| `--cards-folder` | `output/effects/gen3/converted/cardsfolder/`, `output/effects/gen3/converted/tokenscripts/` |
 | `--vocab-path` | `models/effects/vocab.txt` — `surface_of` reads the encoding surface from it, and the rarity table's text keys are built on that surface |
 | `--variant-scripts` | _(none)_ — the perturbed-script tree. A variant line resolves to no ability text without it, and a resolution record acting through one is refused as `no-acting-text` |
 | `--holdout-permille` / `--holdout-max-carriers` | 20 / 8, matching `holdout-cards`; `train-effect-model --corpus` reads both back from the manifest this writes |
@@ -281,7 +281,7 @@ The full flag table is the root spec's § Training. Contract highlights:
 | Flag | Default |
 |---|---|
 | `--corpus` | **required** — a curated dataset built by `build-corpus`, and the trainer's only input: its manifest carries the split, both validation strata, the rarity table and the holdout, and a `--vocab-path` whose encoding surface is not the manifest's is refused |
-| `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` |
+| `--cards-folder` | `output/effects/gen3/converted/cardsfolder/`, `output/effects/gen3/converted/tokenscripts/` |
 | `--variant-scripts` | the tree the corpus manifest records |
 | `--vocab-path` | `models/effects/vocab.txt` |
 | `--keyword-definitions` | `output/effects/keyword-definitions.json` |
@@ -323,7 +323,7 @@ Hardcoded, not flags: encoder d_model 256 / 4 layers / 4 heads; trunk d_model 25
 |---|---|
 | `--variant` | `full` — resolves both `--checkpoint` and the output suffix, so a variant is never encoded with another variant's weights |
 | `--checkpoint` | the variant's `latest.pt`; an explicit value overrides |
-| `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` |
+| `--cards-folder` | `output/effects/gen3/converted/cardsfolder/`, `output/effects/gen3/converted/tokenscripts/` |
 | `--variant-scripts` | the perturbed-script tree |
 | `--vocab-path`, `--keyword-definitions` | the paths the checkpoint recorded from training |
 | `--clean` | removes only files this command wrote |

@@ -312,6 +312,8 @@ def test_build_corpus_reads_the_java_written_shards(recycled_run) -> None:
     games = {record.game_id for record in records}
     output = recycled_run["root"] / "corpus"
     result = _cli("-m", "effects", "build-corpus", "--records-dir", str(run_dir),
+                  "--cards-folder", "output/effects/gen3/converted/cardsfolder/",
+                  "--cards-folder", "output/effects/gen3/converted/tokenscripts/",
                   "--output", str(output), "--workers", "2")
     printed = result.stdout + result.stderr
     print(printed)

@@ -14,7 +14,8 @@ parallel concepts rather than one.
 
 The cache lives under ``output/effects/abilities/`` rather than beside the
 converted text, because the sealed pipeline's ``encode-cards --clean`` deletes
-every ``.npz`` under ``output/cardsfolder/`` and would take this one with it.
+every ``.npz`` under the converted card tree
+(``output/effects/gen3/converted/cardsfolder/``) and would take this one with it.
 """
 
 from __future__ import annotations

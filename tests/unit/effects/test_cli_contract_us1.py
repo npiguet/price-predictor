@@ -28,7 +28,10 @@ def parse(*argv: str):
 TRAIN = ("train-effect-model", "--corpus", "output/effects/corpus")
 
 #: What ``--cards-folder`` parses to when it is not passed.
-BOTH_TREES = (Path("output/cardsfolder"), Path("output/tokenscripts"))
+BOTH_TREES = (
+    Path("output/effects/gen3/converted/cardsfolder"),
+    Path("output/effects/gen3/converted/tokenscripts"),
+)
 
 
 class TestBuildVocab:

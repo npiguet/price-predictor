@@ -142,8 +142,8 @@ def add_probe_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentPar
         default=None,
         help=(
             "Sidecar tree the cache rows align with (repeatable); defaults to "
-            "the trees the checkpoint recorded, else output/cardsfolder and "
-            "output/tokenscripts"
+            "the trees the checkpoint recorded, else output/effects/gen3/converted/cardsfolder and "
+            "output/effects/gen3/converted/tokenscripts"
         ),
     )
     parser.add_argument(
