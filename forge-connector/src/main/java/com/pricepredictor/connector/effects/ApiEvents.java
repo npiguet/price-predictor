@@ -631,8 +631,8 @@ final class ApiEvents {
      * only, so a {@code Player} target would be silently dropped and the
      * event would still fire with an empty {@code targets} list -- a channel
      * that looks wired while reporting nothing distinguishable from
-     * "retargeted at nothing." Mixed-entity targets are read as {@code
-     * EntityJson.stackExtrasJson} reads them, through {@link Refs#ofAny}.
+     * "retargeted at nothing." Mixed-entity targets are read through
+     * {@link Refs#ofAny}.
      */
     private static EffectEvent retargeted(SpellAbility sa) {
         List<String> targets = new ArrayList<>();

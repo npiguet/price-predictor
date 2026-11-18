@@ -6,7 +6,6 @@ import forge.card.CardStateName;
 import forge.card.CardTypeView;
 import forge.game.CardTraitBase;
 import forge.game.Game;
-import forge.game.GameEntity;
 import forge.game.card.Card;
 import forge.game.card.CardCollectionView;
 import forge.game.card.CardTraitChanges;
@@ -54,17 +53,27 @@ final class EntityJson {
      * @param role {@code library_card}, {@code exiled_with},
      *             {@code mutate_component} or {@code last_known}; null for an
      *             entity of the tiers
+     * @param stackTargets its stack item's targets as the record shows them,
+     *             where that is not what the item holds now: the acting
+     *             item's as cast on an effect half ({@link StackExtras});
+     *             null for those it holds now
      */
-    record Beyond(String id, String zone, Integer rank, String role, boolean zoneless) {
+    record Beyond(String id, String zone, Integer rank, String role, boolean zoneless,
+                  ChainTargets stackTargets) {
         static final Beyond NONE = new Beyond(null, null, null, null);
 
         Beyond(String id, String zone, Integer rank, String role) {
-            this(id, zone, rank, role, false);
+            this(id, zone, rank, role, false, null);
         }
 
         /** A card as it last existed, which no zone holds: zone and rank null. */
         static Beyond lastKnown(String id, String role) {
-            return new Beyond(id, null, null, role, true);
+            return new Beyond(id, null, null, role, true, null);
+        }
+
+        /** The same, its stack item's targets read as {@code targets} says. */
+        Beyond withStackTargets(ChainTargets targets) {
+            return new Beyond(id, zone, rank, role, zoneless, targets);
         }
     }
 
@@ -111,7 +120,7 @@ final class EntityJson {
                         ? beyond.rank() : CardFacts.orderRank(game, card))
                 .raw("granted_temporary", grantedTemporaryJson(card, board))
                 .raw("lines", CardLines.render(game, card, board))
-                .raw("stack_extras", stackExtrasJson(onStack))
+                .raw("stack_extras", StackExtras.json(onStack, beyond.stackTargets()))
                 .value("role", beyond.role())
                 .render();
     }
@@ -255,43 +264,6 @@ final class EntityJson {
             }
         }
         return null;
-    }
-
-    /**
-     * What a stack object announced, or null when the entity is not on the stack.
-     *
-     * <p>Divided damage and "up to N" counts are choices the caster made that no
-     * other field records: a Fireball for 3 split two ways and one aimed at a
-     * single creature have the same cost and the same text.
-     */
-    private static String stackExtrasJson(SpellAbility onStack) {
-        if (onStack == null || onStack.getTargets() == null) {
-            return "null";
-        }
-        List<String> targets = new ArrayList<>();
-        Json.ObjectWriter amounts = Json.object();
-        int chosen = 0;
-        for (GameEntity target : onStack.getTargets().getTargetEntities()) {
-            chosen++;
-            String id = Refs.ofAny(target).orElse(null);
-            if (id == null) {
-                continue;
-            }
-            targets.add(id);
-            Integer divided = onStack.getDividedValue(target);
-            if (divided != null) {
-                amounts.value(id, divided);
-            }
-        }
-        Json.ObjectWriter upTo = Json.object();
-        if (onStack.getTargetRestrictions() != null) {
-            upTo.value("chosen", chosen);
-        }
-        return Json.object()
-                .raw("targets", Json.stringArray(targets))
-                .raw("per_target_amounts", amounts.render())
-                .raw("up_to_counts", upTo.render())
-                .render();
     }
 
     /**

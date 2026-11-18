@@ -517,6 +517,16 @@ position a card left a library from, and a search of another player's library.
   `refs.targets_at_cast` lists, in that order (an `L<id>` ref for one that ceased to exist), never
   those left after Forge's check for illegal targets. A cost half and any other record read the
   acting chain's clauses.
+- An entity's `stack_extras` describe its item's whole chain, root first: `targets` lists every
+  link's targets spelled as `refs.targets` spells them (a targeted spell or ability by its card's
+  `E` ref), each once; `per_target_amounts` holds each divided link's share per target, summed
+  over links; `up_to_counts.chosen` counts every link's targets, a target two links share twice,
+  and is present when a link of the chain targets. On an effect half the acting item's entity
+  reads them from its targets as cast, the refs `refs.targets_at_cast` lists, never from those
+  left after Forge's check for illegal targets. Forge drops a removed target's divided share
+  with it: a link that lost one target gives it what the link's announced total leaves; a link
+  that lost two or more writes no share for them. Every other entity, and every record that is no
+  effect half, reads what its item holds.
 - Forge deals a chain's damage from one damage map when its last clause resolves (Arc Trail's
   `DamageResolve`). A `damage_dealt` whose subject the resolving clause does not target, but an
   earlier link of its chain does, carries that link's `attributed_to`; so does every other event

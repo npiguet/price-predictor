@@ -109,7 +109,7 @@ public final class SnapshotBuilder {
      *                   they sit in (tier 1)
      */
     Snapshot ofAbility(SpellAbility acting, Iterable<Card> referenced) {
-        return snapshot(referenced, StaticSuppression.NONE, acting, null, null, true, List.of());
+        return snapshot(referenced, StaticSuppression.NONE, acting, null, null, true, null);
     }
 
     /**
@@ -126,7 +126,7 @@ public final class SnapshotBuilder {
     Snapshot ofCandidate(SpellAbility candidate) {
         Card host = candidate.getHostCard();
         return snapshot(host == null ? List.of() : List.of(host), StaticSuppression.NONE,
-                candidate, host, null, false, List.of());
+                candidate, host, null, false, null);
     }
 
     /**
@@ -156,8 +156,7 @@ public final class SnapshotBuilder {
                 referenced.add(card);
             }
         }
-        return snapshot(referenced, StaticSuppression.NONE, acting, null, null, true,
-                atCast.lastKnown(), atCast.all());
+        return snapshot(referenced, StaticSuppression.NONE, acting, null, null, true, atCast);
     }
 
     /**
@@ -166,7 +165,7 @@ public final class SnapshotBuilder {
      * block is the empty shape.
      */
     Snapshot ofBoard() {
-        return snapshot(List.of(), StaticSuppression.NONE, null, null, null, true, List.of());
+        return snapshot(List.of(), StaticSuppression.NONE, null, null, null, true, null);
     }
 
     /**
@@ -175,7 +174,7 @@ public final class SnapshotBuilder {
      * the answer the record labels.
      */
     Snapshot ofBoardWithout(StaticAbility stat) {
-        return snapshot(List.of(), StaticSuppression.of(stat), null, null, null, true, List.of());
+        return snapshot(List.of(), StaticSuppression.of(stat), null, null, null, true, null);
     }
 
     /**
@@ -198,50 +197,43 @@ public final class SnapshotBuilder {
      */
     Snapshot ofTrait(Card source, EffectEvent pending) {
         return snapshot(source == null ? List.of() : List.of(source), StaticSuppression.NONE,
-                null, source, pending, true, List.of());
+                null, source, pending, true, null);
     }
 
     /**
      * The one assembly behind every call shape, private so that no caller
      * passes the combination of nulls that picks its shape.
      *
-     * @param board         the board as it stands, or without one static
-     * @param source        the host of an acting line that is not a spell
-     *                      ability, or null
-     * @param pending       the event a trait is about to handle, or null
-     * @param chosen        whether {@code acting}'s targets and announced
-     *                      values are its own, chosen for this record: false
-     *                      for a playability candidate, whose refs name its
-     *                      host alone and whose targets are no links
-     */
-    private Snapshot snapshot(
-            Iterable<Card> referenced, StaticSuppression board, SpellAbility acting, Card source,
-            EffectEvent pending, boolean chosen, List<Card> lastKnownTargets) {
-        return snapshot(referenced, board, acting, source, pending, chosen, lastKnownTargets, null);
-    }
-
-    /**
-     * The same, the acting ability's {@code targets} links drawn from
-     * {@code actingTargetsAsCast} (refs, root first) rather than from its
-     * clauses: an effect half's, whose clauses Forge's check for illegal
-     * targets has already thinned, so links read off them would show the
-     * fizzle the half is to predict, as {@code refs.targets} would.
+     * <p>Where {@code atCast} is given (an effect half's), the acting
+     * ability's {@code targets} links and its host's {@code stack_extras}
+     * are drawn from it rather than from its clauses, which Forge's check
+     * for illegal targets has already thinned: read off them, they would
+     * show the fizzle the half is to predict, as {@code refs.targets} would.
+     * Each of its targets that ceased to exist or became a new object is an
+     * {@code L<id>} entity of role {@code last_known}.
      *
-     * @param actingTargetsAsCast the acting chain's targets as cast, or null
-     *                            to read its clauses
+     * @param board   the board as it stands, or without one static
+     * @param source  the host of an acting line that is not a spell
+     *                ability, or null
+     * @param pending the event a trait is about to handle, or null
+     * @param chosen  whether {@code acting}'s targets and announced
+     *                values are its own, chosen for this record: false
+     *                for a playability candidate, whose refs name its
+     *                host alone and whose targets are no links
+     * @param atCast  the acting chain's targets as cast, or null to read
+     *                its clauses
      */
     private Snapshot snapshot(
             Iterable<Card> referenced, StaticSuppression board, SpellAbility acting, Card source,
-            EffectEvent pending, boolean chosen, List<Card> lastKnownTargets,
-            List<String> actingTargetsAsCast) {
+            EffectEvent pending, boolean chosen, ChainTargets atCast) {
         Set<Card> tiers = collectEntities(referenced);
         List<String> entities = new ArrayList<>();
         Set<String> present = new HashSet<>();
         for (Card card : tiers) {
-            entities.add(renderTier(card, acting, board));
+            entities.add(renderTier(card, acting, atCast, board));
             present.add(Refs.of(card));
         }
-        for (Card gone : lastKnownTargets) {
+        for (Card gone : lastKnownOf(atCast)) {
             // A target that ceased to exist or became a new object, as it was
             // targeted: no zone holds that object any more.
             if (present.add(ChainTargets.lastKnownRef(gone))) {
@@ -257,7 +249,7 @@ public final class SnapshotBuilder {
                 globalToJson(tiers, board), players, "[" + String.join(",", entities) + "]",
                 SnapshotLinks.render(
                         game, cards, tiers, acting, chosen, pending, board, floating,
-                        actingTargetsAsCast),
+                        refsOf(atCast)),
                 RefsJson.render(chosen ? acting : null, source),
                 pending == null ? "null" : pending.toJson(),
                 libraries);
@@ -270,17 +262,44 @@ public final class SnapshotBuilder {
      * back face, cast from a hand that holds the card on its front (or, for
      * a split card, on its combined face). Read off a last-known copy turned
      * to that face, so the game's card is not touched; its zone and rank are
-     * the card's own.
+     * the card's own. The entity whose stack item is the acting one shows
+     * that item's extras from its targets as cast, where they are given.
      */
-    private String renderTier(Card card, SpellAbility acting, StaticSuppression board) {
+    private String renderTier(
+            Card card, SpellAbility acting, ChainTargets atCast, StaticSuppression board) {
         Card shown = actingFaceOf(card, acting);
-        if (shown == card) {
-            return EntityJson.render(game, card, board);
+        EntityJson.Beyond beyond = EntityJson.Beyond.NONE;
+        if (shown != card) {
+            var zone = card.getZone();
+            beyond = new EntityJson.Beyond(
+                    null, zone == null ? null : CardSpelling.zoneName(zone.getZoneType()),
+                    CardFacts.orderRank(game, card), null);
         }
-        var zone = card.getZone();
-        return EntityJson.render(game, shown, board, new EntityJson.Beyond(
-                null, zone == null ? null : CardSpelling.zoneName(zone.getZoneType()),
-                CardFacts.orderRank(game, card), null));
+        return EntityJson.render(game, shown, board,
+                beyond.withStackTargets(stackTargetsOf(card, acting, atCast)));
+    }
+
+    /**
+     * {@code atCast} where {@code card}'s stack item is {@code acting}, the
+     * item whose targets they are; else null, its item's targets as it
+     * holds them.
+     */
+    private ChainTargets stackTargetsOf(Card card, SpellAbility acting, ChainTargets atCast) {
+        if (atCast == null || acting == null) {
+            return null;
+        }
+        SpellAbility onStack = CardLines.stackAbilityOf(game, card);
+        return onStack != null && onStack.getId() == acting.getId() ? atCast : null;
+    }
+
+    /** The targets as cast, root first, each ref once; null without them. */
+    private static List<String> refsOf(ChainTargets atCast) {
+        return atCast == null ? null : atCast.all();
+    }
+
+    /** The targets as cast that ceased to exist or became new objects; none without them. */
+    private static List<Card> lastKnownOf(ChainTargets atCast) {
+        return atCast == null ? List.of() : atCast.lastKnown();
     }
 
     /**
