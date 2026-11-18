@@ -8,16 +8,19 @@ import forge.game.keyword.KeywordInterface;
 import forge.game.staticability.StaticAbility;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
  * A card line's {@code active}: whether the line is in force (root spec
  * § 9.2). A line of a face not up is not. Of the face up, a static is while
  * Forge's condition for it holds, a {@code Class:N} level line is once the
- * Class has reached level N (written whether or not it has), and a Room's
- * line is while its door is unlocked; every other line says nothing, and
- * reads as in force.
+ * Class has reached level N (written whether or not it has), and so is a
+ * trait that level grants, which keys to the level's keyword; a Room's line
+ * is while its door is unlocked. Every other line says nothing, and reads as
+ * in force.
  *
  * <p>A Room's doors are its two split halves. Forge plays the doors
  * unlocked as the state up: both halves' {@code Original}, one half's own
@@ -36,12 +39,29 @@ final class LineInForce {
             CardStateName.Original, CardStateName.LeftSplit, CardStateName.RightSplit);
 
     private final Card card;
+    /** The level of each {@code Class:N} keyword of the face up, by its key. */
+    private final Map<ProvenanceKey, Integer> levels = new HashMap<>();
     /** True on a Room with a door up: every line of its face up is a door's. */
     private final Boolean doorUp;
 
     LineInForce(Card card) {
         this.card = card;
         this.doorUp = isRoom(card) && DOORS_UP.contains(card.getCurrentStateName()) ? Boolean.TRUE : null;
+        CardState up = card.getCurrentState();
+        for (KeywordInterface keyword : up.getIntrinsicKeywords()) {
+            addLevel(up, keyword);
+        }
+    }
+
+    private void addLevel(CardState up, KeywordInterface keyword) {
+        String original = keyword.getOriginal();
+        if (original == null || !original.startsWith(CLASS_LEVEL)) {
+            return;
+        }
+        ProvenanceKey key = ProvenanceResolver.keyOfKeyword(up, keyword);
+        if (key != null) {
+            levels.put(key.withoutBuilt(), levelOf(original));
+        }
     }
 
     /** A keyword line's {@code active}, or null for none. */
@@ -56,12 +76,20 @@ final class LineInForce {
         return doorUp;
     }
 
-    /** A trigger, ability, static or replacement line's {@code active}, or null for none. */
-    Boolean ofTrait(CardTraitBase trait, boolean faceUp) {
+    /**
+     * A trigger, ability, static or replacement line's {@code active}, or
+     * null for none. A static a level grants keeps its own condition: it is
+     * there only once the level is reached.
+     */
+    Boolean ofTrait(CardTraitBase trait, ProvenanceKey key, boolean faceUp) {
         if (!faceUp) {
             return Boolean.FALSE;
         }
-        return trait instanceof StaticAbility stat ? holds(stat) : doorUp;
+        if (trait instanceof StaticAbility stat) {
+            return holds(stat);
+        }
+        Integer level = key == null ? null : levels.get(key.withoutBuilt());
+        return level == null ? doorUp : Boolean.valueOf(level <= card.getClassLevel());
     }
 
     /** A Room's doors that are not up, in face order: none for any other card. */

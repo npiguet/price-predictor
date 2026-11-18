@@ -330,7 +330,8 @@ class CardLine:
     grant: str | None = None
     #: Whether the line is in force: Forge's answer to whether a static's
     #: condition holds; on a ``Class:N`` keyword line, whether the Class has
-    #: reached level N; on a Room door's line, whether the door is unlocked;
+    #: reached level N, and True on a line that level grants; on a Room
+    #: door's line, whether the door is unlocked;
     #: False on every line of a face not up; None on any other line.
     active: bool | None = None
     #: Keyword lines of a card cast with them: how many times the spell paid

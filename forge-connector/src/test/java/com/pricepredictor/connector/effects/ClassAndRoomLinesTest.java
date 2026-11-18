@@ -10,6 +10,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -69,85 +70,65 @@ class ClassAndRoomLinesTest {
         assertEquals(false, trigger.get("granted"), lines.toString());
     }
 
+    /**
+     * A trait a reached level grants is a line of that level: in force, said
+     * explicitly, as its {@code Class:N} line is.
+     */
+    @Test
+    void aReachedLevelsTriggerIsInForce() {
+        List<Map<String, Object>> lines = monkClassAt(3);
+
+        for (int level : List.of(2, 3)) {
+            Object levelKeys = classLine(lines, level).get("keys");
+            Map<String, Object> trigger = only(lines, line -> "trigger".equals(line.get("kind"))
+                    && levelKeys.equals(line.get("keys")));
+            assertEquals(true, trigger.get("active"), lines.toString());
+        }
+    }
+
     // ── Room doors ──────────────────────────────────────────────────────
 
     @Test
     void aRoomWithOneDoorUnlockedListsBothDoors() {
-        List<Map<String, Object>> lines = roomWithUnlocked(List.of(CardStateName.LeftSplit));
-
-        assertEquals(true, doorLine(lines, 0).get("active"), lines.toString());
-        assertEquals(false, doorLine(lines, 1).get("active"), lines.toString());
+        assertDoors(roomWithUnlocked(List.of(CardStateName.LeftSplit)), true, false);
     }
 
     @Test
     void aRoomWithTheOtherDoorUnlockedListsBothDoors() {
-        List<Map<String, Object>> lines = roomWithUnlocked(List.of(CardStateName.RightSplit));
-
-        assertEquals(false, doorLine(lines, 0).get("active"), lines.toString());
-        assertEquals(true, doorLine(lines, 1).get("active"), lines.toString());
+        assertDoors(roomWithUnlocked(List.of(CardStateName.RightSplit)), false, true);
     }
 
     @Test
     void aRoomWithBothDoorsUnlockedHasBothInForce() {
-        List<Map<String, Object>> lines = roomWithUnlocked(
-                List.of(CardStateName.LeftSplit, CardStateName.RightSplit));
-
-        assertEquals(true, doorLine(lines, 0).get("active"), lines.toString());
-        assertEquals(true, doorLine(lines, 1).get("active"), lines.toString());
+        assertDoors(roomWithUnlocked(List.of(CardStateName.LeftSplit, CardStateName.RightSplit)), true, true);
     }
 
     @Test
     void aRoomWithBothDoorsLockedListsBothDoorsNotInForce() {
-        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
-        Card room = roomOnBattlefield(board);
-
-        List<Map<String, Object>> lines = linesOf(board, room);
-
-        assertEquals(false, doorLine(lines, 0).get("active"), lines.toString());
-        assertEquals(false, doorLine(lines, 1).get("active"), lines.toString());
+        assertDoors(roomWithUnlocked(List.of()), false, false);
     }
 
     /** A face-down Room carries its real doors, neither in force. */
     @Test
     void aFaceDownRoomListsBothDoorsNotInForce() {
-        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
-        Card room = roomOnBattlefield(board);
-        room.unlockRoom(board.you, CardStateName.LeftSplit);
-        room.turnFaceDown();
-
-        List<Map<String, Object>> lines = linesOf(board, room);
-
-        assertEquals(false, doorLine(lines, 0).get("active"), lines.toString());
-        assertEquals(false, doorLine(lines, 1).get("active"), lines.toString());
+        assertDoors(linesOfRoom(board -> {
+            Card room = roomOnBattlefield(board);
+            room.unlockRoom(board.you, CardStateName.LeftSplit);
+            room.turnFaceDown();
+            return room;
+        }), false, false);
     }
 
     /** Off the battlefield a Room has both halves (709.4): both doors are in force. */
     @Test
     void aRoomInHandHasBothDoorsInForce() {
-        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
-        Card room = board.hand(POOL_ROOM, board.you);
-
-        List<Map<String, Object>> lines = linesOf(board, room);
-
-        assertEquals(true, doorLine(lines, 0).get("active"), lines.toString());
-        assertEquals(true, doorLine(lines, 1).get("active"), lines.toString());
+        assertDoors(linesOfRoom(board -> board.hand(POOL_ROOM, board.you)), true, true);
     }
 
     /** A Room spell has only the half cast (709.3): the other door is not in force. */
     @Test
     void aRoomCastAsOneDoorHasOnlyThatDoorInForce() {
-        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
-        Card room = board.hand(POOL_ROOM, board.you);
-        SpellAbility lockerRoom = room.getAllSpellAbilities().stream()
-                .filter(sa -> sa.getCardState().getStateName() == CardStateName.RightSplit)
-                .findFirst().orElseThrow();
-        lockerRoom.setActivatingPlayer(board.you);
-        Card spell = board.game.getAction().moveToStack(room, lockerRoom);
-
-        List<Map<String, Object>> lines = linesOf(board, spell);
-
-        assertEquals(false, doorLine(lines, 0).get("active"), lines.toString());
-        assertEquals(true, doorLine(lines, 1).get("active"), lines.toString());
+        assertDoors(linesOfRoom(ClassAndRoomLinesTest::lockerRoomOnTheStack), false, true);
     }
 
     // ── helpers ─────────────────────────────────────────────────────────
@@ -161,13 +142,36 @@ class ClassAndRoomLinesTest {
     }
 
     private static List<Map<String, Object>> roomWithUnlocked(List<CardStateName> doors) {
+        return linesOfRoom(board -> {
+            Card room = roomOnBattlefield(board);
+            for (CardStateName door : doors) {
+                room.unlockRoom(board.you, door);
+            }
+            board.game.getAction().checkStaticAbilities();
+            return room;
+        });
+    }
+
+    /** The lines of the Room {@code place} puts on a new board. */
+    private static List<Map<String, Object>> linesOfRoom(Function<CharacterizationBoard, Card> place) {
         CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
-        Card room = roomOnBattlefield(board);
-        for (CardStateName door : doors) {
-            room.unlockRoom(board.you, door);
-        }
-        board.game.getAction().checkStaticAbilities();
-        return linesOf(board, room);
+        return linesOf(board, place.apply(board));
+    }
+
+    /** The Room cast from its owner's hand as its Locker Room half, on the stack. */
+    private static Card lockerRoomOnTheStack(CharacterizationBoard board) {
+        Card room = board.hand(POOL_ROOM, board.you);
+        SpellAbility lockerRoom = room.getAllSpellAbilities().stream()
+                .filter(sa -> sa.getCardState().getStateName() == CardStateName.RightSplit)
+                .findFirst().orElseThrow();
+        lockerRoom.setActivatingPlayer(board.you);
+        return board.game.getAction().moveToStack(room, lockerRoom);
+    }
+
+    /** Each door's one line, face 0's then face 1's, says whether it is in force. */
+    private static void assertDoors(List<Map<String, Object>> lines, boolean first, boolean second) {
+        assertEquals(first, doorLine(lines, 0).get("active"), lines.toString());
+        assertEquals(second, doorLine(lines, 1).get("active"), lines.toString());
     }
 
     /**

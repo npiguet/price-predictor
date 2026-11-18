@@ -238,7 +238,7 @@ final class CardLines {
                 }
             }
             ProvenanceKey key = ProvenanceResolver.of(trait);
-            Boolean active = inForce.ofTrait(trait, faceUp);
+            Boolean active = inForce.ofTrait(trait, key, faceUp);
             List<Integer> chosen = faceUp && key != null && key.equals(stackKey)
                     ? chosenModes(onStack) : null;
             List<String> affected = faceUp && trait instanceof StaticAbility stat
