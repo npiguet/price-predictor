@@ -32,7 +32,13 @@ from effects.application.run_context import (
     build_run,
     preparer_settings,
 )
-from effects.application.run_reporter import EpochTally, RunReporter, ShardStats
+from effects.application.run_reporter import (
+    EpochOutcome,
+    EpochTally,
+    RunReporter,
+    ShardOutcome,
+    ShardStats,
+)
 from effects.application.step_loss import StepLossComputer, read_back
 from effects.application.step_preparation import (
     DeviceStep,
@@ -275,8 +281,10 @@ class TrainingLoop:
         with run.average.applied() as averaged:
             scores = self.validator.epoch(run, samples, run.fields[epoch])
             best = self._save_epoch(epoch, run, scores.control.control, candidate=averaged)
-            self.reporter.epoch(epoch, tally, scores, self.validator.floor.floor,
-                                best=run.stopper.best_score, trained=trained)
+            self.reporter.epoch(EpochOutcome(
+                epoch, tally, scores, self.validator.floor.floor,
+                best=run.stopper.best_score, trained=trained,
+            ))
             self.reporter.unresolved(run.preparer)
         save_resume(run, epoch, best=best)
         if run.stopper.should_stop:
@@ -432,7 +440,9 @@ class TrainingLoop:
                         raise TypeError(f"unexpected shard message {type(message).__name__}")
         finally:
             steps.close()
-        self.reporter.shard(task, of, opened, stats, trained=time.perf_counter() - started)
+        self.reporter.shard(ShardOutcome(
+            task, of, opened, stats, trained=time.perf_counter() - started,
+        ))
 
     def _set_learning_rate(self, run: RunContext) -> float:
         rate = learning_rate_at(run.step, warmup=run.warmup, scale=self.config.lr_scale)

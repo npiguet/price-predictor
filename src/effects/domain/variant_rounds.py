@@ -10,7 +10,7 @@ is ``application/collect_variants.py``.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -178,27 +178,37 @@ def detected_rules(catalogue: ScenarioCatalogue) -> frozenset[str]:
     return DetectorIndex.of(catalogue).declared_rules
 
 
-def short_pairs(
-    counts: Mapping,
-    heads: Mapping[str, RuleMapEntry],
-    detected: frozenset[str],
-    *,
-    floor: int,
-    retired: Iterable[str] = (),
-) -> list[ShortPair]:
+@dataclass(frozen=True, slots=True)
+class SteerScope:
+    """The rules a steered round may chase: the rule map's heads, the rules
+    with a declared detector, the pair floor, and the rules already retired."""
+
+    heads: Mapping[str, RuleMapEntry]
+    detected: frozenset[str]
+    floor: int
+    retired: frozenset[str] = frozenset()
+
+    def steerable_rules(self) -> Iterator[str]:
+        """The detected, unretired rules the map marks ``trained``, in rule
+        order."""
+        for rule in sorted(self.detected - self.retired):
+            entry = self.heads.get(rule)
+            if entry is not None and entry.verdict is MapVerdict.TRAINED:
+                yield rule
+
+
+def short_pairs(counts: Mapping, scope: SteerScope) -> list[ShortPair]:
     """Every short pair of a rule the map marks ``trained`` with a declared
     detector, not retired, in rule order; a rule the counts omit is short in
     both polarities."""
-    retired = frozenset(retired)
     found: list[ShortPair] = []
-    for rule in sorted(detected - retired):
-        entry = heads.get(rule)
-        if entry is None or entry.verdict is not MapVerdict.TRAINED:
-            continue
+    for rule in scope.steerable_rules():
         for polarity in STEERED_POLARITIES:
             records = pair_records(counts, rule, polarity)
-            if records < floor:
-                found.append(ShortPair(rule, polarity, records, floor - records))
+            if records < scope.floor:
+                found.append(
+                    ShortPair(rule, polarity, records, scope.floor - records),
+                )
     return found
 
 

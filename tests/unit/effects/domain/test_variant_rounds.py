@@ -10,6 +10,7 @@ from effects.domain.provenance import ProvenanceKey
 from effects.domain.rule_catalogue import MapVerdict, Polarity, RuleMapEntry
 from effects.domain.variant_rounds import (
     ShortPair,
+    SteerScope,
     VariantGames,
     acting_lines,
     counted_carriers,
@@ -39,25 +40,27 @@ _DETECTED = frozenset({"702.2b", "704.5f", "702.19b", "613.1"})
 
 
 def test_a_pair_short_of_the_floor_over_all_sources_is_short():
-    pairs = short_pairs(_COUNTS, _HEADS, _DETECTED, floor=100)
+    pairs = short_pairs(_COUNTS, SteerScope(_HEADS, _DETECTED, 100))
     assert ShortPair("702.2b", Polarity.DOES_NOT_FIRE, 30, 70) in pairs
     assert ShortPair("704.5f", Polarity.FIRES, 99, 1) in pairs
     assert not any(p.rule == "702.2b" and p.polarity is Polarity.FIRES for p in pairs)
 
 
 def test_a_rule_no_record_tags_is_short_in_both_polarities():
-    pairs = short_pairs(_COUNTS, _HEADS, _DETECTED, floor=100)
+    pairs = short_pairs(_COUNTS, SteerScope(_HEADS, _DETECTED, 100))
     assert {(p.rule, p.polarity, p.shortfall) for p in pairs if p.rule == "702.19b"} == {
         ("702.19b", Polarity.FIRES, 100), ("702.19b", Polarity.DOES_NOT_FIRE, 100)}
 
 
 def test_only_trained_rules_with_a_declared_detector_are_steered():
-    pairs = short_pairs(_COUNTS, _HEADS, _DETECTED - {"704.5f"}, floor=100)
+    pairs = short_pairs(_COUNTS, SteerScope(_HEADS, _DETECTED - {"704.5f"}, 100))
     assert {p.rule for p in pairs} == {"702.2b", "702.19b"}
 
 
 def test_a_retired_rule_has_no_short_pair():
-    pairs = short_pairs(_COUNTS, _HEADS, _DETECTED, floor=100, retired={"702.19b"})
+    pairs = short_pairs(
+        _COUNTS, SteerScope(_HEADS, _DETECTED, 100, frozenset({"702.19b"})),
+    )
     assert "702.19b" not in {p.rule for p in pairs}
 
 

@@ -97,6 +97,31 @@ class ShardStats:
             self.parts = loss.parts.as_dict()
 
 
+@dataclass(frozen=True)
+class ShardOutcome:
+    """What a finished shard reports: its task and place in the epoch, how it
+    opened, what its steps summed to, and the seconds it trained."""
+
+    task: ShardTask
+    of: int
+    opened: ShardOpened
+    stats: ShardStats
+    trained: float
+
+
+@dataclass(frozen=True)
+class EpochOutcome:
+    """What a finished epoch reports: its tally and scores, the validation
+    floor, the run's best control score after it, and its training seconds."""
+
+    epoch: int
+    tally: EpochTally
+    scores: EpochScores
+    floor: dict[str, float]
+    best: float | None
+    trained: float = 0.0
+
+
 class RunReporter:
     """Every line a training run logs between steps, and the tallies those
     lines gather from every process."""
@@ -156,10 +181,7 @@ class RunReporter:
     def shard_opened(self, opened: ShardOpened) -> None:
         """Say, once per run, how much of a shard the rarity table covers: a
         table matching nothing otherwise looks exactly like a healthy one."""
-        if (
-            opened.rarity_coverage is None or not opened.trainable
-            or self._rarity_reported
-        ):
+        if self._rarity_reported or not self._has_rarity_coverage(opened):
             return
         self._rarity_reported = True
         coverage = opened.rarity_coverage
@@ -170,16 +192,19 @@ class RunReporter:
             coverage.named, coverage.distinct, coverage.percent,
         )
 
+    @staticmethod
+    def _has_rarity_coverage(opened: ShardOpened) -> bool:
+        return opened.rarity_coverage is not None and bool(opened.trainable)
+
     def shard_closed(self, closed: ShardClosed) -> None:
         """What a worker's own caches counted, into this process's reports."""
         self._unresolved_elsewhere.update(closed.unresolved)
         for text, keys in closed.truncated:
             self.truncations.note(text, keys)
 
-    def shard(
-        self, task: ShardTask, of: int, opened: ShardOpened,
-        stats: ShardStats, *, trained: float,
-    ) -> None:
+    def shard(self, outcome: ShardOutcome) -> None:
+        task, of, opened = outcome.task, outcome.of, outcome.opened
+        stats, trained = outcome.stats, outcome.trained
         name = Path(task.shard).name
         trainable = opened.trainable
         if not trainable:
@@ -199,15 +224,14 @@ class RunReporter:
             format_parts(stats.parts), format_terms(stats.heads),
         )
 
-    def epoch(
-        self, epoch: int, tally: EpochTally, scores: EpochScores,
-        floor: dict[str, float], *, best: float | None, trained: float = 0.0,
-    ) -> None:
+    def epoch(self, outcome: EpochOutcome) -> None:
         """The epoch's lines: its losses and gate 1's progress margins on the
         card-disjoint pass, its control score (FR-075) and what scoring it cost
         against ``trained``, the epoch's training seconds (research E2: at most
         a fifth), then what it trained on. ``best`` is the run's best control
         score after this epoch."""
+        epoch, tally, scores = outcome.epoch, outcome.tally, outcome.scores
+        floor, best, trained = outcome.floor, outcome.best, outcome.trained
         card, game = scores.card, scores.game
         metrics = card.progress()
         logger.info(

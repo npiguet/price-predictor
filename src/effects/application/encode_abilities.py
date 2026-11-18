@@ -142,11 +142,15 @@ def build_runner(checkpoint: EffectCheckpoint, files: TokenizerFiles):
     """The checkpoint's encoder, built once for the whole run."""
     from effects.application.ability_encoder_runner import (
         AbilityEncoderRunner,
+        RunnerSettings,
     )
     from effects.domain.ability_encoder import TruncationLog, log_truncation
     from effects.infrastructure.tokenizer_loading import tokenizer_for
 
     return AbilityEncoderRunner.from_checkpoint(
-        checkpoint, tokenizer_for(checkpoint, files), surface=files.surface,
-        truncations=TruncationLog(log_truncation(logger, "encode-abilities")),
+        checkpoint, tokenizer_for(checkpoint, files),
+        RunnerSettings(
+            surface=files.surface,
+            truncations=TruncationLog(log_truncation(logger, "encode-abilities")),
+        ),
     )

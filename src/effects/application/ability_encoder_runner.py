@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import random
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass, replace
 
 import numpy as np
 import torch
@@ -35,6 +36,17 @@ logger = logging.getLogger(__name__)
 BLOCK_TEXTS = 1024
 
 
+@dataclass(frozen=True)
+class RunnerSettings:
+    """How a runner reads text: ``surface`` is the checkpoint's vocabulary's,
+    which the tokenizer's own grammar may not be (``tokenizer_surface``)."""
+
+    surface: Surface
+    device: torch.device | None = None
+    withheld_keyword: str | None = None
+    truncations: TruncationLog | None = None
+
+
 class AbilityEncoderRunner:
     """A loaded encoder plus its text stager, loaded once for the whole run."""
 
@@ -43,13 +55,9 @@ class AbilityEncoderRunner:
         config: AbilityEncoderConfig,
         state: dict,
         tokenizer: AbilityTokenizer,
-        *,
-        surface: Surface,
-        device: torch.device | None = None,
-        withheld_keyword: str | None = None,
-        truncations: TruncationLog | None = None,
+        settings: RunnerSettings,
     ) -> None:
-        self.device = device or default_device()
+        self.device = settings.device or default_device()
         self.encoder = AbilityEncoder(config).to(self.device)
         self.encoder.load_state_dict(state)
         # Dropout off, without which a cache would not be reproducible.
@@ -57,8 +65,9 @@ class AbilityEncoderRunner:
         # Inference probability zero, so two runs write the same cache; the
         # withheld keyword expands as it did in training.
         self.stager = TextStager.for_inference(
-            tokenizer, surface, withhold_keyword=withheld_keyword,
-            truncations=truncations,
+            tokenizer, settings.surface,
+            withhold_keyword=settings.withheld_keyword,
+            truncations=settings.truncations,
         )
         self.e_dim = config.e_dim
 
@@ -67,21 +76,17 @@ class AbilityEncoderRunner:
         cls,
         checkpoint,
         tokenizer: AbilityTokenizer,
-        *,
-        surface: Surface,
-        device: torch.device | None = None,
-        truncations: TruncationLog | None = None,
+        settings: RunnerSettings,
     ) -> AbilityEncoderRunner:
-        """``surface`` is the checkpoint's vocabulary's, which the tokenizer's
-        own grammar may not be (``tokenizer_surface``)."""
+        """``settings`` carry no withheld keyword: the checkpoint's own is
+        used."""
         return cls(
             checkpoint.encoder_config,
             checkpoint.encoder_state,
             tokenizer,
-            surface=surface,
-            device=device,
-            withheld_keyword=checkpoint.provenance.withheld_keyword,
-            truncations=truncations,
+            replace(
+                settings, withheld_keyword=checkpoint.provenance.withheld_keyword,
+            ),
         )
 
     def encode(

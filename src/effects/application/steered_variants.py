@@ -57,6 +57,7 @@ from effects.domain.script_variants import (
 from effects.domain.tally_merge import merge_into
 from effects.domain.variant_rounds import (
     ShortPair,
+    SteerScope,
     VariantGames,
     acting_lines,
     counted_carriers,
@@ -354,7 +355,9 @@ def steer(config, generation: SteeredGeneration, counts, heads, detected,
     played = False
     for iteration in range(1, config.steer_iterations + 1):
         before = combined_counts(counts, ruled.document())
-        pairs = short_pairs(before, heads, detected, floor=config.steer_floor, retired=retired)
+        pairs = short_pairs(before, SteerScope(
+            heads, detected, config.steer_floor, frozenset(retired),
+        ))
         if not pairs:
             logger.info("Steered iteration %d: no short pair left", iteration)
             break
