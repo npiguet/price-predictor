@@ -424,7 +424,8 @@ def test_thrasta_is_still_a_trampler_for_gate_2(thrasta_sidecars):
 #: Thrasta): for each rule, the fork's record (``aimed_at`` the rule), then the
 #: live game's. On 2026-11-18 (task B05a, the commit after cbe63ad6) each
 #: ``combat.attacking`` was rewritten from Forge's rendering of the defender to
-#: the ref its ``attacks`` link ends at, as the collector writes it since.
+#: the ref its ``attacks`` link ends at, as the collector writes it since. On
+#: 2026-11-19 (task C07b) each fork record gained ``fork_kind: directed``.
 _PLAYED = Path(__file__).parents[4] / "fixtures" / "effects" / "directed-702.19ef-combats.jsonl"
 
 

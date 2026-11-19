@@ -193,6 +193,55 @@ COLLECTION_METADATA_FIELDS: frozenset[str] = frozenset({
 })
 
 
+class ForkKind(StrEnum):
+    """The kind of fork that wrote a record: its envelope's ``fork_kind``,
+    absent on a live record.
+
+    Mirrors the connector's ``ForkKind`` enum; ``test_wire_closed_lists.py``
+    reads its source and ``WireVocabularyTest.forkKinds`` spells it out, so
+    one is changed on both sides or neither.
+    """
+
+    #: A forced resolution's effect half.
+    INTERVENTION = "intervention"
+    #: A damage-step probe's branch.
+    PROBE = "probe"
+    #: A protection fork played to the end of the turn.
+    PROTECTION = "protection"
+    #: A directed fork played to the end of the turn.
+    DIRECTED = "directed"
+
+
+class RecordOrigin(StrEnum):
+    """What produced a record: the live game, one of the four forks, or
+    ``build-corpus`` (:attr:`EffectRecord.origin`)."""
+
+    LIVE = "live"
+    PROBE = "probe"
+    FORCED = "forced"
+    PROTECTION_FORK = "protection_fork"
+    DIRECTED_FORK = "directed_fork"
+    SYNTHETIC = "synthetic"
+
+
+#: The origin of each fork kind's records.
+_FORK_ORIGINS: dict[ForkKind, RecordOrigin] = {
+    ForkKind.INTERVENTION: RecordOrigin.FORCED,
+    ForkKind.PROBE: RecordOrigin.PROBE,
+    ForkKind.PROTECTION: RecordOrigin.PROTECTION_FORK,
+    ForkKind.DIRECTED: RecordOrigin.DIRECTED_FORK,
+}
+
+#: Each fork kind's ``(interventional, directed set)`` flags, the contract's
+#: flag-signature table (``record-schema-delta.md`` (025) § Envelope).
+_FORK_SIGNATURES: dict[ForkKind, tuple[bool, bool]] = {
+    ForkKind.INTERVENTION: (True, False),
+    ForkKind.PROBE: (False, False),
+    ForkKind.PROTECTION: (True, False),
+    ForkKind.DIRECTED: (False, True),
+}
+
+
 @dataclass(frozen=True, slots=True)
 class DirectedTag:
     """What a directed fork changed: the scenario variant and the operation that applied it."""
@@ -807,19 +856,19 @@ PAYLOAD_TYPES: dict[tuple[RecordKind, Moment | StrEnum | None], type] = {
 class EffectRecord:
     """One JSONL line: an observed game event or decision point.
 
-    Three flag signatures distinguish how a record was produced, and the probe's
-    ``interventional = False`` is what separates it from an intervention by
-    flags alone:
+    A fork's record names the fork that wrote it in ``fork_kind``; its flags
+    follow from it, and an intervention and a protection fork share theirs,
+    so only ``fork_kind`` tells them apart (:attr:`origin`):
 
-    ==========================  ============  ===============  ======
-    record                      kind          interventional   fork
-    ==========================  ============  ===============  ======
-    ordinary observation        any           False            False
-    interventional resolution   resolution    True             True
-    protection fork (gen-3)     any           True             True
-    damage-step probe           combat        False            True
-    directed fork (gen-3)       any           False            True
-    ==========================  ============  ===============  ======
+    ==========================  ============  ===============  ======  ============
+    record                      kind          interventional   fork    fork_kind
+    ==========================  ============  ===============  ======  ============
+    ordinary observation        any           False            False   None
+    interventional resolution   resolution    True             True    intervention
+    protection fork (gen-3)     any           True             True    protection
+    damage-step probe           combat        False            True    probe
+    directed fork (gen-3)       any           False            True    directed
+    ==========================  ============  ===============  ======  ============
 
     A directed fork also carries ``directed`` and the rule it aimed at in
     ``aimed_at``. A forced resolution writes its effect half alone, with no
@@ -867,11 +916,10 @@ class EffectRecord:
     #: record and on a fork whose copy left nothing out. Collection metadata:
     #: it decides nothing, it is counted (``validate-corpus``).
     copy_dropped: tuple[tuple[str, int], ...] | None = None
-    #: The kind of fork that wrote the record, as the writer spells it
-    #: (``intervention``, ``probe``, ``protection``, ``directed``); None on a
-    #: live record, which carries no ``fork_kind``. Kept as read; collection
-    #: metadata.
-    fork_kind: str | None = None
+    #: The kind of fork that wrote the record; None on a live record, which
+    #: carries no ``fork_kind``, and on a synthetic one, which copies a live
+    #: record. Collection metadata.
+    fork_kind: ForkKind | None = None
     #: How ``build-corpus`` copied the record (research T1); None on every
     #: collected record. Curation metadata.
     curation: Curation | None = None
@@ -884,6 +932,7 @@ class EffectRecord:
         self._check_discriminators()
         self._check_ability()
         self._check_flags()
+        self._check_fork_kind()
 
     def _check_discriminators(self) -> None:
         if (self.moment is not None) != (self.kind is RecordKind.RESOLUTION):
@@ -964,6 +1013,53 @@ class EffectRecord:
                 "what_if classes a legality record; "
                 f"kind={self.kind.value} subkind={self.subkind} carries it"
             )
+
+    def _check_fork_kind(self) -> None:
+        """A fork kind is on a collected fork's record alone, with its kind's
+        flags; a synthetic record copies a live one and carries none."""
+        kind = self.fork_kind
+        if kind is None:
+            return
+        if not self.fork or self.synthetic:
+            raise ValueError(
+                f"fork_kind={kind.value} names the fork a collected fork record came from")
+        interventional, directed = _FORK_SIGNATURES[kind]
+        if (self.interventional, self.directed is not None) != (interventional, directed):
+            raise ValueError(
+                f"a {kind.value} fork's record carries interventional={interventional} "
+                f"and {'a' if directed else 'no'} directed tag")
+
+    @property
+    def origin(self) -> RecordOrigin:
+        """What produced the record, read off ``synthetic`` and ``fork_kind``
+        alone: a synthetic record is a ``build-corpus`` copy of a live one,
+        whatever its flags; a fork's is its ``fork_kind``'s.
+
+        A fork record with no ``fork_kind`` was written before the member
+        existed and is refused: its kind is never guessed from the flags.
+        """
+        if self.synthetic:
+            return RecordOrigin.SYNTHETIC
+        if not self.fork:
+            return RecordOrigin.LIVE
+        if self.fork_kind is None:
+            raise ValueError(
+                f"fork record {self.record_id} names no fork_kind: written before the member")
+        return _FORK_ORIGINS[self.fork_kind]
+
+    @property
+    def is_game_end_record(self) -> bool:
+        """Whether the record is a game-end record: an effect half naming no
+        acting line, no cost half and no outcome, which holds the game's
+        ``player_lost`` and ``player_won`` when no other record took them
+        (contract ``record-schema-delta.md`` (025), ``player_lost``).
+
+        Not the game-end marker (:func:`is_game_end`). A mana record also
+        has a null outcome, and names its mana ability.
+        """
+        payload = self.payload
+        return (isinstance(payload, ResolutionPayload) and payload.outcome is None
+                and not self.ability and self.link_id is None)
 
     @property
     def discriminator(self) -> Moment | PlayabilitySubkind | TurnActionSubkind | None:

@@ -56,6 +56,7 @@ from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarL
 from effects.domain.records import (
     CombatPayload,
     EffectRecord,
+    ForkKind,
     RecordKind,
     RewritePayload,
     TurnActionSubkind,
@@ -209,7 +210,7 @@ def _combat(
 ) -> EffectRecord:
     return make_record(
         RecordKind.COMBAT, record_id=record_id, game_id=game_id, timestamp=_TIMESTAMP,
-        fork=fork, mirror_of=mirror_of,
+        fork=fork, fork_kind=ForkKind.PROBE if fork else None, mirror_of=mirror_of,
         payload=CombatPayload(
             attackers=("E0",), probed_keyword=probed_keyword,
             probed_entity=probed_entity,

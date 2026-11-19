@@ -94,7 +94,12 @@ def java_golden_entities() -> list[dict]:
 #: 2026-11-18 (task B05a, the commit after cbe63ad6) every entity's
 #: ``combat.attacking`` was rewritten from Forge's rendering of the defender to
 #: the ref its ``attacks`` link ends at, as the collector writes it since;
-#: no other byte of any line changed.
+#: no other byte of any line changed. On 2026-11-19 (task C07b) each of its 34
+#: fork records gained ``fork_kind`` after ``fork``, read off its flag
+#: signature and, for the six unlinked interventional effect halves the
+#: table leaves open, off its acting line: the five naming a printed line are
+#: interventions, the engine-effect one a protection fork's; no other byte
+#: changed.
 GEN3_RECORDS = EFFECTS_FIXTURES / "gen3-records.jsonl.gz"
 GEN3_SIDECAR_FOLDERS = (
     EFFECTS_FIXTURES / "gen3-sidecars" / "cardsfolder",
@@ -106,7 +111,7 @@ GEN3_SIDECAR_FOLDERS = (
 #: three together, and with them every count a test pins on the fixture.
 GEN3_FIXTURE_RECORDS = 314
 GEN3_FIXTURE_GAMES = 57
-GEN3_FIXTURE_SHA256 = "a4b4a238831d25e7f401561ab29d40b7781b29e00c62cb118ece0c3ab6ec3607"
+GEN3_FIXTURE_SHA256 = "2c474ca2512b7e786ccb552fb069e32b9f1e14dc6834447891e5907524db4b29"
 
 
 def gen3_fixture_records() -> list[dict]:
@@ -127,8 +132,9 @@ def game_end_marker(last: EffectRecord, *, records_withheld: int = 0) -> EffectR
         last, record_id=f"{last.game_id}.game-end", kind=RecordKind.TURN_ACTION,
         moment=None, subkind=TurnActionSubkind.GAME_END, ability=None,
         ability_unresolved=None, link_id=None, mirror_of=None, variant_of=None,
-        interventional=False, fork=False, synthetic=False, directed=None, curation=None,
-        what_if=None, payload=TurnActionPayload(records_withheld=records_withheld),
+        interventional=False, fork=False, fork_kind=None, copy_dropped=None, synthetic=False,
+        directed=None, curation=None, what_if=None,
+        payload=TurnActionPayload(records_withheld=records_withheld),
     )
 
 

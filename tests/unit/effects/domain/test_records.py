@@ -24,17 +24,20 @@ from effects.domain.records import (
     Contribution,
     Costs,
     EffectRecord,
+    ForkKind,
     Moment,
     PlayabilityAttackersPayload,
     PlayabilityBlockersPayload,
     PlayabilityCheck,
     PlayabilitySubkind,
     RecordKind,
+    RecordOrigin,
     ResolutionPayload,
     RewritePayload,
     RewriteResult,
     UnresolvedReason,
 )
+from tests.unit.effects.builders import JAVA_GOLDENS
 from tests.unit.effects.builders import make_record as build_record
 from tests.unit.forge_sources import FORGE_GAME, forge_source
 
@@ -454,3 +457,80 @@ class TestGen3Envelope:
         with pytest.raises(ValueError, match="discriminator"):
             replace(build_record(RecordKind.TURN_ACTION), subkind=None)
 
+
+
+def _golden(name: str, *, fork: bool) -> EffectRecord:
+    """The first record of a Java golden whose ``fork`` flag is ``fork``."""
+    import json
+
+    from effects.infrastructure.record_codec import record_from_dict
+
+    lines = (JAVA_GOLDENS / name).read_text(encoding="utf-8").splitlines()
+    raw = next(raw for raw in map(json.loads, filter(str.strip, lines)) if raw["fork"] is fork)
+    return record_from_dict(raw)
+
+
+class TestRecordOrigin:
+    """What produced a record, read off ``fork_kind`` and ``synthetic`` (finding 5.8)."""
+
+    @pytest.mark.parametrize(("golden", "fork", "origin"), [
+        ("record-combat.jsonl", False, RecordOrigin.LIVE),
+        ("record-intervention.jsonl", True, RecordOrigin.FORCED),
+        ("record-combat-probe.jsonl", True, RecordOrigin.PROBE),
+        ("record-protection-fork.jsonl", True, RecordOrigin.PROTECTION_FORK),
+        ("record-directed-fork.jsonl", True, RecordOrigin.DIRECTED_FORK),
+    ])
+    def test_a_collected_record_s_origin_is_its_fork_kind_s(self, golden, fork, origin):
+        assert _golden(golden, fork=fork).origin is origin
+
+    def test_a_build_corpus_copy_is_synthetic(self):
+        live = _golden("record-combat.jsonl", fork=False)
+        copy = replace(live, record_id=f"{live.record_id}~pc0", synthetic=True)
+        assert copy.origin is RecordOrigin.SYNTHETIC
+
+    def test_a_fork_record_without_a_fork_kind_is_refused_not_guessed(self):
+        old = replace(_golden("record-intervention.jsonl", fork=True), fork_kind=None)
+        with pytest.raises(ValueError, match="names no fork_kind"):
+            _ = old.origin
+
+    @pytest.mark.parametrize("flags", [{"synthetic": True}, {}])
+    def test_a_live_or_synthetic_record_carries_no_fork_kind(self, flags):
+        live = _golden("record-combat.jsonl", fork=False)
+        with pytest.raises(ValueError, match="collected fork record"):
+            replace(live, fork_kind=ForkKind.PROBE, **flags)
+
+    @pytest.mark.parametrize(("golden", "kind"), [
+        ("record-combat-probe.jsonl", ForkKind.INTERVENTION),
+        ("record-intervention.jsonl", ForkKind.PROBE),
+        ("record-protection-fork.jsonl", ForkKind.DIRECTED),
+        ("record-directed-fork.jsonl", ForkKind.PROTECTION),
+    ])
+    def test_a_fork_kind_outside_its_flag_signature_is_refused(self, golden, kind):
+        with pytest.raises(ValueError, match=f"a {kind.value} fork's record carries"):
+            replace(_golden(golden, fork=True), fork_kind=kind)
+
+
+class TestGameEndRecord:
+    """The effect half holding a game's outcome when no other record took it."""
+
+    def _game(self) -> list[EffectRecord]:
+        import json
+
+        from effects.infrastructure.record_codec import record_from_dict
+
+        lines = (JAVA_GOLDENS / "shard-game-end.jsonl").read_text(encoding="utf-8").splitlines()
+        return [record_from_dict(json.loads(line)) for line in lines if line.strip()]
+
+    def test_only_the_outcome_holding_half_is_one(self):
+        """The golden game: a cost half, its resolved effect half, the
+        game-end record and the marker."""
+        game = self._game()
+        assert [record.is_game_end_record for record in game] == [False, False, True, False]
+        assert {event.type for event in game[2].payload.events} == {
+            EventType.PLAYER_LOST, EventType.PLAYER_WON}
+
+    def test_a_mana_record_names_its_line(self):
+        """Its outcome is null too: it resolves no stack item."""
+        mana = _golden("record-mana.jsonl", fork=False)
+        assert mana.payload.outcome is None
+        assert not mana.is_game_end_record

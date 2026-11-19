@@ -41,6 +41,7 @@ from effects.domain.records import (
     EffectRecord,
     FailedCheck,
     ForbiddenEntity,
+    ForkKind,
     Moment,
     PlayabilityAttackersPayload,
     PlayabilityBlockersPayload,
@@ -1049,7 +1050,7 @@ def record_to_dict(record: EffectRecord) -> dict:
     }
     # A fork's record alone, beside the flag it says more about.
     if record.fork_kind is not None:
-        out["fork_kind"] = record.fork_kind
+        out["fork_kind"] = record.fork_kind.value
     out |= {"synthetic": record.synthetic, "random_seat": record.random_seat}
     # On a blockers record alone, the one kind that carries it.
     if record.what_if is not None:
@@ -1144,6 +1145,7 @@ def record_from_dict(data: dict) -> EffectRecord:
     aimed_at = data.get("aimed_at")
     directed = data.get("directed")
     copy_dropped = data.get("copy_dropped")
+    fork_kind = data.get("fork_kind")
     curation = data.get("curation")
     return EffectRecord(
         record_id=data["record_id"],
@@ -1162,7 +1164,7 @@ def record_from_dict(data: dict) -> EffectRecord:
         variant_of=data.get("variant_of"),
         interventional=data["interventional"],
         fork=data["fork"],
-        fork_kind=data.get("fork_kind"),
+        fork_kind=ForkKind(fork_kind) if fork_kind is not None else None,
         synthetic=data["synthetic"],
         random_seat=data["random_seat"],
         what_if=data.get("what_if"),

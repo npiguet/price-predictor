@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from effects.domain.records import ForkKind
 from effects.domain.wire_closed_lists import (
     ABSENT,
     CHOICE_KINDS,
@@ -85,6 +86,8 @@ def _entity(**members) -> dict:
      ("choice_made.choice_kind", "colour")),
     (_record(pending_event={"type": "pt_change", "duration": "until_leaves"}),
      ("event.duration", "until_leaves")),
+    (_record() | {"fork": True}, ("fork_kind", ABSENT)),
+    (_record() | {"fork": True, "fork_kind": "replay"}, ("fork_kind", "replay")),
 ])
 def test_a_value_outside_its_list_is_named(raw, found):
     assert list(off_list_values(raw)) == [found]
@@ -184,6 +187,17 @@ def test_the_choice_kinds_are_the_connector_s():
 def test_the_event_durations_are_the_connector_s():
     source = (_CONNECTOR / "EventDuration.java").read_text(encoding="utf-8")
     assert sorted(EVENT_DURATIONS) == sorted(re.findall(r'[A-Z_]+\("([a-z_]+)"\)', source))
+
+
+def test_the_fork_kinds_are_the_connector_s_in_its_order():
+    """``ForkKind.java``'s wire names; ``WireVocabularyTest.forkKinds``
+    spells the same list out on the Java side."""
+    source = (_CONNECTOR / "ForkKind.java").read_text(encoding="utf-8")
+    assert list(ForkKind) == re.findall(r'^\s*[A-Z]+\("([a-z]+)"\)', source, re.MULTILINE)
+
+
+def test_a_live_record_s_absent_fork_kind_is_on_the_list():
+    assert list(off_list_values(_record() | {"fork": False})) == []
 
 
 def test_the_line_grants_are_the_connector_s():

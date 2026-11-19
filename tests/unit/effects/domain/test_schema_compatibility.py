@@ -33,6 +33,7 @@ from effects.domain.records import (
     CollectionMode,
     Curation,
     EffectRecord,
+    ForkKind,
     Moment,
     PlayabilitySubkind,
     RecordKind,
@@ -97,7 +98,7 @@ _FROZEN_ENVELOPE: dict[str, str] = {
     # What a fork's copy left out (WP5), by kind; None on live records.
     "copy_dropped": "tuple[tuple[str, int], ...] | None",
     # The kind of fork that wrote a record; None on live records.
-    "fork_kind": "str | None",
+    "fork_kind": "ForkKind | None",
     # Written by build-corpus on curated records only (research T1): how
     # curation copied the record, never collected.
     "curation": "Curation | None",
@@ -307,7 +308,7 @@ class TestRuleFourMetadataNeverBecomesAModelInput:
     @pytest.mark.parametrize("flip", [
         {"mode": CollectionMode.PATCHED},
         {"fork": True},
-        {"fork": True, "fork_kind": "probe"},
+        {"fork": True, "fork_kind": ForkKind.PROBE},
         {"synthetic": True},
         {"random_seat": True},
         {"aimed_at": ()},

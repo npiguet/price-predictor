@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping
 
 from effects.domain.event_schema import EventType
+from effects.domain.records import ForkKind
 from effects.domain.relation_types import FAMILIES
 from effects.domain.state_snapshot import (
     CombatSubstep,
@@ -86,6 +87,9 @@ _LINK_TYPES = frozenset(FAMILIES)
 _ATTRIBUTION_SENTINELS = frozenset({"root", "unresolved"})
 _EVENT_DURATIONS = frozenset(EVENT_DURATIONS) | {None}
 _COPY_DROPPED_KINDS = frozenset(COPY_DROPPED_KINDS)
+#: A fork record's ``fork_kind`` (``ForkKind``, pinned to the connector's by
+#: a test); a live record carries none.
+_FORK_KINDS = frozenset(ForkKind)
 #: ``(event type, parameter) -> the values it may take``; a parameter the
 #: event does not carry is not checked.
 _EVENT_PARAM_LISTS: dict[tuple[str, str], frozenset] = {
@@ -114,6 +118,17 @@ def _envelope(raw: Mapping) -> Iterator[tuple[str, object]]:
     for kind in raw.get("copy_dropped") or ():
         if _outside(kind, _COPY_DROPPED_KINDS):
             yield "copy_dropped", kind
+    yield from _fork_kind(raw)
+
+
+def _fork_kind(raw: Mapping) -> Iterator[tuple[str, object]]:
+    """A fork record's ``fork_kind`` outside its list, or absent: a fork
+    record written before the member existed. A live record's is not read."""
+    if not raw.get("fork"):
+        return
+    kind = raw.get("fork_kind", ABSENT)
+    if kind is ABSENT or _outside(kind, _FORK_KINDS):
+        yield "fork_kind", kind
 
 
 def _state(state: Mapping) -> Iterator[tuple[str, object]]:

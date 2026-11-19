@@ -80,6 +80,10 @@ A fork's record may hold `player_lost` and `player_won`, the outcome of the fork
 
 A protection copy written by `build-corpus` is a synthetic record `<record_id>~pc<i>`.
 
+- `EffectRecord.origin` (`RecordOrigin`) reads what produced a record off `synthetic` and `fork_kind` alone: `SYNTHETIC` for a synthetic record, `LIVE` for an observed one, else its `fork_kind`'s (`FORCED`, `PROBE`, `PROTECTION_FORK`, `DIRECTED_FORK`). An intervention and a protection fork share their flags, so a reader that infers the kind from them confuses the two.
+- `fork_kind` decodes into `records.ForkKind`, and a value outside it is refused. A synthetic record copies a live one and carries none, and a record whose `fork_kind` disagrees with its row above is refused (`EffectRecord._check_fork_kind`). A fork record without one predates the member: it is counted as `fork_kind <absent>` (`wire_closed_lists`), and its `origin` raises rather than guess.
+- `EffectRecord.is_game_end_record` is the game-end record of the 025 contract's `player_lost` row: an effect half with no `ability`, no `link_id` and `outcome` null. It is not the `game_end` marker (`records.is_game_end`), and a mana record, which names its line, is not one.
+
 ## Gen-3 members worth knowing
 
 - A snapshot lists every line of a card (`lines`), sets base P/T and boosts apart, and carries the facts of `rules/gen3-fields.json`, `links`, and extra card entities with a `role`.
