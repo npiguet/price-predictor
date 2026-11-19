@@ -241,7 +241,7 @@ _DETECTOR_RANK = {"missing": 0, "none": 1, "untaggable": 2, "same_as": 3, "decla
 #: emittable-events table): no record of theirs can be tagged.
 #: ``test_directed_fork_flags.py`` pins this set to that index over the real
 #: catalogue.
-UNTAGGABLE_SCENARIOS = frozenset({"104.4c-1", "701.8c-2"})
+UNTAGGABLE_SCENARIOS = frozenset({"104.4c-1"})
 
 
 def rule_readiness(rules_dir: Path = DEFAULT_RULES_DIR) -> dict[str, tuple[str, bool]]:

@@ -277,6 +277,38 @@ class ForcedAndLiveHalvesTest {
                 List.of("zone_change", "unresolved"))));
     }
 
+    /**
+     * Switcheroo exchanging the first player's attacking Grizzly Bears for
+     * the defender's Hill Giant, the two creatures out: the static check
+     * after its one clause corrects both zones, and the bears leave combat,
+     * the clause's, {@code root}, live and forced alike (finding 9.9).
+     */
+    @Test
+    void anExchangeOfAnAttacker() throws Throwable {
+        Play play = new Play(declining -> {
+            Game game = game(declining);
+            Player caster = game.getPlayers().get(0);
+            Player defender = game.getPlayers().get(1);
+            Card bears = TestBoard.inPlay(game, caster, "Grizzly Bears");
+            TestBoard.inPlay(game, defender, "Hill Giant");
+            TestBoard.inHand(game, caster, "Switcheroo");
+            game.getPhaseHandler().devModeSet(PhaseType.COMBAT_DECLARE_BLOCKERS, caster);
+            forge.game.combat.Combat combat = new forge.game.combat.Combat(caster);
+            combat.addAttacker(bears, defender);
+            combat.setBlocked(bears, false);
+            game.getPhaseHandler().setCombat(combat);
+            return game;
+        }, "Switcheroo", exchange -> {
+            exchange.resetTargets();
+            for (Player each : exchange.getHostCard().getGame().getPlayers()) {
+                exchange.getTargets().add(each.getCreaturesInPlay().get(0));
+            }
+        });
+        assertAlike(play, false, linksAre(List.of(
+                List.of("removed_from_combat", "root"), List.of("control_change", "root"),
+                List.of("control_change", "root"), List.of("zone_change", "unresolved"))));
+    }
+
     /** A check that a record's events are {@code expected}: each one's type and {@code attributed_to}, in order. */
     private static Consumer<String> linksAre(List<List<Object>> expected) {
         return record -> assertEquals(expected, RecordLines.events(record).stream()

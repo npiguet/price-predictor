@@ -13,11 +13,12 @@ The table is built by the event's source in the connector
 and ``test_emittable_events`` reads the sources to keep it so:
 
 - :data:`BUS`: built from Forge's event bus (``BusEvents``, ``BusEventReader``,
-  ``StatDiffer``) and filed wherever the bus event lands: a resolution's effect
-  half, the open combat damage step, or the turn-based action under way. The
-  game's end (:data:`GAME_END`) is filed in the game-end record: a combat, the
-  game-end rescue record after a state-based check, or the effect half of the
-  ability that ended the game outright (a ``WinsGame`` or ``LosesGame`` line);
+  ``StatDiffer``, ``ControlCorrection``) and filed wherever the bus event
+  lands: a resolution's effect half, the open combat damage step, or the
+  turn-based action under way. The game's end (:data:`GAME_END`) is filed in
+  the game-end record: a combat, the game-end rescue record after a
+  state-based check, or the effect half of the ability that ended the game
+  outright (a ``WinsGame`` or ``LosesGame`` line);
 - :data:`CLAUSE_HOOKS`: built by a resolving clause's hooks (``ApiEvents``,
   ``ClauseOutcomeRouter``'s outcome hook, ``ManaChannel``) into the effect
   half of the resolution it belongs to;
@@ -59,7 +60,8 @@ from __future__ import annotations
 from effects.domain.event_schema import EventType as E
 from effects.domain.records import CollectionMode, EffectRecord, RecordKind
 
-#: Built from the event bus (``BusEvents``, ``BusEventReader``, ``StatDiffer``).
+#: Built from the event bus (``BusEvents``, ``BusEventReader``, ``StatDiffer``,
+#: ``ControlCorrection``).
 BUS: frozenset[E] = frozenset({
     E.ZONE_CHANGE, E.DAMAGE_DEALT, E.LIFE_CHANGE, E.COUNTER_CHANGE, E.POISON_CHANGE,
     E.TAPPED, E.UNTAPPED, E.CARD_DRAWN, E.CARD_DISCARDED, E.CARD_MILLED, E.PHASED,
@@ -67,7 +69,7 @@ BUS: frozenset[E] = frozenset({
     E.LIBRARY_REORDERED, E.PLAYER_WON, E.PLAYER_LOST, E.ENERGY_CHANGE, E.RADIATION_CHANGE,
     E.SPEED_CHANGED, E.REGENERATED, E.PT_CHANGE, E.TYPE_CHANGE, E.COLOR_CHANGE,
     E.CONTROL_CHANGE, E.KEYWORD_CHANGE, E.ABILITY_CHANGE, E.NAME_CHANGE, E.MANA_COST_CHANGE,
-    E.STATE_FLAG_CHANGE, E.FACE_CHANGE, E.DESTROYED, E.SACRIFICED,
+    E.STATE_FLAG_CHANGE, E.FACE_CHANGE, E.DESTROYED, E.SACRIFICED, E.REMOVED_FROM_COMBAT,
 })
 #: Built by a resolving clause's hooks into its resolution's effect half.
 CLAUSE_HOOKS: frozenset[E] = frozenset({

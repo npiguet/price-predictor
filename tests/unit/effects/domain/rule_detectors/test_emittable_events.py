@@ -54,7 +54,7 @@ def _outcome_hook_types() -> set[EventType]:
 
 
 def test_the_bus_set_is_what_the_bus_shapers_build():
-    assert BUS == _named("BusEvents", "BusEventReader", "StatDiffer")
+    assert BUS == _named("BusEvents", "BusEventReader", "StatDiffer", "ControlCorrection")
 
 
 def test_the_clause_hook_set_is_what_the_clause_hooks_build():

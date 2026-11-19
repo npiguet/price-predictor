@@ -282,10 +282,25 @@ abstract class BusEventReader {
      * dungeon_completed} (each {@code value} true) on the player. A player
      * gets the blessing once and keeps it, and a dungeon completed stays
      * counted, so neither is ever reported lost.
+     *
+     * <p>A battlefield's notification can be a change of control moving a
+     * combatant, which leaves combat ({@link ControlCorrection}).
      */
     @Subscribe
     public void onZone(GameEventZone event) {
-        if (game == null || event.zoneType() != ZoneType.Command || event.player() == null) {
+        if (game == null) {
+            return;
+        }
+        if (event.zoneType() == ZoneType.Battlefield) {
+            file(ControlCorrection.removalAt(game, event), null);
+        } else if (event.zoneType() == ZoneType.Command) {
+            commandZoneChanged(event);
+        }
+    }
+
+    /** A player's command zone changed: their blessing or completed dungeons, if either moved. */
+    private void commandZoneChanged(GameEventZone event) {
+        if (event.player() == null) {
             return;
         }
         Player player = game.getPlayer(event.player());

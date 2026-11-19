@@ -168,6 +168,14 @@ final class ApiEvents {
     }
 
     /**
+     * The APIs whose clause rule tells every combatant that leaves combat
+     * while the clause runs ({@link #everyCombatant}), whatever took it out.
+     * Declared above {@link #RULES}, whose building reads it.
+     */
+    private static final Set<String> EVERY_COMBATANT_APIS =
+            Set.of("Regeneration", "GainControl", "Phases");
+
+    /**
      * The rule for each API name.
      *
      * <p>Built when the class initialises, so every memo and emitter the table
@@ -931,6 +939,16 @@ final class ApiEvents {
 
     // ── combat removals ─────────────────────────────────────────────────
 
+    /**
+     * Whether {@code clause}, the clause resolving now, tells every
+     * combatant that leaves combat while it runs, so a removal seen
+     * elsewhere meanwhile ({@link ControlCorrection}) is already told.
+     */
+    static boolean tellsEveryCombatRemoval(Object clause) {
+        return clause instanceof SpellAbility sa && sa.getApi() != null
+                && EVERY_COMBATANT_APIS.contains(sa.getApi().name());
+    }
+
     private static void combatRemovalRules(Map<String, Rule<?>> rules) {
         put(rules, Rule.one(EventType.REMOVED_FROM_COMBAT,
                         ApiEvents::combatantsBefore,
@@ -943,7 +961,7 @@ final class ApiEvents {
         put(rules, Rule.one(EventType.REMOVED_FROM_COMBAT,
                         ApiEvents::everyCombatant,
                         (sa, host, memo) -> noLongerInCombat(host, memo)),
-                "Regeneration", "GainControl", "Phases");
+                EVERY_COMBATANT_APIS.toArray(new String[0]));
         put(rules, Rule.shaped(EventType.COMBAT_ENDED,
                         ApiEvents::combatAttacker, ApiEvents::endedCombatOf),
                 "EndCombatPhase");
@@ -986,7 +1004,8 @@ final class ApiEvents {
      *
      * <p>Not {@code ExchangeControl} and the other control APIs: they set the
      * new controller and leave the zone correction, and with it the removal,
-     * to the static check after the clause.
+     * to the static check after the clause, where {@link ControlCorrection}
+     * tells it.
      */
     private static List<Card> everyCombatant(SpellAbility sa, Card host) {
         Combat combat = host.getGame().getCombat();
