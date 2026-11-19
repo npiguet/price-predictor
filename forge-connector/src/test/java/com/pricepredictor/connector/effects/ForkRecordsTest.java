@@ -99,30 +99,30 @@ class ForkRecordsTest {
     // ── the fixed per-resolution cap ────────────────────────────────────
 
     @Test
-    void thePerResolutionCapIsIndependentOfTheFlag() {
+    void thePerResolutionCapIsIndependentOfTheFlag() throws Throwable {
         // A generous --interventions-per-game must not let one board absorb
         // the whole budget: two counterfactuals for it are already both worth
         // having, and a third costs a game's simulation for a third variation.
         InterventionFork collector = interventions(forkCaps().interventions(100).probes(2).build());
-        collector.intervene(null, 7);
-        collector.intervene(null, 7);
+        DiscardedCopies.expectOne("intervention", () -> collector.intervene(null, 7));
+        DiscardedCopies.expectOne("intervention", () -> collector.intervene(null, 7));
         assertFalse(collector.mayIntervene(7));
         assertTrue(collector.mayIntervene(8));
     }
 
     @Test
-    void aDiscardedForkStillCountsAgainstItsBudget() {
+    void aDiscardedForkStillCountsAgainstItsBudget() throws Throwable {
         // Otherwise a systematically failing copy would retry until the game
         // ended. A null game makes every copy fail.
         InterventionFork collector = interventions(forkCaps().interventions(1).probes(2).build());
-        assertFalse(collector.intervene(null, 1));
+        DiscardedCopies.expectOne("intervention", () -> assertFalse(collector.intervene(null, 1)));
         assertFalse(collector.mayIntervene(1));
     }
 
     @Test
-    void aFailedForkWritesNoRecord() {
+    void aFailedForkWritesNoRecord() throws Throwable {
         InterventionFork collector = interventions(forkCaps().interventions(2).probes(2).build());
-        collector.intervene(null, 1);
+        DiscardedCopies.expectOne("intervention", () -> collector.intervene(null, 1));
         assertFalse(Files.exists(ShardRun.closed(writer)));
     }
 
@@ -143,10 +143,11 @@ class ForkRecordsTest {
     }
 
     @Test
-    void theProbeBudgetIsSpentByTakingProbes() {
+    void theProbeBudgetIsSpentByTakingProbes() throws Throwable {
         // Spent even by a fork that fails: a null game makes every copy fail.
         DamageStepProbe collector = probes(forkCaps().interventions(2).probes(1).probeKeywords("wither").build());
-        assertNull(collector.probe("wither", TestCards.build("Grizzly Bears"), DamageStep.REGULAR));
+        DiscardedCopies.expectOne("probe", () -> assertNull(
+                collector.probe("wither", TestCards.build("Grizzly Bears"), DamageStep.REGULAR)));
         assertFalse(budget.mayProbe("wither"));
     }
 

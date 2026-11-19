@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.pricepredictor.connector.ForgeExtension;
+import com.pricepredictor.connector.StdStreams;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.phase.PhaseType;
@@ -72,16 +73,20 @@ class ForkRunTest {
 
     /** A copy that throws is counted under its kind's copy, and nothing runs. */
     @Test
-    void aForkWhoseCopyThrowsIsCounted() {
+    void aForkWhoseCopyThrowsIsCounted() throws Throwable {
         long before = count("fork run-test-copy copy");
         AtomicInteger ran = new AtomicInteger();
+        Object[] written = new Object[1];
 
-        Object written = run("run-test-copy", null, new AtomicInteger()).take((verified, snapshots) -> {
-            ran.incrementAndGet();
-            return "ran";
-        }, (verified, produced) -> produced);
+        // Its first failure prints a line with the stack: captured, not shown.
+        String printed = StdStreams.captureStderr(() -> written[0] = run("run-test-copy", null, new AtomicInteger())
+                .take((verified, snapshots) -> {
+                    ran.incrementAndGet();
+                    return "ran";
+                }, (verified, produced) -> produced));
 
-        assertNull(written);
+        assertNull(written[0]);
+        assertTrue(printed.isEmpty() || printed.contains("fork run-test-copy copy threw"), printed);
         assertEquals(0, ran.get());
         assertEquals(before + 1, count("fork run-test-copy copy"));
     }
