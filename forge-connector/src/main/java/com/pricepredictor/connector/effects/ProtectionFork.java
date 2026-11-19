@@ -24,8 +24,9 @@ import java.util.function.Consumer;
  * gives one creature such a protection through the {@code keyword} operation
  * and {@link ForkPlayForward} plays the copy to the end of the turn: what the
  * turn then does about the protection (an attack it makes unblockable, damage
- * it prevents, a spell it leaves without a target, an Aura that falls off) is
- * the record.
+ * it prevents, a spell it leaves without a target) is the record. An Aura or
+ * Equipment the protection makes fall off does so in the state-based check
+ * the fork runs first, recorded as its premise ({@link ForkPremise}).
  *
  * <p>The quality is one an object that could meet the creature has: a
  * non-land permanent or a card in hand of an opponent of its controller, or a
@@ -44,6 +45,9 @@ import java.util.function.Consumer;
  * board with a creature.
  */
 final class ProtectionFork {
+
+    /** The fork's kind, as the failure report and the dropped-event counts name it. */
+    static final String KIND = "protection";
 
     /** The chance a first main phase with a creature on the battlefield is forked. */
     static final double PROBABILITY = 0.25;
@@ -110,7 +114,7 @@ final class ProtectionFork {
      */
     boolean take(Grant grant) {
         Forks.ForkRun run = new Forks.ForkRun(
-                "protection", game, () -> { }, () -> game.getPhaseHandler().getPlayerTurn());
+                KIND, game, () -> { }, () -> game.getPhaseHandler().getPlayerTurn());
         ForkPlayForward.Played played = run.take((verified, snapshots) -> {
             Card forked = Forks.mappedCard(verified.copier(), grant.creature());
             if (forked == null) {
@@ -118,10 +122,11 @@ final class ProtectionFork {
             }
             // Before the fork's collectors listen (ForkPlayForward.play opens
             // them): the grant publishes a stats change, which is the fork's
-            // premise, not something its turn did.
+            // premise, not something its turn did. What the grant makes true
+            // (an Aura falling off) is recorded, as the premise's record.
             KeywordOperation.adding(forked, grant.quality()).apply(verified.fork());
             return playForward.play(verified.fork(), FLAGS.andThen(verified::stamp));
-        }, (verified, result) -> result);
+        }, (verified, result) -> playForward.countDropped(KIND, result));
         return played != null;
     }
 

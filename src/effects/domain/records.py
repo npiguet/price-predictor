@@ -54,6 +54,10 @@ class TurnActionSubkind(StrEnum):
     PHASING = "phasing"
     DAY_NIGHT = "day_night"
     LORE_COUNTER = "lore_counter"
+    #: A fork's premise, on fork records only: the state-based check a
+    #: protection fork's grant or a directed fork's edit makes, run before
+    #: the fork plays on (contract ``record-schema-delta.md`` § Kinds).
+    FORK_EDIT = "fork_edit"
     #: The game-end marker: a game's last record, written only for a game that
     #: ended with every end-of-game write done. A game with none in its shard
     #: was cut (contract ``record-schema-delta.md`` § Kinds).

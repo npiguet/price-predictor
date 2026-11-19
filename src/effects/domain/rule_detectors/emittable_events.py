@@ -33,8 +33,11 @@ and ``test_emittable_events`` reads the sources to keep it so:
   replacement's run parameters, the trigger record's ``event`` and the rewrite
   record's ``incoming``/``outgoing``;
 - :data:`TAPPED`: what the bracket routes (``BusBracketCollector.route``:
-  the bus's events and the choke points'), which two channels take before it
-  files them (``EventTap``). ``ManaChannel`` takes a mana ability's own:
+  the bus's events and the choke points'), which three taps take before it
+  files them (``EventTap``). ``ForkPremise`` takes, in a fork, everything the
+  state-based check after the fork's edit publishes, into a ``turn_action`` /
+  ``fork_edit`` record, whose kind lists them already. ``ManaChannel`` takes a
+  mana ability's own:
   what its payment did beyond its taps (a creature sacrificed for mana) and
   what its sub-abilities did (a pain land's damage), into its mana record, a
   resolution, whose kind lists them already. ``RewriteChannel`` takes a

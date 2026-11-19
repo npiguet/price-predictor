@@ -24,6 +24,9 @@ import java.util.Map;
  * discarded, at the next cast, resolution end or the game's end; or it is a state-based
  * death with no held resolution and no open damage step to take it.
  *
+ * <p>A fork played on counts its own; a kept one's are added to its live
+ * game's under the fork's kind ({@link #addFork}).
+ *
  * <p>Counted whatever the run, since a count costs one map entry; only a run
  * under {@link CollectionCaps#countDroppedEvents()} writes them, appending the
  * game's counts to its worker lifetime's file at the end of each game ({@link
@@ -57,6 +60,16 @@ final class DroppedEvents {
         PhaseHandler handler = game == null ? null : game.getPhaseHandler();
         PhaseType phase = handler == null ? null : handler.getPhase();
         return phase == null ? NO_PHASE : phase.name().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Add a kept fork's counts, each under its phase prefixed with the fork's
+     * {@code kind} ({@code protection:main1}): the fork's events are of a
+     * board no live game played, and kept apart from the live game's.
+     */
+    void addFork(String kind, DroppedEvents fork) {
+        fork.counts.forEach((key, count) -> counts.merge(
+                new Key(key.eventType(), kind + ":" + key.phase()), count, Long::sum));
     }
 
     /** The counts so far. */

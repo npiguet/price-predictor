@@ -89,8 +89,18 @@ written as any other) and nothing in training.
 ## Kinds
 
 `turn_action`, with `subkind` one of `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`,
-`lore_counter`, `game_end`; payload `{"events": [...]}`. No `ability`. Never written to a curated
-stratum.
+`lore_counter`, `fork_edit`, `game_end`; payload `{"events": [...]}`. No `ability`. Never written to a
+curated stratum.
+
+`turn_action` / `fork_edit` is a fork's premise, on protection-fork and directed-fork records only:
+
+- The state-based check the fork's edit makes (a protection fork's grant, a directed fork's board
+  edit), run once the fork's collectors listen and before the fork begins its phase.
+- Its events are those the bracket routes while the check runs (an Aura's `unattached` and its
+  `zone_change` to the graveyard, a creature's death at 0 toughness), each `attributed_to:
+  unresolved` with `cause` the object the engine names, if any. Its board is read after the edit
+  and before the check. `actor_player` is the active player.
+- The fork's first record, carrying the fork's flags. A check that publishes nothing writes none.
 
 `turn_action` / `game_end` is the game-end marker:
 

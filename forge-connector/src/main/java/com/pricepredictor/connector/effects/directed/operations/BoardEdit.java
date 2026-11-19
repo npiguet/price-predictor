@@ -18,8 +18,9 @@ import forge.game.zone.ZoneType;
  * replacements and add to the counts (cards drawn, permanents put into a
  * graveyard, lands played) a variant does not change. What the changed board
  * then does — an Aura left unattached going to its owner's graveyard, a
- * creature at 0 toughness dying — happens when the fork plays on, as the
- * game's own consequence of the board.
+ * creature at 0 toughness dying — is the game's own consequence of the
+ * board: the state-based check the fork runs once its collectors listen and
+ * before it plays on, recorded as the fork's premise ({@code ForkPremise}).
  *
  * <p>An edit that cannot describe its variant on this board — a card no longer
  * where the precondition found it, a keyword the card does not carry, a name

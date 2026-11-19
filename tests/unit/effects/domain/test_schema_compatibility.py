@@ -111,7 +111,7 @@ _FROZEN_KINDS = {
 _FROZEN_MOMENTS = {"activation", "resolution"}
 _FROZEN_SUBKINDS = {"decision", "attackers", "blockers"}
 _FROZEN_TURN_ACTION_SUBKINDS = {
-    "draw", "cleanup_discard", "untap", "phasing", "day_night", "lore_counter",
+    "draw", "cleanup_discard", "untap", "phasing", "day_night", "lore_counter", "fork_edit",
 }
 
 #: A gen-3 card slot's members, in the order the collector writes them

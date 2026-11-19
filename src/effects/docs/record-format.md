@@ -32,7 +32,7 @@ The envelope is frozen within a generation: a later capability makes new `kind` 
 | `generation` | `3` on every record; see § Generations |
 | `kind` | `resolution`, `rewrite`, `continuous`, `combat`, `trigger`, `playability`, gen-3 `turn_action` |
 | `moment` | resolution kind only |
-| `subkind` | playability kind; on `turn_action` one of `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`, `lore_counter`, `game_end` (the game-end marker, which carries `records_withheld`) |
+| `subkind` | playability kind; on `turn_action` one of `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`, `lore_counter`, `fork_edit` (a protection or directed fork's premise, on fork records only: `forks.md` § Directed forks), `game_end` (the game-end marker, which carries `records_withheld`) |
 | `link_id` | joins a cost half with its effect halves; see below |
 | `mirror_of`, `variant_of` | the live record a fork mirrors; the variant source |
 | `mode` | `patched` or `degraded` |
@@ -98,5 +98,6 @@ A protection copy written by `build-corpus` is a synthetic record `<record_id>~p
 ## Dropped-event counts
 
 - `{run_id}.{worker}-{lifetime}.dropped-events.tsv` beside the shard, written only under `--count-dropped-events`: one `event_type<TAB>phase<TAB>count` line per pair per game, appended as each game ends, because a worker that is killed runs no shutdown hook.
+- `phase` is the engine phase in lower case (`main1`), or `none` before the game has one; a kept protection or directed fork's count carries the fork's kind before it (`protection:main1`).
 - Lines repeat across games and are summed by the supervisor, which skips a line cut short by a kill.
 - The suffix is not a shard suffix, so no shard reader takes the file for one.

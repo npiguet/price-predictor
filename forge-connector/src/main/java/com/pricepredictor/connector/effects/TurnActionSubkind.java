@@ -24,6 +24,12 @@ public enum TurnActionSubkind implements WireNamed {
     /** A lore counter on each of the active player's Sagas (CR 714.3b). */
     LORE_COUNTER("lore_counter"),
     /**
+     * A fork's premise: the state-based check a protection fork's grant or a
+     * directed fork's edit makes, run before the fork plays on, on fork
+     * records only ({@link ForkPremise}).
+     */
+    FORK_EDIT("fork_edit"),
+    /**
      * The game's end marker: the last record a game writes, after every
      * end-of-game flush, and only for a game that ended (D2). Its payload's
      * {@code events} is empty and {@code records_withheld} counts the records

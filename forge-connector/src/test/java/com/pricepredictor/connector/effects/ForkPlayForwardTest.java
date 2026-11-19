@@ -5,6 +5,11 @@ import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.GamePlayer;
 import com.pricepredictor.connector.RandomSeatController;
 import com.pricepredictor.connector.RandomSeatLobbyPlayer;
+import com.pricepredictor.connector.effects.directed.Application;
+import com.pricepredictor.connector.effects.directed.Binding;
+import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.operations.PtOperation;
 import forge.ai.LobbyPlayerAi;
 import forge.ai.PlayerControllerAi;
 import forge.game.Game;
@@ -24,6 +29,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -525,5 +531,47 @@ class ForkPlayForwardTest {
         assertEquals(14, karn.getCounters(forge.game.card.CounterEnumType.LOYALTY));
         assertTrue(game.getAge() != GameStage.RestartedByKarn);
         assertTrue(forkRecords(ShardRun.readShard(writer.path())).isEmpty(), "the refused fork wrote nothing");
+    }
+
+    // ── the premise ─────────────────────────────────────────────────────
+
+    /**
+     * A directed fork's edit that leaves a creature at 0 toughness: it dies
+     * in the state-based check the fork runs before it plays on (704.5f, a
+     * creature with toughness 0 is put into its owner's graveyard), and the
+     * death is in the fork's premise record, its first, a {@code fork_edit}
+     * turn action. The rule is this test's own: no registered rule's edit has
+     * a state-based consequence, since {@code RegisteredRulesTest} requires
+     * the check after each edit to change nothing.
+     */
+    @Test
+    void anEditsStateBasedDeathIsInTheForksPremiseRecord() throws Throwable {
+        Game game = board();
+        Card bears = onBattlefield(game, "Grizzly Bears");
+
+        List<String> forked = zeroToughnessFork(game, bears);
+
+        Map<String, Object> premise = parse(forked.get(0));
+        assertEquals("turn_action", premise.get("kind"), forked.get(0));
+        assertEquals("fork_edit", premise.get("subkind"), forked.get(0));
+        assertTrue(forked.get(0).contains(deathOf(bears)), forked.get(0));
+        assertEquals(1, naming(forked, deathOf(bears)), "the death is the premise's alone");
+    }
+
+    /** A directed fork at the live main phase setting {@code creature}'s toughness to 0; its lines. */
+    private List<String> zeroToughnessFork(Game game, Card creature) throws Exception {
+        CollectionCaps caps = TestCaps.caps().interventions(0).probes(0).build();
+        Application zero = new Application(ForkOperation.PT,
+                binding -> new PtOperation(binding.card("creature"), null, 0));
+        DirectedRule rule = DirectedRule.of("704.5f", "704.5f-1", live -> Optional.empty(), "zero", zero);
+        RecordShardWriter writer = ShardRun.writer(tempDir);
+        try (GameRecording recording = new GameRecording(game, writer, ShardRun.GAME_ID, caps, 7L, null)) {
+            recording.open();
+            assertTrue(new DirectedFork(game, recording.playForward(), () -> game.getPhaseHandler().getPlayerTurn())
+                    .take(rule, "zero", zero, Binding.empty().with("creature", creature)), "the fork was kept");
+        } finally {
+            writer.close();
+        }
+        return ShardRun.readShard(writer.path());
     }
 }

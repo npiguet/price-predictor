@@ -58,6 +58,7 @@ Rules to respect when changing or diagnosing interventions, damage-step probes, 
 - As a first main phase begins, a protection fork copies the game, gives one creature a rare protection through the `keyword` operation and plays the copy to the end of the turn through `ForkPlayForward`.
 - The quality is one that an opposing non-land permanent, an opposing hand card or a card attached to the creature has, spelled as `rule_outcomes.ProtectionQuality.fragment` spells it.
 - Its records are of any kind, cost halves linked to their effect halves included.
+- The grant is the fork's edit, and the state-based check it makes is the fork's premise (§ Directed forks): an Aura or Equipment the protection makes fall off is in the fork's `fork_edit` record, its `unattached` and its move to the graveyard (`ProtectionForkRecordsTest`).
 - It has a budget of its own: one a game, drawn at each first main phase with a creature out. The forced resolutions spend theirs before any creature is out.
 
 ## Directed forks
@@ -80,6 +81,8 @@ Rules to respect when changing or diagnosing interventions, damage-step probes, 
 - Its random seat draws from the game's fork seed. Nothing in a fork draws from the match's source, which would shift later games' seats.
 - The copy carries the turn's pending state (delayed triggers, end-of-turn and leaves-the-battlefield commands, controller timestamps) through the `GameCopier` patch. A command whose closure holds a reference the copy cannot map is left out rather than carried with a live reference into the real game.
 - The edit is applied before the fork's collectors start listening: the edits are silent to the rules but still publish bus events.
+- Once they listen, and before the fork begins its phase, `ForkPlayForward.play` runs the state-based check the edit makes as the fork's premise (`ForkPremise`, a tap of the fork's bracket). Everything the bracket would route during that check goes into one `turn_action` record of subkind `fork_edit`, the fork's first, its board read after the edit, its actor the active player. Left to the fork's first priority, the check runs with no resolution held and no turn-action window open, and an Aura falling off or a creature dying at 0 toughness reaches no record. A check that changes nothing writes no record. No registered rule's edit has a state-based consequence on its scenario's board (`RegisteredRulesTest`), so a directed fork's premise record comes from boards the scenarios do not show.
+- A kept fork's dropped events are added to its live game's counts, each under its phase prefixed with the fork's kind (`protection:main1`, `directed:end_of_turn`; `ForkPlayForward.countDropped`, `DroppedEvents.addFork`). A discarded fork's are not counted, and neither are a forced resolution's or a probe's.
 - The budget, the rule's one fork per game and the lifetime tally are all spent when the fork is taken, before the score check.
 - A directed fork's records carry no `mirror_of`: a phase boundary closes every live record first.
 - Every edit ends with the static check and a fresh last-known battlefield (`BoardEdit.settle`).

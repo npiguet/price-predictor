@@ -76,6 +76,7 @@ What the collectors must read of the hooks:
 ## Dropped events
 
 - Every event that reaches no record is counted per game by event type and engine phase (`FE/DroppedEvents.java`): one at a player's action at priority that is no cast, one a cost payment publishes, an orphan (filed while no bracket was open) discarded at the next cast, resolution end or game end, a state-based death nothing took.
+- A protection or directed fork counts its own; a kept one's are added to the live game's under the fork's kind (`forks.md` § Directed forks).
 - The counts are written per game, not at exit, because workers are killed with their process tree and run no shutdown hook. File format: `record-format.md`.
 
 ## Continuous records

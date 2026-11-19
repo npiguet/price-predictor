@@ -52,7 +52,7 @@ class WireVocabularyTest {
     void turnActionSubkinds() {
         assertEquals(
                 List.of("draw", "cleanup_discard", "untap", "phasing", "day_night", "lore_counter",
-                        "game_end"),
+                        "fork_edit", "game_end"),
                 wireNames(TurnActionSubkind.class));
     }
 

@@ -99,12 +99,14 @@ def _source(name: str) -> str:
     return re.sub(r"//[^\n]*|/\*.*?\*/", "", path.read_text(encoding="utf-8"), flags=re.S)
 
 
-def test_the_channels_tapping_the_bracket_are_the_mana_and_rewrite_channels():
+def test_the_bracket_s_taps_are_the_mana_and_rewrite_channels_and_the_fork_premise():
     """What a tap takes is what the bracket routes: the bus's events (its
-    damage, moves and outcomes) and the choke points', asked of the taps first."""
+    damage, moves and outcomes) and the choke points', asked of the taps first.
+    The fork premise's record is a turn action, whose kind lists all of them."""
     taps = {path.stem for path in _SOURCES.glob("*.java")
             if re.search(r"implements\s+BusBracketCollector\.EventTap", _source(path.stem))}
-    assert taps == {"ManaChannel", "RewriteChannel"}
+    assert taps == {"ManaChannel", "RewriteChannel", "ForkPremise"}
+    assert TAPPED <= EMITTABLE[RecordKind.TURN_ACTION]
     route = _source("BusBracketCollector").split("private void route(", 1)[1]
     assert route.index("tap.take(") < route.index("classifyNow()")
     assert TAPPED == BUS | CHOKE_POINTS

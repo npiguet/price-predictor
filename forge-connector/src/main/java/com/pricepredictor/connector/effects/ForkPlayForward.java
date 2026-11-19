@@ -72,8 +72,20 @@ final class ForkPlayForward {
      *
      * @param records  how many records it wrote
      * @param gameOver whether the game ended in the fork before the turn did
+     * @param dropped  the fork's events that reached no record
      */
-    record Played(int records, boolean gameOver) {
+    record Played(int records, boolean gameOver, DroppedEvents dropped) {
+    }
+
+    /**
+     * Count a kept fork's dropped events into the live game's, under the
+     * fork's {@code kind}.
+     *
+     * @return {@code played}
+     */
+    Played countDropped(String kind, Played played) {
+        live.countForkDropped(kind, played.dropped());
+        return played;
     }
 
     /**
@@ -81,7 +93,9 @@ final class ForkPlayForward {
      *
      * <p>The copy was taken at a phase event, which the engine fires ahead
      * of the phase's turn-based actions and its priority, so the fork begins
-     * that phase itself before it loops (see {@link PhaseStart}).
+     * that phase itself before it loops (see {@link PhaseStart}). Before
+     * that, it runs the state-based check the fork's edit makes, as its
+     * premise ({@link ForkPremise}).
      *
      * @param flags the flags every record of the fork carries
      * @throws RuntimeException when the fork cannot be played out; nothing
@@ -124,6 +138,8 @@ final class ForkPlayForward {
                 forced.attach(forcing);
             }
             live.routingTo(recording, () -> Forks.playingForward(fork, () -> {
+                // The edit's own consequences first, as the fork's premise.
+                recording.settlePremise();
                 playToTheEndOfTheTurn(fork, forced);
                 return null;
             }));
@@ -134,7 +150,7 @@ final class ForkPlayForward {
             forced.finish();
         }
         live.writeForkLines(held);
-        return new Played(held.size(), fork.isGameOver());
+        return new Played(held.size(), fork.isGameOver(), recording.droppedEvents());
     }
 
     /**

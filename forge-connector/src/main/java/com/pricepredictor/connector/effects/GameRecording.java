@@ -183,8 +183,9 @@ public final class GameRecording implements AutoCloseable {
      * hook installed (D4).
      *
      * <p>No intervention, probe or directed fork is scheduled from a fork,
-     * so a fork never forks. Its dropped events are not counted: the counts
-     * file has one line per real game.
+     * so a fork never forks. Its dropped events are not appended: the counts
+     * file has one line per real game, and a kept fork's are counted into
+     * the live game's, under the fork's kind ({@link #countForkDropped}).
      *
      * @param seed seeds the fork's sampling stream
      */
@@ -227,6 +228,30 @@ public final class GameRecording implements AutoCloseable {
             throw new IllegalStateException("a fork's recording plays no fork on");
         }
         return playForward;
+    }
+
+    /**
+     * A fork's premise, on a fork's recording: the state-based check its
+     * edit makes, run with its collectors listening and written as a {@code
+     * fork_edit} record ({@link ForkPremise}).
+     */
+    void settlePremise() {
+        ForkPremise premise = new ForkPremise(game, envelope);
+        bracket.addTap(premise);
+        premise.settle();
+    }
+
+    /** This recording's events that reached no record so far. */
+    DroppedEvents droppedEvents() {
+        return bracket.droppedEvents();
+    }
+
+    /**
+     * Count a kept fork's dropped events into this game's, under the fork's
+     * {@code kind}, so the game's counts file holds them.
+     */
+    void countForkDropped(String kind, DroppedEvents forkDropped) {
+        bracket.droppedEvents().addFork(kind, forkDropped);
     }
 
     /** Write a kept fork's lines to this game's shard. */

@@ -25,7 +25,8 @@ import java.util.function.Supplier;
  * silent to the rules, but they still publish bus events (a zone change, an
  * attachment, a stats change), which would otherwise land in the fork's
  * records as if the turn had done them. {@link ForkPlayForward#play} opens the
- * fork's recording only after the edit, keeping the records the variant
+ * fork's recording only after the edit, runs the state-based check the edit
+ * makes as the fork's premise ({@link ForkPremise}), keeps the records the variant
  * names whatever the samplers draw ({@link KeptRecords}, FR-010c), and
  * attaches the variant's forced play to its actor's seat in the copy
  * ({@link ForcedPlayRun}, FR-010b).
@@ -35,6 +36,9 @@ import java.util.function.Supplier;
  * the fork with nothing written ({@link Forks.ForkRun}).
  */
 final class DirectedFork {
+
+    /** The fork's kind, as the failure report and the dropped-event counts name it. */
+    static final String KIND = "directed";
 
     private final Game game;
     private final ForkPlayForward playForward;
@@ -57,7 +61,7 @@ final class DirectedFork {
     boolean take(DirectedRule rule, String variant, Application application, Binding binding) {
         Consumer<EffectRecord> flags = flags(
                 rule.rule(), new DirectedTag(variant, application.operation()));
-        Forks.ForkRun run = new Forks.ForkRun("directed", game, () -> { }, perspective);
+        Forks.ForkRun run = new Forks.ForkRun(KIND, game, () -> { }, perspective);
         ForkPlayForward.Played played = run.take((verified, snapshots) -> {
             Game fork = verified.fork();
             Binding forked = binding.inFork(verified.copier());
@@ -68,7 +72,7 @@ final class DirectedFork {
             // the line or made the card that holds it.
             ForcedPlayRun forced = ForcedPlayRun.start(application, application.afterEdit(forked, fork), fork);
             return playForward.play(fork, flags.andThen(verified::stamp), kept, forced);
-        }, (verified, result) -> result);
+        }, (verified, result) -> playForward.countDropped(KIND, result));
         return played != null;
     }
 
