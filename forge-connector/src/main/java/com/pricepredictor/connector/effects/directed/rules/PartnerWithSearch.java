@@ -64,16 +64,17 @@ public final class PartnerWithSearch {
             return Optional.empty();
         }
         for (Card card : active.getCardsIn(ZoneType.Hand)) {
-            if (!Boards.affordable(active, card)) {
-                continue;
-            }
             Optional<String> partner = partnerName(card);
-            if (partner.isPresent() && library.stream().noneMatch(other -> other.getName().equals(partner.get()))) {
+            if (partner.filter(name -> isNotIn(library, name)).isPresent() && Boards.affordable(active, card)) {
                 return Optional.of(Binding.empty().with("player", active)
                         .with("partner with", card).with("card", library.get(0)));
             }
         }
         return Optional.empty();
+    }
+
+    private static boolean isNotIn(List<Card> cards, String name) {
+        return cards.stream().noneMatch(other -> other.getName().equals(name));
     }
 
     /** The name the card's partner with names, if it has the keyword. */

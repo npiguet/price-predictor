@@ -61,7 +61,7 @@ public final class PoisonLoss {
         }
         Player active = Boards.active(live);
         Optional<Card> source = active.getCardsIn(ZoneType.Hand).stream()
-                .filter(card -> Boards.affordable(active, card) && poisonsEachPlayer(card))
+                .filter(card -> poisonsEachPlayer(card) && Boards.affordable(active, card))
                 .findFirst();
         if (source.isEmpty()) {
             return Optional.empty();

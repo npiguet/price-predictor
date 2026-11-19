@@ -50,6 +50,11 @@ public record AddPermanentOperation(
         return new AddPermanentOperation(cardName, player, player, false, sick, Map.of());
     }
 
+    /** A tapped, untouched-this-turn card with no counters, owned and controlled by {@code player}. */
+    public static AddPermanentOperation tapped(String cardName, Player player) {
+        return new AddPermanentOperation(cardName, player, player, true, false, Map.of());
+    }
+
     @Override
     public ForkOperation operation() {
         return ForkOperation.ADD_PERMANENT;

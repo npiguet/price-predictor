@@ -1346,6 +1346,9 @@ class RegisteredRulesTest {
         Twin twin = inspectorBoard(false, true).twin(ConniveWithoutDraw.rule());
         assertOnlyAdded(twin, twin.fork().player("opponent"), ConniveWithoutDraw.SPIRIT);
         assertFalse(twin.fork().player("player").canDraw(), "the Spirit stops the connive's draw");
+        assertTrue(twin.fork().player("opponent").getCardsIn(ZoneType.Battlefield).stream()
+                .filter(card -> card.getName().equals(ConniveWithoutDraw.SPIRIT)).allMatch(Card::isTapped),
+                "the Spirit is tapped, so it blocks no attacker of the fork's turn");
     }
 
     // ── 701.57b, a discovery that finds nothing: move_card, inverted ────

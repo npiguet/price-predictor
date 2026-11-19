@@ -63,7 +63,7 @@ public final class VirtuousRole {
         }
         return active.getCardsIn(ZoneType.Hand).stream()
                 .filter(Card::isCreature)
-                .filter(card -> Boards.affordable(active, card) && makesAVirtuousRoleAsItEnters(card))
+                .filter(card -> makesAVirtuousRoleAsItEnters(card) && Boards.affordable(active, card))
                 .findFirst()
                 .map(card -> Binding.empty().with("caster", active).with("card", card));
     }

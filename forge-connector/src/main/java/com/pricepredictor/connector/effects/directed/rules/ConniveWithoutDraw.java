@@ -53,7 +53,7 @@ public final class ConniveWithoutDraw {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, ConniveWithoutDraw::bind, SPIRIT_ADDED,
                 new Application(ForkOperation.ADD_PERMANENT,
-                        fork -> AddPermanentOperation.of(SPIRIT, fork.player("opponent"), false))
+                        fork -> AddPermanentOperation.tapped(SPIRIT, fork.player("opponent")))
                         .forcing(ForcedPlay.cast("player", "conniver").playing(CONNIVING)));
     }
 

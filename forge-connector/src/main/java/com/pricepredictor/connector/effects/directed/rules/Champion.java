@@ -56,12 +56,9 @@ public final class Champion {
         }
         Player active = Boards.active(live);
         for (Card card : active.getCardsIn(ZoneType.Hand)) {
-            if (!Boards.affordable(active, card)) {
-                continue;
-            }
             for (KeywordInterface champion : card.getKeywords(Keyword.CHAMPION)) {
                 List<Card> candidates = championable(champion, card, active);
-                if (candidates.size() == 1) {
+                if (candidates.size() == 1 && Boards.affordable(active, card)) {
                     return Optional.of(Binding.empty().with("player", active)
                             .with("creature", candidates.get(0)).with("card", card));
                 }

@@ -28,9 +28,9 @@ import java.util.Optional;
  * would die of ({@link Boards#replacementSurvives}), and the Knight's power,
  * with the boosts and counters it carries, is at least the attacker's
  * toughness less its marked damage, so the attacker dies in the first-strike
- * step having dealt no damage: the detector's {@code fires} side. An attacker
- * the Knight leaves alive shows neither side. It binds the attacker and the
- * blocker.
+ * step having dealt no damage: the scenario's {@code does_not_fire} side, the
+ * near miss. An attacker the Knight leaves alive shows neither side. It
+ * binds the attacker and the blocker.
  *
  * <p>Variant {@code knight_in_the_bears_place} ({@code replace_card}): the blocker
  * is Youthful Knight, a 2/1 with first strike, which deals its damage in the

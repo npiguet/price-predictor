@@ -552,7 +552,7 @@
         {
           "label": "spirit_added",
           "polarity": "fires",
-          "delta": "B controls Spirit of the Labyrinth, since before this turn.",
+          "delta": "B controls a tapped Spirit of the Labyrinth, since before this turn.",
           "expected": "No card is drawn: Forest stays on top of A's library. Grizzly Bears (nonland) is discarded, so Echo Inspector gets a counter. Echo Inspector still connived, so Glorious Purpose triggers: Echo Inspector gets a second +1/+1 counter (4/5) and Glorious Purpose gets a plan counter.",
           "operation": "add_permanent"
         }
