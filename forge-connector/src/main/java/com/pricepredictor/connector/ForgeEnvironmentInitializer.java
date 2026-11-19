@@ -18,6 +18,8 @@ import java.nio.file.Path;
  */
 public class ForgeEnvironmentInitializer {
     private static volatile boolean initialized = false;
+    /** The arguments the first initialization ran with; a later call must match. */
+    private static volatile String initializedWith = null;
 
     private static final String RES_SUBPATH = "forge-gui/res";
     private static final String GUI_SUBPATH = "forge-gui";
@@ -94,7 +96,11 @@ public class ForgeEnvironmentInitializer {
      * @param stage whether to copy the scripts, or only register their names
      */
     public static synchronized void initialize(Path extraCardSource, boolean stage) {
-        if (initialized) return;
+        String arguments = describe(extraCardSource, stage);
+        if (initialized) {
+            requireSameArguments(arguments);
+            return;
+        }
 
         Path forgeDir = findForgeDir();
         Path forgeGuiDir = forgeDir.resolve(GUI_SUBPATH);
@@ -116,9 +122,38 @@ public class ForgeEnvironmentInitializer {
             }
         }
 
-        FModel.initialize(null, null);
+        PinnedForgePreferences.requireNoForeignScripts(
+                Path.of(forge.localinstance.properties.ForgeConstants.USER_CUSTOM_CARDS_DIR),
+                Path.of(forge.localinstance.properties.ForgeConstants.USER_CUSTOM_TOKENS_DIR),
+                STAGED_MANIFEST);
+        FModel.initialize(null, PinnedForgePreferences::apply);
 
         initialized = true;
+        initializedWith = arguments;
+    }
+
+    /**
+     * The four game-rule preferences every worker runs with, for the run's
+     * status line and manifest.
+     */
+    public static PinnedForgePreferences pinnedPreferences() {
+        return PinnedForgePreferences.PINNED;
+    }
+
+    private static void requireSameArguments(String arguments) {
+        if (!arguments.equals(initializedWith)) {
+            throw new IllegalStateException(
+                    "Forge is already initialized with " + initializedWith
+                            + "; cannot initialize again with " + arguments);
+        }
+    }
+
+    /** Staging means nothing without a source, so it is not part of the identity. */
+    private static String describe(Path extraCardSource, boolean stage) {
+        return extraCardSource == null
+                ? "no extra card source"
+                : "extra card source " + extraCardSource.toAbsolutePath().normalize()
+                        + (stage ? " (staged)" : " (not staged)");
     }
 
     /**
