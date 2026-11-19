@@ -3,6 +3,8 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
 import forge.game.phase.PhaseType;
+import forge.game.player.Player;
+import forge.game.spellability.SpellAbility;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -54,16 +56,31 @@ class ForkDroppedEventsKindsTest {
         }
     }
 
-    /** A forced resolution that was refused wrote nothing, so no count reaches the game. */
+    /**
+     * Lines really refused on a real game add nothing: Burnt Offering reads
+     * what its cost paid and is refused before the fork is taken; Pacifism,
+     * held over a board with no creature, has no target to draw, so its
+     * fork is taken, spent and refused.
+     */
     @Test
     void aRefusedForcedResolutionAddsNothing() throws Throwable {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player holder = game.getPlayers().get(0);
+        List<SpellAbility> refused = List.of(
+                TestBoard.spellOf(TestBoard.inHand(game, holder, "Burnt Offering"), holder),
+                TestBoard.spellOf(TestBoard.inHand(game, holder, "Pacifism"), holder));
         CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(2).probes(0).build();
         RecordShardWriter shard = ShardRun.writer(tempDir);
         try (GameRecording live = new GameRecording(game, shard, ShardRun.GAME_ID, caps, 1L, null)) {
-            DiscardedCopies.expectOne("intervention", () -> assertFalse(
-                    new InterventionFork(null, live, new ForkBudget(caps), 1L).intervene(null, 1)));
+            for (SpellAbility line : refused) {
+                long before = ForkRefusals.counts().values().stream().mapToLong(Long::longValue).sum();
 
+                assertFalse(new InterventionFork(game, live, new ForkBudget(caps), 1L).intervene(line, 1),
+                        line + " is refused");
+
+                assertEquals(before + 1, ForkRefusals.counts().values().stream().mapToLong(Long::longValue).sum(),
+                        line + " is counted as a refusal: " + ForkRefusals.counts());
+            }
             assertTrue(live.droppedEvents().counts().isEmpty(), () -> "" + live.droppedEvents().counts());
         } finally {
             shard.close();
