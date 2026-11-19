@@ -24,9 +24,13 @@ import java.util.Optional;
  * no combatant strikes first) with an attacker blocked by one creature that
  * blocks it alone, both dealing damage and neither with first strike or
  * double strike, so they will deal it to each other in the one regular damage
- * step, and the blocker carries nothing the Youthful Knight put in its place
- * would die of ({@link Boards#replacementSurvives}). It binds the attacker
- * and the blocker.
+ * step, the blocker carries nothing the Youthful Knight put in its place
+ * would die of ({@link Boards#replacementSurvives}), and the Knight's power,
+ * with the boosts and counters it carries, is at least the attacker's
+ * toughness less its marked damage, so the attacker dies in the first-strike
+ * step having dealt no damage: the detector's {@code fires} side. An attacker
+ * the Knight leaves alive shows neither side. It binds the attacker and the
+ * blocker.
  *
  * <p>Variant {@code knight_in_the_bears_place} ({@code replace_card}): the blocker
  * is Youthful Knight, a 2/1 with first strike, which deals its damage in the
@@ -59,15 +63,34 @@ public final class SimultaneousDamage {
                 continue;
             }
             Card blocker = blockers.get(0);
-            if (combat.getAttackersBlockedBy(blocker).size() == 1
-                    && dealsRegularDamage(attacker) && dealsRegularDamage(blocker)
-                    && Boards.replacementSurvives(blocker, KNIGHT)) {
+            if (trade(combat, attacker, blocker) && knightKills(attacker, blocker)) {
                 return Optional.of(Binding.empty()
                         .with("attacker", attacker)
                         .with("blocker", blocker));
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * Whether the blocker blocks the attacker alone and the two deal their
+     * combat damage to each other in the regular damage step.
+     */
+    private static boolean trade(Combat combat, Card attacker, Card blocker) {
+        return combat.getAttackersBlockedBy(blocker).size() == 1
+                && dealsRegularDamage(attacker) && dealsRegularDamage(blocker);
+    }
+
+    /**
+     * Whether Youthful Knight in the blocker's place survives the edit and
+     * deals the attacker lethal damage in the first-strike step: its power,
+     * with what it carries ({@link ReplaceCardOperation#replacementPower}),
+     * is at least the attacker's toughness less the damage marked on it.
+     */
+    private static boolean knightKills(Card attacker, Card blocker) {
+        return Boards.replacementSurvives(blocker, KNIGHT)
+                && ReplaceCardOperation.replacementPower(blocker, KNIGHT)
+                >= attacker.getNetToughness() - attacker.getDamage();
     }
 
     /** Whether the creature deals combat damage, and only in the regular damage step. */
