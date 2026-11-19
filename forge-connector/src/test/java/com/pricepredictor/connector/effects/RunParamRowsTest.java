@@ -5,9 +5,11 @@ import forge.card.MagicColor;
 import forge.game.CardTraitBase;
 import forge.game.Game;
 import forge.game.ability.AbilityFactory;
+import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardDamageTable;
 import forge.game.card.CardZoneTable;
+import forge.game.combat.Combat;
 import forge.game.mana.Mana;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
@@ -21,6 +23,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -279,5 +282,72 @@ class RunParamRowsTest {
         assertEquals(EventType.ZONE_CHANGE, event.type(), event.toJson());
         assertEquals(List.of(Refs.of(fromPlay), Refs.of(fromHand)), event.subjects(), event.toJson());
         assertEquals(Map.of("mode", "ChangesZoneAll"), event.params(), event.toJson());
+    }
+
+    // ── blocks ──────────────────────────────────────────────────────────
+
+    /**
+     * Two Grizzly Bears attack: one blocked by Ageless Sentinels, the other
+     * by Hill Giant, as the declare-blockers step leaves combat.
+     */
+    private record TwoBlocks(Game game, Card sentinels, Card giant, Card bearsOne, Card bearsTwo) {
+
+        static TwoBlocks declared() {
+            Game game = RunParamRowsTest.game();
+            Card sentinels = TestBoard.inPlay(game, opponent(game), "Ageless Sentinels");
+            Card giant = TestBoard.inPlay(game, opponent(game), "Hill Giant");
+            Card bearsOne = TestBoard.inPlay(game, you(game), "Grizzly Bears");
+            Card bearsTwo = TestBoard.inPlay(game, you(game), "Grizzly Bears");
+            game.getPhaseHandler().devModeSet(PhaseType.COMBAT_DECLARE_ATTACKERS, you(game), false, 1);
+            Combat combat = TestBoard.blockedCombat(
+                    game, you(game), opponent(game), bearsOne, sentinels);
+            combat.addAttacker(bearsTwo, opponent(game));
+            combat.addBlocker(bearsTwo, giant);
+            combat.setBlocked(bearsTwo, true);
+            return new TwoBlocks(game, sentinels, giant, bearsOne, bearsTwo);
+        }
+    }
+
+    /** Blocks of {@code blocker}, a blocker's block as the declare-blockers step announces it. */
+    @Test
+    void aBlockDeclaredInTheStepIsAboutTheBlocker() {
+        TwoBlocks board = TwoBlocks.declared();
+
+        EffectEvent event = evaluated(board.sentinels(), "Blocks", () -> board.game().getPhaseHandler()
+                .devAdvanceToPhase(PhaseType.COMBAT_DECLARE_BLOCKERS)).get(0);
+
+        assertEquals(EventType.BLOCKERS_DECLARED, event.type(), event.toJson());
+        assertEquals(List.of(Refs.of(board.sentinels())), event.subjects(), event.toJson());
+        assertEquals(Refs.of(board.bearsOne()), event.params().get("blocked"), event.toJson());
+    }
+
+    /**
+     * Sorrow's Path switching the two blocks: the map Forge builds holds
+     * Attacker and Blocker, and each event is still about the blocker, who
+     * now blocks the other Bears. The switch comes after the declare-blockers
+     * step, whose history its attackers are picked from.
+     */
+    @Test
+    void aSwitchedBlockIsAboutTheBlocker() {
+        TwoBlocks board = TwoBlocks.declared();
+        board.game().getPhaseHandler().devAdvanceToPhase(PhaseType.COMBAT_DECLARE_BLOCKERS);
+        Card path = TestBoard.inPlay(board.game(), opponent(board.game()), "Sorrow's Path");
+        SpellAbility switchBlock = TestBoard.ability(path, ApiType.SwitchBlock);
+        switchBlock.setActivatingPlayer(opponent(board.game()));
+        switchBlock.getTargets().add(board.sentinels());
+        switchBlock.getTargets().add(board.giant());
+
+        List<EffectEvent> events = evaluated(board.sentinels(), "Blocks", switchBlock::resolve);
+
+        assertEquals(2, events.size(), events.toString());
+        assertEquals(Map.of(Refs.of(board.sentinels()), Refs.of(board.bearsTwo()),
+                        Refs.of(board.giant()), Refs.of(board.bearsOne())),
+                events.stream().collect(Collectors.toMap(
+                        event -> event.subjects().get(0), event -> event.params().get("blocked"))),
+                events.toString());
+        for (EffectEvent event : events) {
+            assertEquals(EventType.BLOCKERS_DECLARED, event.type(), event.toJson());
+            assertEquals(1, event.subjects().size(), event.toJson());
+        }
     }
 }

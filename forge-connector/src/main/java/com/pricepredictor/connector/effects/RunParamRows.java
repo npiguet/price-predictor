@@ -146,10 +146,11 @@ final class RunParamRows {
             Map.entry("Attacks", ModeRow.of(EventType.ATTACKERS_DECLARED,
                     about("Attacker"), RunParamSlots.DEFENDER)),
             // A Blocks map holds Blocker and Attackers (BlockEffect,
-            // PhaseHandler), or Attacker and Blocker (SwitchBlockEffect, whose
-            // event this reads as about the attacker).
+            // PhaseHandler), or Attacker and Blocker (SwitchBlockEffect): the
+            // subject is the blocker in each, and the blocked slot reads the
+            // attackers, or the one attacker.
             Map.entry("Blocks", ModeRow.of(EventType.BLOCKERS_DECLARED,
-                    about("Attacker", "Blocker", "Attackers"), RunParamSlots.BLOCKED)),
+                    about("Blocker"), RunParamSlots.BLOCKED)),
             // Retargeted: the subject of an AttackerBlocked event is the
             // attacker, not the blocker, so blockers_declared would put the
             // wrong creature in the slot named "blocked". became_blocked is the

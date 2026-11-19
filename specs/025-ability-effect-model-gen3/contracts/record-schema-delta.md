@@ -615,6 +615,7 @@ position a card left a library from, and a search of another player's library.
   | `CounterPlayerAddedAll` | `counter_change` | subject the object, `delta` the counters put, summed over their types, `counter_type` when one type; a trigger record is one firing, never written once per type |
   | `Scry` / `Scry` | `card_looked_at` | subject the player, `count` the scry's number (`ScryNum` on the trigger, `Num` on the replacement) |
   | `Surveil` | `card_looked_at` | subject the player, no `count`: Forge puts no number in the map |
+  | `Blocks` | `blockers_declared` | subject the blocker (`Blocker`) in every map Forge builds, `blocked` the attackers (`Attackers`) or, in a switch-block effect's map, its one `Attacker` |
   | `CreateToken` (replacement) | `token_created` | subject the affected player, `count` the tokens its table makes for that player (the table's `Affected` row): Forge runs the replacement once per player with one table |
   | `LoseMana` (replacement) | `mana_lost` | subject the affected player, no `mana_by_color`: the map's `Mana` is the replacement's default answer, never the mana lost |
 
