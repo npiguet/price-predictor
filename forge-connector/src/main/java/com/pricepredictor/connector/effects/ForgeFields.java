@@ -1,7 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import com.google.common.collect.Table;
-import forge.card.CardTypeView;
 import forge.game.CardTraitBase;
 import forge.game.Game;
 import forge.game.StaticEffect;
@@ -17,14 +16,15 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The few engine fields a snapshot reads that Forge declares private and
- * offers no side-effect-free getter for, and the two it lends for a read.
+ * offers no side-effect-free getter for. It writes none: what a continuous
+ * record lends the live board for a read goes through the branch's own
+ * methods ({@link PatchHooks#LEND_TYPE}, {@link PatchHooks#SET_ASIDE_COLORS}).
  *
  * <p>Each read answers null when the field is gone or unreadable, so a Forge
  * that renamed one costs the snapshot that fact rather than the record.
@@ -43,15 +43,10 @@ import java.util.concurrent.ConcurrentHashMap;
  *       Iterable)}): the public getters assemble a state's traits through the
  *       card's own trait changes only, and a printed line's index is counted
  *       through those changes with no line taken away.</li>
- *   <li>{@code CardState.changedType}: the one field written, the type line
- *       Forge caches for a state, lent for a read of the live board as a
- *       continuous record's board and put back after
- *       ({@link #lendCachedType}).</li>
  *   <li>{@code Card.colorLayers}: the card's colour changes in layer order,
  *       keyed (timestamp, static id), from which Forge computes every
- *       colour read and caches none; one static's cells are taken out for a
- *       read of the live board as a continuous record's board and put back
- *       after ({@link #lendColorsWithout}).</li>
+ *       colour read and caches none; read by the tests that check a lend
+ *       of a continuous record's board put every change back.</li>
  * </ul>
  */
 final class ForgeFields {
@@ -127,22 +122,6 @@ final class ForgeFields {
     }
 
     /**
-     * Puts {@code type} in {@code state}'s cached type line
-     * ({@code CardState.changedType}), which every type check of the live
-     * card reads, for a read the caller makes and then undoes with what this
-     * returns: the cached object itself put back. Null, with nothing
-     * written, when the field cannot be reached.
-     */
-    static Runnable lendCachedType(CardState state, CardTypeView type) {
-        Field field = field(CardState.class, "changedType");
-        if (field == MISSING) {
-            return null;
-        }
-        Object cached = read(CardState.class, "changedType", state);
-        return write(field, state, type) ? () -> write(field, state, cached) : null;
-    }
-
-    /**
      * The card's colour change tables in Forge's layer order
      * ({@code Card.colorLayers}: by text, characteristic-defining, layer 5),
      * each keyed (timestamp, static id); the tables themselves, none when
@@ -161,32 +140,6 @@ final class ForgeFields {
     @SuppressWarnings("unchecked")
     private static Table<Long, Long, Object> asColorTable(Object layer) {
         return (Table<Long, Long, Object>) layer;
-    }
-
-    /**
-     * Takes the colour changes filed under {@code staticId} out of the
-     * card's colour tables, which every colour read of the live card
-     * computes from (Forge caches no colour), for a read the caller makes
-     * and then undoes with what this returns: the same cells put back under
-     * the same keys. Forge's tables are sorted by those keys, so putting
-     * them back restores each table exactly. Null, with nothing taken, when
-     * the static filed no colour change on the card.
-     */
-    static Runnable lendColorsWithout(Card card, long staticId) {
-        List<Runnable> restore = new ArrayList<>();
-        for (Table<Long, Long, Object> table : colorLayers(card)) {
-            if (table.containsColumn(staticId)) {
-                restore.add(takeColumn(table, staticId));
-            }
-        }
-        return restore.isEmpty() ? null : () -> restore.forEach(Runnable::run);
-    }
-
-    /** Takes {@code column}'s cells out of {@code table}; what puts the same cells back. */
-    private static Runnable takeColumn(Table<Long, Long, Object> table, Long column) {
-        Map<Long, Object> taken = new LinkedHashMap<>(table.column(column));
-        taken.keySet().forEach(row -> table.remove(row, column));
-        return () -> taken.forEach((row, value) -> table.put(row, column, value));
     }
 
     /** The card's layer-3 mana cost changes keyed (timestamp, static id), or null. */
@@ -319,15 +272,5 @@ final class ForgeFields {
                 return MISSING;
             }
         });
-    }
-
-    /** Sets {@code field} of {@code target} to {@code value}; whether it was set. */
-    private static boolean write(Field field, Object target, Object value) {
-        try {
-            field.set(target, value);
-            return true;
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            return false;
-        }
     }
 }

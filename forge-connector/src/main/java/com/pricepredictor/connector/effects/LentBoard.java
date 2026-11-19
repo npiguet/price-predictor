@@ -17,7 +17,10 @@ import java.util.function.Supplier;
  * <p>For the read every live card is lent its type line without the
  * suppressed static, its colours without it, and every permanent its
  * controller without it; each is put back after, also on a throw, and lending
- * publishes no game event. So a condition or a mana ability that matches or
+ * publishes no game event. The type line and the colours are lent through
+ * methods the {@code effect-record-hooks} branch adds for the purpose
+ * ({@link PatchHooks#LEND_TYPE}, {@link PatchHooks#SET_ASIDE_COLORS}), which
+ * {@link PatchHooks#report()} names when a checkout lacks them. So a condition or a mana ability that matches or
  * counts types ("as long as you control an artifact", metalcraft, under
  * Mycosynth Lattice), colours ("each colour among permanents you control",
  * under Painter's Servant) or asks a card's controller (an artifact you

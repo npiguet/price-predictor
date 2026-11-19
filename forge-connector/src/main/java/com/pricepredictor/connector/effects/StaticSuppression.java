@@ -214,28 +214,30 @@ final class StaticSuppression {
     /**
      * Gives the live card this board's type line, for a read Forge makes of
      * the live board only (a static's condition counting artifacts), by
-     * lending it as the type line Forge caches for the card's state. The
-     * layer tables the line is computed from are not touched, so putting the
-     * cached line back restores the card exactly. Returns what puts it back,
-     * or null when the suppressed static changed no type of the card.
+     * lending it as the type line Forge caches for the card's state
+     * ({@code CardState.lendEffectRecordType}). The layer tables the line is
+     * computed from are not touched, so giving the cached line back restores
+     * the card exactly. Returns what gives it back, or null when the
+     * suppressed static changed no type of the card.
      */
     Runnable lendType(Card card) {
         if (staticId == null || !changedType(card)) {
             return null;
         }
-        return ForgeFields.lendCachedType(card.getCurrentState(), type(card));
+        return PatchHooks.LEND_TYPE.lend(card.getCurrentState(), CardTypeView.class, type(card));
     }
 
     /**
      * Gives the live card this board's colours, for a read Forge makes of
      * the live board only ("each colour among permanents you control"), by
-     * taking the suppressed static's colour changes out of the tables Forge
-     * computes the card's colours from; putting the same changes back
-     * restores the card exactly. Returns what puts them back, or null when
-     * the suppressed static changed no colour of the card.
+     * setting the suppressed static's colour changes aside from the tables
+     * Forge computes the card's colours from
+     * ({@code Card.setAsideEffectRecordColors}); putting the same changes
+     * back restores the card exactly. Returns what puts them back, or null
+     * when the suppressed static changed no colour of the card.
      */
     Runnable lendColors(Card card) {
-        return staticId == null ? null : ForgeFields.lendColorsWithout(card, staticId);
+        return staticId == null ? null : PatchHooks.SET_ASIDE_COLORS.lend(card, long.class, staticId);
     }
 
     /** Whether the suppressed static has a type change on the card. */

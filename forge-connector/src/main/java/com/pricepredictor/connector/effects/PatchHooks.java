@@ -125,6 +125,15 @@ public final class PatchHooks {
             return PatchHooks.read(target, method, argument);
         }
 
+        /**
+         * Call this one-argument lend on {@code target}: what gives back what
+         * it lent, or null when it lent nothing or the hook is absent.
+         */
+        Runnable lend(Object target, Class<?> parameterType, Object argument) {
+            return PatchHooks.invoke(target, method, parameterType, argument)
+                    instanceof Runnable giveBack ? giveBack : null;
+        }
+
         @Override
         public String toString() {
             return owner.substring(owner.lastIndexOf('.') + 1) + "." + method;
@@ -356,6 +365,12 @@ public final class PatchHooks {
     static final Hook PRIOR_SICKNESS = new Hook(CARD, "isEffectRecordSickForPriorController",
             "a continuous record's sickness of a permanent its static took: its summoning-sickness"
                     + " flag had that controller kept it");
+    static final Hook LEND_TYPE = new Hook("forge.game.card.CardState", "lendEffectRecordType",
+            "a continuous record's static conditions and untapped_production on the types without"
+                    + " its static: a card's type line lent for the read and given back");
+    static final Hook SET_ASIDE_COLORS = new Hook(CARD, "setAsideEffectRecordColors",
+            "a continuous record's static conditions and untapped_production on the colours without"
+                    + " its static: the static's colour changes set aside for the read and put back");
     static final Hook ASSIGNED_DAMAGE = new Hook(COMBAT, "getAssignedDamage",
             "a combat record's assignment_choices");
     static final Hook CONFIRM_LISTENER = new Hook(
@@ -433,7 +448,7 @@ public final class PatchHooks {
             CHANGED_COLORS_BY_STATIC, TYPE_WITHOUT, COLOR_WITHOUT, KEYWORDS_WITHOUT,
             PT_WITHOUT, CONTROLLER_WITHOUT, TRAITS_WITHOUT,
             CHANGED_NAMES, COPY_SOURCE, COPIED_PERMANENT, CLONE_PRINTER, PRIOR_CONTROLLER, PRIOR_SICKNESS,
-            ASSIGNED_DAMAGE, CONFIRM_LISTENER, OUTCOME_LISTENER,
+            LEND_TYPE, SET_ASIDE_COLORS, ASSIGNED_DAMAGE, CONFIRM_LISTENER, OUTCOME_LISTENER,
             PENDING_DELAYED_TRIGGERS, STATE_BASED_LOOP_LISTENER, PRIORITY_SETTLED_LISTENER,
             CAST_LISTENER, RESOLUTION_LISTENER, PAYMENT_LISTENER);
 
@@ -661,6 +676,19 @@ public final class PatchHooks {
         }
         return invokeOrNull(
                 instanceMethod(target.getClass(), methodName, ONE_LONG), target, argument);
+    }
+
+    /**
+     * Call a one-argument method on an instance, its parameter declared as
+     * {@code parameterType}, or answer null.
+     */
+    public static Object invoke(
+            Object target, String methodName, Class<?> parameterType, Object argument) {
+        if (target == null) {
+            return null;
+        }
+        return invokeOrNull(instanceMethod(
+                target.getClass(), methodName, List.of(parameterType)), target, argument);
     }
 
     /**
