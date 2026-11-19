@@ -405,21 +405,33 @@ class PriorityCandidatesTest {
 
     /**
      * What a verdict could write: the board a snapshot renders, every card's
-     * cast ability, every spell ability's activating player and the targets
-     * chosen on each clause of its chain.
+     * cast ability, whether it is marked as paying a cost and what it delved,
+     * every spell ability's activating player, the targets chosen on each
+     * clause of its chain, and what a cost adjustment leaves on it: its
+     * convoke list, its emerge sacrifice and its waterbend maximum.
      */
     private static String digest(Game game) {
         StringBuilder digest = new StringBuilder(new SnapshotBuilder(game).ofBoard().render());
         for (Card card : game.getCardsInGame()) {
             digest.append('\n').append(card.getId())
-                    .append(" cast=").append(System.identityHashCode(card.getCastSA()));
+                    .append(" cast=").append(System.identityHashCode(card.getCastSA()))
+                    .append(" usedToPay=").append(card.isUsedToPay())
+                    .append(" delved=").append(card.getDelved());
             for (SpellAbility ability : card.getSpellAbilities()) {
                 digest.append(" | ").append(ability.getId())
                         .append(" by ").append(ability.getActivatingPlayer())
-                        .append(chosenTargets(ability));
+                        .append(chosenTargets(ability))
+                        .append(costAdjustments(ability));
             }
         }
         return digest.toString();
+    }
+
+    /** What a cost adjustment writes on the ability. */
+    private static String costAdjustments(SpellAbility ability) {
+        return " convoked=" + ability.getTappedForConvoke()
+                + " emerge=" + ability.getSacrificedAsEmerge()
+                + " waterbend=" + ability.getMaxWaterbend();
     }
 
     /** The targets chosen on each clause of the chain, and which object holds them. */
@@ -446,8 +458,10 @@ class PriorityCandidatesTest {
      * Enumerating and evaluating both players' candidates leaves the game as
      * it was: spells and abilities, a charm, a static prohibition, a
      * split-second spell on the stack, in both seats' hands and on both
-     * sides of the battlefield, and a spell with targets an evaluation left
-     * chosen on each of its two clauses, which the verdict reads without.
+     * sides of the battlefield, a spell with targets an evaluation left
+     * chosen on each of its two clauses, which the verdict reads without,
+     * and spells whose cost a payer's choices reduce: emerge, convoke,
+     * delve, waterbend and a morph's face-down cast.
      */
     @Test
     void theGameIsUnchangedByEnumeration() {
@@ -479,6 +493,12 @@ class PriorityCandidatesTest {
         TestBoard.inHand(game, a, "Agadeem's Awakening");
         TestBoard.inHand(game, a, "Forest");
         TestBoard.inHand(game, b, "Island");
+        TestBoard.inHand(game, a, "Wretched Gryff");
+        TestBoard.inHand(game, a, "Treasure Cruise");
+        TestBoard.inGraveyard(game, a, "Shock");
+        TestBoard.inHand(game, b, "Stoke the Flames");
+        TestBoard.inHand(game, b, "Exalted Angel");
+        TestBoard.inHand(game, b, "Benevolent River Spirit");
         TestBoard.cast(game, TestBoard.inHand(game, a, "Sudden Shock"), a, b);
         String before = digest(game);
 
@@ -494,9 +514,9 @@ class PriorityCandidatesTest {
         assertTrue(read > 5, "the board offers candidates to evaluate: " + read);
         assertEquals(before, digest(game));
         assertEquals(1, game.getStack().size());
-        assertEquals(4, a.getCardsIn(ZoneType.Hand).size());
-        assertEquals(3, b.getCardsIn(ZoneType.Hand).size());
+        assertEquals(6, a.getCardsIn(ZoneType.Hand).size());
+        assertEquals(6, b.getCardsIn(ZoneType.Hand).size());
         assertEquals(2, a.getLandsPlayedThisTurn());
-        assertEquals(1, a.getCardsIn(ZoneType.Graveyard).size());
+        assertEquals(2, a.getCardsIn(ZoneType.Graveyard).size());
     }
 }

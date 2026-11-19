@@ -3,7 +3,6 @@ package com.pricepredictor.connector.effects;
 import forge.game.card.Card;
 import forge.game.cost.Cost;
 import forge.game.cost.CostPayment;
-import forge.game.mana.ManaCostBeingPaid;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
@@ -27,8 +26,12 @@ import java.util.function.Supplier;
  * stopped early and an earlier evaluation's when it did not run at all. The
  * AI's mana check, {@code ComputerUtilMana.canPayManaCost}, is no rules check
  * either: it honours the AI's mana reservations and draws from the random
- * stream. So affordability is a rules-only mana check
- * ({@link ManaAffordability}) and Forge's additional-cost check, and target
+ * stream. Nor is Forge's cost adjustment in its test mode, which asks the
+ * payer's controller what to convoke, improvise, waterbend, delve and
+ * sacrifice to emerge, and marks the sacrifice on the live card. So
+ * affordability is a rules-only mana check ({@link ManaAffordability})
+ * against the cost the rules charge, with those reductions as the rules
+ * allow them ({@link RulesCost}), and Forge's additional-cost check, and target
  * legality counts candidates rather than reading choices, with the choices
  * left on the ability set aside while it counts: Forge judges a cross-target
  * rule against them ({@link TargetingClauses#withNoneChosen}).
@@ -178,8 +181,10 @@ public record PlayabilityVerdict(
 
     /**
      * Whether the player has the mana, colours included, and the additional
-     * costs, by the rules alone: no AI reservation, preference or memory, and
-     * no draw from Forge's random stream ({@link ManaAffordability}). The
+     * costs, by the rules alone: no AI reservation, preference or memory, no
+     * draw from Forge's random stream, and the cost's convoke, improvise,
+     * waterbend, delve and emerge paid as the rules allow rather than as the
+     * AI would choose ({@link RulesCost}, {@link ManaAffordability}). The
      * candidate's activating player is {@code payer}; X is zero.
      */
     public static boolean affordable(SpellAbility candidate, Player payer) {
@@ -190,12 +195,12 @@ public record PlayabilityVerdict(
         if (unpayable(candidate, cost)) {
             return false;
         }
-        ManaCostBeingPaid charged;
+        RulesCost charged;
         try {
-            charged = DecisionCandidate.charged(candidate, payer);
+            charged = RulesCost.of(candidate, payer);
         } catch (RuntimeException e) {
-            // The adjustment cannot be read on this board: the printed cost.
-            charged = new ManaCostBeingPaid(cost.getTotalMana());
+            // The cost cannot be read on this board: the printed cost.
+            charged = RulesCost.printed(cost);
         }
         return ManaAffordability.canPay(candidate, payer, charged)
                 && CostPayment.canPayAdditionalCosts(cost, candidate, false, payer);

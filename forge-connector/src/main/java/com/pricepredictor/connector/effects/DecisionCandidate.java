@@ -1,17 +1,9 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.json.Json;
-import forge.card.mana.ManaCost;
 import forge.game.GameEntity;
-import forge.game.card.Card;
-import forge.game.cost.Cost;
-import forge.game.cost.CostAdjustment;
-import forge.game.cost.CostPartMana;
-import forge.game.mana.ManaCostBeingPaid;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
-import forge.game.zone.Zone;
-import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -31,10 +23,10 @@ import java.util.Set;
  *
  * @param keys         the candidate's printed line, as a list of at most one
  * @param legalTargets refs of what the rules allow any of its clauses to target
- * @param manaCost     the mana Forge would charge for it, after cost increases
- *                     and reductions ({@link #adjustedManaCost}), or null where
- *                     it has no costs, is a land play or the adjustment cannot
- *                     be computed
+ * @param manaCost     the mana the rules charge for it, after cost increases
+ *                     and reductions and less the most its keywords can pay
+ *                     ({@link #adjustedManaCost}), or null where it has no
+ *                     costs, is a land play or the cost cannot be computed
  * @param verdict      what the rules say of it on this board
  * @param landPlay     whether it plays a land (FR-033a), written as
  *                     {@code land_play}
@@ -76,62 +68,19 @@ public record DecisionCandidate(
     }
 
     /**
-     * The mana Forge would charge for {@code candidate} now, after every cost
-     * increase and reduction (rule 601.2f), as a cost string; null where it
-     * has no costs or the adjustment cannot be computed on this board.
-     *
-     * <p>The same two adjustments, in the same order, that Forge's payment
-     * makes ({@code ComputerUtilMana.calculateManaCost} in its test mode): the
-     * raises applied to the {@code Cost} ({@code CostAdjustment.adjust(Cost)}:
-     * commander tax, {@code RaiseCost} statics), then the reductions applied
-     * to the mana being paid ({@code CostAdjustment.adjust(ManaCostBeingPaid)}:
-     * {@code ReduceCost} statics, set costs, and the delve, convoke and
-     * improvise mana the AI would pay, in its test mode, which moves nothing).
-     * Not that call itself, which also fills X with the announced value: at a
-     * priority stop nothing is announced, so the X would read as removed
-     * rather than as still to be chosen. The host's cast-from zone is set to
-     * where it is for the duration, as {@code calculateManaCost} sets it, so a
-     * reduction keyed on where a spell is cast from applies.
+     * The mana the rules charge for {@code candidate} now, after every cost
+     * increase and reduction (rule 601.2f), less the most its convoke,
+     * improvise, waterbend and delve can pay ({@link RulesCost#mostReduced}),
+     * as a cost string; null where it has no costs or the cost cannot be
+     * computed on this board. X stays an unpaid {X}: at a priority stop
+     * nothing is announced.
      */
     static String adjustedManaCost(SpellAbility candidate, Player payer) {
         try {
-            ManaCostBeingPaid charged = charged(candidate, payer);
-            return charged == null ? null : String.valueOf(charged.toManaCost());
+            RulesCost charged = RulesCost.of(candidate, payer);
+            return charged == null ? null : String.valueOf(charged.mostReduced().toManaCost());
         } catch (RuntimeException e) {
             return null;
-        }
-    }
-
-    /**
-     * The mana {@link #adjustedManaCost} spells, as Forge's payment reads it;
-     * null where the candidate has no costs.
-     *
-     * @throws RuntimeException where the adjustment cannot be computed on
-     *                          this board
-     */
-    static ManaCostBeingPaid charged(SpellAbility candidate, Player payer) {
-        Cost cost = candidate.getPayCosts();
-        if (cost == null) {
-            return null;
-        }
-        Card host = candidate.getHostCard();
-        boolean castFromHere = candidate.isSpell() && host != null && !host.isInZone(ZoneType.Stack);
-        Zone castFrom = castFromHere ? host.getCastFrom() : null;
-        if (castFromHere) {
-            host.setCastFrom(host.getZone());
-        }
-        try {
-            Cost raised = CostAdjustment.adjust(cost, candidate, false);
-            CostPartMana part = raised == null ? null : raised.getCostMana();
-            ManaCost mana = raised == null ? ManaCost.NO_COST
-                    : part == null ? ManaCost.ZERO : part.getManaCostFor(candidate);
-            ManaCostBeingPaid charged = new ManaCostBeingPaid(mana);
-            CostAdjustment.adjust(charged, candidate, payer, null, true, false);
-            return charged;
-        } finally {
-            if (castFromHere) {
-                host.setCastFrom(castFrom);
-            }
         }
     }
 

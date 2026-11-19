@@ -23,11 +23,10 @@ import java.util.Optional;
  * begins, and it holds a card with improvise whose mana value the mana its
  * other sources make ({@link #otherMana}) and its untapped nonland artifacts,
  * none of which makes mana itself, pay exactly, the artifacts no more than
- * the card's generic mana. It binds one of those artifacts and the card.
- * Colours are not asked: the cost Forge would charge
- * ({@code PlayabilityVerdict.affordable}) improvises with the artifacts the
- * AI would tap, and before combat on its own turn the AI taps no artifact
- * creature (Ornithopter) for improvise.
+ * the card's generic mana, and which the player can pay, colours included
+ * ({@link Boards#affordable(Player, Card)}: every untapped artifact
+ * improvises, as the rules allow, whatever the AI would tap). It binds one
+ * of those artifacts and the card.
  *
  * <p>The active player cannot add a land to its mana this turn
  * ({@link Boards#noLandToPlay}): it holds no land, or its land drop is
@@ -75,6 +74,7 @@ public final class Improvise {
         return active.getCardsIn(ZoneType.Hand).stream()
                 .filter(card -> card.hasKeyword(Keyword.IMPROVISE) && card.getCMC() == mana + artifacts.size())
                 .filter(card -> card.getManaCost().getGenericCost() >= artifacts.size())
+                .filter(card -> Boards.affordable(active, card))
                 .findFirst()
                 .map(card -> Binding.empty().with("artifact", artifacts.get(0)).with("card", card));
     }

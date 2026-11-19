@@ -1,21 +1,15 @@
 package com.pricepredictor.connector.effects;
 
-import forge.card.MagicColor;
 import forge.card.mana.ManaAtom;
 import forge.card.mana.ManaCostShard;
-import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.cost.Cost;
-import forge.game.cost.CostPayment;
 import forge.game.mana.Mana;
-import forge.game.mana.ManaCostBeingPaid;
 import forge.game.player.Player;
-import forge.game.spellability.AbilityManaPart;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -30,101 +24,81 @@ import java.util.List;
  * held-for-blockers sets it clears). A label read that way says what the AI
  * would do, and reading it changes the game's random sequence.
  *
- * <p>Here the cost Forge would charge now ({@link DecisionCandidate#charged})
- * is matched against the mana the player could make: what floats in the pool
- * and, from each battlefield or hand card, one mana ability that can be
- * activated and whose non-mana costs can be paid. A mana ability with a mana
- * cost of its own (a filter land) is not counted, nor one producing special
- * mana; X is zero, as nothing is announced at a priority stop. Phyrexian
- * shards may be paid with two life each, a {@code {2/W}} shard with two
- * generic. Each card makes one activation's mana, which is a slight
- * undercount for a card whose several mana abilities need no tap.
+ * <p>Here the cost the rules charge now ({@link RulesCost}) is matched
+ * against the mana the player could make: what floats in the pool and, from
+ * each battlefield or hand card, one mana ability that can be activated and
+ * whose non-mana costs can be paid. A mana ability with a mana cost of its
+ * own (a filter land) is not counted, nor one producing special mana; X is
+ * zero, as nothing is announced at a priority stop. Phyrexian shards may be
+ * paid with two life each, a {@code {2/W}} shard with two generic. Each card
+ * makes one activation's mana, which is a slight undercount for a card whose
+ * several mana abilities need no tap.
+ *
+ * <p>Beside that mana, what the candidate's keywords let pay
+ * ({@link KeywordPayers}), the payment chosen freely: a card delve may exile
+ * is one more generic mana, and a permanent that may tap for convoke,
+ * improvise or waterbend is one more choice of what that card gives, so a
+ * mana creature either convokes or makes its mana, never both. No more
+ * waterbend tappers pay than its amount. A keyword's {1} may pay half of a
+ * {@code {2/W}} shard's two generic here, which the rules do not allow.
  */
 final class ManaAffordability {
 
     /** More choices of activation than this across the sources and each card keeps its first. */
     private static final int MAX_COMBINATIONS = 4096;
 
-    private ManaAffordability() {
-    }
+    private final Player payer;
+    private final SpellAbility candidate;
+    private final ShardDemand demand;
+    private final KeywordPayers payers;
+    private final List<List<List<ManaUnit>>> sources;
 
-    /** One mana the player could make: its possible colours, and whether it is snow. */
-    private record Unit(byte colors, boolean snow) {
-    }
-
-    /** The colours one unit can pay a shard with. */
-    private static boolean pays(Unit unit, ManaCostShard shard) {
-        if (shard.isSnow() && !unit.snow()) {
-            return false;
-        }
-        if (shard == ManaCostShard.GENERIC || shard == ManaCostShard.S) {
-            return true;
-        }
-        for (byte color : ManaAtom.MANATYPES) {
-            if ((unit.colors() & color) != 0 && shard.canBePaidWithManaOfColor(color)) {
-                return true;
-            }
-        }
-        return false;
+    private ManaAffordability(Player payer, SpellAbility candidate, ShardDemand demand, KeywordPayers payers) {
+        this.payer = payer;
+        this.candidate = candidate;
+        this.demand = demand;
+        this.payers = payers;
+        this.sources = withinBudget(sources(candidate, payer, payers));
     }
 
     /**
      * Whether {@code payer} can pay {@code candidate}'s mana cost now.
      *
-     * @param charged the mana Forge would charge, or null when it has no cost
+     * @param charged what the rules charge, or null when it has no cost
      */
-    static boolean canPay(SpellAbility candidate, Player payer, ManaCostBeingPaid charged) {
+    static boolean canPay(SpellAbility candidate, Player payer, RulesCost charged) {
         if (charged == null) {
             return true;
         }
-        List<ManaCostShard> colored = new ArrayList<>();
-        List<ManaCostShard> phyrexian = new ArrayList<>();
-        List<ManaCostShard> twoGeneric = new ArrayList<>();
-        int generic = 0;
-        for (ManaCostShard shard : charged.getUnpaidShards()) {
-            if (shard.isOfKind(ManaAtom.IS_X)) {
-                continue; // nothing is announced at a priority stop
-            } else if (shard == ManaCostShard.GENERIC) {
-                generic++;
-            } else if (shard.isPhyrexian()) {
-                phyrexian.add(shard);
-            } else if (shard.isOr2Generic()) {
-                twoGeneric.add(shard);
-            } else {
-                colored.add(shard);
-            }
-        }
-        if (colored.isEmpty() && phyrexian.isEmpty() && twoGeneric.isEmpty() && generic == 0) {
+        ShardDemand demand = ShardDemand.of(charged.total());
+        if (demand.isEmpty()) {
             return true;
         }
-        List<Unit> floating = floating(candidate, payer);
-        List<List<List<Unit>>> sources = sources(candidate, payer);
+        List<ManaUnit> units = floating(candidate, payer);
+        units.addAll(charged.payers().delved(demand.generic()));
+        return new ManaAffordability(payer, candidate, demand, charged.payers()).payable(units, 0);
+    }
+
+    /** Each source's choices, or only its first where all of them together are too many to try. */
+    private static List<List<List<ManaUnit>>> withinBudget(List<List<List<ManaUnit>>> sources) {
         long combinations = 1;
-        for (List<List<Unit>> options : sources) {
+        for (List<List<ManaUnit>> options : sources) {
             combinations *= options.size();
             if (combinations > MAX_COMBINATIONS) {
-                break;
+                return sources.stream().map(choices -> List.of(choices.get(0))).toList();
             }
         }
-        if (combinations > MAX_COMBINATIONS) {
-            sources = sources.stream().map(options -> List.of(options.get(0))).toList();
-        }
-        return payable(new ArrayList<>(floating), sources, 0, payer, candidate,
-                colored, phyrexian, twoGeneric, generic);
+        return sources;
     }
 
     /** Choose one activation per source, then try the shards against the mana that makes. */
-    private static boolean payable(
-            List<Unit> units, List<List<List<Unit>>> sources, int next, Player payer,
-            SpellAbility candidate, List<ManaCostShard> colored, List<ManaCostShard> phyrexian,
-            List<ManaCostShard> twoGeneric, int generic) {
+    private boolean payable(List<ManaUnit> units, int next) {
         if (next == sources.size()) {
-            return covers(units, payer, candidate, colored, phyrexian, twoGeneric, generic);
+            return covers(units);
         }
-        for (List<Unit> option : sources.get(next)) {
+        for (List<ManaUnit> option : sources.get(next)) {
             units.addAll(option);
-            boolean paid = payable(units, sources, next + 1, payer, candidate,
-                    colored, phyrexian, twoGeneric, generic);
+            boolean paid = payable(units, next + 1);
             units.subList(units.size() - option.size(), units.size()).clear();
             if (paid) {
                 return true;
@@ -134,54 +108,24 @@ final class ManaAffordability {
     }
 
     /** Whether these units pay the shards, some phyrexian ones with life and some {2/C} ones with two generic. */
-    private static boolean covers(
-            List<Unit> units, Player payer, SpellAbility candidate, List<ManaCostShard> colored,
-            List<ManaCostShard> phyrexian, List<ManaCostShard> twoGeneric, int generic) {
-        for (int withLife = 0; withLife <= phyrexian.size(); withLife++) {
+    private boolean covers(List<ManaUnit> units) {
+        int usable = units.size() - payers.beyondLimit(units);
+        for (int withLife = 0; withLife <= demand.phyrexian().size(); withLife++) {
             if (withLife > 0 && !payer.canPayLife(2 * withLife, false, candidate)) {
-                break;
+                return false;
             }
-            for (int asGeneric = 0; asGeneric <= twoGeneric.size(); asGeneric++) {
-                List<ManaCostShard> slots = new ArrayList<>(colored);
-                slots.addAll(phyrexian.subList(withLife, phyrexian.size()));
-                slots.addAll(twoGeneric.subList(asGeneric, twoGeneric.size()));
-                int needed = generic + 2 * asGeneric;
-                if (slots.size() + needed > units.size()) {
-                    continue;
-                }
-                if (matched(units, slots) == slots.size()) {
-                    return true;
-                }
+            if (coversWithLife(units, usable, withLife)) {
+                return true;
             }
         }
         return false;
     }
 
-    /** The size of a maximum matching of shards to units (Kuhn's augmenting paths). */
-    private static int matched(List<Unit> units, List<ManaCostShard> slots) {
-        int[] unitOf = new int[slots.size()];
-        int[] slotOf = new int[units.size()];
-        Arrays.fill(unitOf, -1);
-        Arrays.fill(slotOf, -1);
-        int count = 0;
-        for (int slot = 0; slot < slots.size(); slot++) {
-            if (augment(slot, units, slots, slotOf, unitOf, new boolean[units.size()])) {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    private static boolean augment(int slot, List<Unit> units, List<ManaCostShard> slots,
-                                   int[] slotOf, int[] unitOf, boolean[] seen) {
-        for (int unit = 0; unit < units.size(); unit++) {
-            if (seen[unit] || !pays(units.get(unit), slots.get(slot))) {
-                continue;
-            }
-            seen[unit] = true;
-            if (slotOf[unit] < 0 || augment(slotOf[unit], units, slots, slotOf, unitOf, seen)) {
-                slotOf[unit] = slot;
-                unitOf[slot] = unit;
+    private boolean coversWithLife(List<ManaUnit> units, int usable, int withLife) {
+        for (int asGeneric = 0; asGeneric <= demand.twoGeneric().size(); asGeneric++) {
+            List<ManaCostShard> slots = demand.slots(withLife, asGeneric);
+            int needed = demand.generic() + 2 * asGeneric;
+            if (slots.size() + needed <= usable && ShardMatching.size(units, slots) == slots.size()) {
                 return true;
             }
         }
@@ -189,39 +133,32 @@ final class ManaAffordability {
     }
 
     /** The mana floating in the payer's pool that may be spent on the candidate. */
-    private static List<Unit> floating(SpellAbility candidate, Player payer) {
-        List<Unit> units = new ArrayList<>();
+    private static List<ManaUnit> floating(SpellAbility candidate, Player payer) {
+        List<ManaUnit> units = new ArrayList<>();
         for (Mana mana : payer.getManaPool()) {
             if (mana.meetsManaRestrictions(candidate)
                     && candidate.allowsPayingWithShard(mana.getSourceCard(), mana.getColor())) {
-                units.add(new Unit(mana.getColor(), mana.isSnow()));
+                units.add(new ManaUnit(mana.getColor(), mana.isSnow(), false));
             }
         }
         return units;
     }
 
     /**
-     * Each card's choices of activation, as the mana each would make; a card
-     * the candidate's own tap cost taps is no source.
+     * Each card's choices of what it pays: the mana each of its mana
+     * abilities would make, and the unit it pays as a keyword's tapper; a
+     * card the candidate's own tap cost taps is no source.
      */
-    private static List<List<List<Unit>>> sources(SpellAbility candidate, Player payer) {
+    private static List<List<List<ManaUnit>>> sources(SpellAbility candidate, Player payer, KeywordPayers payers) {
         Cost cost = candidate.getPayCosts();
         Card host = candidate.getHostCard();
         boolean hostTaps = cost != null && cost.hasTapCost();
-        List<List<List<Unit>>> sources = new ArrayList<>();
+        List<List<List<ManaUnit>>> sources = new ArrayList<>();
         List<Card> cards = new ArrayList<>(payer.getCardsIn(ZoneType.Battlefield));
         cards.addAll(payer.getCardsIn(ZoneType.Hand));
         for (Card card : cards) {
-            if (hostTaps && card == host) {
-                continue;
-            }
-            List<List<Unit>> options = new ArrayList<>();
-            for (SpellAbility ability : card.getManaAbilities()) {
-                List<Unit> made = made(ability, candidate, payer);
-                if (!made.isEmpty()) {
-                    options.add(made);
-                }
-            }
+            List<List<ManaUnit>> options = hostTaps && card == host
+                    ? List.of() : optionsOf(card, candidate, payer, payers);
             if (!options.isEmpty()) {
                 sources.add(options);
             }
@@ -229,51 +166,18 @@ final class ManaAffordability {
         return sources;
     }
 
-    /** The mana one activation of {@code ability} would make for {@code candidate}, or none when it cannot be activated. */
-    private static List<Unit> made(SpellAbility ability, SpellAbility candidate, Player payer) {
-        AbilityManaPart part = ability.getManaPart();
-        if (part == null || part.isSpecialMana()) {
-            return List.of();
-        }
-        ability.setActivatingPlayer(payer);
-        Cost own = ability.getPayCosts();
-        if (own != null && own.hasManaCost()) {
-            return List.of(); // a filter: its mana comes from other sources
-        }
-        if (!ability.canPlay() || !ability.checkRestrictions(payer)
-                || !CostPayment.canPayAdditionalCosts(own, ability, false, payer)
-                || !ability.metConditions() || !part.meetsManaRestrictions(candidate)) {
-            return List.of();
-        }
-        boolean snow = part.getSourceCard() != null && part.getSourceCard().isSnow();
-        List<Unit> units = new ArrayList<>();
-        if (part.isAnyMana() || part.isComboMana() || ability.getApi() == ApiType.ManaReflected) {
-            byte colors = 0;
-            for (byte color : ManaAtom.MANATYPES) {
-                if (ability.isManaAbilityFor(candidate, color)) {
-                    colors |= color;
-                }
-            }
-            if (colors != 0) {
-                for (int i = ability.amountOfManaGenerated(false); i > 0; i--) {
-                    units.add(new Unit(colors, snow));
-                }
-            }
-            return units;
-        }
-        int amount = ability.hasParam("Amount")
-                ? forge.game.ability.AbilityUtils.calculateAmount(
-                        ability.getHostCard(), ability.getParam("Amount"), ability)
-                : 1;
-        for (int i = 0; i < amount; i++) {
-            for (String token : part.mana(ability).split(" ")) {
-                byte color = token.equals("C") ? (byte) ManaAtom.COLORLESS
-                        : MagicColor.fromName(token);
-                if (color != 0 && ability.isManaAbilityFor(candidate, color)) {
-                    units.add(new Unit(color, snow));
-                }
+    private static List<List<ManaUnit>> optionsOf(Card card, SpellAbility candidate, Player payer, KeywordPayers payers) {
+        List<List<ManaUnit>> options = new ArrayList<>();
+        for (SpellAbility ability : card.getManaAbilities()) {
+            List<ManaUnit> made = ManaAbilityUnits.made(ability, candidate, payer);
+            if (!made.isEmpty()) {
+                options.add(made);
             }
         }
-        return units;
+        ManaUnit tapper = payers.tappers().get(card);
+        if (tapper != null) {
+            options.add(List.of(tapper));
+        }
+        return options;
     }
 }

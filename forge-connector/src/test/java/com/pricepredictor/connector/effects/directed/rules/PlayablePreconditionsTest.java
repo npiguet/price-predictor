@@ -124,6 +124,20 @@ class PlayablePreconditionsTest {
         assertTrue(Improvise.bind(game).isEmpty());
     }
 
+    /**
+     * Reverse Engineer over two Forests and three Ornithopters: the mana
+     * value adds up, but the Forests cannot pay {U}{U}, so the spell is not
+     * castable on the base board and the fork's tapped artifact would change
+     * nothing.
+     */
+    @Test
+    void improviseBindsNothingWhoseColoursTheLandsCannotPay() {
+        permanents(you, "Forest", 2);
+        permanents(you, "Ornithopter", 3);
+        TestBoard.inHand(game, you, "Reverse Engineer");
+        assertTrue(Improvise.bind(game).isEmpty());
+    }
+
     /** A face-down Exalted Angel (morph {2}{W}{W}) beside Plains and an Azorius Chancery, which makes two mana. */
     private Card angelOver(int plains) {
         permanents(you, "Plains", plains);
