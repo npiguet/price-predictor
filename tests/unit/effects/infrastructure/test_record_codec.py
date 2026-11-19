@@ -612,7 +612,7 @@ class TestTheWireFormIsPinned:
     def test_every_kind_serializes_to_the_pinned_bytes(self):
         records = [_record(**ALL_KINDS[name]) for name in sorted(ALL_KINDS)]
         assert self._digest(records) == (
-            "b76bd16928f86a1e15f74f84239b0534f3bf6be4c5d689fafd2ba35370afd72c"
+            "80542c6159f1b942df4a87272e3a085e4ca4db23def721dc0ac42ecc69ada554"
         )
 
     def test_the_fixture_round_trips_through_its_own_wire_form(self):

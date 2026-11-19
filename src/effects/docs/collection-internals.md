@@ -10,7 +10,7 @@ What a record's board and events mean, and the rules the Java collectors keep. R
 
 Each record's board is read just before the moment it describes, and its events are what the moment changed.
 
-- A spell's cost half reads before its card moves to the stack; an activated ability's before its costs are paid. It is written at the cast event with no `outcome`. A triggered ability or a copy writes none.
+- A spell's cost half reads before its card moves to the stack; an activated ability's before its costs are paid. It is written at the cast event with no `outcome`. A triggered ability or a copy writes none. Its `costs` read the paid lists, the ability's convoke list and the cast card's delve list (`PaidCosts`, `CostChannel`), and the counters and life the payment published (`PaymentLedger`, kept per paying ability and read at the cast event, since neither survives on the ability): `life` is their sum and `counters` a signed net count per type, so a loyalty -2 reads `{LOYALTY: -2}`.
 - The effect half reads when its resolution starts (a mode's half at its first clause) and carries `outcome`: `resolved`, `fizzled`, `partially_fizzled` or `declined`. A fizzled or declined spell's half holds exactly its card's move off the stack; an ability's and a spell copy's hold none. `outcome` is `null` on a mana record and the rescue record.
 - A spell's effect half takes its card's move off the stack after its own events, before the state-based deaths it holds.
 - A countered item writes no effect half. The countering clause's half holds its `spell_countered` and the card's move off the stack.

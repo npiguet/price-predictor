@@ -266,7 +266,11 @@ class _PayloadQueries:
 
 @dataclass(frozen=True, slots=True)
 class Costs:
-    """What the actor actually paid, as paid rather than as printed."""
+    """What the actor actually paid, as paid rather than as printed.
+
+    ``life`` is the sum of the life payments; the entity channels name the
+    permanents or cards by ref, as ``tapped`` and ``sacrificed`` do.
+    """
 
     mana_by_color: dict[str, int] = field(default_factory=dict)
     tapped: tuple[str, ...] = ()
@@ -274,6 +278,17 @@ class Costs:
     sacrificed: tuple[str, ...] = ()
     discarded: tuple[str, ...] = ()
     exiled: tuple[str, ...] = ()
+    #: Net counters per type, signed: a loyalty ``-2`` is ``{"LOYALTY": -2}``
+    #: and a ``+1`` is ``{"LOYALTY": 1}``.
+    counters: dict[str, int] = field(default_factory=dict)
+    returned: tuple[str, ...] = ()
+    revealed: tuple[str, ...] = ()
+    exerted: tuple[str, ...] = ()
+    untapped: tuple[str, ...] = ()
+    #: What a convoke cost tapped, apart from ``tapped``.
+    convoked: tuple[str, ...] = ()
+    #: What a delve cost exiled, apart from ``exiled``.
+    delved: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

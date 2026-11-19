@@ -644,6 +644,13 @@ def _costs_to_json(costs: Costs) -> dict:
         "sacrificed": list(costs.sacrificed),
         "discarded": list(costs.discarded),
         "exiled": list(costs.exiled),
+        "returned": list(costs.returned),
+        "revealed": list(costs.revealed),
+        "exerted": list(costs.exerted),
+        "untapped": list(costs.untapped),
+        "convoked": list(costs.convoked),
+        "delved": list(costs.delved),
+        "counters": dict(costs.counters),
     }
 
 
@@ -655,6 +662,13 @@ def _costs_from_json(data: dict) -> Costs:
         sacrificed=tuple(data.get("sacrificed", ())),
         discarded=tuple(data.get("discarded", ())),
         exiled=tuple(data.get("exiled", ())),
+        counters=dict(data.get("counters", {})),
+        returned=tuple(data.get("returned", ())),
+        revealed=tuple(data.get("revealed", ())),
+        exerted=tuple(data.get("exerted", ())),
+        untapped=tuple(data.get("untapped", ())),
+        convoked=tuple(data.get("convoked", ())),
+        delved=tuple(data.get("delved", ())),
     )
 
 

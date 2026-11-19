@@ -93,6 +93,60 @@ class CostPayloadTest {
                 "\"tapped\":[\"" + Refs.of(sacrificed) + "\""), json);
     }
 
+    /** Returned, revealed and exerted cards each read from their own paid list. */
+    @Test
+    void returnedRevealedAndExertedCardsEachHaveTheirOwnChannel() {
+        SpellAbility sa = ability("AB$ GainLife | Cost$ 1 | Defined$ You | LifeAmount$ 1");
+        Card returned = TestCards.build("Mountain");
+        Card revealed = TestCards.build("Island");
+        Card exerted = TestCards.build("Forest");
+        sa.addCostToHashList(returned, "Returned", true);
+        sa.addCostToHashList(revealed, "Revealed", true);
+        sa.addCostToHashList(exerted, "Exerted", true);
+
+        String json = costs(sa);
+
+        assertTrue(json.contains("\"returned\":[\"" + Refs.of(returned) + "\"]"), json);
+        assertTrue(json.contains("\"revealed\":[\"" + Refs.of(revealed) + "\"]"), json);
+        assertTrue(json.contains("\"exerted\":[\"" + Refs.of(exerted) + "\"]"), json);
+    }
+
+    /** Convoke's taps and the untap symbol: the first kept on the ability, the second a host act. */
+    @Test
+    void convokeTapsAndTheUntapSymbolAreNamed() {
+        SpellAbility sa = ability("AB$ GainLife | Cost$ Q | Defined$ You | LifeAmount$ 1");
+        Card convoker = TestCards.build("Grizzly Bears");
+        sa.addTappedForConvoke(convoker);
+
+        String json = costs(sa);
+
+        assertTrue(json.contains("\"convoked\":[\"" + Refs.of(convoker) + "\"]"), json);
+        assertTrue(json.contains("\"untapped\":[\"" + Refs.of(sa.getHostCard()) + "\"]"), json);
+        assertTrue(json.contains("\"tapped\":[]"), json);
+    }
+
+    /** What delving exiled is on the cast card. */
+    @Test
+    void delvedCardsAreNamedFromTheCastCard() {
+        SpellAbility sa = ability("AB$ GainLife | Cost$ 1 | Defined$ You | LifeAmount$ 1");
+        Card delved = TestCards.build("Mountain");
+        sa.getHostCard().addDelved(delved);
+
+        assertTrue(costs(sa).contains("\"delved\":[\"" + Refs.of(delved) + "\"]"), costs(sa));
+    }
+
+    /** The counters and life a payment moved are written as the bus told them, in type order. */
+    @Test
+    void movedCountersAreWrittenSignedInTypeOrderAndLifeIsTheirSum() {
+        SpellAbility sa = ability("AB$ GainLife | Cost$ 1 | Defined$ You | LifeAmount$ 1");
+        PaymentTally moved = new PaymentTally(java.util.Map.of("P1P1", 1, "LOYALTY", -2), 4);
+
+        String json = PaidCosts.of(sa, moved).toJson();
+
+        assertTrue(json.contains("\"life\":4"), json);
+        assertTrue(json.endsWith("\"counters\":{\"LOYALTY\":-2,\"P1P1\":1}}"), json);
+    }
+
     /** A card the engine reported twice is named once. */
     @Test
     void oneCardPaidTwiceIsNamedOnce() {
@@ -103,24 +157,6 @@ class CostPayloadTest {
 
         assertTrue(costs(sa).contains(
                 "\"sacrificed\":[\"" + Refs.of(card) + "\"]"), costs(sa));
-    }
-
-    // ── life ────────────────────────────────────────────────────────────
-
-    /**
-     * Life is what was paid, not what the script asked for.
-     *
-     * <p>The two differ whenever the amount is announced or computed, and the
-     * old reading parsed the script's literal — so an X or an SVar recorded
-     * zero and a cost paid at a different value recorded the printed one.
-     */
-    @Test
-    void lifePaidIsTheAmountPaidNotTheAmountPrinted() {
-        SpellAbility sa = ability(
-                "AB$ GainLife | Cost$ PayLife<3> | Defined$ You | LifeAmount$ 1");
-        sa.setPaidLife(1);
-
-        assertTrue(costs(sa).contains("\"life\":1"), costs(sa));
     }
 
     // ── mana ────────────────────────────────────────────────────────────
@@ -202,7 +238,9 @@ class CostPayloadTest {
     void anUnreadableCostRendersEveryChannelRatherThanNone() {
         assertEquals(
                 "{\"mana_by_color\":{},\"tapped\":[],\"life\":0,"
-                        + "\"sacrificed\":[],\"discarded\":[],\"exiled\":[]}",
+                        + "\"sacrificed\":[],\"discarded\":[],\"exiled\":[],"
+                        + "\"returned\":[],\"revealed\":[],\"exerted\":[],"
+                        + "\"untapped\":[],\"convoked\":[],\"delved\":[],\"counters\":{}}",
                 costs(null));
     }
 }

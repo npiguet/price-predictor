@@ -32,7 +32,7 @@ from effects.domain.records import (
     is_game_end,
 )
 
-#: The six cost channels, in the order the schema lists them.
+#: The cost channels, in the order the schema lists them.
 _COST_FIELDS = tuple(spec.name for spec in fields(Costs))
 
 

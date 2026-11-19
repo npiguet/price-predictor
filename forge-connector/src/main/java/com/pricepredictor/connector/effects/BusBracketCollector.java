@@ -78,6 +78,8 @@ public final class BusBracketCollector extends BusEventReader {
 
     /** What this game's records never took, by event type and engine phase. */
     private final DroppedEvents dropped = new DroppedEvents();
+    /** The counters and life each payment under way has moved, until its cast event reads them. */
+    private final PaymentLedger payments;
 
     /** One bracket per stack item this collector saw cast, and the open one. */
     private final StackBrackets brackets = new StackBrackets(dropped);
@@ -177,6 +179,7 @@ public final class BusBracketCollector extends BusEventReader {
         this.context = context;
         this.snapshots = new SnapshotBuilder(game);
         this.fruitless = new FruitlessActivations(game);
+        this.payments = new PaymentLedger(game);
         this.heldResolution = new HeldResolutionWindow(context, fruitless);
         this.castsUnderWay = new CastsUnderWay(game, brackets::holds);
         this.combatStep = new CombatStepBracket(
@@ -436,7 +439,7 @@ public final class BusBracketCollector extends BusEventReader {
         }
         return new OpenResolution(
                 ability, ProvenanceResolver.resolve(ability), actorOf(ability), atCast,
-                context.gameId() + ".link." + ability.getId(), PaidCosts.of(ability));
+                context.gameId() + ".link." + ability.getId(), PaidCosts.of(ability, payments.take(ability)));
     }
 
     /**
@@ -1047,11 +1050,13 @@ public final class BusBracketCollector extends BusEventReader {
         Now now = classifyNow();
         switch (now.cause()) {
             // What a payment publishes: the paid ability's cost half holds
-            // its costs, never an event, so the event reaches no record.
+            // its costs, never an event, so the event reaches no record
+            // (the counters and life it moved are kept for the costs).
             case PAYMENT -> {
                 if (!game.getStack().isResolving()) {
                     brackets.closeForAction();
                 }
+                payments.note(event);
                 dropped.count(event.type(), DroppedEvents.phaseOf(game));
             }
             // What a card's move onto the stack set off: after the cost
