@@ -181,4 +181,61 @@ class ManaRecordEffectsTest {
         assertTrue(eventTypes(record).contains("tapped"), record);
         assertFalse(eventTypes(record).contains("mana_produced"), record);
     }
+
+    /**
+     * Foraging Wickermaw's mana is a sub-ability's below a ChooseColor root:
+     * Forge says the root resolved before the sub-ability makes the mana, and
+     * the activation is still the one record, with the mana in it.
+     */
+    @Test
+    void aManaAbilityWhoseManaIsASubAbilitysWritesItsOwnRecord() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player you = game.getPlayers().get(0);
+        TestBoard.inPlay(game, you, "Forest");
+        Card wickermaw = TestBoard.inPlay(game, you, "Foraging Wickermaw");
+        SpellAbility choose = wickermaw.getManaAbilities().get(0);
+
+        List<String> own = activated(game, you, choose).stream()
+                .filter(r -> r.contains("\"ability\":[{\"script_file\":\"cardsfolder/f/foraging_wickermaw.txt"))
+                .toList();
+        assertEquals(1, own.size(), "the Wickermaw's own record");
+        String record = own.get(0);
+
+        assertTrue(eventTypes(record).contains("choice_made"), record);
+        assertTrue(eventTypes(record).contains("mana_produced"), record);
+    }
+
+    /**
+     * Nykthos's green and black are two observations of one line: with a cap
+     * of one per mana key, each is kept. Under one shared key the second
+     * would be dropped.
+     */
+    @Test
+    void aSubAbilitysManaKeysItsCapToTheManaProduced() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player you = game.getPlayers().get(0);
+        List<Card> forests = List.of(
+                TestBoard.inPlay(game, you, "Forest"), TestBoard.inPlay(game, you, "Forest"));
+        Card nykthos = TestBoard.inPlay(game, you, "Nykthos, Shrine to Nyx");
+        SpellAbility devotion = nykthos.getManaAbilities().stream()
+                .filter(sa -> sa.getApi() == ApiType.ChooseColor).findFirst().orElseThrow();
+        devotion.setActivatingPlayer(you);
+        TestBoard.inPlay(game, you, "Grizzly Bears");
+
+        CollectionCaps oneEach = TestCaps.caps().manaCap(1).interventions(0).probes(0).build();
+        List<String> records = ShardRun.readShard(ShardRun.recordedWithClauseHook(
+                tempDir, game, oneEach, WHY, () -> {
+            assertTrue(ComputerUtil.playNoStack(you, devotion, game, false), "green");
+            nykthos.untap();
+            forests.forEach(Card::untap);
+            TestBoard.inPlay(game, you, "Black Knight");
+            TestBoard.inPlay(game, you, "Black Knight");
+            assertTrue(ComputerUtil.playNoStack(you, devotion, game, false), "black");
+        }).path());
+
+        List<String> nykthosRecords = records.stream()
+                .filter(r -> r.contains("\"ability\":[{\"script_file\":\"cardsfolder/n/nykthos_shrine_to_nyx.txt"))
+                .toList();
+        assertEquals(2, nykthosRecords.size(), records.toString());
+    }
 }
