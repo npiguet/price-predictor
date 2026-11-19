@@ -6,7 +6,6 @@ import os
 import subprocess
 import sys
 import time
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -400,36 +399,6 @@ class TestWorkerLogFiles:
             second.flush()
         finally:
             logs.close_all()
-
-    def test_an_unopenable_log_falls_back_to_a_discarded_destination(
-        self, tmp_path,
-    ):
-        """final-fix-4.md item 6: ``mkdir``/``open`` were unguarded entirely --
-        only the rotation half of ``get`` degraded. ``open("ab")`` is at least
-        as likely to fail as the rename (a permissions problem, another
-        process holding the path), and the worker calling ``get`` must still
-        receive a valid, writable handle rather than an exception that reaches
-        ``ForgeWorkerPool._monitor_worker``'s tight respawn loop -- matching
-        the DEVNULL destination every worker's stdio wrote to before F4 gave
-        it a real one.
-        """
-        logs = WorkerLogFiles(tmp_path, "run-1")
-        with patch.object(Path, "open", side_effect=OSError("boom")):
-            handle = logs.get(0)  # must not raise
-        try:
-            assert handle.closed is False
-            handle.write(b"discarded, but must not raise")
-            handle.flush()
-        finally:
-            logs.close_all()
-
-    def test_an_unopenable_log_is_reported(self, tmp_path, capsys):
-        logs = WorkerLogFiles(tmp_path, "run-1")
-        with patch.object(Path, "open", side_effect=OSError("boom")):
-            logs.get(0)
-        logs.close_all()
-
-        assert "boom" in capsys.readouterr().out
 
     def test_close_all_closes_every_open_handle(self, tmp_path):
         logs = WorkerLogFiles(tmp_path, "run-1")

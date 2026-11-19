@@ -673,16 +673,12 @@ class WorkerLogFiles:
     def get(self, worker_id: int) -> IO[bytes]:
         """The open handle for ``worker_id``, rotating first past the cap.
 
-        Never raises (final-fix-3.md item 5, widened final-fix-4.md item 6):
-        every filesystem call in here -- the rotation's own ``close()``, the
-        rename, ``mkdir`` and the final ``open`` -- is guarded, because any of
-        them raising uncaught used to propagate out of ``spawn_worker`` into
-        ``ForgeWorkerPool._monitor_worker``'s bare ``except Exception``, which
-        respawns immediately with no backoff: a tight respawn/print loop
-        instead of a log that degraded. ``open("ab")`` is at least as likely
-        to fail as the rename on Windows (a directory permission problem, or
-        another process holding the path), so it needed the same guard, not
-        just the rename.
+        The rotation degrades quietly (its own ``close()`` and rename are
+        guarded: a log that stays over the cap is better than a worker
+        lost). A log that cannot be opened raises :class:`OSError` naming the
+        path, which fails the spawn: ``ForgeWorkerPool._monitor_worker`` counts
+        it a failed start and backs off, so a slot never runs a worker whose
+        startup cannot be seen.
         """
         path = self.path_for(worker_id)
         handle = self._open.get(worker_id)
@@ -726,17 +722,11 @@ class WorkerLogFiles:
             handle = path.open("ab")
         except OSError as exc:
             # The directory could not be created, or the file could not be
-            # opened (permissions, another process holding it, a path that
-            # briefly disappeared under a concurrent rotation elsewhere).
-            # Degrading to a destination that always exists and is always
-            # writable -- matching the DEVNULL every worker's stdio wrote to
-            # before F4 gave it a real one -- is what keeps this from taking
-            # the whole worker down; a worker whose log is lost is still a
-            # worker collecting real records, and that is the failure this
-            # class exists to avoid trading away.
-            print(f"Could not open worker log {path}: {exc}; "
-                  f"this worker's log is discarded for this handle")
-            handle = open(os.devnull, "ab")  # noqa: SIM115 - lifetime is _open's
+            # opened (permissions, another process holding it). A worker with
+            # no log cannot be told from one still starting Forge, so the
+            # spawn fails: the pool counts it a failed start and retries
+            # after a backoff.
+            raise OSError(f"Could not open worker log {path}: {exc}") from exc
         self._open[worker_id] = handle
         return handle
 
@@ -841,8 +831,10 @@ MAX_RECYCLE_SECONDS = 86400
 #: is the last its worker prints, with at most the hook-failure report and a
 #: few stderr lines after it.
 _LOG_TAIL_BYTES = 64 * 1024
-#: How much of a lifetime's first output is searched for its startup line.
-_LOG_HEAD_BYTES = 1024 * 1024
+#: The most a startup scan reads at once: Forge prints a line per custom card
+#: before its startup line, megabytes with a staged variant tree, so the scan
+#: reads on from where it stopped, in chunks, and holds none of the log.
+_SCAN_CHUNK_BYTES = 1024 * 1024
 
 
 def _seconds(value: float) -> str:
@@ -1003,14 +995,20 @@ class WorkerStops:
         )
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass
 class _LogMark:
     """Where a slot's log stood when a worker was spawned: its identity and
-    size, so what that worker wrote can be read back."""
+    size, so what that worker wrote can be read back. The mark also keeps the
+    worker's startup scan: how far the log has been searched for the startup
+    line (``scanned``, None before the first search), the tail of the last
+    chunk (a line split across two reads) and whether the line was seen."""
 
     path: Path
     identity: int | None
     size: int
+    scanned: int | None = None
+    carry: bytes = b""
+    started: bool = False
 
     @classmethod
     def of(cls, path: Path) -> _LogMark:
@@ -1038,8 +1036,45 @@ class _LogMark:
 
 def _past_forge_start(mark: _LogMark | None) -> bool:
     """Whether the worker whose log ``mark`` marks has finished starting
-    Forge: its startup line is in what it wrote since its spawn."""
-    return mark is not None and STARTUP_LINE in mark.written_since(head=_LOG_HEAD_BYTES)
+    Forge: its startup line is anywhere in what it wrote since its spawn.
+    Each call reads only what the log gained since the last; once the line has
+    been seen the log is not read again."""
+    if mark is None:
+        return False
+    if not mark.started:
+        _scan_for_startup(mark)
+    return mark.started
+
+
+def _scan_for_startup(mark: _LogMark) -> None:
+    """Search the log's new bytes for the startup line."""
+    try:
+        size = os.stat(mark.path).st_size
+        if mark.scanned is None or size < mark.scanned:
+            mark.scanned = mark.size if _same_file(mark) else 0
+            mark.carry = b""
+        with open(mark.path, "rb") as handle:
+            handle.seek(mark.scanned)
+            _read_through(handle, mark)
+    except OSError:
+        return
+
+
+def _same_file(mark: _LogMark) -> bool:
+    """Whether the log is still the file the mark was taken of."""
+    return os.stat(mark.path).st_ino == mark.identity
+
+
+def _read_through(handle: IO[bytes], mark: _LogMark) -> None:
+    """Read ``handle`` to its end a chunk at a time, advancing the mark's
+    scan and setting ``started`` on the startup line. The last bytes of a
+    chunk carry over, for a line split across two reads."""
+    marker = STARTUP_LINE.encode("utf-8")
+    while not mark.started and (chunk := handle.read(_SCAN_CHUNK_BYTES)):
+        mark.scanned += len(chunk)
+        window = mark.carry + chunk
+        mark.started = marker in window
+        mark.carry = window[-(len(marker) - 1):]
 
 
 def stop_line_of(text: str) -> re.Match[str] | None:
