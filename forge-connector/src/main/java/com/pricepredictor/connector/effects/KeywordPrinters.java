@@ -21,8 +21,10 @@ import java.util.Objects;
  * original's keywords plus those its copy effect added. A token copy of a
  * copy (Kiki-Jiki's token of a Clone copying Moldering Karok) is built from
  * the Clone's paper card, whose rules print none of its keywords: its
- * keywords are read through the Clone's copy state, to what the Clone
- * copies ({@link #copySourceOf}).
+ * keywords are read through the printed state of what the Clone copied
+ * when the token was made ({@link #printingSourceOf}), which a later copy
+ * effect on the Clone (Mirrorweave) does not change, as it does not change
+ * the token (707.2).
  *
  * <p>Neither is a copy {@code Card.isCloned} names, so
  * {@link ProvenanceResolver} does not read them through what they copy, and
@@ -47,8 +49,9 @@ final class KeywordPrinters {
      * The state {@code keyword} of {@code state} is read through: for a
      * mutated permanent's merged state, the printed state of the merged card
      * it came from, the top card's first; for a token copy of a copy, the
-     * copied Clone's state ({@link #copiedPrinterOf}); null when none holds
-     * it. {@code state} itself for any other state.
+     * printed state of what the Clone copied ({@link #copiedPrinterOf});
+     * null when none holds it. {@code state} itself for any other state,
+     * a plain token copy's among them, whose own rules print its keywords.
      */
     static CardState printerOf(CardState state, KeywordInterface keyword) {
         Card host = state.getCard();
@@ -58,8 +61,9 @@ final class KeywordPrinters {
         if (isMergedState(host, state)) {
             return mergedPrinterOf(host, state, keyword);
         }
-        Card source = copySourceOf(host);
-        return source != null && source.isCloned() ? copiedPrinterOf(source, state, keyword) : state;
+        Card source = printingSourceOf(host);
+        return source != null && source.getRules() != host.getRules()
+                ? copiedPrinterOf(source, state, keyword) : state;
     }
 
     /**
@@ -81,16 +85,23 @@ final class KeywordPrinters {
     }
 
     /**
-     * The state of a copied Clone a token copy of it reads {@code keyword}
-     * through: the Clone's state of the token state's name, else the one it
-     * shows, whose keywords the copy took. Null for a keyword that state
-     * does not hold: one the token's own copy effect added (Kiki-Jiki's
-     * haste).
+     * The printed state of what a copied Clone copied that a token copy of
+     * it reads {@code keyword} through: its state of the token state's name,
+     * else of the face it shows (a Clone of a transformed card copies its
+     * back face into its own front), the first holding the keyword. Its
+     * printed state, not the one it shows, which a later copy effect on it
+     * changes. Null for a keyword neither holds: one the token's own copy
+     * effect added (Kiki-Jiki's haste), or one the Clone's did.
      */
     private static CardState copiedPrinterOf(Card source, CardState state, KeywordInterface keyword) {
-        CardState copied = source.getState(state.getStateName());
-        CardState printed = copied == null ? source.getCurrentState() : copied;
-        return rankOf(state, keyword) < countOf(printed, keyword.getOriginal()) ? printed : null;
+        int rank = rankOf(state, keyword);
+        for (CardStateName name : List.of(state.getStateName(), source.getCurrentStateName())) {
+            CardState printed = source.getOriginalState(name);
+            if (rank < countOf(printed, keyword.getOriginal())) {
+                return printed;
+            }
+        }
+        return null;
     }
 
     /**
@@ -121,15 +132,35 @@ final class KeywordPrinters {
         return copied != null && copied != host;
     }
 
+    /** How many token copies of token copies {@link #printingSourceOf} follows. */
+    private static final int MAX_COPY_DEPTH = 8;
+
     /**
-     * The permanent a token copy took its copiable values from: the one its
-     * prototype names ({@code Card.getEffectRecordCopySource}, which the
-     * patch sets in {@code CopyPermanentEffect.getProtoType}). The token's
-     * own {@code copiedPermanent} is that throwaway prototype, which is no
-     * clone and names nothing. Null for any other card, and on a checkout
-     * without the hook.
+     * The card whose printed values a token copy's copiable values are, as
+     * they were when the token was made: what its prototype names, through
+     * a token copy of a token copy to one that is none. Null for any other
+     * card, and on a checkout without the hook.
      */
-    static Card copySourceOf(Card host) {
+    static Card printingSourceOf(Card host) {
+        Card printer = null;
+        Card next = copySourceOf(host);
+        for (int depth = 0; next != null && depth < MAX_COPY_DEPTH; depth++) {
+            printer = next;
+            next = copySourceOf(next);
+        }
+        return printer;
+    }
+
+    /**
+     * The card whose printed values a token copy took as its copiable
+     * values: the one its prototype names ({@code Card.getEffectRecordCopySource},
+     * which the patch sets in {@code CopyPermanentEffect.getProtoType} to
+     * what the copied permanent copied then, through a copy of a copy, else
+     * that permanent). The token's own {@code copiedPermanent} is that
+     * throwaway prototype, which is no clone and names nothing. Null for any
+     * other card, and on a checkout without the hook.
+     */
+    private static Card copySourceOf(Card host) {
         return isStateCopy(host)
                 && PatchHooks.COPY_SOURCE.read(host.getCopiedPermanent()) instanceof Card source
                 ? source : null;

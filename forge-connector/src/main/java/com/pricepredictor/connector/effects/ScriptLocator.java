@@ -84,12 +84,13 @@ final class ScriptLocator {
      * Image's) prints what it copies, through a copy of a copy to the
      * original: its latest copy effect's origin's script, not its own paper
      * card's, which {@link #scriptFileOf} answers. A token copy prints what
-     * the permanent it copied prints ({@link KeywordPrinters#copySourceOf}):
-     * Forge builds it from that permanent's paper card, so
-     * {@link #scriptFileOf} names the copied card's script, which is not the
-     * one printed when the copied card is itself a copy (Kiki-Jiki's token
-     * of a Clone copying Moldering Karok prints Karok's). Any other card
-     * prints its own.
+     * the permanent it copied printed when the token was made
+     * ({@link KeywordPrinters#printingSourceOf}): Forge builds it from that
+     * permanent's paper card, so {@link #scriptFileOf} names the copied
+     * card's script, which is not the one printed when the copied card is
+     * itself a copy (Kiki-Jiki's token of a Clone copying Moldering Karok
+     * prints Karok's, though the Clone becomes a copy of something else
+     * later). Any other card prints its own.
      */
     static String printedScriptOf(Card host) {
         Card printer = host;
@@ -100,17 +101,17 @@ final class ScriptLocator {
             }
             printer = origin;
         }
-        return scriptFileOf(printer);
+        Card source = KeywordPrinters.printingSourceOf(printer);
+        return scriptFileOf(source != null ? source : printer);
     }
 
     /**
-     * What a copy copies: its latest clone states' origin when it is a copy
-     * ({@code Card.isCloned}, which a mutation or a prototype is not), else
-     * the permanent a token copy copied; null for a card that is neither.
+     * What a copy copies: its latest clone states' origin; null for a card
+     * that is no copy ({@code Card.isCloned}, which a mutation or a
+     * prototype is not).
      */
     private static Card copiedFrom(Card card) {
-        Card origin = card.isCloned() ? latestOrigin(card.getCloneStates()) : null;
-        return origin != null ? origin : KeywordPrinters.copySourceOf(card);
+        return card.isCloned() ? latestOrigin(card.getCloneStates()) : null;
     }
 
     /** The latest clone states' origin; null for none. */

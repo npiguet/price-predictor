@@ -342,7 +342,7 @@ public final class PatchHooks {
             "a continuous contribution's name");
     static final Hook COPY_SOURCE = new Hook(CARD, "getEffectRecordCopySource",
             "the keyword keys and printed script of a token copy of a copy (Kiki-Jiki's token"
-                    + " of a Clone): the permanent its prototype took its copiable values from");
+                    + " of a Clone): the card whose printed values its prototype took, read when it was made");
     static final Hook ASSIGNED_DAMAGE = new Hook(COMBAT, "getAssignedDamage",
             "a combat record's assignment_choices");
     static final Hook CONFIRM_LISTENER = new Hook(

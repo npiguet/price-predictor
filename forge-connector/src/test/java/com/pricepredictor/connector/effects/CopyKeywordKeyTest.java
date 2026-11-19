@@ -49,6 +49,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(ForgeExtension.class)
 class CopyKeywordKeyTest {
 
+    /** Moldering Karok's keywords. */
+    private static final List<String> KAROKS = List.of("Lifelink", "Trample");
+
     private final RulesParser parser = new RulesParser();
 
     /**
@@ -69,10 +72,7 @@ class CopyKeywordKeyTest {
         Card token = tokenCopyNamed(board.game, "Moldering Karok");
         ConvertedScript karoks = convertedScriptOf(karok);
 
-        assertJoins(karoks, keyOf(token, "Lifelink"), "lifelink");
-        assertJoins(karoks, keyOf(token, "Trample"), "trample");
-        assertNull(keyOf(token, "Haste"), "the haste the copy effect added");
-        assertPrintedBesideAddedHaste(linesOf(board, token), List.of("Lifelink", "Trample"));
+        assertJoinBesideAddedHaste(board, karoks, token, KAROKS);
     }
 
     /**
@@ -89,14 +89,50 @@ class CopyKeywordKeyTest {
         Card token = kikiCopiesACloneOf(board, "Moldering Karok");
         ConvertedScript karoks = convertedScriptOf(karok);
 
-        assertJoins(karoks, keyOf(token, "Lifelink"), "lifelink");
-        assertJoins(karoks, keyOf(token, "Trample"), "trample");
-        assertNull(keyOf(token, "Haste"), "the haste the copy effect added");
-        assertPrintedBesideAddedHaste(linesOf(board, token), List.of("Lifelink", "Trample"));
+        assertJoinBesideAddedHaste(board, karoks, token, KAROKS);
 
         Card forked = tokenCopyNamed(new GameCopier(board.game).makeCopy(), "Moldering Karok");
-        assertEquals(keyOf(token, "Lifelink"), keyOf(forked, "Lifelink"), "the fork's token");
-        assertEquals(keyOf(token, "Trample"), keyOf(forked, "Trample"), "the fork's token");
+        assertKeyedAlike(token, forked, KAROKS);
+    }
+
+    /**
+     * Kiki-Jiki copies a Clone that is copying Moldering Karok, then
+     * Mirrorweave targets the token: every other creature, the Clone and
+     * Karok among them, becomes a copy of the token until end of turn. The
+     * token keeps the copiable values it took (707.2), and its Lifelink and
+     * Trample still join Karok's lines, printed, on the live board and on a
+     * fork of it.
+     */
+    @Test
+    void aTokenCopyOfACopyKeepsItsKeysWhenTheCopiedCloneBecomesACopyOfSomethingElse() throws IOException {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card karok = board.battlefield("Moldering Karok", board.you);
+        Card token = kikiCopiesACloneOf(board, "Moldering Karok");
+        ConvertedScript karoks = convertedScriptOf(karok);
+        Card clone = mirrorweave(board, token);
+        assertEquals(token, ProvenanceResolver.copyStatesOf(clone.getCurrentState()).getOrigin(),
+                "the Clone is now a copy of the token");
+        assertTrue(karok.isCloned(), "Karok is now a copy of the token");
+
+        assertJoinBesideAddedHaste(board, karoks, token, KAROKS);
+
+        Card forked = tokenCopyNamed(new GameCopier(board.game).makeCopy(), "Moldering Karok");
+        assertKeyedAlike(token, forked, KAROKS);
+    }
+
+    /**
+     * Mirrorweave resolved targeting {@code target}; the Clone on the
+     * battlefield, a copy of it now, returned.
+     */
+    private static Card mirrorweave(CharacterizationBoard board, Card target) {
+        SpellAbility mirrorweave = board.spell(board.hand("Mirrorweave", board.you), board.you);
+        mirrorweave.resetTargets();
+        mirrorweave.getTargets().add(target);
+        board.resolve(mirrorweave, board.you);
+        board.game.getAction().checkStaticAbilities();
+        return board.game.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(card -> "Clone".equals(card.getRules().getName()) && !KeywordPrinters.isStateCopy(card))
+                .findFirst().orElseThrow();
     }
 
     /**
@@ -111,10 +147,7 @@ class CopyKeywordKeyTest {
         Card token = kikiCopiesACloneOf(board, vampire.getName());
         ConvertedScript vampires = convertedScriptOf(vampire);
 
-        assertJoins(vampires, keyOf(token, "Flying"), "flying");
-        assertJoins(vampires, keyOf(token, "Lifelink"), "lifelink");
-        assertNull(keyOf(token, "Haste"), "the haste the copy effect added");
-        assertPrintedBesideAddedHaste(linesOf(board, token), List.of("Flying", "Lifelink"));
+        assertJoinBesideAddedHaste(board, vampires, token, List.of("Flying", "Lifelink"));
     }
 
     /**
@@ -137,6 +170,27 @@ class CopyKeywordKeyTest {
         Card token = tokenCopyNamed(board.game, copied);
         assertEquals("Clone", token.getRules().getName(), "the token is built from the Clone's card");
         return token;
+    }
+
+    /**
+     * That each of a token copy's {@code printed} keywords joins its own line
+     * of {@code script}, printed, and that the Haste its copy effect added
+     * has no key and is granted by an effect.
+     */
+    private static void assertJoinBesideAddedHaste(CharacterizationBoard board, ConvertedScript script,
+                                                   Card token, List<String> printed) {
+        for (String keyword : printed) {
+            assertJoins(script, keyOf(token, keyword), keyword.toLowerCase(Locale.ROOT));
+        }
+        assertNull(keyOf(token, "Haste"), "the haste the copy effect added");
+        assertPrintedBesideAddedHaste(linesOf(board, token), printed);
+    }
+
+    /** That a fork's token keys each of {@code keywords} as the live one does. */
+    private static void assertKeyedAlike(Card token, Card forked, List<String> keywords) {
+        for (String keyword : keywords) {
+            assertEquals(keyOf(token, keyword), keyOf(forked, keyword), "the fork's token's " + keyword);
+        }
     }
 
     /** The printed keywords' lines are printed; the copy effect's Haste is granted by an effect. */
