@@ -15,7 +15,6 @@ import pytest
 
 from effects.domain.ability_cache_layout import (
     ARRAY_KEY,
-    DEFAULT_CACHE_ROOT,
     cache_path_for,
     pooled_card_vector,
     validate_alignment,
@@ -24,6 +23,7 @@ from effects.domain.baselines import Baseline
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 
 _SCRIPT = "cardsfolder/s/serra_angel.txt"
+ROOT = Path("output/effects/gen3/cache/2026-11-20-e256-rule-mask")
 
 
 def _sidecar(n_lines: int = 3) -> ProvenanceSidecar:
@@ -42,26 +42,26 @@ def _sidecar(n_lines: int = 3) -> ProvenanceSidecar:
 
 class TestCachePaths:
     def test_the_cache_mirrors_its_source_trees_layout(self):
-        assert cache_path_for(_SCRIPT) == (
-            DEFAULT_CACHE_ROOT / "cardsfolder" / "s" / "serra_angel.npz"
+        assert cache_path_for(_SCRIPT, root=ROOT) == (
+            ROOT / "cardsfolder" / "s" / "serra_angel.npz"
         )
 
     def test_the_token_tree_gets_its_own_flat_subtree(self):
-        assert cache_path_for("tokenscripts/soldier.txt") == (
-            DEFAULT_CACHE_ROOT / "tokenscripts" / "soldier.npz"
+        assert cache_path_for("tokenscripts/soldier.txt", root=ROOT) == (
+            ROOT / "tokenscripts" / "soldier.npz"
         )
 
     def test_a_variant_writes_beside_the_shipping_cache_not_over_it(self):
-        shipping = cache_path_for(_SCRIPT)
-        variant = cache_path_for(_SCRIPT, variant=Baseline.NO_STATE)
+        shipping = cache_path_for(_SCRIPT, root=ROOT)
+        variant = cache_path_for(_SCRIPT, root=ROOT, variant=Baseline.NO_STATE)
         assert variant != shipping
         assert variant.name == "serra_angel.no-state.npz"
         assert variant.parent == shipping.parent
 
-    def test_the_cache_lives_outside_the_converted_tree(self):
-        """encode-cards --clean deletes every .npz under output/cardsfolder/."""
-        assert "cardsfolder" not in DEFAULT_CACHE_ROOT.parts[:1]
-        assert DEFAULT_CACHE_ROOT == Path("output/effects/abilities")
+    def test_the_root_has_no_default(self):
+        """The cache run's directory is named by the command (artifact-layout rule 2)."""
+        with pytest.raises(TypeError):
+            cache_path_for(_SCRIPT)
 
     def test_the_root_is_configurable(self, tmp_path):
         assert cache_path_for(_SCRIPT, root=tmp_path).is_relative_to(tmp_path)
@@ -96,13 +96,14 @@ class TestVariantOfACacheFile:
         from effects.domain.baselines import BASELINES
 
         for variant in BASELINES:
-            assert variant_of_cache_file(cache_path_for(_SCRIPT, variant=variant)) == variant
+            path = cache_path_for(_SCRIPT, root=ROOT, variant=variant)
+            assert variant_of_cache_file(path) == variant
 
     def test_a_dot_in_a_sources_own_name_is_still_the_shipping_cache(self):
         """The suffix is read against the variant names, not counted in dots."""
         from effects.domain.ability_cache_layout import variant_of_cache_file
 
-        path = cache_path_for("cardsfolder/a/a.d._decoy.txt")
+        path = cache_path_for("cardsfolder/a/a.d._decoy.txt", root=ROOT)
         assert variant_of_cache_file(path) == "full"
         assert variant_of_cache_file(path.with_suffix(".txt")) is None
 

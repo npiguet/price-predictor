@@ -28,7 +28,7 @@ def _train(root: Path, corpus: Path) -> None:
     from effects.application.train_effect_model import TrainEffectModelConfig, run
     from tests.unit.effects.application.test_train_startup import _card_tree
 
-    run(TrainEffectModelConfig(
+    run(TrainEffectModelConfig.unpathed(
         corpus=str(corpus), cards_folders=(_card_tree(root / "cardsfolder"),),
         vocab_path="models/effects/vocab-script.txt",
     ))
@@ -37,7 +37,7 @@ def _train(root: Path, corpus: Path) -> None:
 def _evaluate(root: Path, corpus: Path) -> None:
     import torch
 
-    from effects.application.evaluation_context import EvaluateEffectModelConfig, load_context
+    from effects.application.evaluation_context import load_context
     from effects.domain.ability_encoder import AbilityEncoderConfig
     from effects.domain.effect_head_input import layout_settings
     from effects.domain.effect_model import EffectModel, EffectModelConfig
@@ -48,6 +48,7 @@ def _evaluate(root: Path, corpus: Path) -> None:
         EffectModelStore,
         content_hash,
     )
+    from tests.unit.effects.configs import evaluation_config
 
     vocab, keywords = root / "vocab-script.txt", root / "kw.json"
     vocab.write_text("[PAD]\n[UNK]\n", encoding="utf-8")
@@ -69,7 +70,7 @@ def _evaluate(root: Path, corpus: Path) -> None:
         ),
         training_settings=layout_settings(),
     ))
-    load_context(EvaluateEffectModelConfig(checkpoint=store.latest_path()))
+    load_context(evaluation_config(checkpoint=store.latest_path()))
 
 
 def _probe(root: Path, corpus: Path) -> None:

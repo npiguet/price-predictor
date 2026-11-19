@@ -282,7 +282,8 @@ class CorpusFixture:
         replace any field, a rule included."""
         return BuildCorpusConfig(**{
             "records_dir": self.records, "cards_folders": self.cards,
-            "output": output, "workers": 1, **rules, **overrides,
+            "output": output, "workers": 1, "vocab_path": "vocab.txt",
+            "keyword_definitions": None, **rules, **overrides,
         })
 
     def build(self, output: Path, **overrides) -> CorpusStore:
@@ -1207,7 +1208,7 @@ def test_the_trainer_refuses_a_real_dataset_built_on_the_other_surface(default_b
     assert default_build.load().surface == "prose"
 
     with pytest.raises(SurfaceMismatchError, match="prose"):
-        train(TrainEffectModelConfig(
+        train(TrainEffectModelConfig.unpathed(
             corpus=str(default_build.directory),
             vocab_path=Path("models/effects/vocab-script.txt"),
         ))
@@ -1757,11 +1758,9 @@ def test_a_gen1_shard_among_gen3_ones_is_refused_naming_it(tmp_path, a_corpus):
 
 
 def test_the_game_disjoint_keywords_parse_as_a_comma_separated_list():
-    from effects.infrastructure.cli import build_parser
+    from tests.unit.effects.cli_args import parse_cli
 
-    args = build_parser().parse_args([
-        "build-corpus", "--game-disjoint-keywords", "trample,infect",
-    ])
+    args = parse_cli(["build-corpus", "--game-disjoint-keywords", "trample,infect"])
     assert args.game_disjoint_keywords == ("trample", "infect")
 
 
@@ -2160,7 +2159,8 @@ def _gen3_config(records: Path, output: Path, **overrides) -> BuildCorpusConfig:
 
     values = dict(
         records_dir=records, output=output, cards_folders=GEN3_SIDECAR_FOLDERS,
-        keyword_definitions=None, workers=1, holdout=HoldoutRule(permille=100),
+        keyword_definitions=None, vocab_path="vocab.txt", workers=1,
+        holdout=HoldoutRule(permille=100),
         game_disjoint_share=0.05, validation_sample=0, min_games_per_half=2,
         max_item_error=math.inf, max_component_error=math.inf,
     )

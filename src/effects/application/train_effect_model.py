@@ -103,22 +103,24 @@ class TrainEffectModelConfig:
     corpus: str | None = None
     cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     variant_scripts: Path | None = None
-    vocab_path: Path = Path(default_paths.DEFAULT_VOCAB_PATH)
+    vocab_path: Path = field(kw_only=True, metadata={"help": (
+        "The vocabulary the encoder tokenizes with; the checkpoint records it"
+    )})
     #: ``None`` draws one, so runs do not all measure one arrangement of the
     #: corpus; the checkpoint records the drawn value.
     seed: int | None = field(default=None, metadata={"help": (
         "Seeds weight init, batch planning and each epoch's shard draw; drawn "
         "from the OS and logged when omitted, so any run can be repeated"
     )})
-    keyword_definitions: Path = Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS)
-    reports_dir: Path = field(default=Path(default_paths.DEFAULT_REPORTS_DIR), metadata={
-        "help": (
-            "Where the selection set frozen for --corpus is found, by the corpus "
-            "digest (default: %(default)s)"
-        )})
-    model_output: Path | None = field(default=None, metadata={"help": (
-        "Checkpoint directory (default: models/effects/effect-model/, under "
-        "{variant}/ for a baseline)"
+    keyword_definitions: Path = field(kw_only=True, metadata={"help": (
+        "The keyword table the tokenizer expands with; the checkpoint records it"
+    )})
+    reports_dir: Path = field(kw_only=True, metadata={"help": (
+        "Where the selection set frozen for --corpus is found, by the corpus "
+        "digest: the training run's reports run"
+    )})
+    model_output: Path = field(kw_only=True, metadata={"help": (
+        "Checkpoint directory (models/effects/<gen>/effect-model/<run>/)"
     )})
     variant: Baseline = Baseline.FULL
     e_dim: int = 256
@@ -253,11 +255,19 @@ class TrainEffectModelConfig:
         return TokenizerFiles.of(self.vocab_path, self.keyword_definitions)
 
     def resolved_model_output(self) -> Path:
-        from effects.infrastructure.effect_model_store import model_output_for
+        return Path(self.model_output)
 
-        if self.model_output is not None:
-            return Path(self.model_output)
-        return model_output_for(self.variant)
+    @classmethod
+    def unpathed(cls, **options) -> TrainEffectModelConfig:
+        """A config for code that scores or batches and reads none of the paths
+        a run names (``--vocab-path``, ``--keyword-definitions``,
+        ``--reports-dir``, ``--model-output``): each is empty unless
+        ``options`` gives it."""
+        return cls(**{
+            "vocab_path": Path(), "keyword_definitions": Path(), "reports_dir": Path(),
+            "model_output": Path(),
+            **options,
+        })
 
 
 #: The flags a sweep arm differs by: the checkpoint's training settings record

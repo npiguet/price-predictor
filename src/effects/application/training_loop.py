@@ -75,6 +75,7 @@ from effects.infrastructure.effect_model_store import (
 )
 from effects.infrastructure.shard_io import load_shard
 from effects.infrastructure.torch_device import default_device
+from price_predictor.infrastructure.run_manifest import annotate_run
 from price_predictor.infrastructure.torch_training import clip_per_group
 
 logger = logging.getLogger(__name__)
@@ -203,6 +204,14 @@ class TrainingLoop:
         self.validator = Validator(config, self.device, self.losses)
         self.reporter = RunReporter(config, facts)
         self.curriculum = Curriculum(config.curriculum_epoch)
+        self._record_seed_and_device()
+
+    def _record_seed_and_device(self) -> None:
+        """The seed (drawn from the OS when ``--seed`` is omitted) and the
+        device, in the run's ``run.json`` entry as well as the console log."""
+        annotate_run(
+            self.config.resolved_model_output(), seed=self.spec.seed, device=str(self.device),
+        )
 
     @property
     def is_cuda(self) -> bool:

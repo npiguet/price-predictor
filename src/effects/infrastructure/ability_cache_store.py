@@ -1,4 +1,4 @@
-"""Reading and writing the ability cache under ``output/effects/abilities/``.
+"""Reading and writing the ability cache under the cache root a command names.
 
 The tree mirrors the source tree, so a provenance key's ``script_file`` locates
 its vectors without an index.
@@ -17,7 +17,6 @@ import numpy as np
 from effects.domain.ability_cache_layout import (
     ARRAY_KEY,
     CACHE_SUFFIX,
-    DEFAULT_CACHE_ROOT,
     cache_path_for,
     validate_alignment,
     variant_of_cache_file,
@@ -35,7 +34,7 @@ class AbilityCacheStore:
     """The ``.npz`` cache for one variant."""
 
     def __init__(
-        self, root: Path = DEFAULT_CACHE_ROOT, *, variant: Baseline = Baseline.FULL,
+        self, root: Path, *, variant: Baseline = Baseline.FULL,
     ) -> None:
         self.root = Path(root)
         self.variant = variant

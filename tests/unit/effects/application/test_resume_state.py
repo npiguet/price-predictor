@@ -54,7 +54,7 @@ def test_the_compared_flags_are_the_ones_that_place_a_step():
 ])
 def test_a_resume_changing_a_training_objective_flag_is_a_mismatch(flag, value):
     """Story 7 acceptance 5, for every flag contracts/cli.md lists."""
-    config = TrainEffectModelConfig()
+    config = TrainEffectModelConfig.unpathed()
     mismatches = resume_mismatches(
         _settings(config), _settings(replace(config, **{flag: value})),
     )
@@ -62,7 +62,7 @@ def test_a_resume_changing_a_training_objective_flag_is_a_mismatch(flag, value):
 
 
 def test_a_compared_flag_that_moved_is_a_mismatch_and_a_free_one_is_not():
-    config = TrainEffectModelConfig()
+    config = TrainEffectModelConfig.unpathed()
     saved = _settings(config)
     assert resume_mismatches(saved, _settings(replace(config, batch_size=16)))
     assert not resume_mismatches(
@@ -72,7 +72,7 @@ def test_a_compared_flag_that_moved_is_a_mismatch_and_a_free_one_is_not():
 
 def test_a_resume_dropping_the_copies_of_the_run_it_continues_is_a_mismatch():
     """Recorded only when set, so the saved side alone can hold the key."""
-    config = TrainEffectModelConfig()
+    config = TrainEffectModelConfig.unpathed()
     saved = _settings(config, lethality_copies=3)
     assert resume_mismatches(saved, _settings(config))
     assert resume_mismatches(_settings(config), saved)
@@ -84,7 +84,7 @@ def test_a_vocabulary_rebuilt_at_the_same_path_is_a_mismatch(tmp_path):
     vocab, keywords = tmp_path / "vocab.json", tmp_path / "keywords.json"
     vocab.write_text('{"a": 0}')
     keywords.write_text("{}")
-    config = TrainEffectModelConfig(vocab_path=vocab, keyword_definitions=keywords)
+    config = TrainEffectModelConfig.unpathed(vocab_path=vocab, keyword_definitions=keywords)
     saved = _settings(config)
 
     vocab.write_text('{"b": 0}')
@@ -99,7 +99,7 @@ def test_a_vocabulary_rebuilt_at_the_same_path_is_a_mismatch(tmp_path):
 def test_the_training_settings_are_compared_as_recorded():
     """``lethality_copies`` is recorded only when set, so a run without copies
     resumes against exactly the settings it always wrote."""
-    config = TrainEffectModelConfig()
+    config = TrainEffectModelConfig.unpathed()
     settings = _settings(config, seed=7)
     assert "lethality_copies" not in settings
     assert settings["seed"] == 7

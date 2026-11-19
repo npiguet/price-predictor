@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from effects.domain.default_paths import DEFAULT_CARDS_FOLDER_PATHS, DEFAULT_VARIANT_SCRIPTS
+from effects.domain.default_paths import DEFAULT_CARDS_FOLDER_PATHS
 from effects.infrastructure.cli import build_parser
 
 FIXTURES = Path(__file__).parents[2] / "fixtures" / "effects"
@@ -27,16 +27,23 @@ def parse(*argv: str):
     return build_parser().parse_args(["rule-counts", *argv])
 
 
-def test_records_dir_is_required():
-    with pytest.raises(SystemExit):
-        parse()
+REQUIRED = ("--records-dir", "r", "--output", "o.json", "--variant-scripts", "")
+
+
+@pytest.mark.parametrize("flag", ["--records-dir", "--output", "--variant-scripts"])
+def test_the_paths_a_run_reads_and_writes_are_required(flag):
+    """Artifact-layout rule 2: no default names where the counts go or what is read."""
+    pairs = [REQUIRED[i:i + 2] for i in range(0, len(REQUIRED), 2)]
+    argv = [part for pair in pairs if pair[0] != flag for part in pair]
+    with pytest.raises(SystemExit) as refused:
+        parse(*argv)
+    assert refused.value.code == 2
 
 
 def test_the_defaults_are_the_contract_s():
-    args = parse("--records-dir", "r")
-    assert args.output == Path("output/effects/rule-counts.json")
+    args = parse(*REQUIRED)
     assert tuple(args.cards_folders) == tuple(DEFAULT_CARDS_FOLDER_PATHS)
-    assert str(args.variant_scripts) == str(Path(DEFAULT_VARIANT_SCRIPTS))
+    assert args.variant_scripts is None
     assert args.rules_dir == Path("rules")
     assert args.workers == 12
 
@@ -46,11 +53,11 @@ def test_the_shard_readers_are_1_to_12(workers):
     """The machine runs at most twelve CPU-busy processes: an explicit,
     bounded count, never the CPU count."""
     with pytest.raises(SystemExit):
-        parse("--records-dir", "r", "--workers", workers)
+        parse(*REQUIRED, "--workers", workers)
 
 
 def test_cards_folder_repeats():
-    args = parse("--records-dir", "r", "--cards-folder", "a", "--cards-folder", "b")
+    args = parse(*REQUIRED, "--cards-folder", "a", "--cards-folder", "b")
     assert [str(p) for p in args.cards_folders] == ["a", "b"]
 
 
@@ -68,7 +75,8 @@ def _rules(tmp_path) -> Path:
 
 
 def _run(tmp_path, records: Path, workers: int = 1):
-    args = parse("--records-dir", str(records), "--output", str(tmp_path / "counts.json"),
+    args = parse("--records-dir", str(records), "--variant-scripts", "",
+                 "--output", str(tmp_path / "counts.json"),
                  "--cards-folder", str(SIDECARS / "cardsfolder"),
                  "--rules-dir", str(_rules(tmp_path)), "--workers", str(workers))
     return args.func(args)

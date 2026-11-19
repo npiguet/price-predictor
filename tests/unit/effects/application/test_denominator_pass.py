@@ -17,8 +17,8 @@ from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.domain.effect_head_layout import FIELDS_BY_NAME
 from effects.domain.loss_denominators import LossDenominators
 from effects.domain.loss_floor import PER_ENTITY, TargetSample, constant_predictor_losses
-from effects.infrastructure.cli import build_parser
 from tests.unit.effects.builders import fields_everywhere, make_entity_targets
+from tests.unit.effects.cli_args import parse_cli
 
 FIELDS = (FIELDS_BY_NAME["damage_taken"], FIELDS_BY_NAME["tap_state"])
 
@@ -87,13 +87,13 @@ def test_the_pre_pass_draws_eight_shards_by_the_run_s_seed():
 
 
 def test_the_deviance_floor_flag_defaults_to_four_hundredths_of_a_nat():
-    parsed = build_parser().parse_args(["train-effect-model", "--corpus", "c"])
+    parsed = parse_cli(["train-effect-model", "--corpus", "c"])
     assert parsed.deviance_floor == 0.04
-    assert build_parser().parse_args(
+    assert parse_cli(
         ["train-effect-model", "--corpus", "c", "--deviance-floor", "0.1"],
     ).deviance_floor == 0.1
 
 
 def test_a_floor_of_zero_or_less_is_refused():
     with pytest.raises(ValueError, match="deviance-floor"):
-        TrainEffectModelConfig(corpus="c", deviance_floor=0.0)
+        TrainEffectModelConfig.unpathed(corpus="c", deviance_floor=0.0)

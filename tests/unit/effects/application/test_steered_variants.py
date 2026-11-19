@@ -221,7 +221,10 @@ def _steer(world, monkeypatch, ruled, supervisor=None, **config):
 
     monkeypatch.setattr(steered_variants, "play_variant_rounds", play)
     monkeypatch.setattr(steered_variants, "prepare_variants", lambda config, variants: variants)
-    config = CollectVariantsConfig(steer_variants=3, rules_dir=rules, **config)
+    config = CollectVariantsConfig(
+        steer_variants=3, rules_dir=rules, effect_records=rules.parent / "records",
+        variant_scripts=rules.parent / "variant-scripts", **config,
+    )
     catalogue = load_scenarios(rules)
     units: dict = {}
     result = steer(config, generation, counts, load_heads(rules, catalogue.rules()),
@@ -294,8 +297,10 @@ def test_the_steered_round_is_what_round_steered_runs(monkeypatch, tmp_path):
     collect = MagicMock(return_value=0)
     monkeypatch.setattr(steered_variants, "collect_steered", collect)
     (tmp_path / "cards").mkdir()
-    config = CollectVariantsConfig(round=collect_variants.VariantRound.STEERED,
-                                   forge_cards_path=tmp_path / "cards")
+    config = CollectVariantsConfig(
+        round=collect_variants.VariantRound.STEERED, forge_cards_path=tmp_path / "cards",
+        effect_records=tmp_path / "records", variant_scripts=tmp_path / "variant-scripts",
+    )
     assert collect_variants.run(config) == 0
     collect.assert_called_once()
 

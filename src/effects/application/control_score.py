@@ -1228,7 +1228,7 @@ def score_half(
         half=half, components=components, strict=False,
     )
     device = batcher.materializer.device
-    losses = StepLossComputer(config or TrainEffectModelConfig(), device)
+    losses = StepLossComputer(config or TrainEffectModelConfig.unpathed(), device)
     return scorer.epoch(RecordForward(encoder, model, batcher.materializer), losses,
                         CHECKPOINT_FIELDS)
 

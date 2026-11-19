@@ -54,7 +54,7 @@ def test_the_loop_loads_both_samples_and_the_probe(samples):
 
 def test_run_refuses_to_train_without_a_corpus():
     with pytest.raises(MissingTrainingInputError, match="--corpus"):
-        run(TrainEffectModelConfig())
+        run(TrainEffectModelConfig.unpathed())
 
 
 def test_the_checkpoint_records_the_corpuss_holdout_rule_not_a_constant():
@@ -65,7 +65,7 @@ def test_the_checkpoint_records_the_corpuss_holdout_rule_not_a_constant():
     read it.
     """
     provenance = CorpusFacts(holdout=HoldoutRule(30, 5)).provenance(
-        TrainEffectModelConfig(corpus="unused"),
+        TrainEffectModelConfig.unpathed(corpus="unused"),
     )
 
     assert provenance.holdout_permille == 30
@@ -112,7 +112,7 @@ def test_a_sample_missing_a_class_says_so(tmp_path, make_record, caplog):
     write_shard(paths["game-disjoint"],
                 [make_record(record_id="g0", game_id="gg",
                              kind=RecordKind.COMBAT, payload=CombatPayload())])
-    loop = make_training_loop(TrainEffectModelConfig(corpus="unused"))
+    loop = make_training_loop(TrainEffectModelConfig.unpathed(corpus="unused"))
     present = ValidationSamples.load(paths).present
 
     with caplog.at_level(logging.WARNING):
@@ -125,7 +125,7 @@ def test_a_sample_missing_a_class_says_so(tmp_path, make_record, caplog):
 
 
 def test_a_sample_naming_every_class_says_nothing(caplog):
-    loop = make_training_loop(TrainEffectModelConfig(corpus="unused"))
+    loop = make_training_loop(TrainEffectModelConfig.unpathed(corpus="unused"))
 
     with caplog.at_level(logging.WARNING):
         loop.reporter.missing_classes(frozenset(SAMPLING_CLASSES))
@@ -192,7 +192,7 @@ def test_validation_scores_the_shipped_objective_not_the_backward_total():
     from effects.application.step_loss import StepLoss
     from effects.application.validation_pass import Validator
 
-    loop = make_training_loop(TrainEffectModelConfig(corpus="unused", batch_size=2))
+    loop = make_training_loop(TrainEffectModelConfig.unpathed(corpus="unused", batch_size=2))
     validator = Validator(loop.config, loop.device, StubLosses(lambda prepared: StepLoss(
         total=torch.tensor(5.0), shipped=torch.tensor(1.0), parts=LossParts(), terms={},
     )))

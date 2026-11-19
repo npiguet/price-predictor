@@ -42,6 +42,14 @@ DIRECTED_DEFAULTS = {
 
 
 def parse(*argv: str):
+    """The collector's flags as typed, with the paths it requires but a test does
+    not read given placeholders (a corpus source, and the variant tree)."""
+    argv = list(argv)
+    if argv[:1] in (["collect-coverage"], ["collect-variants"]):
+        if "--effect-records" not in argv and "--training-corpus" not in argv:
+            argv += ["--effect-records", "records"]
+        if argv[0] == "collect-variants" and "--variant-scripts" not in argv:
+            argv += ["--variant-scripts", "variants"]
     return build_parser().parse_args(argv)
 
 
@@ -80,12 +88,18 @@ COLLECTORS = pytest.mark.parametrize(("command", "module", "runner"), [
 
 
 class TestEffectRecordsDefaultAsymmetry:
-    def test_collect_coverage_defaults_to_the_records_directory(self):
-        from effects.application.collect_coverage import CollectCoverageConfig
-        from effects.infrastructure.cli import collector_config
-
-        config = collector_config(CollectCoverageConfig, parse("collect-coverage"))
-        assert config.effect_records == Path("output/effects/records/")
+    @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
+    def test_a_collector_naming_no_corpus_is_refused(self, command, caplog):
+        """Artifact-layout rule 2: no default records directory; a corpus is named
+        by --effect-records or --training-corpus, and none exits 1."""
+        runner = {"collect-coverage": run_collect_coverage,
+                  "collect-variants": run_collect_variants}[command]
+        args = build_parser().parse_args([
+            command, "--exclude-cards", "h.txt", "--variant-scripts", "variants",
+        ] if command == "collect-variants" else [command, "--exclude-cards", "h.txt"])
+        with caplog.at_level("ERROR"):
+            assert runner(args) == 1
+        assert "name the corpus: pass --effect-records DIR, or --training-corpus DIR" in caplog.text
 
     def test_match_outcomes_has_no_default(self):
         """A default there would turn every self-play run into a collection run."""
@@ -278,8 +292,12 @@ class TestCollectVariantsHoldoutRule:
     def test_the_defaults_are_build_corpuss(self):
         from effects.infrastructure.cli import holdout_rule
 
-        assert holdout_rule(parse("collect-variants")) == holdout_rule(parse("build-corpus"))
-        assert parse("collect-variants").cards_folders == parse("build-corpus").cards_folders
+        build_corpus = parse(
+            "build-corpus", "--records-dir", "r", "--output", "o", "--vocab-path", "v",
+            "--keyword-definitions", "k", "--variant-scripts", "s",
+        )
+        assert holdout_rule(parse("collect-variants")) == holdout_rule(build_corpus)
+        assert parse("collect-variants").cards_folders == build_corpus.cards_folders
 
     def test_the_flags_reach_the_config(self):
         from unittest.mock import patch

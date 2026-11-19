@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 from effects.application.rule_breadth import breadth
-from effects.domain.default_paths import DEFAULT_CARDS_FOLDER_PATHS, DEFAULT_VARIANT_SCRIPTS
+from effects.domain.default_paths import DEFAULT_CARDS_FOLDER_PATHS
 from effects.domain.rule_breadth import flagged_rows
 from effects.domain.shard_generation import UnacceptedGenerationError
 from effects.infrastructure.cli import exits_with
@@ -42,10 +42,10 @@ _REFUSED = {
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--records-dir", type=Path, required=True)
-    parser.add_argument("--output", type=Path, default=Path("output/effects/rule-breadth.json"))
+    parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--rules-dir", type=Path, default=Path("rules"))
     parser.add_argument("--cards-folder", dest="cards_folders", type=Path, action="append")
-    parser.add_argument("--variant-scripts", type=Path, default=Path(DEFAULT_VARIANT_SCRIPTS))
+    parser.add_argument("--variant-scripts", type=Path, required=True)
     parser.add_argument("--workers", type=int, default=None,
                         help="Parallel shard readers; unset uses the CPU count")
     parser.add_argument("--min-pool", type=int, default=200,

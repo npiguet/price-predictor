@@ -40,11 +40,14 @@ from _lib.paths import REPO
 
 from effects.domain import default_paths
 
-REPORTS = REPO / default_paths.DEFAULT_REPORTS_DIR
-DEFAULT_CHECKPOINT = REPO / default_paths.DEFAULT_CHECKPOINT
-DEFAULT_ABILITIES = REPO / default_paths.DEFAULT_ABILITIES_ROOT
+# These probe scripts predate the artifact layout: the paths below are theirs
+# alone now (the effects package keeps no default for them) and are the next
+# thing to become required flags.
+REPORTS = REPO / "output/effects/reports/"
+DEFAULT_CHECKPOINT = REPO / "models/effects/effect-model/latest.pt"
+DEFAULT_ABILITIES = REPO / "output/effects/abilities/"
 DEFAULT_CARDS_FOLDERS = tuple(REPO / folder for folder in default_paths.DEFAULT_CARDS_FOLDERS)
-VARIANT_TREE = REPO / default_paths.DEFAULT_VARIANT_SCRIPTS
+VARIANT_TREE = REPO / "output/effects/variant-scripts/"
 SEED = 42
 
 

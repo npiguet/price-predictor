@@ -6,37 +6,33 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from effects.domain import default_paths
-
 logger = logging.getLogger(__name__)
-
-DEFAULT_OUTPUT = Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS)
 
 
 @dataclass
 class ExtractKeywordDefinitionsConfig:
-    output: Path = field(default=DEFAULT_OUTPUT, metadata={
-        "help": "Output path (default: %(default)s)",
+    output: Path = field(metadata={
+        "help": "Output path, inside an inputs run (output/effects/<gen>/inputs/<run>/)",
     })
 
 
+class KeywordExtractionError(RuntimeError):
+    """The worker could not be run, timed out or exited non-zero."""
+
+
 def run(config: ExtractKeywordDefinitionsConfig) -> int:
-    """Spawn the Java worker and report what it wrote. Returns an exit code."""
+    """Spawn the Java worker and report what it wrote; a failure of the worker
+    raises :class:`KeywordExtractionError`."""
     from effects.infrastructure.one_shot_workers import write_keyword_definitions
     from effects.infrastructure.tokenizer_loading import load_keyword_definitions
 
     output = Path(config.output)
     try:
         code = write_keyword_definitions(output)
-    except FileNotFoundError as exc:
-        logger.error("%s", exc)
-        return 2
-    except TimeoutError as exc:
-        logger.error("%s", exc)
-        return 1
+    except (FileNotFoundError, TimeoutError) as exc:
+        raise KeywordExtractionError(str(exc)) from exc
     if code != 0:
-        logger.error("KeywordDefinitionMain exited with %d", code)
-        return code
+        raise KeywordExtractionError(f"KeywordDefinitionMain exited with {code}")
 
     definitions = load_keyword_definitions(output)
     with_reminder = sum(1 for d in definitions.values() if d.reminder_template)

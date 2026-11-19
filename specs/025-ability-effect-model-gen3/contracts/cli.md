@@ -5,7 +5,9 @@ Authority: [`../../2026-10-30-ability-effect-model-gen3.md`](../../2026-10-30-ab
 Base: [`../../024-ability-effect-model-gen2/contracts/cli.md`](../../024-ability-effect-model-gen2/contracts/cli.md).
 
 Only flags and behaviour this feature adds, removes or changes. Defaults are contract. Every refusal
-happens before any game, training step or file write, exits 1 and names what failed.
+happens before any game, training step or file write, exits 1 and names what failed; the reason is also written to the command's `run.json` outcome. Only an argparse usage error (a missing required flag, a value outside its range) exits 2.
+
+No flag names a default path under `output/` or `models/`: every flag that reads or writes one is required (artifact-layout rule 2), and `run.json` lists each path the command reads, those it takes from a corpus manifest or a checkpoint included.
 
 ## `python scripts/rules_catalogue.py validate` (existing)
 
@@ -68,9 +70,9 @@ listed, so `directed-fork-rules.txt` and the file agree with `match-outcomes`' r
 | Flag | Default | Meaning |
 |---|---|---|
 | `--records-dir DIR` | required | shards to count; gen-2 or gen-3, not mixed |
-| `--output PATH` | `output/effects/rule-counts.json` | counts file |
+| `--output PATH` | required | counts file, inside an `inputs` run |
 | `--cards-folder DIR` | `output/cardsfolder` and `output/tokenscripts` | sidecars the detectors read; repeatable, as `build-corpus` |
-| `--variant-scripts DIR` | `output/effects/variant-scripts` | variant sidecars |
+| `--variant-scripts DIR` | required | variant sidecars; an empty value reads none |
 | `--rules-dir DIR` | `rules` | scenarios and their detector declarations |
 | `--workers N` | 12, as `build-corpus` | parallel shard readers, 1 to 12 (exit 2, usage); never the CPU count |
 
@@ -100,7 +102,7 @@ Flags this feature adds (each of `Thresholds`, `effects.application.corpus_valid
 --min-trigger-fired-share F     0.05   share of the trigger records of games that ended in the
                                        window that must report fired=true
 --min-cost-evidence N           200    see below
---variant-scripts DIR           output/effects/variant-scripts/
+--variant-scripts DIR           required; an empty value reads none
                                        the perturbed-script tree whose keys a collect-variants
                                        corpus names
 ```
@@ -529,7 +531,7 @@ target, a balance rule cannot be met or a grid cell is empty, naming stratum, ha
 | `--relation-values on\|off` | on | train the relation value tables |
 | `--stratum-weight W` | 0.5 | card-disjoint share of the control score, in [0, 1] |
 | `--patience N` | 5 | epochs without a new best control score |
-| `--reports-dir DIR` | `output/effects/reports/` | where the selection set frozen for `--corpus` is found, by the corpus digest; may change on a resume |
+| `--reports-dir DIR` | required | where the selection set frozen for `--corpus` is found, by the corpus digest; may change on a resume |
 | `--e-dim` | 256 | was 64 |
 
 Startup, exit 1 when:
@@ -555,7 +557,7 @@ epoch's training seconds. Shard line adds `rel_k_norm` and `rel_v_norm` (pre-cli
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--reports-dir DIR` | `output/effects/reports/` | where the selection set frozen for the corpus is found, by the corpus digest, as on `train-effect-model` |
+| `--reports-dir DIR` | required | where the selection set frozen for the corpus is found, by the corpus digest, as on `train-effect-model` |
 | `--output DIR` | `<checkpoint stem>.evaluation/` beside `--checkpoint` | the directory the files the report names (the UMAP picture and its table) are written to, and the run directory |
 
 Exit 1 unless every record carries `generation: 3`, or when

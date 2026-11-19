@@ -5,11 +5,11 @@ from __future__ import annotations
 import pytest
 
 from effects.application.train_effect_model import TrainEffectModelConfig, on_off
-from effects.infrastructure.cli import build_parser
+from tests.unit.effects.cli_args import parse_cli
 
 
 def parse(*argv: str):
-    return build_parser().parse_args(["train-effect-model", "--corpus", "c", *argv])
+    return parse_cli(["train-effect-model", "--corpus", "c", *argv])
 
 
 def test_the_default_is_on():
@@ -42,9 +42,8 @@ def test_off_builds_a_model_without_value_parameters():
     assert "trunk.layers.0.rel_k" in names and "trunk.layers.0.rel_v" not in names
 
 
-def test_the_selection_set_is_looked_for_under_the_reports_dir_by_default():
-    """contracts/cli.md: ``--reports-dir`` defaults to ``output/effects/reports/``."""
+def test_the_selection_set_is_looked_for_under_the_reports_dir():
+    """contracts/cli.md: ``--reports-dir`` names where the selection set is found."""
     from pathlib import Path
 
-    assert Path(parse().reports_dir) == Path("output/effects/reports")
     assert Path(parse("--reports-dir", "elsewhere").reports_dir) == Path("elsewhere")

@@ -28,22 +28,15 @@ from price_predictor.infrastructure.torch_checkpoint import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL_OUTPUT = Path("models/effects/effect-model")
 LATEST_NAME = "latest.pt"
 
 
 
-def model_output_for(variant: Baseline, root: Path = DEFAULT_MODEL_OUTPUT) -> Path:
-    """``models/effects/effect-model/`` for ``full``, a subdirectory otherwise."""
-    root = Path(root)
-    return root if variant == Baseline.FULL else root / variant
-
-
 def content_hash(path: Path) -> str:
-    """SHA-256 of a file's bytes, or ``""`` when the file is absent: a run
+    """SHA-256 of a file's bytes, or ``""`` when there is no such file: a run
     with no keyword-definition file is degraded, not broken."""
     path = Path(path)
-    if not path.exists():
+    if not path.is_file():
         return ""
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -180,7 +173,7 @@ def encoder_config_from(data: dict[str, Any]) -> AbilityEncoderConfig:
 class EffectModelStore:
     """Reads and writes ``{timestamp}.pt`` plus a rolling ``latest.pt``."""
 
-    def __init__(self, directory: Path = DEFAULT_MODEL_OUTPUT) -> None:
+    def __init__(self, directory: Path) -> None:
         self.directory = Path(directory)
 
     def latest_path(self) -> Path:

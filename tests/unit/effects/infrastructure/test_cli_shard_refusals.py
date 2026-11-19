@@ -18,6 +18,7 @@ import pytest
 from effects.domain.shard_generation import OlderGenerationError, UnknownGenerationError
 from effects.infrastructure import cli
 from effects.infrastructure.shard_io import CorruptShardError, RecordDecodeError
+from tests.unit.effects.cli_args import parse_cli
 
 FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
 
@@ -42,7 +43,7 @@ def _gen3_lines() -> list[str]:
 
 
 def _field_coverage(records: Path) -> int:
-    args = cli.build_parser().parse_args(["field-coverage", "--effect-records", str(records)])
+    args = parse_cli(["field-coverage", "--effect-records", str(records)])
     return args.func(args)
 
 
@@ -67,7 +68,7 @@ def test_field_coverage_prints_the_values_outside_the_closed_lists(tmp_path, cap
 def test_validate_corpus_exits_1_naming_the_line_that_does_not_decode(tmp_path, caplog):
     lines = _gen3_lines()
     (tmp_path / "a.jsonl").write_text(f"{lines[0]}\n[1, 2]\n", encoding="utf-8")
-    args = cli.build_parser().parse_args([
+    args = parse_cli([
         "validate-corpus", "--effect-records", str(tmp_path),
         "--cards-folder", str(tmp_path / "none")])
     with caplog.at_level("ERROR"):
@@ -97,7 +98,7 @@ def test_a_record_of_an_older_generation_exits_1_naming_it(tmp_path, caplog, com
     argv = [command, "--effect-records", str(tmp_path)]
     if command == "validate-corpus":
         argv += ["--cards-folder", str(tmp_path / "none")]
-    args = cli.build_parser().parse_args(argv)
+    args = parse_cli(argv)
     with caplog.at_level("ERROR"):
         assert args.func(args) == 1
     assert any("a.jsonl" in r.getMessage() and f"the record is {named} " in r.getMessage()

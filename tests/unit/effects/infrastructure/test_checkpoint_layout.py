@@ -118,7 +118,7 @@ def test_a_fresh_run_records_the_gen3_layout():
     from effects.domain.effect_head_input import INPUT_LAYOUT_KEY, require_input_layout
 
     settings = training_settings(
-        RunSpec(TrainEffectModelConfig(corpus="unused"), CorpusFacts(), seed=1),
+        RunSpec(TrainEffectModelConfig.unpathed(corpus="unused"), CorpusFacts(), seed=1),
         api_types=[], param_keys=[],
     )
     assert settings[INPUT_LAYOUT_KEY] == "gen-3"

@@ -173,20 +173,6 @@ class TestVariantIsolation:
         assert (root / "cardsfolder" / "s" / "serra_angel.taxonomy.npz").exists()
         assert not (root / "cardsfolder" / "s" / "serra_angel.npz").exists()
 
-    def test_the_variant_resolves_its_own_checkpoint(self, tmp_path):
-        config = EncodeAbilitiesConfig(variant=Baseline.NO_STATE)
-        assert config.resolved_checkpoint().parent.name == "no-state"
-
-    def test_full_resolves_the_shipping_checkpoint(self):
-        config = EncodeAbilitiesConfig(variant=Baseline.FULL)
-        assert config.resolved_checkpoint().parent.name == "effect-model"
-
-    def test_an_explicit_checkpoint_overrides(self, tmp_path):
-        chosen = tmp_path / "elsewhere.pt"
-        assert EncodeAbilitiesConfig(
-            variant=Baseline.NO_STATE, checkpoint=chosen,
-        ).resolved_checkpoint() == chosen
-
     def test_clean_removes_only_this_variants_files(self, corpus, tmp_path):
         root = tmp_path / "abilities"
         run(_config(corpus, tmp_path, variant=Baseline.TAXONOMY, output_root=root))
@@ -465,7 +451,7 @@ class TestAGen3Checkpoint:
                 keyword_definitions_hash=content_hash(keywords),
             ),
             training_settings=training_settings(
-                RunSpec(TrainEffectModelConfig(corpus="unused"), CorpusFacts(), seed=1),
+                RunSpec(TrainEffectModelConfig.unpathed(corpus="unused"), CorpusFacts(), seed=1),
                 api_types=[], param_keys=[],
             ),
         ))

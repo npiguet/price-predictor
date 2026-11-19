@@ -31,7 +31,7 @@ class TestCudaReservationAndCacheRelease:
 
     @staticmethod
     def _on(device: str) -> TrainingLoop:
-        loop = make_training_loop(TrainEffectModelConfig(corpus="unused"))
+        loop = make_training_loop(TrainEffectModelConfig.unpathed(corpus="unused"))
         loop.device = torch.device(device)
         return loop
 

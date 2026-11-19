@@ -27,6 +27,10 @@ logger = logging.getLogger(__name__)
 
 #: The attribute :func:`tag_subcommands` sets on a leaf parser's namespace.
 SUBCOMMAND_DEST = "run_manifest_subcommand"
+#: The attribute a handler sets on the parsed arguments to say why it refused
+#: (it logged the reason and returned a nonzero code): ``run.json``'s outcome
+#: carries it, so the manifest says what the console said.
+REFUSAL_DEST = "run_manifest_refusal"
 
 ArgumentValue = Callable[[argparse.Namespace], Any]
 
@@ -165,4 +169,5 @@ def dispatch(
         command=command_line(sys.argv[1:] if argv is None else argv, module=module),
         inputs=inputs,
         create=entry.create(args) if callable(entry.create) else entry.create,
+        reason=lambda: getattr(args, REFUSAL_DEST, None),
     )

@@ -227,21 +227,6 @@ class TestTheTrainingCorpusFlag:
                 "--effect-records", str(tmp_path / "elsewhere"),
             ]))
 
-    def test_an_explicit_default_records_dir_is_refused_too(self, tmp_path):
-        """Spelling out the default is still a second source."""
-        from effects.domain.default_paths import DEFAULT_RECORDS_DIR
-        from effects.infrastructure.cli import build_parser, collector_config
-
-        corpus = tmp_path / "depleted"
-        corpus.mkdir()
-        (corpus / "holdout-cards.txt").write_text("Soul Echo\n", encoding="utf-8")
-
-        with pytest.raises(ValueError, match="one source"):
-            collector_config(CollectCoverageConfig, build_parser().parse_args([
-                "collect-coverage", "--training-corpus", str(corpus),
-                "--effect-records", DEFAULT_RECORDS_DIR,
-            ]))
-
     def test_without_it_the_ordinary_flags_still_work(self, tmp_path):
         config = self._config("--effect-records", str(tmp_path / "records"))
 
@@ -291,14 +276,14 @@ def test_number_only_variants_land_on_the_same_side_of_the_list():
 def test_no_command_takes_a_holdout_unit():
     """Template is the only unit: ``--holdout-unit`` is no flag, and ``text``
     (feature 023's rule) is refused."""
-    from effects.infrastructure.cli import build_parser
+    from tests.unit.effects.cli_args import parse_cli
 
     for command in (["holdout-cards", "--out", "x.txt"], ["build-corpus"],
                     ["train-effect-model", "--corpus", "c"]):
-        args = build_parser().parse_args(command)
+        args = parse_cli(command)
         assert not hasattr(args, "holdout_unit")
     with pytest.raises(SystemExit):
-        build_parser().parse_args(["build-corpus", "--holdout-unit", "template"])
+        parse_cli(["build-corpus", "--holdout-unit", "template"])
 
 
 def test_the_cli_takes_the_repeatable_cards_folder_like_every_other_command():

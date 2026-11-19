@@ -120,7 +120,9 @@ def a_config(**overrides) -> BuildCorpusConfig:
     """No half needs a minimum of games, so placement keeps gen-2's draw."""
     overrides.setdefault("keyword_definitions", None)
     overrides.setdefault("min_games_per_half", 0)
-    return BuildCorpusConfig(records_dir=Path("."), **overrides)
+    return BuildCorpusConfig(
+        records_dir=Path("."), output=Path("corpus"), vocab_path="vocab.txt", **overrides,
+    )
 
 
 def _decide(survey, fake_sidecars, **config):

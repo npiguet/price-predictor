@@ -443,7 +443,7 @@ def make_preparer(
     )
     settings.update(config)
     return StepPreparer(PreparerSettings(
-        config=TrainEffectModelConfig(**settings), seed=seed, split=CorpusSplit(),
+        config=TrainEffectModelConfig.unpathed(**settings), seed=seed, split=CorpusSplit(),
         rarity={} if rarity is None else rarity, api_types=tuple(api_types),
         param_keys=tuple(param_keys), widths={}, heads=frozenset(),
     ))
@@ -615,7 +615,7 @@ def make_cpu_training_loop(monkeypatch, **config):
     from effects.application.train_effect_model import TrainEffectModelConfig
 
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
-    return make_training_loop(TrainEffectModelConfig(corpus="unused", **config))
+    return make_training_loop(TrainEffectModelConfig.unpathed(corpus="unused", **config))
 
 
 def one_parameter_module():
@@ -812,7 +812,7 @@ def fixture_training_config(corpus, out, **overrides):
         mlm_mask_prob=0.3, value_weight=0.05, api_weight=0.05, e_noise=0.1,
     )
     settings.update(overrides)
-    return TrainEffectModelConfig(**settings)
+    return TrainEffectModelConfig.unpathed(**settings)
 
 
 def fixture_run(corpus, records, out, **overrides):

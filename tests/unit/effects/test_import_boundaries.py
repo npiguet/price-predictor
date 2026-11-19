@@ -48,7 +48,7 @@ _ALLOWED: dict[str, set[str] | None] = {
     # The run manifest every writing command keeps (artifact-layout skill),
     # wired by one table per CLI, the same for all four packages.
     "price_predictor.infrastructure.cli_run_manifest": {
-        "READ_ONLY", "ManifestTable", "Writes", "dispatch", "tag_subcommands",
+        "READ_ONLY", "REFUSAL_DEST", "ManifestTable", "Writes", "dispatch", "tag_subcommands",
     },
     # A collector's supervisor writes its run id, resolved caps and worker-log
     # failures into the running command's run.json entry (V4 #3, #4).

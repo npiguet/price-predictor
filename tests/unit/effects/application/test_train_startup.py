@@ -133,7 +133,7 @@ def reports(corpus, tmp_path):
 
 @pytest.fixture
 def config(corpus, tmp_path, reports):
-    return TrainEffectModelConfig(
+    return TrainEffectModelConfig.unpathed(
         corpus=str(corpus.directory),
         cards_folders=(_card_tree(tmp_path / "cardsfolder"),),
         vocab_path="models/effects/vocab-script.txt",
@@ -307,9 +307,9 @@ def _control_score_error(detail: str):
 
 
 def _train_args(tmp_path, *extra: str):
-    from effects.infrastructure.cli import build_parser
+    from tests.unit.effects.cli_args import parse_cli
 
-    return build_parser().parse_args(["train-effect-model", "--corpus", str(tmp_path), *extra])
+    return parse_cli(["train-effect-model", "--corpus", str(tmp_path), *extra])
 
 
 def test_the_encoder_size_flags_default_to_four_and_256(tmp_path):
@@ -329,7 +329,7 @@ def test_a_width_not_divisible_by_the_head_count_is_refused_before_training(
     monkeypatch.setattr(train_effect_model, "run", lambda config: started.append(1))
     args = _train_args(tmp_path, "--encoder-d-model", "250")
     with caplog.at_level(logging.ERROR):
-        assert cli.run_train_effect_model(args) == 2
+        assert cli.run_train_effect_model(args) == 1
     assert not started
     assert "not divisible" in caplog.text
 
@@ -342,7 +342,7 @@ def test_a_width_not_divisible_by_the_head_count_is_refused_before_training(
     ("ResumeMismatchError", 1),
     ("SelectionSetError", 1),
     ("ControlScoreError", 1),
-    ("FileNotFoundError", 2),
+    ("FileNotFoundError", 1),
 ])
 def test_an_operator_error_out_of_training_exits_with_its_code(
     tmp_path, monkeypatch, caplog, failure, code,
@@ -377,7 +377,7 @@ def test_an_operator_error_out_of_training_exits_with_its_code(
 )
 def test_the_config_refuses_an_encoder_shape_it_cannot_build(shape):
     with pytest.raises(ValueError, match="--encoder"):
-        TrainEffectModelConfig(**shape)
+        TrainEffectModelConfig.unpathed(**shape)
 
 
 def test_the_size_flags_reach_the_trainers_config(tmp_path):
@@ -406,7 +406,7 @@ def test_a_kept_aside_tree_resolves_the_keys_of_its_original(tmp_path):
         path.relative_to(kept).as_posix() for path in sorted(kept.rglob("*.provenance.json"))
     ).replace(".provenance.json", ".txt")
     key = ProvenanceKey(f"cardsfolder/{script_file}", 0, "static", 0)
-    config = TrainEffectModelConfig(corpus=str(tmp_path), cards_folders=(kept,))
+    config = TrainEffectModelConfig.unpathed(corpus=str(tmp_path), cards_folders=(kept,))
 
     trainer = make_preparer(tmp_path, cards_folders=(kept,)).sidecars
     for sidecars in (trainer, config.source_trees.sidecar_cache()):

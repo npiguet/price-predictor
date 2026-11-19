@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 
 from effects.domain import default_paths
-from effects.domain.ability_cache_layout import DEFAULT_CACHE_ROOT
 from effects.domain.baselines import Baseline, taxonomy_matrix
 from effects.domain.provenance import ProvenanceSidecar
 from effects.domain.tokenizer_files import TokenizerFiles
@@ -17,10 +16,8 @@ from effects.infrastructure.ability_cache_store import AbilityCacheStore
 from effects.infrastructure.converted_trees import SourceTrees
 from effects.infrastructure.effect_model_store import (
     EffectCheckpoint,
-    EffectModelStore,
     inference_files,
     load_effect_checkpoint,
-    model_output_for,
 )
 from effects.infrastructure.sidecar_io import iter_sidecars, rendered_prose
 
@@ -31,25 +28,26 @@ logger = logging.getLogger(__name__)
 @dataclass
 class EncodeAbilitiesConfig:
     variant: Baseline = Baseline.FULL
-    checkpoint: Path | None = None
+    #: The checkpoint to encode with, which the command names: no default.
+    checkpoint: Path = field(kw_only=True, metadata={"help": (
+        "The effect-model checkpoint (.pt) to encode with; the baseline named "
+        "by --variant needs its own checkpoint"
+    )})
     cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     variant_scripts: Path | None = None
     vocab_path: Path | None = None
     keyword_definitions: Path | None = None
-    output_root: Path = DEFAULT_CACHE_ROOT
+    #: The cache run's directory, which the command names: no default.
+    output_root: Path = field(kw_only=True, metadata={"help": (
+        "Cache run directory the ability cache is written under "
+        "(output/effects/<gen>/cache/<run>/)"
+    )})
     clean: bool = False
 
     @property
     def source_trees(self) -> SourceTrees:
         """``--cards-folder`` and ``--variant-scripts`` as one value."""
         return SourceTrees.of(self.cards_folders, self.variant_scripts)
-
-    def resolved_checkpoint(self) -> Path:
-        """The checkpoint this variant reads, so a baseline is never encoded
-        with another variant's weights; an explicit value overrides."""
-        if self.checkpoint is not None:
-            return Path(self.checkpoint)
-        return EffectModelStore(model_output_for(self.variant)).latest_path()
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,7 +63,7 @@ def run(config: EncodeAbilitiesConfig) -> EncodeSummary:
         store.clean()
 
     # Hash-checked before anything is written.
-    checkpoint = load_effect_checkpoint(config.resolved_checkpoint())
+    checkpoint = load_effect_checkpoint(config.checkpoint)
     files = inference_files(
         checkpoint, vocab=config.vocab_path, keywords=config.keyword_definitions,
     )

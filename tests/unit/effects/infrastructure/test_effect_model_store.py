@@ -17,7 +17,6 @@ import torch
 from effects.domain.ability_encoder import AbilityEncoderConfig
 from effects.domain.aux_heads import TRAINING_ONLY_MODULES
 from effects.domain.baselines import (
-    BASELINES,
     Baseline,
 )
 from effects.domain.effect_head_input import INPUT_LAYOUT, INPUT_LAYOUT_KEY, layout_settings
@@ -25,7 +24,6 @@ from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.split_provenance import SplitProvenance
 from effects.domain.tokenizer_files import TokenizerFiles
 from effects.infrastructure.effect_model_store import (
-    DEFAULT_MODEL_OUTPUT,
     EffectCheckpoint,
     EffectModelStore,
     HashMismatchError,
@@ -34,7 +32,6 @@ from effects.infrastructure.effect_model_store import (
     filter_training_only,
     inference_files,
     load_effect_checkpoint,
-    model_output_for,
     require_same_split,
     tokenizer_hashes,
     verify_hashes,
@@ -217,15 +214,6 @@ class TestHashChecking:
 
 
 class TestVariantIsolation:
-    def test_full_writes_to_the_shipping_directory(self):
-        assert model_output_for(Baseline.FULL) == DEFAULT_MODEL_OUTPUT
-
-    def test_every_other_variant_writes_under_its_own_name(self):
-        for variant in BASELINES:
-            if variant == Baseline.FULL:
-                continue
-            assert model_output_for(variant) == DEFAULT_MODEL_OUTPUT / variant
-
     def test_a_matching_variant_checkpoint_is_accepted(self, tmp_path, files):
         main = _checkpoint(files)
         variant = _checkpoint(files, variant=Baseline.IDENTITY)

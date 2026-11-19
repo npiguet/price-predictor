@@ -10,10 +10,10 @@ below are contract, not suggestions.
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--surface` | `prose` | `prose` \| `script`; `script` adds the sidecars' script lines to the scan and switches the `--vocab-path` default |
+| `--surface` | `prose` | `prose` \| `script`; `script` adds the sidecars' script lines to the scan |
 | `--cards-folder` | `output/effects/gen3/converted/cardsfolder/`, `output/effects/gen3/converted/tokenscripts/` | repeatable |
-| `--vocab-path` | `models/effects/vocab.txt` (`vocab-script.txt` under `--surface script`) | separate paths so a script-surface rebuild never overwrites the vocabulary a prose-surface checkpoint recorded |
-| `--keyword-definitions` | `output/effects/keyword-definitions.json` | included in the scan |
+| `--vocab-path` | required | output path; a script-surface rebuild names a path of its own, so it never overwrites the vocabulary a prose-surface checkpoint recorded |
+| `--keyword-definitions` | required | included in the scan |
 | `--target-size` | 5000 | post-truncates the corpus-frequency vocabulary, preserving seeded specials and domain tokens |
 
 Seeded specials: `[PAD]`, `[UNK]`, `cardname`, `[MASK]`, `[CLS]`.
@@ -22,7 +22,7 @@ Seeded specials: `[PAD]`, `[UNK]`, `cardname`, `[MASK]`, `[CLS]`.
 
 | Flag | Default |
 |---|---|
-| `--output` | `output/effects/keyword-definitions.json` |
+| `--output` | required |
 
 Writes keyword → reminder-text template for every keyword; on the script surface also the generated
 implementation script, captured as text at the keyword factory, for the script-generated majority.
@@ -54,7 +54,7 @@ Adding the flag must not change `match-outcomes.txt` or `cards-played.txt` in fo
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--effect-records` | `output/effects/records/` | destination shard directory |
+| `--effect-records` | required (or `--training-corpus`) | destination shard directory |
 | `--cards-folder` | `output/effects/gen3/converted/cardsfolder/`, `output/effects/gen3/converted/tokenscripts/` | repeatable; deck candidates and the coverage unit come from the `cardsfolder/` entry alone |
 | `--split-from` | none | a checkpoint whose held-out cards are excluded from every deck |
 | `--target-records` | 50 | per-card satisfaction goal |
@@ -84,7 +84,7 @@ them there costs minutes instead of the eight hours that run spent producing 14.
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--effect-records` | `output/effects/records/` | shard directory to read |
+| `--effect-records` | required | shard directory to read |
 | `--limit` | 0 (read everything) | stop after this many records; every `record_id` is held in memory while it runs |
 | `--min-keyed-rate` | 0.95 | share of records naming a line that must resolve it to a printed key |
 | `--max-duplicate-rate` | 0.02 | share of a kind's records that may repeat an earlier record of the same kind in the same game |
@@ -156,7 +156,7 @@ no shards.
 
 | Flag | Default |
 |---|---|
-| `--effect-records` | `output/effects/records/` |
+| `--effect-records` | required (or `--training-corpus`) |
 | `--forge-cards-path` | `../forge/forge-gui/res/cardsfolder/` |
 | `--variant-volume` | 0.2 — cap on how many variant **scripts** are generated, as a fraction of the real records in `--corpus-records` |
 | `--seed` | 42 — seeds the perturbation and the deck build. A variant round has no shortfall to converge on, so a repeat run with the same seed collects nothing |
@@ -223,10 +223,10 @@ differing only in hyperparameters read the same records.
 
 | Flag | Default |
 |---|---|
-| `--records-dir` | `output/effects/records/` — raw corpus root; discovery recurses |
-| `--output` | `output/effects/corpus/` |
+| `--records-dir` | required — raw corpus root; discovery recurses |
+| `--output` | required |
 | `--cards-folder` | `output/effects/gen3/converted/cardsfolder/`, `output/effects/gen3/converted/tokenscripts/` |
-| `--vocab-path` | `models/effects/vocab.txt` — `surface_of` reads the encoding surface from it, and the rarity table's text keys are built on that surface |
+| `--vocab-path` | required — `surface_of` reads the encoding surface from it, and the rarity table's text keys are built on that surface |
 | `--variant-scripts` | _(none)_ — the perturbed-script tree. A variant line resolves to no ability text without it, and a resolution record acting through one is refused as `no-acting-text` |
 | `--holdout-permille` / `--holdout-max-carriers` | 20 / 8, matching `holdout-cards`; `train-effect-model --corpus` reads both back from the manifest this writes |
 | `--text-cap` | 200 — max training records per unique ability text |
@@ -283,9 +283,9 @@ The full flag table is the root spec's § Training. Contract highlights:
 | `--corpus` | **required** — a curated dataset built by `build-corpus`, and the trainer's only input: its manifest carries the split, both validation strata, the rarity table and the holdout, and a `--vocab-path` whose encoding surface is not the manifest's is refused |
 | `--cards-folder` | `output/effects/gen3/converted/cardsfolder/`, `output/effects/gen3/converted/tokenscripts/` |
 | `--variant-scripts` | the tree the corpus manifest records |
-| `--vocab-path` | `models/effects/vocab.txt` |
-| `--keyword-definitions` | `output/effects/keyword-definitions.json` |
-| `--model-output` | `models/effects/effect-model/` for `--variant full`, `models/effects/effect-model/{variant}/` otherwise |
+| `--vocab-path` | required |
+| `--keyword-definitions` | required |
+| `--model-output` | required: the run directory the checkpoints are written to, a baseline variant's included |
 | `--variant` | `full` (\| `identity` \| `state-only` \| `no-state` \| `taxonomy`) |
 | `--e-dim` / `--e-noise` | 64 / 0.1 (a noise ratio, 024 FR-056) |
 | `--keyword-expand-p` / `--context-dropout` | 0.25 / 0.15 |
@@ -321,26 +321,26 @@ Hardcoded, not flags: encoder d_model 256 / 4 layers / 4 heads; trunk d_model 25
 
 | Flag | Default |
 |---|---|
-| `--variant` | `full` — resolves both `--checkpoint` and the output suffix, so a variant is never encoded with another variant's weights |
-| `--checkpoint` | the variant's `latest.pt`; an explicit value overrides |
+| `--variant` | `full` — the output suffix, so a variant's cache never overwrites the shipping one |
+| `--checkpoint` | required: the variant's own `latest.pt`, so a variant is never encoded with another variant's weights |
 | `--cards-folder` | `output/effects/gen3/converted/cardsfolder/`, `output/effects/gen3/converted/tokenscripts/` |
 | `--variant-scripts` | the perturbed-script tree |
 | `--vocab-path`, `--keyword-definitions` | the paths the checkpoint recorded from training |
 | `--clean` | removes only files this command wrote |
 
-Output: `output/effects/abilities/<tree>/…`, `<name>.npz` for `full` and `<name>.{variant}.npz`
+Output: `<--output-root>/<tree>/…` (`--output-root` is required), `<name>.npz` for `full` and `<name>.{variant}.npz`
 otherwise, beside rather than replacing the shipping cache.
 
 ## `python -m effects evaluate-effect-model`
 
 | Flag | Default |
 |---|---|
-| `--checkpoint` | `models/effects/effect-model/latest.pt` |
+| `--checkpoint` | required |
 | `--variant-checkpoint NAME=PATH` | repeatable |
 | `--cards-folder` | the trainer's default |
 | `--variant-scripts` | the tree the corpus manifest records |
 | `--vocab-path`, `--keyword-definitions` | the paths `--checkpoint` recorded |
-| `--corpus` | the dataset `--checkpoint` recorded; a checkpoint that records none is refused (exit 2) |
+| `--corpus` | the dataset `--checkpoint` recorded; a checkpoint that records none is refused (exit 1) |
 
 The zero-shot keyword check needs no flag: the withheld keyword is read from `--checkpoint`, which
 records it alongside the split.

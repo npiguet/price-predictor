@@ -106,7 +106,7 @@ class CollectorConfig:
     """What both collectors take: the corpus they write to, the converted
     trees, the holdout they keep out of their decks, and how they play."""
 
-    effect_records: Path = Path(default_paths.DEFAULT_RECORDS_DIR)
+    effect_records: Path = field(kw_only=True)
     cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     deck_holdout: DeckHoldout = DeckHoldout()
     decks_per_round: int = field(default=DEFAULT_DECKS_PER_ROUND, metadata={
@@ -196,10 +196,11 @@ def collection_target(
             split_from=split_from,
         )
     if training_corpus is None:
-        records = effect_records if effect_records is not None else Path(
-            default_paths.DEFAULT_RECORDS_DIR,
-        )
-        return records, DeckHoldout(
+        if effect_records is None:
+            raise ValueError(
+                "name the corpus: pass --effect-records DIR, or --training-corpus DIR"
+            )
+        return effect_records, DeckHoldout(
             exclude_cards=exclude_cards, split_from=split_from, only_cards=only_cards,
         )
     if effect_records is not None or exclude_cards is not None:

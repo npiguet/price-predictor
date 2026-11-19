@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from effects.infrastructure.cli import build_parser
+from tests.unit.effects.cli_args import parse_cli
 
 
 def parse(*argv: str):
-    return build_parser().parse_args(argv)
+    return parse_cli(argv)
 
 
 class TestCollectVariants:
@@ -21,11 +21,14 @@ class TestCollectVariants:
         from effects.application.collect_variants import CollectVariantsConfig
         from effects.infrastructure.cli import collector_config
 
-        args = parse("collect-variants")
+        args = parse(
+            "collect-variants", "--effect-records", "records/run",
+            "--variant-scripts", "inputs/variants",
+        )
         records = collector_config(CollectVariantsConfig, args).effect_records
-        assert records == Path("output/effects/records/")
+        assert records == Path("records/run")
         assert args.forge_cards_path == Path("../forge/forge-gui/res/cardsfolder/")
-        assert args.variant_scripts == Path("output/effects/variant-scripts/")
+        assert args.variant_scripts == Path("inputs/variants")
         assert args.variant_games == 2
         assert args.decks_per_round == 500
 

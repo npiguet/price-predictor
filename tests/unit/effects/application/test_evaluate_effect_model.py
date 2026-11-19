@@ -38,11 +38,11 @@ def _context(tmp_path, *, rule_mask="soft", stratum_weight=0.25, deviance_floor=
     digest and map, the checkpoint's recorded flags, the loaded model."""
     from types import SimpleNamespace
 
-    from effects.application.evaluation_context import EvaluateEffectModelConfig
+    from tests.unit.effects.configs import evaluation_config
 
     loaded = SimpleNamespace(encoder="encoder", model="model", batcher=lambda: "batcher")
     return SimpleNamespace(
-        config=EvaluateEffectModelConfig(reports_dir=tmp_path),
+        config=evaluation_config(reports_dir=tmp_path),
         manifest=SimpleNamespace(
             digest=lambda: "corpus-digest",
             rule_map={"r.board": SimpleNamespace(outputs=["gate", "zone_outcome"])},

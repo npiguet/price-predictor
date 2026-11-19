@@ -372,19 +372,26 @@ def run_recorded(
     """Run ``body`` with ``run_dir``'s manifest open around it, closed on
     every way out — a return, an exception, ``sys.exit`` and Ctrl-C — and
     hand back whatever ``body`` returned or raised. While ``body`` runs,
-    :func:`annotate_run` on ``run_dir`` writes into this command's entry."""
+    :func:`annotate_run` on ``run_dir`` writes into this command's entry.
+    The option ``reason``, a function called once ``body`` has returned,
+    gives why a nonzero code was a refusal; the outcome carries it. Any other
+    option goes to :class:`RunManifest`."""
+    reason = manifest_options.pop("reason", None)
     manifest = RunManifest(run_dir, **manifest_options)
     manifest.start(command=command, inputs=inputs, create=create)
     with _active_lock:
         _active.append(manifest)
     try:
-        return _run_body(manifest, body)
+        return _run_body(manifest, body, reason)
     finally:
         with _active_lock:
             _active.remove(manifest)
 
 
-def _run_body(manifest: RunManifest, body: Callable[[], int | None]) -> int | None:
+def _run_body(
+    manifest: RunManifest, body: Callable[[], int | None],
+    reason: Callable[[], str | None] | None = None,
+) -> int | None:
     try:
         code = body()
     except KeyboardInterrupt as interrupt:
@@ -400,8 +407,15 @@ def _run_body(manifest: RunManifest, body: Callable[[], int | None]) -> int | No
     except BaseException as error:
         manifest.finish(exit_code=1, error=error)
         raise
-    manifest.finish(exit_code=code or 0)
+    _finish_returned(manifest, code, reason)
     return code
+
+
+def _finish_returned(
+    manifest: RunManifest, code: int | None, reason: Callable[[], str | None] | None,
+) -> None:
+    """Close the run ``body`` returned ``code`` from, with its refusal's reason."""
+    manifest.finish(exit_code=code or 0, message=reason() if reason and code else None)
 
 
 def run_script(

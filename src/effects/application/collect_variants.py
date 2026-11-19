@@ -91,12 +91,10 @@ class CollectVariantsConfig(CollectorConfig):
         )},
     )
     #: The help names the default as typed, trailing slash and all.
-    variant_scripts: Path = field(
-        default=Path(default_paths.DEFAULT_VARIANT_SCRIPTS), metadata={"help": (
-            "Where perturbed scripts are written "
-            f"(default: {default_paths.DEFAULT_VARIANT_SCRIPTS})"
-        )},
-    )
+    variant_scripts: Path = field(kw_only=True, metadata={"help": (
+        "Where perturbed scripts are written, an inputs run "
+        "(output/effects/<gen>/inputs/<run>/)"
+    )})
     round: VariantRound = field(default=VariantRound.UNTARGETED, metadata={
         "type": VariantRound, "help": (
             "untargeted: one variant of every eligible script; steered: variants "

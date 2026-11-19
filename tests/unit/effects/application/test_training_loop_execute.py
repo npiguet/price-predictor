@@ -59,7 +59,7 @@ def run(tmp_path, make_record, monkeypatch):
         lambda self: (resets.append(1), original(self))[1],
     )
 
-    config = TrainEffectModelConfig(
+    config = TrainEffectModelConfig.unpathed(
         corpus=str(tmp_path), epochs=2, curriculum_epoch=2, steps_per_epoch=2,
         shards_per_epoch=1, batch_size=2, seed=7, keyword_expand_p=0.25,
         model_output=tmp_path / "out",
@@ -125,7 +125,7 @@ def test_empty_validation_samples_are_refused_before_a_model_is_built(tmp_path):
 
     samples = write_validation_samples(tmp_path, [])
     loop = make_training_loop(
-        TrainEffectModelConfig(corpus=str(tmp_path), prefetch_workers=0),
+        TrainEffectModelConfig.unpathed(corpus=str(tmp_path), prefetch_workers=0),
         validation_samples=samples,
     )
     with pytest.raises(MissingTrainingInputError, match="nothing to measure feature widths"):
@@ -154,7 +154,7 @@ def test_the_best_control_score_epoch_is_the_one_checkpoint_and_patience_counts_
         lambda self, plan, *a, fields=None, **k: ({"fields": fields}, 0),
     )
     out = tmp_path / "out"
-    config = TrainEffectModelConfig(
+    config = TrainEffectModelConfig.unpathed(
         corpus=str(tmp_path), epochs=6, curriculum_epoch=1, steps_per_epoch=2,
         shards_per_epoch=1, batch_size=2, seed=7, model_output=out, prefetch_workers=0,
         patience=2,

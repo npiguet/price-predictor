@@ -18,10 +18,11 @@ from pathlib import Path
 import pytest
 
 from effects.infrastructure.cli import build_parser
+from tests.unit.effects.cli_args import parse_cli
 
 
 def parse(*argv: str):
-    return build_parser().parse_args(argv)
+    return parse_cli(argv)
 
 
 #: ``train-effect-model`` takes no defaults without a corpus any more.
@@ -39,8 +40,6 @@ class TestBuildVocab:
         args = parse("build-vocab")
         assert args.surface == "prose"
         assert args.cards_folders == BOTH_TREES
-        assert args.vocab_path is None  # resolved per surface
-        assert args.keyword_definitions == Path("output/effects/keyword-definitions.json")
         assert args.target_size == 5000
 
     def test_cards_folder_is_repeatable(self):
@@ -63,18 +62,21 @@ class TestBuildVocab:
 
 
 class TestExtractKeywordDefinitions:
-    def test_the_output_default_is_the_contracts(self):
-        args = parse("extract-keyword-definitions")
-        assert args.output == Path("output/effects/keyword-definitions.json")
+    def test_the_output_is_the_flags_value(self):
+        args = parse("extract-keyword-definitions", "--output", "inputs/run/keywords.json")
+        assert args.output == Path("inputs/run/keywords.json")
 
 
 class TestTrainEffectModel:
-    def test_the_path_defaults_are_the_contracts(self):
-        args = parse(*TRAIN)
+    def test_the_paths_are_the_flags_values(self):
+        args = parse(
+            *TRAIN, "--vocab-path", "v.txt", "--keyword-definitions", "k.json",
+            "--model-output", "models/run",
+        )
         assert args.corpus == "output/effects/corpus"
-        assert args.vocab_path == Path("models/effects/vocab.txt")
-        assert args.keyword_definitions == Path("output/effects/keyword-definitions.json")
-        assert args.model_output is None  # resolved from --variant
+        assert args.vocab_path == Path("v.txt")
+        assert args.keyword_definitions == Path("k.json")
+        assert args.model_output == Path("models/run")
         assert args.variant_scripts is None
 
     def test_the_architecture_defaults_are_the_contracts(self):
@@ -191,10 +193,10 @@ class TestBuildCorpusDispatch:
 
 class TestEncodeAbilities:
     def test_the_defaults_are_the_contracts(self):
-        args = parse("encode-abilities")
+        args = parse("encode-abilities", "--output-root", "cache/run", "--checkpoint", "c.pt")
         assert args.variant == "full"
-        assert args.checkpoint is None  # resolved from --variant
-        assert args.output_root == Path("output/effects/abilities/")
+        assert args.checkpoint == Path("c.pt")
+        assert args.output_root == Path("cache/run")
         assert args.clean is False
 
     def test_the_vocabulary_paths_default_to_the_checkpoints(self):
@@ -203,17 +205,11 @@ class TestEncodeAbilities:
         assert args.vocab_path is None
         assert args.keyword_definitions is None
 
-    def test_the_variant_selects_the_checkpoint_and_the_suffix_together(self):
-        from effects.application.encode_abilities import EncodeAbilitiesConfig
-
-        config = EncodeAbilitiesConfig(variant="no-state")
-        assert config.resolved_checkpoint().parent.name == "no-state"
-
 
 class TestEvaluateEffectModel:
     def test_the_defaults_are_the_contracts(self):
-        args = parse("evaluate-effect-model")
-        assert args.checkpoint == Path("models/effects/effect-model/latest.pt")
+        args = parse("evaluate-effect-model", "--checkpoint", "models/run/latest.pt")
+        assert args.checkpoint == Path("models/run/latest.pt")
         assert not hasattr(args, "records_dir")
         assert args.baseline_checkpoints is None
         assert not hasattr(args, "sealed_encoder_checkpoint")
@@ -274,7 +270,7 @@ class TestTrainEffectModelSurfaceMismatch:
         monkeypatch.setattr("effects.application.train_effect_model.run", explode)
         args = parse("train-effect-model", "--corpus", "output/effects/corpus")
 
-        assert run_train_effect_model(args) == 2
+        assert run_train_effect_model(args) == 1
 
 
 class TestBuildCorpus:
@@ -287,11 +283,14 @@ class TestBuildCorpus:
     """
 
     def test_the_path_defaults_are_the_contracts(self):
-        args = parse("build-corpus")
-        assert args.records_dir == Path("output/effects/records/")
-        assert args.output == Path("output/effects/corpus/")
+        args = parse(
+            "build-corpus", "--records-dir", "records/run", "--output", "corpus/run",
+            "--vocab-path", "v.txt",
+        )
+        assert args.records_dir == Path("records/run")
+        assert args.output == Path("corpus/run")
         assert args.cards_folders == BOTH_TREES
-        assert args.vocab_path == "models/effects/vocab.txt"
+        assert args.vocab_path == "v.txt"  # a string: the manifest records it
         assert args.variant_scripts is None
 
     def test_the_holdout_defaults_match_the_trainers(self):

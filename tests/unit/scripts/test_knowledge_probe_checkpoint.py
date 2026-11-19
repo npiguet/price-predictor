@@ -80,7 +80,7 @@ def checkpoint_path(tmp_path_factory, records, sidecars):
             keyword_definitions_hash=content_hash(FIXTURE_KEYWORD_DEFINITIONS),
         ),
         training_settings=training_settings(
-            RunSpec(TrainEffectModelConfig(corpus="unused"), CorpusFacts(), seed=1),
+            RunSpec(TrainEffectModelConfig.unpathed(corpus="unused"), CorpusFacts(), seed=1),
             api_types=[], param_keys=[]),
     ))
     return store.latest_path()

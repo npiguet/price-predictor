@@ -366,7 +366,7 @@ class TestTheBatchersTheLoopBuilds:
     def test_the_checkpoint_records_the_sweep_flags(self, monkeypatch):
         settings = training_settings(
             RunSpec(
-                TrainEffectModelConfig(corpus="unused", e_noise=0.05, value_weight=0.1),
+                TrainEffectModelConfig.unpathed(corpus="unused", e_noise=0.05, value_weight=0.1),
                 CorpusFacts(), seed=7,
             ),
             api_types=["Draw"], param_keys=["NumCards"],
@@ -385,7 +385,10 @@ class TestTheBatchersTheLoopBuilds:
         ``lethality_copies`` appears only when set."""
         def keys(**flags):
             return list(training_settings(
-                RunSpec(TrainEffectModelConfig(corpus="unused", **flags), CorpusFacts(), seed=7),
+                RunSpec(
+                    TrainEffectModelConfig.unpathed(corpus="unused", **flags),
+                    CorpusFacts(), seed=7,
+                ),
                 api_types=[], param_keys=[],
             ))
 

@@ -12,8 +12,8 @@ which describes the sealed ``.npz``: one pooled card vector followed by
 deterministic features. Shape, arity and consumers all differ, so the two are
 parallel concepts rather than one.
 
-The cache lives under ``output/effects/abilities/`` rather than beside the
-converted text, because the sealed pipeline's ``encode-cards --clean`` deletes
+The cache lives under a cache run (``output/effects/<gen>/cache/<run>/``) rather
+than beside the converted text, because the sealed pipeline's ``encode-cards --clean`` deletes
 every ``.npz`` under the converted card tree
 (``output/effects/gen3/converted/cardsfolder/``) and would take this one with it.
 """
@@ -24,12 +24,9 @@ from pathlib import Path
 
 import numpy as np
 
-from effects.domain import default_paths
 from effects.domain.baselines import BASELINES, Baseline
 from effects.domain.provenance import ProvenanceSidecar
 
-#: Root of the cache tree. One subtree per source tree, mirroring its layout.
-DEFAULT_CACHE_ROOT = Path(default_paths.DEFAULT_ABILITIES_ROOT)
 #: The key the `.npz` stores its matrix under.
 ARRAY_KEY = "e"
 CACHE_SUFFIX = ".npz"
@@ -46,7 +43,7 @@ def cache_suffix(variant: Baseline) -> str:
 
 
 def cache_path_for(
-    script_file: str, *, root: Path = DEFAULT_CACHE_ROOT, variant: Baseline = Baseline.FULL,
+    script_file: str, *, root: Path, variant: Baseline = Baseline.FULL,
 ) -> Path:
     """Where a source file's cache lives, under the variant's :func:`cache_suffix`."""
     relative = Path(script_file)

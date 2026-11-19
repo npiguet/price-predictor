@@ -1130,7 +1130,10 @@ class TestOnlyCardsRefusals:
         from effects.infrastructure.cli import build_parser, collector_config
 
         config = collector_config(CollectCoverageConfig, build_parser().parse_args(
-            ["collect-coverage", "--only-cards", "holdout.txt", "--min-text-games", "7"],
+            [
+                "collect-coverage", "--only-cards", "holdout.txt", "--min-text-games", "7",
+                "--effect-records", "records",
+            ],
         ))
         assert config.deck_holdout.only_cards == Path("holdout.txt")
         assert config.min_text_games == 7
@@ -1357,6 +1360,7 @@ class TestTheWordingRound:
     def test_it_is_refused_beside_the_held_out_round(self, tmp_path):
         with pytest.raises(ValueError, match="--wording-cards or --only-cards"):
             CollectCoverageConfig(
+                effect_records=tmp_path / "records",
                 wording_cards=tmp_path / "w.txt",
                 deck_holdout=DeckHoldout(only_cards=tmp_path / "h.txt"),
             )

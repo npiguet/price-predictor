@@ -62,8 +62,8 @@ def rules_dir(tmp_path: Path) -> Path:
 
 def config(tmp_path: Path, *rules: str, **overrides) -> CollectVariantsConfig:
     return CollectVariantsConfig(
-        effect_records=tmp_path / "records", decks_per_round=4, workers=1,
-        rules_dir=rules_dir(tmp_path), variant_games=2, steer_floor=2,
+        effect_records=tmp_path / "records", variant_scripts=tmp_path / "variant-scripts",
+        decks_per_round=4, workers=1, rules_dir=rules_dir(tmp_path), variant_games=2, steer_floor=2,
         caps=CollectionCaps(aimed_at=rules, directed_fork_rules=rules),
         **overrides,
     )

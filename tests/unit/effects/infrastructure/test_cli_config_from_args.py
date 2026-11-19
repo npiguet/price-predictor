@@ -17,10 +17,10 @@ from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.infrastructure import cli
 from effects.infrastructure.cli import (
     add_config_flags,
-    build_parser,
     collector_config,
     config_from_args,
 )
+from tests.unit.effects.cli_args import parse_cli
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,14 +65,14 @@ class TestBuildCorpusKeepsTheTypedStrings:
             return 0
 
         monkeypatch.setattr("effects.application.build_corpus.build", capture)
-        args = build_parser().parse_args([
+        args = parse_cli([
             "build-corpus", "--variant-scripts", "output/effects/variant-scripts/",
         ])
         assert run_build_corpus(args) == 0
         config = seen["config"]
-        assert config.vocab_path == "models/effects/vocab.txt"
+        assert config.vocab_path == "vocab.txt"
         assert config.variant_scripts == "output/effects/variant-scripts/"
-        assert config.records_dir == Path("output/effects/records/")
+        assert config.records_dir == Path("records")
 
 
 class TestAddConfigFlags:
@@ -117,17 +117,24 @@ class TestTheParsedDefaultsAreTheConfigsOwn:
     no flags builds the config a caller building it directly would."""
 
     def test_build_corpus(self):
-        args = build_parser().parse_args(["build-corpus"])
-        assert config_from_args(BuildCorpusConfig, args) == BuildCorpusConfig()
+        args = parse_cli(["build-corpus"])
+        assert config_from_args(BuildCorpusConfig, args) == BuildCorpusConfig(
+            records_dir=Path("records"), output=Path("corpus"), vocab_path="vocab.txt",
+            keyword_definitions=Path("keywords.json"),
+        )
 
     def test_train_effect_model(self):
-        args = build_parser().parse_args(["train-effect-model", "--corpus", "c"])
+        args = parse_cli(["train-effect-model", "--corpus", "c"])
         assert config_from_args(TrainEffectModelConfig, args) == (
-            TrainEffectModelConfig(corpus="c")
+            TrainEffectModelConfig.unpathed(
+                corpus="c", vocab_path=Path("vocab.txt"),
+                keyword_definitions=Path("keywords.json"), reports_dir=Path("reports"),
+                model_output=Path("model"),
+            )
         )
 
     def test_validate_corpus(self):
-        args = build_parser().parse_args(["validate-corpus"])
+        args = parse_cli(["validate-corpus"])
         assert config_from_args(Thresholds, args) == Thresholds()
 
     @pytest.mark.parametrize(("command", "config"), [
@@ -135,8 +142,11 @@ class TestTheParsedDefaultsAreTheConfigsOwn:
         ("collect-variants", CollectVariantsConfig),
     ])
     def test_the_collectors(self, command, config):
-        args = build_parser().parse_args([command])
-        assert collector_config(config, args) == config()
+        args = parse_cli([command])
+        paths = {"effect_records": Path("records")}
+        if command == "collect-variants":
+            paths["variant_scripts"] = Path("variants")
+        assert collector_config(config, args) == config(**paths)
 
 
 class TestExitCodes:

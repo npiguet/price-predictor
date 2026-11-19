@@ -264,7 +264,7 @@ def scoring_targets(corpus: Path, manifest, *, cards_folders: Sequence[Path] | N
                "api_weight": 0.0}
     if cards_folders:
         options["cards_folders"] = tuple(Path(folder) for folder in cards_folders)
-    config = with_variant_scripts(TrainEffectModelConfig(**options), manifest)
+    config = with_variant_scripts(TrainEffectModelConfig.unpathed(**options), manifest)
     if "rule_mask" in {f.name for f in dataclass_fields(config)}:
         config = replace(config, rule_mask=None)
     spec = RunSpec(config, CorpusFacts.of(manifest), manifest.seed)

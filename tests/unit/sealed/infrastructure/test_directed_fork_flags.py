@@ -221,6 +221,7 @@ class TestTheCollectors:
 
         config = CollectVariantsConfig(
             effect_records=tmp_path / "records", forge_cards_path=tmp_path / "no-forge",
+            variant_scripts=tmp_path / "variants",
             caps=CollectionCaps(aimed_at=(), directed_fork_probability=0.0),
         )
         with caplog.at_level(logging.ERROR):

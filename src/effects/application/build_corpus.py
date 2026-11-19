@@ -125,23 +125,17 @@ class BuildCorpusConfig:
     slash and all, which the ``Path`` the flag parses to cannot spell.
     """
 
-    records_dir: Path = field(
-        default=Path(default_paths.DEFAULT_RECORDS_DIR), metadata={"help": (
-            "Raw corpus root; discovery recurses "
-            f"(default: {default_paths.DEFAULT_RECORDS_DIR})"
-        )},
-    )
-    output: Path = field(
-        default=Path(default_paths.DEFAULT_CORPUS_OUTPUT), metadata={"help": (
-            f"Curated dataset directory (default: {default_paths.DEFAULT_CORPUS_OUTPUT})"
-        )},
-    )
+    records_dir: Path = field(kw_only=True, metadata={"help": (
+        "Raw corpus root, a records run; discovery recurses"
+    )})
+    output: Path = field(kw_only=True, metadata={"help": (
+        "Curated dataset directory, a corpus run (output/effects/<gen>/corpus/<run>/)"
+    )})
     cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     #: A string rather than a path: the manifest records it, and a Path would
     #: rewrite its separators on Windows.
-    vocab_path: str = field(default=default_paths.DEFAULT_VOCAB_PATH, metadata={"help": (
-        "Decides the encoding surface the rarity table's text keys are built "
-        "on (default: %(default)s)"
+    vocab_path: str = field(kw_only=True, metadata={"help": (
+        "Decides the encoding surface the rarity table's text keys are built on"
     )})
     variant_scripts: str | None = None
     holdout: HoldoutRule = HoldoutRule()
@@ -178,13 +172,10 @@ class BuildCorpusConfig:
     )
     #: Read by FR-015's check; None or a missing file skips it, since nothing
     #: can expand without a table.
-    keyword_definitions: Path | None = field(
-        default=Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS), metadata={"help": (
-            "The keyword table the tokenizer expands with; the build fails when "
-            "a display-name match would expand a non-keyword line "
-            "(default: %(default)s)"
-        )},
-    )
+    keyword_definitions: Path | None = field(kw_only=True, metadata={"help": (
+        "The keyword table the tokenizer expands with; the build fails when "
+        "a display-name match would expand a non-keyword line; empty skips the check"
+    )})
     card_disjoint_text_cap: int = field(default=50, metadata={"help": (
         "Max card-disjoint games admitted per held-out ability text, so each "
         "weighs comparably in gate 1; 0 means no cap (default: %(default)s)"

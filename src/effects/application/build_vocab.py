@@ -37,9 +37,6 @@ from price_predictor.infrastructure.tokenizer_store import save_vocabulary
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_KEYWORD_DEFINITIONS = Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS)
-DEFAULT_VOCAB_PATH = Path(default_paths.DEFAULT_VOCAB_PATH)
-DEFAULT_SCRIPT_VOCAB_PATH = Path(default_paths.DEFAULT_SCRIPT_VOCAB_PATH)
 DEFAULT_TARGET_SIZE = 5000
 
 #: Seeded into every effects vocabulary at the lowest ids, whatever their
@@ -60,10 +57,12 @@ _DESCRIPTION_PARAM_RE = re.compile(r"\w*Description\$[^|\[]*")
 
 @dataclass
 class BuildVocabConfig:
+    #: The output and the keyword table have no default: a vocabulary is a
+    #: run's artifact, so the command names where it goes and what it read.
+    vocab_path: Path = field(kw_only=True)
+    keyword_definitions: Path = field(kw_only=True)
     surface: Surface = Surface.PROSE
     cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
-    vocab_path: Path | None = None
-    keyword_definitions: Path = DEFAULT_KEYWORD_DEFINITIONS
     target_size: int = DEFAULT_TARGET_SIZE
 
     def __post_init__(self) -> None:
@@ -74,17 +73,6 @@ class BuildVocabConfig:
                 f"--surface must be one of {', '.join(repr(s.value) for s in Surface)}, "
                 f"got {self.surface!r}"
             ) from None
-
-    def resolved_vocab_path(self) -> Path:
-        """``--vocab-path``, defaulting per surface so a script rebuild never
-        overwrites the vocabulary a prose checkpoint recorded."""
-        if self.vocab_path is not None:
-            return Path(self.vocab_path)
-        return (
-            DEFAULT_SCRIPT_VOCAB_PATH
-            if self.surface == Surface.SCRIPT
-            else DEFAULT_VOCAB_PATH
-        )
 
 
 class EmptyCardsFolderError(RuntimeError):
@@ -216,7 +204,7 @@ def run(config: BuildVocabConfig) -> int:
     final = AbilityTokenizer(truncated, definitions, surface=config.surface)
     _check_expansions(final, definitions)
 
-    vocab_path = config.resolved_vocab_path()
+    vocab_path = Path(config.vocab_path)
     vocab_path.parent.mkdir(parents=True, exist_ok=True)
     save_vocabulary(truncated, vocab_path)
     logger.info(

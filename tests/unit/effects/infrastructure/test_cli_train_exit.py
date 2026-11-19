@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from effects.domain.baselines import Baseline
+from tests.unit.effects.cli_args import parse_cli
 
 
 class TestEmptyHoldoutIsAnExitCodeNotATraceback:
@@ -44,9 +45,8 @@ class TestEmptyHoldoutIsAnExitCodeNotATraceback:
 
 
 def _parse(*argv: str):
-    from effects.infrastructure.cli import build_parser
 
-    return build_parser().parse_args(["train-effect-model", "--corpus", "c", *argv])
+    return parse_cli(["train-effect-model", "--corpus", "c", *argv])
 
 
 def _config(*argv: str):

@@ -20,9 +20,6 @@ from effects.application.training_schedule import (
     warmup_steps,
 )
 from effects.domain.baselines import Baseline
-from effects.infrastructure.effect_model_store import (
-    DEFAULT_MODEL_OUTPUT,
-)
 
 
 class TestScheduleConstants:
@@ -94,17 +91,8 @@ class TestControlScoreStopper:
 
 
 class TestModelOutput:
-    def test_full_writes_to_the_shipping_directory(self):
-        assert TrainEffectModelConfig().resolved_model_output() == (
-            DEFAULT_MODEL_OUTPUT
-        )
-
-    def test_a_variant_writes_under_its_own_name(self):
-        config = TrainEffectModelConfig(variant=Baseline.IDENTITY)
-        assert config.resolved_model_output() == DEFAULT_MODEL_OUTPUT / "identity"
-
-    def test_an_explicit_model_output_wins(self, tmp_path):
-        config = TrainEffectModelConfig(variant=Baseline.IDENTITY, model_output=tmp_path)
+    def test_the_model_output_is_the_directory_the_run_names(self, tmp_path):
+        config = TrainEffectModelConfig.unpathed(variant=Baseline.IDENTITY, model_output=tmp_path)
         assert config.resolved_model_output() == tmp_path
 
 
@@ -196,7 +184,7 @@ class TestProvenanceRecordsTheCorpus:
         )
 
         provenance = CorpusFacts(digest="abc123").provenance(
-            TrainEffectModelConfig(corpus="output/effects/corpus"),
+            TrainEffectModelConfig.unpathed(corpus="output/effects/corpus"),
         )
 
         assert provenance.corpus_path == "output/effects/corpus"
@@ -209,7 +197,7 @@ class TestProvenanceRecordsTheCorpus:
             TrainEffectModelConfig,
         )
 
-        provenance = CorpusFacts().provenance(TrainEffectModelConfig())
+        provenance = CorpusFacts().provenance(TrainEffectModelConfig.unpathed())
 
         assert provenance.corpus_path == ""
         assert provenance.corpus_digest == ""

@@ -766,11 +766,9 @@ class TestTheCli:
     """The subcommand exits non-zero on a broken window and zero on a good one."""
 
     def _run(self, directory, **overrides) -> int:
-        from effects.infrastructure.cli import build_parser
+        from tests.unit.effects.cli_args import parse_cli
 
-        args = build_parser().parse_args(
-            ["validate-corpus", "--effect-records", str(directory)]
-        )
+        args = parse_cli(["validate-corpus", "--effect-records", str(directory)])
         for name, value in overrides.items():
             setattr(args, name, value)
         return args.func(args)
@@ -842,9 +840,9 @@ class TestTheCli:
 
     def test_the_new_thresholds_are_the_contracts(self):
         """Pinned here because a default that drifts changes what a corpus means."""
-        from effects.infrastructure.cli import build_parser
+        from tests.unit.effects.cli_args import parse_cli
 
-        args = build_parser().parse_args(["validate-corpus"])
+        args = parse_cli(["validate-corpus"])
         assert args.max_duplicate_event_rate == 0.02
         assert args.max_trigger_fired_share == 0.65
         assert args.min_zone_change_from_zone_rate is None

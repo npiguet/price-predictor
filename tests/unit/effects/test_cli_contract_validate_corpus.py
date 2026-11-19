@@ -13,11 +13,11 @@ from __future__ import annotations
 from dataclasses import fields
 
 from effects.application.corpus_validation.findings import Thresholds
-from effects.infrastructure.cli import build_parser
+from tests.unit.effects.cli_args import parse_cli
 
 
 def parse(*argv: str):
-    return build_parser().parse_args(["validate-corpus", *argv])
+    return parse_cli(["validate-corpus", *argv])
 
 
 class TestEveryThresholdHasAFlag:

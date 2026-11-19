@@ -231,6 +231,7 @@ class TestScanSources:
         empty.mkdir()
         config = BuildVocabConfig(
             cards_folders=(empty,), vocab_path=tmp_path / "vocab.txt",
+            keyword_definitions=tmp_path / "keywords.json",
         )
         with pytest.raises(EmptyCardsFolderError, match="convert"):
             run(config)
@@ -261,19 +262,10 @@ class TestTargetSize:
 
 
 class TestSurfaces:
-    def test_the_two_surfaces_default_to_their_own_files(self):
-        """contracts/cli.md: a script rebuild never overwrites the vocabulary a
-        prose checkpoint recorded."""
-        assert BuildVocabConfig().resolved_vocab_path() == Path("models/effects/vocab.txt")
-        assert BuildVocabConfig(
-            surface=Surface.SCRIPT,
-        ).resolved_vocab_path() == Path("models/effects/vocab-script.txt")
-
-    def test_an_explicit_path_overrides_the_surface_default(self, tmp_path):
-        chosen = tmp_path / "elsewhere.txt"
-        assert BuildVocabConfig(
-            surface=Surface.SCRIPT, vocab_path=chosen,
-        ).resolved_vocab_path() == chosen
+    def test_the_vocabulary_path_has_no_default(self):
+        """Artifact-layout rule 2: the output and the keyword table are named."""
+        with pytest.raises(TypeError, match="vocab_path"):
+            BuildVocabConfig()
 
     def test_an_unknown_surface_is_rejected(self, corpus, tmp_path):
         with pytest.raises(ValueError, match="--surface"):

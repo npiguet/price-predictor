@@ -13,6 +13,7 @@ from effects.infrastructure import cli
 from effects.infrastructure.shard_io import iter_shards
 from price_predictor.infrastructure import run_manifest
 from price_predictor.infrastructure.cli_run_manifest import subcommand_names
+from tests.unit.effects.cli_args import cli_args, parse_cli
 
 
 @pytest.fixture(autouse=True)
@@ -65,7 +66,7 @@ def test_an_exception_is_recorded_and_still_raised(tmp_path: Path, monkeypatch):
         raise RuntimeError("a shard holds a mixed generation")
 
     monkeypatch.setattr(cli, "run_build_corpus", build_corpus)
-    monkeypatch.setattr(sys, "argv", ["effects", "build-corpus", "--output", str(out)])
+    monkeypatch.setattr(sys, "argv", ["effects", *cli_args(["build-corpus", "--output", str(out)])])
 
     with pytest.raises(RuntimeError):
         cli.main()
@@ -78,24 +79,25 @@ def test_an_exception_is_recorded_and_still_raised(tmp_path: Path, monkeypatch):
 def test_verify_writes_none(tmp_path: Path, monkeypatch):
     out = tmp_path / "corpus-run"
     monkeypatch.setattr(cli, "run_build_corpus", lambda _args: 0)
-    assert run_main(monkeypatch, ["build-corpus", "--output", str(out), "--verify"]) == 0
+    assert run_main(monkeypatch, cli_args(["build-corpus", "--output", str(out), "--verify"])) == 0
     assert not out.exists()
 
 
 def test_a_collector_records_in_the_corpus_it_extends():
     corpus = "output/effects/gen3/records/2026-11-13-depleted"
-    args = cli.build_parser().parse_args(["collect-coverage", "--training-corpus", corpus])
+    args = parse_cli(["collect-coverage", "--training-corpus", corpus])
     spec = cli.RUN_MANIFESTS["collect-coverage"]
     assert spec.run_dir(args) == Path(corpus)
     assert Path(corpus) / "holdout-cards.txt" in spec.input_paths(args)
 
 
-def test_a_baseline_trains_into_its_own_directory():
-    args = cli.build_parser().parse_args(
-        ["train-effect-model", "--corpus", "c", "--variant", "identity"],
-    )
+def test_the_trainer_manifests_the_directory_it_is_given():
+    args = parse_cli([
+        "train-effect-model", "--corpus", "c", "--variant", "identity",
+        "--model-output", "models/effects/gen3/effect-model/run",
+    ])
     assert cli.RUN_MANIFESTS["train-effect-model"].run_dir(args) == Path(
-        "models/effects/effect-model/identity",
+        "models/effects/gen3/effect-model/run",
     )
 
 
@@ -112,7 +114,7 @@ class TestTheCollectorsListWhatTheyRead:
     ``collect-coverage --count-from`` reads earlier runs."""
 
     def test_collect_variants_lists_its_variant_tree(self):
-        args = cli.build_parser().parse_args([
+        args = parse_cli([
             "collect-variants", "--variant-scripts", "output/effects/gen3/inputs/variants",
         ])
         inputs = cli.RUN_MANIFESTS["collect-variants"].input_paths(args)
@@ -120,7 +122,7 @@ class TestTheCollectorsListWhatTheyRead:
         assert Path("rules") not in inputs, "the untargeted round reads no catalogue"
 
     def test_the_steered_round_lists_the_rules_catalogue(self):
-        args = cli.build_parser().parse_args([
+        args = parse_cli([
             "collect-variants", "--round", "steered", "--rule-counts", "counts.json",
         ])
         inputs = cli.RUN_MANIFESTS["collect-variants"].input_paths(args)
@@ -128,7 +130,7 @@ class TestTheCollectorsListWhatTheyRead:
         assert Path("counts.json") in inputs
 
     def test_collect_coverage_lists_every_count_from_directory(self):
-        args = cli.build_parser().parse_args([
+        args = parse_cli([
             "collect-coverage", "--count-from", "runs/a", "--count-from", "runs/b",
         ])
         inputs = cli.RUN_MANIFESTS["collect-coverage"].input_paths(args)

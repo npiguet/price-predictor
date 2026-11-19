@@ -71,7 +71,7 @@ class EvaluationContext:
 
 @dataclass
 class EvaluateEffectModelConfig:
-    checkpoint: Path = Path(default_paths.DEFAULT_CHECKPOINT)
+    checkpoint: Path = field(kw_only=True)
     baseline_checkpoints: dict[str, Path] = field(default_factory=dict)
     cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     variant_scripts: Path | None = None
@@ -80,12 +80,12 @@ class EvaluateEffectModelConfig:
     #: A curated dataset directory (`build-corpus`); defaults to the one
     #: `--checkpoint` recorded (FR-147).
     corpus: Path | None = None
-    abilities_root: Path = Path(default_paths.DEFAULT_ABILITIES_ROOT)
+    abilities_root: Path = field(kw_only=True)
     #: The per-card win-rate table the decodability battery reads (FR-070).
-    win_rates: Path = Path(default_paths.DEFAULT_WIN_RATES)
+    win_rates: Path = field(kw_only=True)
     #: Where the selection set frozen for the corpus is found, by its digest:
     #: ``--reports-dir``, as on ``train-effect-model``.
-    reports_dir: Path = Path(default_paths.DEFAULT_REPORTS_DIR)
+    reports_dir: Path = field(kw_only=True)
     #: ``--output``: the directory the files the report names are written to.
     output: Path | None = None
 

@@ -6,9 +6,6 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from effects.application.evaluation_context import (
-    EvaluateEffectModelConfig,
-)
 from effects.domain.baselines import Baseline
 from tests.unit.effects.application.geometry_checks_support import (
     SourceRows,
@@ -16,6 +13,7 @@ from tests.unit.effects.application.geometry_checks_support import (
     _write_source,
 )
 from tests.unit.effects.builders import read_cache
+from tests.unit.effects.configs import evaluation_config
 
 
 class TestLoadingTheCache:
@@ -191,7 +189,7 @@ class TestTheShippingCache:
                 tree="variant-scripts",
             ),
         )
-        return EvaluateEffectModelConfig(
+        return evaluation_config(
             cards_folders=(cards, tokens), variant_scripts=variants,
             abilities_root=abilities,
         )
@@ -217,7 +215,7 @@ class TestTheShippingCache:
 
 
 def test_the_evaluation_files_go_beside_the_checkpoint_named_for_it(tmp_path):
-    from effects.application.evaluation_context import EvaluateEffectModelConfig
+    from tests.unit.effects.configs import evaluation_config
 
-    config = EvaluateEffectModelConfig(checkpoint=tmp_path / "arm" / "latest.pt")
+    config = evaluation_config(checkpoint=tmp_path / "arm" / "latest.pt")
     assert config.output_dir == tmp_path / "arm" / "latest.evaluation"

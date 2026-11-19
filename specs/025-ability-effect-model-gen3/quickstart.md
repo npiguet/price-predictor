@@ -352,16 +352,14 @@ $ckpt   = "$train\latest.pt"
 $cache  = "$gen3\cache\$(Split-Path -Leaf $train)"
 $report = "$gen3\reports\$(Split-Path -Leaf $train)"
 Run-Logged $cache  "$py -u -m effects encode-abilities --checkpoint $ckpt $cards --variant-scripts $variants $tokens --output-root $cache"
-Run-Logged "$report-evaluation" "$py -u -m effects evaluate-effect-model --checkpoint $ckpt $cards --variant-scripts $variants $tokens --corpus $corpus --abilities-root $cache --reports-dir $freeze --output $report-evaluation"
+Run-Logged "$report-evaluation" "$py -u -m effects evaluate-effect-model --checkpoint $ckpt $cards --variant-scripts $variants $tokens --corpus $corpus --abilities-root $cache --win-rates $gen3\inputs\cards-win-rates.txt --reports-dir $freeze --output $report-evaluation"
 Run-Logged $report "$py -u scripts\effect_knowledge_probes\run.py --checkpoint $ckpt --corpus $corpus $cards $tokens --abilities-root $cache --probe-set-dir $freeze --output $report"
 ```
 
-`evaluate-effect-model`'s decodability check reads a per-card win-rate table (`--win-rates`). No
-stage here writes one under `output/effects/`, so the command above passes none and the check
-reports itself skipped (`no win-rate table at …`). Its default names a file of the sealed
-module's tree (`output/sealed/cards-win-rates.txt`): once such a file exists, the run reads it,
-which the layout forbids an effects run, so name a table under `$gen3` with `--win-rates` before
-that happens.
+`evaluate-effect-model`'s decodability check reads a per-card win-rate table, which `--win-rates`
+names and which has no default. No stage here writes one, so the command above names a path under
+`$gen3\inputs` where none exists and the check reports itself skipped (`no win-rate table at …`).
+Put a table at that path to run the check; the run reads nothing from another module's tree.
 
 Check: the scorecard reports every probe and the rule tests on the reporting half. Results go into the
 gen-3 record's Result section only.

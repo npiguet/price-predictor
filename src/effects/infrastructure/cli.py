@@ -42,24 +42,13 @@ from effects.application.train_effect_model import (
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import BASELINES, Baseline
 from effects.domain.collection_caps import DEFAULT_RANDOM_SEAT_PROBABILITY, CollectionCaps
-from effects.domain.default_paths import (
-    DEFAULT_ABILITIES_ROOT,
-    DEFAULT_CARDS_FOLDER_PATHS,
-    DEFAULT_CARDS_FOLDERS,
-    DEFAULT_CHECKPOINT,
-    DEFAULT_KEYWORD_DEFINITIONS,
-    DEFAULT_RECORDS_DIR,
-    DEFAULT_REPORTS_DIR,
-    DEFAULT_SCRIPT_VOCAB_PATH,
-    DEFAULT_VARIANT_SCRIPTS,
-    DEFAULT_VOCAB_PATH,
-    DEFAULT_WIN_RATES,
-)
+from effects.domain.default_paths import DEFAULT_CARDS_FOLDER_PATHS, DEFAULT_CARDS_FOLDERS
 from effects.domain.shard_generation import UnacceptedGenerationError
 from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HoldoutRule
 from price_predictor.domain.dataclass_defaults import field_default
 from price_predictor.infrastructure.cli_run_manifest import (
     READ_ONLY,
+    REFUSAL_DEST,
     ManifestTable,
     Writes,
     dispatch,
@@ -105,7 +94,8 @@ def config_from_args(cls: type[_Config], args: argparse.Namespace, **overrides: 
 def add_config_flags(
     parser: argparse.ArgumentParser, config: type, *, only: Iterable[str] | None = None,
 ) -> None:
-    """A ``--field-name`` flag per field of ``config``, with the field's own default.
+    """A ``--field-name`` flag per field of ``config``, with the field's own
+    default; a field with none is a required flag (artifact-layout rule 2).
 
     ``only`` picks the fields, in order; without it, every field no flag on
     ``parser`` claims yet. The type comes from ``metadata["type"]``, else the
@@ -120,17 +110,31 @@ def add_config_flags(
     for name in only if only is not None else [n for n in specs if n not in claimed]:
         spec = specs[name]
         kind = spec.metadata.get("type") or _flag_type(config, name, hints[name])
-        default = field_default(spec)
-        if isinstance(default, Path):
-            # Spelled as typed in --help; argparse parses a string default too.
-            default = default.as_posix()
-        flag, help_text = "--" + name.replace("_", "-"), spec.metadata.get("help")
-        if kind is bool and default is False:
-            parser.add_argument(flag, action="store_true", help=help_text)
-        elif kind is not bool:
-            parser.add_argument(flag, type=kind, default=default, help=help_text)
-        else:
-            raise TypeError(f"{config.__name__}.{name} defaults to True; declare its flag")
+        _add_field_flag(parser, config, spec, kind)
+
+
+def _add_field_flag(
+    parser: argparse.ArgumentParser, config: type, spec: Any, kind: Callable[[str], Any],
+) -> None:
+    """One field's flag: required where the field has no default."""
+    default = field_default(spec, otherwise=_REQUIRED)
+    flag, help_text = flag_name(spec.name), spec.metadata.get("help")
+    if default is _REQUIRED:
+        parser.add_argument(flag, type=kind, required=True, help=help_text)
+        return
+    if isinstance(default, Path):
+        # Spelled as typed in --help; argparse parses a string default too.
+        default = default.as_posix()
+    if kind is bool and default is False:
+        parser.add_argument(flag, action="store_true", help=help_text)
+    elif kind is not bool:
+        parser.add_argument(flag, type=kind, default=default, help=help_text)
+    else:
+        raise TypeError(f"{config.__name__}.{spec.name} defaults to True; declare its flag")
+
+
+def flag_name(field_name: str) -> str:
+    return "--" + field_name.replace("_", "-")
 
 
 def _flag_type(config: type, name: str, hint: Any) -> Callable[[str], Any]:
@@ -142,6 +146,9 @@ def _flag_type(config: type, name: str, hint: Any) -> Callable[[str], Any]:
     if kinds == [Path]:
         return _optional_path if type(None) in typing.get_args(hint) else Path
     raise TypeError(f"{config.__name__}.{name} is {hint}; declare its flag")
+
+
+_REQUIRED = object()
 
 
 def exits_with(codes: Mapping[type[Exception] | str, int]) -> Callable:
@@ -162,6 +169,7 @@ def exits_with(codes: Mapping[type[Exception] | str, int]) -> Callable:
                 if code is None:
                     raise
                 logger.error("%s", exc)
+                setattr(args, REFUSAL_DEST, str(exc))
                 return code
 
         run.exit_codes = codes
@@ -209,13 +217,13 @@ def _add_cards_folder(parser: argparse.ArgumentParser) -> None:
 
 
 def _add_effect_records(
-    parser: argparse.ArgumentParser, *, help_text: str,
-    default: str | None = DEFAULT_RECORDS_DIR,
+    parser: argparse.ArgumentParser, *, help_text: str, required: bool = True,
 ) -> None:
-    """``--effect-records``; a collector passes ``default=None`` so it can tell
-    an explicit one beside ``--training-corpus`` from none."""
+    """``--effect-records``; a collector passes ``required=False`` so it can tell
+    an explicit one beside ``--training-corpus`` from none, and refuses a
+    command with neither."""
     parser.add_argument(
-        "--effect-records", type=Path, default=default, help=help_text,
+        "--effect-records", type=Path, required=required, default=None, help=help_text,
     )
 
 
@@ -294,7 +302,7 @@ def _add_variant_scripts(
         "--variant-scripts", type=path_type, default=None,
         help=(
             "The perturbed-script tree collect-variants wrote (usually "
-            f"{DEFAULT_VARIANT_SCRIPTS}); unset, {without}"
+            f"an inputs run); unset, {without}"
         ),
     )
 
@@ -322,20 +330,17 @@ def _build_vocab_parser(subparsers) -> None:
         "--surface", type=Surface, choices=list(Surface), default=Surface.PROSE,
         help=(
             "prose reads the converted text; script adds the sidecars' script "
-            "lines and switches the --vocab-path default (default: %(default)s)"
+            "lines (default: %(default)s)"
         ),
     )
     _add_cards_folder(parser)
     parser.add_argument(
-        "--vocab-path", type=_optional_path, default=None,
-        help=(
-            f"Output path (default: {DEFAULT_VOCAB_PATH}, or "
-            f"{DEFAULT_SCRIPT_VOCAB_PATH} under --surface script)"
-        ),
+        "--vocab-path", type=Path, required=True,
+        help="Output path, inside the vocabulary's inputs run",
     )
     parser.add_argument(
-        "--keyword-definitions", type=Path, default=DEFAULT_KEYWORD_DEFINITIONS,
-        help="Keyword definitions to scan (default: %(default)s)",
+        "--keyword-definitions", type=Path, required=True,
+        help="Keyword definitions to scan",
     )
     parser.add_argument(
         "--target-size", type=int, default=DEFAULT_TARGET_SIZE,
@@ -343,7 +348,7 @@ def _build_vocab_parser(subparsers) -> None:
     )
 
 
-@exits_with({EmptyCardsFolderError: 1, ValueError: 2})
+@exits_with({EmptyCardsFolderError: 1, ValueError: 1})
 def run_build_vocab(args: argparse.Namespace) -> int:
     from effects.application.build_vocab import BuildVocabConfig
     from effects.application.build_vocab import run as build_vocab
@@ -364,6 +369,7 @@ def _extract_keyword_definitions_parser(subparsers) -> None:
     add_config_flags(parser, ExtractKeywordDefinitionsConfig)
 
 
+@exits_with({"effects.application.extract_keyword_definitions.KeywordExtractionError": 1})
 def run_extract_keyword_definitions(args: argparse.Namespace) -> int:
     from effects.application.extract_keyword_definitions import run as extract
 
@@ -382,9 +388,9 @@ def _collect_coverage_parser(subparsers) -> None:
         ),
     )
     parser.set_defaults(func=run_collect_coverage)
-    _add_effect_records(parser, default=None, help_text=(
-        f"Destination shard directory (default: {DEFAULT_RECORDS_DIR}); unlike "
-        "on match-outcomes, collection is the point of this command"
+    _add_effect_records(parser, required=False, help_text=(
+        "Destination shard directory, a records run; this or --training-corpus "
+        "names it. Unlike on match-outcomes, collection is the point of this command"
     ))
     _add_cards_folder(parser)
     _add_holdout_sources(parser)
@@ -431,8 +437,8 @@ def _collect_variants_parser(subparsers) -> None:
     )
     parser.set_defaults(func=run_collect_variants)
     _add_effect_records(
-        parser, default=None,
-        help_text=f"Destination shard directory (default: {DEFAULT_RECORDS_DIR})",
+        parser, required=False,
+        help_text="Destination shard directory, a records run; this or --training-corpus names it",
     )
     add_config_flags(parser, CollectVariantsConfig, only=(
         "forge_cards_path", "variant_scripts", "round", "variant_games",
@@ -589,6 +595,14 @@ def continues_error(config: Any) -> str | None:
     return None
 
 
+def _flag_error(args: argparse.Namespace) -> str | None:
+    """The first refusal the collector's flags earn before any config is built."""
+    return (
+        random_seat_error(args) or candidate_rate_error(args)
+        or holdout_source_error(args) or steered_round_error(args)
+    )
+
+
 def _check_workers_can_start(command: str, config: Any) -> None:
     """The connector JAR, ``java`` and the list files the run reads, checked
     before any worker starts (python R2), so a missing one exits 1 naming it
@@ -622,10 +636,7 @@ def _collector_runner(command: str, config_type: type, module: str) -> Callable:
         "price_predictor.infrastructure.forge_jvm.WorkerStartError": 1,
     })
     def run(args: argparse.Namespace) -> int:
-        error = (
-            random_seat_error(args) or candidate_rate_error(args)
-            or holdout_source_error(args) or steered_round_error(args)
-        )
+        error = _flag_error(args)
         if error is not None:
             raise CollectorRefusal(f"{command}: {error}")
         try:
@@ -767,7 +778,7 @@ def _field_coverage_parser(subparsers) -> None:
         ),
     )
     parser.set_defaults(func=run_field_coverage)
-    _add_effect_records(parser, help_text="Shard directory to read (default: %(default)s)")
+    _add_effect_records(parser, help_text="Shard directory to read")
     parser.add_argument(
         "--all", action="store_true",
         help="List every field, not only the constant ones",
@@ -787,9 +798,6 @@ _SHARD_REFUSED: dict[str, int] = {
 
 # ── rule-counts ─────────────────────────────────────────────────────────
 
-DEFAULT_RULE_COUNTS = "output/effects/rule-counts.json"
-
-
 def _rule_counts_parser(subparsers) -> None:
     parser = subparsers.add_parser(
         "rule-counts",
@@ -804,13 +812,13 @@ def _rule_counts_parser(subparsers) -> None:
         help="Shards to count: gen-3 records only",
     )
     parser.add_argument(
-        "--output", type=Path, default=Path(DEFAULT_RULE_COUNTS),
-        help="Counts file (default: %(default)s)",
+        "--output", type=Path, required=True,
+        help="Counts file, inside an inputs run",
     )
     _add_cards_folder(parser)
     parser.add_argument(
-        "--variant-scripts", type=_optional_path, default=DEFAULT_VARIANT_SCRIPTS,
-        help="Variant sidecars the detectors read (default: %(default)s)",
+        "--variant-scripts", type=_optional_path, required=True,
+        help="Variant sidecars the detectors read; empty reads none",
     )
     parser.add_argument(
         "--rules-dir", type=Path, default=Path("rules"),
@@ -874,7 +882,7 @@ def _validate_corpus_parser(subparsers) -> None:
         ),
     )
     parser.set_defaults(func=run_validate_corpus)
-    _add_effect_records(parser, help_text="Shard directory to read (default: %(default)s)")
+    _add_effect_records(parser, help_text="Shard directory to read")
     parser.add_argument(
         "--limit", type=int, default=0,
         help=(
@@ -885,10 +893,10 @@ def _validate_corpus_parser(subparsers) -> None:
     add_config_flags(parser, Thresholds)
     _add_cards_folder(parser)
     parser.add_argument(
-        "--variant-scripts", type=_optional_path, default=DEFAULT_VARIANT_SCRIPTS,
+        "--variant-scripts", type=_optional_path, required=True,
         help=("The perturbed-script tree whose keys a collect-variants corpus names; "
-              "a key in a tree not given fails the keyword-join check as unchecked "
-              "(default: %(default)s)"),
+              "a key in a tree not given fails the keyword-join check as unchecked; "
+              "empty reads none"),
     )
 
 
@@ -994,16 +1002,19 @@ def _encode_abilities_parser(subparsers) -> None:
     )
     parser.set_defaults(func=run_encode_abilities)
     _add_variant(
-        parser, help_text="Resolves the checkpoint and the output suffix together",
+        parser, help_text="Names the output suffix; the checkpoint is the baseline's own",
     )
     parser.add_argument(
-        "--checkpoint", type=_optional_path, default=None,
-        help="Overrides the checkpoint --variant resolves",
+        "--checkpoint", type=Path, required=True,
+        help="The checkpoint to encode with (a baseline needs its own)",
     )
     _add_cards_folder(parser)
     _add_variant_scripts(parser)
     _add_recorded_tokenizer_paths(parser)
-    parser.add_argument("--output-root", type=Path, default=DEFAULT_ABILITIES_ROOT)
+    parser.add_argument(
+        "--output-root", type=Path, required=True,
+        help="Cache run directory the ability cache is written under",
+    )
     parser.add_argument(
         "--clean", action="store_true",
         help="Remove only the files this variant wrote, then re-encode",
@@ -1011,7 +1022,7 @@ def _encode_abilities_parser(subparsers) -> None:
 
 
 @exits_with({
-    f"{_EFFECT_MODEL_STORE}.HashMismatchError": 2, FileNotFoundError: 2, _LAYOUT_REFUSED: 1,
+    f"{_EFFECT_MODEL_STORE}.HashMismatchError": 1, FileNotFoundError: 1, _LAYOUT_REFUSED: 1,
 })
 def run_encode_abilities(args: argparse.Namespace) -> int:
     from effects.application.encode_abilities import EncodeAbilitiesConfig
@@ -1030,7 +1041,9 @@ def _evaluate_effect_model_parser(subparsers) -> None:
         help="Run the three gates and the reported checks over a checkpoint",
     )
     parser.set_defaults(func=run_evaluate_effect_model)
-    parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT)
+    parser.add_argument(
+        "--checkpoint", type=Path, required=True, help="The checkpoint to evaluate",
+    )
     parser.add_argument(
         "--variant-checkpoint", action="append", dest="baseline_checkpoints",
         type=_baseline_checkpoint, default=None, metavar="NAME=PATH",
@@ -1048,16 +1061,19 @@ def _evaluate_effect_model_parser(subparsers) -> None:
             "recorded); refused when rebuilt since training"
         ),
     )
-    parser.add_argument("--abilities-root", type=Path, default=DEFAULT_ABILITIES_ROOT)
     parser.add_argument(
-        "--win-rates", type=Path, default=DEFAULT_WIN_RATES,
+        "--abilities-root", type=Path, required=True,
+        help="The cache run encode-abilities wrote for this checkpoint",
+    )
+    parser.add_argument(
+        "--win-rates", type=Path, required=True,
         help="Per-card win-rate table the decodability battery reads",
     )
     parser.add_argument(
-        "--reports-dir", type=Path, default=DEFAULT_REPORTS_DIR,
+        "--reports-dir", type=Path, required=True,
         help=(
             "Where the selection set frozen for the corpus is found, by the "
-            "corpus digest, as on train-effect-model (default: %(default)s)"
+            "corpus digest, as on train-effect-model"
         ),
     )
     parser.add_argument(
@@ -1080,10 +1096,10 @@ def _baseline_checkpoint(value: str):
 
 
 @exits_with({
-    f"{_EFFECT_MODEL_STORE}.HashMismatchError": 2,
-    f"{_EFFECT_MODEL_STORE}.SplitMismatchError": 2,
-    CorpusMismatchError: 2,
-    FileNotFoundError: 2,
+    f"{_EFFECT_MODEL_STORE}.HashMismatchError": 1,
+    f"{_EFFECT_MODEL_STORE}.SplitMismatchError": 1,
+    CorpusMismatchError: 1,
+    FileNotFoundError: 1,
     # A checkpoint of another input layout, a corpus not wholly gen-3 (FR-076).
     _LAYOUT_REFUSED: 1,
     _MANIFEST_REFUSED: 1,
@@ -1148,11 +1164,12 @@ def write_output_as_utf8(*streams) -> None:
 # ── run manifests ───────────────────────────────────────────────────────
 
 
-def _collection_dir(args: argparse.Namespace) -> Path:
-    """A collector's shard directory, as ``collection_target`` resolves it."""
+def _collection_dir(args: argparse.Namespace) -> Path | None:
+    """A collector's shard directory, as ``collection_target`` resolves it;
+    None where it names none, which the command refuses."""
     if args.training_corpus is not None:
         return Path(args.training_corpus)
-    return Path(args.effect_records or DEFAULT_RECORDS_DIR)
+    return Path(args.effect_records) if args.effect_records else None
 
 
 def _collection_inputs(args: argparse.Namespace) -> list[Path | None]:
@@ -1180,28 +1197,41 @@ def _vocab_output(args: argparse.Namespace) -> Path:
     return config_from_args(BuildVocabConfig, args).resolved_vocab_path()
 
 
-def _model_output(args: argparse.Namespace) -> Path:
-    """``--model-output``, else the directory ``--variant`` trains into."""
-    if args.model_output is not None:
-        return Path(args.model_output)
-    from effects.infrastructure.effect_model_store import model_output_for
-
-    return model_output_for(args.variant)
-
-
-def _encoded_checkpoint(args: argparse.Namespace) -> Path:
-    """The checkpoint ``encode-abilities`` reads: ``--checkpoint``, else ``--variant``'s."""
-    from effects.application.encode_abilities import EncodeAbilitiesConfig
-
-    return config_from_args(EncodeAbilitiesConfig, args).resolved_checkpoint()
-
-
 def _evaluation_dir(args: argparse.Namespace) -> Path:
     """Where the evaluation's pictures go: ``--output``, else
     ``<checkpoint stem>.evaluation/`` beside the checkpoint."""
     from effects.application.evaluation_context import evaluation_dir
 
     return evaluation_dir(args.checkpoint, args.output)
+
+
+def _corpus_variant_tree(args: argparse.Namespace) -> list[Path]:
+    """The variant tree ``--variant-scripts`` names, else the one the corpus
+    manifest records: what a trainer or an evaluation reads without a flag."""
+    from effects.infrastructure.recorded_inputs import corpus_variant_tree
+
+    return corpus_variant_tree(args.corpus, args.variant_scripts)
+
+
+def _evaluated_inputs(args: argparse.Namespace) -> list[Path]:
+    """What ``evaluate-effect-model`` reads from its checkpoint: the
+    vocabulary, the keyword table, the corpus and its variant tree."""
+    from effects.infrastructure.recorded_inputs import corpus_paths, tokenizer_paths
+
+    return [
+        *tokenizer_paths(args.checkpoint, vocab=args.vocab_path, keywords=args.keyword_definitions),
+        *corpus_paths(args.checkpoint, corpus=args.corpus, variant_scripts=args.variant_scripts),
+    ]
+
+
+def _encoded_inputs(args: argparse.Namespace) -> list[Path]:
+    """What ``encode-abilities`` reads from its checkpoint: the vocabulary and
+    the keyword table."""
+    from effects.infrastructure.recorded_inputs import tokenizer_paths
+
+    return tokenizer_paths(
+        args.checkpoint, vocab=args.vocab_path, keywords=args.keyword_definitions,
+    )
 
 
 _SOURCE_TREES = ("cards_folders", "variant_scripts")
@@ -1237,19 +1267,20 @@ RUN_MANIFESTS: ManifestTable = {
         ),
     ),
     "train-effect-model": Writes(
-        _model_output,
-        inputs=("corpus", *_SOURCE_TREES, *_TOKENIZER_PATHS, "reports_dir"),
+        "model_output",
+        inputs=(
+            "corpus", *_SOURCE_TREES, _corpus_variant_tree, *_TOKENIZER_PATHS, "reports_dir",
+        ),
     ),
     "encode-abilities": Writes(
-        "output_root", inputs=(_encoded_checkpoint, *_SOURCE_TREES, *_TOKENIZER_PATHS),
+        "output_root", inputs=("checkpoint", *_SOURCE_TREES, _encoded_inputs),
     ),
     "evaluate-effect-model": Writes(
         _evaluation_dir,
         inputs=(
             "checkpoint",
             lambda args: [path for _name, path in (args.baseline_checkpoints or [])],
-            *_SOURCE_TREES, *_TOKENIZER_PATHS, "corpus", "abilities_root", "win_rates",
-            "reports_dir",
+            *_SOURCE_TREES, _evaluated_inputs, "abilities_root", "win_rates", "reports_dir",
         ),
     ),
 }

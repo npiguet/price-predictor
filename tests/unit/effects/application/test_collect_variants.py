@@ -1099,6 +1099,7 @@ class TestNoVariantPrintsAHeldOutText:
 
         def config(**rule) -> CollectVariantsConfig:
             return CollectVariantsConfig(
+                effect_records=tmp_path / "records", variant_scripts=variants,
                 cards_folders=(tmp_path / "cardsfolder",), holdout=HoldoutRule(**rule),
             )
 
