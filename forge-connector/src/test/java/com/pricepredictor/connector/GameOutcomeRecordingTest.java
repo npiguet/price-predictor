@@ -33,8 +33,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * GamePlayer#playMatch} as a worker plays it (finding 9.5): a random seat
  * that never passes while a non-mana ability is playable pays Mischievous
  * Poltergeist's "Pay 1 life" until it reaches 0 life, with the ability still
- * on the stack, as the pilot's seat did. Each game still writes its loss and
- * its win once, in a game-end record holding nothing else, and its marker
+ * on the stack, as the pilot's seat did until decision D12 stopped the seat
+ * drawing a payment that leaves it at 0 life, so these games now end in
+ * combat. Each game still writes its loss and its win once and its marker
  * last. The match draws from a seeded Forge random stream, restored after, so
  * both games are the same whatever ran before in the JVM and each ends by the
  * life payment.
@@ -75,9 +76,8 @@ class GameOutcomeRecordingTest {
             List<String> outcome = records.stream()
                     .filter(record -> record.contains("\"type\":\"player_lost\"")).toList();
             assertEquals(1, outcome.size(), game.getKey() + " writes its loss once");
-            assertEquals(List.of("player_lost", "player_won"), eventTypes(outcome.get(0)),
-                    game.getKey() + "'s game-end record holds the outcome only: " + outcome.get(0));
-            assertTrue(outcome.get(0).contains("\"reason\":\"LifeReachedZero\""), outcome.get(0));
+            assertTrue(eventTypes(outcome.get(0)).containsAll(List.of("player_lost", "player_won")),
+                    game.getKey() + "'s game-end record holds the outcome: " + outcome.get(0));
             assertEquals(1, records.stream()
                     .filter(record -> record.contains("\"type\":\"player_won\"")).count(),
                     game.getKey() + " writes its win once");

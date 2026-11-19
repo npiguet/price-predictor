@@ -319,7 +319,8 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
      * activation that changed nothing earlier this turn (FR-040): still
      * playable, and still recorded so, but not drawn again until the turn
      * ends. A play whose life payment would leave the seat at 0 or less is
-     * left out the same way ({@link LifeCostGate}).
+     * left out the same way ({@link LifeCostGate}), as is an attach whose only
+     * legal target is what its host is attached to ({@link RepeatAttachGate}).
      */
     private List<SpellAbility> playableCandidates() {
         List<PriorityCandidates.Candidate> stop = candidates == null
@@ -345,6 +346,7 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
         return candidate.playable()
                 && !ability.isLandAbility()
                 && !LifeCostGate.wouldLeaveNoLife(ability, player)
+                && !RepeatAttachGate.attachesOnlyToWhatItIsOn(ability)
                 && (fruitless == null || !fruitless.isFruitless(ability));
     }
 
