@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.staticability.StaticAbility;
 import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
@@ -23,10 +24,46 @@ import java.util.function.Supplier;
  * permanent the static took control of sits in, which Forge moved to its new
  * controller's battlefield, so a count over one player's battlefield (Forge's
  * metalcraft) still counts it as the static's controller's.
+ *
+ * <p>A static whose condition reads neither (most have no condition) is
+ * asked directly, as live: lending would change nothing it reads.
  */
 final class LentBoard {
 
+    /**
+     * The parameters of Forge's {@code StaticAbility.checkConditions()}
+     * whose answer can read a card's type line or controller:
+     * {@code Condition$} (the host's controller, metalcraft's artifacts),
+     * {@code PlayerTurn$} (players defined from the host),
+     * {@code TopCardOfLibraryIs$} and {@code IsPresent$} (cards matched by
+     * type and controller), and {@code CheckSVar$} (a count; the
+     * {@code CheckSecondSVar$} and later ones are read only after it). Its
+     * other reads ({@code Phases$}, {@code GameStage$}, {@code ClassLevel$},
+     * the host's zone) read nothing lent.
+     */
+    private static final List<String> BOARD_CONDITIONS =
+            List.of("Condition", "PlayerTurn", "TopCardOfLibraryIs", "IsPresent", "CheckSVar");
+
     private LentBoard() {
+    }
+
+    /**
+     * Forge's {@code checkConditions()} of {@code stat} on {@code board},
+     * lending the board only when the condition reads what is lent.
+     */
+    static boolean conditionsHold(Game game, StaticSuppression board, StaticAbility stat) {
+        if (!conditionReadsTheBoard(stat)) {
+            return stat.checkConditions();
+        }
+        return read(game, board, stat::checkConditions);
+    }
+
+    /**
+     * Whether the static's condition reads a card's type line or controller:
+     * one that does not answers the same on every board.
+     */
+    static boolean conditionReadsTheBoard(StaticAbility stat) {
+        return BOARD_CONDITIONS.stream().anyMatch(stat::hasParam);
     }
 
     /** {@code read} answered on {@code board}; on the live board, as it stands. */

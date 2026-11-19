@@ -23,6 +23,7 @@ import java.util.Map;
 import static com.pricepredictor.connector.effects.RecordLines.asMap;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -126,6 +127,21 @@ class SuppressedConditionTest {
         assertEquals(controllers, controllers(board.game), "the read changed a controller");
     }
 
+    /**
+     * Only a static whose condition reads a card's type line or controller
+     * is read on a lent board: Ardent Recruit's metalcraft
+     * ({@code Condition$}) and Kird Ape's Forest ({@code IsPresent$}) are,
+     * Glorious Anthem's unconditional static and Crusade's are not.
+     */
+    @Test
+    void onlyAStaticWhoseConditionReadsTheBoardIsReadOnALentBoard() {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        assertTrue(LentBoard.conditionReadsTheBoard(firstStatic(board, "Ardent Recruit")), "Ardent Recruit");
+        assertTrue(LentBoard.conditionReadsTheBoard(firstStatic(board, "Kird Ape")), "Kird Ape");
+        assertFalse(LentBoard.conditionReadsTheBoard(firstStatic(board, "Glorious Anthem")), "Glorious Anthem");
+        assertFalse(LentBoard.conditionReadsTheBoard(firstStatic(board, "Crusade")), "Crusade");
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────
 
     private static void assumeSuppression() {
@@ -143,6 +159,11 @@ class SuppressedConditionTest {
         assertTrue(aura.isInPlay() && aura.getAttachedTo() != null,
                 auraName + " did not resolve onto " + target);
         return aura;
+    }
+
+    /** The first static of a real card of yours, in no zone. */
+    private static StaticAbility firstStatic(CharacterizationBoard board, String name) {
+        return TestBoard.card(board.game, board.you, name).getStaticAbilities().get(0);
     }
 
     private static StaticAbility addTypeStatic(Card lattice) {

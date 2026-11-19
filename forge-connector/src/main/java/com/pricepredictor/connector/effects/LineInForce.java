@@ -130,7 +130,7 @@ final class LineInForce {
      */
     private Boolean holds(StaticAbility stat) {
         try {
-            return LentBoard.read(card.getGame(), board, stat::checkConditions);
+            return LentBoard.conditionsHold(card.getGame(), board, stat);
         } catch (RuntimeException e) {
             return Boolean.FALSE;
         }
