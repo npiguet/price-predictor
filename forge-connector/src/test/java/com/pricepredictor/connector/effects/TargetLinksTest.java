@@ -45,8 +45,9 @@ class TargetLinksTest {
     }
 
     /**
-     * Stifle at Prodigal Pyromancer's ability: its cost half and its effect
-     * half both link the ability at its line, never at its card, at index 0.
+     * Stifle at Prodigal Pyromancer's ability on the stack (the stack copy
+     * {@code MagicStack.add} made of it): its cost half and its effect half
+     * both link the ability at its line, never at its card, at index 0.
      */
     @Test
     void anAbilityTargetedEndsAtItsLineOnTheCostAndTheEffectHalf() throws Throwable {
@@ -63,7 +64,9 @@ class TargetLinksTest {
 
         List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
             game.getStack().add(ping);
-            cast[0] = TestBoard.cast(game, stifle, caster, ping);
+            // MagicStack.add puts a copy of an activated ability on the stack
+            // and clears the original's targets: Stifle aims at that copy.
+            cast[0] = TestBoard.cast(game, stifle, caster, game.getStack().peekAbility());
             game.getStack().resolveStack();
             TestBoard.priority(game);
             TestBoard.nextStep(game);
