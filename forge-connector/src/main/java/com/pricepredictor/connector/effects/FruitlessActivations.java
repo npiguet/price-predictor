@@ -1,7 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import forge.game.Game;
-import forge.game.card.Card;
 import forge.game.spellability.SpellAbility;
 
 import java.util.HashMap;
@@ -27,13 +26,21 @@ import java.util.Set;
  * waits for that resolution instead.
  *
  * <p>Keyed by the card and the activated ability's printed line, as the
- * seat's candidates name them; an activation whose line cannot be keyed is not
- * remembered, since nothing could match it. The turn's set is cleared at the
- * first report or query of a new turn.
+ * seat's candidates name them; an ability no line made, one an Aura or an
+ * Equipment grants, is keyed by the card and the ability's text. The turn's
+ * set is cleared, and the activations no longer on the stack are dropped, at
+ * the first report, query or pending activation of a new turn.
  */
 public final class FruitlessActivations {
 
-    private record Activation(int cardId, ProvenanceKey key) {
+    /** The line's key, or, for an ability no line made, its text. */
+    private record Activation(int cardId, ProvenanceKey key, String text) {
+
+        static Activation of(SpellAbility ability, ProvenanceKey key) {
+            return key == null
+                    ? new Activation(ability.getHostCard().getId(), null, String.valueOf(ability.getDescription()))
+                    : new Activation(ability.getHostCard().getId(), key.root(), "");
+        }
     }
 
     private final Game game;
@@ -66,20 +73,25 @@ public final class FruitlessActivations {
 
     /** A free activation of the line {@code key} has been put on the stack. */
     void pending(SpellAbility onStackAbility, ProvenanceKey key) {
-        Card host = onStackAbility.getHostCard();
-        if (host == null || key == null) {
-            return;
-        }
-        onStack.put(onStackAbility.getId(), new Activation(host.getId(), rootOf(key)));
-    }
-
-    /** {@code host}'s activation of the line {@code key} changed nothing. */
-    void report(Card host, ProvenanceKey key) {
-        if (host == null || key == null) {
+        if (onStackAbility.getHostCard() == null) {
             return;
         }
         current();
-        thisTurn.add(new Activation(host.getId(), rootOf(key)));
+        onStack.put(onStackAbility.getId(), Activation.of(onStackAbility, key));
+    }
+
+    /** The activation of {@code ability}, of the line {@code key} if it has one, changed nothing. */
+    void report(SpellAbility ability, ProvenanceKey key) {
+        if (ability == null || ability.getHostCard() == null) {
+            return;
+        }
+        current();
+        thisTurn.add(Activation.of(ability, key));
+    }
+
+    /** How many free activations are remembered as on the stack. */
+    int trackedOnStack() {
+        return onStack.size();
     }
 
     /**
@@ -94,11 +106,7 @@ public final class FruitlessActivations {
                 || ability == null || ability.getHostCard() == null) {
             return false;
         }
-        ProvenanceKey key = ProvenanceResolver.of(ability);
-        if (key == null) {
-            return false;
-        }
-        Activation activation = new Activation(ability.getHostCard().getId(), rootOf(key));
+        Activation activation = Activation.of(ability, ProvenanceResolver.of(ability));
         return thisTurn.contains(activation) || onStack.containsValue(activation);
     }
 
@@ -116,18 +124,11 @@ public final class FruitlessActivations {
         onStack.keySet().retainAll(ids);
     }
 
-    /**
-     * The line itself, whichever of its modes resolved; a keyword's ability
-     * keeps its {@code built}, so two abilities one keyword built stay two.
-     */
-    private static ProvenanceKey rootOf(ProvenanceKey key) {
-        return key.root();
-    }
-
     private void current() {
         int now = game.getPhaseHandler().getTurn();
         if (now != turn) {
             thisTurn.clear();
+            dropResolved();
             turn = now;
         }
     }

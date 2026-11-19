@@ -367,7 +367,7 @@ final class HeldResolutionWindow {
         // that changed nothing the seat will not repeat this turn (FR-040).
         if (writing.free && writing.halves.halves().stream()
                 .allMatch(half -> FruitlessActivations.changesNothing(half.events()))) {
-            fruitless.report(writing.root.getHostCard(), writing.key);
+            fruitless.report(writing.root, writing.key);
         }
         for (HeldHalves.Half<HalfRecord> half : writing.halves.halves()) {
             HalfRecord record = half.about();

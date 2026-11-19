@@ -49,7 +49,7 @@ class FruitlessActivationsTest {
         other.addSpellAbility(othersAbility);
         FruitlessActivations fruitless = new FruitlessActivations(game);
 
-        fruitless.report(bears, ProvenanceResolver.of(ability));
+        fruitless.report(ability, ProvenanceResolver.of(ability));
 
         assertTrue(fruitless.isFruitless(ability));
         assertFalse(fruitless.isFruitless(othersAbility), "another card's activation is its own");

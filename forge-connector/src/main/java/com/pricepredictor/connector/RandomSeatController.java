@@ -318,7 +318,8 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
      * which stays the AI's ({@link #landDropPending}, FR-033a), and a free
      * activation that changed nothing earlier this turn (FR-040): still
      * playable, and still recorded so, but not drawn again until the turn
-     * ends.
+     * ends. A play whose life payment would leave the seat at 0 or less is
+     * left out the same way ({@link LifeCostGate}).
      */
     private List<SpellAbility> playableCandidates() {
         List<PriorityCandidates.Candidate> stop = candidates == null
@@ -328,9 +329,7 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
         for (PriorityCandidates.Candidate candidate : stop) {
             // A script whose check throws on this board reads as unplayable,
             // as the AI would have skipped it.
-            if (candidate.playable()
-                    && !candidate.ability().isLandAbility()
-                    && (fruitless == null || !fruitless.isFruitless(candidate.ability()))) {
+            if (seatMayDraw(candidate)) {
                 // The verdict put the ability's activating player back; the
                 // seat is about to play it, which is the seat's to write.
                 candidate.ability().setActivatingPlayer(player);
@@ -338,6 +337,15 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
             }
         }
         return playable;
+    }
+
+    /** Whether the seat may draw {@code candidate}: playable, no land, not barred (see above). */
+    private boolean seatMayDraw(PriorityCandidates.Candidate candidate) {
+        SpellAbility ability = candidate.ability();
+        return candidate.playable()
+                && !ability.isLandAbility()
+                && !LifeCostGate.wouldLeaveNoLife(ability, player)
+                && (fruitless == null || !fruitless.isFruitless(ability));
     }
 
     /**

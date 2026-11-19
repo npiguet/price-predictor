@@ -117,6 +117,8 @@ public final class PriorityCandidates {
      * the random seat draws, is the seat's own query, as the AI's are.
      */
     void settle(Player priorityPlayer) {
+        // Cleared first: a stop whose enumeration throws leaves none, never the stop before.
+        current = null;
         live.enumerate(() -> enumerate(priorityPlayer));
     }
 
