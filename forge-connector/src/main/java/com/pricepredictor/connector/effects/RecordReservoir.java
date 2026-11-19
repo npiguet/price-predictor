@@ -61,15 +61,36 @@ final class RecordReservoir {
      * activation.
      */
     int slot(String key) {
-        if (cap <= 0) {
-            return -1;
-        }
-        int n = seen.merge(key, 1, Integer::sum);
+        return cap <= 0 ? -1 : draw(seen.merge(key, 1, Integer::sum));
+    }
+
+    /** The slot the {@code n}th activation takes, or -1: the first {@code cap} fill, then {@code cap/n}. */
+    private int draw(int n) {
         if (n <= cap) {
             return n - 1;
         }
         int candidate = sampler.nextInt(n);
         return candidate < cap ? candidate : -1;
+    }
+
+    /**
+     * The slot the next activation of {@code key} would take, drawn against
+     * the count it would make ({@code seen + 1}) without counting it, or -1
+     * to skip it; {@link #count} counts it once it is known to have happened.
+     *
+     * <p>For a record whose activation is only known later (a firing Forge
+     * has evaluated and may not run): the record is built only when this
+     * draw takes a slot. Two activations drawn before either is counted
+     * draw against the same count, which is rare and costs a slightly
+     * higher chance of keeping the second.
+     */
+    int drawFor(String key) {
+        return cap <= 0 ? -1 : draw(seen.getOrDefault(key, 0) + 1);
+    }
+
+    /** Count one activation of {@code key}: the {@code n} the next draw is made against. */
+    void count(String key) {
+        seen.merge(key, 1, Integer::sum);
     }
 
     /** How many records {@code key}'s reservoir holds: the slot the next fill takes. */

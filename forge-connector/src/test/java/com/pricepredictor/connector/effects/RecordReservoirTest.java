@@ -100,4 +100,17 @@ class RecordReservoirTest {
 
         assertEquals(java.util.List.of(next), reservoir.drain());
     }
+
+    /** A draw is made against the count the activation would make, and counts nothing itself. */
+    @Test
+    void aDrawCountsNothingUntilTheActivationIsCounted() {
+        RecordReservoir reservoir = new RecordReservoir(2, new Random(0));
+        for (int i = 0; i < 10; i++) {
+            assertEquals(0, reservoir.drawFor("line"));
+        }
+        reservoir.count("line");
+        assertEquals(1, reservoir.drawFor("line"));
+        reservoir.count("line");
+        assertTrue(reservoir.drawFor("line") < 2, "a third activation draws one of two slots or none");
+    }
 }

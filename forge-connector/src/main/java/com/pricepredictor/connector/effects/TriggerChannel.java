@@ -30,9 +30,10 @@ final class TriggerChannel {
     /** Each acting line's fired records, held until the game ends. */
     private final RecordReservoir positives;
     /**
-     * The firings evaluated and not yet run, each with its record, read on
-     * the board at the evaluation. Few: Forge runs a trigger right after the
-     * evaluation that fired it.
+     * The firings evaluated and not yet run, each with the reservoir slot it
+     * drew and, when that took a slot, its record, read on the board at the
+     * evaluation. Few: Forge runs a trigger right after the evaluation that
+     * fired it.
      */
     private final List<Firing> unconfirmed = new ArrayList<>();
     /**
@@ -43,7 +44,8 @@ final class TriggerChannel {
 
     /** An evaluation that fired, waiting for its run. */
     private record Firing(
-            Object trigger, Object runParams, String key, String mode, EffectRecord record) {
+            Object trigger, Object runParams, String key, String mode, int slot,
+            EffectRecord record) {
     }
 
     TriggerChannel(
@@ -139,18 +141,18 @@ final class TriggerChannel {
     }
 
     /**
-     * A firing evaluated: built on this board now, and counted in its line's
-     * reservoir only once Forge runs it, so an evaluation that never runs
-     * leaves the reservoir's count alone.
+     * A firing evaluated: drawn for its line's reservoir now, against the
+     * count its run would make, and built on this board only when the draw
+     * takes a slot; counted in the reservoir only once Forge runs it, so an
+     * evaluation that never runs leaves the count alone.
      */
     private void evaluatedFiring(
             Object trait, ProvenanceKey.Resolved line, Object runParams, String mode,
             String key) {
-        if (!positives.keepsAny()) {
-            return;
-        }
+        int slot = positives.drawFor(key);
         unconfirmed.add(new Firing(
-                trait, runParams, key, mode, record(trait, line, runParams, true)));
+                trait, runParams, key, mode, slot,
+                slot < 0 ? null : record(trait, line, runParams, true)));
         if (!runsAreTold) {
             ran(trait, runParams);
         }
@@ -172,9 +174,10 @@ final class TriggerChannel {
         }
     }
 
-    /** Draw a run firing's slot in its line's reservoir and hold it there if it took one. */
+    /** Count a run firing in its line's reservoir and hold it there if it drew a slot. */
     private void hold(Firing firing) {
-        int slot = positives.slot(firing.key());
+        positives.count(firing.key());
+        int slot = firing.slot();
         if (slot < 0) {
             return;
         }
@@ -185,6 +188,16 @@ final class TriggerChannel {
         if (fills) {
             negatives.keep(firing.mode(), firing.key(), true);
         }
+    }
+
+    /** How many evaluated firings wait with a built record; for a test. */
+    int pendingRecords() {
+        return (int) unconfirmed.stream().filter(firing -> firing.record() != null).count();
+    }
+
+    /** How many evaluated firings wait for their run; for a test. */
+    int pending() {
+        return unconfirmed.size();
     }
 
     /** Whether a firing evaluated here waits for its run; for a test. */

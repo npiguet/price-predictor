@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a line's fired-trigger reservoir counts: a firing Forge ran, never an
@@ -56,5 +57,36 @@ class TriggerReservoirCountTest {
         });
 
         assertEquals(1, lines.size(), lines.toString());
+    }
+
+    /**
+     * Once a line's reservoir is past its cap, most evaluations draw no slot
+     * and so build no record (a record is a whole board snapshot).
+     */
+    @Test
+    void anEvaluationThatDrawsNoSlotBuildsNoRecord() throws Throwable {
+        Card card = TestCards.build("Garruk's Uprising");
+        List<Trigger> triggers = new ArrayList<>();
+        card.getCurrentState().getTriggers().forEach(triggers::add);
+        Trigger trigger = triggers.get(0);
+        int[] pending = new int[2];
+
+        ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
+            var handler = collectors.triggers().handler();
+            for (int i = 0; i < 20 * TriggerNegativeSampler.POSITIVES_PER_LINE; i++) {
+                Map<?, ?> run = new HashMap<>();
+                handler.invoke(null, ON_CONDITION_EVALUATED, new Object[]{trigger, run, true});
+                handler.invoke(null, ON_TRIGGER_RUN, new Object[]{trigger, run, null});
+            }
+            for (int i = 0; i < 100; i++) {
+                handler.invoke(null, ON_CONDITION_EVALUATED,
+                        new Object[]{trigger, new HashMap<>(), true});
+            }
+            pending[0] = collectors.triggers().pending();
+            pending[1] = collectors.triggers().pendingRecords();
+        });
+
+        assertEquals(100, pending[0]);
+        assertTrue(pending[1] < 30, "records built for " + pending[1] + " of 100 evaluations");
     }
 }
