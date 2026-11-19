@@ -340,10 +340,12 @@ public final class GameRecording implements AutoCloseable {
 
     /**
      * Whether the game ended with every end-of-game write done: its flush
-     * did not throw, and the record holding its outcome was written.
+     * did not throw, the shard flushed every block it was handed, and the
+     * record holding its outcome was written.
      */
     private boolean endedWhole(boolean flushed) {
-        return flushed && game.isGameOver() && bracket.outcomeIsWritten();
+        return flushed && !envelope.flushFailed() && game.isGameOver()
+                && bracket.outcomeIsWritten();
     }
 
     /** The first marker that could not be written, printed once per worker. */

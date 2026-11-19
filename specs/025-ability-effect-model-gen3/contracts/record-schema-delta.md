@@ -101,7 +101,9 @@ stratum.
   record holding the outcome (`player_lost`, `player_won`), the fired trigger records, the mana
   records and the waiting rewrite records, none of which the cap withholds. A game that threw
   mid-match, a game whose end-of-game writes threw, a game whose outcome was published and reached
-  no written record, a game cut by a killed worker, and a game whose marker could not be written
+  no written record, a game open while the shard lost a block flush (the append is cut back and
+  the block kept for the next flush), a game cut by a killed worker, and a game whose marker could
+  not be written
   (its snapshot threw; counted as `game-end marker` in the worker's failure report) have none.
 - Never withheld by `--max-records-per-game`.
 

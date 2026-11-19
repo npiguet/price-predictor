@@ -91,6 +91,47 @@ class GameOutcomeFilingTest {
     }
 
     /**
+     * A block flush that failed while the game was open: the outcome is
+     * written, but the game gets no marker, so it reads as cut.
+     */
+    @Test
+    void aGameWhoseShardLostABlockFlushHasNoMarker() throws Throwable {
+        org.junit.jupiter.api.Assumptions.assumeTrue(
+                AttributionMode.detect() == AttributionMode.PATCHED
+                        && PatchHooks.CLAUSE_LISTENER.present(), WHY);
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        RecordShardWriter writer = ShardRun.writer(tempDir);
+        boolean[] failed = {false};
+        writer.appendThrough((path, bytes) -> {
+            if (!failed[0]) {
+                failed[0] = true;
+                throw new java.io.IOException("the channel fails once");
+            }
+            ShardAppender.FILES.append(path, bytes);
+        });
+        CollectionCaps noForks = TestCaps.caps().interventions(0).probes(0).build();
+        try (GameRecording recording =
+                new GameRecording(game, writer, ShardRun.GAME_ID, noForks, 1L, null)) {
+            recording.open();
+            for (int i = 0; i < RecordShardWriter.BLOCK_RECORDS - 1; i++) {
+                writer.write("{\"game_id\":\"" + ShardRun.GAME_ID + "\",\"n\":" + i + "}");
+            }
+            org.junit.jupiter.api.Assertions.assertThrows(java.io.UncheckedIOException.class,
+                    () -> writer.write("{\"game_id\":\"" + ShardRun.GAME_ID + "\",\"n\":-1}"));
+            payLifeToZero(game, game.getPlayers().get(0));
+            game.fireEvent(new GameEventGameFinished());
+        } finally {
+            writer.close();
+        }
+
+        // Without the filler lines the test itself wrote to fill the block.
+        List<String> records = ShardRun.readShard(writer.path()).stream()
+                .filter(line -> line.contains("\"kind\"")).toList();
+        assertEquals(1, withEventOfType(records, "player_lost").size(), "the outcome is written");
+        assertFalse(records.stream().anyMatch(GameOutcomeFilingTest::isMarker), records.toString());
+    }
+
+    /**
      * Forest played, Juggernaut attacks for 5, and the next turn the
      * defender draws from an empty library: the game ends with the land's
      * move and the attack's tap still orphaned. The game-end record holds

@@ -7,7 +7,6 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
@@ -74,6 +73,7 @@ public final class RecordShardWriter implements AutoCloseable {
     /** {@code {worker}-{lifetime}}: this shard's identity and the middle segment of every id it issues. */
     private final String shard;
     private final Path path;
+    private final ShardAppender appender;
     private final StringBuilder block = new StringBuilder();
     private int blockRecords;
     private boolean closed;
@@ -98,11 +98,17 @@ public final class RecordShardWriter implements AutoCloseable {
         this.runId = runId;
         this.shard = worker + "-" + lifetime;
         this.path = directory.resolve(runId + "." + shard + SUFFIX);
+        this.appender = new ShardAppender(path);
         try {
             Files.createDirectories(directory);
         } catch (IOException e) {
             throw new UncheckedIOException("cannot open effect-record shard " + path, e);
         }
+    }
+
+    /** Append through {@code channel}: a test's, which fails. */
+    void appendThrough(ShardAppender.Channel channel) {
+        appender.through(channel);
     }
 
     public Path path() {
@@ -215,9 +221,11 @@ public final class RecordShardWriter implements AutoCloseable {
     /**
      * Compress the buffered lines as one gzip member and append it.
      *
-     * <p>Written in a single {@code Files.write} append so a reader never sees a
-     * half-written member from a writer that is still running — only from one
-     * that died.
+     * <p>Written in a single append so a reader never sees a half-written
+     * member from a writer that is still running — only from one that died.
+     * An append that fails is cut back ({@link ShardAppender}) and the block
+     * is kept for the next flush; every game open now is marked
+     * ({@link #flushFailed}) so it gets no game-end marker.
      */
     private void flushBlock() {
         if (blockRecords == 0) {
@@ -228,15 +236,23 @@ public final class RecordShardWriter implements AutoCloseable {
             try (OutputStream gzip = new GZIPOutputStream(member)) {
                 gzip.write(block.toString().getBytes(StandardCharsets.UTF_8));
             }
-            Files.write(
-                    path, member.toByteArray(),
-                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            appender.append(member.toByteArray());
         } catch (IOException e) {
+            games.values().forEach(game -> game.flushFailed = true);
             throw new UncheckedIOException("cannot append to " + path, e);
-        } finally {
-            block.setLength(0);
-            blockRecords = 0;
         }
+        block.setLength(0);
+        blockRecords = 0;
+    }
+
+    /**
+     * Whether a block flush failed while {@code gameId} was open: its
+     * records were held back past their write, so it is not marked as ended
+     * whole.
+     */
+    public synchronized boolean flushFailed(String gameId) {
+        GameRecords records = games.get(gameId);
+        return records != null && records.flushFailed;
     }
 
     /**
@@ -247,12 +263,15 @@ public final class RecordShardWriter implements AutoCloseable {
      * the most of them shared (FR-041a).
      */
     public synchronized void endGame(String gameId) {
-        if (!closed) {
-            flushBlock();
-        }
-        GameRecords records = games.remove(gameId);
-        if (records != null && records.withheld > 0) {
-            System.err.println(records.report(gameId, maxRecordsPerGame));
+        try {
+            if (!closed) {
+                flushBlock();
+            }
+        } finally {
+            GameRecords records = games.remove(gameId);
+            if (records != null && records.withheld > 0) {
+                System.err.println(records.report(gameId, maxRecordsPerGame));
+            }
         }
     }
 
@@ -260,6 +279,7 @@ public final class RecordShardWriter implements AutoCloseable {
     private static final class GameRecords {
         private int written;
         private int withheld;
+        private boolean flushFailed;
         private final Map<String, Integer> byTurnAndCard = new HashMap<>();
 
         void withhold(String recordJson) {
@@ -337,7 +357,10 @@ public final class RecordShardWriter implements AutoCloseable {
         if (closed) {
             return;
         }
-        flushBlock();
-        closed = true;
+        try {
+            flushBlock();
+        } finally {
+            closed = true;
+        }
     }
 }

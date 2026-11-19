@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -322,5 +323,59 @@ class RecordShardWriterTest {
                         + " records, most often (5) on turn 9, acting card"
                         + " cardsfolder/c/chain_of_smog.txt",
                 report.strip());
+    }
+
+    // ── a block flush that fails ────────────────────────────────────────
+
+    /** Every line of the shard, through a gzip reader that raises on a partial member. */
+    private static List<String> strictLines(Path shard) throws IOException {
+        try (java.util.zip.GZIPInputStream in =
+                new java.util.zip.GZIPInputStream(Files.newInputStream(shard))) {
+            String text = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            return text.isEmpty() ? List.of() : List.of(text.split("\n"));
+        }
+    }
+
+    /**
+     * A channel that writes half of the member and then fails, once: the
+     * shard is cut back to whole members, the block is written by the next
+     * flush, and the game in flight is marked so it gets no game-end marker.
+     */
+    @Test
+    void aFailedFlushLosesNothingAndLeavesOnlyWholeMembers() throws IOException {
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        for (int i = 0; i < RecordShardWriter.BLOCK_RECORDS; i++) {
+            writer.write("{\"game_id\":\"g1\",\"n\":" + i + "}");
+        }
+        long wholeMember = Files.size(writer.path());
+        boolean[] failed = {false};
+        writer.appendThrough((path, bytes) -> {
+            if (!failed[0]) {
+                failed[0] = true;
+                Files.write(path, java.util.Arrays.copyOf(bytes, bytes.length / 2),
+                        java.nio.file.StandardOpenOption.APPEND);
+                throw new IOException("the channel fails once");
+            }
+            ShardAppender.FILES.append(path, bytes);
+        });
+        CollectorContext context = new CollectorContext(
+                writer, "g1", AttributionMode.PATCHED, null, null);
+
+        for (int i = 0; i < RecordShardWriter.BLOCK_RECORDS - 1; i++) {
+            writer.write("{\"game_id\":\"g1\",\"n\":" + (1000 + i) + "}");
+        }
+        assertThrows(java.io.UncheckedIOException.class,
+                () -> writer.write("{\"game_id\":\"g1\",\"n\":2000}"));
+
+        assertEquals(wholeMember, Files.size(writer.path()), "cut back to the whole members");
+        assertEquals(RecordShardWriter.BLOCK_RECORDS, strictLines(writer.path()).size());
+        assertTrue(writer.flushFailed("g1"));
+        assertTrue(context.flushFailed(), "the game in flight gets no marker");
+
+        writer.close();
+        writer.close();
+
+        assertEquals(2 * RecordShardWriter.BLOCK_RECORDS, strictLines(writer.path()).size(),
+                "the kept block is written by the next flush");
     }
 }

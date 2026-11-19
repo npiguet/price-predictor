@@ -123,6 +123,11 @@ final class CollectorContext {
         }
     }
 
+    /** Whether the shard lost a block flush while this game was open ({@link RecordShardWriter#flushFailed}). */
+    boolean flushFailed() {
+        return writer != null && writer.flushFailed(gameId);
+    }
+
     /** Whether this context writes a fork's records rather than a live game's. */
     boolean isFork() {
         return fork;
