@@ -34,14 +34,25 @@ final class ForkEventSink extends BusEventReader {
     /** What the probe's damage step filed, a repeat recognised within it. */
     private final EventBuffer filed = new EventBuffer();
 
+    /** What the sink heard and no record holds: a change its baseline already showed. */
+    private final DroppedEvents dropped = new DroppedEvents();
+
     private ForkEventSink(Game fork) {
         super(fork);
-        rebaselineStats();
+        String phase = DroppedEvents.phaseOf(fork);
+        for (EffectEvent unreported : rebaselineStats()) {
+            dropped.count(unreported.type(), phase);
+        }
     }
 
     /** A sink for a damage step dealt in a fork, with no ability resolving. */
     static ForkEventSink forProbe(Game fork) {
         return new ForkEventSink(fork);
+    }
+
+    /** The events the sink heard that reached no record. */
+    DroppedEvents dropped() {
+        return dropped;
     }
 
     /** Every event filed, in order. */

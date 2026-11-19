@@ -52,6 +52,8 @@ final class ForcedResolution {
     /** The forced item's link, which its effect halves carry; null until it is on the stack. */
     private String link;
     private final List<EffectRecord> halves = new ArrayList<>();
+    /** The fork recording's events that reached no record; empty until the fork is forced. */
+    private DroppedEvents dropped = new DroppedEvents();
 
     /**
      * @param live     the live game's recording, whose hooks route to the fork's
@@ -84,6 +86,7 @@ final class ForcedResolution {
         } finally {
             // Writes the half the next action would have closed.
             recording.close();
+            dropped = recording.droppedEvents();
         }
         return this;
     }
@@ -94,6 +97,11 @@ final class ForcedResolution {
      */
     List<EffectRecord> outcome() {
         return List.copyOf(halves);
+    }
+
+    /** The fork's events that reached no record, counted once the fork is forced. */
+    DroppedEvents droppedEvents() {
+        return dropped;
     }
 
     /**
