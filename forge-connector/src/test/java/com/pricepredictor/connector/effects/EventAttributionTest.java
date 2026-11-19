@@ -116,6 +116,26 @@ class EventAttributionTest {
     }
 
     /**
+     * An event published while no clause resolves, once a clause of the
+     * resolution's line has run, is the last such clause's: the static check
+     * after the last clause (finding 2.1). Before any has run it is none's,
+     * and its duration and cause are read off the line either way.
+     */
+    @Test
+    void anEventAfterTheLastClauseIsThatClauses() {
+        SpellAbility root = threeClauseAbility();
+
+        String after = EventAttribution.stamp(
+                new EffectEvent(EventType.PT_CHANGE).subject("E1"), root, "1", null).toJson();
+        String before = EventAttribution.stamp(
+                new EffectEvent(EventType.PT_CHANGE).subject("E1"), root, null, null).toJson();
+
+        assertTrue(after.contains("\"attributed_to\":\"1\""), after);
+        assertTrue(before.contains("\"attributed_to\":\"unresolved\""), before);
+        assertEquals(after.replace("\"1\"", "\"unresolved\""), before);
+    }
+
+    /**
      * A clause's own {@code Duration$} outranks the line's.
      *
      * <p>Both fields come from one read of the pointer, so they cannot describe

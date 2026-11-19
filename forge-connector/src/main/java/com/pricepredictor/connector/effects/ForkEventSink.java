@@ -77,6 +77,12 @@ final class ForkEventSink extends BusEventReader {
      * deaths it left behind join; null until then.
      */
     private HeldHalves<ModeSplit.ModeHalf> held;
+    /**
+     * The {@code attributed_to} of the forced ability's last clause whose own
+     * effect ran, or null until one has, as the live bracket keeps it
+     * ({@link OpenResolution#lastClauseRan}).
+     */
+    private String lastClauseRan;
 
     /**
      * Where the forced ability stands, which decides what an intervention
@@ -273,12 +279,19 @@ final class ForkEventSink extends BusEventReader {
     }
 
     /**
-     * A conditional clause of the forced ability has finished its own
-     * effect: whether it met its condition, as Forge decided it, joins the
-     * open span's half, as the live bracket's does (FR-034).
+     * A clause of the forced ability has finished its own effect, as the
+     * live bracket is told: whether a conditional one met its condition, as
+     * Forge decided it, joins the open span's half (FR-034), and one whose
+     * own effect ran is the last clause that ran so far, the one the static
+     * check after the resolution's last clause is attributed to.
+     *
+     * @param run the {@code ClauseRun} constant Forge reported, or null
      */
-    void noteCondition(ConditionsMet condition) {
-        modes.noteCondition(condition);
+    void clauseResolved(SpellAbility clause, String run) {
+        modes.noteCondition(ConditionsMet.of(clause, run));
+        if (ClauseOutcomeRouter.ran(run)) {
+            lastClauseRan = EventAttribution.attributedTo(clause);
+        }
     }
 
     /**
@@ -458,6 +471,6 @@ final class ForkEventSink extends BusEventReader {
     }
 
     private void file(EffectEvent event, String namedCause) {
-        modes.buffer().file(EventAttribution.stamp(event, acting, namedCause));
+        modes.buffer().file(EventAttribution.stamp(event, acting, lastClauseRan, namedCause));
     }
 }

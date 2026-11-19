@@ -115,6 +115,14 @@ final class StackBrackets {
     }
 
     /**
+     * The {@code attributed_to} of the last clause of the open bracket's line
+     * that ran, or null when none is open or none has run.
+     */
+    String lastClauseRan() {
+        return open == null ? null : open.lastClauseRan();
+    }
+
+    /**
      * File an event where it goes now: the open bracket's buffer, or the
      * orphans, noting the phase it arrived in for the count it joins if it is
      * discarded.

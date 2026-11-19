@@ -145,17 +145,24 @@ class ForcedAndLiveHalvesTest {
     /** Flame Slash with one creature out: its one legal target. */
     @Test
     void aTargetedDamageSpell() throws Throwable {
-        Play play = new Play(declining -> {
+        assertAlike(atTheOpponentsCreature("Flame Slash"), false);
+    }
+
+    /**
+     * {@code spell}, from the first player's hand, aimed at the one creature
+     * out, the opponent's Hill Giant.
+     */
+    private static Play atTheOpponentsCreature(String spell) {
+        return new Play(declining -> {
             Game game = game(declining);
             TestBoard.inPlay(game, game.getPlayers().get(1), "Hill Giant");
-            TestBoard.inHand(game, game.getPlayers().get(0), "Flame Slash");
+            TestBoard.inHand(game, game.getPlayers().get(0), spell);
             return game;
-        }, "Flame Slash", spell -> {
-            spell.resetTargets();
-            spell.getTargets().add(spell.getActivatingPlayer().getOpponents().get(0)
+        }, spell, aimed -> {
+            aimed.resetTargets();
+            aimed.getTargets().add(aimed.getActivatingPlayer().getOpponents().get(0)
                     .getCreaturesInPlay().get(0));
         });
-        assertAlike(play, false);
     }
 
     @Test
@@ -212,8 +219,8 @@ class ForcedAndLiveHalvesTest {
 
     /**
      * Bonesplitter equipped to the one creature out: the half holds the
-     * attaching and the +2/+0 the static check after it applies, live and
-     * forced alike (finding 2.1).
+     * attaching and the +2/+0 the static check after it applies, both the
+     * equip's one clause's, live and forced alike (finding 2.1).
      */
     @Test
     void anEquip() throws Throwable {
@@ -227,16 +234,66 @@ class ForcedAndLiveHalvesTest {
             equip.resetTargets();
             equip.getTargets().add(equip.getActivatingPlayer().getCreaturesInPlay().get(0));
         });
-        assertAlike(play, false, live -> assertEquals(List.of("attached", "pt_change"),
-                RecordLines.eventTypes(live), live));
+        assertAlike(play, false, linksAre(
+                List.of(List.of("attached", "root"), List.of("pt_change", "root"))));
+    }
+
+    /**
+     * Brass Squire attaching Bonesplitter to itself, the one creature out:
+     * a clause targeting the Equipment, then the Attach sub-ability. The
+     * attaching, and the +2/+0 the static check after that last clause
+     * applies, are the sub-ability's, {@code 0}, live and forced alike
+     * (finding 2.1).
+     */
+    @Test
+    void anEquipWithASubAbility() throws Throwable {
+        Play play = new Play(declining -> {
+            Game game = game(declining);
+            Player caster = game.getPlayers().get(0);
+            TestBoard.inPlay(game, caster, "Brass Squire");
+            TestBoard.inPlay(game, caster, "Bonesplitter");
+            return game;
+        }, "Brass Squire", game -> abilityOf(game, ApiType.Pump), attach -> {
+            Player caster = attach.getActivatingPlayer();
+            attach.resetTargets();
+            attach.getTargets().add(caster.getCardsIn(forge.game.zone.ZoneType.Battlefield).stream()
+                    .filter(Card::isEquipment).findFirst().orElseThrow());
+            attach.getSubAbility().resetTargets();
+            attach.getSubAbility().getTargets().add(caster.getCreaturesInPlay().get(0));
+        });
+        assertAlike(play, false, linksAre(
+                List.of(List.of("attached", "0"), List.of("pt_change", "0"))));
+    }
+
+    /**
+     * Act of Treason on the one creature out, the opponent's: its one clause
+     * gains control of it, untaps it and gives it haste. The control change
+     * is the clause's, {@code root}, live and forced alike (finding 2.1).
+     */
+    @Test
+    void aControlChange() throws Throwable {
+        assertAlike(atTheOpponentsCreature("Act of Treason"), false, linksAre(List.of(
+                List.of("keyword_change", "root"), List.of("control_change", "root"),
+                List.of("zone_change", "unresolved"))));
+    }
+
+    /** A check that a record's events are {@code expected}: each one's type and {@code attributed_to}, in order. */
+    private static Consumer<String> linksAre(List<List<Object>> expected) {
+        return record -> assertEquals(expected, RecordLines.events(record).stream()
+                .map(event -> List.of(event.get("type"), event.get("attributed_to"))).toList(), record);
     }
 
     private static SpellAbility equipOfBonesplitter(Game game) {
+        return abilityOf(game, ApiType.Attach);
+    }
+
+    /** The first ability whose API is {@code api} of the first player's permanents. */
+    private static SpellAbility abilityOf(Game game, ApiType api) {
         Player caster = game.getPlayers().get(0);
-        Card splitter = caster.getCardsIn(forge.game.zone.ZoneType.Battlefield).stream()
-                .filter(card -> card.getName().equals("Bonesplitter")).findFirst().orElseThrow();
-        SpellAbility equip = TestBoard.ability(splitter, ApiType.Attach);
-        equip.setActivatingPlayer(caster);
-        return equip;
+        SpellAbility ability = caster.getCardsIn(forge.game.zone.ZoneType.Battlefield).stream()
+                .flatMap(card -> card.getSpellAbilities().stream())
+                .filter(line -> line.getApi() == api).findFirst().orElseThrow();
+        ability.setActivatingPlayer(caster);
+        return ability;
     }
 }

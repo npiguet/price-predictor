@@ -50,7 +50,9 @@ class AttachTargetsTest {
 
     /**
      * Bonesplitter moves from Grizzly Bears to Hill Giant: its equip half
-     * holds the unattaching from the bears, then the attaching to the giant.
+     * holds the unattaching from the bears, then the attaching to the giant,
+     * and the +2/+0 moving with it, which the static check after the equip's
+     * one clause applies and attributes to that clause (finding 2.1).
      */
     @Test
     void anEquipMoveLeavesOneHostAndJoinsTheOther() throws Throwable {
@@ -88,13 +90,16 @@ class AttachTargetsTest {
         assertEquals(Refs.of(giant), params(attachments.get(1)).get("attached_to"), half);
         assertEquals(Map.of(Refs.of(bears), List.of(-2L, 0L), Refs.of(giant), List.of(2L, 0L)),
                 ptChangesIn(half), "the +2/+0 leaves the bears and joins the giant: " + half);
+        assertEquals(List.of("root", "root"), events(half).stream()
+                .filter(event -> "pt_change".equals(event.get("type")))
+                .map(event -> event.get("attributed_to")).toList(), half);
     }
 
     /**
      * Swiftfoot Boots equipped to Grizzly Bears: the equip half holds the
      * bears gaining hexproof and haste, which the static check after the
-     * equip's last clause applies (finding 2.1). No clause is resolving
-     * during that check, so the change is attributed to none.
+     * equip's last clause applies (finding 2.1), attributed to that clause,
+     * the equip's one.
      */
     @Test
     void anEquipsKeywordGrantIsItsHalfs() throws Throwable {
@@ -122,7 +127,7 @@ class AttachTargetsTest {
         assertEquals(1, granted.size(), half);
         assertEquals(Map.of("keywords", List.of("haste", "hexproof"), "removed", false, "cause", Refs.of(boots)),
                 params(granted.get(0)), half);
-        assertEquals("unresolved", granted.get(0).get("attributed_to"), half);
+        assertEquals("root", granted.get(0).get("attributed_to"), half);
     }
 
     /**

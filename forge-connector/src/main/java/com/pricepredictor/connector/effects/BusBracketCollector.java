@@ -1083,8 +1083,8 @@ public final class BusBracketCollector extends BusEventReader {
                 if (stepTakenOver && filing != Filing.CLAUSE) {
                     fileAsTheStepsOwn(event, namedCause, filing);
                 } else {
-                    brackets.file(
-                            EventAttribution.stamp(event, brackets.resolving(), namedCause),
+                    brackets.file(EventAttribution.stamp(event, brackets.resolving(),
+                                    brackets.lastClauseRan(), namedCause),
                             DroppedEvents.phaseOf(game));
                 }
             }
@@ -1223,12 +1223,34 @@ public final class BusBracketCollector extends BusEventReader {
         if (condition == null) {
             return;
         }
-        Cause cause = classifyNow().cause();
-        OpenResolution open = brackets.open();
-        if (open == null || !fromOpenBracket(cause) || !open.onItsLine(clause)) {
-            return;
+        OpenResolution open = openOnTheLineOf(clause);
+        if (open != null) {
+            open.modes.noteCondition(condition);
         }
-        open.modes.noteCondition(condition);
+    }
+
+    /**
+     * A clause's own effect ran: on the open bracket's line, as {@link
+     * #recordClauseCondition} reads it, it is the last clause that ran so
+     * far, the one what the static check after the resolution's last clause
+     * applies is attributed to. A clause whose condition failed or whose
+     * unless cost decided against it did nothing, and is not told.
+     */
+    void recordClauseRan(SpellAbility clause) {
+        OpenResolution open = openOnTheLineOf(clause);
+        if (open != null) {
+            open.noteClauseRan(clause);
+        }
+    }
+
+    /** The open bracket, when what happens now is its own and the clause is on its line; else null. */
+    private OpenResolution openOnTheLineOf(SpellAbility clause) {
+        boolean itsOwn = fromOpenBracket(classifyNow().cause());
+        OpenResolution open = brackets.open();
+        if (!itsOwn || open == null) {
+            return null;
+        }
+        return open.onItsLine(clause) ? open : null;
     }
 
     /** The free activations that changed nothing this turn (FR-040). */

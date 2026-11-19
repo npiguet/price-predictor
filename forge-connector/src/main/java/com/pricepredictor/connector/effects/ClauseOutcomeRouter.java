@@ -134,7 +134,7 @@ final class ClauseOutcomeRouter {
         ApiEvents.ClauseObservation<?> observed = observations.isEmpty()
                 ? ApiEvents.unobserved(clause, rules)
                 : observations.pop();
-        boolean ran = run == null || "RAN".equals(run);
+        boolean ran = ran(run);
         if (!live.owns(clause)) {
             forkClauseResolved(clause, run, ran ? observed : null);
             return;
@@ -144,8 +144,22 @@ final class ClauseOutcomeRouter {
         // clause has not begun yet (A1).
         bracket.recordClauseCondition(clause, ConditionsMet.of(clause, run));
         if (ran) {
+            bracket.recordClauseRan(clause);
             observed.finish().forEach(bracket::recordClauseEvent);
         }
+    }
+
+    /**
+     * Whether a clause's own effect ran, by the {@code ClauseRun} Forge
+     * reported: one whose condition failed, whose unless cost decided against
+     * it or that threw did nothing its API promises. A jar whose listener
+     * passes no {@code ClauseRun} is read as the clause having run, the one
+     * answer such a jar could not tell.
+     *
+     * @param run the {@code ClauseRun} constant's name, or null
+     */
+    static boolean ran(String run) {
+        return run == null || "RAN".equals(run);
     }
 
     /**

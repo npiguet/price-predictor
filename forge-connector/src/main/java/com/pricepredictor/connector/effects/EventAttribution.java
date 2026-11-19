@@ -68,7 +68,9 @@ final class EventAttribution {
      *
      * <p>Three ways to arrive here, all of them honest and none of them the
      * root: no clause was resolving at all (a combat damage step, a
-     * state-based-action death after the bracket's ability finished), the hook
+     * state-based-action death after the bracket's ability finished; but not
+     * the static check after a resolution's last clause, which is that
+     * clause's), the hook
      * is absent because this is an unpatched checkout, or the pointer named a
      * chain whose walk reached no top-level line.
      */
@@ -298,6 +300,31 @@ final class EventAttribution {
         // instant, and reading the hook twice could straddle a clause boundary
         // in a nested resolution.
         return stampAt(event, root, PatchHooks.currentSubAbility(), namedCause);
+    }
+
+    /**
+     * The same, for an event of a resolution whose line may have run clauses
+     * already: one published while no clause is resolving, after the last
+     * clause, is that clause's ({@code lastRan}). That is the static check
+     * the {@code effect-record-hooks} branch makes before it reports the
+     * spell resolved ({@code MagicStack.resolveStack}): what it applies (an
+     * Equip's +2/+0) follows from the last clause, as what the check between
+     * two clauses applies follows from the earlier one, under whose pointer
+     * Forge makes it. Only its attribution moves; its duration and cause are
+     * read as for no clause.
+     *
+     * @param lastRan the {@code attributed_to} of the last clause of the
+     *                resolution's line whose own effect ran, or null when none
+     *                has: an event published then is attributed to none
+     */
+    static EffectEvent stamp(
+            EffectEvent event, SpellAbility root, String lastRan, String namedCause) {
+        Object pointer = PatchHooks.currentSubAbility();
+        EffectEvent stamped = stampAt(event, root, pointer, namedCause);
+        if (stamped != null && pointer == null) {
+            stamped.attributedTo(lastRan != null ? lastRan : UNRESOLVED);
+        }
+        return stamped;
     }
 
     /**

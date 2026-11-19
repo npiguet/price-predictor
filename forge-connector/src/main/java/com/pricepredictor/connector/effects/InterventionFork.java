@@ -378,7 +378,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
             @Override
             public void clauseResolved(SpellAbility clause, String run) {
                 if (clause.getRootAbility() == onStack) {
-                    sink.noteCondition(ConditionsMet.of(clause, run));
+                    sink.clauseResolved(clause, run);
                 }
             }
 

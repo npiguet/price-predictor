@@ -83,6 +83,14 @@ final class OpenResolution {
      */
     private boolean declined;
 
+    /**
+     * The {@code attributed_to} of the last clause of its line whose own
+     * effect ran while it resolved, or null until one has: what the static
+     * check after that clause applies is that clause's
+     * ({@link EventAttribution#stamp(EffectEvent, SpellAbility, String, String)}).
+     */
+    private String lastClauseRan;
+
     OpenResolution(
             SpellAbility ability, ProvenanceKey.Resolved keys, String actor, Snapshot state) {
         this(ability, keys, actor, state, null, null);
@@ -183,6 +191,16 @@ final class OpenResolution {
      */
     Snapshot effectState() {
         return resolutionState != null ? resolutionState : state;
+    }
+
+    /** A clause of its line has run its own effect: the last one so far. */
+    void noteClauseRan(SpellAbility clause) {
+        lastClauseRan = EventAttribution.attributedTo(clause);
+    }
+
+    /** The {@code attributed_to} of the last clause of its line that ran, or null. */
+    String lastClauseRan() {
+        return lastClauseRan;
     }
 
     /** The controller turned something down while this bracket was open. */
