@@ -370,6 +370,89 @@
       }
     },
     {
+      "id": "701.24e-2",
+      "rules": [
+        "701.24e"
+      ],
+      "title": "Shuffling an emptied library still triggers shuffle abilities, a library holding cards on a board whose search finds one",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "B",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Cosi's Trickster",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Demonic Tutor"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Forest",
+            "Grizzly Bears",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are top first. The directed fork's board: B's library holds cards, which the fork takes out, leaving it empty."
+      },
+      "decisions": [
+        "B casts Demonic Tutor, tapping Swamp and Swamp.",
+        "Both players pass; Demonic Tutor resolves.",
+        "B searches the library for a card and chooses the Forest.",
+        "Cosi's Trickster triggers; A puts the counter on it."
+      ],
+      "variants": [
+        {
+          "label": "library_holds_cards",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Forest moves to B's hand and B's library, now holding Grizzly Bears and Island, is shuffled. Cosi's Trickster triggers and becomes 2/2."
+        },
+        {
+          "label": "empty_library",
+          "polarity": "fires",
+          "delta": "B's library is empty.",
+          "expected": "The search finds nothing and the empty library is shuffled. Cosi's Trickster triggers and becomes 2/2.",
+          "operation": "move_card"
+        }
+      ],
+      "cards": [
+        "Cosi's Trickster",
+        "Swamp",
+        "Demonic Tutor",
+        "Forest",
+        "Grizzly Bears",
+        "Island"
+      ],
+      "forge_notes": "The fork forces B's cast of Demonic Tutor. The emptied library's cards go to no zone.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A shuffle trigger fires when a library is shuffled, whatever the library's size or the cards moved into it.",
+        "near_miss": "A shuffle trigger evaluated against an event that is not a shuffle of a library it watches.",
+        "params": {
+          "mode": "Shuffled"
+        },
+        "needs": []
+      }
+    },
+    {
       "id": "701.24f-1",
       "rules": [
         "701.24f"

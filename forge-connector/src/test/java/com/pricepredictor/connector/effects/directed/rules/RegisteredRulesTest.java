@@ -1057,32 +1057,33 @@ class RegisteredRulesTest {
         return board;
     }
 
+    /** The searcher binds over a library of common cards, whatever its size: the edit empties it. */
     @Test
-    void smallLibraryShuffleBindsTheBottomCardOfATwoCardLibrary() {
-        Board board = tricksterBoard("Forest", "Grizzly Bears");
-        assertEquals(board.subject, SmallLibraryShuffle.bind(board.game).orElseThrow().card("card"));
-    }
-
-    @Test
-    void smallLibraryShuffleBindsNothingWithThreeCards() {
-        assertTrue(SmallLibraryShuffle.bind(tricksterBoard("Forest", "Grizzly Bears", "Island").game).isEmpty());
-    }
-
-    @Test
-    void smallLibraryShuffleForksTheCardInTheGraveyard() {
-        Board board = tricksterBoard("Forest", "Grizzly Bears");
-        Twin twin = board.twin(SmallLibraryShuffle.rule());
-        String bears = id(board.subject);
-        // A graveyard card is an entity of the snapshot, a library card is not.
-        assertTrue(twin.changes().containsAll(Set.of("P0.library", "P0.graveyard", "+" + bears)),
-                twin.changes().toString());
-        for (String change : twin.changes()) {
-            assertTrue(Set.of("P0.library", "P0.graveyard", "+" + bears).contains(change)
-                            || change.startsWith("+link ") && change.contains("=" + bears),
-                    "moving changed " + change + "; all: " + twin.changes());
+    void smallLibraryShuffleBindsTheSearcherOverAnyLibraryOfOneCardOrMore() {
+        for (String[] library : new String[][]{{"Forest"}, {"Forest", "Grizzly Bears", "Island"}}) {
+            Board board = tricksterBoard(library);
+            Binding binding = SmallLibraryShuffle.bind(board.game).orElseThrow();
+            assertEquals(board.you, binding.player("searcher"));
+            assertEquals("Demonic Tutor", binding.card("spell").getName());
         }
-        assertTrue(twin.fork().card("card").getZone().is(ZoneType.Graveyard));
-        assertEquals(1, twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library).size());
+    }
+
+    /** An empty library is the rare board itself: the edit would add nothing to it. */
+    @Test
+    void smallLibraryShuffleBindsNothingOverAnEmptyLibrary() {
+        assertTrue(SmallLibraryShuffle.bind(tricksterBoard().game).isEmpty());
+    }
+
+    @Test
+    void smallLibraryShuffleForksTheLibraryEmptyAndTheGraveyardAsItWas() {
+        Board board = tricksterBoard("Forest", "Grizzly Bears", "Island");
+        Card top = board.you.getCardsIn(ZoneType.Library).get(0);
+        Twin twin = board.twin(SmallLibraryShuffle.rule());
+        // The snapshot shows a library by its count and its top card alone.
+        assertOnlyChanged(twin, top, top, "P0.library");
+        Player searcher = twin.fork().player("searcher");
+        assertTrue(searcher.getCardsIn(ZoneType.Library).isEmpty());
+        assertTrue(searcher.getCardsIn(ZoneType.Graveyard).isEmpty(), "no card went to the graveyard");
     }
 
     // ── 701.39a, bolster: add_permanent ─────────────────────────────────

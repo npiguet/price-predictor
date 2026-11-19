@@ -1343,22 +1343,23 @@ class DirectedForkPlayedForwardTest {
 
     /**
      * 701.24e: the Cosi's Trickster of B; the Demonic Tutor of A over two
-     * Swamps and a two-card library. The fork's library holds one card and A
-     * is made to cast the Tutor: the library shuffled after the search is
-     * empty, and the Trickster's trigger is evaluated.
+     * Swamps and a library of three. The fork's library is empty and A is
+     * made to cast the Tutor: the empty library is shuffled after the search
+     * and the Trickster's trigger is evaluated.
      */
     @Test
     void aTutorShufflesTheEmptiedLibrary() throws Throwable {
         Game game = empty(PhaseType.MAIN1);
         Player active = game.getPlayers().get(0);
-        permanent(game, game.getPlayers().get(1), "Cosi's Trickster");
+        Card trickster = permanent(game, game.getPlayers().get(1), "Cosi's Trickster");
         lands(game, active, "Swamp", 2);
         Card tutor = TestBoard.inHand(game, active, "Demonic Tutor");
-        library(game, active, "Forest", "Island");
+        library(game, active, "Forest", "Island", "Grizzly Bears");
 
-        List<String> fork = forkOf(game, PhaseType.MAIN1, "701.24e", "zero-cards");
+        List<String> fork = forkOf(game, PhaseType.MAIN1, "701.24e", "empty_library");
 
         assertFalse(resolutionsOf(fork, tutor).isEmpty(), "the Tutor resolves in the fork");
+        assertFalse(fired(fork, trickster).isEmpty(), "the Trickster triggers on the empty library's shuffle");
     }
 
     /**

@@ -16,7 +16,7 @@ rule	variant
 701.12e	aura_in_hand
 701.12g	opponent_above
 701.23f	mindcensor_added
-701.24e	zero-cards
+701.24e	empty_library
 701.39a	has_creature
 701.42a	meld_pair
 701.44b	empty_library

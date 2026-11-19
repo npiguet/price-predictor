@@ -5,7 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
-import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
+import com.pricepredictor.connector.effects.directed.operations.EmptyLibraryOperation;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.player.Player;
@@ -18,44 +18,39 @@ import java.util.Optional;
 
 /**
  * 701.24e, shuffling a library of zero or one card still shuffles it, so
- * shuffle triggers fire, on scenario {@code 701.24e-1}: B's Demonic Tutor
- * takes the Forest from a two-card library and the one-card library left is
- * shuffled, which triggers A's Cosi's Trickster.
+ * shuffle triggers fire, inverted (FR-014a) on scenario {@code 701.24e-2}:
+ * B's Demonic Tutor searches a library of cards and finds one, then the
+ * library is shuffled, and A's Cosi's Trickster triggers; with B's library
+ * empty the search finds nothing, the empty library is shuffled all the same
+ * (Forge shuffles whatever the search found), and the Trickster still
+ * triggers.
  *
  * <p>The base board, read at a boundary: a main phase begins, a player
  * controls a permanent that triggers when an opponent shuffles their library
- * (Cosi's Trickster), and an opponent of theirs with exactly two cards in
- * their library holds a card they have the mana for whose spell searches
- * their library and that they can cast now
- * ({@link Boards#searchersInHand}: a sorcery only as the active
- * player). It binds the bottom card of that library.
+ * (Cosi's Trickster), and an opponent of theirs with a card in their library
+ * holds a card they have the mana for whose spell searches their library and
+ * that they can cast now ({@link Boards#searchersInHand}: a sorcery only as
+ * the active player): the common board, whose library holds cards. It binds
+ * the searcher and its spell, whose cast the fork forces (FR-010b).
  *
- * <p>Variant {@code zero-cards} ({@code move_card}): that card is in its
- * owner's graveyard instead, so the library holds one card, which the search
- * takes, and the library shuffled after it is empty.
- *
- * <p>It also binds the searcher and its spell, whose cast the fork forces
- * (FR-010b).
- *
- * <p>The precondition waits for the rare board, a library of two, and is
- * not inverted as FR-014a would have it: the rule's point is a library of
- * zero or one card being shuffled, and no one-card edit makes a library that
- * small out of the common board's, so the fork's one card moved can only
- * take a library of two to one.
+ * <p>Variant {@code empty_library} ({@code move_card}): the searcher's
+ * library is empty, the rule's point, the one edit that makes a library of
+ * zero cards out of any other. It moves no card to a graveyard, so no count
+ * of one moves.
  */
 public final class SmallLibraryShuffle {
 
     public static final String RULE = "701.24e";
-    static final String SCENARIO = "701.24e-1";
-    static final String ZERO_CARDS = "zero-cards";
+    static final String SCENARIO = "701.24e-2";
+    static final String EMPTY_LIBRARY = "empty_library";
 
     private SmallLibraryShuffle() {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, SmallLibraryShuffle::bind, ZERO_CARDS,
+        return DirectedRule.of(RULE, SCENARIO, SmallLibraryShuffle::bind, EMPTY_LIBRARY,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.move(fork.card("card"), ZoneType.Graveyard, null))
+                        fork -> new EmptyLibraryOperation(fork.player("searcher")))
                         .forcing(ForcedPlay.cast("searcher", "spell").playing(Boards.LIBRARY_SEARCH_SPELL)));
     }
 
@@ -68,11 +63,11 @@ public final class SmallLibraryShuffle {
                 continue;
             }
             for (Player searcher : watcher.getOpponents()) {
-                List<Card> library = List.copyOf(searcher.getCardsIn(ZoneType.Library));
+                boolean hasLibrary = !searcher.getCardsIn(ZoneType.Library).isEmpty();
                 List<Card> spells = Boards.searchersInHand(searcher);
-                if (library.size() == 2 && !spells.isEmpty()) {
+                if (hasLibrary && !spells.isEmpty()) {
                     return Optional.of(Binding.empty().with("searcher", searcher)
-                            .with("spell", spells.get(0)).with("card", library.get(1)));
+                            .with("spell", spells.get(0)));
                 }
             }
         }
