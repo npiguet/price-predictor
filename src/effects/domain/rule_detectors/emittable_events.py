@@ -21,7 +21,12 @@ and ``test_emittable_events`` reads the sources to keep it so:
   outright (a ``WinsGame`` or ``LosesGame`` line);
 - :data:`CLAUSE_HOOKS`: built by a resolving clause's hooks (``ApiEvents``,
   ``ClauseOutcomeRouter``'s outcome hook, ``ManaChannel``) into the effect
-  half of the resolution it belongs to;
+  half of the resolution it belongs to. A clause a replacement runs while no
+  resolution is open (a regeneration shield used by lethal combat damage, a
+  replacement run in the cleanup's discard) is filed as any consequence is
+  (``BusBracketCollector.route``): on the open combat damage step's record,
+  else in the turn-based action's window. So a combat or turn-action record
+  can list a clause-hook event too;
 - :data:`CHOKE_POINTS`: the two outcome-hook events Forge reports at an
   engine choke point with no resolving ability, routed as a bus event is;
 - :data:`RUN_PARAMS`: built by ``RunParamNormalizer`` through ``RunParamRows`` from a trigger's or a
@@ -116,8 +121,8 @@ GAME_ENDING_APIS: frozenset[str] = frozenset({"WinsGame", "LosesGame"})
 #: outcome; playability and continuous records list none.
 EMITTABLE: dict[RecordKind, frozenset[E]] = {
     RecordKind.RESOLUTION: BUS | CLAUSE_HOOKS,
-    RecordKind.COMBAT: BUS | CHOKE_POINTS,
-    RecordKind.TURN_ACTION: BUS | CHOKE_POINTS,
+    RecordKind.COMBAT: BUS | CHOKE_POINTS | CLAUSE_HOOKS,
+    RecordKind.TURN_ACTION: BUS | CHOKE_POINTS | CLAUSE_HOOKS,
     RecordKind.TRIGGER: RUN_PARAMS,
     RecordKind.REWRITE: RUN_PARAMS,
     RecordKind.CONTINUOUS: frozenset(),

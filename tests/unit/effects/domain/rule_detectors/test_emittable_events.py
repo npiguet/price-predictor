@@ -131,3 +131,20 @@ def test_a_set_aside_ability_s_run_is_a_place_of_its_own():
     runs = [e for raw in java_golden_records() if raw["kind"] == "rewrite"
             for e in raw["payload"].get("buffered_events", ())]
     assert runs and all(carries_buffered(e["type"]) for e in runs)
+
+
+def test_a_clause_a_replacement_runs_in_a_window_files_its_events_on_that_window_s_record():
+    """With no resolution bracket open, ``BusBracketCollector.route`` files a
+    clause's events (``Filing.CLAUSE``) on the open combat damage step's
+    record, else in the turn-based action's window: a regeneration shield
+    used by lethal combat damage writes its clause events on the combat record
+    (``CombatReplacementClauseTest``)."""
+    route = _source("BusBracketCollector").split("case CONSEQUENCE -> {", 1)[1]
+    assert route.index("combatStep.file(") < route.index("turnActions.take(")
+    assert "filing != Filing.NON_COMBAT_DAMAGE" in route
+    for kind in ("combat", "turn_action"):
+        for event in CLAUSE_HOOKS:
+            assert carries(kind, event), (kind, event)
+    assert EMITTABLE[RecordKind.COMBAT] == EMITTABLE[RecordKind.TURN_ACTION]
+    for event in ("regenerated", "removed_from_combat", "token_created", "replacement_applied"):
+        assert carries("combat", event)

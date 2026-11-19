@@ -139,13 +139,13 @@ def test_a_misspelt_declaration_is_refused_when_the_index_is_built(family, param
 
 
 def test_a_declaration_asking_its_kind_for_an_event_it_never_lists_is_untaggable():
-    """V5 #14: a combat never lists ``mana_produced`` (a resolving clause's
+    """V5 #14: a combat never lists ``spell_cast`` (a trigger record's
     event), so a combat record must not read as the rule's near miss."""
     asks = scenario("9.9-2", ("9.9",), "combat", declaration(
-        "outcome_event", "combat", event="regenerated", with_event="mana_produced"))
+        "outcome_event", "combat", event="regenerated", with_event="spell_cast"))
     index = DetectorIndex.of(catalogue(asks))
     assert index.by_kind == {} and "9.9" not in index.declared_rules
-    assert "mana_produced" in index.untaggable["9.9-2"]
+    assert "spell_cast" in index.untaggable["9.9-2"]
     assert index.untaggable_rules["9.9-2"] == ("9.9",)
     on_a_resolution = scenario("1-1", ("1.1",), "resolution", declaration(
         "outcome_event", "resolution", event="face_change", api="SetState"))
