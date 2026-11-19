@@ -4,7 +4,12 @@ import forge.game.card.Card;
 import forge.game.cost.Cost;
 import forge.game.cost.CostPart;
 import forge.game.cost.CostPartWithList;
+import forge.game.cost.CostRemoveAnyCounter;
+import forge.game.cost.CostRemoveCounter;
+import forge.game.cost.CostRollDice;
 import forge.game.keyword.Keyword;
+import forge.game.replacement.ReplacementEffect;
+import forge.game.staticability.StaticAbility;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayDeque;
@@ -40,7 +45,14 @@ import java.util.regex.Pattern;
  * Count$EachSpentToCast}, {@code Count$EachPhyrexianPaidWithLife}, {@code
  * ConditionManaSpent$}, {@code ManaSpent$}), or is a sunburst permanent's.</li>
  * </ul>
- * A permanent's activated ability reading the mana spent to cast its host
+ * A spell's host also reads its cast mana outside the chain, on its
+ * {@code K:etbCounter} line ({@code Converge}, {@code Adamant$}), its
+ * {@code R:} and {@code S:} lines: their parameters, their overriding
+ * abilities' and the SVars those name are read as well. A cost holding a
+ * counter-removal part makes {@code CostCountersRemoved} a read, and a die
+ * roll the SVar its result is set in.
+ *
+ * <p>A permanent's activated ability reading the mana spent to cast its host
  * reads a payment the live game made, and is forced. A description is no
  * read. A list the line's cost pays nothing into is empty live as well, so
  * naming it is no read either ({@code Defined$ Exiled} of a spell that pays
@@ -58,7 +70,7 @@ final class PaidReads {
 
     /** Parameters that test the mana spent to cast the line's host. */
     private static final Set<String> CAST_MANA_PARAMETERS =
-            Set.of("ConditionManaSpent", "ConditionManaNotSpent", "ManaSpent");
+            Set.of("ConditionManaSpent", "ConditionManaNotSpent", "ManaSpent", "Adamant");
 
     /** What ends a defined list's or a count source's name: {@code Sacrificed$}, {@code ExiledCards.Other}. */
     private static final Pattern NAME_END = Pattern.compile("[.$ &,/+]");
@@ -75,11 +87,14 @@ final class PaidReads {
     private final boolean spell;
     /** The lists the line's cost pays into. */
     private final Set<String> paidLists;
+    /** The SVars the line's cost sets as it pays: the counters it removed, a die's result. */
+    private final Set<String> costSVars;
 
     private PaidReads(SpellAbility root) {
         this.host = root.getHostCard();
         this.spell = root.isSpell();
         this.paidLists = paidLists(root.getPayCosts());
+        this.costSVars = costSVars(root.getPayCosts());
     }
 
     /** Whether {@code line}'s chain or the SVars it names read what its cost paid. */
@@ -107,6 +122,33 @@ final class PaidReads {
         return lists;
     }
 
+    /** The SVars {@code cost}'s counter-removal and die-roll parts set when paid. */
+    private static Set<String> costSVars(Cost cost) {
+        Set<String> names = new HashSet<>();
+        if (cost == null) {
+            return names;
+        }
+        for (CostPart part : cost.getCostParts()) {
+            if (part instanceof CostRemoveCounter || part instanceof CostRemoveAnyCounter) {
+                names.add("CostCountersRemoved");
+            } else if (part instanceof CostRollDice roll) {
+                names.add(dieResultSVar(roll));
+            }
+        }
+        return names;
+    }
+
+    /** The SVar a die-roll cost sets its result in; Forge offers no accessor for it. */
+    private static String dieResultSVar(CostRollDice roll) {
+        try {
+            java.lang.reflect.Field field = CostRollDice.class.getDeclaredField("resultSVar");
+            field.setAccessible(true);
+            return (String) field.get(roll);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            throw new IllegalStateException("Forge's CostRollDice no longer holds its resultSVar", e);
+        }
+    }
+
     /** Whether the line casts a sunburst permanent, whose counters are the colors spent on it. */
     private boolean sunburst() {
         return spell && host.hasKeyword(Keyword.SUNBURST);
@@ -115,8 +157,9 @@ final class PaidReads {
     /** Whether a parameter of the chain, or of an SVar it names, reads what the cost paid. */
     private boolean anyRead(SpellAbility root) {
         Deque<Parameter> pending = new ArrayDeque<>();
-        for (SpellAbility clause = root; clause != null; clause = clause.getSubAbility()) {
-            clause.getMapParams().forEach((name, value) -> pending.add(new Parameter(name, value)));
+        addChain(pending, root);
+        if (spell) {
+            addHostTraits(pending);
         }
         Set<String> named = new HashSet<>();
         while (!pending.isEmpty()) {
@@ -129,11 +172,28 @@ final class PaidReads {
         return false;
     }
 
+    private static void addChain(Deque<Parameter> pending, SpellAbility first) {
+        for (SpellAbility clause = first; clause != null; clause = clause.getSubAbility()) {
+            clause.getMapParams().forEach((name, value) -> pending.add(new Parameter(name, value)));
+        }
+    }
+
+    /** The parameters of the host's replacement and static abilities (an {@code etbCounter} is one), and of what a replacement does. */
+    private void addHostTraits(Deque<Parameter> pending) {
+        for (ReplacementEffect replacement : host.getReplacementEffects()) {
+            replacement.getMapParams().forEach((name, value) -> pending.add(new Parameter(name, value)));
+            addChain(pending, replacement.getOverridingAbility());
+        }
+        for (StaticAbility ability : host.getStaticAbilities()) {
+            ability.getMapParams().forEach((name, value) -> pending.add(new Parameter(name, value)));
+        }
+    }
+
     private boolean reads(Parameter parameter) {
         if (describes(parameter.name())) {
             return false;
         }
-        return readsAPaidList(parameter.value()) || OWN_MANA.matcher(parameter.value()).find()
+        return readsAPaidList(parameter.value()) || readsACostSVar(parameter.value()) || OWN_MANA.matcher(parameter.value()).find()
                 || spell && readsTheCastsMana(parameter);
     }
 
@@ -146,6 +206,17 @@ final class PaidReads {
     /** Whether {@code value} names a list the cost pays into: {@code Sacrificed$CardPower}, {@code Sacrificed}. */
     private boolean readsAPaidList(String value) {
         return paidLists.contains(NAME_END.split(value.trim(), 2)[0]);
+    }
+
+    /** Whether {@code value} names an SVar the line's cost sets: {@code SVar$CostCountersRemoved/Twice}, a die's {@code X}. */
+    private boolean readsACostSVar(String value) {
+        Matcher word = WORD.matcher(value);
+        while (word.find()) {
+            if (costSVars.contains(word.group())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean readsTheCastsMana(Parameter parameter) {
