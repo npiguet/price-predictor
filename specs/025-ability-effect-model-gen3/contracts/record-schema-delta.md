@@ -513,9 +513,16 @@ position a card left a library from, and a search of another player's library.
   neither forced nor drawn yet), and the step of upkeep to end of turn it opens at; one not forced
   is carried to the next boundary with a line to force. The 20 is a constant
   (`InterventionScheduler.TYPICAL_GAME_TURNS`), not a flag.
-- A line is forced only at a boundary where its own timing lets its holder play it: a sorcery-speed
-  line in a main phase of its holder's turn with the stack empty, an instant-speed line at any
-  step that gives priority. Each printed line is forced once a game per pass, whoever holds it.
+- A line is forced at a step's first priority with the stack empty, after the step's turn-based
+  action, never at the step's phase event: its record's `phase` is a step the rules gave priority
+  in, a draw step's board holds the card drawn, and a declare-blockers or combat-damage step's
+  board holds an attacker. It is forced only where its own restrictions let its holder play it,
+  its cost aside: its timing (a sorcery-speed line in a main phase of its holder's turn), the
+  steps and turns its script names (`ActivationPhases$`, `PlayerTurn$`), its script's conditions
+  (`IsPresent$`), its activation limits and a static forbidding it. A spell whose mana cost is no
+  cost and a special action are never forced. Among the lines a step can force, the one forced is
+  drawn at random from the fork's stream. Each printed line is forced once a game per pass,
+  whoever holds it.
 - A forced (interventional) resolution's effect halves are filed by the live collector's own rules,
   in a recording bound to the fork: the board read when its resolution starts, one half per chosen
   mode, the events the engine hooks report, the deaths of the state-based check after it and what

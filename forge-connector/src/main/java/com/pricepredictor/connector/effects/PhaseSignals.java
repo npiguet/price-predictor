@@ -68,7 +68,7 @@ final class PhaseSignals {
     }
 
     private final LiveGame live;
-    private final Sink sink;
+    private Sink sink;
 
     /** How many begins are open: a loop begun inside a loop leaves the outer one open at its end. */
     private int loopDepth;
@@ -76,6 +76,11 @@ final class PhaseSignals {
     PhaseSignals(LiveGame live, Sink sink) {
         this.live = live;
         this.sink = sink;
+    }
+
+    /** Tell {@code later} of each signal too, after every sink told so far. */
+    void alsoTell(Sink later) {
+        sink = Sink.both(sink, later);
     }
 
     /** Whether this game is between a state-based loop's begin and its end. */

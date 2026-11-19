@@ -265,15 +265,18 @@ class GameRecordingTest {
             recording.open();
             // Enough untap boundaries, each in a game turn of its own, for
             // the forced resolutions' gate (drawn once a turn) to open at
-            // several, were it asked there; devModeSet publishes the step.
+            // several, were it asked there; devModeSet publishes the step,
+            // and its priority is settled, as Forge never does at untap.
             forge.game.phase.PhaseHandler phases = game.getPhaseHandler();
             for (int boundary = 0; boundary < 40; boundary++) {
                 phases.devModeSet(forge.game.phase.PhaseType.UNTAP, active, phases.getTurn() + 1);
+                TestPriority.settle(game);
             }
             assertEquals(1, tally.taken("A"), "the directed rule bound at UNTAP forked there");
 
             for (int boundary = 0; boundary < 40; boundary++) {
                 phases.devModeSet(forge.game.phase.PhaseType.UPKEEP, active, phases.getTurn() + 1);
+                TestPriority.settle(game);
             }
         } finally {
             writer.close();

@@ -163,6 +163,8 @@ public final class GameRecording implements AutoCloseable {
         this.bracket = new BusBracketCollector(game, context.get(),
                 recordId -> probes.ifPresent(probe -> probe.writeHeldProbes(recordId)));
         this.patched = new PatchedCollectors(game, context.get(), caps, seed, bracket);
+        // Forced at a step's first priority, after the decision records.
+        interventions.map(InterventionScheduler::prioritySink).ifPresent(patched::alsoTell);
         this.droppedEventsFile = caps.countDroppedEvents() ? droppedEventsFile(writer) : null;
         // Directed forks, on a patched checkout as the other two kinds: the
         // fork plays on through the live game's hooks.
@@ -434,9 +436,13 @@ public final class GameRecording implements AutoCloseable {
                             patched.continuous().collect();
                         }
                     }),
+                    // The step's forced resolution waits for its first
+                    // priority (InterventionScheduler.prioritySink); its
+                    // protection fork is taken here.
                     new BoundaryStep("interventions", () -> interventions.ifPresent(scheduler -> {
+                        scheduler.stepBegan();
                         if (collecting && forking) {
-                            scheduler.collect(event.phase());
+                            scheduler.protect(event.phase());
                         }
                     })),
                     // Before the turn-based action that deals the damage: the

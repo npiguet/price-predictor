@@ -10,6 +10,7 @@ import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
+import forge.game.zone.ZoneType;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -41,15 +42,22 @@ class ScheduledInterventionsTest {
 
     /**
      * Publish {@code count} boundaries of the step the game is in, the same
-     * player's, each in the next game turn ({@code devModeSet} publishes the
-     * step's phase event); the turn number put back after, so a board read
-     * before and after differs only by what a fork did to it.
+     * player's, each in the next game turn: the step's phase event ({@code
+     * devModeSet} publishes it), then its first priority, with the stack
+     * empty. The turn number put back after with no priority, so a board
+     * read before and after differs only by what a fork did to it.
      */
     private static void boundaries(Game game, int count) {
+        steps(game, count, () -> TestPriority.settle(game));
+    }
+
+    /** The same boundaries, each a phase event then {@code priority}. */
+    private static void steps(Game game, int count, Runnable priority) {
         int turn = game.getPhaseHandler().getTurn();
         for (int i = 0; i < count; i++) {
             game.getPhaseHandler().devModeSet(game.getPhaseHandler().getPhase(),
                     game.getPhaseHandler().getPlayerTurn(), game.getPhaseHandler().getTurn() + 1);
+            priority.run();
         }
         forge.game.phase.PhaseHandler phases = game.getPhaseHandler();
         phases.devModeSet(phases.getPhase(), phases.getPlayerTurn(), turn);
@@ -105,12 +113,16 @@ class ScheduledInterventionsTest {
 
     /**
      * Two lines of one card with the same effect API (Chainflinger's two
-     * damage abilities) are two lines, each forced once.
+     * damage abilities) are two lines, each forced once: its threshold line
+     * with seven cards in its holder's graveyard, where it can be activated.
      */
     @Test
     void twoLinesOfOneCardWithOneApiAreForcedApart() throws Throwable {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         TestBoard.inPlay(game, game.getPlayers().get(0), "Chainflinger");
+        for (int card = 0; card < 7; card++) {
+            TestBoard.inGraveyard(game, game.getPlayers().get(0), "Mountain");
+        }
 
         List<String> records = forced(game, 4, () -> boundaries(game, 2 * BOUNDARIES));
 
@@ -148,29 +160,87 @@ class ScheduledInterventionsTest {
     }
 
     /**
-     * No fork is taken at a phase event published while the stack resolves,
-     * as an effect ending the turn publishes the steps it moves to; the
-     * line is forced at the next boundary that draws one.
+     * A line is forced at a step's first priority, never at its phase
+     * event, which comes before the step's turn-based action and also for a
+     * step the turn then skips: steps that publish their phase event and
+     * give no priority force nothing, and the line is forced at the next
+     * step that gives priority, on the board as it stands there.
      */
     @Test
-    void noForkIsTakenWhileTheStackResolves() throws Throwable {
+    void aLineIsForcedAtAStepsFirstPriorityNeverAtItsPhaseEvent() throws Throwable {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         TestBoard.inHand(game, game.getPlayers().get(0), "Lightning Bolt");
 
         List<String> records = forced(game, 1, () -> {
-            game.getStack().setResolving(true);
-            try {
-                boundaries(game, BOUNDARIES);
-            } finally {
-                game.getStack().setResolving(false);
-            }
-            // What tells the boundary the fork was taken at.
+            steps(game, BOUNDARIES, () -> { });
+            // What tells the step the fork was taken at.
             game.getPlayers().get(1).setLife(7, null);
             boundaries(game, BOUNDARIES);
         });
 
         assertEquals(1, records.size(), records.toString());
         assertTrue(records.get(0).contains("{\"id\":\"P1\",\"life\":7,"),
-                "forked while the stack resolved: " + records.get(0));
+                "forked at a phase event: " + records.get(0));
+    }
+
+    /**
+     * The draw step gives priority once its player has drawn, so a line
+     * forced there has the post-draw library: the intervention, drawn and
+     * carried over upkeeps with nothing to force, is spent at the draw step
+     * the engine runs, on the board that has the card drawn.
+     */
+    @Test
+    void aLineForcedAtTheDrawStepHasThePostDrawLibrary() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.UPKEEP);
+        Player you = game.getPlayers().get(0);
+        game.getPhaseHandler().devModeSet(PhaseType.UPKEEP, you, 2);
+        for (int card = 0; card < 3; card++) {
+            game.getAction().moveTo(ZoneType.Library, TestBoard.card(game, you, "Mountain"), null, null);
+        }
+
+        List<String> records = forced(game, 1, () -> {
+            boundaries(game, BOUNDARIES);
+            // Past every turn the gate drew for, so the carried intervention opens at once.
+            game.getPhaseHandler().devModeSet(PhaseType.UPKEEP, you, 4 * BOUNDARIES);
+            TestBoard.inHand(game, you, "Lightning Bolt");
+            game.getPhaseHandler().devAdvanceToPhase(PhaseType.DRAW);
+            TestPriority.settle(game);
+        });
+
+        assertEquals(1, records.size(), records.toString());
+        Map<String, Object> state = RecordLines.asMap(parse(records.get(0)).get("state"));
+        assertEquals("draw", RecordLines.asMap(state.get("global")).get("phase"), records.get(0));
+        Map<String, Object> drawer = RecordLines.asMap(((List<?>) state.get("players")).get(0));
+        assertEquals(2L, drawer.get("library"), records.get(0));
+        assertEquals(1L, RecordLines.asMap(drawer.get("turn_counts")).get("cards_drawn"), records.get(0));
+    }
+
+    /**
+     * Spirit en-Dal's forecast is activated only during its holder's upkeep
+     * and once a turn: held through its holder's end step and another
+     * player's upkeep it is not forced, and its forced record's board is in
+     * its holder's upkeep.
+     */
+    @Test
+    void aForecastLineIsForcedOnlyInItsHoldersUpkeep() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.END_OF_TURN);
+        Player you = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        TestBoard.inHand(game, you, "Spirit en-Dal");
+        TestBoard.inPlay(game, opponent, "Grizzly Bears");
+
+        List<String> records = forced(game, 1, () -> {
+            boundaries(game, BOUNDARIES);
+            game.getPhaseHandler().devModeSet(PhaseType.UPKEEP, opponent);
+            boundaries(game, BOUNDARIES);
+            game.getPhaseHandler().devModeSet(PhaseType.UPKEEP, you);
+            boundaries(game, BOUNDARIES);
+        });
+
+        assertEquals(1, records.size(), records.toString());
+        Map<String, Object> global = RecordLines.asMap(
+                RecordLines.asMap(parse(records.get(0)).get("state")).get("global"));
+        assertEquals("upkeep", global.get("phase"), records.get(0));
+        assertEquals(parse(records.get(0)).get("actor_player"), global.get("active"), records.get(0));
     }
 }

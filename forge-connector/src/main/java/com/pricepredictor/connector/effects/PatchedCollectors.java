@@ -130,6 +130,15 @@ final class PatchedCollectors implements AutoCloseable {
         return channels.playability();
     }
 
+    /**
+     * Tell {@code sink} of this game's phase signals too, after its
+     * channels: the intervention scheduler, which forces a line where
+     * priority settles once the decision records are written.
+     */
+    void alsoTell(PhaseSignals.Sink sink) {
+        channels.phase().alsoTell(sink);
+    }
+
     /** The priority stops' candidates, which the random seat draws from. */
     PriorityCandidates priorityCandidates() {
         return channels.candidates();

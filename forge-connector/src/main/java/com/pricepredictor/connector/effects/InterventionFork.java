@@ -4,6 +4,8 @@ import forge.game.Game;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Random;
 import java.util.function.Supplier;
 
@@ -38,7 +40,9 @@ final class InterventionFork implements InterventionScheduler.Forcing {
     /** The live game's recording: its hooks and its shard. */
     private final GameRecording live;
     private final ForkBudget budget;
-    /** The draws a forced resolution makes, from the game's seed. */
+    /** The fork's stream: which line a boundary forces, and its choices, from the game's seed. */
+    private final Random random;
+    /** The draws a forced resolution makes, from the fork's stream. */
     private final RandomChoices choices;
     /** The game's seed, which seeds a fork recording's sampling stream. */
     private final long seed;
@@ -58,7 +62,18 @@ final class InterventionFork implements InterventionScheduler.Forcing {
         // the sampler's seed is: games are seeded consecutively, and the first
         // draw here is a mode or target count, which an unscrambled seed would
         // make nearly the same in every game.
-        this.choices = new RandomChoices(new Random(GameRecording.scramble(seed)));
+        this.random = new Random(GameRecording.scramble(seed));
+        this.choices = new RandomChoices(random);
+    }
+
+    /**
+     * A boundary's lines in an order drawn from the fork's stream, never the
+     * live game's, so the line forced is drawn at random among those that
+     * can be.
+     */
+    @Override
+    public void shuffle(List<SpellAbility> lines) {
+        Collections.shuffle(lines, random);
     }
 
     /**

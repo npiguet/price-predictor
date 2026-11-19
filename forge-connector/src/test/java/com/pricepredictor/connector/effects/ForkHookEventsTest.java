@@ -41,11 +41,16 @@ class ForkHookEventsTest {
     @TempDir
     Path tempDir;
 
-    /** Publish {@code count} boundaries of the step the game is in, the same player's, each in the next turn. */
+    /**
+     * Publish {@code count} boundaries of the step the game is in, the same
+     * player's, each in the next turn: the step's phase event, then its
+     * first priority, where an intervention is forced.
+     */
     private static void boundaries(Game game, int count) {
         for (int i = 0; i < count; i++) {
             game.getPhaseHandler().devModeSet(game.getPhaseHandler().getPhase(),
                     game.getPhaseHandler().getPlayerTurn(), game.getPhaseHandler().getTurn() + 1);
+            TestPriority.settle(game);
         }
     }
 

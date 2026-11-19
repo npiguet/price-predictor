@@ -59,9 +59,58 @@ class InterventionSchedulerTest {
                 "another copy of the card is the same line");
     }
 
+    /**
+     * A special action (116.2) is no spell or ability on the stack: Rift
+     * Bolt's suspend, Forge's {@code AbilityStatic}, is never forced, and
+     * its spell is.
+     */
     @Test
-    void theHandIsStillForcedFirst() {
-        assertEquals(ZoneType.Hand, InterventionScheduler.FORCED_ZONES.get(0));
+    void aSpecialActionIsNeverForced() {
+        List<SpellAbility> lines = List.copyOf(TestCards.build("Rift Bolt").getAllSpellAbilities());
+        List<SpellAbility> special = lines.stream()
+                .filter(line -> line instanceof forge.game.spellability.AbilityStatic).toList();
+
+        assertEquals(1, special.size(), lines.toString());
+        assertFalse(InterventionScheduler.worthIntervening(special.get(0), new HashSet<>()));
+        assertTrue(lines.stream().filter(SpellAbility::isSpell)
+                .anyMatch(spell -> InterventionScheduler.worthIntervening(spell, new HashSet<>())));
+    }
+
+    /**
+     * A boundary forces the first line it can in the order the fork's stream
+     * draws, not the first in hand order: drawn in reverse, the battlefield's
+     * ability goes before the hand's spell.
+     */
+    @Test
+    void theLineForcedIsTheOneTheForksStreamDraws() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = game.getPlayers().get(0);
+        TestBoard.inHand(game, you, "Lightning Bolt");
+        TestBoard.inPlay(game, you, "Prodigal Sorcerer");
+        List<String> inOrder = new ArrayList<>();
+        List<String> reversed = new ArrayList<>();
+        InterventionScheduler.Forcing drawingInReverse = new Board(game).recording(reversed, 1);
+
+        new InterventionScheduler(game, new Board(game).recording(inOrder, 1)).collect();
+        new InterventionScheduler(game, new InterventionScheduler.Forcing() {
+            @Override
+            public boolean mayIntervene(int realResolutionId) {
+                return drawingInReverse.mayIntervene(realResolutionId);
+            }
+
+            @Override
+            public void shuffle(List<SpellAbility> lines) {
+                java.util.Collections.reverse(lines);
+            }
+
+            @Override
+            public boolean intervene(SpellAbility ability, int realResolutionId, Player holder) {
+                return drawingInReverse.intervene(ability, realResolutionId, holder);
+            }
+        }).collect();
+
+        assertEquals(List.of("Lightning Bolt@0"), inOrder);
+        assertEquals(List.of("Prodigal Sorcerer@0"), reversed);
     }
 
     @Test
@@ -297,20 +346,17 @@ class InterventionSchedulerTest {
 
     /**
      * A ninjutsu line reads the attacker its cost returned, which a forced
-     * line never pays: it is passed over as a game-restart line is, so the
-     * boundary forces the next line and the gate's planned intervention goes
-     * to it; the refusal is counted once a game, however often it is met.
+     * line never pays: it is passed over, wherever it is held, as a
+     * game-restart line is, so the boundary forces the next line and the
+     * gate's planned intervention goes to it; the refusal is counted once a
+     * game, however often it is met.
      */
     @Test
     void aLineThatReadsAnUnpaidCostTakesNeitherTheBoundaryNorAPlannedIntervention() {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.UPKEEP);
         Player active = game.getPlayers().get(0);
-        Card ninja = TestBoard.inHand(game, active, "Ninja of the Deep Hours");
+        TestBoard.inHand(game, active, "Ninja of the Deep Hours");
         TestBoard.inHand(game, active, "Lightning Bolt");
-        SpellAbility ninjutsu = ninja.getSpellAbilities().stream()
-                .filter(SpellAbility::isNinjutsu).findFirst().orElseThrow();
-        ninjutsu.setActivatingPlayer(active);
-        assertTrue(InterventionScheduler.playableNow(ninjutsu, active), "ninjutsu is not playable at the upkeep");
         String refusal = "intervention " + InterventionFork.READS_AN_UNPAID_COST;
         long refused = ForkRefusals.counts().getOrDefault(refusal, 0L);
         List<String> forced = new ArrayList<>();
