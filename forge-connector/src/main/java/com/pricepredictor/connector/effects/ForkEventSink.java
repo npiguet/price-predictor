@@ -248,6 +248,11 @@ final class ForkEventSink extends BusEventReader {
         return hold().halves();
     }
 
+    /** How many of the forced resolution's modes have begun: the next one's position, from 0. */
+    int modesBegun() {
+        return modes.begun();
+    }
+
     /**
      * A chosen mode's first clause is resolving: close the previous mode's
      * half, so a repeat is recognised within one mode, as the live bracket

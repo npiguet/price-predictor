@@ -370,7 +370,8 @@ final class InterventionFork implements InterventionScheduler.Forcing {
             public void clauseResolving(SpellAbility clause) {
                 CharmModes.ModeStart start = CharmModes.modeStartOf(clause);
                 if (start != null && start.charm() == onStack) {
-                    sink.beginMode(start.option(), snapshots.ofResolving(onStack, targets[1]));
+                    sink.beginMode(start.option(), snapshots.ofResolving(
+                            onStack, ofBeginningMode(targets[1], sink, start.option())));
                 }
             }
 
@@ -437,6 +438,16 @@ final class InterventionFork implements InterventionScheduler.Forcing {
             halves = onlyMoveOffTheStack(halves, onStack);
         }
         return new ForcedResolution(cast.refs(), halves, outcome, targets[0], targets[1], started[0]);
+    }
+
+    /**
+     * The forced item's targets as cast with the links narrowed to the mode
+     * beginning now, as the live bracket's {@code beginMode} reads them
+     * ({@link ChainTargets#beginningMode}); null where they are unknown.
+     */
+    private static ChainTargets ofBeginningMode(
+            ChainTargets atCast, ForkEventSink sink, Integer option) {
+        return atCast == null ? null : atCast.beginningMode(sink.modesBegun(), option);
     }
 
     /** Whether no half holds anything but the forced spell's own card leaving the stack. */

@@ -1,6 +1,9 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import com.pricepredictor.connector.RandomSeatController;
+import com.pricepredictor.connector.RandomSeatLobbyPlayer;
+import forge.ai.LobbyPlayerAi;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.phase.PhaseType;
@@ -14,13 +17,16 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 import static com.pricepredictor.connector.effects.RecordLines.asMap;
+import static com.pricepredictor.connector.effects.RecordLines.only;
 import static com.pricepredictor.connector.effects.RecordLines.optionOf;
 import static com.pricepredictor.connector.effects.RecordLines.outcomeOf;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
 import static com.pricepredictor.connector.effects.RecordLines.records;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -339,5 +345,40 @@ class ChainTargetsRecordTest {
         // Exiled, the bears are a new object: named as they last existed.
         assertEquals(List.of("L" + bears.getId()), refsOf(damage).get("targets_at_cast"), damage);
         assertEquals("partially_fizzled", outcomeOf(discard), discard);
+    }
+
+    /**
+     * Kolaghan's Command the random seat draws and casts: its modes and
+     * their targets are chosen after the card moved to the stack, where the
+     * cost half's board is read, so that half links the targets its refs
+     * name, chosen, in their order — never the none the chain held as it
+     * moved.
+     */
+    @Test
+    void aRandomSeatCharmsCostHalfLinksTheTargetsItsRefsName() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN2,
+                new RandomSeatLobbyPlayer("a", 1.0, new Random(1L)),
+                new LobbyPlayerAi("b", null));
+        Player seat = game.getPlayers().get(0);
+        TestBoard.inPlay(game, seat, "Mountain");
+        TestBoard.inPlay(game, seat, "Mountain");
+        TestBoard.inPlay(game, seat, "Swamp");
+        TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
+        TestBoard.inHand(game, seat, "Kolaghan's Command");
+        RandomSeatController random = (RandomSeatController) seat.getController();
+        random.attach(game, null, null);
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            List<SpellAbility> chosen = random.chooseSpellAbilityToPlay();
+            assertTrue(random.playChosenSpellAbility(chosen.get(0)), "the draw casts the Command");
+            game.getStack().resolveStack();
+            TestBoard.priority(game);
+            TestBoard.nextStep(game);
+        });
+
+        String cost = only(records, "activation", "cardsfolder/k/kolaghans_command.txt");
+        List<?> targets = (List<?>) refsOf(cost).get("targets");
+        assertFalse(targets.isEmpty(), cost);
+        assertEquals(targets, RecordLines.targetEnds(cost), cost);
     }
 }

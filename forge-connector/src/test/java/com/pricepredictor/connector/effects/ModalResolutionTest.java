@@ -404,8 +404,9 @@ class ModalResolutionTest {
     /**
      * A forced Kolaghan's Command's halves read the targets as the live
      * bracket reads them: each half's {@code targets_at_cast} is the hook's,
-     * never null, and every card it names is an entity of that half's board
-     * (follow-up item 6).
+     * never null, every card it names is an entity of that half's board
+     * (follow-up item 6), and its {@code targets} links are those refs, in
+     * their order.
      */
     @Test
     void aForcedCharmsHalvesCarryTheirTargetsAsCast() throws Throwable {
@@ -430,7 +431,84 @@ class ModalResolutionTest {
                     assertTrue(ids.contains(ref), ref + " is an entity: " + half);
                 }
             }
+            assertEquals(atCast, RecordLines.targetEnds(half), "its links are its refs: " + half);
         }
+    }
+
+    /**
+     * Kolaghan's Command with a discard at the opponent and 2 damage at a
+     * creature: each mode's half links its own mode's targets only, in the
+     * order of its {@code refs.targets_at_cast}, indexed from 0 — the damage
+     * half's one link is the creature at 0, never the discard's player too.
+     */
+    @Test
+    void eachModesHalfLinksTheTargetsItsRefsList() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card bears = TestBoard.inPlay(game, opponent, "Grizzly Bears");
+        TestBoard.inHand(game, opponent, "Mountain");
+        Card command = TestBoard.inHand(game, caster, "Kolaghan's Command");
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, "to split the charm's modes", () -> {
+            SpellAbility charm = TestBoard.charmOf(game.getAction().moveToStack(command, null), caster);
+            List<AbilitySub> modes = TestBoard.chain(charm, 1, 3);
+            modes.get(0).getTargets().add(opponent);
+            modes.get(1).getTargets().add(bears);
+            game.getStack().add(charm);
+            game.getStack().resolveStack();
+            TestBoard.priority(game);
+            TestBoard.nextStep(game);
+        });
+
+        List<String> halves = records(records, "resolution");
+        assertEquals(2, halves.size(), records.toString());
+        for (String half : halves) {
+            Object atCast = RecordLines.asMap(stateMap(half).get("refs")).get("targets_at_cast");
+            assertEquals(atCast, RecordLines.targetEnds(half), half);
+        }
+        assertEquals(List.of(Refs.of(bears)), RecordLines.targetEnds(halves.get(1)), halves.get(1));
+    }
+
+    /**
+     * Kolaghan's Command destroying an Ornithopter and dealing 2 damage to a
+     * creature, both exiled before it resolved: it fizzles, and each mode's
+     * empty half still links its own mode's target as cast, its refs' one.
+     */
+    @Test
+    void aFizzledCharmsHalvesLinkTheTargetsTheirRefsList() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card thopter = TestBoard.inPlay(game, opponent, "Ornithopter");
+        Card bears = TestBoard.inPlay(game, opponent, "Grizzly Bears");
+        Card command = TestBoard.inHand(game, caster, "Kolaghan's Command");
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, "to split the charm's modes", () -> {
+            SpellAbility charm = TestBoard.charmOf(game.getAction().moveToStack(command, null), caster);
+            List<AbilitySub> modes = TestBoard.chain(charm, 2, 3);
+            modes.get(0).getTargets().add(thopter);
+            modes.get(1).getTargets().add(bears);
+            game.getStack().add(charm);
+            game.getAction().exile(thopter, null, null);
+            game.getAction().exile(bears, null, null);
+            game.getStack().resolveStack();
+            TestBoard.priority(game);
+            TestBoard.nextStep(game);
+        });
+
+        List<String> halves = records(records, "resolution");
+        assertEquals(2, halves.size(), records.toString());
+        assertEquals(List.of("L" + thopter.getId()), RecordLines.targetEnds(halves.get(0)), halves.get(0));
+        assertEquals(List.of("L" + bears.getId()), RecordLines.targetEnds(halves.get(1)), halves.get(1));
+        for (String half : halves) {
+            Object atCast = RecordLines.asMap(stateMap(half).get("refs")).get("targets_at_cast");
+            assertEquals(atCast, RecordLines.targetEnds(half), half);
+        }
+    }
+
+    private static Map<String, Object> stateMap(String record) {
+        return RecordLines.asMap(RecordLines.parse(record).get("state"));
     }
 
     private static Game confluenceBoard() {

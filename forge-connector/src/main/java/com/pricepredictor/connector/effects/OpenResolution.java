@@ -138,11 +138,13 @@ final class OpenResolution {
     /**
      * Its targets before Forge's check for illegal targets, which its effect
      * half's boards carry whatever zone they are in now, or as they last
-     * existed: the card that made it fizzle is among them. Null where they
-     * are unknown.
+     * existed (the card that made it fizzle is among them), with the links
+     * narrowed to the mode beginning now, the next of {@link #modes}
+     * ({@link ChainTargets#beginningMode}): what that mode's half's board
+     * links. Null where they are unknown.
      */
-    ChainTargets castTargets() {
-        return castTargets;
+    ChainTargets castTargetsOfMode(Integer option) {
+        return castTargets == null ? null : castTargets.beginningMode(modes.begun(), option);
     }
 
     /**

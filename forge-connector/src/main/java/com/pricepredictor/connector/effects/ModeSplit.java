@@ -71,6 +71,11 @@ final class ModeSplit {
         }
     }
 
+    /** How many modes have begun: the position, from 0, of the next one to begin. */
+    int begun() {
+        return complete.size() + (current == null ? 0 : 1);
+    }
+
     /** Complete the current mode's half and open one for the next mode. */
     void begin(Integer option, Snapshot state) {
         close();

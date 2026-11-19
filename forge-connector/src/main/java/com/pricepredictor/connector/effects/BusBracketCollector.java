@@ -39,8 +39,9 @@ import java.util.Set;
  * <p>Each record describes one moment, its board read just before it (root
  * spec § 8.14, FR-042a–FR-042f). A cast or an activation writes its cost half
  * when its costs are paid — at its cast event — on the board read before the
- * card moved to the stack or the costs were paid ({@link #castHandler}); it
- * does not wait for the item's fate. The item's resolution writes its effect
+ * card moved to the stack or the costs were paid ({@link #castHandler}), its
+ * {@code targets} links read with its refs at the cast event, its modes and
+ * targets chosen; it does not wait for the item's fate. The item's resolution writes its effect
  * half, on the board read when the resolution starts ({@link
  * #resolutionHandler}), carrying the item's {@code outcome}; a countered item
  * writes none, its fate being the countering clause's {@code spell_countered}
@@ -100,8 +101,12 @@ public final class BusBracketCollector extends BusEventReader {
      */
     private PendingCast pendingCast;
 
-    /** A cast's board, read before its card moved or its costs were paid. */
-    private record PendingCast(SpellAbility ability, int hostId, Snapshot board) {
+    /**
+     * A cast's board, read before its card moved or its costs were paid, and
+     * the targets its chain held then, each ref once.
+     */
+    private record PendingCast(
+            SpellAbility ability, int hostId, Snapshot board, List<String> targets) {
 
         /** Whether the item a cast event put on the stack is this cast's. */
         boolean isOf(SpellAbility pushed) {
@@ -232,8 +237,8 @@ public final class BusBracketCollector extends BusEventReader {
             onNextAction();
         }
         Card host = cast.getHostCard();
-        pendingCast = new PendingCast(
-                cast, host == null ? -1 : host.getId(), snapshots.ofResolving(cast));
+        pendingCast = new PendingCast(cast, host == null ? -1 : host.getId(),
+                snapshots.ofResolving(cast), ChainTargets.now(cast).all());
         if (!resolving) {
             rebaselineAtSnapshot();
         }
@@ -301,12 +306,22 @@ public final class BusBracketCollector extends BusEventReader {
         Snapshot board = snapshots.ofResolving(resolving.ability, atCast);
         resolving.resolutionStarted(board, ChainTargets.now(item), atCast);
         if (fizzled) {
-            for (Integer option : CharmModes.chosenOptions(item)) {
-                resolving.modes.begin(option, board);
-            }
-            resolving.modes.close();
+            beginFizzledModes(resolving, item);
         }
         rebaselineAtSnapshot();
+    }
+
+    /**
+     * A fizzled charm's halves, one per chosen mode, none of whose clauses
+     * resolves: each on the board its resolution started on, linking its
+     * own mode's targets as cast, as a resolving mode's half does.
+     */
+    private void beginFizzledModes(OpenResolution resolving, SpellAbility item) {
+        for (Integer option : CharmModes.chosenOptions(item)) {
+            resolving.modes.begin(option,
+                    snapshots.ofResolving(resolving.ability, resolving.castTargetsOfMode(option)));
+        }
+        resolving.modes.close();
     }
 
     /** Whether an ability a hook hands over is this game's. */
@@ -440,12 +455,14 @@ public final class BusBracketCollector extends BusEventReader {
     /**
      * Write a cast's cost half (FR-042a): the board read as its cast started
      * — or at the cast, where its start was not told — with the refs block
-     * read now, its targets, modes and X chosen; its events, a spell card's
-     * {@code zone_change} to the stack; and its costs.
+     * read now, its targets, modes and X chosen, and the {@code targets}
+     * links those refs name; its events, a spell card's {@code zone_change}
+     * to the stack; and its costs.
      */
     private void writeCostHalf(OpenResolution cast, PendingCast started) {
         Snapshot board = started != null
-                ? started.board().withRefs(RefsJson.renderWithX(cast.ability, cast.x()))
+                ? withTargetsChosen(started, cast.ability)
+                        .withRefs(RefsJson.renderWithX(cast.ability, cast.x()))
                 : cast.state;
         context.emit(context.newResolution(Moment.ACTIVATION)
                 .actor(cast.actor)
@@ -453,6 +470,19 @@ public final class BusBracketCollector extends BusEventReader {
                 .linkId(cast.linkId)
                 .state(board.render())
                 .payload(RecordPayloads.costPayload(castMove(cast.ability), cast.costs)));
+    }
+
+    /**
+     * A cast's board as it started, its {@code targets} links read again
+     * where its modes or targets were chosen after the read: Forge moves a
+     * spell's card to the stack, where the cast hook reads the board, before
+     * it chains a charm's modes, and a play that defers its targets (the
+     * random seat's charm) chooses them after that too.
+     */
+    private Snapshot withTargetsChosen(PendingCast started, SpellAbility pushed) {
+        return ChainTargets.now(pushed).all().equals(started.targets())
+                ? started.board()
+                : snapshots.withTargetsChosen(started.board(), pushed);
     }
 
     /**
@@ -1157,7 +1187,7 @@ public final class BusBracketCollector extends BusEventReader {
         if (open == null || !fromOpenBracket(cause) || !open.hosts(clause)) {
             return;
         }
-        open.modes.begin(option, snapshots.ofResolving(open.ability, open.castTargets()));
+        open.modes.begin(option, snapshots.ofResolving(open.ability, open.castTargetsOfMode(option)));
         rebaselineAtSnapshot();
     }
 

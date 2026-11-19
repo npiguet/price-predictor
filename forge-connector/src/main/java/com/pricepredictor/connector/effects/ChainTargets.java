@@ -7,9 +7,13 @@ import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -33,11 +37,15 @@ import java.util.Set;
  * spell or ability on the stack is named by its host card's {@code E<id>},
  * and listed among {@link #onStack} too, which is how it is told from that
  * card targeted itself.
+ *
+ * <p>Each target is read once, as a {@link Target}: what the refs list, what
+ * a snapshot's {@code targets} links name and index, and what the stack
+ * extras share out all come from that one reading.
  */
 final class ChainTargets {
 
     /** The root's links' targets, before any mode clone. */
-    private final List<String> root;
+    private final List<Target> root;
     /** Each chosen mode's targets, in chain order. */
     private final List<ModeTargets> modes;
     /** How many targets the chain holds, counted per link. */
@@ -50,16 +58,46 @@ final class ChainTargets {
     private final Set<String> onStack;
     /** Each link with the targets of it that have a ref, root first. */
     private final List<Link> links;
+    /** The targets a record's links name: every link's, or one half's; each ref once. */
+    private final List<Target> linked;
 
-    private record ModeTargets(Integer option, List<String> targets) {
+    private record ModeTargets(Integer option, List<Target> targets) {
     }
 
     /** One link of the chain and its targets that have a ref, in the order chosen. */
     record Link(SpellAbility ability, List<Target> targets) {
     }
 
-    /** One target of a link: the object Forge holds, and the ref it is written as. */
-    record Target(GameObject object, String ref) {
+    /** What a target is, which says how a link names it. */
+    enum Kind {
+        /** A card that is still the object targeted: {@code E<id>}. */
+        CARD,
+        /** A card that ceased to exist or became a new object: {@code L<id>}. */
+        LAST_KNOWN,
+        /** A player: {@code P<id>}. */
+        PLAYER,
+        /** A spell on the stack: its card's {@code E<id>}, its card the link's end. */
+        SPELL,
+        /** An ability on the stack: its host card's {@code E<id>}, its line the link's end. */
+        ABILITY
+    }
+
+    /**
+     * One target of a link: the object Forge holds, the ref the refs block
+     * writes it as, and what it is.
+     */
+    record Target(GameObject object, String ref, Kind kind) {
+
+        /**
+         * The card a snapshot holds for it: the targeted card itself, the
+         * host of a targeted spell or ability; null for a player.
+         */
+        Card card() {
+            if (object instanceof SpellAbility ability) {
+                return ability.getHostCard();
+            }
+            return object instanceof Card card ? card : null;
+        }
     }
 
     private ChainTargets(Reading reading) {
@@ -70,6 +108,19 @@ final class ChainTargets {
         this.lastKnown = List.copyOf(reading.lastKnown);
         this.onStack = Set.copyOf(reading.onStack);
         this.links = List.copyOf(reading.links);
+        this.linked = distinct(root, modes);
+    }
+
+    /** {@code whole} with the targets its links name narrowed to {@code linked}. */
+    private ChainTargets(ChainTargets whole, List<Target> linked) {
+        this.root = whole.root;
+        this.modes = whole.modes;
+        this.count = whole.count;
+        this.cards = whole.cards;
+        this.lastKnown = whole.lastKnown;
+        this.onStack = whole.onStack;
+        this.links = whole.links;
+        this.linked = linked;
     }
 
     /** The targets the chain holds now. */
@@ -89,7 +140,13 @@ final class ChainTargets {
      * that does not match the chain.
      */
     static ChainTargets atCast(SpellAbility item, Object perLink) {
-        if (item == null || !(perLink instanceof List<?> lists)) {
+        List<Collection<?>> links = item == null ? null : listsOf(perLink);
+        return links != null && chainLength(item) == links.size() ? of(item, links, true) : null;
+    }
+
+    /** {@code perLink} as one collection per link, or null where it is no such list. */
+    private static List<Collection<?>> listsOf(Object perLink) {
+        if (!(perLink instanceof List<?> lists)) {
             return null;
         }
         List<Collection<?>> links = new ArrayList<>();
@@ -99,11 +156,15 @@ final class ChainTargets {
             }
             links.add(targets);
         }
+        return links;
+    }
+
+    private static int chainLength(SpellAbility item) {
         int chain = 0;
         for (SpellAbility link = item; link != null; link = link.getSubAbility()) {
             chain++;
         }
-        return chain == links.size() ? of(item, links, true) : null;
+        return chain;
     }
 
     private static ChainTargets of(
@@ -121,14 +182,14 @@ final class ChainTargets {
     private static final class Reading {
         private final Game game;
         private final boolean asCast;
-        private final List<String> root = new ArrayList<>();
+        private final List<Target> root = new ArrayList<>();
         private final List<ModeTargets> modes = new ArrayList<>();
         private final List<Card> cards = new ArrayList<>();
         private final List<Card> lastKnown = new ArrayList<>();
         private final Set<String> onStack = new LinkedHashSet<>();
         private final List<Link> links = new ArrayList<>();
-        /** Where the current link's refs go: the root's, or its mode's. */
-        private List<String> into = root;
+        /** Where the current link's targets go: the root's, or its mode's. */
+        private List<Target> into = root;
         private int count;
 
         Reading(Game game, boolean asCast) {
@@ -145,43 +206,54 @@ final class ChainTargets {
             List<Target> named = new ArrayList<>();
             for (Object target : targets) {
                 count++;
-                String ref = nameOf(target);
-                if (ref != null) {
-                    into.add(ref);
-                    named.add(new Target((GameObject) target, ref));
+                Target read = targetOf(target, asCast ? game : null);
+                if (read != null) {
+                    note(read);
+                    into.add(read);
+                    named.add(read);
                 }
             }
             links.add(new Link(link, List.copyOf(named)));
         }
 
-        /** A target's ref, the card or host it holds noted; null for anything else. */
-        private String nameOf(Object target) {
-            if (target instanceof Card card) {
-                return cardRef(card);
+        /** The card a snapshot holds for {@code target}, or the one it last was, noted. */
+        private void note(Target target) {
+            switch (target.kind()) {
+                case LAST_KNOWN -> lastKnown.add(target.card());
+                case CARD -> cards.add(target.card());
+                case SPELL, ABILITY -> noteStack(target);
+                default -> {
+                    // A player is no card.
+                }
             }
-            if (target instanceof SpellAbility ability && ability.getHostCard() != null) {
-                return stackRef(ability.getHostCard());
-            }
-            return target instanceof Player player ? Refs.of(player) : null;
         }
 
-        private String cardRef(Card card) {
-            if (asCast && isGone(game, card)) {
-                lastKnown.add(card);
-                return lastKnownRef(card);
+        private void noteStack(Target target) {
+            onStack.add(target.ref());
+            if (game == null || game.getCardState(target.card(), null) != null) {
+                cards.add(target.card());
             }
-            cards.add(card);
-            return Refs.of(card);
         }
+    }
 
-        private String stackRef(Card host) {
-            String ref = Refs.of(host);
-            onStack.add(ref);
-            if (game == null || game.getCardState(host, null) != null) {
-                cards.add(host);
-            }
-            return ref;
+    /**
+     * A target as one {@link Target}, or null for anything no ref names: a
+     * card or a player as itself, a spell or an ability on the stack by its
+     * host card. A card is {@link Kind#LAST_KNOWN} when {@code asCastIn}, the
+     * game of targets as cast, no longer holds it as the object targeted;
+     * null reads every card as the object it is.
+     */
+    static Target targetOf(Object target, Game asCastIn) {
+        if (target instanceof Card card) {
+            return isGone(asCastIn, card)
+                    ? new Target(card, lastKnownRef(card), Kind.LAST_KNOWN)
+                    : new Target(card, Refs.of(card), Kind.CARD);
         }
+        if (target instanceof SpellAbility ability && ability.getHostCard() != null) {
+            return new Target(ability, Refs.of(ability.getHostCard()),
+                    ability.isSpell() ? Kind.SPELL : Kind.ABILITY);
+        }
+        return target instanceof Player player ? new Target(player, Refs.of(player), Kind.PLAYER) : null;
     }
 
     /**
@@ -206,22 +278,37 @@ final class ChainTargets {
      * a spell or an ability on the stack by its host card.
      */
     static String refOf(Object target) {
-        if (target instanceof SpellAbility ability) {
-            return Refs.ofNullable(ability.getHostCard());
-        }
-        if (target instanceof Card || target instanceof Player) {
-            return Refs.ofAny(target).orElse(null);
-        }
-        return null;
+        Target read = targetOf(target, null);
+        return read == null ? null : read.ref();
     }
 
     /** Every link's targets, root first, each ref once. */
     List<String> all() {
-        Set<String> all = new LinkedHashSet<>(root);
+        return refsOf(distinct(root, modes));
+    }
+
+    /**
+     * The targets a record's {@code targets} links name, each ref once, a
+     * link's {@code index} its position here: every link's, root first, or
+     * one half's ({@link #half}), in the order of the refs the record lists
+     * for them.
+     */
+    List<Target> linked() {
+        return linked;
+    }
+
+    /** The first target of each ref, root first. */
+    private static List<Target> distinct(List<Target> root, List<ModeTargets> modes) {
+        Map<String, Target> byRef = new LinkedHashMap<>();
+        root.forEach(target -> byRef.putIfAbsent(target.ref(), target));
         for (ModeTargets mode : modes) {
-            all.addAll(mode.targets());
+            mode.targets().forEach(target -> byRef.putIfAbsent(target.ref(), target));
         }
-        return List.copyOf(all);
+        return List.copyOf(byRef.values());
+    }
+
+    private static List<String> refsOf(List<Target> targets) {
+        return targets.stream().map(Target::ref).toList();
     }
 
     /** How many targets the chain holds, a target two links share counted twice. */
@@ -239,26 +326,36 @@ final class ChainTargets {
      * @param option the half's {@code Choices$} position, or null
      */
     List<String> ofHalf(int half, int halves, Integer option) {
-        if (modes.isEmpty()) {
-            return all();
+        return refsOf(half(half, halves, option).linked);
+    }
+
+    /**
+     * These targets with the links narrowed to one effect half's ({@link
+     * #ofHalf}): what that half's board links, in the order its refs list
+     * them.
+     */
+    ChainTargets half(int half, int halves, Integer option) {
+        ModeTargets mode = halves == modes.size() && half < halves
+                ? modes.get(half) : modeOf(option);
+        return new ChainTargets(this, distinct(root, mode == null ? modes : List.of(mode)));
+    }
+
+    /**
+     * {@link #half} for a mode's half as it begins, the {@code begun}-th
+     * mode begun, counted from 0: a resolution writes one half per mode
+     * begun, each chosen mode beginning in chain order, so its half is the
+     * {@code begun}-th of as many halves as chosen modes.
+     */
+    ChainTargets beginningMode(int begun, Integer option) {
+        return half(begun, modes.size(), option);
+    }
+
+    /** The first chosen mode at {@code option}, or null where none is or the option is unknown. */
+    private ModeTargets modeOf(Integer option) {
+        if (option == null) {
+            return null;
         }
-        ModeTargets mode = null;
-        if (halves == modes.size()) {
-            mode = modes.get(half);
-        } else if (option != null) {
-            for (ModeTargets each : modes) {
-                if (option.equals(each.option())) {
-                    mode = each;
-                    break;
-                }
-            }
-        }
-        if (mode == null) {
-            return all();
-        }
-        Set<String> targets = new LinkedHashSet<>(root);
-        targets.addAll(mode.targets());
-        return List.copyOf(targets);
+        return modes.stream().filter(mode -> option.equals(mode.option())).findFirst().orElse(null);
     }
 
     /**
@@ -299,17 +396,8 @@ final class ChainTargets {
      */
     static List<String> onStackOf(List<String> written, ChainTargets... readings) {
         Set<String> stack = new LinkedHashSet<>();
-        for (ChainTargets reading : readings) {
-            if (reading != null) {
-                stack.addAll(reading.onStack());
-            }
-        }
-        List<String> named = new ArrayList<>();
-        for (String ref : written) {
-            if (stack.contains(ref) && !named.contains(ref)) {
-                named.add(ref);
-            }
-        }
-        return named;
+        Arrays.stream(readings).filter(Objects::nonNull)
+                .forEach(reading -> stack.addAll(reading.onStack()));
+        return written.stream().filter(stack::contains).distinct().toList();
     }
 }

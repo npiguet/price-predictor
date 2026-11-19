@@ -216,6 +216,25 @@ final class RecordLines {
         return found.get(0);
     }
 
+    /**
+     * The ends of a record's {@code targets} links in {@code index} order,
+     * each index from 0 held once: what a record whose one stack object
+     * targets names as that object's targets.
+     */
+    static List<Object> targetEnds(String record) {
+        List<?> links = (List<?>) asMap(parse(record).get("state")).get("links");
+        Map<Long, Object> byIndex = new java.util.TreeMap<>();
+        for (Object each : links) {
+            Map<String, Object> link = asMap(each);
+            if ("targets".equals(link.get("type"))) {
+                assertEquals(null, byIndex.put((Long) link.get("index"), link.get("to")), record);
+            }
+        }
+        assertEquals(new ArrayList<>(byIndex.keySet()),
+                java.util.stream.LongStream.range(0, byIndex.size()).boxed().toList(), record);
+        return new ArrayList<>(byIndex.values());
+    }
+
     /** The outcome an effect half carries (FR-042b). */
     static String outcomeOf(String record) {
         Object outcome = payload(record).get("outcome");

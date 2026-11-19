@@ -6,7 +6,6 @@ import com.pricepredictor.connector.json.JsonParts;
 import forge.game.CardTraitBase;
 import forge.game.Game;
 import forge.game.GameEntity;
-import forge.game.GameObject;
 import forge.game.StaticEffect;
 import forge.game.card.Card;
 import forge.game.card.CardCloneStates;
@@ -39,7 +38,8 @@ import java.util.Set;
  *
  * <p>A link is {@code {from, to, type, index?}}, written once in its family's
  * forward direction ({@link LinkFamily}); {@code index} is a target's
- * position, on {@code targets} only. An end is a ref ({@code E<id>},
+ * position among its stack object's targets, each ref once, on
+ * {@code targets} only ({@link ChainTargets#linked}). An end is a ref ({@code E<id>},
  * {@code P<id>}, a last-known copy's {@code L<id>}, a floating effect's
  * {@code F<timestamp>}, a delayed trigger's {@code D<id>}) or a line,
  * {@code {entity, key}}: a link an ability made ends at that ability's line,
@@ -86,42 +86,57 @@ final class SnapshotLinks {
     }
 
     /**
-     * The links of one snapshot.
+     * A snapshot's acting spell ability, and the targets its links name.
      *
-     * @param cards         every card entity the snapshot renders, in order
-     * @param tiers         the cards of the four tiers, whose rows the global
-     *                      block's timestamped floating effects are read from
-     * @param acting        the acting spell ability, whose targets are links
-     *                      even before it is on the stack; or null
-     * @param actingTargets whether {@code acting}'s targets are its own: false
-     *                      for a playability candidate, whose persistent
-     *                      ability may hold an earlier evaluation's
-     * @param pending       the event a trait is about to handle, or null
-     * @param board         the board as it stands, or without one static:
-     *                      a {@code continuous} record's, which carries no
-     *                      {@code affects} from a static, whose answer it is,
-     *                      and names each card's controller on it
-     * @param floating      the clause notes the floating effects are read by
+     * @param ability the acting spell ability, whose targets are links even
+     *                before it is on the stack; or null
+     * @param chosen  whether its targets are its own: false for a
+     *                playability candidate, whose persistent ability may
+     *                hold an earlier evaluation's
+     * @param targets the targets its links name ({@link ChainTargets#linked}):
+     *                an effect half's as cast, before Forge's check for
+     *                illegal targets, a mode's half's its mode's; or null
+     *                for those it holds now
      */
-    static String render(Game game, Collection<Card> cards, Collection<Card> tiers,
-                         SpellAbility acting, boolean actingTargets, EffectEvent pending,
-                         StaticSuppression board, FloatingEffects floating) {
-        return render(game, cards, tiers, acting, actingTargets, pending, board, floating, null);
+    record Acting(SpellAbility ability, boolean chosen, ChainTargets targets) {
+
+        /** No acting ability: a board's snapshot. */
+        static final Acting NONE = new Acting(null, true, null);
+
+        /**
+         * The targets the acting ability's links name: those given, else
+         * those it holds now, unless they are a candidate's, an earlier
+         * evaluation's, off the stack.
+         */
+        List<ChainTargets.Target> linked(boolean onStack) {
+            if (targets != null) {
+                return targets.linked();
+            }
+            return chosen || onStack ? ChainTargets.now(ability).linked() : List.of();
+        }
     }
 
     /**
-     * The same, {@code acting}'s {@code targets} links taken from
-     * {@code actingTargetsAsCast} when it is not null: an effect half's
-     * targets as cast, before Forge's check for illegal targets.
+     * The links of one snapshot.
+     *
+     * @param cards    every card entity the snapshot renders, in order
+     * @param tiers    the cards of the four tiers, whose rows the global
+     *                 block's timestamped floating effects are read from
+     * @param acting   the acting spell ability and the targets its links name
+     * @param pending  the event a trait is about to handle, or null
+     * @param board    the board as it stands, or without one static: a
+     *                 {@code continuous} record's, which carries no
+     *                 {@code affects} from a static, whose answer it is,
+     *                 and names each card's controller on it
+     * @param floating the clause notes the floating effects are read by
      */
     static String render(Game game, Collection<Card> cards, Collection<Card> tiers,
-                         SpellAbility acting, boolean actingTargets, EffectEvent pending,
-                         StaticSuppression board, FloatingEffects floating,
-                         List<String> actingTargetsAsCast) {
+                         Acting acting, EffectEvent pending,
+                         StaticSuppression board, FloatingEffects floating) {
         SnapshotLinks links = new SnapshotLinks(game, cards);
         links.cardLinks(cards, board);
         links.combat(game.getCombat());
-        links.stack(acting, actingTargets, actingTargetsAsCast);
+        links.stack(acting);
         links.commandZone(cards, tiers, floating);
         if (pending != null && pending.lastKnown() != null) {
             Card lastKnown = pending.lastKnown();
@@ -139,10 +154,7 @@ final class SnapshotLinks {
      * each controlled by its owner, as in the library.
      */
     static String withLibraryCards(String links, Collection<Card> libraryCards) {
-        Map<LinkFamily, Set<String>> byFamily = new EnumMap<>(LinkFamily.class);
-        for (String link : JsonParts.elements(links)) {
-            byFamily.computeIfAbsent(familyOf(link), f -> new LinkedHashSet<>()).add(link);
-        }
+        Map<LinkFamily, Set<String>> byFamily = byFamily(links);
         for (Card card : libraryCards) {
             String owner = player(card.getOwner());
             byFamily.computeIfAbsent(LinkFamily.CONTROLS, f -> new LinkedHashSet<>())
@@ -151,6 +163,31 @@ final class SnapshotLinks {
                     .add(linkJson(LinkFamily.OWNS, owner, card(card)));
         }
         return joined(byFamily);
+    }
+
+    /**
+     * {@code links}, a cast's links read as it started, with the
+     * {@code targets} family read again now, its modes and targets chosen
+     * and {@code acting} on the stack: each stack object's targets as the
+     * cast's refs block reads them. {@code added} are the card entities the
+     * snapshot gained for the targets chosen since.
+     */
+    static String withTargetsNow(
+            String links, Game game, Collection<Card> added, SpellAbility acting) {
+        SnapshotLinks now = new SnapshotLinks(game, added);
+        now.stack(new Acting(acting, true, null));
+        Map<LinkFamily, Set<String>> byFamily = byFamily(links);
+        byFamily.put(LinkFamily.TARGETS, now.byFamily.getOrDefault(LinkFamily.TARGETS, Set.of()));
+        return joined(byFamily);
+    }
+
+    /** Rendered links, by family, each family's in the order given. */
+    private static Map<LinkFamily, Set<String>> byFamily(String links) {
+        Map<LinkFamily, Set<String>> byFamily = new EnumMap<>(LinkFamily.class);
+        for (String link : JsonParts.elements(links)) {
+            byFamily.computeIfAbsent(familyOf(link), f -> new LinkedHashSet<>()).add(link);
+        }
+        return byFamily;
     }
 
     /** A rendered link's family, from its {@code type}. */
@@ -255,12 +292,31 @@ final class SnapshotLinks {
     }
 
     /**
-     * Each stack object's targets, by index across its chain (the root's
-     * first, then each sub-ability's), its source and what triggered it; the
-     * acting ability's too where it is not on the stack yet, its targets only
-     * when they are its own.
+     * Each stack object's targets, its source and what triggered it; the
+     * acting ability's too where it is not on the stack yet. A target's
+     * {@code index} is its position among its object's targets, each ref
+     * once ({@link ChainTargets#linked}): the acting ability's those its
+     * record names ({@link Acting#linked}), every other object's those it
+     * holds now.
      */
-    private void stack(SpellAbility acting, boolean actingTargets, List<String> actingAsCast) {
+    private void stack(Acting acting) {
+        List<SpellAbility> ordered = stackObjects();
+        SpellAbility actor = acting.ability();
+        boolean onStack = ordered.stream().anyMatch(each -> each == actor);
+        if (actor != null && !onStack) {
+            ordered.add(actor);
+        }
+        for (SpellAbility ability : ordered) {
+            String line = line(ability.getHostCard(), ability);
+            targets(line, ability == actor
+                    ? acting.linked(onStack) : ChainTargets.now(ability).linked());
+            sourceOf(ability, line);
+            triggeredBy(ability, line);
+        }
+    }
+
+    /** The spell abilities on the stack, top first, each once. */
+    private List<SpellAbility> stackObjects() {
         Set<SpellAbility> objects = Collections.newSetFromMap(new IdentityHashMap<>());
         List<SpellAbility> ordered = new ArrayList<>();
         for (SpellAbilityStackInstance instance : game.getStack()) {
@@ -269,41 +325,30 @@ final class SnapshotLinks {
                 ordered.add(ability);
             }
         }
-        // A candidate off the stack: its persistent ability's targets are an
-        // earlier evaluation's, not chosen for this record.
-        boolean staleTargets = acting != null && !actingTargets && !objects.contains(acting);
-        if (acting != null && objects.add(acting)) {
-            ordered.add(acting);
+        return ordered;
+    }
+
+    /** A stack object's targets, each indexed by its position in {@code targets}. */
+    private void targets(String line, List<ChainTargets.Target> targets) {
+        for (int index = 0; index < targets.size(); index++) {
+            addTarget(line, target(targets.get(index)), index);
         }
-        for (SpellAbility ability : ordered) {
-            Card host = ability.getHostCard();
-            String line = line(host, ability);
-            int index = 0;
-            boolean targets = !(staleTargets && ability == acting);
-            if (targets && ability == acting && actingAsCast != null) {
-                for (String target : actingAsCast) {
-                    addTarget(line, Json.string(target), index++);
-                }
-                targets = false;
-            }
-            for (SpellAbility clause = ability; targets && clause != null;
-                    clause = clause.getSubAbility()) {
-                if (clause.getTargets() == null) {
-                    continue;
-                }
-                for (GameObject target : clause.getTargets()) {
-                    addTarget(line, target(target), index++);
-                }
-            }
-            if (line != null && !line.equals(card(host))) {
-                add(LinkFamily.SOURCE_OF, card(host), line);
-            }
-            if (ability.isTrigger() && ability.getTriggeringObjects() != null) {
-                for (Object about : ability.getTriggeringObjects().values()) {
-                    for (String to : entities(about)) {
-                        add(LinkFamily.TRIGGERED_BY, line, to);
-                    }
-                }
+    }
+
+    private void sourceOf(SpellAbility ability, String line) {
+        Card host = ability.getHostCard();
+        if (line != null && !line.equals(card(host))) {
+            add(LinkFamily.SOURCE_OF, card(host), line);
+        }
+    }
+
+    private void triggeredBy(SpellAbility ability, String line) {
+        if (!ability.isTrigger() || ability.getTriggeringObjects() == null) {
+            return;
+        }
+        for (Object about : ability.getTriggeringObjects().values()) {
+            for (String to : entities(about)) {
+                add(LinkFamily.TRIGGERED_BY, line, to);
             }
         }
     }
@@ -504,15 +549,15 @@ final class SnapshotLinks {
     }
 
     /**
-     * A target: a card or a player by its ref, a spell by its card, and an
-     * ability on the stack by its line.
+     * A target's end: its ref, which names a card, a player, a card as it
+     * last existed and a spell by its card; an ability on the stack by its
+     * line.
      */
-    private static String target(GameObject target) {
-        if (target instanceof SpellAbility ability) {
-            return ability.isSpell() ? card(ability.getHostCard())
-                    : line(ability.getHostCard(), ability);
+    private static String target(ChainTargets.Target target) {
+        if (target.kind() == ChainTargets.Kind.ABILITY) {
+            return line(target.card(), (SpellAbility) target.object());
         }
-        return entity(target);
+        return Json.string(target.ref());
     }
 
     /** A trait's line on its host, or the host where the trait keys to no line. */

@@ -290,9 +290,10 @@ library's own object, so these fields are not read from it after the move.
 `links` sits in `state` after `entities`. Each link is `{from, to, type, index?}`, written once in
 its family's forward direction; the reader takes the reverse type from the other end. `type` is a
 family name of `relation_types.FAMILIES` (`FE/LinkFamily.java`, pinned by `LinkFamilyContractTest`
-and `test_relation_types.py`). `index` is on `targets` only: the target's position across the
-stack object's chain, the root's targets first. Links are listed by family in table order, each
-once.
+and `test_relation_types.py`). `index` is on `targets` only: the target's position among the
+stack object's targets, root first, each ref once, as a refs block lists them (an acting item's
+targets are its refs' list: § Behaviour changes readers rely on). A target two links share is
+one link. Links are listed by family in table order, each once.
 
 An end is a ref (`E<id>`, `P<id>`, `L<id>`, `F<timestamp>`, `D<id>`) or a line
 `{entity, key}`: a link an ability made ends at that ability's line. Where Forge keeps no record of
@@ -310,7 +311,7 @@ lists (`getGainControlTargets`, `getDamageHistory`) may still hold it.
 | `in_band_with` | the lower card id of two attackers of one band | the other | `Combat.getAttackingBands` |
 | `must_block` | the creature | each attacker it must block, by card id | `getMustBlockCards` |
 | `goaded_by` | the goaded creature | each player who goaded it | `getGoaded` |
-| `targets` | a stack object's line (the acting ability's too, before it is on the stack) | each target: a card or player; a spell by its card; an ability by its line | each clause's targets |
+| `targets` | a stack object's line (the acting ability's too, before it is on the stack) | each target: a card or player; a spell by its card; an ability by its line | each clause's targets, each ref once |
 | `source_of` | the stack object's host card | its line | the stack object's host |
 | `triggered_by` | a triggered ability's line on the stack | each card or player among its triggering objects | `getTriggeringObjects` |
 | `affects` | a static line, a command-zone effect card's included; a timestamped floating effect `F<ts>` | each permanent it applies to, and each player (`StaticEffect.getAffectedPlayers`); an `F<ts>` reaches cards only | the static's `affected`; the floating effect's `affected` |
@@ -413,7 +414,7 @@ position a card left a library from, and a search of another player's library.
 
 - Each record describes one moment; its snapshot is the board just before it (root § 8.14):
   - a spell's cost half: before the card moves to the stack, the card where it was cast from and its
-    costs unpaid;
+    costs unpaid; its acting item's `targets` links excepted (below);
   - an activated ability's cost half: before its costs are paid;
   - an effect half: when the resolution starts, before its first clause (a modal half: before its
     mode's first clause);
@@ -540,10 +541,19 @@ position a card left a library from, and a search of another player's library.
   item carry that one reading, never one taken after the resolution.
 - A countered stack item writes no effect half. The countering clause's effect half holds the
   countered spell's `spell_countered` event and its card's `zone_change` off the stack.
-- An effect half's `targets` links from the acting line are its targets as cast, the refs
-  `refs.targets_at_cast` lists, in that order (an `L<id>` ref for one that ceased to exist), never
-  those left after Forge's check for illegal targets. A cost half and any other record read the
-  acting chain's clauses.
+- The acting line's `targets` links are the refs the record's refs block lists for them, in that
+  order, `index` the position there:
+  - an effect half: its targets as cast, the refs `refs.targets_at_cast` lists (an `L<id>` ref for
+    one that ceased to exist), never those left after Forge's check for illegal targets; a modal
+    half's are its own: the charm's root's and its mode's, a fizzled charm's halves too;
+  - a cost half: the chain's targets at its cast event, the refs `refs.targets` lists, after its
+    modes and any deferred targets are chosen (Forge chains a charm's modes, and the random seat
+    draws a charm's targets, after the card moves to the stack). A target chosen then that the
+    board read before the move does not hold is added to its entities, as read at the cast event;
+  - any other record: the targets the acting chain holds.
+
+  Every other stack object links the targets it holds. A targeted ability ends at its line on every
+  record.
 - An entity's `stack_extras` describe its item's whole chain, root first: `targets` lists every
   link's targets spelled as `refs.targets` spells them (a targeted spell or ability by its card's
   `E` ref), each once; `per_target_amounts` holds each divided link's share per target, summed
