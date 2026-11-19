@@ -5,69 +5,73 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
-import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
+import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
 import forge.game.Game;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.player.Player;
 import forge.game.trigger.TriggerType;
-import forge.game.zone.ZoneType;
 
-import java.util.List;
 import java.util.Optional;
 
 /**
  * 701.50f, a permanent connives even when its controller cannot draw or
- * discard, and connive triggers fire, on scenario {@code 701.50f-1}: under
- * Spirit of the Labyrinth A's Echo Inspector connives without drawing,
- * discards Grizzly Bears, and Glorious Purpose triggers.
+ * discard, and connive triggers fire, inverted (FR-014a) on scenario
+ * {@code 701.50f-2}: A's Echo Inspector connives, drawing and discarding,
+ * and Glorious Purpose triggers; under B's Spirit of the Labyrinth, A having
+ * drawn its card this turn, the Inspector connives without drawing, and
+ * Glorious Purpose still triggers.
  *
  * <p>The base board, read at a boundary: a main phase of the active player
- * begins, it cannot draw a card (Spirit of the Labyrinth after its draw), a
- * permanent on the battlefield triggers when a creature connives (Glorious
- * Purpose), and its hand holds exactly two cards: one it has the lands for
- * that connives (Echo Inspector) and one other. It binds the other card,
- * the first of the two that does not connive.
+ * begins, it holds a card it has the lands for that connives (Echo
+ * Inspector), a permanent on the battlefield triggers when a creature
+ * connives (Glorious Purpose), and it has drawn a card this turn and can
+ * draw another: the common board, whose connive draws. It binds the active
+ * player, the conniving card, whose cast the fork forces (FR-010b), and an
+ * opponent.
  *
- * <p>Variant {@code nothing_to_discard} ({@code move_card}): that card is at
- * the bottom of the library instead, so once the conniving card is cast the
- * hand is empty and the connive discards nothing; the connives trigger fires
- * as before.
- *
- * <p>It also binds the active player and the conniving card, whose cast
- * the fork forces (FR-010b).
+ * <p>Variant {@code spirit_added} ({@code add_permanent}): the opponent
+ * controls Spirit of the Labyrinth, since before this turn, so the player,
+ * who has drawn this turn, cannot draw, and the connive draws nothing, the
+ * rule's point; the connives trigger fires as before.
  */
 public final class ConniveWithoutDraw {
 
     public static final String RULE = "701.50f";
-    static final String SCENARIO = "701.50f-1";
-    static final String NOTHING_TO_DISCARD = "nothing_to_discard";
+    static final String SCENARIO = "701.50f-2";
+    static final String SPIRIT_ADDED = "spirit_added";
+    static final String SPIRIT = "Spirit of the Labyrinth";
 
     private ConniveWithoutDraw() {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, ConniveWithoutDraw::bind, NOTHING_TO_DISCARD,
-                new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.move(fork.card("card"), ZoneType.Library, null))
+        return DirectedRule.of(RULE, SCENARIO, ConniveWithoutDraw::bind, SPIRIT_ADDED,
+                new Application(ForkOperation.ADD_PERMANENT,
+                        fork -> AddPermanentOperation.of(SPIRIT, fork.player("opponent"), false))
                         .forcing(ForcedPlay.cast("player", "conniver")));
     }
 
     static Optional<Binding> bind(Game live) {
-        if (!Boards.atMainPhase(live)) {
+        if (!Boards.atMainPhase(live) || !Boards.watched(live, TriggerType.Connives)) {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        List<Card> hand = List.copyOf(active.getCardsIn(ZoneType.Hand));
         Optional<Card> conniver = Boards.acting(active, ApiType.Connive);
-        if (active.canDraw() || hand.size() != 2 || !Boards.watched(live, TriggerType.Connives)
-                || conniver.isEmpty()) {
+        if (!spiritWouldStopTheDraw(active) || conniver.isEmpty()) {
             return Optional.empty();
         }
-        return hand.stream()
-                .filter(card -> !Boards.acts(card, ApiType.Connive))
-                .findFirst()
-                .map(card -> Binding.empty().with("player", active).with("conniver", conniver.get())
-                        .with("card", card));
+        return active.getOpponents().stream().findFirst()
+                .map(opponent -> Binding.empty().with("player", active).with("conniver", conniver.get())
+                        .with("opponent", opponent));
+    }
+
+    /**
+     * Whether the Spirit of the Labyrinth added would stop the player's next
+     * draw and nothing stops it now: it has drawn a card this turn and can
+     * draw another.
+     */
+    private static boolean spiritWouldStopTheDraw(Player player) {
+        return player.getNumDrawnThisTurn() > 0 && player.canDraw();
     }
 }

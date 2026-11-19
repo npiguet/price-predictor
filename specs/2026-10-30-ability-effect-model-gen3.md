@@ -285,14 +285,15 @@ from a real game.
   | `replace_card` | replace one card with another |
   | `remove_permanent` | take a permanent off the battlefield |
   | `add_permanent` | put a card onto the battlefield |
-  | `move_card` | move a card between hand, library and graveyard, or change which card sits in one of them |
+  | `move_card` | move a card between hand, library and graveyard, change which card sits in one of them, or empty a library |
 
 - All ten operations are built. The damage-step probe is the existing "remove a keyword"
   operation. A variant marked unclassifiable has no operation.
 - An operation edits the fork's copy without the event the change would raise in a game: a
   removed permanent triggers no leaves-the-battlefield ability and goes to no zone, a card
-  put onto the battlefield triggers no enters ability and no replacement, and a moved card
-  counts as no draw, discard or mill. The per-turn counts stay as the live game left them.
+  put onto the battlefield triggers no enters ability and no replacement, a moved card counts
+  as no draw, discard or mill, and an emptied library's cards go to no zone. The per-turn
+  counts stay as the live game left them.
 - No operation forces a choice, a target or a timing on a seat. The one play a variant may
   force beside its operation is below.
 - A variant may force one play in its fork, made by a seat its precondition binds: a cast or

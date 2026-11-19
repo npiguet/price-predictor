@@ -662,22 +662,19 @@ class DirectedForkPlayedForwardTest {
     }
 
     /**
-     * {@code life}, 104.4a: Plague Spitter's controller and its opponent at
-     * 1 life as the untap step begins. In the live upkeep the trigger takes
-     * both players' last life, and the game ends with two losses and no
-     * winner, a draw; the fork, taken as the upkeep begins, has the opponent
-     * at 2, and its game ends with the active player's loss beside the
-     * opponent's win. Both ends are in a resolution's effect half, where
-     * 104.4a-1's declaration reads them.
+     * {@code life}, 104.4a, inverted: Plague Spitter's controller and its
+     * opponent at 20 life as the untap step begins. In the live upkeep the
+     * trigger takes 1 life from each and nobody loses; the fork, taken as
+     * the upkeep begins, has both players at 1, and its game ends with two
+     * losses and no winner, a draw, in the trigger's resolution's effect
+     * half, where 104.4a-2's declaration reads it.
      */
     @Test
-    void bothPlayersAtOneLifeDrawAndTheForksOpponentAtTwoWins() throws Throwable {
+    void theForksPlayersAtOneLifeBothLoseToPlagueSpitter() throws Throwable {
         Game game = board(PhaseType.UNTAP);
         Player active = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
         permanent(game, active, "Plague Spitter");
-        active.setLife(1, null);
-        opponent.setLife(1, null);
 
         List<String> records = played(game, null, "104.4a", Decisions.SAMPLED);
 
@@ -691,9 +688,8 @@ class DirectedForkPlayedForwardTest {
             }
         }
         assertEquals(List.of(
-                List.of(true, List.of(List.of(Refs.of(active))), List.of(List.of(Refs.of(opponent)))),
-                List.of(false, List.of(List.of(Refs.of(active)), List.of(Refs.of(opponent))), List.of())),
-                ends, "the fork's end has a winner, the live end none");
+                List.of(true, List.of(List.of(Refs.of(active)), List.of(Refs.of(opponent))), List.of())),
+                ends, "the fork's game ends in a draw, the live game goes on");
     }
 
     /**
@@ -948,7 +944,7 @@ class DirectedForkPlayedForwardTest {
     }
 
     /**
-     * {@code counters}, 104.3d, inverted: B at 8 poison counters and Ichor
+     * {@code counters}, 104.3d, inverted: B with no poison counter and Ichor
      * Rats in A's hand. The fork's B has 9 and A is made to cast the Rats,
      * whose enters trigger gives B its tenth: B loses.
      */
@@ -958,7 +954,6 @@ class DirectedForkPlayedForwardTest {
         Player active = game.getPlayers().get(0);
         lands(game, active, "Swamp", 3);
         TestBoard.inHand(game, active, "Ichor Rats");
-        game.getPlayers().get(1).setCounters(CounterEnumType.POISON, 8, null, false);
 
         List<String> fork = forkOf(game, PhaseType.MAIN1, "104.3d", "nine");
 
@@ -1385,64 +1380,69 @@ class DirectedForkPlayedForwardTest {
     }
 
     /**
-     * 701.44b: Merfolk Branchwalker over two Forests beside Wildgrowth
-     * Walker, the library of A empty and a Forest in its graveyard. The
-     * fork's Forest is the library's one card and A is made to cast the
-     * Branchwalker.
+     * 701.44b, inverted: Merfolk Branchwalker over two Forests beside
+     * Wildgrowth Walker, the library of A holding cards. The fork's library
+     * is empty and A is made to cast the Branchwalker, which explores with
+     * nothing to reveal: Wildgrowth Walker's trigger still fires.
      */
     @Test
-    void aBranchwalkerExploresOntoTheOneCard() throws Throwable {
+    void aBranchwalkerExploresAnEmptyLibrary() throws Throwable {
         Game game = empty(PhaseType.MAIN1);
         Player active = game.getPlayers().get(0);
         lands(game, active, "Forest", 2);
-        permanent(game, active, "Wildgrowth Walker");
+        Card walker = permanent(game, active, "Wildgrowth Walker");
         Card branchwalker = TestBoard.inHand(game, active, "Merfolk Branchwalker");
-        TestBoard.inGraveyard(game, active, "Forest");
+        library(game, active, "Forest", "Grizzly Bears", "Island");
 
-        List<String> fork = forkOf(game, PhaseType.MAIN1, "701.44b", "land_on_top");
+        List<String> fork = forkOf(game, PhaseType.MAIN1, "701.44b", "empty_library");
 
         assertFalse(resolutionsOf(fork, branchwalker).isEmpty(), "the Branchwalker is cast in the fork");
+        assertFalse(fired(fork, walker).isEmpty(), "Wildgrowth Walker triggers in the fork");
+        assertTrue(holding(fork, "card_revealed").isEmpty(), "the fork's explore reveals nothing");
     }
 
     /**
-     * 701.50f: Echo Inspector and one other card in the hand of A under the
-     * Spirit of the Labyrinth of B, A having drawn, beside Glorious Purpose.
-     * The fork's other card is in the library and A is made to cast the
-     * Inspector, which connives with nothing to discard.
+     * 701.50f, inverted: Echo Inspector in the hand of A, A having drawn,
+     * beside Glorious Purpose. The fork's B controls Spirit of the Labyrinth
+     * and A is made to cast the Inspector, which connives without drawing:
+     * Glorious Purpose's trigger still fires.
      */
     @Test
-    void anInspectorConnivesWithNothingToDiscard() throws Throwable {
+    void anInspectorConnivesUnderTheAddedSpirit() throws Throwable {
         Game game = empty(PhaseType.MAIN1);
         Player active = game.getPlayers().get(0);
         lands(game, active, "Island", 4);
-        permanent(game, active, "Glorious Purpose");
-        permanent(game, game.getPlayers().get(1), "Spirit of the Labyrinth");
+        Card purpose = permanent(game, active, "Glorious Purpose");
         Card inspector = TestBoard.inHand(game, active, "Echo Inspector");
         library(game, active, "Forest", "Island", "Island");
         active.drawCard();
 
-        List<String> fork = forkOf(game, PhaseType.MAIN1, "701.50f", "nothing_to_discard");
+        List<String> fork = forkOf(game, PhaseType.MAIN1, "701.50f", "spirit_added");
 
         assertFalse(resolutionsOf(fork, inspector).isEmpty(), "the Inspector is cast in the fork");
+        assertFalse(fired(fork, purpose).isEmpty(), "Glorious Purpose triggers in the fork");
+        assertTrue(holding(fork, "card_drawn").isEmpty(), "the fork's connive draws nothing");
     }
 
     /**
-     * 701.57b: Geological Appraiser over four Mountains beside Val, Marooned
-     * Surveyor, no nonland card of mana value 3 or less in the library. The
-     * fork's library holds Grizzly Bears and A is made to cast the Appraiser.
+     * 701.57b, inverted: Geological Appraiser over four Mountains beside Val,
+     * Marooned Surveyor, Grizzly Bears in the library. The fork's library is
+     * empty and A is made to cast the Appraiser, whose discovery finds
+     * nothing: Val's trigger still fires.
      */
     @Test
-    void anAppraiserDiscoversTheBears() throws Throwable {
+    void anAppraiserDiscoversAnEmptyLibrary() throws Throwable {
         Game game = empty(PhaseType.MAIN1);
         Player active = game.getPlayers().get(0);
         lands(game, active, "Mountain", 4);
-        permanent(game, active, "Val, Marooned Surveyor");
+        Card val = permanent(game, active, "Val, Marooned Surveyor");
         Card appraiser = TestBoard.inHand(game, active, "Geological Appraiser");
-        library(game, active, "Forest", "Hill Giant", "Island", "Island", "Island");
+        library(game, active, "Forest", "Grizzly Bears", "Island", "Island", "Island");
 
-        List<String> fork = forkOf(game, PhaseType.MAIN1, "701.57b", "card_found");
+        List<String> fork = forkOf(game, PhaseType.MAIN1, "701.57b", "empty_library");
 
         assertFalse(resolutionsOf(fork, appraiser).isEmpty(), "the Appraiser is cast in the fork");
+        assertFalse(fired(fork, val).isEmpty(), "Val triggers in the fork");
     }
 
     /**

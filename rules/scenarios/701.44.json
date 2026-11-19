@@ -174,6 +174,80 @@
       }
     },
     {
+      "id": "701.44b-2",
+      "rules": [
+        "701.44b"
+      ],
+      "title": "A permanent explores with nothing to reveal, its library emptied on a board whose explore reveals a card",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Wildgrowth Walker"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Merfolk Branchwalker"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Grizzly Bears"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are top first. The directed fork's board: A's library holds cards, which the fork takes out, leaving it empty."
+      },
+      "decisions": [
+        "A casts Merfolk Branchwalker, tapping both Forests; it resolves and enters the battlefield; its explore trigger goes on the stack.",
+        "Both players pass; the explore trigger resolves. Wildgrowth Walker's trigger resolves afterwards."
+      ],
+      "variants": [
+        {
+          "label": "library_holds_cards",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Forest is revealed and goes to A's hand; Merfolk Branchwalker gets no counter (2/1). Wildgrowth Walker's trigger fires, giving Walker a +1/+1 counter (2/4) and A 3 life (23)."
+        },
+        {
+          "label": "empty_library",
+          "polarity": "fires",
+          "delta": "A's library is empty.",
+          "expected": "Nothing can be revealed, but Merfolk Branchwalker still explores: it gets a +1/+1 counter (3/2). Wildgrowth Walker's trigger fires, giving Walker a +1/+1 counter (2/4) and A 3 life (23).",
+          "operation": "move_card"
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Wildgrowth Walker",
+        "Merfolk Branchwalker",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "The fork forces A's cast of Merfolk Branchwalker. The emptied library's cards go to no zone.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An explores trigger is evaluated and fires when a permanent explores, whether or not the reveal was possible.",
+        "near_miss": "An explores trigger is evaluated and does not fire.",
+        "params": {
+          "mode": "Explores"
+        },
+        "needs": []
+      }
+    },
+    {
       "id": "701.44c-1",
       "rules": [
         "701.44c"

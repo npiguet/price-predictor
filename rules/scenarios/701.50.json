@@ -496,6 +496,86 @@
         },
         "needs": []
       }
+    },
+    {
+      "id": "701.50f-2",
+      "rules": [
+        "701.50f"
+      ],
+      "title": "A permanent connives without drawing, Spirit of the Labyrinth added on a board whose connive draws",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Glorious Purpose"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Echo Inspector",
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "A has already drawn a card this turn in the draw step. Library lists are top first; cards below the listed ones are irrelevant Forests. The directed fork's board: no Spirit of the Labyrinth, which the fork adds under B."
+      },
+      "decisions": [
+        "A casts Echo Inspector, tapping four Islands.",
+        "Both players pass; Echo Inspector resolves and its enters trigger goes on the stack.",
+        "Both players pass; the trigger resolves: Echo Inspector connives. A draws if it can, then discards Grizzly Bears.",
+        "Glorious Purpose's connives trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "draw_possible",
+          "polarity": "other",
+          "delta": "",
+          "expected": "A draws Forest, then discards Grizzly Bears; Forest stays in A's hand. Echo Inspector gets one counter from the discard and one from Glorious Purpose (4/5), and Glorious Purpose gets a plan counter."
+        },
+        {
+          "label": "spirit_added",
+          "polarity": "fires",
+          "delta": "B controls Spirit of the Labyrinth, since before this turn.",
+          "expected": "No card is drawn: Forest stays on top of A's library. Grizzly Bears (nonland) is discarded, so Echo Inspector gets a counter. Echo Inspector still connived, so Glorious Purpose triggers: Echo Inspector gets a second +1/+1 counter (4/5) and Glorious Purpose gets a plan counter.",
+          "operation": "add_permanent"
+        }
+      ],
+      "cards": [
+        "Echo Inspector",
+        "Island",
+        "Grizzly Bears",
+        "Glorious Purpose",
+        "Spirit of the Labyrinth",
+        "Forest"
+      ],
+      "forge_notes": "Spirit of the Labyrinth is a CantDraw static with DrawLimit$ 1: A, having drawn this turn, cannot draw. The fork forces A's cast of Echo Inspector.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A connives trigger is evaluated and fires when a permanent connives, even where the draw or discard was impossible.",
+        "near_miss": "A connives trigger is evaluated and does not fire.",
+        "params": {
+          "mode": "Connives"
+        },
+        "needs": []
+      }
     }
   ]
 }

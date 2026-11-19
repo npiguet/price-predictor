@@ -1,7 +1,7 @@
 rule	variant
 104.2b	forty
 104.3d	nine
-104.4a	b_has_more
+104.4a	both_at_one
 111.10p	two_enchantments
 111.10v	mana_available
 118.12b	sanctuary_added
@@ -19,10 +19,10 @@ rule	variant
 701.24e	zero-cards
 701.39a	has_creature
 701.42a	meld_pair
-701.44b	land_on_top
+701.44b	empty_library
 701.44d	branchwalker_in_the_bears_place
-701.50f	nothing_to_discard
-701.57b	card_found
+701.50f	spirit_added
+701.57b	empty_library
 702.103e	skulking_ghost
 702.105a	tied
 702.118b	lesser_power

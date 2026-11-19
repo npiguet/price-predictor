@@ -36,6 +36,12 @@ import java.util.Optional;
  *
  * <p>It also binds the searcher and its spell, whose cast the fork forces
  * (FR-010b).
+ *
+ * <p>The precondition waits for the rare board, a library of two, and is
+ * not inverted as FR-014a would have it: the rule's point is a library of
+ * zero or one card being shuffled, and no one-card edit makes a library that
+ * small out of the common board's, so the fork's one card moved can only
+ * take a library of two to one.
  */
 public final class SmallLibraryShuffle {
 

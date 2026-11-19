@@ -122,8 +122,11 @@ A registered variant makes the side the rule's counts lack. Where that side need
 registered scenario's base is the common board and its variant adds the fact (104.2b, 104.3d,
 111.10v, 119.7, 608.2p, 614.17d, 701.12e, 701.39a (through 701.39a-2), 701.42a, 702.65a,
 702.103e (through 702.103e-2), 702.124j, 702.131a, 702.170c; 712.4a and 712.14c through
-712.4a-2, 712.4a-1 inverted; 118.12b, 701.23f, 701.44d and 702.19c through a second scenario,
-118.12b-2, 701.23f-2, 701.44d-2 and 702.19c-2, whose base is the common board). Where the lacking
+712.4a-2, 712.4a-1 inverted; 104.4a, 118.12b, 701.23f, 701.44b, 701.44d, 701.50f, 701.57b and
+702.19c through a second scenario, 104.4a-2, 118.12b-2, 701.23f-2, 701.44b-2, 701.44d-2,
+701.50f-2, 701.57b-2 and 702.19c-2, whose base is the common board). 701.24e is the exception:
+its precondition waits for a library of two, since no one-card edit makes a library of zero or
+one out of the common board's. Where the lacking
 side is a fact a contrasting variant of the same polarity as the base already states, that variant
 is registered: 701.12g (`opponent_above`) and 702.105a (`tied`). The side a fork makes is what
 the detectors tag its records: 205.1a (`counter-kept`) and 111.10p (`two_enchantments`) register a

@@ -516,6 +516,69 @@
       }
     },
     {
+      "id": "104.4a-2",
+      "rules": [
+        "104.4a"
+      ],
+      "title": "Every remaining player loses at once to an upkeep trigger, each player's life lowered within its reach",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "upkeep",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Plague Spitter",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "The directed fork's board: each player has more life than Plague Spitter's upkeep trigger takes, and the fork lowers each to 1."
+      },
+      "decisions": [
+        "At the beginning of A's upkeep Plague Spitter triggers; both players pass and the trigger resolves, dealing 1 damage to each creature and each player."
+      ],
+      "variants": [
+        {
+          "label": "at_twenty",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Each player goes to 19 life; nobody loses and the game goes on."
+        },
+        {
+          "label": "both_at_one",
+          "polarity": "fires",
+          "delta": "Each player is at 1 life instead of 20.",
+          "expected": "Plague Spitter deals 1 damage to each player; both go to 0 life, both lose at the same state-based check, and the game ends as a draw.",
+          "operation": "life"
+        }
+      ],
+      "cards": [
+        "Plague Spitter"
+      ],
+      "forge_notes": "The edit sets each player's life; the trigger is the engine's own, so no seat decides the draw.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "All remaining players lose at once, so the game ends as a draw: the game-end record holds a player_lost and no player_won.",
+        "near_miss": "A state-based check in which one player loses and the other remains, so the game ends with a winner, not a draw: a player_lost beside a player_won.",
+        "params": {
+          "event": "player_lost",
+          "without_event": "player_won"
+        },
+        "needs": []
+      }
+    },
+    {
       "id": "104.4b-1",
       "rules": [
         "104.4b"

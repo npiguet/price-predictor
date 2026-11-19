@@ -31,8 +31,8 @@ public enum ForkOperation implements WireNamed {
     /** Put a new card from the card database onto the battlefield. */
     ADD_PERMANENT("add_permanent"),
     /**
-     * Move a card between hand, library and graveyard, or put a new card
-     * at a position of one of them.
+     * Move a card between hand, library and graveyard, put a new card at a
+     * position of one of them, or empty a library.
      */
     MOVE_CARD("move_card");
 

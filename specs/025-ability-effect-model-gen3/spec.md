@@ -767,8 +767,8 @@ and that the reporting half never enters the control score.
   remove a keyword (`keyword`); change a colour or type (`colour_type`); add or remove counters
   (`counters`); tap or untap a permanent (`tap`); change a life total (`life`); replace one card
   with another (`replace_card`); take a permanent off the battlefield (`remove_permanent`); put a
-  card onto the battlefield (`add_permanent`); move a card between hand, library and graveyard, or
-  change which card sits in one of them (`move_card`). The existing damage-step probe is the
+  card onto the battlefield (`add_permanent`); move a card between hand, library and graveyard,
+  change which card sits in one of them, or empty a library (`move_card`). The existing damage-step probe is the
   "remove a keyword" operation. This feature MUST build all ten operations, the existing one
   reused, so every classified variant has its operation; a variant marked unclassifiable (FR-003)
   has none. No operation forces a choice, a target or a timing on a seat; the one play a
@@ -779,8 +779,8 @@ and that the reporting half never enters the control score.
   graveyard. `add_permanent` puts a new card from the card database onto the battlefield under the
   variant's controller, tapped, summoning-sick and with counters as the variant states: no enters
   trigger, no replacement. `move_card` moves a card between hand, library (at a stated position) and
-  graveyard, or replaces the card at a position of one of them with a new card from the database:
-  no draw, discard or mill event. The players' per-turn counts stay as the live game left them.
+  graveyard, replaces the card at a position of one of them with a new card from the database, or
+  puts every card of a library in no zone: no draw, discard, mill or exile event. The players' per-turn counts stay as the live game left them.
   Every operation ends with the engine's static-ability check.
 - **FR-012**: `match-outcomes`, and `collect-variants`, MUST take `--directed-fork-rules LIST`
   (default none), `--directed-forks-per-game N` (default 2), a budget of its own beside the

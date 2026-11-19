@@ -22,14 +22,17 @@ import java.util.Optional;
  * whose enters trigger gives each player one more, and B stays in the game
  * at 9; at 9 B would lose.
  *
- * <p>The base board, read at a boundary: a main phase begins, a player has
- * eight poison counters, the common side, and the active player holds a card
- * it has the lands for that gives each player a poison counter with no
- * choice (Ichor Rats: {@link #poisonsEachPlayer}). It binds that player, the
- * active player and the card.
+ * <p>The base board, read at a boundary: a main phase begins, the active
+ * player holds a card it has the lands for that gives each player a poison
+ * counter with no choice (Ichor Rats: {@link #poisonsEachPlayer}), and an
+ * opponent of it has fewer than nine poison counters, however few: the
+ * common side, where that counter loses no one the game (the scenario's
+ * eight is one such board). It binds that opponent, the active player and
+ * the card.
  *
- * <p>Variant {@code nine} ({@code counters}): the player has nine poison
- * counters, so the turn's next poison counter given to it ends the game.
+ * <p>Variant {@code nine} ({@code counters}): the opponent has nine poison
+ * counters, whatever it had, so the turn's next poison counter given to it
+ * ends the game.
  * The fork forces the card's cast (FR-010b), whose resolution gives the
  * tenth counter in the record its declaration reads; an attack's poison
  * would land in a combat record, which it does not read.
@@ -63,8 +66,8 @@ public final class PoisonLoss {
         if (source.isEmpty()) {
             return Optional.empty();
         }
-        return live.getPlayers().stream()
-                .filter(player -> player.getPoisonCounters() == ONE_SHORT - 1)
+        return active.getOpponents().stream()
+                .filter(player -> player.getPoisonCounters() < ONE_SHORT)
                 .findFirst()
                 .map(player -> Binding.empty().with("player", player)
                         .with("caster", active).with("card", source.get()));

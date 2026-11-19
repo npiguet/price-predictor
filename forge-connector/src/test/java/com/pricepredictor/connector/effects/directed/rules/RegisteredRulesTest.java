@@ -164,9 +164,7 @@ class RegisteredRulesTest {
         Board board = new Board(PhaseType.COMBAT_DECLARE_BLOCKERS);
         board.other = board.card(board.you, "Bladetusk Boar");
         board.subject = board.card(board.opponent, blocker);
-        Combat combat = new Combat(board.you);
-        combat.addAttacker(board.other, board.opponent);
-        board.game.getPhaseHandler().setCombat(combat);
+        board.attacking(board.other);
         return board;
     }
 
@@ -417,8 +415,8 @@ class RegisteredRulesTest {
     }
 
     @Test
-    void poisonLossBindsThePlayerTwoCountersShortAndThePoisonSource() {
-        Board board = poisonBoard(8);
+    void poisonLossBindsAnOpponentAtAnyPoisonBelowNineAndThePoisonSource() {
+        Board board = poisonBoard(0);
         Binding binding = PoisonLoss.bind(board.game).orElseThrow();
         assertEquals(board.opponent, binding.player("player"));
         assertEquals(board.other, binding.card("card"));
@@ -427,7 +425,7 @@ class RegisteredRulesTest {
 
     @Test
     void poisonLossBindsNothingWithoutAPoisonSourceToCast() {
-        Board board = poisonBoard(8);
+        Board board = poisonBoard(0);
         board.you.getLandsInPlay().forEach(land -> land.setTapped(true));
         assertTrue(PoisonLoss.bind(board.game).isEmpty());
     }
@@ -437,9 +435,17 @@ class RegisteredRulesTest {
         assertTrue(PoisonLoss.bind(poisonBoard(9).game).isEmpty());
     }
 
+    /** The caster's own poison is no matter: the opponent's is the one the edit sets. */
+    @Test
+    void poisonLossBindsTheOpponentNotTheCaster() {
+        Board board = poisonBoard(3);
+        board.you.setCounters(CounterEnumType.POISON, 5, null, false);
+        assertEquals(board.opponent, PoisonLoss.bind(board.game).orElseThrow().player("player"));
+    }
+
     @Test
     void poisonLossForksThePlayerWithNineCounters() {
-        Twin twin = poisonBoard(8).twin(PoisonLoss.rule());
+        Twin twin = poisonBoard(0).twin(PoisonLoss.rule());
         assertEquals(Set.of("P1.poison"), twin.changes());
         assertEquals(9, twin.fork().player("player").getPoisonCounters());
     }
@@ -1245,39 +1251,48 @@ class RegisteredRulesTest {
         assertOnlyReplaced(board.twin(Meld.rule()), board.subject, "Midnight Scavengers");
     }
 
-    // ── 701.44b, exploring with an empty library: move_card ─────────────
+    // ── 701.44b, exploring with an empty library: move_card, inverted ──
 
-    /** A's Merfolk Branchwalker in hand over two Forests, Wildgrowth Walker, a Forest in A's graveyard. */
-    private static Board branchwalkerBoard() {
+    /** A's Merfolk Branchwalker in hand over two Forests, Wildgrowth Walker, A's library {@code library}. */
+    private static Board branchwalkerBoard(String... library) {
         Board board = new Board(PhaseType.MAIN1);
-        board.card(board.you, "Forest");
-        board.card(board.you, "Forest");
-        board.card(board.you, "Wildgrowth Walker");
-        TestBoard.inHand(board.game, board.you, "Merfolk Branchwalker");
-        board.subject = TestBoard.inGraveyard(board.game, board.you, "Forest");
+        board.cards(board.you, "Forest", 2);
+        return watchedCast(board, "Wildgrowth Walker", "Merfolk Branchwalker", library);
+    }
+
+    /**
+     * {@code board} with {@code card} the subject in your hand beside your
+     * {@code watcher}, your library {@code library}, top card first.
+     */
+    private static Board watchedCast(Board board, String watcher, String card, String... library) {
+        board.card(board.you, watcher);
+        board.subject = TestBoard.inHand(board.game, board.you, card);
+        board.library(board.you, library);
         return board;
     }
 
     @Test
-    void exploreEmptyLibraryBindsTheLandInTheGraveyard() {
-        Board board = branchwalkerBoard();
-        assertEquals(board.subject, ExploreEmptyLibrary.bind(board.game).orElseThrow().card("land"));
+    void exploreEmptyLibraryBindsTheExplorerOverALibraryOfCommonCards() {
+        Board board = branchwalkerBoard("Forest", "Grizzly Bears");
+        Binding binding = ExploreEmptyLibrary.bind(board.game).orElseThrow();
+        assertEquals(board.subject, binding.card("card"));
+        assertEquals(board.you, binding.player("player"));
+    }
+
+    /** An empty library is the rare board itself: the edit would add nothing to it. */
+    @Test
+    void exploreEmptyLibraryBindsNothingOverAnEmptyLibrary() {
+        assertTrue(ExploreEmptyLibrary.bind(branchwalkerBoard().game).isEmpty());
     }
 
     @Test
-    void exploreEmptyLibraryBindsNothingWithACardInTheLibrary() {
-        Board board = branchwalkerBoard();
-        board.library(board.you, "Island");
-        assertTrue(ExploreEmptyLibrary.bind(board.game).isEmpty());
-    }
-
-    @Test
-    void exploreEmptyLibraryForksTheLandOnTopOfTheLibrary() {
-        Board board = branchwalkerBoard();
+    void exploreEmptyLibraryForksTheLibraryEmpty() {
+        Board board = branchwalkerBoard("Forest", "Grizzly Bears");
+        Card top = board.you.getCardsIn(ZoneType.Library).get(0);
         Twin twin = board.twin(ExploreEmptyLibrary.rule());
-        assertOnlyChanged(twin, board.subject, board.subject, "P0.library", "P0.graveyard");
-        assertEquals(List.of(twin.fork().card("land")),
-                List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library)));
+        // The snapshot shows a library by its count and its top card alone.
+        assertOnlyChanged(twin, top, top, "P0.library");
+        assertTrue(twin.fork().player("player").getCardsIn(ZoneType.Library).isEmpty());
     }
 
     // ── 701.44d, several permanents exploring: replace_card ─────────────
@@ -1346,84 +1361,89 @@ class RegisteredRulesTest {
         assertOnlyReplaced(board.twin(SeveralExplore.rule()), board.subject, SeveralExplore.BRANCHWALKER);
     }
 
-    // ── 701.50f, conniving when drawing is impossible: move_card ────────
+    // ── 701.50f, conniving when drawing is impossible: add_permanent, inverted
 
     /**
-     * A has drawn its one card this turn (a Forest), and holds Echo Inspector
-     * and the Forest over four Islands and Glorious Purpose; B's Spirit of the
-     * Labyrinth, when {@code spirit}.
+     * A holds Echo Inspector over four Islands and Glorious Purpose, and has
+     * drawn its one card this turn (a Forest) when {@code drawn}; B's Spirit
+     * of the Labyrinth, when {@code spirit}.
      */
-    private static Board inspectorBoard(boolean spirit) {
+    private static Board inspectorBoard(boolean spirit, boolean drawn) {
         Board board = new Board(PhaseType.MAIN1);
         for (int i = 0; i < 4; i++) {
             board.card(board.you, "Island");
         }
         board.card(board.you, "Glorious Purpose");
         if (spirit) {
-            board.card(board.opponent, "Spirit of the Labyrinth");
+            board.card(board.opponent, ConniveWithoutDraw.SPIRIT);
         }
-        TestBoard.inHand(board.game, board.you, "Echo Inspector");
-        board.library(board.you, "Forest");
-        board.subject = board.you.drawCard().get(0);
+        board.subject = TestBoard.inHand(board.game, board.you, "Echo Inspector");
+        board.library(board.you, "Forest", "Island");
+        if (drawn) {
+            board.you.drawCard();
+        }
         return board;
     }
 
     @Test
-    void conniveWithoutDrawBindsTheOtherCardInHand() {
-        Board board = inspectorBoard(true);
-        assertEquals(board.subject, ConniveWithoutDraw.bind(board.game).orElseThrow().card("card"));
+    void conniveWithoutDrawBindsTheConniverOfAPlayerWhoDrewAndCanDrawAgain() {
+        Board board = inspectorBoard(false, true);
+        Binding binding = ConniveWithoutDraw.bind(board.game).orElseThrow();
+        assertEquals(board.subject, binding.card("conniver"));
+        assertEquals(board.you, binding.player("player"));
+        assertEquals(board.opponent, binding.player("opponent"));
+    }
+
+    /** Under the Spirit the board is the rare one already: the edit would add nothing to it. */
+    @Test
+    void conniveWithoutDrawBindsNothingWhenThePlayerCannotDraw() {
+        assertTrue(ConniveWithoutDraw.bind(inspectorBoard(true, true).game).isEmpty());
+    }
+
+    /** Before the turn's first draw the Spirit added would stop no draw of the connive. */
+    @Test
+    void conniveWithoutDrawBindsNothingBeforeTheTurnsFirstDraw() {
+        assertTrue(ConniveWithoutDraw.bind(inspectorBoard(false, false).game).isEmpty());
     }
 
     @Test
-    void conniveWithoutDrawBindsNothingWhenThePlayerCanDraw() {
-        assertTrue(ConniveWithoutDraw.bind(inspectorBoard(false).game).isEmpty());
+    void conniveWithoutDrawForksTheSpiritOfTheLabyrinthUnderTheOpponent() {
+        Twin twin = inspectorBoard(false, true).twin(ConniveWithoutDraw.rule());
+        assertOnlyAdded(twin, twin.fork().player("opponent"), ConniveWithoutDraw.SPIRIT);
+        assertFalse(twin.fork().player("player").canDraw(), "the Spirit stops the connive's draw");
     }
 
-    @Test
-    void conniveWithoutDrawForksTheCardAtTheBottomOfTheLibrary() {
-        Board board = inspectorBoard(true);
-        Twin twin = board.twin(ConniveWithoutDraw.rule());
-        assertOnlyChanged(twin, board.subject, board.subject, "P0.hand", "P0.library");
-        assertTrue(twin.fork().card("card").getZone().is(ZoneType.Library));
-        assertEquals(1, twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Hand).size());
-    }
-
-    // ── 701.57b, a discovery that finds nothing: move_card ──────────────
+    // ── 701.57b, a discovery that finds nothing: move_card, inverted ────
 
     /** A's Geological Appraiser over four Mountains and Val, Marooned Surveyor; A's library top card first. */
     private static Board appraiserBoard(String... library) {
         Board board = new Board(PhaseType.MAIN1);
-        for (int i = 0; i < 4; i++) {
-            board.card(board.you, "Mountain");
-        }
-        board.card(board.you, "Val, Marooned Surveyor");
-        TestBoard.inHand(board.game, board.you, "Geological Appraiser");
-        List<Card> cards = board.library(board.you, library);
-        board.subject = cards.stream().filter(card -> !card.isLand()).findFirst().orElse(null);
-        return board;
+        board.cards(board.you, "Mountain", 4);
+        return watchedCast(board, "Val, Marooned Surveyor", "Geological Appraiser", library);
     }
 
     @Test
-    void discoverNothingFoundBindsTheFirstNonlandCard() {
-        Board board = appraiserBoard("Forest", "Hill Giant", "Island");
-        assertEquals(board.subject, DiscoverNothingFound.bind(board.game).orElseThrow().card("card"));
+    void discoverNothingFoundBindsTheDiscovererOverALibraryWithACardToFind() {
+        Board board = appraiserBoard("Forest", "Grizzly Bears", "Island");
+        Binding binding = DiscoverNothingFound.bind(board.game).orElseThrow();
+        assertEquals(board.subject, binding.card("discoverer"));
+        assertEquals(board.you, binding.player("player"));
+    }
+
+    /** An empty library is the rare board itself: the edit would add nothing to it. */
+    @Test
+    void discoverNothingFoundBindsNothingOverAnEmptyLibrary() {
+        assertTrue(DiscoverNothingFound.bind(appraiserBoard().game).isEmpty());
     }
 
     @Test
-    void discoverNothingFoundBindsNothingWhenACardWouldBeFound() {
-        assertTrue(DiscoverNothingFound.bind(appraiserBoard("Forest", "Grizzly Bears", "Island").game).isEmpty());
-    }
-
-    @Test
-    void discoverNothingFoundForksGrizzlyBearsInTheCardsPlace() {
-        Board board = appraiserBoard("Forest", "Hill Giant", "Island");
+    void discoverNothingFoundForksTheLibraryEmpty() {
+        Board board = appraiserBoard("Forest", "Grizzly Bears", "Island");
+        Card top = board.you.getCardsIn(ZoneType.Library).get(0);
         Twin twin = board.twin(DiscoverNothingFound.rule());
-        List<Card> library = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library));
-        assertEquals(List.of("Forest", DiscoverNothingFound.BEARS, "Island"),
-                library.stream().map(Card::getName).toList());
-        // A library card the board shows by count alone: the swap the list
-        // above shows changes no visible member.
-        assertTrue(twin.changes().isEmpty(), "visible changes: " + twin.changes());
+        // The snapshot shows a library by its count and its top card alone.
+        assertOnlyChanged(twin, top, top, "P0.library");
+        assertTrue(twin.fork().player("player").getCardsIn(ZoneType.Library).isEmpty());
     }
 
     // ── 702.1c, keywords shared by "the same is true for": replace_card ─
@@ -1617,9 +1637,7 @@ class RegisteredRulesTest {
         board.other = board.card(board.you, "Grizzly Bears");
         board.subject = board.card(board.opponent, blocker);
         board.subject.setCounters(CounterEnumType.P1P1, counters);
-        Combat combat = new Combat(board.you);
-        combat.addAttacker(board.other, board.opponent);
-        board.game.getPhaseHandler().setCombat(combat);
+        board.attacking(board.other);
         return board;
     }
 
@@ -1770,12 +1788,7 @@ class RegisteredRulesTest {
     /** A's Electro's Bolt (mayhem {1}{R}) in the graveyard, discarded this turn when {@code discarded}, over {@code mountains} Mountains. */
     private static Board boltBoard(boolean discarded, int mountains) {
         Board board = new Board(PhaseType.MAIN2);
-        for (int i = 0; i < mountains; i++) {
-            Card mountain = board.card(board.you, "Mountain");
-            if (board.subject == null) {
-                board.subject = mountain;
-            }
-        }
+        board.subject = board.cards(board.you, "Mountain", mountains);
         board.other = TestBoard.inGraveyard(board.game, board.you, "Electro's Bolt");
         board.other.setDiscarded(discarded);
         return board;
@@ -1862,12 +1875,7 @@ class RegisteredRulesTest {
     /** A's Blitz Automaton (prototype {2}{R}, mana value 7) in hand over {@code mountains} Mountains; the first is the subject. */
     private static Board automatonBoard(int mountains) {
         Board board = new Board(PhaseType.MAIN1);
-        for (int i = 0; i < mountains; i++) {
-            Card mountain = board.card(board.you, "Mountain");
-            if (board.subject == null) {
-                board.subject = mountain;
-            }
-        }
+        board.subject = board.cards(board.you, "Mountain", mountains);
         TestBoard.inHand(board.game, board.you, "Blitz Automaton");
         return board;
     }
@@ -1889,7 +1897,7 @@ class RegisteredRulesTest {
         assertOnlyRemoved(board.twin(Prototype.rule()), board.subject, "land");
     }
 
-    // ── 104.4a, a draw when every player loses at once: life ────────────
+    // ── 104.4a, a draw when every player loses at once: life, inverted ──
 
     /** Your Plague Spitter as your upkeep begins, you at {@code yours} life and the opponent at {@code theirs}. */
     private static Board spitterBoard(int yours, int theirs) {
@@ -1901,25 +1909,25 @@ class RegisteredRulesTest {
     }
 
     @Test
-    void simultaneousLossBindsAnUpkeepTriggerTakingEveryPlayersLastLife() {
-        Board board = spitterBoard(1, 1);
+    void simultaneousLossBindsAnUpkeepTriggerTakingLifeFromEachPlayerAtAnyLife() {
+        Board board = spitterBoard(20, 20);
         Binding binding = SimultaneousLoss.bind(board.game).orElseThrow();
         assertEquals(board.subject, binding.card("permanent"));
+        assertEquals(board.you, binding.player("player"));
         assertEquals(board.opponent, binding.player("opponent"));
+        assertTrue(SimultaneousLoss.bind(spitterBoard(1, 20).game).isPresent(), "one player in reach already");
     }
 
+    /** Every player within the trigger's reach is the rare board itself: the edit would add nothing to it. */
     @Test
-    void simultaneousLossBindsNothingWhenAPlayerWouldStayInTheGame() {
-        assertTrue(SimultaneousLoss.bind(spitterBoard(1, 2).game).isEmpty());
-        assertTrue(SimultaneousLoss.bind(spitterBoard(2, 1).game).isEmpty());
+    void simultaneousLossBindsNothingWhenEveryPlayerIsInReachAlready() {
+        assertTrue(SimultaneousLoss.bind(spitterBoard(1, 1).game).isEmpty());
     }
 
     @Test
     void simultaneousLossBindsNothingForTheOtherPlayersTrigger() {
         Board board = new Board(PhaseType.UPKEEP);
         board.card(board.opponent, "Plague Spitter");
-        board.you.setLife(1, null);
-        board.opponent.setLife(1, null);
         assertTrue(SimultaneousLoss.bind(board.game).isEmpty());
     }
 
@@ -1928,8 +1936,6 @@ class RegisteredRulesTest {
     void simultaneousLossReadsTheLifeLossBelowADraw() {
         Board board = new Board(PhaseType.UPKEEP);
         board.card(board.you, "Stormfist Crusader");
-        board.you.setLife(1, null);
-        board.opponent.setLife(1, null);
         assertTrue(SimultaneousLoss.bind(board.game).isPresent());
     }
 
@@ -1937,15 +1943,13 @@ class RegisteredRulesTest {
     void simultaneousLossBindsNothingAtAnotherBoundary() {
         Board board = new Board(PhaseType.DRAW);
         board.card(board.you, "Plague Spitter");
-        board.you.setLife(1, null);
-        board.opponent.setLife(1, null);
         assertTrue(SimultaneousLoss.bind(board.game).isEmpty());
     }
 
-    /** Platinum Emperion keeps its controller's life from changing: the opponent stays at 1. */
+    /** Platinum Emperion keeps its controller's life from changing: the trigger would leave the opponent at 20. */
     @Test
     void simultaneousLossBindsNothingWhenAPlayerCannotLoseLife() {
-        Board board = spitterBoard(1, 1);
+        Board board = spitterBoard(20, 20);
         board.card(board.opponent, "Platinum Emperion");
         assertTrue(SimultaneousLoss.bind(board.game).isEmpty());
     }
@@ -1953,7 +1957,7 @@ class RegisteredRulesTest {
     /** Platinum Angel's controller cannot lose the game: the 0 life loses it nothing. */
     @Test
     void simultaneousLossBindsNothingWhenAPlayerCannotLoseForZeroLife() {
-        Board board = spitterBoard(1, 1);
+        Board board = spitterBoard(20, 20);
         board.card(board.opponent, "Platinum Angel");
         assertTrue(SimultaneousLoss.bind(board.game).isEmpty());
     }
@@ -1963,7 +1967,7 @@ class RegisteredRulesTest {
     void simultaneousLossBindsNothingForATriggerWithAConditionOrAChoice() {
         for (Map.Entry<String, String> param : Map.of("IsPresent", "Card.Self", "CheckSVar", "X",
                 "OptionalDecider", "You").entrySet()) {
-            Board board = spitterBoard(1, 1);
+            Board board = spitterBoard(20, 20);
             upkeepTrigger(board.subject).putParam(param.getKey(), param.getValue());
             assertTrue(SimultaneousLoss.bind(board.game).isEmpty(), param.getKey());
         }
@@ -1975,12 +1979,12 @@ class RegisteredRulesTest {
         String damage = "DB$ DamageAll | ValidCards$ Creature | ValidPlayers$ Player | NumDmg$ 1";
         for (String extra : List.of(" | ConditionCheckSVar$ X", " | UnlessCost$ 1", " | Optional$ True",
                 " | SubAbility$ DBDestroy")) {
-            Board board = spitterBoard(1, 1);
+            Board board = spitterBoard(20, 20);
             board.subject.setSVar("TrigDamageAll", damage + extra);
             board.subject.setSVar("DBDestroy", "DB$ Destroy | Defined$ Self");
             assertTrue(SimultaneousLoss.bind(board.game).isEmpty(), extra);
         }
-        Board plain = spitterBoard(1, 1);
+        Board plain = spitterBoard(20, 20);
         plain.subject.setSVar("TrigDamageAll", damage);
         assertTrue(SimultaneousLoss.bind(plain.game).isPresent(), "the plain chain binds");
     }
@@ -1991,10 +1995,22 @@ class RegisteredRulesTest {
     }
 
     @Test
-    void simultaneousLossForksTheOpponentOneLifeAbove() {
-        Twin twin = spitterBoard(1, 1).twin(SimultaneousLoss.rule());
+    void simultaneousLossForksEachPlayerAtTheTriggersAmount() {
+        Twin twin = spitterBoard(20, 20).twin(SimultaneousLoss.rule());
+        assertEquals(Set.of("P0.life", "P1.life"), twin.changes());
+        assertEquals(1, twin.fork().player("player").getLife());
+        assertEquals(1, twin.fork().player("opponent").getLife());
+    }
+
+    /** A player already in the trigger's reach keeps its life: the edit only lowers a life total. */
+    @Test
+    void simultaneousLossForksOnlyThePlayerOutOfReach() {
+        Board board = new Board(PhaseType.UPKEEP);
+        board.card(board.you, "Plague Spitter");
+        board.you.setLife(1, null);
+        Twin twin = board.twin(SimultaneousLoss.rule());
         assertEquals(Set.of("P1.life"), twin.changes());
-        assertEquals(2, twin.fork().player("opponent").getLife());
+        assertEquals(1, twin.fork().player("opponent").getLife());
     }
 
     // ── 702.19c, trample over planeswalkers: replace_card ───────────────
@@ -2840,6 +2856,23 @@ class RegisteredRulesTest {
             Card card = TestBoard.inPlay(game, owner, name);
             card.setGameTimestamp(game.getNextTimestamp());
             return card;
+        }
+
+        /** {@code count} permanents named {@code name} of {@code owner}; the first, or null for none. */
+        Card cards(Player owner, String name, int count) {
+            Card first = null;
+            for (int i = 0; i < count; i++) {
+                Card card = card(owner, name);
+                first = first == null ? card : first;
+            }
+            return first;
+        }
+
+        /** {@code attacker} attacks the opponent, no blocker declared yet. */
+        void attacking(Card attacker) {
+            Combat combat = new Combat(you);
+            combat.addAttacker(attacker, opponent);
+            game.getPhaseHandler().setCombat(combat);
         }
 
         /** {@code names} at the bottom of {@code owner}'s library in order, so the first listed is the topmost of them. */

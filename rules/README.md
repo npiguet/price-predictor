@@ -306,14 +306,15 @@ two.
   | `replace_card` | replace one card with another |
   | `remove_permanent` | take a permanent off the battlefield |
   | `add_permanent` | put a card onto the battlefield |
-  | `move_card` | move a card between hand, library and graveyard, or change which card sits in one of them |
+  | `move_card` | move a card between hand, library and graveyard, change which card sits in one of them, or empty a library |
 
   Each operation edits the fork's copy silently, without the event the change would raise in a
   game. A removed permanent leaves combat, is unattached from what it was attached to and what was
   attached to it, triggers no leaves-the-battlefield ability and goes to no zone. A card put onto
   the battlefield arrives under the variant's controller, tapped, summoning-sick and with the
   counters the variant states, and triggers no enters ability and no replacement. A moved card
-  counts as no draw, discard or mill. The players' per-turn counts stay as the live game left them.
+  counts as no draw, discard or mill, and an emptied library's cards go to no zone. The players'
+  per-turn counts stay as the live game left them.
 
   A variant no operation can make is `{"unclassifiable": reason}`: one that differs by a choice, a
   target or a decision of a player, by a timing, by the phase, step or turn, or by more than one

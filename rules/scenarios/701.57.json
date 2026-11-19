@@ -188,6 +188,86 @@
       }
     },
     {
+      "id": "701.57b-2",
+      "rules": [
+        "701.57b"
+      ],
+      "title": "A player discovers with nothing to find, its library emptied on a board whose discovery finds a card",
+      "record_kind": "trigger",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Val, Marooned Surveyor"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Geological Appraiser"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Grizzly Bears",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top first. The directed fork's board: A's library holds cards, which the fork takes out, leaving it empty."
+      },
+      "decisions": [
+        "A casts Geological Appraiser, tapping four Mountains; it resolves and enters the battlefield.",
+        "Its enters trigger ('if you cast it, discover 3') goes on the stack; both players pass and it resolves.",
+        "A discovers 3; if a card is found, A casts it without paying its mana cost. Both players pass until Val's trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "card_found",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Forest and Grizzly Bears are exiled; A casts Grizzly Bears for free and it enters the battlefield, and Forest goes to the bottom of A's library. A has discovered: Val triggers, dealing 2 damage to B (B at 18) and A gains 2 life (A at 22)."
+        },
+        {
+          "label": "empty_library",
+          "polarity": "fires",
+          "delta": "A's library is empty.",
+          "expected": "No card is exiled and none is found; nothing is cast and nothing goes to A's hand. A has still discovered: Val triggers, B is at 18 and A is at 22.",
+          "operation": "move_card"
+        }
+      ],
+      "cards": [
+        "Geological Appraiser",
+        "Val, Marooned Surveyor",
+        "Mountain",
+        "Forest",
+        "Grizzly Bears",
+        "Island"
+      ],
+      "forge_notes": "The fork forces A's cast of Geological Appraiser, so the enters trigger's 'if you cast it' holds. The emptied library's cards go to no zone.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger with Mode$ Discover is evaluated when a player discovers and fires.",
+        "near_miss": "The same trigger is evaluated and does not fire.",
+        "params": {
+          "mode": "Discover"
+        },
+        "needs": []
+      }
+    },
+    {
       "id": "701.57c-1",
       "rules": [
         "701.57c"
