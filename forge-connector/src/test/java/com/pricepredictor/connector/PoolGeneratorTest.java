@@ -84,4 +84,23 @@ class PoolGeneratorTest {
                 () -> generator.generate("XXXXUNKNOWN", 1, HoldoutCards.NONE));
         assertEquals("Unknown or unsupported set code: XXXXUNKNOWN", thrown.getMessage());
     }
+
+    @Test
+    void generatePrintsTheCountOfPoolsLeftShort() {
+        // Holding out every card of the set leaves no replacement to draw, so
+        // every pool is short: real engine, extreme case.
+        PoolGenerator generator = new PoolGenerator();
+        Set<String> everyCard = Set.copyOf(
+                generator.generate("RVR", 40, HoldoutCards.NONE).stream()
+                        .flatMap(List::stream).toList());
+        java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
+        java.io.PrintStream original = System.err;
+        System.setErr(new java.io.PrintStream(captured, true));
+        try {
+            generator.generate("RVR", 3, HoldoutCards.of(everyCard));
+        } finally {
+            System.setErr(original);
+        }
+        assertTrue(captured.toString().contains("3 of 3 pools are short"), captured.toString());
+    }
 }

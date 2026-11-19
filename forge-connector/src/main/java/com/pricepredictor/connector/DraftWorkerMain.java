@@ -104,6 +104,7 @@ public class DraftWorkerMain {
         AgentMix mix;
         try {
             mix = AgentMix.parse(agentMixSpec);
+            DraftAgent.requireKnown(mix.labels(), externalAgents);
         } catch (IllegalArgumentException e) {
             throw ToolMain.badConfig("-D" + AGENT_MIX + " " + e.getMessage());
         }

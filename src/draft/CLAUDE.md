@@ -32,7 +32,7 @@ Where the rest lives:
 
 ## Agent labels
 
-- A mix label names how a seat drafts. `forge-full` is pure Forge AI; `forge-r30` and `forge-r100` replace 30% and 100% of that seat's picks with uniform-random legal picks. `--agent-mix` is a categorical sampled independently per seat.
+- A mix label names how a seat drafts. `forge-full` is pure Forge AI; `forge-r30` and `forge-r100` replace 30% and 100% of that seat's picks with uniform-random legal picks. `--agent-mix` is a categorical sampled independently per seat. Any other label must be listed in `-Ddraft.external.agents`; the worker refuses a mix with an unknown label at start, naming it (`DraftAgent.requireKnown`).
 - A model-piloted seat's `agent` is just the mix label its checkpoint was bound to.
 - A mix label never names deck building. Every seat's deck in a drafts corpus is built by this project's picker or SA builder, because `generate-draft-data` never calls a Forge deck builder. Every seat is built and scored on the same scale.
 - `forge-native` exists only in `play-draft-games`: full-strength Forge drafting with Forge's own `BoosterDeckBuilder` building the deck too, so it alone is Forge end to end.

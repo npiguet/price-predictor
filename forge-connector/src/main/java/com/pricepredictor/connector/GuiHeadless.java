@@ -38,9 +38,9 @@ public class GuiHeadless implements IGuiBase {
     @Override public String getCurrentVersion() { return ""; }
     @Override public String getAssetsDir() { return assetsDir; }
     @Override public ImageFetcher getImageFetcher() { return null; }
-    @Override public void invokeInEdtNow(Runnable runnable) {}
-    @Override public void invokeInEdtLater(Runnable runnable) {}
-    @Override public void invokeInEdtAndWait(Runnable proc) {}
+    @Override public void invokeInEdtNow(Runnable runnable) { runnable.run(); }
+    @Override public void invokeInEdtLater(Runnable runnable) { runnable.run(); }
+    @Override public void invokeInEdtAndWait(Runnable proc) { proc.run(); }
     @Override public boolean isGuiThread() { return false; }
     @Override public ISkinImage getSkinIcon(FSkinProp skinProp) { return null; }
     @Override public ISkinImage getUnskinnedIcon(String path) { return null; }

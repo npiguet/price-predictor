@@ -360,6 +360,9 @@ public class GamePlayer {
         }
         gamesPlayed++;
 
+        // The game's rows are refused when a card could not be credited; the
+        // match worker reports it as a match error.
+        collector.requireComplete();
         var winningLobby = game.getOutcome().getWinningLobbyPlayer();
         if (winningLobby == null) {
             return Optional.empty();

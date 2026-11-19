@@ -51,6 +51,11 @@ final class AgentMix {
         return new AgentMix(labels.toArray(new String[0]), cumulative, running);
     }
 
+    /** The labels the mix draws from, in spec order. */
+    List<String> labels() {
+        return List.of(labels);
+    }
+
     String sample(Random random) {
         int roll = random.nextInt(total);
         for (int i = 0; i < cumulative.length; i++) {

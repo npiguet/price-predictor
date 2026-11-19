@@ -50,12 +50,21 @@ public class PoolGenerator {
         SealedTemplate boosterTemplate = boosterTemplate(setCode);
 
         List<List<String>> pools = new ArrayList<>(poolCount);
+        int shortPools = 0;
         for (int p = 0; p < poolCount; p++) {
             List<String> poolCards = new ArrayList<>();
-            for (PaperCard card : openSinglePool(boosterTemplate, excluded)) {
+            OpenedPool opened = openPool(boosterTemplate, excluded);
+            for (PaperCard card : opened.cards()) {
                 poolCards.add(card.getName());
             }
             pools.add(poolCards);
+            if (opened.dropped() > 0) {
+                shortPools++;
+            }
+        }
+        if (shortPools > 0) {
+            System.err.println(shortPools + " of " + poolCount
+                    + " pools are short of cards: a held-out card found no replacement");
         }
         return pools;
     }
@@ -77,6 +86,16 @@ public class PoolGenerator {
      * every collected effect record is played from.
      */
     List<PaperCard> openSinglePool(SealedTemplate boosterTemplate, HoldoutCards excluded) {
+        return openPool(boosterTemplate, excluded).cards();
+    }
+
+    /** A pool and how many of its slots found no replacement for a held-out card. */
+    record OpenedPool(List<PaperCard> cards, int dropped) {
+    }
+
+    /** {@link #openSinglePool}, with the count of slots left empty. */
+    OpenedPool openPool(SealedTemplate boosterTemplate, HoldoutCards excluded) {
+        int dropped = 0;
         List<PaperCard> pool = new ArrayList<>();
         Map<CardRarity, Deque<PaperCard>> spares = new EnumMap<>(CardRarity.class);
         int replacementBoosters = 0;
@@ -100,10 +119,12 @@ public class PoolGenerator {
                 }
                 if (replacement != null) {
                     pool.add(replacement);
+                } else {
+                    dropped++;
                 }
             }
         }
-        return pool;
+        return new OpenedPool(pool, dropped);
     }
 
     private PaperCard takeSpare(Map<CardRarity, Deque<PaperCard>> spares, CardRarity rarity) {

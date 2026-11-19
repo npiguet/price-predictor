@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Per-game eventbus visitor that records every non-basic, non-token card
@@ -52,8 +53,19 @@ public class PlayedCardCollector extends IGameEventVisitor.Base<Void> {
     private final Game game;
     private final Map<Side, List<String>> cardsBySide = new EnumMap<>(Side.class);
 
+    private String failure;
+
     public PlayedCardCollector(Game game) {
         this.game = game;
+    }
+
+    /**
+     * Why a played card could not be credited to a side, or null when every
+     * one was. A game with a failure has an incomplete record: its row must
+     * not be written.
+     */
+    public String failure() {
+        return failure;
     }
 
     /** Return the recorded card names for one side. */
@@ -121,10 +133,36 @@ public class PlayedCardCollector extends IGameEventVisitor.Base<Void> {
         if (name == null || name.isEmpty()) {
             return;
         }
-        // Throws on a name neither side registered, as the winner mapping
-        // does: a card credited to the wrong deck is a corrupt row.
-        Side side = Side.ofLobbyName(owner.getLobbyPlayerName());
-        cardsBySide.computeIfAbsent(side, s -> new ArrayList<>()).add(name);
+        sideOf(owner).ifPresent(
+                side -> cardsBySide.computeIfAbsent(side, s -> new ArrayList<>()).add(name));
+    }
+
+    /**
+     * The owner's side. A name neither side registered is a card that cannot
+     * be credited to a deck: Forge's event bus swallows a subscriber's
+     * exception, so the failure is kept for {@link #requireComplete} once the
+     * game has ended.
+     */
+    private Optional<Side> sideOf(PlayerView owner) {
+        try {
+            return Optional.of(Side.ofLobbyName(owner.getLobbyPlayerName()));
+        } catch (IllegalArgumentException e) {
+            failure = failure == null ? e.getMessage() : failure;
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Refuse the game's rows when a played card could not be credited: a card
+     * list missing a card is a corrupt row.
+     *
+     * @throws IllegalStateException naming the first failure
+     */
+    public void requireComplete() {
+        if (failure != null) {
+            throw new IllegalStateException(
+                    "played-card collector could not credit a card: " + failure);
+        }
     }
 
     /**
