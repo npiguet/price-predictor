@@ -334,6 +334,22 @@ final class StackBrackets {
     }
 
     /**
+     * The game has ended: every bracket left, on the stack or not, is
+     * removed and counts its unwritten events as dropped. A cost half was
+     * written at the cast and is not touched.
+     */
+    void dropAll(String phase) {
+        List<OpenResolution> all = new ArrayList<>(items);
+        all.addAll(waiting);
+        items.clear();
+        waiting.clear();
+        open = null;
+        for (OpenResolution item : all) {
+            countDropped(item, phase);
+        }
+    }
+
+    /**
      * What a bracket gathered and no record will write, counted as dropped:
      * an item removed without resolving, or the consequences of a cast that
      * precede its resolution's board.

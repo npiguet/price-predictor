@@ -185,8 +185,40 @@ class GameOutcomeFilingTest {
         assertEquals("resolved", payload(half).get("outcome"), half);
     }
 
+    /**
+     * The Poltergeist's "Pay 1 life" ends the game with its activation still
+     * on the stack: an event filed in its bracket, which no record will
+     * write, so the dropped counts hold it and the game's records are the
+     * cost half only, as without it. The game is finished before the
+     * state-based check that would clear the stack and end it.
+     */
+    @Test
+    void aBracketStillOnTheStackAtTheGamesEndCountsItsEventsAsDropped() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player payer = game.getPlayers().get(0);
+        AtomicReference<Map<DroppedEvents.Key, Long>> dropped = new AtomicReference<>();
+
+        List<String> records = ShardRun.observed(tempDir, game, collector -> {
+            activatePayLife(game, payer);
+            collector.fileOutcome(new EffectEvent(EventType.TAPPED).subject(Refs.of(payer)), null);
+            game.fireEvent(new GameEventGameFinished());
+            dropped.set(Map.copyOf(collector.droppedEvents().counts()));
+        });
+
+        assertEquals(1, records.size(), "the cost half only: " + records);
+        assertEquals(1L, dropped.get().get(new DroppedEvents.Key("tapped", "main1")),
+                "the event filed into the bracket, counted when the game ends: " + dropped.get());
+    }
+
     /** Activate the Poltergeist's "Pay 1 life" at 1 life, then run the check that ends the game. */
     private static void payLifeToZero(Game game, Player payer) {
+        activatePayLife(game, payer);
+        game.getAction().checkStateEffects(false);
+        assertTrue(game.isGameOver(), "the payer lost");
+    }
+
+    /** Activate the Poltergeist's "Pay 1 life" at 1 life: its cost paid, the ability on the stack. */
+    private static void activatePayLife(Game game, Player payer) {
         payer.setLife(1, null);
         Card poltergeist = TestBoard.inPlay(game, payer, "Mischievous Poltergeist");
         SpellAbility regenerate = TestBoard.ability(poltergeist, ApiType.Regenerate);
@@ -194,8 +226,7 @@ class GameOutcomeFilingTest {
         assertTrue(ComputerUtil.handlePlayingSpellAbility(payer, regenerate, null),
                 "the AI paid the life");
         assertEquals(0, payer.getLife());
-        game.getAction().checkStateEffects(false);
-        assertTrue(game.isGameOver(), "the payer lost");
+        assertEquals(1, game.getStack().size(), "the ability waits on the stack");
     }
 
     /** Step the engine's main loop until the game is over. */

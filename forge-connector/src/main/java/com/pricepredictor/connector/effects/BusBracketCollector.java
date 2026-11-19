@@ -1323,7 +1323,8 @@ public final class BusBracketCollector extends BusEventReader {
      * is the game-end record's ({@link #writeGameEnd}).
      *
      * <p>An item still on the stack had its cost half written at its cast,
-     * and its effect half never comes: nothing is written for it.
+     * and its effect half never comes: nothing is written for it, and what
+     * its bracket gathered is counted as dropped.
      */
     @Subscribe
     public void onGameFinished(GameEventGameFinished event) {
@@ -1364,6 +1365,9 @@ public final class BusBracketCollector extends BusEventReader {
         combatStep.flush();
         writeGameEnd();
         writeOffRemoved(onStack);
+        // An item still on the stack kept its bracket above: what it gathered
+        // (a cast whose cost ended the game) reaches no record either.
+        brackets.dropAll(game == null ? null : DroppedEvents.phaseOf(game));
     }
 
     /**
