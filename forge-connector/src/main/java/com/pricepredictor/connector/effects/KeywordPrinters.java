@@ -18,7 +18,11 @@ import java.util.Objects;
  * Where a keyword of a state that is not a card's own printed state is
  * printed (finding 1.8): a mutated permanent's, which holds the keywords of
  * every card merged into it, and a token or spell copy's, which holds the
- * original's keywords plus those its copy effect added.
+ * original's keywords plus those its copy effect added. A token copy of a
+ * copy (Kiki-Jiki's token of a Clone copying Moldering Karok) is built from
+ * the Clone's paper card, whose rules print none of its keywords: its
+ * keywords are read through the Clone's copy state, to what the Clone
+ * copies ({@link #copySourceOf}).
  *
  * <p>Neither is a copy {@code Card.isCloned} names, so
  * {@link ProvenanceResolver} does not read them through what they copy, and
@@ -40,16 +44,30 @@ final class KeywordPrinters {
     }
 
     /**
-     * The printed state that prints {@code keyword} of a mutated permanent's
-     * merged state: the state of the merged card it came from, the top
-     * card's first; null when none prints it. {@code state} itself for any
-     * other state.
+     * The state {@code keyword} of {@code state} is read through: for a
+     * mutated permanent's merged state, the printed state of the merged card
+     * it came from, the top card's first; for a token copy of a copy, the
+     * copied Clone's state ({@link #copiedPrinterOf}); null when none holds
+     * it. {@code state} itself for any other state.
      */
     static CardState printerOf(CardState state, KeywordInterface keyword) {
         Card host = state.getCard();
-        if (host == null || !isMergedState(host, state)) {
+        if (host == null) {
             return state;
         }
+        if (isMergedState(host, state)) {
+            return mergedPrinterOf(host, state, keyword);
+        }
+        Card source = copySourceOf(host);
+        return source != null && source.isCloned() ? copiedPrinterOf(source, state, keyword) : state;
+    }
+
+    /**
+     * The merged card's printed state that prints {@code keyword} of a
+     * mutated permanent's merged state, the top card's first; null when
+     * none prints it.
+     */
+    private static CardState mergedPrinterOf(Card host, CardState state, KeywordInterface keyword) {
         int rank = rankOf(state, keyword);
         for (Card component : host.getMergedCards()) {
             CardState printed = printedStateOf(component, host, state.getStateName());
@@ -60,6 +78,19 @@ final class KeywordPrinters {
             rank -= count;
         }
         return null;
+    }
+
+    /**
+     * The state of a copied Clone a token copy of it reads {@code keyword}
+     * through: the Clone's state of the token state's name, else the one it
+     * shows, whose keywords the copy took. Null for a keyword that state
+     * does not hold: one the token's own copy effect added (Kiki-Jiki's
+     * haste).
+     */
+    private static CardState copiedPrinterOf(Card source, CardState state, KeywordInterface keyword) {
+        CardState copied = source.getState(state.getStateName());
+        CardState printed = copied == null ? source.getCurrentState() : copied;
+        return rankOf(state, keyword) < countOf(printed, keyword.getOriginal()) ? printed : null;
     }
 
     /**
@@ -88,6 +119,20 @@ final class KeywordPrinters {
     static boolean isStateCopy(Card host) {
         Card copied = host == null ? null : host.getCopiedPermanent();
         return copied != null && copied != host;
+    }
+
+    /**
+     * The permanent a token copy took its copiable values from: the one its
+     * prototype names ({@code Card.getEffectRecordCopySource}, which the
+     * patch sets in {@code CopyPermanentEffect.getProtoType}). The token's
+     * own {@code copiedPermanent} is that throwaway prototype, which is no
+     * clone and names nothing. Null for any other card, and on a checkout
+     * without the hook.
+     */
+    static Card copySourceOf(Card host) {
+        return isStateCopy(host)
+                && PatchHooks.COPY_SOURCE.read(host.getCopiedPermanent()) instanceof Card source
+                ? source : null;
     }
 
     /** Whether {@code state} is one of the card's mutated clone states. */

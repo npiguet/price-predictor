@@ -340,6 +340,9 @@ public final class PatchHooks {
                     + " in a continuous snapshot");
     static final Hook CHANGED_NAMES = new Hook(CARD, "getChangedCardNames",
             "a continuous contribution's name");
+    static final Hook COPY_SOURCE = new Hook(CARD, "getEffectRecordCopySource",
+            "the keyword keys and printed script of a token copy of a copy (Kiki-Jiki's token"
+                    + " of a Clone): the permanent its prototype took its copiable values from");
     static final Hook ASSIGNED_DAMAGE = new Hook(COMBAT, "getAssignedDamage",
             "a combat record's assignment_choices");
     static final Hook CONFIRM_LISTENER = new Hook(
@@ -416,7 +419,7 @@ public final class PatchHooks {
             CANT_BLOCK_BY_STATIC, CANT_BLOCK_STATIC, FAILURE_COUNTS, MANA_LISTENER, CHANGED_TYPES_BY_STATIC,
             CHANGED_COLORS_BY_STATIC, TYPE_WITHOUT, COLOR_WITHOUT, KEYWORDS_WITHOUT,
             PT_WITHOUT, CONTROLLER_WITHOUT, TRAITS_WITHOUT,
-            CHANGED_NAMES, ASSIGNED_DAMAGE, CONFIRM_LISTENER, OUTCOME_LISTENER,
+            CHANGED_NAMES, COPY_SOURCE, ASSIGNED_DAMAGE, CONFIRM_LISTENER, OUTCOME_LISTENER,
             PENDING_DELAYED_TRIGGERS, STATE_BASED_LOOP_LISTENER, PRIORITY_SETTLED_LISTENER,
             CAST_LISTENER, RESOLUTION_LISTENER, PAYMENT_LISTENER);
 

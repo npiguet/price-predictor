@@ -471,8 +471,10 @@ public final class ProvenanceResolver {
      * The keyword line a state no copy effect's clone states hold prints
      * for {@code keyword}: a mutated permanent's keyword in the file of the
      * merged card that prints it, a token or spell copy's in the original's
-     * file at the original's ordinal, and none for one its copy effect added
-     * ({@link KeywordPrinters}); any other state's at its own ordinal.
+     * file at the original's ordinal, a token copy of a Clone's through the
+     * Clone's copy state into what the Clone copies, and none for one its
+     * copy effect added ({@link KeywordPrinters}); any other state's at its
+     * own ordinal.
      */
     private static ProvenanceKey keyOfUncloned(CardState state, KeywordInterface keyword,
                                                ProvenanceKey.Built built, int depth) {

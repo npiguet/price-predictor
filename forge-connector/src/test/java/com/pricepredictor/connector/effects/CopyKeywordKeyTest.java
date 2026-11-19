@@ -2,7 +2,9 @@ package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.RulesParser;
+import forge.ai.simulation.GameCopier;
 import forge.game.CardTraitBase;
+import forge.game.Game;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardFactory;
@@ -38,7 +40,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * printed keyword one line on. A mutated permanent's keywords come from
  * several cards, each printed in its own file, as do its triggers, statics,
  * replacements and abilities, which keep the state of the card that printed
- * them. A trait Forge builds on a
+ * them. A token copy of a copy (Kiki-Jiki's token of a Clone) is built from
+ * the Clone's card, yet holds the keywords of what the Clone copies. A trait
+ * Forge builds on a
  * copy's state (a land's mana ability) is no line of the copy effect's. Each
  * key is read against the real sidecar of the card it names.
  */
@@ -62,23 +66,90 @@ class CopyKeywordKeyTest {
         copy.getTargets().add(karok);
         board.resolve(copy, board.you);
         board.game.getAction().checkStaticAbilities();
-        Card token = tokenNamed(board, "Moldering Karok");
+        Card token = tokenCopyNamed(board.game, "Moldering Karok");
         ConvertedScript karoks = convertedScriptOf(karok);
 
         assertJoins(karoks, keyOf(token, "Lifelink"), "lifelink");
         assertJoins(karoks, keyOf(token, "Trample"), "trample");
         assertNull(keyOf(token, "Haste"), "the haste the copy effect added");
+        assertPrintedBesideAddedHaste(linesOf(board, token), List.of("Lifelink", "Trample"));
+    }
 
-        List<Map<String, Object>> lines = linesOf(board, token);
+    /**
+     * Kiki-Jiki copies a Clone that is copying Moldering Karok: the token is
+     * built from the Clone's paper card, whose rules print no keyword, yet
+     * its Lifelink and Trample are Karok's and join their own lines of
+     * Karok's script, printed, on the live board and on a fork of it; the
+     * Haste the copy effect added stays a granted line with no key.
+     */
+    @Test
+    void aTokenCopyOfACopysKeywordsJoinTheOriginalsLines() throws IOException {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card karok = board.battlefield("Moldering Karok", board.you);
+        Card token = kikiCopiesACloneOf(board, "Moldering Karok");
+        ConvertedScript karoks = convertedScriptOf(karok);
+
+        assertJoins(karoks, keyOf(token, "Lifelink"), "lifelink");
+        assertJoins(karoks, keyOf(token, "Trample"), "trample");
+        assertNull(keyOf(token, "Haste"), "the haste the copy effect added");
+        assertPrintedBesideAddedHaste(linesOf(board, token), List.of("Lifelink", "Trample"));
+
+        Card forked = tokenCopyNamed(new GameCopier(board.game).makeCopy(), "Moldering Karok");
+        assertEquals(keyOf(token, "Lifelink"), keyOf(forked, "Lifelink"), "the fork's token");
+        assertEquals(keyOf(token, "Trample"), keyOf(forked, "Trample"), "the fork's token");
+    }
+
+    /**
+     * Kiki-Jiki copies a Clone that is copying a Vampire token (flying,
+     * lifelink): the token's Flying and Lifelink join the Vampire token
+     * script's lines, printed.
+     */
+    @Test
+    void aTokenCopyOfACopyOfATokenJoinsThatTokensLines() throws IOException {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card vampire = board.token("b_2_3_vampire_flying_lifelink", board.you);
+        Card token = kikiCopiesACloneOf(board, vampire.getName());
+        ConvertedScript vampires = convertedScriptOf(vampire);
+
+        assertJoins(vampires, keyOf(token, "Flying"), "flying");
+        assertJoins(vampires, keyOf(token, "Lifelink"), "lifelink");
+        assertNull(keyOf(token, "Haste"), "the haste the copy effect added");
+        assertPrintedBesideAddedHaste(linesOf(board, token), List.of("Flying", "Lifelink"));
+    }
+
+    /**
+     * A Clone cast to copy the one creature named {@code copied}, then
+     * Kiki-Jiki's token copy of that Clone, the token returned.
+     */
+    private static Card kikiCopiesACloneOf(CharacterizationBoard board, String copied) {
+        Card inHand = board.hand("Clone", board.you);
+        board.resolve(board.spell(inHand, board.you), board.you);
+        Card clone = board.game.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(card -> card.getId() == inHand.getId()).findFirst().orElseThrow();
+        assertTrue(clone.isCloned(), "the Clone entered as a copy");
+        assertEquals(copied, clone.getName());
+        Card kiki = board.battlefield("Kiki-Jiki, Mirror Breaker", board.you);
+        SpellAbility copy = board.ability(kiki, ApiType.CopyPermanent);
+        copy.resetTargets();
+        copy.getTargets().add(clone);
+        board.resolve(copy, board.you);
+        board.game.getAction().checkStaticAbilities();
+        Card token = tokenCopyNamed(board.game, copied);
+        assertEquals("Clone", token.getRules().getName(), "the token is built from the Clone's card");
+        return token;
+    }
+
+    /** The printed keywords' lines are printed; the copy effect's Haste is granted by an effect. */
+    private static void assertPrintedBesideAddedHaste(List<Map<String, Object>> lines, List<String> printed) {
+        for (String keyword : printed) {
+            Map<String, Object> line = only(lines, keyword);
+            assertEquals(false, line.get("granted"), line.toString());
+            assertFalse(line.containsKey("grant"), line.toString());
+        }
         Map<String, Object> haste = only(lines, "Haste");
         assertEquals(List.of(), haste.get("keys"), haste.toString());
         assertEquals(true, haste.get("granted"), haste.toString());
         assertEquals("effect", haste.get("grant"), haste.toString());
-        for (String printed : List.of("Lifelink", "Trample")) {
-            Map<String, Object> line = only(lines, printed);
-            assertEquals(false, line.get("granted"), line.toString());
-            assertFalse(line.containsKey("grant"), line.toString());
-        }
     }
 
     /**
@@ -248,9 +319,10 @@ class CopyKeywordKeyTest {
 
     // ── the board ───────────────────────────────────────────────────────
 
-    private static Card tokenNamed(CharacterizationBoard board, String name) {
-        return board.game.getCardsIn(ZoneType.Battlefield).stream()
-                .filter(card -> card.isToken() && name.equals(card.getName()))
+    /** The token copy a copy effect made on the battlefield, named {@code name}. */
+    private static Card tokenCopyNamed(Game game, String name) {
+        return game.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(card -> KeywordPrinters.isStateCopy(card) && name.equals(card.getName()))
                 .findFirst().orElseThrow();
     }
 

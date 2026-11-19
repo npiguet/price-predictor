@@ -83,10 +83,13 @@ final class ScriptLocator {
      * The script whose lines a card prints. A copy (a Clone's, a Phantasmal
      * Image's) prints what it copies, through a copy of a copy to the
      * original: its latest copy effect's origin's script, not its own paper
-     * card's, which {@link #scriptFileOf} answers. A token copy is no such
-     * copy: Forge builds it from the copied card's paper card, so
-     * {@link #scriptFileOf} already names the copied card's script. Any other
-     * card prints its own.
+     * card's, which {@link #scriptFileOf} answers. A token copy prints what
+     * the permanent it copied prints ({@link KeywordPrinters#copySourceOf}):
+     * Forge builds it from that permanent's paper card, so
+     * {@link #scriptFileOf} names the copied card's script, which is not the
+     * one printed when the copied card is itself a copy (Kiki-Jiki's token
+     * of a Clone copying Moldering Karok prints Karok's). Any other card
+     * prints its own.
      */
     static String printedScriptOf(Card host) {
         Card printer = host;
@@ -101,16 +104,18 @@ final class ScriptLocator {
     }
 
     /**
-     * What a copy copies: its latest clone states' origin; null for a card
-     * that is no copy ({@code Card.isCloned}, which a mutation or a
-     * prototype is not).
+     * What a copy copies: its latest clone states' origin when it is a copy
+     * ({@code Card.isCloned}, which a mutation or a prototype is not), else
+     * the permanent a token copy copied; null for a card that is neither.
      */
     private static Card copiedFrom(Card card) {
-        Map<Long, CardCloneStates> states = card.getCloneStates();
-        if (!card.isCloned() || states.isEmpty()) {
-            return null;
-        }
-        return states instanceof NavigableMap<Long, CardCloneStates> ordered
+        Card origin = card.isCloned() ? latestOrigin(card.getCloneStates()) : null;
+        return origin != null ? origin : KeywordPrinters.copySourceOf(card);
+    }
+
+    /** The latest clone states' origin; null for none. */
+    private static Card latestOrigin(Map<Long, CardCloneStates> states) {
+        return states instanceof NavigableMap<Long, CardCloneStates> ordered && !ordered.isEmpty()
                 ? ordered.lastEntry().getValue().getOrigin() : null;
     }
 
