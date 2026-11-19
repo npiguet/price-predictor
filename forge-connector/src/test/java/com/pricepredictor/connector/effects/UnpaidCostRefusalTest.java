@@ -11,6 +11,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -64,6 +65,42 @@ class UnpaidCostRefusalTest {
                 ForkRefusals.counts().toString());
         assertTrue(game.getCardState(ninja).isInZone(forge.game.zone.ZoneType.Hand), "the live ninja stays in hand");
         assertTrue(InterventionFork.readsAnUnpaidCost(ninjutsu), "ninjutsu reads its returned attacker");
+    }
+
+    /**
+     * A line whose resolution reads what its cost paid (Burnt Offering's
+     * sacrificed creature's mana value, Ghitu Fire-Eater's own power as it
+     * was sacrificed, Foundry Helix's sacrificed artifact) would resolve
+     * forced as no legal play does: it is refused before it is forced,
+     * counted under a reason of its own.
+     */
+    @Test
+    void aLineReadingWhatItsCostPaidIsRefusedUnderItsOwnReason() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player holder = game.getPlayers().get(0);
+        TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
+        List<SpellAbility> reading = List.of(
+                lineOf(TestBoard.inHand(game, holder, "Burnt Offering"), holder, SpellAbility::isSpell),
+                lineOf(TestBoard.inPlay(game, holder, "Ghitu Fire-Eater"), holder,
+                        SpellAbility::isActivatedAbility),
+                lineOf(TestBoard.inHand(game, holder, "Foundry Helix"), holder, SpellAbility::isSpell));
+        String reason = "intervention " + InterventionFork.READS_WHAT_ITS_COST_PAID;
+
+        for (SpellAbility line : reading) {
+            long refused = ForkRefusals.counts().getOrDefault(reason, 0L);
+            long unguarded = ForkRefusals.counts().getOrDefault(REFUSAL, 0L);
+            assertTrue(InterventionFork.readsAnUnpaidCost(line), line + " reads what its cost paid");
+
+            ShardRun.Fork fork = ShardRun.forked(
+                    tempDir, game, TestCaps.caps().interventions(1).probes(0).build(), 1L, line);
+
+            assertFalse(fork.wrote(), "nothing is written for a refused line");
+            assertEquals(refused + 1, ForkRefusals.counts().getOrDefault(reason, 0L),
+                    ForkRefusals.counts().toString());
+            assertEquals(unguarded, ForkRefusals.counts().getOrDefault(REFUSAL, 0L), "counted apart");
+        }
+        SpellAbility shock = lineOf(TestBoard.inHand(game, holder, "Shock"), holder, SpellAbility::isSpell);
+        assertFalse(InterventionFork.readsAnUnpaidCost(shock), "Shock's cost is its mana alone");
     }
 
     @Test

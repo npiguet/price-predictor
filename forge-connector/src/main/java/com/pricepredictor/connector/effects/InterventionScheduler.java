@@ -315,9 +315,10 @@ final class InterventionScheduler {
      * <p>A line without the modes or targets its resolution needs on this
      * board is passed over and not marked forced, so a removal spell held
      * over an empty board is forced once a target has arrived. A line whose
-     * resolution reads a cost a forced line never pays (ninjutsu) is passed
-     * over too, wherever it is held, counted once a game as {@code
-     * intervention reads a cost it never paid}: it takes neither the boundary
+     * resolution reads a cost a forced line never pays (ninjutsu, a
+     * sacrificed creature's power) is passed over too, wherever it is held,
+     * counted once a game under its refusal's reason ({@link
+     * InterventionFork#unpaidCostRefusal}): it takes neither the boundary
      * nor one of the gate's planned interventions.
      *
      * <p>A steered game's variants go first because they are what its decks
@@ -439,11 +440,12 @@ final class InterventionScheduler {
      * intervention stay for another line; counted once a game.
      */
     private boolean refusedForAnUnpaidCost(SpellAbility candidate) {
-        if (!InterventionFork.readsAnUnpaidCost(candidate)) {
+        String refusal = InterventionFork.unpaidCostRefusal(candidate);
+        if (refusal == null) {
             return false;
         }
         if (unpaidCostRefused.add(lineKey(candidate))) {
-            ForkRefusals.count("intervention", InterventionFork.READS_AN_UNPAID_COST);
+            ForkRefusals.count("intervention", refusal);
         }
         return true;
     }

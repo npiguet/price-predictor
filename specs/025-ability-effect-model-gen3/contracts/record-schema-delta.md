@@ -520,7 +520,9 @@ position a card left a library from, and a search of another player's library.
   its cost aside: its timing (a sorcery-speed line in a main phase of its holder's turn), the
   steps and turns its script names (`ActivationPhases$`, `PlayerTurn$`), its script's conditions
   (`IsPresent$`), its activation limits and a static forbidding it. A spell whose mana cost is no
-  cost and a special action are never forced. Among the lines a step can force, the one forced is
+  cost and a special action are never forced, nor a line whose resolution reads what its cost
+  paid (a sacrificed or discarded card, the mana spent, converge), which no forced resolution
+  pays. Among the lines a step can force, the one forced is
   drawn at random from the fork's stream. Each printed line is forced once a game per pass,
   whoever holds it.
 - A forced (interventional) resolution's effect halves are filed by the live collector's own rules,

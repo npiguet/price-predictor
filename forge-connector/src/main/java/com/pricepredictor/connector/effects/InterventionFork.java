@@ -36,6 +36,12 @@ final class InterventionFork implements InterventionScheduler.Forcing {
      */
     static final String READS_AN_UNPAID_COST = "reads a cost it never paid";
 
+    /**
+     * A refusal's reason: the line's chain or the SVars it names read what
+     * its cost paid, which a forced line never pays ({@link PaidReads}).
+     */
+    static final String READS_WHAT_ITS_COST_PAID = "reads what its cost paid";
+
     private final Game game;
     /** The live game's recording: its hooks and its shard. */
     private final GameRecording live;
@@ -77,12 +83,24 @@ final class InterventionFork implements InterventionScheduler.Forcing {
     }
 
     /**
-     * Whether {@code line}'s resolution reads what its cost paid where Forge
-     * reads it without a guard, so a forced line, which pays nothing, throws
-     * there: ninjutsu and a sneak cast take the attacker returned to hand
-     * ({@code getPaidList("Returned")}) and the defender it attacked. Refused
-     * before the fork is taken, as a line the engine cannot resolve off its
-     * normal path.
+     * Whether {@code line}'s resolution reads what its cost paid, which a
+     * forced line never pays: refused before the fork is taken ({@link
+     * #unpaidCostRefusal} says under which reason).
+     */
+    static boolean readsAnUnpaidCost(SpellAbility line) {
+        return unpaidCostRefusal(line) != null;
+    }
+
+    /**
+     * Why {@code line} is refused for what its cost paid, or null when it
+     * reads nothing its cost paid.
+     *
+     * <p>{@link #READS_AN_UNPAID_COST} where Forge reads the payment without
+     * a guard, so a forced line throws there: ninjutsu and a sneak cast take
+     * the attacker returned to hand ({@code getPaidList("Returned")}) and the
+     * defender it attacked, a line the engine cannot resolve off its normal
+     * path. {@link #READS_WHAT_ITS_COST_PAID} where the script reads it
+     * ({@link PaidReads}): forced, the line resolves as no legal play does.
      *
      * <p>Crewing and saddling are forced: each adds its paid list of tapped
      * creatures to the vehicle's or mount's list for the turn, and a forced
@@ -90,12 +108,15 @@ final class InterventionFork implements InterventionScheduler.Forcing {
      * a held one as nothing ({@code FCollection.addAll} ignores a null), so
      * neither a first nor a second crew or saddle in a turn throws.
      */
-    static boolean readsAnUnpaidCost(SpellAbility line) {
+    static String unpaidCostRefusal(SpellAbility line) {
         if (line == null) {
-            return false;
+            return null;
         }
         SpellAbility root = line.getRootAbility();
-        return root.isNinjutsu() || root.isSneak();
+        if (root.isNinjutsu() || root.isSneak()) {
+            return READS_AN_UNPAID_COST;
+        }
+        return PaidReads.readsWhatItsCostPaid(root) ? READS_WHAT_ITS_COST_PAID : null;
     }
 
     /** Whether the budget lets {@link #intervene} take another fork of this resolution. */
@@ -130,11 +151,13 @@ final class InterventionFork implements InterventionScheduler.Forcing {
         if (!budget.mayIntervene(realResolutionId)) {
             return false;
         }
-        if (readsAnUnpaidCost(ability)) {
+        String refusal = unpaidCostRefusal(ability);
+        if (refusal != null) {
             // Before the fork is taken: it would spend the budget and a copy
-            // on a line whose forced resolution throws. The scheduler passes
-            // such a line over before it asks (InterventionScheduler.force).
-            ForkRefusals.count("intervention", READS_AN_UNPAID_COST);
+            // on a line whose forced resolution throws or reads a payment
+            // never made. The scheduler passes such a line over before it
+            // asks (InterventionScheduler.refusedForAnUnpaidCost).
+            ForkRefusals.count("intervention", refusal);
             return false;
         }
         Forks.ForkRun run = new Forks.ForkRun(
