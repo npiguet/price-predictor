@@ -29,8 +29,6 @@ import forge.game.player.PlayerController;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -494,40 +492,14 @@ public final class ForcedPlayRun {
 
     // ── the confirm hook ────────────────────────────────────────────────
 
-    /** {@code PlayerControllerAi.noteEffectRecordConfirm}, private: the hook every AI answer is reported through. */
-    private static final Method NOTE_CONFIRM;
-
-    static {
-        Method note;
-        try {
-            note = PlayerControllerAi.class.getDeclaredMethod("noteEffectRecordConfirm", SpellAbility.class,
-                    boolean.class);
-            note.setAccessible(true);
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            note = null;
-        }
-        NOTE_CONFIRM = note;
-    }
-
     /**
      * Report {@code answer} to {@code ability}'s question through the
-     * engine's confirm hook, as the AI's own answers are, so the fork's
-     * records read a forced answer as a live one.
+     * engine's confirm hook ({@link PatchHooks#NOTE_CONFIRM}), as the AI's
+     * own answers are, so the fork's records read a forced answer as a live
+     * one. Throws on a Forge without the hook, which the report names.
      */
     static boolean noted(SpellAbility ability, boolean answer) {
-        if (NOTE_CONFIRM == null) {
-            throw new IllegalStateException("this Forge's PlayerControllerAi reports no confirmation");
-        }
-        try {
-            return (Boolean) NOTE_CONFIRM.invoke(null, ability, answer);
-        } catch (IllegalAccessException e) {
-            throw new IllegalStateException(e);
-        } catch (InvocationTargetException e) {
-            if (e.getCause() instanceof RuntimeException runtime) {
-                throw runtime;
-            }
-            throw new IllegalStateException(e.getCause());
-        }
+        return (Boolean) PatchHooks.NOTE_CONFIRM.call(ability, answer);
     }
 
     // ── the cost ────────────────────────────────────────────────────────

@@ -54,25 +54,14 @@ final class DecliningSeat extends LobbyPlayerAi {
         @Override
         public boolean confirmAction(SpellAbility sa, PlayerActionConfirmMode mode, String message,
                                      List<String> options, Card cardToShow, Map<String, Object> params) {
-            return noted(sa, answer);
+            return ForcedPlayRun.noted(sa, answer);
         }
 
         /** An accepting seat takes every optional trigger; a declining one leaves them to the AI. */
         @Override
         public boolean confirmTrigger(WrappedAbility wrapper) {
             return answer && !wrapper.isMandatory()
-                    ? noted(wrapper.getWrappedAbility(), true) : super.confirmTrigger(wrapper);
-        }
-
-        private static boolean noted(SpellAbility sa, boolean confirmed) {
-            try {
-                java.lang.reflect.Method note = PlayerControllerAi.class.getDeclaredMethod(
-                        "noteEffectRecordConfirm", SpellAbility.class, boolean.class);
-                note.setAccessible(true);
-                return (Boolean) note.invoke(null, sa, confirmed);
-            } catch (ReflectiveOperationException e) {
-                throw new AssertionError(e);
-            }
+                    ? ForcedPlayRun.noted(wrapper.getWrappedAbility(), true) : super.confirmTrigger(wrapper);
         }
     }
 }

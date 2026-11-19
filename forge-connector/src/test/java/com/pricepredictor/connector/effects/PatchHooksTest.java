@@ -2,7 +2,9 @@ package com.pricepredictor.connector.effects;
 
 import com.google.common.collect.Multimap;
 import com.pricepredictor.connector.ForgeExtension;
+import forge.game.ability.AbilityKey;
 import forge.game.card.Card;
+import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
 import forge.game.trigger.TriggerHandler;
 import org.junit.jupiter.api.Assumptions;
@@ -15,6 +17,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -89,7 +92,108 @@ class PatchHooksTest {
     void theSiblingForgeCheckoutIsThePatchedOne() {
         assertEquals(AttributionMode.PATCHED, AttributionMode.detect(),
                 "../forge lacks the effect-record hooks: " + PatchHooks.report());
-        assertEquals(List.of(), PatchHooks.missing(), PatchHooks.report());
+        assertEquals(List.of(), PatchHooks.gaps(), PatchHooks.report());
+    }
+
+    // ── what the report names ───────────────────────────────────────────
+
+    /** The trigger listener of a jar older than its run callback: it never confirms a firing. */
+    interface TriggerFireWithoutRuns {
+        void onConditionEvaluated(Trigger trigger, Map<AbilityKey, Object> runParams, boolean fired);
+    }
+
+    /**
+     * A stale installed Forge: setters whose listeners lack what the
+     * collectors read, under the names the patch gives them.
+     */
+    static final class StaleForge {
+        public static void setEffectRecordTriggerListener(TriggerFireWithoutRuns listener) {
+            // Only its parameter type is read.
+        }
+
+        public static void setEffectRecordListener(HookShapes.FiveArgumentReplacement listener) {
+            // Only its parameter type is read.
+        }
+
+        private static boolean noteEffectRecordConfirm(SpellAbility sa, boolean confirmed) {
+            if (confirmed) {
+                throw new IllegalArgumentException("what the engine's own call throws");
+            }
+            return confirmed;
+        }
+    }
+
+    /** {@code hook}, looked up on {@code owner} instead of its Forge class. */
+    private static PatchHooks.Hook on(Class<?> owner, PatchHooks.Hook hook) {
+        return new PatchHooks.Hook(owner.getName(), hook.method(), hook.unlocks(), hook.callbacks(), hook.reach());
+    }
+
+    /**
+     * The private confirm hook is found among its owner's own methods and
+     * called through, its answer returned and what it throws rethrown.
+     */
+    @Test
+    void thePrivateConfirmHookIsFoundAndCalledThrough() {
+        PatchHooks.Hook note = on(StaleForge.class, PatchHooks.NOTE_CONFIRM);
+
+        assertTrue(note.present());
+        assertEquals(false, note.call(null, false));
+        assertThrows(IllegalArgumentException.class, () -> note.call(null, true));
+    }
+
+    /**
+     * A Forge without the private confirm hook has it named by the report,
+     * and a fork's call through it fails naming it rather than with a
+     * reflective error from inside the engine.
+     */
+    @Test
+    void aForgeWithoutThePrivateConfirmHookIsNamed() {
+        PatchHooks.Hook note = on(TriggerFireWithoutRuns.class, PatchHooks.NOTE_CONFIRM);
+
+        String report = PatchHooks.report(List.of(note));
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () -> note.call(null, true));
+
+        assertTrue(report.contains("noteEffectRecordConfirm"), report);
+        assertTrue(failure.getMessage().contains("noteEffectRecordConfirm"), failure.getMessage());
+    }
+
+    /**
+     * Each current stand-in passes every callback its hook dispatches, with
+     * every argument the collectors read: the counts in {@link PatchHooks.Callback}
+     * agree with the shapes {@link #eachStandInIsForgesOwnDeclaration} checks
+     * against Forge.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("com.pricepredictor.connector.effects.HookShapes#declared")
+    void eachStandInLacksNoCallbackItsHookReads(HookShapes.Declared standIn) {
+        assertEquals(List.of(),
+                PatchHooks.callbacksLacking(standIn.shape(), standIn.setter().callbacks()));
+    }
+
+    /**
+     * A listener whose interface lacks a callback is named, with the
+     * callback: its setter is present, so a presence check alone read it
+     * whole while the channel the callback feeds stayed empty.
+     */
+    @Test
+    void aListenerLackingACallbackIsReportedByName() {
+        String report = PatchHooks.report(List.of(on(StaleForge.class, PatchHooks.TRIGGER_LISTENER)));
+
+        assertTrue(report.contains("setEffectRecordTriggerListener"), report);
+        assertTrue(report.contains("onTriggerRun is not declared"), report);
+    }
+
+    /**
+     * A listener whose callback passes fewer arguments than the collectors
+     * read is named with both counts, and each callback it lacks by name.
+     */
+    @Test
+    void aListenerPassingFewerArgumentsThanTheCollectorsReadIsReported() {
+        String report = PatchHooks.report(List.of(on(StaleForge.class, PatchHooks.REPLACEMENT_LISTENER)));
+
+        assertTrue(report.contains("onReplacement passes 5 of the 6 arguments the collectors read"), report);
+        assertTrue(report.contains("onBufferedAbilityStarting is not declared"), report);
+        assertTrue(report.contains("onBufferedAbilityFinished is not declared"), report);
     }
 
     /**

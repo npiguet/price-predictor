@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
@@ -60,21 +61,66 @@ public final class PatchHooks {
      * @param callbacks for a listener setter, the methods of the listener it
      *                  takes, which are as much the contract as the setter's
      *                  own name; empty for every other hook
+     * @param reach     where the method is looked up
      */
-    public record Hook(String owner, String method, String unlocks, List<Callback> callbacks) {
+    public record Hook(String owner, String method, String unlocks, List<Callback> callbacks, Reach reach) {
 
-        /** A hook that takes no listener. */
+        /** A public hook that takes no listener. */
         Hook(String owner, String method, String unlocks) {
             this(owner, method, unlocks, List.of());
+        }
+
+        /** A public hook. */
+        Hook(String owner, String method, String unlocks, List<Callback> callbacks) {
+            this(owner, method, unlocks, callbacks, Reach.PUBLIC);
         }
 
         boolean present() {
             return lookUp().isPresent();
         }
 
-        /** The method itself, found the way {@link PatchHooks#find} finds it. */
+        /** The method itself, found the way {@link PatchHooks#find} finds it, or among the private ones. */
         Optional<Method> lookUp() {
-            return find(owner, method);
+            return LOOKUPS.computeIfAbsent(new Named(owner, method, reach), PatchHooks::lookUp);
+        }
+
+        /** The interface this setter's listener is declared as, or empty for a hook that takes none. */
+        Optional<Class<?>> listenerType() {
+            return lookUp()
+                    .filter(setter -> setter.getParameterCount() == 1)
+                    .map(setter -> setter.getParameterTypes()[0]);
+        }
+
+        /**
+         * What is wrong with this hook on this checkout, or empty: absent, or
+         * its listener lacking a callback or an argument the collectors read.
+         */
+        Optional<String> gap() {
+            if (!present()) {
+                return Optional.of(this + " — " + unlocks);
+            }
+            List<String> lacking = listenerType()
+                    .map(type -> callbacksLacking(type, callbacks)).orElse(List.of());
+            return lacking.isEmpty() ? Optional.empty()
+                    : Optional.of(this + " — " + unlocks + "; its listener: " + String.join(", ", lacking));
+        }
+
+        /**
+         * Call this static method and answer what it returns, for a hook a
+         * caller cannot do without: absent, it throws naming itself, and what
+         * the method throws is rethrown rather than read as absence.
+         */
+        Object call(Object... args) {
+            Method found = lookUp().orElseThrow(() -> new IllegalStateException(
+                    "this Forge lacks " + this + ": " + unlocks));
+            try {
+                return found.invoke(null, args);
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException(e);
+            } catch (InvocationTargetException e) {
+                throw e.getCause() instanceof RuntimeException runtime ? runtime
+                        : new IllegalStateException(e.getCause());
+            }
         }
 
         /** Install a listener on this setter, or do nothing; see {@link PatchHooks#install}. */
@@ -93,12 +139,7 @@ public final class PatchHooks {
          * relying on it must do without.
          */
         boolean listenerDeclares(String name) {
-            return lookUp()
-                    .filter(setter -> setter.getParameterCount() == 1)
-                    .map(setter -> java.util.Arrays.stream(
-                                    setter.getParameterTypes()[0].getMethods())
-                            .anyMatch(declared -> declared.getName().equals(name)))
-                    .orElse(false);
+            return listenerType().map(type -> mostArguments(type, name) >= 0).orElse(false);
         }
 
         /**
@@ -148,10 +189,14 @@ public final class PatchHooks {
      * widened a listener appended its new arguments, and a worker still runs
      * against an older jar, so a handler reads those through
      * {@link Args#optional} and the shorter call still reaches it.
+     *
+     * <p>{@link #read} counts those optional arguments too: what a current
+     * Forge passes, and what {@link PatchHooks#report()} checks each
+     * listener against, so a shorter one is named rather than read whole.
      */
     enum Callback {
         ON_REPLACING("onReplacing", 2),
-        ON_REPLACEMENT("onReplacement", 3),
+        ON_REPLACEMENT("onReplacement", 3, 6),
         ON_BUFFERED_ABILITY_STARTING("onBufferedAbilityStarting", 2),
         ON_BUFFERED_ABILITY_FINISHED("onBufferedAbilityFinished", 2),
         ON_CONDITION_EVALUATED("onConditionEvaluated", 3),
@@ -159,7 +204,7 @@ public final class PatchHooks {
         ON_ATTACKERS_DECLARABLE("onAttackersDeclarable", 4),
         ON_BLOCKERS_DECLARABLE("onBlockersDeclarable", 5),
         ON_CLAUSE_RESOLVING("onClauseResolving", 1),
-        ON_CLAUSE_RESOLVED("onClauseResolved", 1),
+        ON_CLAUSE_RESOLVED("onClauseResolved", 1, 2),
         ON_MANA_PRODUCED("onManaProduced", 3),
         ON_CONFIRM("onConfirm", 2),
         ON_OUTCOME("onOutcome", 3),
@@ -167,16 +212,23 @@ public final class PatchHooks {
         ON_STATE_BASED_LOOP_END("onStateBasedLoopEnd", 1),
         ON_PRIORITY_SETTLED("onPrioritySettled", 2),
         ON_CAST_STARTING("onCastStarting", 1),
-        ON_RESOLUTION_STARTING("onResolutionStarting", 2),
+        ON_RESOLUTION_STARTING("onResolutionStarting", 2, 3),
         ON_PAYING_COSTS("onPayingCosts", 3),
         ON_COSTS_PAID("onCostsPaid", 3);
 
         private final String methodName;
         private final int arity;
+        private final int read;
 
+        /** A callback whose handler reads no optional argument. */
         Callback(String methodName, int arity) {
+            this(methodName, arity, arity);
+        }
+
+        Callback(String methodName, int arity, int read) {
             this.methodName = methodName;
             this.arity = arity;
+            this.read = read;
         }
 
         String methodName() {
@@ -186,6 +238,38 @@ public final class PatchHooks {
         int arity() {
             return arity;
         }
+
+        /** The arguments a handler reads, the optional ones past {@link #arity} included. */
+        int read() {
+            return read;
+        }
+    }
+
+    /**
+     * What {@code listener} lacks of {@code callbacks}, one phrase each: a
+     * callback it declares no method for, or declares with fewer arguments
+     * than the handler reads. A widened listener declares its old call and
+     * its new one under one name, so the longest counts.
+     */
+    static List<String> callbacksLacking(Class<?> listener, List<Callback> callbacks) {
+        List<String> lacking = new ArrayList<>();
+        for (Callback callback : callbacks) {
+            int passed = mostArguments(listener, callback.methodName());
+            if (passed < 0) {
+                lacking.add(callback.methodName() + " is not declared");
+            } else if (passed < callback.read()) {
+                lacking.add(callback.methodName() + " passes " + passed + " of the "
+                        + callback.read() + " arguments the collectors read");
+            }
+        }
+        return lacking;
+    }
+
+    /** The most parameters a public method {@code name} of {@code type} takes, or -1 when it has none. */
+    private static int mostArguments(Class<?> type, String name) {
+        return java.util.Arrays.stream(type.getMethods())
+                .filter(declared -> declared.getName().equals(name))
+                .mapToInt(Method::getParameterCount).max().orElse(-1);
     }
 
     /**
@@ -378,6 +462,17 @@ public final class PatchHooks {
             "the declined outcome: an optional effect the controller "
             + "was offered and turned down",
             List.of(Callback.ON_CONFIRM));
+    /**
+     * Private to Forge, and called by the directed forks rather than the
+     * engine: an answer a fork forces is reported through it, the way the
+     * AI's own answers are. On a jar without it, every fork that forces an
+     * answer would throw from inside the engine's confirm call.
+     */
+    static final Hook NOTE_CONFIRM = new Hook(
+            PLAYER_CONTROLLER_AI, "noteEffectRecordConfirm",
+            "a directed fork's forced answer to an optional effect, reported to the confirm "
+            + "listener as an AI answer is; without it every fork that forces one fails",
+            List.of(), Reach.PRIVATE);
     static final Hook OUTCOME_LISTENER = new Hook(
             EFFECT_RECORD_OUTCOMES, "setEffectRecordOutcomeListener",
             "the outcomes an effect computes and discards: a coin's "
@@ -435,15 +530,15 @@ public final class PatchHooks {
      * what destroyed the permanent, not as a missing hook.
      *
      * <p>Presence is not the whole contract for the {@code set*Listener} hooks.
-     * A setter keeps its name when its listener gains arguments, so this list
-     * reports the hook present against a jar whose listener is shorter. That
-     * shows in the records instead: a rewrite record from a jar whose
-     * {@code setEffectRecordListener} listener does not pass the
-     * {@code ReplacementResult} carries a {@code result} of null on every
-     * rewrite. The handlers therefore read the tail arguments through
-     * {@link Args#optional} rather than assuming them, because a partly-current
-     * patch must degrade the way an absent one does instead of throwing inside
-     * a dynamic proxy.
+     * A setter keeps its name when its listener loses a callback or gains
+     * arguments, so {@link #report()} also checks each listener interface
+     * against its hook's {@link Callback}s, by name and by the arguments the
+     * handlers read. A jar whose {@code setEffectRecordListener} listener does
+     * not pass the {@code ReplacementResult} is named there; its rewrite
+     * records would carry a {@code result} of null on every rewrite. The
+     * handlers still read the tail arguments through {@link Args#optional}
+     * rather than assuming them, because a partly-current patch must degrade
+     * the way an absent one does instead of throwing inside a dynamic proxy.
      */
     public static final List<Hook> REQUIRED = List.of(
             SUB_ABILITY, TRIGGER_LISTENER, REPLACEMENT_LISTENER, CLAUSE_LISTENER,
@@ -452,7 +547,7 @@ public final class PatchHooks {
             CHANGED_COLORS_BY_STATIC, TYPE_WITHOUT, COLOR_WITHOUT, KEYWORDS_WITHOUT,
             PT_WITHOUT, CONTROLLER_WITHOUT, TRAITS_WITHOUT,
             CHANGED_NAMES, COPY_SOURCE, COPIED_PERMANENT, CLONE_PRINTER, PRIOR_CONTROLLER, PRIOR_SICKNESS,
-            LEND_TYPE, SET_ASIDE_COLORS, ASSIGNED_DAMAGE, CONFIRM_LISTENER, OUTCOME_LISTENER,
+            LEND_TYPE, SET_ASIDE_COLORS, ASSIGNED_DAMAGE, CONFIRM_LISTENER, NOTE_CONFIRM, OUTCOME_LISTENER,
             PENDING_DELAYED_TRIGGERS, SIMULTANEOUS_STACK_ENTRIES, STATE_BASED_LOOP_LISTENER,
             PRIORITY_SETTLED_LISTENER,
             CAST_LISTENER, RESOLUTION_LISTENER, PAYMENT_LISTENER);
@@ -487,32 +582,74 @@ public final class PatchHooks {
     }
 
     /**
-     * One line per missing hook, for a worker to print at startup.
+     * One line per required hook this checkout lacks, or whose listener lacks
+     * a callback or an argument the collectors read; empty on a current
+     * patched checkout.
+     */
+    public static List<String> gaps() {
+        return gaps(REQUIRED);
+    }
+
+    private static List<String> gaps(List<Hook> required) {
+        List<String> gaps = new ArrayList<>();
+        for (Hook hook : required) {
+            hook.gap().ifPresent(gaps::add);
+        }
+        return gaps;
+    }
+
+    /**
+     * One line per {@link #gaps() gap}, for a worker to print at startup.
      *
      * <p>A partly-applied patch is the state worth naming: the mode still reads
      * {@code patched} because that is one hook's answer, while a channel this
-     * run was meant to collect is quietly empty.
+     * run was meant to collect is quietly empty. A stale installed jar is the
+     * likely case, whose setters are all there and whose listeners are older.
      */
     public static String report() {
-        List<Hook> absent = missing();
-        if (absent.isEmpty()) {
-            return "effect-record hooks: all " + REQUIRED.size() + " present";
+        return report(REQUIRED);
+    }
+
+    static String report(List<Hook> required) {
+        List<String> gaps = gaps(required);
+        if (gaps.isEmpty()) {
+            return "effect-record hooks: all " + required.size() + " present, each listener whole";
         }
         StringBuilder out = new StringBuilder(
-                "effect-record hooks: " + absent.size() + " of " + REQUIRED.size()
-                        + " missing, so these channels stay empty:");
-        for (Hook hook : absent) {
-            out.append("\n  ").append(hook).append(" — ").append(hook.unlocks());
+                "effect-record hooks: " + gaps.size() + " of " + required.size()
+                        + " missing or short, so these channels stay empty or partial:");
+        for (String gap : gaps) {
+            out.append("\n  ").append(gap);
         }
         return out.toString();
     }
 
-    /** A static method's owner and name, the key {@link #find} looks up by. */
-    private record Named(String owner, String method) {
+    /**
+     * Where a hook's method is looked up: among its owner's public methods,
+     * or among its own declared ones, made accessible, for the one private
+     * method the patch adds ({@link #NOTE_CONFIRM}).
+     */
+    enum Reach {
+        PUBLIC, PRIVATE;
+
+        Method[] candidates(Class<?> owner) {
+            return this == PUBLIC ? owner.getMethods() : owner.getDeclaredMethods();
+        }
+
+        Method reachable(Method method) {
+            if (this == PRIVATE) {
+                method.setAccessible(true);
+            }
+            return method;
+        }
+    }
+
+    /** A method's owner, name and reach, the key {@link #find} looks up by. */
+    private record Named(String owner, String method, Reach reach) {
     }
 
     /**
-     * Every lookup made so far, absent ones included, by owner and name.
+     * Every lookup made so far, absent ones included, by owner, name and reach.
      *
      * <p>The classpath is fixed for the life of the JVM, so an answer never
      * changes, and the sub-ability pointer is read through here for every
@@ -532,18 +669,19 @@ public final class PatchHooks {
      * pointer the patch adds have no overload to be confused with.
      */
     public static Optional<Method> find(String className, String methodName) {
-        return LOOKUPS.computeIfAbsent(new Named(className, methodName), PatchHooks::lookUp);
+        return LOOKUPS.computeIfAbsent(new Named(className, methodName, Reach.PUBLIC), PatchHooks::lookUp);
     }
 
     private static Optional<Method> lookUp(Named named) {
         try {
-            for (Method method : Class.forName(named.owner()).getMethods()) {
+            for (Method method : named.reach().candidates(Class.forName(named.owner()))) {
                 if (method.getName().equals(named.method())) {
-                    return Optional.of(method);
+                    return Optional.of(named.reach().reachable(method));
                 }
             }
-        } catch (ClassNotFoundException | LinkageError ignored) {
-            // An unpatched checkout, or a Forge upgrade that moved the class.
+        } catch (ClassNotFoundException | LinkageError | RuntimeException ignored) {
+            // An unpatched checkout, or a Forge upgrade that moved the class;
+            // or a private method a module path refuses access to.
         }
         return Optional.empty();
     }

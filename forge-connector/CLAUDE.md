@@ -21,7 +21,7 @@ Every main runs under `ToolMain.guard` or `ToolMain.run`: `ToolMain.exit` and `b
 
 ## Engine hooks
 
-The effect collectors reach the patched engine's hooks by name, through `PatchHooks`, and compile against stock Forge. Forge widens a listener by adding `void` default methods or same-name overloads with appended arguments, which an unaware proxy answers with nothing. Every listener method, argument and accessor the branch offers is read: `PatchHooksTest` fails on a listener method Forge declares that no stand-in restates (there is no allow-list), and `theSiblingForgeCheckoutIsThePatchedOne` fails, rather than skips, on a sibling checkout without the hooks, where every hook-needing test and golden comparison would otherwise skip. What each one says is in `src/effects/docs/collection-internals.md` § The hook inventory.
+The effect collectors reach the patched engine's hooks by name, through `PatchHooks`, and compile against stock Forge; `PatchHooks.report()`, printed at worker startup, names each hook absent from the classpath's Forge and each listener callback or argument its interface lacks. Forge widens a listener by adding `void` default methods or same-name overloads with appended arguments, which an unaware proxy answers with nothing. Every listener method, argument and accessor the branch offers is read: `PatchHooksTest` fails on a listener method Forge declares that no stand-in restates (there is no allow-list), and `theSiblingForgeCheckoutIsThePatchedOne` fails, rather than skips, on a sibling checkout without the hooks, where every hook-needing test and golden comparison would otherwise skip. What each one says is in `src/effects/docs/collection-internals.md` § The hook inventory.
 
 ## Build
 
