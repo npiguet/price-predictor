@@ -89,6 +89,7 @@ reads the variant there.
 | `attack` | an attack made this turn, by defender |
 | `ability` | an ability a copied object names (what made an effect card, what exiled a card) |
 | `activation` | a key of a card's activation, resolution or chosen-mode tables |
+| `pending_trigger` | a trigger that fired and is not yet on the stack, or one that an event waiting to run its triggers collected |
 
 `copy_dropped` is collection metadata: it decides nothing at collection (the fork is kept and
 written as any other) and nothing in training.

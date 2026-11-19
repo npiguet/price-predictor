@@ -65,6 +65,7 @@ CHOICE_KINDS: tuple[str, ...] = (
 #: names lower-cased (``Forks.dropped``). Pinned to ``GameCopier.java`` by a test.
 COPY_DROPPED_KINDS: tuple[str, ...] = (
     "command", "delayed_trigger", "remembered", "link", "attack", "ability", "activation",
+    "pending_trigger",
 )
 #: An event's ``duration`` (``EventDuration.java``): instant, end of turn or
 #: permanent, null on an event that writes none.
