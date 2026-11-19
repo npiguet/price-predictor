@@ -62,6 +62,14 @@ _ALLOWED: dict[str, set[str] | None] = {
         "WorkerEngineRefused",
     },
     "price_predictor.infrastructure.worker_log_scan": {"WorkerLogReport"},
+    # The sidecars and their digest, one definition for convert, build-corpus
+    # and the collectors, and the conversion a collection reads from its tree
+    # and checks against the connector JAR (finding 11.3, K03).
+    "price_predictor.infrastructure.converted_provenance": {
+        "SIDECAR_SUFFIX", "sidecar_paths", "sidecar_digest", "collection_conversion",
+        "record_conversion",
+    },
+    "price_predictor.domain.converted_provenance": {"Conversion", "ConversionRefused"},
     # A directed rule's fork probability, one formula for collect-variants and
     # sealed match-outcomes, which never imports effects (DR1).
     "price_predictor.domain.directed_fork_probabilities": {"directed_fork_probability"},

@@ -187,6 +187,45 @@
 
     <build>
         <plugins>
+            <!--
+                The Forge commit the connector is built against: the sibling
+                checkout's HEAD (git -C ${forge.dir} rev-parse HEAD) when this
+                build runs, written into the fat JAR's manifest as
+                Forge-Commit below. Every collecting command compares it with
+                the commit its converted tree was converted at, and refuses a
+                connector whose manifest names none. It is the checkout's HEAD
+                at build time, so it names the Forge the JAR links against only
+                when Forge was installed from that same HEAD first (the build
+                order). The property is deliberately not declared under
+                <properties>: a declared default would be interpolated into the
+                manifest entry before this execution sets it.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>forge-commit</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <exportAntProperties>true</exportAntProperties>
+                            <target>
+                                <exec executable="git" outputproperty="forge.commit"
+                                      failonerror="false" failifexecutionfails="false">
+                                    <arg value="-C"/>
+                                    <arg value="${forge.dir}"/>
+                                    <arg value="rev-parse"/>
+                                    <arg value="HEAD"/>
+                                </exec>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -246,6 +285,9 @@
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>com.pricepredictor.connector.ConvertMain</mainClass>
+                                    <manifestEntries>
+                                        <Forge-Commit>${forge.commit}</Forge-Commit>
+                                    </manifestEntries>
                                 </transformer>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
                                     <resource>META-INF/LICENSE</resource>

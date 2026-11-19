@@ -152,6 +152,7 @@ Every invariant prints the number it measured, passed or not.
 | `--directed-fork-probability P` | 0.25 | chance a matching boundary forks; must be in (0, 1] |
 | `--directed-fork-probabilities FILE` | none | each listed rule's records on its registered side and the count a side needs (`rules_catalogue.py directed-rules --probabilities-output` writes it, § `python scripts/rules_catalogue.py directed-rules`); the rule's own probability, recomputed during the run (below); a listed rule without an entry takes `--directed-fork-probability`, one at 0 is never forked |
 | `--outcomes-dir DIR` | `--effect-records DIR` when given, else `output/sealed/` | the directory `match-outcomes.txt` and `cards-played.txt` are appended to |
+| `--cards-folder DIR` | none | the converted card tree the records' keys join against (§ The conversion a collection joins against); required with `--effect-records` and refused without it, exit 2 |
 
 Startup, exit 1 naming the rule when a listed rule:
 
@@ -196,7 +197,7 @@ end it prints the run's totals, the hook-failure counts, the fork refusals and h
 ended, and records in
 its `run.json` entry, at start, the resolved `caps` (the collectors' members, so the three rates of every run can be compared), and at the end `run_id`, `matches` (outcome rows), `matches_played` (progress lines),
 `worker_failures`, `worker_failure_examples`, `hook_failures`, `fork_refusals`, `directed_fork_tally`, `worker_survivors`,
-`worker_stops`, `worker_engine`, `stop_timeout`, `recycle_seconds`, `match_outcomes` (the outcome file's path) and `final_directed_rule_probabilities` (each listed rule's probability as last recomputed; the caps' `directed_rule_probabilities` when the run was given no `--directed-fork-probabilities`). A run that played matches (outcome rows, progress lines or
+`worker_stops`, `worker_engine`, `conversion`, `stop_timeout`, `recycle_seconds`, `match_outcomes` (the outcome file's path) and `final_directed_rule_probabilities` (each listed rule's probability as last recomputed; the caps' `directed_rule_probabilities` when the run was given no `--directed-fork-probabilities`). A run that played matches (outcome rows, progress lines or
 random-seat match errors, so a run of random-seat matches alone counts) and wrote no effect
 record exits 1. `match-outcomes.txt` and `cards-played.txt` go to `--outcomes-dir`, which defaults
 to `DIR`: a collection writes nothing outside its run directory. Their format and content do not
@@ -263,7 +264,7 @@ showed still count as shown). The running command's entry in `run.json`'s `invoc
 `run_id` (the supervisor's), `caps` (every `CollectionCaps` field, resolved), `stop_timeout`,
 `recycle_seconds`, `rounds`, `worker_failures` (kind to line count), `worker_failure_examples`
 (kind to its first line), `hook_failures`, `fork_refusals`, `directed_fork_tally`, `worker_engine`,
-`worker_stops`, `worker_survivors` (PIDs) and
+`conversion` (§ The conversion a collection joins against), `worker_stops`, `worker_survivors` (PIDs) and
 `cut_games` (`{"before_rounds": n, "by_round": [n, …], "total": n}`, the games the counts left
 out, the shards read before the first round apart). The castability consult and the sidecar
 pass are one-shot JVMs killed after `max(3600, 600 + 0.1 × scripts handed over)` seconds: the
@@ -481,6 +482,38 @@ The reason for an engine that is not whole:
 `<what is missing>` being `mode degraded (no effect-record hooks)` when the mode is not
 `patched`, then each gap, joined by `; `. For an engine that changed:
 `worker lifetime <token> runs another engine than the run's first (lifetime <token>): <member> <first> -> <later>; …; a run's records come from one engine (was a Forge or connector jar installed during the run?)`.
+
+## The conversion a collection joins against (every collecting command)
+
+`python -m price_predictor convert` records, in its `run.json` entry, `conversion`:
+
+| Exit of `ConvertMain` | `conversion` |
+|---|---|
+| 0 | `{"forge_commit", "forge_dirty", "sidecar_digest"}`: the `../forge` checkout's full HEAD read before the JVM starts, whether it has uncommitted changes to tracked files, and the sha256 over every sidecar of both trees (tree, relative path and size per sidecar, sorted; `converted_provenance.sidecar_digest`, the digest `build-corpus` writes as `sidecar_digest`) |
+| 2 (refused before touching either tree) | absent |
+| any other, or Ctrl-C | `null`: the trees may have changed and the conversion is not whole |
+
+The connector build writes the `../forge` checkout's HEAD into the fat JAR's manifest as
+`Forge-Commit` (`forge-connector/pom.xml`).
+
+`collect-coverage`, `collect-variants` (over their `--cards-folder` trees) and `match-outcomes
+--effect-records` (over its `--cards-folder`), before any worker starts:
+
+- A tree's conversion is read from its own `run.json`, else its parent's: the first whose
+  `invocations` carry `conversion`, the latest such entry deciding.
+- Exit 1, the message in `run.json`'s outcome, when a tree names no conversion
+  (`the converted tree <tree> names no conversion: neither <tree>/run.json nor <parent>/run.json records one (the 'conversion' member convert writes). Reconvert it with 'python -m price_predictor convert'`),
+  when the latest is `null` (`<run.json>: the last convert into this tree did not finish whole, …; reconvert it with --replace`)
+  or names no full commit, when the trees come from two conversions, when the JAR's manifest
+  names no `Forge-Commit` (`rebuild the connector: its JAR <jar> names no Forge commit in its manifest, …; mvn -f forge-connector/pom.xml install -DskipTests`),
+  and when the two commits differ:
+  `the converted tree was converted at Forge <conversion commit>, but the connector was built at Forge <JAR commit>: the records' provenance keys would join against another conversion's lines (converted tree <run>, connector JAR <jar>). Reconvert the tree at the connector's commit, or install Forge at the conversion's commit and rebuild the connector`.
+  The collectors prefix the message with the command's name.
+- A conversion with `forge_dirty` true is collected against, with a warning.
+- The running command's `run.json` entry records `conversion`: `{"run", "forge_commit",
+  "forge_dirty", "sidecar_digest"}`, `run` the conversion's run directory.
+
+A plain `match-outcomes` (no `--effect-records`) writes no keyed record and reads no conversion.
 
 ## `python -m effects collect-variants` (existing)
 

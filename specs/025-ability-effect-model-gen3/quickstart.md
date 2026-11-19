@@ -116,9 +116,11 @@ Run-Logged (Split-Path $holdout) "$py -u -m effects holdout-cards $cards --print
 ```
 
 Check: `$gen3\converted\` holds `run.json`, `console.log`, `cardsfolder\` and `tokenscripts\`, and
-every converted card has its `.provenance.json` sidecar. The generation is converted once, before
-its first record is collected: records name their abilities by provenance keys that join against
-these sidecars.
+every converted card has its `.provenance.json` sidecar; `run.json`'s entry holds `conversion` with
+the Forge commit, and that commit is the one the installed connector JAR's manifest names
+(`Forge-Commit`): every collection refuses a tree converted at another commit than its connector.
+The generation is converted once, before its first record is collected: records name their
+abilities by provenance keys that join against these sidecars.
 
 ## Stage 1 — detectors and per-rule counts on gen-2 (story 1)
 
@@ -169,7 +171,7 @@ if (-not (Test-Path variable:pilotStart)) { $pilotStart = Run-Start "$gen3\scrat
 $pilot = "$gen3\scratch\$pilotStart-pilot"
 if (-not (Test-Path variable:pilotChecksStart)) { $pilotChecksStart = Run-Start "$gen3\scratch" pilot-checks }
 $pilotChecks = "$gen3\scratch\$pilotChecksStart-pilot-checks"
-Run-Logged $pilot "$py -u -m sealed match-outcomes --workers 6 --effect-records $pilot --outcomes-dir $pilot --count-dropped-events --directed-fork-rules 704.5f --directed-fork-probability 1 $pilotFlags"
+Run-Logged $pilot "$py -u -m sealed match-outcomes --workers 6 --effect-records $pilot --cards-folder $gen3\converted\cardsfolder --outcomes-dir $pilot --count-dropped-events --directed-fork-rules 704.5f --directed-fork-probability 1 $pilotFlags"
 Run-Logged $pilotChecks "$py -u -m effects validate-corpus --effect-records $pilot $cards --variant-scripts $variants"
 Run-Logged $pilotChecks "$py -u -m effects field-coverage --effect-records $pilot"
 Run-Logged $pilotChecks "$py -u -m effects rule-counts --records-dir $pilot $cards --variant-scripts $variants --rules-dir rules --workers 10 --output $pilotChecks\rule-counts.json"
@@ -218,7 +220,7 @@ if (-not (Test-Path variable:auditStart)) { $auditStart = Run-Start "$gen3\scrat
 $audit = "$gen3\scratch\$auditStart-fork-fidelity"
 if (-not (Test-Path variable:auditChecksStart)) { $auditChecksStart = Run-Start "$gen3\scratch" fork-fidelity-checks }
 $auditChecks = "$gen3\scratch\$auditChecksStart-fork-fidelity-checks"
-Run-Logged $audit "$py -u -m sealed match-outcomes --workers 6 --effect-records $audit --outcomes-dir $audit --random-seat-share 0.25 --random-seat-probability 0.5 --interventions-per-game 4 --probes-per-game 4 --directed-fork-rules $rules --directed-fork-probabilities $probabilities --count-dropped-events"
+Run-Logged $audit "$py -u -m sealed match-outcomes --workers 6 --effect-records $audit --cards-folder $gen3\converted\cardsfolder --outcomes-dir $audit --random-seat-share 0.25 --random-seat-probability 0.5 --interventions-per-game 4 --probes-per-game 4 --directed-fork-rules $rules --directed-fork-probabilities $probabilities --count-dropped-events"
 Run-Logged $auditChecks "$py -u -m effects validate-corpus --effect-records $audit $cards --variant-scripts $variants"
 ```
 
@@ -250,8 +252,8 @@ $untarget  = "$gen3\records\$untargetStart-variants-untargeted"
 if (-not (Test-Path variable:steeredStart)) { $steeredStart = Run-Start "$gen3\records" variants-steered }
 $steered   = "$gen3\records\$steeredStart-variants-steered"
 
-Run-Logged $full      "$py -u -m sealed match-outcomes --effect-records $full --outcomes-dir $full --directed-fork-rules $rules --directed-fork-probabilities $probabilities $runFlags"
-Run-Logged $depleted  "$py -u -m sealed match-outcomes --effect-records $depleted --outcomes-dir $depleted --exclude-cards $holdout --directed-fork-rules $rules --directed-fork-probabilities $probabilities $runFlags"
+Run-Logged $full      "$py -u -m sealed match-outcomes --effect-records $full --cards-folder $gen3\converted\cardsfolder --outcomes-dir $full --directed-fork-rules $rules --directed-fork-probabilities $probabilities $runFlags"
+Run-Logged $depleted  "$py -u -m sealed match-outcomes --effect-records $depleted --cards-folder $gen3\converted\cardsfolder --outcomes-dir $depleted --exclude-cards $holdout --directed-fork-rules $rules --directed-fork-probabilities $probabilities $runFlags"
 Run-Logged $anytarget "$py -u -m effects collect-coverage --effect-records $anytarget $cards --wording-cards $anyTargetCards --exclude-cards $holdout --count-from $depleted $runFlags $collectorFlags"
 Run-Logged $wording   "$py -u -m effects collect-coverage --effect-records $wording $cards --wording-cards rules\coverage-wording-cards.txt --directed-fork-rules $rules --exclude-cards $holdout --count-from $depleted --count-from $anytarget $runFlags $collectorFlags"
 Run-Logged $untarget  "$py -u -m effects collect-variants --round untargeted --effect-records $untarget --forge-cards-path ..\forge\forge-gui\res\cardsfolder --variant-scripts $variants $cards --exclude-cards $holdout $runFlags $collectorFlags"

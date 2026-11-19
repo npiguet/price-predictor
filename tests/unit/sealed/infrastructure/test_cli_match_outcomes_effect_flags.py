@@ -22,9 +22,23 @@ from sealed.infrastructure.effect_collection_flags import (
     candidate_rate_error,
 )
 
+#: The converted tree a collecting run names; its conversion check is the
+#: subject of ``test_cli_match_outcomes_conversion.py`` and stood in here.
+CARDS_FOLDER = ("--cards-folder", "output/effects/gen3/converted/cardsfolder/")
+
 
 def parse(*argv: str):
+    """The flags as typed, a collecting run given its converted tree."""
+    if "--effect-records" in argv and "--cards-folder" not in argv:
+        argv = (*argv, *CARDS_FOLDER)
     return build_parser().parse_args(argv)
+
+
+@pytest.fixture(autouse=True)
+def _conversion_checked(monkeypatch):
+    import sealed.infrastructure.cli as cli
+
+    monkeypatch.setattr(cli, "check_conversion", lambda *_: None)
 
 
 class TestEffectRecordsOptIn:

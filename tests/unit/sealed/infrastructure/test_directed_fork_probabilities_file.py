@@ -126,10 +126,12 @@ def test_the_supervisor_starts_from_the_file_and_is_steered_by_it(tmp_path, monk
     monkeypatch.setattr(module, "MatchOutcomeSupervisor", supervisor)
     monkeypatch.setattr(forge_jvm, "check_worker_prerequisites", lambda **_: None)
     monkeypatch.setattr(cli, "directed_fork_error", lambda *_: None)
+    monkeypatch.setattr(cli, "check_conversion", lambda *_: None)
     path = _write(tmp_path, _document({"704.5f": {"does_not_fire": 40},
                                        "118.12b": {"fires": 0}}))
     args = build_parser().parse_args([
         "match-outcomes", "--effect-records", str(tmp_path / "records"), "--workers", "1",
+        "--cards-folder", str(tmp_path / "converted" / "cardsfolder"),
         "--directed-fork-rules", "704.5f,118.12b", "--directed-fork-probabilities", str(path)])
 
     assert cli.run_match_outcomes(args) == 0

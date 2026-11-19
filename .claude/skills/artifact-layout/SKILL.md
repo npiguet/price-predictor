@@ -136,8 +136,9 @@ or reads lives under that module's own `output/<module>/` and `models/<module>/`
   `running`.
 - `invocations` holds one entry per line of `commands`, in order: that command's own `commits`,
   `started`, `ended` and `outcome`, and what it records while it runs (a collector's supervisor
-  `run_id`, resolved `caps` and worker-log failures). The top-level `commits` and `started` are the
-  run's first command's; `ended` and `outcome` its last's.
+  `run_id`, resolved `caps`, worker-log failures and the `conversion` its keys join against;
+  `convert`'s `conversion`, the Forge commit and sidecar digest every collection checks). The
+  top-level `commits` and `started` are the run's first command's; `ended` and `outcome` its last's.
 - The run directory is the command's output directory argument, or the directory holding its output
   file argument.
 - `inputs` and `continues` hold run paths relative to the repository root.

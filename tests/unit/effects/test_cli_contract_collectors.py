@@ -23,6 +23,7 @@ from price_predictor.infrastructure.forge_jvm import (
     check_worker_prerequisites as real_check_worker_prerequisites,
 )
 from sealed.infrastructure.cli import build_parser as sealed_parser
+from tests.unit.conversion_fixtures import STAND_IN_CONVERSION, TREES_CONVERSION
 
 #: Every cap and its default, read off the dataclass the workers receive.
 #: ``random_seat_probability`` is left out: its flag defaults to None so that a
@@ -62,7 +63,10 @@ PREREQUISITES = "price_predictor.infrastructure.forge_jvm.check_worker_prerequis
 def _workers_could_start():
     from unittest.mock import patch
 
-    with patch(PREREQUISITES) as check:
+    with (
+        patch(PREREQUISITES) as check,
+        patch(TREES_CONVERSION, return_value=STAND_IN_CONVERSION),
+    ):
         yield check
 
 

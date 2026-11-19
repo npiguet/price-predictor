@@ -27,6 +27,11 @@ from sealed.infrastructure.cli_resume import (
     dataclass_default,
     resolve_resumable_args,
 )
+from sealed.infrastructure.collection_conversion import (
+    add_cards_folder_flag,
+    cards_folder_error,
+    check_conversion,
+)
 from sealed.infrastructure.directed_fork_probabilities_file import (
     add_directed_fork_probabilities_flag,
     read_directed_fork_needs,
@@ -1144,6 +1149,7 @@ def _add_effect_record_flags(parser: argparse.ArgumentParser) -> None:
             " this command behaves exactly as it does today."
         ),
     )
+    add_cards_folder_flag(parser)
     add_cap_flags(parser)
     add_directed_fork_flags(parser)
     add_directed_fork_probabilities_flag(parser)
@@ -1944,8 +1950,8 @@ def _directed_startup_error(args: argparse.Namespace) -> str | None:
 def _effect_flags_usage_error(args: argparse.Namespace) -> str | None:
     """The first exit-2 refusal of the random-seat, worker-stop,
     ``--allow-degraded`` and sampling-rate flags, in that order, or None."""
-    for check in (check_random_seat_flags, worker_stop_error, allow_degraded_error,
-                  candidate_rate_error):
+    for check in (cards_folder_error, check_random_seat_flags, worker_stop_error,
+                  allow_degraded_error, candidate_rate_error):
         error = check(args)
         if error is not None:
             return error
@@ -1992,8 +1998,10 @@ def _supervise_match_outcomes(
     args: argparse.Namespace, explicit_side_b_weight: int | None,
 ) -> int:
     """Run the match-outcomes supervisor over the checked flags: 2 when a
-    worker cannot start, 1 when the workers' engine was refused (the reason
-    reaches ``run.json``) or when matches recorded nothing, else 0."""
+    worker cannot start, 1 when the converted tree's conversion or the
+    workers' engine was refused (the reason reaches ``run.json``) or when
+    matches recorded nothing, else 0."""
+    from price_predictor.domain.converted_provenance import ConversionRefused
     from price_predictor.domain.worker_status import WorkerEngineRefused
     from price_predictor.infrastructure import forge_jvm
     from sealed.application.match_outcomes import MatchOutcomeSupervisor
@@ -2025,6 +2033,7 @@ def _supervise_match_outcomes(
         # Before any worker: a missing JAR, java or list file would otherwise
         # surface only inside each worker's start.
         forge_jvm.check_worker_prerequisites(files={"--exclude-cards": exclude_cards})
+        check_conversion(args, effect_records_dir)
         supervisor = MatchOutcomeSupervisor(
             worker_count=args.workers,
             output_path=output_path,
@@ -2043,7 +2052,7 @@ def _supervise_match_outcomes(
     except (FileNotFoundError, forge_jvm.WorkerStartError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
-    except WorkerEngineRefused as exc:
+    except (ConversionRefused, WorkerEngineRefused) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         setattr(args, REFUSAL_DEST, str(exc))
         return 1
@@ -2164,7 +2173,7 @@ RUN_MANIFESTS: ManifestTable = {
     # the two sealed corpora unless --outcomes-dir sends them elsewhere.
     "match-outcomes": Writes(
         lambda args: args.effect_records or outcomes_dir(args),
-        inputs=("side_a_decks", "side_b_decks", "exclude_cards"),
+        inputs=("side_a_decks", "side_b_decks", "exclude_cards", "cards_folder"),
     ),
     "train-encoder": Writes(
         "model_output", inputs=("cards_played_path", "cards_folder", "vocab_path"),

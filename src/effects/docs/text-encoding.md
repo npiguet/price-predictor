@@ -9,6 +9,8 @@ Rules to respect when touching provenance sidecars, the tokenizer, the vocabular
 
 `<name>.provenance.json` sits beside each converted `.txt`, written by `python -m price_predictor convert`. It is the join between runtime Forge trait objects and converted ability lines.
 
+- A sidecar names no conversion. The conversion's `run.json` does: the Forge commit it converted at and a digest of its sidecars (`conversion`, `src/price_predictor/CLAUDE.md`), which every collection checks against the connector's Forge commit before it starts (`docs/collection-runs.md` § The conversion the keys join against).
+
 - The key is printed provenance, `(script_file, face, trait_kind, index_within_kind, option?, built?)`, never a converted-line ordinal. The converter runs one per-face counter across five mixed line kinds, emits keyword-derived lines first though Forge appends them last, and merges and deduplicates relative to the runtime objects.
 - `script_file` includes its tree: `cardsfolder` is letter-keyed, `tokenscripts` and `variant-scripts` are flat, and one filename occurs in more than one.
 - `option` is a charm mode's 0-based position in its root's `Choices$`, written only when set.

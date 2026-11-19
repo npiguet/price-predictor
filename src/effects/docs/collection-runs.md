@@ -40,6 +40,14 @@ Rules to respect when running, babysitting or changing `collect-coverage`, `coll
 - The records written before the stop stay in the run directory, stamped with the engine that wrote them; nothing deletes them.
 - `run.json` records the first lifetime's engine as `worker_engine` (`{"mode", "gaps", "pinned_preferences"}`), `null` while no worker has printed its status line.
 
+## The conversion the keys join against
+
+- A run collecting effect records names the converted tree its records' provenance keys join against: `--cards-folder` on `collect-coverage` and `collect-variants`, and on `sealed match-outcomes`, where it is required with `--effect-records` and refused without it. A plain `match-outcomes` run writes no keyed record and checks nothing.
+- Before any worker starts, the run reads the conversion from the tree's `run.json` (the tree's own, else its parent's: the one whose invocations carry `conversion`, `price_predictor/infrastructure/converted_provenance.py`) and exits 1, the message in `run.json`'s outcome, when the tree names no conversion (a tree converted before the record existed included: reconvert it), when the latest convert into it did not finish whole, when the `--cards-folder` trees come from two conversions, when the connector JAR's manifest names no `Forge-Commit` ("rebuild the connector"), and when that commit differs from the conversion's, both commits named. Otherwise a tree reconverted at another Forge commit joins the records' keys to other lines without a word. The variant tree is the collector's own and is not checked.
+- The JAR's commit is the Forge checkout's HEAD when the connector was built (`forge-connector/pom.xml`), so it names the Forge the workers link only when Forge was installed from that HEAD first (`src/effects/CLAUDE.md` § The engine hooks). The card scripts a worker loads are read from the checkout at run time; a checkout moved after the connector build escapes the check.
+- A conversion made from a Forge checkout with uncommitted changes (`forge_dirty`) is warned about and collected against: its commit does not pin the scripts it converted.
+- `run.json` records the conversion as `conversion` (`{"run", "forge_commit", "forge_dirty", "sidecar_digest"}`).
+
 ## Restarts are the normal condition
 
 - An eight-hour run is hundreds of JVM lifetimes across its worker slots, and a crash or a kill ends a JVM mid-game without a stop. Record identity, game boundaries and any resume logic must be correct across hundreds of restarts and across a JVM ended mid-game. This is a correctness constraint, not a throughput one.

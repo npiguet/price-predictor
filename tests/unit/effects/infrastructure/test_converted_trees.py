@@ -5,10 +5,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine, SourceTree
 from effects.domain.split import HoldoutRule
 from effects.infrastructure.converted_trees import SourceTrees, process_sidecars
 from effects.infrastructure.sidecar_io import sidecar_path_for
+from price_predictor.domain.converted_provenance import ConversionRefused
+from tests.unit.conversion_fixtures import (
+    DIGEST,
+    FORGE_COMMIT,
+    OTHER_COMMIT,
+    conversion_member,
+    write_conversion,
+    write_jar,
+)
 from tests.unit.effects.builders import write_sidecar
 
 
@@ -102,3 +113,42 @@ def test_a_process_keeps_one_cache_per_roots(tmp_path) -> None:
     assert process_sidecars(roots) is process_sidecars(dict(roots))
     other = SourceTrees.of((tmp_path / "other-cardsfolder",)).sidecar_roots()
     assert process_sidecars(other) is not process_sidecars(roots)
+
+
+# ── the conversion the card trees come from (finding 11.3, task K03) ─────
+
+
+def _trees(root: Path) -> SourceTrees:
+    return SourceTrees.of((root / "cardsfolder", root / "tokenscripts"))
+
+
+def test_both_card_trees_name_their_one_conversion(tmp_path) -> None:
+    root = write_conversion(tmp_path / "converted")
+    jar = write_jar(tmp_path / "connector.jar")
+
+    conversion = _trees(root).conversion(jar=jar)
+
+    assert conversion.forge_commit == FORGE_COMMIT
+    assert conversion.manifest == root / "run.json"
+    assert conversion.sidecar_digest == DIGEST
+
+
+def test_a_tree_converted_at_another_commit_is_refused_naming_both(tmp_path) -> None:
+    root = write_conversion(tmp_path / "converted", conversion_member(OTHER_COMMIT))
+    jar = write_jar(tmp_path / "connector.jar", FORGE_COMMIT)
+
+    with pytest.raises(ConversionRefused) as refused:
+        _trees(root).conversion(jar=jar)
+
+    assert FORGE_COMMIT in str(refused.value)
+    assert OTHER_COMMIT in str(refused.value)
+    assert str(jar) in str(refused.value)
+
+
+def test_trees_of_two_conversions_are_refused(tmp_path) -> None:
+    first = write_conversion(tmp_path / "first")
+    second = write_conversion(tmp_path / "second")
+    trees = SourceTrees.of((first / "cardsfolder", second / "tokenscripts"))
+
+    with pytest.raises(ConversionRefused, match="2 conversions"):
+        trees.conversion(jar=write_jar(tmp_path / "connector.jar"))

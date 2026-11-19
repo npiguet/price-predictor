@@ -21,7 +21,8 @@ Rules to respect when running or changing `match-outcomes`, its supervisor or it
 - Every status interval the pool kills the longest-running worker and starts a fresh one; with `--effect-records` it passes over a worker still starting Forge, one asked to stop and one already killed.
 - With `--effect-records DIR` the workers honour the stop protocol (`specs/025-ability-effect-model-gen3/contracts/cli.md` § Match worker stop protocol): each recycles itself at a game end after `--recycle-seconds`, and the run's end or a first Ctrl-C asks each to finish its game, killing one only after `--stop-timeout`. A second Ctrl-C kills any worker still finishing. A match stopped after one of its games is abandoned: no outcome or cards-played row.
 - With `--effect-records DIR` the worker logs go under `DIR/logs/`, never beside the shards, and the supervisor scans them for failure lines at every status line. The run exits 1 when it played matches and wrote no effect record, and stops with exit 1 on workers whose engine is not `patched` with every hook, unless `--allow-degraded` (`src/effects/docs/collection-runs.md` § The workers' engine).
-- Without `--effect-records` the workers keep no log, nothing judges their engine, the pool kills every worker at the end, and `--recycle-seconds`, `--stop-timeout` or `--allow-degraded` exits 2.
+- With `--effect-records DIR`, `--cards-folder` names the converted tree the records' keys join against, and the run exits 1 before any worker starts when that tree's conversion is not at the connector JAR's Forge commit (`src/effects/docs/collection-runs.md` § The conversion the keys join against).
+- Without `--effect-records` the workers keep no log, nothing judges their engine or reads a conversion, the pool kills every worker at the end, and `--recycle-seconds`, `--stop-timeout`, `--allow-degraded` or `--cards-folder` exits 2; with it, a missing `--cards-folder` exits 2.
 
 ## Directed forks
 

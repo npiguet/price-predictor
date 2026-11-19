@@ -24,6 +24,7 @@ from effects.domain.records import LegalityDecision
 from effects.domain.sampling import SamplingClass
 from effects.domain.strata import DROPPED_STRATA, OUTPUT_STRATA, Stratum
 from effects.domain.text_holdout import normalize_script_text
+from price_predictor.infrastructure.converted_provenance import sidecar_digest
 
 if TYPE_CHECKING:
     from effects.application.build_corpus import BuildCorpusConfig, Decisions
@@ -315,22 +316,6 @@ def _code_version() -> str:
     return done.stdout.strip() if done.returncode == 0 else ""
 
 
-def _sidecar_digest(roots: Mapping[str, Path]) -> str:
-    """sha256 over every sidecar under ``roots``, by tree, relative path and
-    size: cheap enough for tens of thousands of files, and moved by a
-    reconversion."""
-    import hashlib
-
-    from effects.infrastructure.sidecar_io import sidecar_paths
-
-    digest = hashlib.sha256()
-    for tree, root in sorted(roots.items()):
-        for path in sidecar_paths(Path(root)):
-            relative = path.relative_to(root).as_posix()
-            digest.update(f"{tree}/{relative}:{path.stat().st_size}\n".encode())
-    return digest.hexdigest()
-
-
 def _under(where: str, records_dir: Path) -> str:
     """A tally's ``<shard path>, byte <n>`` with the shard's path relative to
     ``--records-dir``, so the manifest does not depend on where the raw
@@ -380,7 +365,7 @@ def _collection_fields(
         "unsupervised_events": dict(sorted(totals.unsupervised.items())),
         "cut_games": len(totals.cut.games),
         "code_version": _code_version(),
-        "sidecar_digest": _sidecar_digest(config.source_trees.sidecar_roots()),
+        "sidecar_digest": sidecar_digest(config.source_trees.sidecar_roots()),
         "join_gaps": _join_gaps(reading),
     }
 

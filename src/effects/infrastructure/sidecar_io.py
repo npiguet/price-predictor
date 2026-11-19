@@ -31,13 +31,12 @@ from effects.domain.provenance import (
     split_script_file,
 )
 from effects.domain.text_holdout import normalize_script_text
+from price_predictor.infrastructure.converted_provenance import SIDECAR_SUFFIX, sidecar_paths
 
 if TYPE_CHECKING:
     from effects.domain.ability_tokenizer import Surface
 
 logger = logging.getLogger(__name__)
-
-SIDECAR_SUFFIX = ".provenance.json"
 
 
 def tree_of_folder(folder: Path) -> str:
@@ -196,12 +195,6 @@ _TRANSIENT_ERRNOS = frozenset({errno.EINVAL, errno.EACCES})
 #: second.
 _SIDECAR_READ_ATTEMPTS = 5
 _SIDECAR_RETRY_DELAY = 0.05
-
-
-def sidecar_paths(folder: Path) -> list[Path]:
-    """Every sidecar under ``folder``, recursively, in path order so every
-    walk over a tree visits it the same way."""
-    return sorted(Path(folder).rglob(f"*{SIDECAR_SUFFIX}"))
 
 
 def iter_sidecars(folder: Path) -> Iterator[tuple[Path, ProvenanceSidecar]]:

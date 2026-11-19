@@ -622,6 +622,21 @@ def _check_workers_can_start(command: str, config: Any) -> None:
         raise CollectorRefusal(f"{command}: {exc}") from exc
 
 
+def _check_conversion(command: str, config: Any) -> None:
+    """The conversion the ``--cards-folder`` trees come from, checked against
+    the connector JAR before any worker starts and kept in the run's
+    ``run.json`` (finding 11.3): a tree naming no conversion, or one converted
+    at another Forge commit than the JAR's, exits 1 naming both."""
+    from price_predictor.domain.converted_provenance import ConversionRefused
+    from price_predictor.infrastructure.converted_provenance import record_conversion
+
+    try:
+        conversion = config.source_trees.conversion()
+    except ConversionRefused as exc:
+        raise CollectorRefusal(f"{command}: {exc}") from exc
+    record_conversion(config.effect_records, conversion)
+
+
 def _collector_runner(command: str, config_type: type, module: str) -> Callable:
     """The ``run_*`` of one collector: its config, refused as a message on a
     bad flag combination, then ``module.run`` over it.
@@ -651,6 +666,7 @@ def _collector_runner(command: str, config_type: type, module: str) -> Callable:
         if error is not None:
             raise CollectorRefusal(f"{command}: {error}")
         _check_workers_can_start(command, config)
+        _check_conversion(command, config)
         print(announce_probe_state(args.probe_keywords, args.probes_per_game))
         return importlib.import_module(module).run(config)
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
 
 from price_predictor.infrastructure.cli_common import require_path_exists
@@ -225,11 +226,56 @@ def run_convert(args: argparse.Namespace) -> int:
     )
 
     try:
-        result = subprocess.run(cmd, check=False)
-        return result.returncode
+        code = _converted(args, lambda: subprocess.run(cmd, check=False).returncode)
     except FileNotFoundError:
         logger.error("Java not found. Ensure java is on PATH.")
         return 2
+    return code
+
+
+#: ``ConvertMain``'s exit when it refused before touching either tree
+#: (``ExitCode.BAD_CONFIG``: a flag, an unsafe or occupied output tree).
+_UNTOUCHED_EXIT = 2
+
+
+def _converted(args: argparse.Namespace, convert: Callable[[], int]) -> int:
+    """Run ``convert`` and keep, in this invocation's ``run.json`` entry, the
+    conversion it left (``converted_provenance``): the Forge checkout's commit
+    as it stood at the start and the sidecars' digest once it finished whole,
+    ``null`` when it may have changed the trees without finishing (a failed
+    script, a crash, Ctrl-C), nothing when it refused before touching them."""
+    from price_predictor.infrastructure.converted_provenance import forge_checkout
+    from price_predictor.infrastructure.forge_jvm import forge_dir
+
+    commit, dirty = forge_checkout(forge_dir())
+    try:
+        code = convert()
+    except KeyboardInterrupt:
+        _record_conversion(args, None)
+        raise
+    if code == 0:
+        _record_conversion(args, _conversion_record(args, commit, dirty))
+    elif code != _UNTOUCHED_EXIT:
+        _record_conversion(args, None)
+    return code
+
+
+def _conversion_record(args: argparse.Namespace, commit: str | None, dirty: bool) -> dict:
+    from price_predictor.infrastructure.converted_provenance import (
+        CARD_TREE,
+        TOKEN_TREE,
+        sidecar_digest,
+    )
+
+    roots = {CARD_TREE: Path(args.output_path), TOKEN_TREE: Path(args.tokens_output_path)}
+    return {"forge_commit": commit, "forge_dirty": dirty, "sidecar_digest": sidecar_digest(roots)}
+
+
+def _record_conversion(args: argparse.Namespace, record: dict | None) -> None:
+    from price_predictor.domain.converted_provenance import CONVERSION_MEMBER
+    from price_predictor.infrastructure.run_manifest import annotate_run
+
+    annotate_run(_converted_root(args), **{CONVERSION_MEMBER: record})
 
 
 def _check_report(args: argparse.Namespace) -> Path:

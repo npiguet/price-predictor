@@ -53,7 +53,7 @@ def repository_root() -> Path:
     return candidate if (candidate / ".git").exists() else Path.cwd()
 
 
-def _git(repository: Path, *args: str) -> str | None:
+def git_output(repository: Path, *args: str) -> str | None:
     """``git`` output in ``repository``, or None when git fails or is absent."""
     try:
         result = subprocess.run(
@@ -71,9 +71,9 @@ def read_commits(repo_root: Path, forge_dir: Path | None = None) -> dict[str, An
     working tree has uncommitted changes to tracked files."""
     forge_dir = Path(repo_root).parent / "forge" if forge_dir is None else Path(forge_dir)
     checkouts = [Path(repo_root)] + ([forge_dir] if (forge_dir / ".git").exists() else [])
-    shas = [_git(checkout, "rev-parse", "--short", "HEAD") for checkout in checkouts]
+    shas = [git_output(checkout, "rev-parse", "--short", "HEAD") for checkout in checkouts]
     dirty = any(
-        bool(_git(checkout, "status", "--porcelain", "--untracked-files=no"))
+        bool(git_output(checkout, "status", "--porcelain", "--untracked-files=no"))
         for checkout, sha in zip(checkouts, shas, strict=True) if sha is not None
     )
     return {"repo": shas[0], "forge": shas[1] if len(shas) > 1 else None, "dirty": dirty}

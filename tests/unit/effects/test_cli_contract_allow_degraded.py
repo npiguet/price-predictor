@@ -11,6 +11,7 @@ import pytest
 from effects.infrastructure.cli import build_parser, run_collect_coverage, run_collect_variants
 from price_predictor.domain.worker_status import WorkerEngineRefused
 from price_predictor.infrastructure.cli_run_manifest import REFUSAL_DEST
+from tests.unit.conversion_fixtures import STAND_IN_CONVERSION, TREES_CONVERSION
 
 COLLECTORS = pytest.mark.parametrize(("command", "module", "runner"), [
     ("collect-coverage", "effects.application.collect_coverage.run", run_collect_coverage),
@@ -26,7 +27,10 @@ def parse(command: str, *argv: str):
 
 @pytest.fixture(autouse=True)
 def _workers_could_start():
-    with patch("price_predictor.infrastructure.forge_jvm.check_worker_prerequisites"):
+    with (
+        patch("price_predictor.infrastructure.forge_jvm.check_worker_prerequisites"),
+        patch(TREES_CONVERSION, return_value=STAND_IN_CONVERSION),
+    ):
         yield
 
 

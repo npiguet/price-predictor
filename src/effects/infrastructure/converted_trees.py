@@ -22,9 +22,11 @@ from effects.infrastructure.card_sources import (
     load_converted_cards,
 )
 from effects.infrastructure.sidecar_io import SidecarCache, load_tree_texts, sidecar_roots
+from price_predictor.infrastructure.converted_provenance import collection_conversion
 
 if TYPE_CHECKING:
     from effects.domain.split import HeldOutCards, HoldoutRule
+    from price_predictor.domain.converted_provenance import Conversion
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +65,14 @@ class SourceTrees:
     def sidecar_cache(self) -> SidecarCache:
         """A fresh cache over these trees, for a caller that owns its tallies."""
         return SidecarCache(self.sidecar_roots())
+
+    def conversion(self, *, jar: Path | None = None) -> Conversion:
+        """The one conversion the card trees come from, read from its
+        ``run.json`` and checked against the connector JAR (by default the
+        workers'): :class:`ConversionRefused` when a tree names none, the
+        trees name two, or the JAR was built at another Forge commit. The
+        variant tree is the collector's own, never converted."""
+        return collection_conversion(self.cards_folders, jar=jar)
 
     def converted(self, *, sidecars: SidecarCache | None = None) -> ConvertedTrees:
         """What is read from these trees; ``sidecars`` shares a cache already
