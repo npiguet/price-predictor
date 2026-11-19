@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import torch
 
@@ -44,9 +46,15 @@ def _ex(types: list[int], action_token: int, learner: bool, reward: float, adv: 
     )
 
 
+_PATHS = {
+    "drafts_path": Path("d.jsonl"), "cards_path": Path("cards"), "checkpoint_dir": Path("run"),
+}
+
+
 def _config(**kw) -> TrainDraftAgentRLConfig:
     return TrainDraftAgentRLConfig(
-        checkpoint=None, learner_agents=("gen-k",), rollout_temperature=1.0, **kw,
+        checkpoint=None, learner_agents=("gen-k",), rollout_temperature=1.0,
+        **_PATHS, **kw,
     )
 
 
@@ -128,7 +136,7 @@ def test_temperature_changes_entropy() -> None:
     hot = _compute_loss(
         model, ref, _collate(rows, table, 0.0, 1.0, torch.device("cpu")),
         TrainDraftAgentRLConfig(
-            checkpoint=None, learner_agents=("g",), rollout_temperature=5.0,
+            checkpoint=None, learner_agents=("g",), rollout_temperature=5.0, **_PATHS,
         ),
         entropy_coef=1.0, kl_coef=0.0,
     )

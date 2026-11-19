@@ -79,7 +79,8 @@ class TestRunIdScope:
         from draft.application.play_draft_games import selected_records
 
         config = PlayDraftGamesConfig(
-            drafts_path=tmp_path / "drafts.jsonl", run_ids=run_ids,
+            drafts_path=tmp_path / "drafts.jsonl", output_path=tmp_path / "o.txt",
+            run_ids=run_ids,
         )
         with patch(
             "draft.application.play_draft_games.read_records",
@@ -104,7 +105,8 @@ class TestRunIdScope:
 
         destination = tmp_path / "seats.txt"
         config = PlayDraftGamesConfig(
-            drafts_path=tmp_path / "drafts.jsonl", run_ids=("runB",),
+            drafts_path=tmp_path / "drafts.jsonl", output_path=tmp_path / "o.txt",
+            run_ids=("runB",),
         )
         with patch(
             "draft.application.play_draft_games.read_records",
@@ -127,7 +129,9 @@ class TestStoppingCondition:
     def test_counts_only_rows_added_by_this_run(self, tmp_path):
         out = tmp_path / "draft-games.txt"
         out.write_text("old\nold\nold\n", encoding="utf-8")
-        config = PlayDraftGamesConfig(output_path=out, n_pairings=2)
+        config = PlayDraftGamesConfig(
+            drafts_path=tmp_path / "d.jsonl", output_path=out, n_pairings=2,
+        )
 
         pool = self._pool_for(config, tmp_path)
 
@@ -137,7 +141,9 @@ class TestStoppingCondition:
 
     def test_no_pre_existing_rows(self, tmp_path):
         out = tmp_path / "draft-games.txt"
-        config = PlayDraftGamesConfig(output_path=out, n_pairings=2)
+        config = PlayDraftGamesConfig(
+            drafts_path=tmp_path / "d.jsonl", output_path=out, n_pairings=2,
+        )
 
         pool = self._pool_for(config, tmp_path)
 
@@ -145,14 +151,18 @@ class TestStoppingCondition:
         assert pool._should_stop(2) is True
 
     def test_unbounded_run_has_no_stop_condition(self, tmp_path):
-        config = PlayDraftGamesConfig(output_path=tmp_path / "o.txt", n_pairings=None)
+        config = PlayDraftGamesConfig(
+            drafts_path=tmp_path / "d.jsonl", output_path=tmp_path / "o.txt", n_pairings=None,
+        )
 
         pool = self._pool_for(config, tmp_path)
 
         assert pool._should_stop is None
 
     def test_worker_count_reaches_the_pool(self, tmp_path):
-        config = PlayDraftGamesConfig(output_path=tmp_path / "o.txt", workers=4)
+        config = PlayDraftGamesConfig(
+            drafts_path=tmp_path / "d.jsonl", output_path=tmp_path / "o.txt", workers=4,
+        )
 
         pool = self._pool_for(config, tmp_path)
 
@@ -166,7 +176,7 @@ class TestUnboundedRunAndExitCodes:
         from draft.infrastructure.cli import build_parser, run_play_draft_games
 
         args = build_parser().parse_args(
-            ["play-draft-games", "--drafts-path", "corpus.jsonl"]
+            ["play-draft-games", "--drafts-path", "corpus.jsonl", "--output-path", "out.txt"]
         )
         from draft.domain.draft_geometry import Booster, DraftRecord, Seat
 
@@ -201,8 +211,10 @@ class TestUnboundedRunAndExitCodes:
         """A bounded run that recorded nothing still finished; only a signal is 130."""
         assert self._exit_code(RunSummary(0, 1.0, Path("o.txt"), interrupted=False)) == 0
 
-    def test_absent_target_leaves_the_run_unbounded(self):
-        config = PlayDraftGamesConfig(n_pairings=None)
+    def test_absent_target_leaves_the_run_unbounded(self, tmp_path):
+        config = PlayDraftGamesConfig(
+            drafts_path=tmp_path / "d.jsonl", output_path=tmp_path / "o.txt", n_pairings=None,
+        )
         assert config.n_pairings is None
 
 

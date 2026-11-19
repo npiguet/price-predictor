@@ -14,6 +14,7 @@ width, effective colour count).
 from __future__ import annotations
 
 import json
+import os
 import re
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Iterator
@@ -191,6 +192,8 @@ def load_labeler_and_scorer(cards_path: Path, scorer_path: Path, picker_path: Pa
         n_drafts=0, agent_mix=[], scorer_checkpoint=scorer_path,
         picker_checkpoint=picker_path, cards_path=cards_path,
         build_method=build_method,     # never leave this defaulted: it defaults to picker
+        # The labeler writes nothing; the config's output paths have no default.
+        output_path=Path(os.devnull), worker_log_dir=Path(os.devnull),
     ), locator=locator)
     ckpt = ScorerStore().load_checkpoint(scorer_path)
     scorer = SetTransformerScorer(ckpt.config)

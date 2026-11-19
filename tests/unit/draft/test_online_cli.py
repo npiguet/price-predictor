@@ -31,6 +31,13 @@ def scorer(tmp_path: Path) -> Path:
     return path
 
 
+#: The path flags every invocation names (none has a default).
+_PATHS = [
+    "--scorer-checkpoint", "scorer.pt", "--cards-path", "cards",
+    "--output-path", "drafts.jsonl", "--checkpoint-dir", "run",
+]
+
+
 def _run(argv: list[str]) -> int:
     args = build_parser().parse_args(argv)
     return args.func(args)
@@ -43,6 +50,8 @@ def _argv(ckpt: Path, scorer: Path, **overrides: str | None) -> list[str]:
         "--mix": "gen-3:5,gen-1:3,forge-r30:1",
         "--scorer-checkpoint": str(scorer),
         "--cards-path": "cards",
+        "--output-path": "drafts.jsonl",
+        "--checkpoint-dir": "run",
         "--agent-temp": "gen-3=2.0",
         "--max-rounds": "1",
     }
@@ -79,7 +88,7 @@ def _never_run(monkeypatch: pytest.MonkeyPatch):
 def test_missing_learner_is_rejected(scorer: Path, capsys) -> None:
     argv = [
         "train-draft-agent-online", "--scorer-checkpoint", str(scorer), "--cards-path", "cards",
-        "--agent-temp", "gen-3=2.0",
+        "--output-path", "drafts.jsonl", "--checkpoint-dir", "run", "--agent-temp", "gen-3=2.0",
     ]
     assert _run(argv) == 2
     assert "learner" in capsys.readouterr().err.lower()
@@ -272,7 +281,7 @@ def test_the_global_temperature_flag_is_gone(flag: str) -> None:
     """One map is the only temperature source, so nothing can disagree with it."""
     parser = build_parser()
     with pytest.raises(SystemExit):
-        parser.parse_args(["train-draft-agent-online", flag, "2.0"])
+        parser.parse_args(["train-draft-agent-online", *_PATHS, flag, "2.0"])
 
 
 # --------------------------------------------------------------------------- #
@@ -364,7 +373,7 @@ def test_width_mismatch_exits_two(
 def test_gen2_knobs_are_not_registered(flag: str) -> None:
     parser = build_parser()
     with pytest.raises(SystemExit):
-        parser.parse_args(["train-draft-agent-online", flag, "1"])
+        parser.parse_args(["train-draft-agent-online", *_PATHS, flag, "1"])
 
 
 # --------------------------------------------------------------------------- #
@@ -375,7 +384,7 @@ def test_gen2_knobs_are_not_registered(flag: str) -> None:
 
 def test_run_control_is_disabled_by_default() -> None:
     args = build_parser().parse_args([
-        "train-draft-agent-online", "--learner", "gen-3=x.pt", "--cards-path", "cards",
+        "train-draft-agent-online", *_PATHS, "--learner", "gen-3=x.pt",
         "--agent-temp", "gen-3=2.0",
     ])
     assert args.patience is None
@@ -479,7 +488,7 @@ def test_min_lr_must_be_positive_and_not_above_lr(
 
 def test_the_three_tunable_knobs_are_registered() -> None:
     args = build_parser().parse_args([
-        "train-draft-agent-online", "--cards-path", "cards",
+        "train-draft-agent-online", *_PATHS,
         "--learner", "gen-3=x.pt", "--agent-temp", "gen-3=1.5", "--lr", "5e-5",
         "--drafts-per-round", "20",
     ])
@@ -490,7 +499,7 @@ def test_the_three_tunable_knobs_are_registered() -> None:
 
 def test_defaults_match_the_contract() -> None:
     args = build_parser().parse_args([
-        "train-draft-agent-online", "--learner", "gen-3=x.pt", "--cards-path", "cards",
+        "train-draft-agent-online", *_PATHS, "--learner", "gen-3=x.pt",
         "--agent-temp", "gen-3=2.0",
     ])
     assert args.lr == 1e-4
@@ -504,5 +513,6 @@ def test_defaults_match_the_contract() -> None:
     assert args.build_method == "greedy"
     assert args.max_rounds is None
     assert args.set_code is None
-    assert args.output_path == "output/draft/drafts.jsonl"
+    assert args.output_path == "drafts.jsonl"
+    assert args.picker_checkpoint is None
     assert args.max_consecutive_faults == 5

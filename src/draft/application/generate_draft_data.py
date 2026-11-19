@@ -80,25 +80,20 @@ def _log(message: str) -> None:
     print(f"[{timestamp}] {message}", flush=True)
 
 
-@dataclass
+@dataclass(kw_only=True)
 class GenerateDraftDataConfig:
     n_drafts: int
     agent_mix: list[tuple[str, int]]
     set_code: str | None = None
-    scorer_checkpoint: Path = field(
-        default_factory=lambda: Path("models/sealed/scorer/latest.pt"),
-    )
+    scorer_checkpoint: Path
     build_method: str = "picker"
-    picker_checkpoint: Path = field(
-        default_factory=lambda: Path("models/sealed/picker/latest.pt"),
-    )
-    cards_path: Path = field(default_factory=lambda: Path("output/cardsfolder/"))
+    #: Required (by the CLI) only with ``build_method == "picker"``.
+    picker_checkpoint: Path | None = None
+    cards_path: Path
     #: The ``.npz`` embeddings' tree, laid out like ``cards_path``; None
     #: reads them beside the cards.
     embeddings_path: Path | None = None
-    output_path: Path = field(
-        default_factory=lambda: Path("output/draft/drafts.jsonl"),
-    )
+    output_path: Path
     resume: bool = False
     # Live model-pilot additions (all optional; defaults preserve gen-1, SC-004).
     agent_checkpoints: dict[str, Path] = field(default_factory=dict)
@@ -111,7 +106,7 @@ class GenerateDraftDataConfig:
     # leaves sampling byte-for-byte as it was.
     required_agent: str | None = None
     #: Where a live-seat worker's stderr log (``worker-<run id>.log``) goes.
-    worker_log_dir: Path = field(default_factory=lambda: Path("output/draft"))
+    worker_log_dir: Path
 
 
 # --------------------------------------------------------------------------- #

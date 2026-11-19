@@ -16,7 +16,6 @@ import numpy as np
 import pytest
 import torch
 
-from draft.application import train_draft_agent_online as online
 from draft.application.train_draft_agent_online import (
     TrainDraftAgentOnlineConfig,
     TrainDraftAgentOnlineUseCase,
@@ -67,7 +66,6 @@ def _capture(
     monkeypatch: pytest.MonkeyPatch, agent_temperatures: dict[str, float],
 ) -> dict:
     """Run ``execute`` up to ``AgentRegistry.build`` and capture its arguments."""
-    monkeypatch.setattr(online, "CHECKPOINT_DIR", tmp_path / "models")
     monkeypatch.setattr(
         "draft.application.generate_draft_data.build_labeler",
         lambda config, *, locator=None: object(),
@@ -95,6 +93,8 @@ def _capture(
         cards_path=cards_path,
         agent_temperatures=agent_temperatures,
         output_path=tmp_path / "drafts.jsonl",
+        checkpoint_dir=tmp_path / "models",
+        worker_log_dir=tmp_path / "models" / "logs",
     )
     with pytest.raises(_Captured):
         TrainDraftAgentOnlineUseCase().execute(config)

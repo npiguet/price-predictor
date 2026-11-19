@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -39,6 +40,7 @@ def _ex(learner: bool, action_token: int = 0) -> RLExample:
 def _config() -> TrainDraftAgentRLConfig:
     return TrainDraftAgentRLConfig(
         checkpoint=None, learner_agents=("g",), rollout_temperature=1.0, batch_size=8,
+        drafts_path=Path("d.jsonl"), cards_path=Path("cards"), checkpoint_dir=Path("run"),
     )
 
 

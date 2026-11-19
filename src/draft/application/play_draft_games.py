@@ -27,18 +27,16 @@ from draft.infrastructure.draft_game_connector import DraftGameConnector
 from draft.infrastructure.draft_record_io import read_records
 from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
 
-DEFAULT_DRAFTS_PATH = Path("output/draft/drafts.jsonl")
-DEFAULT_OUTPUT_PATH = Path("output/draft/draft-games.txt")
 DEFAULT_WORKERS = 12
 DEFAULT_BEST_OF = 3
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class PlayDraftGamesConfig:
     """Everything the command needs; validated by the CLI before it gets here."""
 
-    drafts_path: Path = DEFAULT_DRAFTS_PATH
-    output_path: Path = DEFAULT_OUTPUT_PATH
+    drafts_path: Path
+    output_path: Path
     run_ids: tuple[str, ...] = ()
     n_pairings: int | None = None
     best_of: int = DEFAULT_BEST_OF

@@ -63,6 +63,7 @@ def test_train_draft_agent_smoke(tmp_path: Path, monkeypatch) -> None:
     config = TrainDraftAgentConfig(
         drafts_path=drafts_path,
         cards_path=cards_path,
+        checkpoint_dir=tmp_path / "models" / "draft" / "agent",
         epochs=3,
         batch_size=16,
         val_fraction=0.25,

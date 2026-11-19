@@ -26,7 +26,8 @@ def _args(argv: list[str]):
 
 
 def test_fresh_run_uses_defaults_and_cli_overrides() -> None:
-    args = _args(["--lr", "1e-3"])
+    args = _args(["--lr", "1e-3", "--drafts-path", "d.jsonl", "--cards-path", "cards",
+                  "--checkpoint-dir", "run"])
     cfg = _resolve_train_agent_config(args, resumed_train_config=None)
     assert cfg.lr == 1e-3                 # explicit CLI
     assert cfg.batch_size == 32           # dataclass default
@@ -34,7 +35,7 @@ def test_fresh_run_uses_defaults_and_cli_overrides() -> None:
     assert cfg.evals_per_epoch == 100     # dataclass default
     assert cfg.patience == 30             # dataclass default
     assert cfg.imitation_agents == ("forge-full",)
-    assert cfg.drafts_path == Path("output/draft/drafts.jsonl")
+    assert cfg.drafts_path == Path("d.jsonl")
 
 
 def test_resume_inherits_then_cli_overrides() -> None:

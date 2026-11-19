@@ -131,8 +131,8 @@ def _build_play_draft_games_parser(subparsers) -> None:
     )
     parser.set_defaults(func=run_play_draft_games)
     parser.add_argument(
-        "--drafts-path", default="output/draft/drafts.jsonl",
-        help="Corpus to sample from (default: output/draft/drafts.jsonl)",
+        "--drafts-path", required=True,
+        help="Corpus to sample from.",
     )
     parser.add_argument(
         "--run-id", action="append", dest="run_ids", default=None,
@@ -142,8 +142,8 @@ def _build_play_draft_games_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
-        "--output-path", default="output/draft/draft-games.txt",
-        help="Append target (default: output/draft/draft-games.txt)",
+        "--output-path", required=True,
+        help="Append target (a run directory's draft-games.txt).",
     )
     parser.add_argument(
         "--n-pairings", type=int, default=None,
@@ -192,8 +192,8 @@ def _build_analyze_generated_decks_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
-        "--drafts-path", default="output/draft/drafts.jsonl",
-        help="Drafts corpus to analyze (default: output/draft/drafts.jsonl).",
+        "--drafts-path", required=True,
+        help="Drafts corpus to analyze.",
     )
     parser.add_argument(
         "--cards-path", required=True,
@@ -244,7 +244,7 @@ def _build_train_draft_agent_online_parser(subparsers) -> None:
 
     # -- Deck building & reward (same meaning as generate-draft-data) ----------
     parser.add_argument(
-        "--scorer-checkpoint", default="models/sealed/scorer/latest.pt",
+        "--scorer-checkpoint", required=True,
         help="Frozen scorer producing each seat's deck_score (the reward). Must exist.",
     )
     parser.add_argument(
@@ -252,19 +252,19 @@ def _build_train_draft_agent_online_parser(subparsers) -> None:
         help="Pool -> deck before scoring (default: greedy).",
     )
     parser.add_argument(
-        "--picker-checkpoint", default="models/sealed/picker/latest.pt",
-        help="Used only with --build-method picker; must exist then.",
+        "--picker-checkpoint", default=None,
+        help="Required with --build-method picker, and must exist then; unused otherwise.",
     )
     parser.add_argument(
         "--cards-path", required=True,
         help=".npz embedding cache; fixes the model/scorer input width.",
     )
     _add_embeddings_path(parser)
-    _add_checkpoint_dir(parser, help_text=(
-        "The run directory: latest.pt, the snapshots and best_*.pt, run.json, and "
-        "the worker's stderr log under logs/ (default: checkpoints in "
-        "models/draft/agent/, run.json beside --output-path, the log in output/draft/)."
-    ))
+    parser.add_argument(
+        "--checkpoint-dir", required=True,
+        help="The run directory: latest.pt, the snapshots and best_*.pt, run.json, and "
+             "the worker's stderr log under logs/.",
+    )
 
     # -- Rollout & optimisation ------------------------------------------------
     parser.add_argument(
@@ -320,7 +320,7 @@ def _build_train_draft_agent_online_parser(subparsers) -> None:
         help="Restrict every draft to one set; else a random sealed-legal set per draft.",
     )
     parser.add_argument(
-        "--output-path", default="output/draft/drafts.jsonl", dest="output_path",
+        "--output-path", required=True, dest="output_path",
         help="Corpus appended with every generated draft (shared file).",
     )
     parser.add_argument(
@@ -382,12 +382,12 @@ def _build_validate_builder_parser(subparsers) -> None:
         help="Number of pools to evaluate (default: 300).",
     )
     parser.add_argument(
-        "--scorer-checkpoint", default="models/sealed/scorer/latest.pt",
-        help="Frozen scorer (default: models/sealed/scorer/latest.pt).",
+        "--scorer-checkpoint", required=True,
+        help="Frozen scorer.",
     )
     parser.add_argument(
-        "--picker-checkpoint", default="models/sealed/picker/latest.pt",
-        help="Picker (default: models/sealed/picker/latest.pt).",
+        "--picker-checkpoint", required=True,
+        help="Picker.",
     )
     parser.add_argument(
         "--cards-path", required=True,
@@ -425,19 +425,16 @@ def _build_generate_draft_data_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
-        "--scorer-checkpoint", default="models/sealed/scorer/latest.pt",
-        help="Frozen scorer labeling decks (default: models/sealed/scorer/latest.pt).",
+        "--scorer-checkpoint", required=True,
+        help="Frozen scorer labeling decks.",
     )
     parser.add_argument(
         "--build-method", default="picker", choices=["picker", "greedy"],
         help="Deck builder for labeling (default: picker).",
     )
     parser.add_argument(
-        "--picker-checkpoint", default="models/sealed/picker/latest.pt",
-        help=(
-            "Picker used when --build-method picker; ignored otherwise "
-            "(default: models/sealed/picker/latest.pt)."
-        ),
+        "--picker-checkpoint", default=None,
+        help="Picker; required with --build-method picker, ignored otherwise.",
     )
     parser.add_argument(
         "--cards-path", required=True,
@@ -445,14 +442,14 @@ def _build_generate_draft_data_parser(subparsers) -> None:
     )
     _add_embeddings_path(parser)
     parser.add_argument(
-        "--output-path", default="output/draft/drafts.jsonl",
+        "--output-path", required=True,
         help="Destination JSONL; appended, created if missing.",
     )
     parser.add_argument(
-        "--logs-dir", default="output/draft",
+        "--logs-dir", required=True,
         help=(
             "Directory of the live-seat worker's stderr log, worker-<run id>.log "
-            "(default: output/draft); under the layout, logs/ in the run directory."
+            "(under the layout, logs/ in the run directory)."
         ),
     )
     parser.add_argument(
@@ -573,7 +570,7 @@ def _build_train_draft_agent_rl_parser(subparsers) -> None:
     parser.add_argument(
         "--drafts-path", default=None,
         help="On-policy corpus generated by --checkpoint; the sole policy-gradient "
-             "source (default: output/draft/drafts.jsonl). Resumable.",
+             "source. Required on a fresh run; Resumable.",
     )
     parser.add_argument(
         "--critic-corpus", action="append", default=[], dest="critic_corpus",
@@ -587,8 +584,8 @@ def _build_train_draft_agent_rl_parser(subparsers) -> None:
     )
     _add_embeddings_path(parser, resumable=True)
     _add_checkpoint_dir(parser, help_text=(
-        "Directory of latest.pt and <timestamp>.pt, and the run's run.json "
-        "(default: models/draft/agent/). Resumable."
+        "Directory of latest.pt and <timestamp>.pt, and the run's run.json. "
+        "Required on a fresh run; Resumable."
     ))
     parser.add_argument(
         "--learner-agents", default=None,
@@ -677,7 +674,7 @@ def _build_train_draft_agent_parser(subparsers) -> None:
     # explicit CLI > resumed checkpoint's train_config > dataclass default.
     parser.add_argument(
         "--drafts-path", default=None,
-        help="Recorded corpus (default: output/draft/drafts.jsonl). Resumable.",
+        help="Recorded corpus. Required on a fresh run; Resumable.",
     )
     parser.add_argument(
         "--cards-path", default=None,
@@ -685,8 +682,8 @@ def _build_train_draft_agent_parser(subparsers) -> None:
     )
     _add_embeddings_path(parser, resumable=True)
     _add_checkpoint_dir(parser, help_text=(
-        "Directory of latest.pt and <timestamp>.pt, and the run's run.json "
-        "(default: models/draft/agent/). Resumable."
+        "Directory of latest.pt and <timestamp>.pt, and the run's run.json. "
+        "Required on a fresh run; Resumable."
     ))
     # Architecture flags: default=None so they can be rejected with --resume/--checkpoint.
     parser.add_argument(
@@ -784,6 +781,22 @@ def _build_train_draft_agent_parser(subparsers) -> None:
     )
 
 
+def _picker_checkpoint_missing(args: argparse.Namespace) -> bool:
+    """Print the error and return True when --build-method picker lacks --picker-checkpoint."""
+    if args.build_method != "picker" or args.picker_checkpoint is not None:
+        return False
+    print("Error: --picker-checkpoint is required by --build-method picker.", file=sys.stderr)
+    return True
+
+
+def _generate_flag_error(args: argparse.Namespace) -> bool:
+    """Print the error and return True when generate-draft-data's flags disagree."""
+    if args.pick_mode == "sample" and args.temperature <= 0:
+        print("Error: --temperature must be > 0 with --pick-mode sample.", file=sys.stderr)
+        return True
+    return _picker_checkpoint_missing(args)
+
+
 def run_generate_draft_data(args: argparse.Namespace) -> int:
     """Execute the generate-draft-data command."""
     from draft.application.agent_mix import AgentMixError, parse_agent_mix
@@ -813,11 +826,7 @@ def run_generate_draft_data(args: argparse.Namespace) -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
 
-    if args.pick_mode == "sample" and args.temperature <= 0:
-        print(
-            "Error: --temperature must be > 0 with --pick-mode sample.",
-            file=sys.stderr,
-        )
+    if _generate_flag_error(args):
         return 2
 
     config = GenerateDraftDataConfig(
@@ -826,7 +835,7 @@ def run_generate_draft_data(args: argparse.Namespace) -> int:
         agent_mix=agent_mix,
         scorer_checkpoint=Path(args.scorer_checkpoint),
         build_method=args.build_method,
-        picker_checkpoint=Path(args.picker_checkpoint),
+        picker_checkpoint=_optional_path(args.picker_checkpoint),
         cards_path=Path(args.cards_path),
         embeddings_path=_optional_path(args.embeddings_path),
         output_path=Path(args.output_path),
@@ -856,15 +865,22 @@ def run_generate_draft_data(args: argparse.Namespace) -> int:
     return 0
 
 
-def _require_cards_path(args: argparse.Namespace, resumed_train_config: dict | None) -> None:
-    """Exit 2 when no --cards-path was given and none can be inherited from a resumed run."""
-    inherited = (resumed_train_config or {}).get("cards_path")
-    if args.cards_path is not None:
-        return
-    if inherited:
+_TRAINER_REQUIRED_PATHS: tuple[str, ...] = ("drafts_path", "cards_path", "checkpoint_dir")
+
+
+def _require_trainer_paths(args: argparse.Namespace, resumed_train_config: dict | None) -> None:
+    """Exit 2 naming each of --drafts-path, --cards-path and --checkpoint-dir that was
+    not given and cannot be inherited from a resumed run."""
+    recorded = resumed_train_config or {}
+    missing = [
+        "--" + name.replace("_", "-") for name in _TRAINER_REQUIRED_PATHS
+        if getattr(args, name) is None and not recorded.get(name)
+    ]
+    if not missing:
         return
     print(
-        "Error: --cards-path is required (a resumed run inherits it from its checkpoint).",
+        f"Error: {', '.join(missing)} required (a resumed run inherits them from its "
+        "checkpoint).",
         file=sys.stderr,
     )
     raise SystemExit(2)
@@ -908,7 +924,7 @@ def run_train_draft_agent(args: argparse.Namespace) -> int:
             return 2
         resumed_train_config = resumed.train_config
 
-    _require_cards_path(args, resumed_train_config)
+    _require_trainer_paths(args, resumed_train_config)
     config = _resolve_train_agent_config(args, resumed_train_config)
 
     try:
@@ -950,7 +966,7 @@ def run_train_draft_agent_rl(args: argparse.Namespace) -> int:
             return 2
         resumed_train_config = resumed.train_config
 
-    _require_cards_path(args, resumed_train_config)
+    _require_trainer_paths(args, resumed_train_config)
     config = _resolve_train_agent_rl_config(args, resumed_train_config)
 
     if not config.learner_agents:
@@ -994,6 +1010,8 @@ def run_train_draft_agent_online(args: argparse.Namespace) -> int:
     )
     from draft.domain.draft_agent_model import DraftAgentArchitectureError
 
+    if _picker_checkpoint_missing(args):
+        return 2
     try:
         learner_label, learner_checkpoint = parse_learner_spec(args.learner)
         frozen = parse_frozen_specs(args.frozen)
@@ -1011,7 +1029,7 @@ def run_train_draft_agent_online(args: argparse.Namespace) -> int:
         mix=mix,
         scorer_checkpoint=Path(args.scorer_checkpoint),
         build_method=args.build_method,
-        picker_checkpoint=Path(args.picker_checkpoint),
+        picker_checkpoint=_optional_path(args.picker_checkpoint),
         cards_path=Path(args.cards_path),
         embeddings_path=_optional_path(args.embeddings_path),
         agent_temperatures=agent_temperatures,
@@ -1031,7 +1049,8 @@ def run_train_draft_agent_online(args: argparse.Namespace) -> int:
         seed=args.seed,
         output_path=Path(args.output_path),
         max_consecutive_faults=args.max_consecutive_faults,
-        **_online_run_directory(args),
+        checkpoint_dir=Path(args.checkpoint_dir),
+        worker_log_dir=Path(args.checkpoint_dir) / "logs",
     )
 
     # Every rule runs before the Forge worker launches and before any update
@@ -1059,15 +1078,6 @@ def run_train_draft_agent_online(args: argparse.Namespace) -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
     return 0
-
-
-def _online_run_directory(args: argparse.Namespace) -> dict[str, Path]:
-    """``--checkpoint-dir`` holds the checkpoints and the worker log's ``logs/``;
-    unset, both keep the config's defaults (``models/draft/agent/``, ``output/draft/``)."""
-    if args.checkpoint_dir is None:
-        return {}
-    run = Path(args.checkpoint_dir)
-    return {"checkpoint_dir": run, "worker_log_dir": run / "logs"}
 
 
 def run_validate_builder(args: argparse.Namespace) -> int:
@@ -1252,14 +1262,10 @@ def _has_playable_pair(rows, *, include_mirrors: bool) -> bool:
 
 # ── run manifests ─────────────────────────────────────────────────────
 
-#: Where the trainers write their checkpoints unless ``--checkpoint-dir`` says.
-_AGENT_CHECKPOINT_DIR = Path("models") / "draft" / "agent"
-
-
-def _offline_checkpoint_dir(args: argparse.Namespace) -> Path:
+def _offline_checkpoint_dir(args: argparse.Namespace) -> Path | None:
     """An offline trainer's run directory, resolved as the trainer resolves it:
     ``--checkpoint-dir``, else on ``--resume`` the directory the resumed run
-    recorded, else the default."""
+    recorded; ``None`` (no manifest) when neither names one, which the trainer refuses."""
     if args.checkpoint_dir is not None:
         return Path(args.checkpoint_dir)
     if args.resume is not None:
@@ -1272,19 +1278,14 @@ def _offline_checkpoint_dir(args: argparse.Namespace) -> Path:
             recorded = None  # the trainer reports an unreadable checkpoint itself
         if recorded:
             return Path(recorded)
-    return _AGENT_CHECKPOINT_DIR
+    return None
 
 
 def _offline_training_inputs(args: argparse.Namespace) -> list[str | Path | None]:
     """What an offline trainer reads; a resume reads its recorded paths unless overridden."""
-    from draft.application.train_draft_agent import TrainDraftAgentConfig
-    from sealed.infrastructure.cli_resume import dataclass_default
-
     def path(name: str) -> str | Path | None:
         given = getattr(args, name)
-        if given is not None or args.resume is not None:
-            return given
-        return dataclass_default(TrainDraftAgentConfig, name)
+        return given
 
     return [
         path("drafts_path"), path("cards_path"), args.embeddings_path,
@@ -1309,10 +1310,9 @@ RUN_MANIFESTS: ManifestTable = {
         _offline_checkpoint_dir,
         inputs=(_offline_training_inputs, "critic_corpus"),
     ),
-    # Its run directory is --checkpoint-dir; unset, the directory of the
-    # drafts it streams to --output-path (its checkpoints in models/draft/agent/).
+    # Its run directory is --checkpoint-dir.
     "train-draft-agent-online": Writes(
-        lambda args: args.checkpoint_dir or Path(args.output_path).parent,
+        "checkpoint_dir",
         inputs=(
             lambda args: labelled_paths(args.learner),
             lambda args: labelled_paths(args.frozen),

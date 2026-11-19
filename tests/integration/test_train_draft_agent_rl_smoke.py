@@ -71,6 +71,7 @@ def test_rl_training_writes_gen2_checkpoint(tmp_path, monkeypatch) -> None:
         checkpoint=ref_path,
         drafts_path=corpus,
         cards_path=tmp_path,
+        checkpoint_dir=tmp_path / "models" / "draft" / "agent",
         learner_agents=("gen-k",),
         rollout_temperature=1.0,
         epochs=1,

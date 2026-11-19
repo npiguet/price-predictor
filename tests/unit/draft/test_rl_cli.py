@@ -10,6 +10,11 @@ from draft.infrastructure.cli import (
     run_train_draft_agent_rl,
 )
 
+_REQUIRED = [
+    "--checkpoint", "ref.pt", "--cards-path", "c", "--drafts-path", "d.jsonl",
+    "--checkpoint-dir", "run",
+]
+
 
 def _args(argv: list[str]):
     return build_parser().parse_args(["train-draft-agent-rl", *argv])
@@ -23,19 +28,18 @@ def test_requires_exactly_one_of_checkpoint_or_resume() -> None:
 
 
 def test_empty_learner_agents_rejected() -> None:
-    args = _args(["--checkpoint", "ref.pt", "--cards-path", "c", "--rollout-temperature", "1.0"])
+    args = _args([*_REQUIRED, "--rollout-temperature", "1.0"])
     assert run_train_draft_agent_rl(args) == 2
 
 
 def test_missing_rollout_temperature_rejected() -> None:
-    args = _args(["--checkpoint", "ref.pt", "--cards-path", "c", "--learner-agents", "gen-k"])
+    args = _args([*_REQUIRED, "--learner-agents", "gen-k"])
     assert run_train_draft_agent_rl(args) == 2
 
 
 def test_nonpositive_rollout_temperature_rejected() -> None:
     args = _args([
-        "--checkpoint", "ref.pt", "--cards-path", "c", "--learner-agents", "gen-k",
-        "--rollout-temperature", "0",
+        *_REQUIRED, "--learner-agents", "gen-k", "--rollout-temperature", "0",
     ])
     assert run_train_draft_agent_rl(args) == 2
 

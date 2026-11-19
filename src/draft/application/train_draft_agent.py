@@ -17,7 +17,7 @@ from __future__ import annotations
 import math
 import random
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -64,15 +64,15 @@ def _fmt_dur(seconds: float) -> str:
     return f"{hours}h{minutes:02d}m"
 
 
-@dataclass
+@dataclass(kw_only=True)
 class TrainDraftAgentConfig:
-    drafts_path: Path = field(default_factory=lambda: Path("output/draft/drafts.jsonl"))
-    cards_path: Path = field(default_factory=lambda: Path("output/cardsfolder/"))
+    drafts_path: Path
+    cards_path: Path
     #: The ``.npz`` embeddings' tree, laid out like ``cards_path``; None
     #: reads them beside the cards.
     embeddings_path: Path | None = None
     #: Where the checkpoints (``latest.pt``, ``<timestamp>.pt``) go.
-    checkpoint_dir: Path = field(default_factory=lambda: Path("models/draft/agent"))
+    checkpoint_dir: Path
     d_model: int | None = None
     n_layers: int = 4
     n_heads: int = 8

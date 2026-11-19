@@ -16,7 +16,6 @@ import numpy as np
 import pytest
 import torch
 
-from draft.application import train_draft_agent_online as online
 from draft.application.generate_draft_data import POD_SIZE, SENTINEL
 from draft.application.train_draft_agent_online import (
     TrainDraftAgentOnlineConfig,
@@ -121,7 +120,6 @@ def run(
 ):
     """Drive two rounds and return (result, captured stdout, paths)."""
     checkpoint_dir = tmp_path / "models"
-    monkeypatch.setattr(online, "CHECKPOINT_DIR", checkpoint_dir)
 
     launched: list[int] = []
     generated: list[str] = []
@@ -164,6 +162,8 @@ def run(
         max_rounds=2,
         batch_size=8,
         output_path=corpus,
+        checkpoint_dir=checkpoint_dir,
+        worker_log_dir=checkpoint_dir / "logs",
     )
 
     rounds = TrainDraftAgentOnlineUseCase().execute(config)
@@ -281,7 +281,6 @@ def test_best_checkpoint_is_written_once_the_window_fills(
 ) -> None:
     """With anchor_window == drafts_per_round the window fills on round 0."""
     checkpoint_dir = tmp_path / "models"
-    monkeypatch.setattr(online, "CHECKPOINT_DIR", checkpoint_dir)
     labeler = _VaryingLabeler()
     monkeypatch.setattr(
         "draft.application.generate_draft_data.build_labeler",
@@ -311,6 +310,8 @@ def test_best_checkpoint_is_written_once_the_window_fills(
         max_rounds=2,
         batch_size=8,
         output_path=corpus,
+        checkpoint_dir=checkpoint_dir,
+        worker_log_dir=checkpoint_dir / "logs",
     ))
     out = capsys.readouterr().out
 
@@ -327,7 +328,6 @@ def test_the_corpus_is_appended_never_truncated(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """drafts.jsonl is the canonical shared corpus — opening it "w" destroys it."""
-    monkeypatch.setattr(online, "CHECKPOINT_DIR", tmp_path / "models")
     labeler = _VaryingLabeler()
     monkeypatch.setattr(
         "draft.application.generate_draft_data.build_labeler",
@@ -361,6 +361,8 @@ def test_the_corpus_is_appended_never_truncated(
         max_rounds=1,
         batch_size=8,
         output_path=corpus,
+        checkpoint_dir=tmp_path / "models",
+        worker_log_dir=tmp_path / "models" / "logs",
     ))
 
     ids = [r.draft_id for r in read_records(corpus)]

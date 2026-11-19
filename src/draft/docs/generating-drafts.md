@@ -15,7 +15,7 @@ Rules to respect when running or changing `generate-draft-data`, live-seat pilot
 - The supervisor rebuilds the live state incrementally with `OnlineDraftStateTracker`. It must equal `build_state`; a gating equivalence test pins it.
 - A pick fault (a policy or tracker error, a protocol desync, or every legal action un-embeddable) abandons the whole in-flight draft. No substitute pick is ever made, which keeps the corpus clean by construction. The draft is not recorded or counted.
 - `--max-consecutive-faults` consecutive abandonments abort the run with a nonzero exit.
-- Worker stderr goes to a per-run log, `worker-<run_id>.log` in `--logs-dir` (`logs/` of the run directory under the artifact layout; pass it, its default is the old flat `output/draft/`). `train-draft-agent-online` puts it in `<--checkpoint-dir>/logs/`.
+- Worker stderr goes to a per-run log, `worker-<run_id>.log` in `--logs-dir` (required; `logs/` of the run directory under the artifact layout). `train-draft-agent-online` puts it in `<--checkpoint-dir>/logs/`.
 - A seeded `--pick-mode sample` run is reproducible.
 - A mixed pod yields a per-draft agent-minus-Forge `deck_score` delta, since every seat is built and scored the same way.
 

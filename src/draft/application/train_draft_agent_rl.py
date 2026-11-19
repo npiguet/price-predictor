@@ -27,7 +27,7 @@ from __future__ import annotations
 import math
 import random
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -87,7 +87,7 @@ def _fmt_dur(seconds: float) -> str:
     return f"{hours}h{minutes:02d}m"
 
 
-@dataclass
+@dataclass(kw_only=True)
 class TrainDraftAgentRLConfig:
     """Inputs to the RL trainer (data-model §1).
 
@@ -99,14 +99,14 @@ class TrainDraftAgentRLConfig:
 
     checkpoint: Path | None = None
     resume: Path | None = None
-    drafts_path: Path = field(default_factory=lambda: Path("output/draft/drafts.jsonl"))
+    drafts_path: Path
     critic_corpus: tuple[Path, ...] = ()
-    cards_path: Path = field(default_factory=lambda: Path("output/cardsfolder/"))
+    cards_path: Path
     #: The ``.npz`` embeddings' tree, laid out like ``cards_path``; None
     #: reads them beside the cards.
     embeddings_path: Path | None = None
     #: Where the checkpoints (``latest.pt``, ``<timestamp>.pt``) go.
-    checkpoint_dir: Path = field(default_factory=lambda: Path("models/draft/agent"))
+    checkpoint_dir: Path
     learner_agents: tuple[str, ...] = ()
     rollout_temperature: float | None = None
     gae_lambda: float = 0.95

@@ -1,5 +1,5 @@
 """Where the draft commands write and read under ``output/`` and ``models/``:
-each path has a flag, and every default is today's path (025 LAYOUT-2)."""
+each path has a flag, and none has a default (025 LAYOUT-2, finding 16.6)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,9 @@ from draft.infrastructure.cli import (
 
 _RUN = "models/draft/gen3/agent/2026-11-15-online"
 _CACHE = "output/draft/gen3/cache/2026-11-15-encoder"
-_TODAY = Path("models/draft/agent")
+_LOGS = "output/draft/gen3/records/2026-11-15-x/logs"
+#: What the offline trainers need on a fresh run (none of these has a default).
+_FRESH = ["--drafts-path", "d.jsonl", "--cards-path", "cards"]
 
 
 def _args(*argv: str):
@@ -25,7 +27,7 @@ def _args(*argv: str):
 
 def _rl(*extra: str):
     return _args("train-draft-agent-rl", "--checkpoint", "ref.pt", "--learner-agents", "gen-2",
-                 "--rollout-temperature", "1.0", *extra)
+                 "--rollout-temperature", "1.0", *_FRESH, *extra)
 
 
 # --------------------------------------------------------------------------- #
@@ -35,17 +37,12 @@ def _rl(*extra: str):
 class TestTheOfflineTrainersCheckpointDirectory:
     def test_train_draft_agent_writes_where_the_flag_says(self):
         config = _resolve_train_agent_config(
-            _args("train-draft-agent", "--checkpoint-dir", _RUN), None)
+            _args("train-draft-agent", *_FRESH, "--checkpoint-dir", _RUN), None)
         assert config.checkpoint_dir == Path(_RUN)
 
     def test_train_draft_agent_rl_writes_where_the_flag_says(self):
         assert _resolve_train_agent_rl_config(
             _rl("--checkpoint-dir", _RUN), None).checkpoint_dir == Path(_RUN)
-
-    def test_unset_both_write_where_they_always_did(self):
-        fresh = _resolve_train_agent_config(_args("train-draft-agent"), None)
-        assert fresh.checkpoint_dir == _TODAY
-        assert _resolve_train_agent_rl_config(_rl(), None).checkpoint_dir == _TODAY
 
     def test_a_resumed_run_keeps_the_directory_it_ran_in(self):
         resumed = {"checkpoint_dir": _RUN}
@@ -60,8 +57,8 @@ class TestTheOfflineTrainersCheckpointDirectory:
         assert cli.RUN_MANIFESTS[command].run_dir(args) == Path(_RUN)
 
     @pytest.mark.parametrize("command", ["train-draft-agent", "train-draft-agent-rl"])
-    def test_unset_the_manifest_is_kept_where_it_always_was(self, command):
-        assert cli.RUN_MANIFESTS[command].run_dir(_args(command)) == _TODAY
+    def test_unset_no_manifest_is_kept_and_the_trainer_refuses(self, command):
+        assert cli.RUN_MANIFESTS[command].run_dir(_args(command)) is None
 
     def test_a_resume_s_manifest_follows_the_directory_the_run_writes(self, tmp_path, monkeypatch):
         """The resumed checkpoint's recorded directory, as the trainer resolves it."""
@@ -74,7 +71,7 @@ class TestTheOfflineTrainersCheckpointDirectory:
         args = _args("train-draft-agent", "--resume", str(tmp_path / "elsewhere.pt"))
         assert cli.RUN_MANIFESTS["train-draft-agent"].run_dir(args) == Path(_RUN)
 
-    def test_a_resume_of_a_run_that_recorded_none_keeps_today_s(self, tmp_path, monkeypatch):
+    def test_a_resume_of_a_run_that_recorded_none_keeps_no_manifest(self, tmp_path, monkeypatch):
         from draft.infrastructure.draft_agent_store import DraftAgentStore
 
         class _Loaded:
@@ -82,7 +79,7 @@ class TestTheOfflineTrainersCheckpointDirectory:
 
         monkeypatch.setattr(DraftAgentStore, "load_checkpoint", lambda _self, _path: _Loaded())
         args = _args("train-draft-agent-rl", "--resume", str(tmp_path / "old.pt"))
-        assert cli.RUN_MANIFESTS["train-draft-agent-rl"].run_dir(args) == _TODAY
+        assert cli.RUN_MANIFESTS["train-draft-agent-rl"].run_dir(args) is None
 
 
 # --------------------------------------------------------------------------- #
@@ -91,7 +88,8 @@ class TestTheOfflineTrainersCheckpointDirectory:
 
 def _online(*extra: str):
     return _args("train-draft-agent-online", "--learner", "gen-3=a.pt", "--frozen", "gen-1=b.pt",
-                 "--cards-path", "cards", "--agent-temp", "gen-3=2.0", *extra)
+                 "--scorer-checkpoint", "s.pt", "--cards-path", "cards",
+                 "--output-path", "d.jsonl", "--agent-temp", "gen-3=2.0", *extra)
 
 
 class TestTheOnlineTrainersRunDirectory:
@@ -111,18 +109,9 @@ class TestTheOnlineTrainersRunDirectory:
         assert config.checkpoint_dir == Path(_RUN)
         assert config.worker_log_dir == Path(_RUN) / "logs"
 
-    def test_unset_they_go_where_they_always_did(self, monkeypatch):
-        config = self._config(monkeypatch)
-        assert config.checkpoint_dir == _TODAY
-        assert config.worker_log_dir == Path("output/draft")
-
     def test_the_manifest_is_kept_in_the_run_directory(self):
-        args = _online("--checkpoint-dir", _RUN, "--output-path", "output/draft/x/drafts.jsonl")
+        args = _online("--checkpoint-dir", _RUN)
         assert cli.RUN_MANIFESTS["train-draft-agent-online"].run_dir(args) == Path(_RUN)
-
-    def test_unset_the_manifest_is_kept_beside_the_drafts(self):
-        args = _online("--output-path", "output/draft/x/drafts.jsonl")
-        assert cli.RUN_MANIFESTS["train-draft-agent-online"].run_dir(args) == Path("output/draft/x")
 
     def test_the_generation_it_drives_logs_its_workers_there(self):
         from draft.application.train_draft_agent_online import (
@@ -131,8 +120,9 @@ class TestTheOnlineTrainersRunDirectory:
         )
 
         config = TrainDraftAgentOnlineConfig(
-            learner_label="gen-3", worker_log_dir=Path(_RUN) / "logs",
-            embeddings_path=Path(_CACHE),
+            learner_label="gen-3", scorer_checkpoint=Path("s.pt"), cards_path=Path("cards"),
+            output_path=Path("d.jsonl"), checkpoint_dir=Path(_RUN),
+            worker_log_dir=Path(_RUN) / "logs", embeddings_path=Path(_CACHE),
         )
         generation = TrainDraftAgentOnlineUseCase._generation_config(config, 2.0)
         assert generation.worker_log_dir == Path(_RUN) / "logs"
@@ -143,7 +133,11 @@ class TestTheOnlineTrainersRunDirectory:
         import draft.application.train_draft_agent_online as online
 
         written = []
-        config = online.TrainDraftAgentOnlineConfig(checkpoint_dir=tmp_path / "run")
+        config = online.TrainDraftAgentOnlineConfig(
+            scorer_checkpoint=Path("s.pt"), cards_path=Path("cards"),
+            output_path=Path("d.jsonl"), checkpoint_dir=tmp_path / "run",
+            worker_log_dir=tmp_path / "run" / "logs",
+        )
         original = online._write_checkpoint
         try:
             online._write_checkpoint = lambda *args: written.append(args[7])
@@ -167,16 +161,14 @@ class TestGenerateDraftDataWorkerLogs:
         seen = []
         monkeypatch.setattr(generate_draft_data.GenerateDraftDataSupervisor, "run",
                             lambda self: seen.append(self._config) or 0)
-        args = _args("generate-draft-data", "--n-drafts", "1", "--cards-path", "cards", *extra)
+        args = _args("generate-draft-data", "--n-drafts", "1", "--scorer-checkpoint", "s.pt",
+                     "--picker-checkpoint", "p.pt", "--cards-path", "cards",
+                     "--output-path", "d.jsonl", "--logs-dir", _LOGS, *extra)
         assert args.func(args) == 0
         return seen[0]
 
     def test_they_go_to_the_flag_s_directory(self, monkeypatch):
-        logs = "output/draft/gen3/records/2026-11-15-x/logs"
-        assert self._config(monkeypatch, "--logs-dir", logs).worker_log_dir == Path(logs)
-
-    def test_unset_they_go_where_they_always_did(self, monkeypatch):
-        assert self._config(monkeypatch).worker_log_dir == Path("output/draft")
+        assert self._config(monkeypatch).worker_log_dir == Path(_LOGS)
 
     def test_the_worker_is_started_with_that_directory(self, tmp_path, monkeypatch):
         from draft.application.generate_draft_data import (
@@ -189,7 +181,9 @@ class TestGenerateDraftDataWorkerLogs:
         monkeypatch.setattr(DraftWorkerConnector, "start",
                             lambda _self, **kwargs: started.append(kwargs))
         config = GenerateDraftDataConfig(
-            n_drafts=1, agent_mix=[("draft-agent", 1)], worker_log_dir=tmp_path / "logs")
+            n_drafts=1, agent_mix=[("draft-agent", 1)], scorer_checkpoint=Path("s.pt"),
+            cards_path=Path("cards"), output_path=tmp_path / "d.jsonl",
+            worker_log_dir=tmp_path / "logs")
         GenerateDraftDataSupervisor(config)._default_launch_worker(frozenset({"draft-agent"}))()
         assert started[0]["log_dir"] == tmp_path / "logs"
 
@@ -201,10 +195,12 @@ class TestGenerateDraftDataWorkerLogs:
 class TestEmbeddingsPath:
     def test_the_offline_trainers_read_them_where_the_flag_says(self):
         assert _resolve_train_agent_config(
-            _args("train-draft-agent", "--embeddings-path", _CACHE), None,
+            _args("train-draft-agent", *_FRESH, "--checkpoint-dir", _RUN,
+                  "--embeddings-path", _CACHE), None,
         ).embeddings_path == Path(_CACHE)
         assert _resolve_train_agent_rl_config(
-            _rl("--embeddings-path", _CACHE), None).embeddings_path == Path(_CACHE)
+            _rl("--checkpoint-dir", _RUN, "--embeddings-path", _CACHE), None,
+        ).embeddings_path == Path(_CACHE)
 
     def test_a_resumed_offline_trainer_keeps_them(self):
         args = _args("train-draft-agent", "--resume", "x.pt")
@@ -212,8 +208,10 @@ class TestEmbeddingsPath:
             args, {"embeddings_path": _CACHE}).embeddings_path == Path(_CACHE)
 
     def test_unset_they_are_read_beside_the_cards(self):
-        assert _resolve_train_agent_config(_args("train-draft-agent"), None).embeddings_path is None
-        assert _resolve_train_agent_rl_config(_rl(), None).embeddings_path is None
+        fresh = _args("train-draft-agent", *_FRESH, "--checkpoint-dir", _RUN)
+        assert _resolve_train_agent_config(fresh, None).embeddings_path is None
+        assert _resolve_train_agent_rl_config(
+            _rl("--checkpoint-dir", _RUN), None).embeddings_path is None
 
     def test_generate_draft_data_reads_them_where_the_flag_says(self, monkeypatch):
         config = TestGenerateDraftDataWorkerLogs()._config(
@@ -222,7 +220,7 @@ class TestEmbeddingsPath:
 
     def test_the_online_trainer_reads_them_where_the_flag_says(self, monkeypatch):
         config = TestTheOnlineTrainersRunDirectory()._config(
-            monkeypatch, "--embeddings-path", _CACHE)
+            monkeypatch, "--checkpoint-dir", _RUN, "--embeddings-path", _CACHE)
         assert config.embeddings_path == Path(_CACHE)
 
     def test_validate_builder_reads_them_where_the_flag_says(self, monkeypatch):
@@ -231,7 +229,8 @@ class TestEmbeddingsPath:
         seen = []
         monkeypatch.setattr(validate_builder, "run_validate", lambda config: seen.append(config))
         monkeypatch.setattr(validate_builder, "format_diagnostic", lambda _diagnostic: "")
-        args = _args("validate-builder", "--pools-from", "d.jsonl", "--cards-path", "cards",
+        args = _args("validate-builder", "--pools-from", "d.jsonl", "--scorer-checkpoint", "s.pt",
+                     "--picker-checkpoint", "p.pt", "--cards-path", "cards",
                      "--embeddings-path", _CACHE)
         assert args.func(args) == 0
         assert seen[0].embeddings_path == Path(_CACHE)
@@ -246,10 +245,12 @@ class TestEmbeddingsPath:
         assert probe_embedding_width(tmp_path / "cache") == 6
 
     @pytest.mark.parametrize("argv", [
-        ["generate-draft-data", "--n-drafts", "1", "--cards-path", "cards"],
-        ["train-draft-agent"],
-        ["train-draft-agent-online", "--learner", "gen-3=a.pt", "--cards-path", "cards",
-         "--output-path", "o/d.jsonl"],
+        ["generate-draft-data", "--n-drafts", "1", "--scorer-checkpoint", "s.pt",
+         "--picker-checkpoint", "p.pt", "--cards-path", "cards", "--output-path", "o/d.jsonl",
+         "--logs-dir", _LOGS],
+        ["train-draft-agent", *_FRESH, "--checkpoint-dir", _RUN],
+        ["train-draft-agent-online", "--learner", "gen-3=a.pt", "--scorer-checkpoint", "s.pt",
+         "--cards-path", "cards", "--output-path", "o/d.jsonl", "--checkpoint-dir", _RUN],
     ])
     def test_every_writer_lists_the_embeddings_it_read(self, argv):
         args = _args(*argv, "--embeddings-path", _CACHE)

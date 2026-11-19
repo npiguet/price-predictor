@@ -89,7 +89,10 @@ def _supervisor(tmp_path, lines, *, registry, target=1, max_faults=5):
     config = GenerateDraftDataConfig(
         n_drafts=target,
         agent_mix=[("draft-agent", 1), ("forge-full", 1)],
+        scorer_checkpoint=tmp_path / "scorer.pt",
+        cards_path=tmp_path / "cards",
         output_path=tmp_path / "drafts.jsonl",
+        worker_log_dir=tmp_path / "logs",
         max_consecutive_faults=max_faults,
     )
     proc = _FakeProc(lines)

@@ -52,8 +52,6 @@ from price_predictor.infrastructure.torch_training import (
     policy_entropy,
 )
 
-CHECKPOINT_DIR = Path("models/draft/agent")
-
 _MISSING_WARN_CAP = 20
 
 # Degenerate-round guard (FR-023): below this reward std the standardisation
@@ -83,7 +81,7 @@ def _fmt_dur(seconds: float) -> str:
 _DEFAULT_MIX = "gen-3:5,gen-1:3,forge-r30:1,forge-r100:1"
 
 
-@dataclass
+@dataclass(kw_only=True)
 class TrainDraftAgentOnlineConfig:
     """Resolved inputs to the online GRPO loop (data-model §1).
 
@@ -110,14 +108,11 @@ class TrainDraftAgentOnlineConfig:
     mix: list[tuple[str, int]] = field(default_factory=list)
 
     # Deck building & reward (FR-005)
-    scorer_checkpoint: Path = field(
-        default_factory=lambda: Path("models/sealed/scorer/latest.pt"),
-    )
+    scorer_checkpoint: Path
     build_method: str = "greedy"
-    picker_checkpoint: Path = field(
-        default_factory=lambda: Path("models/sealed/picker/latest.pt"),
-    )
-    cards_path: Path = field(default_factory=lambda: Path("output/cardsfolder/"))
+    #: Required (by the CLI) only with ``build_method == "picker"``.
+    picker_checkpoint: Path | None = None
+    cards_path: Path
     #: The ``.npz`` embeddings' tree, laid out like ``cards_path``; None
     #: reads them beside the cards.
     embeddings_path: Path | None = None
@@ -144,14 +139,12 @@ class TrainDraftAgentOnlineConfig:
     seed: int = 42
 
     # Corpus & fault handling (FR-020, FR-031)
-    output_path: Path = field(
-        default_factory=lambda: Path("output/draft/drafts.jsonl"),
-    )
+    output_path: Path
     max_consecutive_faults: int = 5
 
     # Run directory (LAYOUT): checkpoints, and the worker's stderr log.
-    checkpoint_dir: Path = field(default_factory=lambda: CHECKPOINT_DIR)
-    worker_log_dir: Path = field(default_factory=lambda: Path("output/draft"))
+    checkpoint_dir: Path
+    worker_log_dir: Path
 
     @property
     def rollout_temperature(self) -> float | None:
@@ -296,6 +289,19 @@ def resolve_anchor(config: TrainDraftAgentOnlineConfig) -> str:
     return anchor
 
 
+def _check_picker_checkpoint(config: TrainDraftAgentOnlineConfig) -> None:
+    """``--build-method picker`` needs ``--picker-checkpoint``, and the file must exist."""
+    if config.build_method != "picker":
+        return
+    if config.picker_checkpoint is None:
+        raise OnlineConfigError("--picker-checkpoint is required by --build-method picker")
+    if not config.picker_checkpoint.exists():
+        raise OnlineConfigError(
+            f"picker checkpoint not found: {config.picker_checkpoint} "
+            "(required by --build-method picker)"
+        )
+
+
 def validate_config(config: TrainDraftAgentOnlineConfig) -> str:
     """Run every data-model §1.1 rule in order; return the resolved anchor label.
 
@@ -394,11 +400,7 @@ def validate_config(config: TrainDraftAgentOnlineConfig) -> str:
             f"scorer checkpoint not found: {config.scorer_checkpoint} (the "
             "frozen scorer produces every seat's deck_score, i.e. the reward)"
         )
-    if config.build_method == "picker" and not config.picker_checkpoint.exists():
-        raise OnlineConfigError(
-            f"picker checkpoint not found: {config.picker_checkpoint} "
-            "(required by --build-method picker)"
-        )
+    _check_picker_checkpoint(config)
 
     # Rule 8 — positive counts.
     for name, value in (

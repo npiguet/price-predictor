@@ -1,4 +1,4 @@
-"""JSONL corpus IO for ``output/draft/drafts.jsonl`` (FR-012, FR-013).
+"""JSONL corpus IO for a ``drafts.jsonl`` (FR-012, FR-013).
 
 One self-contained JSON record per line, append-only. Readers tolerate a
 trailing partial final line (supervisor crash mid-write); ``--resume`` counts

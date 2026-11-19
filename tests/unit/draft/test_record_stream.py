@@ -67,7 +67,11 @@ def _transcript(draft_id: str, agents: list[str] | None = None) -> str:
 
 
 def _config(**overrides) -> GenerateDraftDataConfig:
-    base = {"n_drafts": 0, "agent_mix": [("forge-full", 1)]}
+    base = {
+        "n_drafts": 0, "agent_mix": [("forge-full", 1)],
+        "scorer_checkpoint": Path("scorer.pt"), "cards_path": Path("cards"),
+        "output_path": Path("drafts.jsonl"), "worker_log_dir": Path("logs"),
+    }
     base.update(overrides)
     return GenerateDraftDataConfig(**base)
 

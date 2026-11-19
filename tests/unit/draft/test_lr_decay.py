@@ -120,10 +120,17 @@ def test_scheduler_folds_live_decay_multiplier() -> None:
 # Config validation
 # --------------------------------------------------------------------------- #
 
+
+def _config(**kwargs) -> TrainDraftAgentConfig:
+    return TrainDraftAgentConfig(
+        drafts_path=Path("d.jsonl"), cards_path=Path("cards"), checkpoint_dir=Path("run"),
+        **kwargs,
+    )
+
 def test_validate_lr_decay_accepts_disabled_and_valid() -> None:
-    _validate_lr_decay(TrainDraftAgentConfig())  # disabled: no-op
+    _validate_lr_decay(_config())  # disabled: no-op
     _validate_lr_decay(
-        TrainDraftAgentConfig(lr_decay_patience=10, patience=30, lr_decay_factor=0.1)
+        _config(lr_decay_patience=10, patience=30, lr_decay_factor=0.1)
     )
 
 
@@ -139,7 +146,7 @@ def test_validate_lr_decay_accepts_disabled_and_valid() -> None:
 )
 def test_validate_lr_decay_rejects_bad_combos(kwargs: dict) -> None:
     with pytest.raises(ValueError):
-        _validate_lr_decay(TrainDraftAgentConfig(**kwargs))
+        _validate_lr_decay(_config(**kwargs))
 
 
 # --------------------------------------------------------------------------- #
@@ -161,13 +168,13 @@ def _save_agent(tmp_path: Path, *, lr: float, decay_count: int) -> Path:
 
 def test_resume_inherits_decay_count_when_lr_unchanged(tmp_path: Path) -> None:
     path = _save_agent(tmp_path, lr=3e-5, decay_count=2)
-    cfg = TrainDraftAgentConfig(resume=path, lr=3e-5)  # same base LR
+    cfg = _config(resume=path, lr=3e-5)  # same base LR
     resume, _, _ = _resume_or_build(cfg, DraftAgentStore(), 8, 3, 15)
     assert resume.lr_decay_count == 2
 
 
 def test_resume_resets_decay_count_on_explicit_lr_override(tmp_path: Path) -> None:
     path = _save_agent(tmp_path, lr=3e-5, decay_count=2)
-    cfg = TrainDraftAgentConfig(resume=path, lr=1e-6)  # different base LR
+    cfg = _config(resume=path, lr=1e-6)  # different base LR
     resume, _, _ = _resume_or_build(cfg, DraftAgentStore(), 8, 3, 15)
     assert resume.lr_decay_count == 0

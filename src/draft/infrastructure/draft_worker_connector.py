@@ -34,7 +34,7 @@ class DraftWorkerConnector:
         external_agents: frozenset[str] | set[str] | None = None,
         run_id: str | None = None,
         required_agent: str | None = None,
-        log_dir: Path = Path("output/draft"),
+        log_dir: Path | None = None,
         xmx: str = "1200m",
     ) -> subprocess.Popen[str]:
         """Spawn the worker and return its Popen handle (stdout/stdin = text pipes).
@@ -54,7 +54,8 @@ class DraftWorkerConnector:
                 none (``-Ddraft.required.agent``), guaranteeing every played pod
                 carries at least one such seat (spec 021 FR-003). None ⇒ sampling
                 is byte-for-byte unchanged.
-            log_dir: directory for the per-run worker stderr log (FR-015).
+            log_dir: directory for the per-run worker stderr log (FR-015); required
+                with ``external_agents`` (the only workers that keep a log).
             xmx: JVM max heap.
 
         Raises:
@@ -79,6 +80,8 @@ class DraftWorkerConnector:
         # to a per-run log so FR-015's diagnostic log exists (gen-1 discarded it).
         stdin = subprocess.PIPE if external_agents else subprocess.DEVNULL
         if external_agents:
+            if log_dir is None:
+                raise ValueError("log_dir is required when external_agents is given")
             log_dir.mkdir(parents=True, exist_ok=True)
             stderr = open(log_dir / f"worker-{run_id or 'run'}.log", "a", encoding="utf-8")
         else:

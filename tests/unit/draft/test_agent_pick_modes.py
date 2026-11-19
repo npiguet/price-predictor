@@ -63,7 +63,9 @@ def test_sample_mode_is_reproducible_under_same_seed(tmp_path) -> None:
 
 def test_temperature_must_be_positive_with_sample_mode() -> None:
     args = build_parser().parse_args(
-        ["generate-draft-data", "--n-drafts", "1", "--cards-path", "cards", "--pick-mode", "sample",
+        ["generate-draft-data", "--n-drafts", "1", "--scorer-checkpoint", "s.pt",
+         "--picker-checkpoint", "p.pt", "--cards-path", "cards", "--output-path", "d.jsonl",
+         "--logs-dir", "logs", "--pick-mode", "sample",
          "--temperature", "0"]
     )
     assert run_generate_draft_data(args) == 2

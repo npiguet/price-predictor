@@ -15,7 +15,7 @@ torch/Forge); the surrounding builder/scorer wiring reuses ``sealed``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -94,19 +94,15 @@ def format_diagnostic(diag: BuilderDiagnostic) -> str:
 # Pool sourcing + build/score wiring (reuses sealed)
 # --------------------------------------------------------------------------- #
 
-@dataclass
+@dataclass(kw_only=True)
 class ValidateBuilderConfig:
     pools_from: Path | None = None
     fresh_pools: bool = False
     set_code: str | None = None
     n_pools: int = 300
-    scorer_checkpoint: Path = field(
-        default_factory=lambda: Path("models/sealed/scorer/latest.pt"),
-    )
-    picker_checkpoint: Path = field(
-        default_factory=lambda: Path("models/sealed/picker/latest.pt"),
-    )
-    cards_path: Path = field(default_factory=lambda: Path("output/cardsfolder/"))
+    scorer_checkpoint: Path
+    picker_checkpoint: Path
+    cards_path: Path
     #: The ``.npz`` embeddings' tree, laid out like ``cards_path``; None
     #: reads them beside the cards.
     embeddings_path: Path | None = None

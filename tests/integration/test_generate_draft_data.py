@@ -49,6 +49,7 @@ def test_generate_two_drafts_end_to_end(tmp_path: Path) -> None:
         picker_checkpoint=_PICKER,
         cards_path=_CARDS,
         output_path=out_path,
+        worker_log_dir=tmp_path / "logs",
     )
 
     count = GenerateDraftDataSupervisor(config).run()

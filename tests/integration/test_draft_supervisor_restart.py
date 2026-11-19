@@ -59,7 +59,10 @@ def test_supervisor_restarts_until_target(tmp_path: Path) -> None:
     config = GenerateDraftDataConfig(
         n_drafts=5,
         agent_mix=[("forge-full", 1)],
+        scorer_checkpoint=tmp_path / "scorer.pt",
+        cards_path=tmp_path / "cards",
         output_path=out_path,
+        worker_log_dir=tmp_path / "logs",
     )
 
     # Each launch yields a worker emitting 2 drafts then crashing. Mix in noise

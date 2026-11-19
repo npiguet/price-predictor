@@ -9,7 +9,9 @@ from draft.infrastructure.cli import build_parser
 
 
 def parse(*argv: str):
-    return build_parser().parse_args(["play-draft-games", *argv])
+    return build_parser().parse_args(
+        ["play-draft-games", "--drafts-path", "d.jsonl", "--output-path", "g.txt", *argv]
+    )
 
 
 @pytest.mark.parametrize("workers", ["0", "13", "-2"])

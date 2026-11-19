@@ -35,7 +35,7 @@ Reused unchanged
 
 | Input | Meaning |
 |---|---|
-| `--drafts-path` | Corpus to sample from; default `output/draft/drafts.jsonl` |
+| `--drafts-path` | Corpus to sample from; required |
 | `--run-id` | Optional, repeatable; restricts sampling to records with a matching `run_id`. Absent, the whole corpus is used |
 
 The `drafts.jsonl` format is specified in
@@ -105,7 +105,7 @@ be compared under two builders.
 
 # 7. Output
 
-`--output-path`, default `output/draft/draft-games.txt`. Append-only, in the sealed
+`--output-path`, required. Append-only, in the sealed
 match-outcome format, specified in
 [`2026-03-28-sealed-deck-picker.md`](2026-03-28-sealed-deck-picker.md) § Phase 0 Step 4.
 One row per match.
@@ -125,8 +125,8 @@ simulates each match at shorter lengths than it was played, which carries inform
 
 ```
 python -m draft play-draft-games
-    [--drafts-path PATH] [--run-id ID]...
-    [--output-path PATH]
+    --drafts-path PATH [--run-id ID]...
+    --output-path PATH
     [--n-pairings N]
     [--best-of N]
     [--include-mirrors]
