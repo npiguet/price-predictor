@@ -11,7 +11,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.BiConsumer;
 
 /**
  * A <b>damage-step probe</b>: a fork that re-runs one combat with a keyword
@@ -36,20 +35,11 @@ final class DamageStepProbe {
     private final Game game;
     private final CollectorContext context;
     private final ForkBudget budget;
-    /** Where a written branch's dropped events go: the live game's counts, under a fork kind. */
-    private final BiConsumer<String, DroppedEvents> countDropped;
 
-    DamageStepProbe(Game game, CollectorContext context, ForkBudget budget,
-                    BiConsumer<String, DroppedEvents> countDropped) {
+    DamageStepProbe(Game game, CollectorContext context, ForkBudget budget) {
         this.game = game;
         this.context = context;
         this.budget = budget;
-        this.countDropped = countDropped;
-    }
-
-    /** A probe whose branches' dropped events are counted nowhere: no live recording behind it. */
-    DamageStepProbe(Game game, CollectorContext context, ForkBudget budget) {
-        this(game, context, budget, (kind, dropped) -> { });
     }
 
     /** A refusal's reason: the copy holds no combat to deal. */
@@ -115,7 +105,7 @@ final class DamageStepProbe {
                     // carries the counter across (GameCopier hands it to
                     // devModeSet). Read here so the branch remembers the step it
                     // belongs to.
-                    liveTurn(), verified.copyDropped(), dealt.dropped());
+                    liveTurn(), verified.copyDropped());
         }, (verified, held) -> held);
     }
 
@@ -123,7 +113,7 @@ final class DamageStepProbe {
      * What a probe's damage step did: the fork's combat, read as the observed
      * record reads it, and the events the bus published.
      */
-    private record ProbedStep(CombatShape combat, List<EffectEvent> events, DroppedEvents dropped) {
+    private record ProbedStep(CombatShape combat, List<EffectEvent> events) {
     }
 
     /**
@@ -175,7 +165,7 @@ final class DamageStepProbe {
             }
             return null;
         });
-        return new ProbedStep(shape, sink.events(), sink.dropped());
+        return new ProbedStep(shape, sink.events());
     }
 
     /**
@@ -252,18 +242,17 @@ final class DamageStepProbe {
     record HeldProbe(
             String keyword, String carrier, String state,
             List<EffectEvent> events, String actor, CombatShape combat,
-            DamageStep substep, int turn, Map<String, Integer> copyDropped, DroppedEvents dropped) {
+            DamageStep substep, int turn, Map<String, Integer> copyDropped) {
 
         HeldProbe {
             copyDropped = copyDropped == null ? Map.of() : Map.copyOf(copyDropped);
-            dropped = dropped == null ? new DroppedEvents() : dropped;
         }
 
         /** A branch whose copy left nothing out. */
         HeldProbe(String keyword, String carrier, String state,
                   List<EffectEvent> events, String actor, CombatShape combat,
                   DamageStep substep, int turn) {
-            this(keyword, carrier, state, events, actor, combat, substep, turn, Map.of(), null);
+            this(keyword, carrier, state, events, actor, combat, substep, turn, Map.of());
         }
 
         /**
@@ -335,7 +324,6 @@ final class DamageStepProbe {
                 .actor(held.actor())
                 .state(held.state())
                 .payload(held.payload()));
-        countDropped.accept(KIND, held.dropped());
         return true;
     }
 

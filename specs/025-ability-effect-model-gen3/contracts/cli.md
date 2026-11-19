@@ -127,7 +127,7 @@ Every invariant prints the number it measured, passed or not.
 | `--playability-rate P` | 0.01 (was 0.1) | stage 1 of decision sampling (FR-033b): the share of enumerated decision candidates evaluated; a dropped one is not evaluated for the record |
 | `--zone-candidate-rate R` | 0.0001 | share of zone-bucket candidates written, both stages together |
 | `--plain-candidate-rate R` | 0.001 | share of plain-bucket candidates written, both stages together |
-| `--count-dropped-events` | off | count events arriving with no open record, by event type and engine phase; a kept protection or directed fork's, a written forced resolution's and a written probe branch's under the phase prefixed with its kind (`protection:main1`, `directed:`, `intervention:`, `probe:`); print at the end |
+| `--count-dropped-events` | off | count events arriving with no open record, by event type and engine phase; a kept protection or directed fork's and a written forced resolution's under the phase prefixed with its kind (`protection:main1`, `directed:`, `intervention:`); a probe files every event it hears, so it has no count; print at the end |
 | `--max-records-per-game N` | 5000 | records one game may write, its forks' included; past it the worker withholds the rest, counts them and prints one line naming the game, the turn and the acting card of the most frequent withheld record (FR-041a); below 1 is refused |
 | `--directed-fork-rules LIST` | none | comma-separated rule ids |
 | `--directed-forks-per-game N` | 2 | directed-fork budget per game, beside the existing fork budgets |

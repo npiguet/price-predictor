@@ -157,7 +157,7 @@ public final class GameRecording implements AutoCloseable {
                 : Optional.empty();
         this.probes = forking
                 ? Optional.of(new ProbeScheduler(
-                        game, gameId, caps, new DamageStepProbe(game, forkContext, budget, this::countForkDropped)))
+                        game, gameId, caps, new DamageStepProbe(game, forkContext, budget)))
                 : Optional.empty();
         // A probe forks before the damage step and cannot know which combat
         // record it mirrors until that record is written.
