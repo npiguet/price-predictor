@@ -106,6 +106,19 @@ def load_scenarios(rules_dir: Path = DEFAULT_RULES_DIR) -> ScenarioCatalogue:
     return ScenarioCatalogue(tuple(scenarios))
 
 
+def load_registered_variants(rules_dir: Path = DEFAULT_RULES_DIR) -> dict[str, frozenset[str]]:
+    """``rule -> variant labels`` the Java registry registers, from
+    ``rules_dir/directed-fork-variants.tsv`` (a header line, then one tab-separated
+    rule and label per line). ``DirectedRulesContractTest`` pins the file equal to
+    the registry, which Python cannot see."""
+    lines = Path(rules_dir, "directed-fork-variants.tsv").read_text(encoding="utf-8").splitlines()
+    registered: dict[str, set[str]] = {}
+    for line in lines[1:]:
+        rule, label = line.split("	")
+        registered.setdefault(rule, set()).add(label)
+    return {rule: frozenset(labels) for rule, labels in registered.items()}
+
+
 def _heads_lines(rules_dir: Path) -> list[dict[str, Any]]:
     """Every heads line; raises ValueError on a rule id given two lines."""
     lines: list[dict[str, Any]] = []

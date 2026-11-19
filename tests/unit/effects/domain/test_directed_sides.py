@@ -22,7 +22,7 @@ from effects.domain.directed_sides import (
 )
 from effects.domain.rule_catalogue import Polarity
 from effects.infrastructure.record_codec import record_from_dict
-from effects.infrastructure.rules_catalogue_io import load_scenarios
+from effects.infrastructure.rules_catalogue_io import load_registered_variants, load_scenarios
 
 _PLAYED = Path(__file__).parents[3] / "fixtures" / "effects" / "directed-702.19ef-combats.jsonl"
 RULES = Path(__file__).parents[4] / "rules"
@@ -51,16 +51,42 @@ def catalogue():
     return load_scenarios(RULES)
 
 
+@pytest.fixture(scope="module")
+def registered():
+    """The real registry's pairs, and 702.19e's plain_trample: the fixture's
+    played rule, in the catalogue but not in the Java registry."""
+    return {**load_registered_variants(RULES), "702.19e": frozenset({"plain_trample"})}
+
+
 class TestForkableSides:
-    def test_a_rule_s_forkable_variants_are_the_classified_non_base_ones(self, catalogue):
-        sides = forkable_sides(catalogue, ("702.19e", "702.19f"))
+    def test_a_rule_s_forkable_variants_are_the_registered_classified_ones(
+        self, catalogue, registered,
+    ):
+        sides = forkable_sides(catalogue, ("702.19e", "702.19f"), registered)
         assert sides == {
             "702.19e": {"plain_trample": Polarity.DOES_NOT_FIRE},
             "702.19f": {"trample_over_planeswalkers": Polarity.DOES_NOT_FIRE},
         }
 
-    def test_a_rule_the_catalogue_lacks_has_no_variant(self, catalogue):
-        assert forkable_sides(catalogue, ("999.99z",)) == {"999.99z": {}}
+    def test_a_rule_the_catalogue_lacks_has_no_variant(self, catalogue, registered):
+        assert forkable_sides(catalogue, ("999.99z",), registered) == {"999.99z": {}}
+
+    def test_a_rule_counts_only_the_side_its_registered_variant_makes(self, catalogue, registered):
+        """702.19c's catalogue lists plain_trample (does_not_fire) and
+        thrasta_in_the_dreadmaws_place (fires); only the second is registered."""
+        sides = forkable_sides(catalogue, ("702.19c",), registered)
+        assert sides == {"702.19c": {"thrasta_in_the_dreadmaws_place": Polarity.FIRES}}
+        assert forkable_sides(catalogue, ("702.19c",), {}) == {"702.19c": {}}
+
+    def test_the_catalogue_unregistered_side_is_left_out_of_the_counts(self, catalogue):
+        both = forkable_sides(catalogue, ("702.19c",),
+                              {"702.19c": {"plain_trample", "thrasta_in_the_dreadmaws_place"}})
+        assert set(both["702.19c"].values()) == {Polarity.FIRES, Polarity.DOES_NOT_FIRE}
+
+    def test_every_listed_rule_has_a_registered_side(self, catalogue, registered):
+        listed = (RULES / "directed-fork-rules.txt").read_text(encoding="utf-8").split()
+        sides = forkable_sides(catalogue, listed, registered)
+        assert [rule for rule, variants in sides.items() if not variants] == []
 
 
 class TestDirectedForkGames:
@@ -122,6 +148,15 @@ class TestProbabilities:
         got = directed_rule_probabilities(self.SIDES, self.forks("702.19e", 40), 100)
         assert got["702.19e"] == directed_fork_probability([40], 100) == pytest.approx(0.6)
         assert got["702.19f"] == 1.0
+
+    def test_a_rule_with_one_registered_side_reaches_zero_when_full(
+        self, catalogue, registered,
+    ):
+        sides = forkable_sides(catalogue, ("702.19c",), registered)
+        found = DirectedForkGames()
+        found.games = {("702.19c", "thrasta_in_the_dreadmaws_place"): {f"g{n}" for n in range(100)}}
+        assert directed_rule_probabilities(sides, DirectedForkGames(), 100) == {"702.19c": 1.0}
+        assert directed_rule_probabilities(sides, found, 100) == {"702.19c": 0.0}
 
     def test_a_rule_at_its_count_is_at_zero(self):
         got = directed_rule_probabilities(self.SIDES, self.forks("702.19e", 100), 100)

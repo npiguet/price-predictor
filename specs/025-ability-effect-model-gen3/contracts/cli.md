@@ -441,7 +441,7 @@ two decks). Before its first round and after each one it sets every listed rule'
 from the directed forks its shards hold, counting `--steer-floor` forks per side (the `count` of
 `effects.domain.directed_fork_probabilities.directed_fork_probability`): a rule's forks are the games holding a record
 with `directed` set and `aimed_at` the rule (no cut game), its sides are the `fires` and `does_not_fire`
-polarities of the variants the catalogue classifies into an operation, and a fork's side is its variant's polarity
+polarities of the variants the catalogue classifies into an operation and `rules/directed-fork-variants.tsv` lists as registered, and a fork's side is its variant's polarity
 (`other` counts for no side; a rule with no such variant keeps `--directed-fork-probability`). A fresh run starts every rule at 1; the
 round's line is preceded by `directed fork probabilities: <rule> <p> (<shorter side>/<count>)`, the workers of the next round receive
 `effect.directed.probability.<rule>`, and `run.json` keeps the last as `directed_rule_probabilities`. A protection keyword line of a source script swaps its quality for another of

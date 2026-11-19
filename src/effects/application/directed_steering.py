@@ -32,9 +32,14 @@ class DirectedSteering:
         rules = config.caps.directed_fork_rules
         if not rules:
             return cls()
-        from effects.infrastructure.rules_catalogue_io import load_scenarios
+        from effects.infrastructure.rules_catalogue_io import (
+            load_registered_variants,
+            load_scenarios,
+        )
 
-        return cls(forkable_sides(load_scenarios(config.rules_dir), rules), config.steer_floor)
+        sides = forkable_sides(load_scenarios(config.rules_dir), rules,
+                               load_registered_variants(config.rules_dir))
+        return cls(sides, config.steer_floor)
 
     def steer(self, supervisor: CollectorSupervisor, forks: DirectedForkGames) -> None:
         """Hand ``supervisor`` the probabilities ``forks`` give, for the

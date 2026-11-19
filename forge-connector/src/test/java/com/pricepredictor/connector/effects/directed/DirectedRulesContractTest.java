@@ -106,6 +106,46 @@ class DirectedRulesContractTest {
         return wrong;
     }
 
+    /** The list the registry's pairs are committed in, which the Python collector reads for each rule's sides. */
+    private static final Path VARIANTS = Path.of("..", "rules", "directed-fork-variants.tsv");
+
+    /** Every registered (rule id, variant label) pair as a list line, sorted. */
+    static List<String> registeredPairs(DirectedRules registry) {
+        return registry.rules().stream()
+                .flatMap(rule -> rule.variants().keySet().stream().map(label -> rule.rule() + "	" + label))
+                .sorted().toList();
+    }
+
+    /** How {@code listed} differs from {@code registered}, one line each; empty when they are equal. */
+    static List<String> listDifferences(List<String> registered, List<String> listed) {
+        List<String> wrong = new ArrayList<>();
+        registered.stream().filter(pair -> !listed.contains(pair))
+                .forEach(pair -> wrong.add("registered, not listed: " + pair.replace('	', ' ')));
+        listed.stream().filter(pair -> !registered.contains(pair))
+                .forEach(pair -> wrong.add("listed, not registered: " + pair.replace('	', ' ')));
+        return wrong;
+    }
+
+    /**
+     * {@code rules/directed-fork-variants.tsv} is the registered pairs, so
+     * Python, which cannot see the registry, counts a rule's sides over the
+     * variants a fork can make.
+     */
+    @Test
+    void theVariantsListIsTheRegistry() throws IOException {
+        List<String> lines = Files.readAllLines(VARIANTS, StandardCharsets.UTF_8);
+        assertEquals("rule	variant", lines.get(0));
+        List<String> listed = lines.subList(1, lines.size());
+        assertEquals(List.of(), listDifferences(registeredPairs(DirectedRules.registered()), listed));
+        assertEquals(listed.stream().sorted().toList(), listed, "the list is not sorted");
+    }
+
+    @Test
+    void aVariantMissingFromTheListIsNamed() {
+        assertEquals(List.of("registered, not listed: 704.5f counters", "listed, not registered: 704.5f gone"),
+                listDifferences(List.of("704.5f	counters"), List.of("704.5f	gone")));
+    }
+
     private static DirectedRule rule(String rule, String scenario, String variant, ForkOperation operation) {
         Application application = new Application(operation, binding -> new TapOperation(binding.card("x"), true));
         return DirectedRule.of(rule, scenario, live -> Optional.empty(), variant, application);

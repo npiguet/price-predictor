@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
@@ -47,10 +48,22 @@ def bolt_record(game: str):
     )
 
 
+def rules_dir(tmp_path: Path) -> Path:
+    """The real catalogue with 702.19e's plain_trample registered beside the
+    real registry's pairs: the fixture's played rule is in the catalogue only."""
+    target = tmp_path / "rules"
+    if not target.exists():
+        shutil.copytree(RULES / "scenarios", target / "scenarios")
+        listed = (RULES / "directed-fork-variants.tsv").read_text(encoding="utf-8")
+        (target / "directed-fork-variants.tsv").write_text(
+            listed + "702.19e\tplain_trample\n", encoding="utf-8")
+    return target
+
+
 def config(tmp_path: Path, *rules: str, **overrides) -> CollectVariantsConfig:
     return CollectVariantsConfig(
         effect_records=tmp_path / "records", decks_per_round=4, workers=1,
-        rules_dir=RULES, variant_games=2, steer_floor=2,
+        rules_dir=rules_dir(tmp_path), variant_games=2, steer_floor=2,
         caps=CollectionCaps(aimed_at=rules, directed_fork_rules=rules),
         **overrides,
     )

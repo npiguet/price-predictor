@@ -5,8 +5,10 @@ A directed fork's records carry ``aimed_at = [rule]`` and ``directed =
 {variant, operation}``, and a rule forks at most once per game, so a rule's
 kept forks are the distinct games holding such a record. A fork's side is the
 polarity its variant has in the catalogue. The sides of a rule are the
-polarities of the variants the catalogue classifies into an operation: the
-side the live games already show is not made by a fork, and is not counted.
+polarities of its registered variants that the catalogue classifies into an
+operation: a catalogue variant the Java registry does not register is never
+forked, so its side would never fill, and the side the live games already show
+is not made by a fork and is not counted.
 """
 
 from __future__ import annotations
@@ -25,9 +27,10 @@ COUNTED_SIDES = frozenset({Polarity.FIRES, Polarity.DOES_NOT_FIRE})
 
 def forkable_sides(
     catalogue: ScenarioCatalogue, rules: Iterable[str],
+    registered: Mapping[str, Collection[str]],
 ) -> dict[str, dict[str, Polarity]]:
     """``rule -> {variant label -> polarity}`` over each rule's non-base
-    variants classified into an operation."""
+    variants classified into an operation and registered for it."""
     by_rule = catalogue.by_rule()
     return {
         rule: {
@@ -35,6 +38,7 @@ def forkable_sides(
             for scenario in by_rule.get(rule, ())
             for variant in scenario.variants[1:]
             if isinstance(variant.operation, ForkOperation)
+            and variant.label in registered.get(rule, ())
         }
         for rule in rules
     }

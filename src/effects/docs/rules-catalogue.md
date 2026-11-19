@@ -23,7 +23,7 @@ Rules to respect when editing `rules/`, a detector family or rule tagging, and w
 ## Commands to run after a change
 
 - `scripts/rules_catalogue.py validate` checks the declarations.
-- `scripts/rules_catalogue.py directed-rules --counts <counts> --cards-folder <gen>/converted/cardsfolder` writes `rules/directed-fork-rules.txt`, `rules/coverage-wording-cards.txt` and `rules/directed-fork-counts.json`, the counts the list is decided from, so `test_rules_catalogue.py` can regenerate the list from checked-in files. `--probabilities-output FILE` also writes each listed rule's directed-fork probability from the same counts (`docs/forks.md` § Directed forks).
+- `scripts/rules_catalogue.py directed-rules --counts <counts> --cards-folder <gen>/converted/cardsfolder` writes `rules/directed-fork-rules.txt`, `rules/coverage-wording-cards.txt` and `rules/directed-fork-counts.json`, the counts the list is decided from, so `test_rules_catalogue.py` can regenerate the list from checked-in files. `rules/directed-fork-variants.tsv` is the registry's pairs, kept by hand (`docs/forks.md` § Registering a directed rule). `--probabilities-output FILE` also writes each listed rule's directed-fork probability from the same counts (`docs/forks.md` § Directed forks).
 - `scripts/rules_catalogue.py gen3-fields` recomputes the learnable rules after a map rerun.
 - `scripts/rule_entity_audit.py` measures, per rule and output, how often the outputs are supervised at each role's entities.
 
