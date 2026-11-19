@@ -47,9 +47,8 @@ class TrainScorerConfig:
     embeddings_path: Path | None = None
     resume: Path | None = None
     scorer_checkpoint: Path | None = None
-    encoder_checkpoint: Path = field(
-        default_factory=lambda: Path("models/sealed/encoder/latest.pt"),
-    )
+    #: Where a fresh Phase B run takes its encoder weights; None on Phase A.
+    encoder_checkpoint: Path | None = None
     epochs: int = 100
     batch_size: int = 64
     lr: float = 1e-5
@@ -561,6 +560,7 @@ def _build_phase_b_encoder(
     else:
         encoder, max_seq_len = _load_encoder_dispatch(config.encoder_checkpoint)
 
+    assert config.encoder_checkpoint is not None  # Phase B always names its encoder
     vocab_path = config.encoder_checkpoint.parent / "vocab.txt"
     tokenizer = load_tokenizer(vocab_path)
     return encoder, tokenizer, max_seq_len

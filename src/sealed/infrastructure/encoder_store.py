@@ -39,7 +39,7 @@ def _timestamp() -> str:
 
 
 class SealedEncoderStore:
-    """Save and load sealed encoder checkpoints under ``models/sealed/encoder/``."""
+    """Save and load sealed encoder checkpoints in a training run directory."""
 
     def save_encoder(
         self,

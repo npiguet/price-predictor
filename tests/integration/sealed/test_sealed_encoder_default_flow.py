@@ -1,4 +1,4 @@
-"""Integration test for the default-flipped encode-cards path.
+"""Integration test for encode-cards with a sealed encoder.
 
 Creates a tiny sealed encoder via ``SealedEncoderStore.save_encoder`` (no
 training), runs ``encode-cards`` against a tiny corpus, and verifies the
@@ -61,6 +61,8 @@ def test_sealed_encoder_default_flow(tmp_path: Path):
         args = parser.parse_args([
             "encode-cards",
             "--cards-path", str(cards_path),
+            "--encoder-checkpoint", str(latest),
+            "--vocab-path", str(vocab_path),
         ])
         rc = run_encode_cards(args)
         assert rc == 0

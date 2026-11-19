@@ -80,6 +80,7 @@ def test_train_encoder_smoke(tmp_path: Path, capsys):
             cards_folder=cards_folder,
             vocab_path=vocab_path,
             model_output_dir=model_output,
+            win_rates_path=model_output / "cards-win-rates.txt",
             batch_size=4,
             epochs=3,
             lr=1e-3,
@@ -121,7 +122,7 @@ def test_train_encoder_smoke(tmp_path: Path, capsys):
         assert loaded_cfg.n_layers == 2
         assert loaded_cfg.n_pool_queries == 2
 
-        win_rates = tmp_path / "output" / "sealed" / "cards-win-rates.txt"
+        win_rates = model_output / "cards-win-rates.txt"
         assert win_rates.exists(), "cards-win-rates.txt must be written"
         rows = win_rates.read_text(encoding="utf-8").splitlines()
         assert len(rows) >= 2  # header + at least one card

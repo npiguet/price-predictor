@@ -75,7 +75,7 @@
 # host. The container's WORKDIR is /app, so the in-image paths are
 # /app/output and /app/models.
 #
-# Default invocation runs `python -m sealed match-outcomes --workers 8`
+# Default invocation runs `python -m sealed match-outcomes --workers 8 --outcomes-dir /app/output/sealed`
 # (the ENTRYPOINT + CMD set at the bottom of this Dockerfile). Run from a
 # host directory that contains output/ and models/ subdirs:
 #
@@ -99,13 +99,13 @@
 #
 # Override the worker count (or any other match-outcomes flag) by passing
 # args after the image name — they recommplace CMD, not ENTRYPOINT:
-#       docker run --rm -v ... price-predictor --workers 4 --best-of 5
+#       docker run --rm -v ... price-predictor --workers 4 --best-of 5 --outcomes-dir /app/output/sealed
 #
 # Run a different sealed/price_predictor subcommand by overriding the
 # entrypoint (same syntax on all shells, modulo the line-continuation
 # character — `\`, ` `` `, or `^` as shown above):
 #       docker run --rm -v ... --entrypoint python price-predictor \
-#           -m sealed train-scorer --epochs 50
+#           -m sealed train-scorer --outcomes-path ... --cards-path ... --checkpoint-dir ... --epochs 50
 ###############################################################################
 
 ###############################################################################
@@ -168,4 +168,4 @@ RUN pip install --no-cache-dir \
 VOLUME ["/app/output", "/app/models"]
 
 ENTRYPOINT ["python", "-m", "sealed", "match-outcomes"]
-CMD ["--workers", "8"]
+CMD ["--workers", "8", "--outcomes-dir", "/app/output/sealed"]

@@ -48,6 +48,7 @@ def _args(**overrides) -> Namespace:
         "side_b_decks": None,
         "best_of": 7,
         "exclude_cards": None,
+        "outcomes_dir": "out",
     }
     defaults.update(overrides)
     return Namespace(**defaults)
@@ -167,12 +168,13 @@ class TestMatchOutcomesBestOf:
 
 
 def _train_args(**overrides) -> Namespace:
-    """Build a Namespace with every train-scorer flag at its sentinel default."""
+    """Build a Namespace with every train-scorer flag at its sentinel default (the
+    three required paths given)."""
     defaults: dict[str, object | None] = {
-        "outcomes_path": None,
-        "cards_path": None,
+        "outcomes_path": "o.txt",
+        "cards_path": "cards",
         "embeddings_path": None,
-        "checkpoint_dir": None,
+        "checkpoint_dir": "run",
         "resume": None,
         "scorer_checkpoint": None,
         "encoder_checkpoint": None,
@@ -345,8 +347,8 @@ def _encode_cards_args(**overrides) -> Namespace:
     defaults: dict[str, object | None] = {
         "encoder_checkpoint": None,
         "scorer_checkpoint": None,
-        "vocab_path": "models/price-predictor/transformer/vocab.txt",
-        "cards_path": "output/cardsfolder/",
+        "vocab_path": "vocab.txt",
+        "cards_path": "cards",
         "embeddings_path": None,
         "clean": False,
     }

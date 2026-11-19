@@ -7,9 +7,9 @@ from sealed.infrastructure.cli import build_parser
 
 class TestBuildVocabArgs:
     def test_defaults(self):
-        ns = build_parser().parse_args(["build-vocab"])
-        assert ns.cards_folder == "output/cardsfolder/"
-        assert ns.vocab_path == "models/sealed/encoder/vocab.txt"
+        ns = build_parser().parse_args(
+            ["build-vocab", "--cards-folder", "cards", "--vocab-path", "vocab.txt"],
+        )
         assert ns.target_size == 5000
 
     def test_overrides(self):

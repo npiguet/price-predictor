@@ -2,8 +2,8 @@
 ``build_vocabulary`` utility.
 
 Per FR-008, the sealed vocabulary file lives at
-``models/sealed/encoder/vocab.txt`` and is independent from
-``models/price-predictor/transformer/vocab.txt``: writing one MUST NOT
+its ``--vocab-path`` and is independent from
+the price-predictor vocabulary: writing one MUST NOT
 modify the other. Per FR-009 / Decision D-1, ``--target-size`` is a
 post-hoc truncation of the corpus-frequency vocab; seeded special and
 domain tokens are always preserved.
@@ -23,12 +23,8 @@ from price_predictor.infrastructure.tokenizer_store import save_vocabulary
 
 @dataclass
 class BuildVocabConfig:
-    cards_folder: Path = field(
-        default_factory=lambda: Path("output/cardsfolder/"),
-    )
-    vocab_path: Path = field(
-        default_factory=lambda: Path("models/sealed/encoder/vocab.txt"),
-    )
+    cards_folder: Path
+    vocab_path: Path
     target_size: int = 5000
     printings_path: Path = field(
         default_factory=lambda: Path("resources/AllPrintings.json"),

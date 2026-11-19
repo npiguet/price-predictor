@@ -91,7 +91,7 @@ def test_a_bad_file_exits_1_before_any_supervisor(tmp_path, monkeypatch, capsys)
     monkeypatch.setattr(module, "MatchOutcomeSupervisor", no_supervisor)
     path = _write(tmp_path, _document({"999.9z": {"fires": 0}}))
     args = build_parser().parse_args(
-        ["match-outcomes", "--directed-fork-probabilities", str(path)])
+        ["match-outcomes", "--outcomes-dir", "out", "--directed-fork-probabilities", str(path)])
     assert run_match_outcomes(args) == 1
     assert "999.9z" in capsys.readouterr().err
 
@@ -101,7 +101,7 @@ def test_a_two_sided_rule_exits_1_at_start(tmp_path, monkeypatch, capsys):
 
     path = _write(tmp_path, _document({"704.5f": {"fires": 3, "does_not_fire": 5}}))
     args = build_parser().parse_args(
-        ["match-outcomes", "--directed-fork-rules", "704.5f",
+        ["match-outcomes", "--outcomes-dir", "out", "--directed-fork-rules", "704.5f",
          "--directed-fork-probabilities", str(path)])
     assert run_match_outcomes(args) == 1
     assert "two sides" in capsys.readouterr().err

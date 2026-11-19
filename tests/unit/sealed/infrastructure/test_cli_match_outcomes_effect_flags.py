@@ -28,9 +28,12 @@ CARDS_FOLDER = ("--cards-folder", "output/effects/gen3/converted/cardsfolder/")
 
 
 def parse(*argv: str):
-    """The flags as typed, a collecting run given its converted tree."""
+    """The flags as typed, a collecting run given its converted tree and a plain
+    run (neither ``--effect-records`` nor ``--outcomes-dir``) a directory for its corpora."""
     if "--effect-records" in argv and "--cards-folder" not in argv:
         argv = (*argv, *CARDS_FOLDER)
+    if "--effect-records" not in argv and "--outcomes-dir" not in argv:
+        argv = (*argv, "--outcomes-dir", "sealed/plain")
     return build_parser().parse_args(argv)
 
 
@@ -418,14 +421,12 @@ class TestTheWorkerStopFlags:
 class TestWhereTheTwoSealedCorporaGo:
     """``--outcomes-dir`` names the directory ``match-outcomes.txt`` and
     ``cards-played.txt`` are appended to. Unset, a run collecting effect
-    records keeps them in its own run directory, and a plain run appends to
-    ``output/sealed/`` exactly as it always did."""
+    records keeps them in its own run directory; a plain run must name one."""
 
     def test_it_has_no_default(self):
-        assert parse("match-outcomes").outcomes_dir is None
+        assert build_parser().parse_args(["match-outcomes"]).outcomes_dir is None
 
     @pytest.mark.parametrize(("argv", "expected"), [
-        ((), "output/sealed/match-outcomes.txt"),
         (("--effect-records", "records/run"), "records/run/match-outcomes.txt"),
         (("--outcomes-dir", "sealed/run"), "sealed/run/match-outcomes.txt"),
         (("--effect-records", "records/run", "--outcomes-dir", "sealed/run"),
@@ -437,7 +438,6 @@ class TestWhereTheTwoSealedCorporaGo:
         assert self._made(monkeypatch, *argv)["output_path"] == Path(expected)
 
     @pytest.mark.parametrize(("argv", "expected"), [
-        ((), "output/sealed"),
         (("--outcomes-dir", "sealed/run"), "sealed/run"),
         (("--effect-records", "records/run"), "records/run"),
         (("--effect-records", "records/run", "--outcomes-dir", "sealed/run"), "records/run"),

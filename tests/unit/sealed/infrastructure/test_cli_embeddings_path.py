@@ -15,11 +15,13 @@ _CACHE = "output/sealed/gen1/cache/2026-11-15-encoder"
 #: Each reader: its argv (without the flag), the use case run, its run function.
 _READERS = {
     "build-decks": (
-        ["build-decks", "--pools-path", "p.txt", "--label", "x", "--cards-path", _CARDS],
+        ["build-decks", "--pools-path", "p.txt", "--label", "x", "--cards-path", _CARDS,
+         "--checkpoint", "s.pt", "--output", "d.txt"],
         "sealed.application.build_decks.BuildDecksUseCase", "run_build_decks",
     ),
     "pick-decks": (
-        ["pick-decks", "--pools-path", "p.txt", "--label", "x", "--cards-path", _CARDS],
+        ["pick-decks", "--pools-path", "p.txt", "--label", "x", "--cards-path", _CARDS,
+         "--picker-checkpoint", "p.pt", "--output", "d.txt"],
         "sealed.application.pick_decks.PickDecksUseCase", "run_pick_decks",
     ),
     "evaluate-scorer": (
@@ -27,7 +29,8 @@ _READERS = {
         "sealed.application.evaluate_scorer.EvaluateScorerUseCase", "run_evaluate_scorer",
     ),
     "train-scorer": (
-        ["train-scorer", "--cards-path", _CARDS],
+        ["train-scorer", "--cards-path", _CARDS, "--outcomes-path", "o.txt",
+         "--checkpoint-dir", "run"],
         "sealed.application.train_scorer.TrainScorerUseCase", "run_train_scorer",
     ),
 }
@@ -63,7 +66,8 @@ def test_train_picker_reads_the_embeddings_where_the_flag_says(monkeypatch, tmp_
     config = _config_of(
         monkeypatch,
         ["train-picker", "--pools-path", "p.txt", "--scorer-checkpoint", str(scorer),
-         "--cards-path", _CARDS, "--embeddings-path", _CACHE],
+         "--cards-path", _CARDS, "--embeddings-path", _CACHE,
+         "--checkpoint-dir", "run"],
         "sealed.application.train_picker.TrainPickerUseCase", "run_train_picker",
     )
     assert config.embeddings_path == Path(_CACHE)
@@ -77,7 +81,6 @@ def test_a_resumed_trainer_keeps_the_embeddings_it_ran_on():
     resolved = resolve_resumable_args(
         args, flag_names=cli._RESUMABLE_FLAG_NAMES, config_cls=TrainScorerConfig,
         path_fields=cli._PATH_FIELDS, resumed_config={"embeddings_path": _CACHE},
-        required_defaults=cli._REQUIRED_FIELD_CLI_DEFAULTS,
     )
     assert resolved["embeddings_path"] == Path(_CACHE)
     assert "embeddings_path" in cli._RESUMABLE_PICKER_FLAG_NAMES
@@ -86,7 +89,10 @@ def test_a_resumed_trainer_keeps_the_embeddings_it_ran_on():
 
 class TestEncodeCardsWritesWhereTheFlagSays:
     def _args(self, *extra):
-        return cli.build_parser().parse_args(["encode-cards", "--cards-path", _CARDS, *extra])
+        return cli.build_parser().parse_args([
+            "encode-cards", "--cards-path", _CARDS, "--vocab-path", "vocab.txt",
+            "--encoder-checkpoint", "e.pt", *extra,
+        ])
 
     def test_the_run_directory_is_the_embeddings_tree_made_for_it(self):
         args = self._args("--embeddings-path", _CACHE)
@@ -107,9 +113,14 @@ class TestEncodeCardsWritesWhereTheFlagSays:
     ])
     def test_every_reader_lists_the_embeddings_it_read(self, command):
         argv = {
-            "build-decks": ["--pools-path", "p", "--label", "x"],
-            "pick-decks": ["--pools-path", "p", "--label", "x"],
+            "build-decks": ["--pools-path", "p", "--label", "x", "--checkpoint", "s.pt",
+                            "--output", "d.txt"],
+            "pick-decks": ["--pools-path", "p", "--label", "x", "--picker-checkpoint",
+                           "p.pt", "--output", "d.txt"],
             "evaluate-scorer": ["--checkpoint", "s.pt", "--work-dir", "w"],
+            "train-scorer": ["--outcomes-path", "o.txt", "--checkpoint-dir", "run"],
+            "train-picker": ["--pools-path", "p", "--scorer-checkpoint", "s.pt",
+                             "--checkpoint-dir", "run"],
         }.get(command, [])
         args = cli.build_parser().parse_args(
             [command, *argv, "--cards-path", _CARDS, "--embeddings-path", _CACHE])

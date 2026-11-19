@@ -393,7 +393,10 @@ class TestCliValidation:
         assert "picker-checkpoint" in capsys.readouterr().err
 
     def test_missing_pools_path(self, capsys):
-        code = _run_cli(["train-picker", "--scorer-checkpoint", "s.pt"])
+        code = _run_cli([
+            "train-picker", "--scorer-checkpoint", "s.pt", "--cards-path", "c",
+            "--checkpoint-dir", "run",
+        ])
         assert code == 2
         assert "pools-path" in capsys.readouterr().err
 
@@ -403,6 +406,7 @@ class TestCliValidation:
         code = _run_cli([
             "train-picker", "--pools-path", str(pools),
             "--scorer-checkpoint", str(tmp_path / "nope.pt"),
+            "--cards-path", str(tmp_path), "--checkpoint-dir", str(tmp_path / "run"),
         ])
         assert code == 2
         assert "scorer checkpoint not found" in capsys.readouterr().err.lower()

@@ -1,4 +1,4 @@
-"""Stream parser for ``output/sealed/cards-played.txt``.
+"""Stream parser for ``cards-played.txt``.
 
 Tolerates a trailing partial line (a JVM crash mid-write may leave the
 final line non-newline-terminated). Mid-file malformed lines raise.

@@ -9,7 +9,7 @@ file is a drop-in input for ``match-outcomes`` self-play.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -41,16 +41,12 @@ def _log(message: str) -> None:
 class PickDecksConfig:
     pools_path: Path
     label: str
-    picker_checkpoint: Path = field(
-        default_factory=lambda: Path("models/sealed/picker/latest.pt"),
-    )
-    cards_path: Path = field(default_factory=lambda: Path("output/cardsfolder/"))
+    picker_checkpoint: Path
+    cards_path: Path
+    output: Path
     #: The ``.npz`` embeddings' tree, laid out like ``cards_path``; None
     #: reads them beside the cards.
     embeddings_path: Path | None = None
-    output: Path = field(
-        default_factory=lambda: Path("output/sealed/generated-decks.txt"),
-    )
     resume: bool = False
 
 

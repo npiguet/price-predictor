@@ -183,6 +183,7 @@ def _run(args: argparse.Namespace) -> int:
     bd_config = BuildDecksConfig(
         pools_path=pools_file, label="deck-builder",
         checkpoint=args.scorer_checkpoint, cards_path=args.cards_path,
+        output=args.output_dir / "deck-builder.txt",  # never written: decks stay in memory
         sa_temperature=args.sa_temperature, sa_cooling=args.sa_cooling,
         sa_max_iterations=args.sa_max_iterations,
     )

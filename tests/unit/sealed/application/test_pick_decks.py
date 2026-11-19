@@ -66,6 +66,14 @@ def _patch(use_case, locator, model=None):
     )
 
 
+def _config(tmp_path, pools_path, **fields) -> PickDecksConfig:
+    defaults = {
+        "picker_checkpoint": tmp_path / "p.pt", "label": "picker",
+        "cards_path": tmp_path / "c", "output": tmp_path / "decks.txt",
+    }
+    return PickDecksConfig(pools_path=pools_path, **{**defaults, **fields})
+
+
 class TestPickDecks:
     def test_zero_lands_yields_40_cards(self, tmp_path):
         spells = [f"s{i}" for i in range(30)]
@@ -73,10 +81,7 @@ class TestPickDecks:
         _write_pools(pools_path, [("MH3", spells)])
         locator = _make_locator(set(), set(spells))
         use_case = PickDecksUseCase()
-        config = PickDecksConfig(
-            pools_path=pools_path, label="picker", cards_path=tmp_path / "c",
-            output=tmp_path / "decks.txt",
-        )
+        config = _config(tmp_path, pools_path)
         with _patch(use_case, locator):
             written = use_case.execute(config)
         assert written == 1
@@ -97,10 +102,7 @@ class TestPickDecks:
         _write_pools(pools_path, [("BLB", lands + spells)])
         locator = _make_locator(set(lands), set(spells))
         use_case = PickDecksUseCase()
-        config = PickDecksConfig(
-            pools_path=pools_path, label="picker", cards_path=tmp_path / "c",
-            output=tmp_path / "decks.txt",
-        )
+        config = _config(tmp_path, pools_path)
         with _patch(use_case, locator):
             use_case.execute(config)
         _, _, names = config.output.read_text("utf-8").strip().split(";", 2)
@@ -115,10 +117,7 @@ class TestPickDecks:
         _write_pools(pools_path, [("MH3", spells), ("BLB", spells)])
         locator = _make_locator(set(), set(spells))
         use_case = PickDecksUseCase()
-        config = PickDecksConfig(
-            pools_path=pools_path, label="picker-gen5", cards_path=tmp_path / "c",
-            output=tmp_path / "decks.txt",
-        )
+        config = _config(tmp_path, pools_path, label="picker-gen5")
         with _patch(use_case, locator):
             use_case.execute(config)
         for line in config.output.read_text("utf-8").strip().splitlines():
@@ -131,10 +130,7 @@ class TestPickDecks:
         _write_pools(pools_path, [("MH3", small), ("BLB", big)])
         locator = _make_locator(set(), set(small) | set(big))
         use_case = PickDecksUseCase()
-        config = PickDecksConfig(
-            pools_path=pools_path, label="picker", cards_path=tmp_path / "c",
-            output=tmp_path / "decks.txt",
-        )
+        config = _config(tmp_path, pools_path)
         with _patch(use_case, locator):
             written = use_case.execute(config)
         assert written == 1
@@ -153,10 +149,7 @@ class TestPickDecks:
         output.write_text("picker;MH3;preexisting\n", encoding="utf-8")
         locator = _make_locator(set(), set(all_cards))
         use_case = PickDecksUseCase()
-        config = PickDecksConfig(
-            pools_path=pools_path, label="picker", cards_path=tmp_path / "c",
-            output=output, resume=True,
-        )
+        config = _config(tmp_path, pools_path, output=output, resume=True)
         with _patch(use_case, locator):
             written = use_case.execute(config)
         assert written == 2
@@ -187,10 +180,7 @@ class TestWidthMismatch:
         embeddings = {n: np.zeros(36, dtype=np.float32) for n in spells}
         locator.load_embedding.side_effect = lambda n: embeddings.get(n)
         use_case = PickDecksUseCase()
-        config = PickDecksConfig(
-            pools_path=pools_path, label="picker", cards_path=tmp_path / "c",
-            picker_checkpoint=ckpt, output=tmp_path / "decks.txt",
-        )
+        config = _config(tmp_path, pools_path, picker_checkpoint=ckpt)
         with patch(
             "sealed.application.pick_decks.ConvertedCardLocator", return_value=locator,
         ), pytest.raises(ValueError, match="wide"):

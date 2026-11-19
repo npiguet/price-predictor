@@ -31,8 +31,6 @@ from sealed.infrastructure.converted_card_locator import (
 )
 from sealed.infrastructure.pool_file_reader import GeneratedDeck
 
-DEFAULT_DECKS_PATH = Path("output/sealed/generated-decks.txt")
-DEFAULT_CARDS_PATH = Path("output/cardsfolder")
 ALLPRINTINGS_PATH = Path("resources/AllPrintings.json")
 ALLPRICES_PATH = Path("resources/AllPricesToday.json")
 

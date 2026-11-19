@@ -1,5 +1,5 @@
-"""Argparse-level tests for the flipped ``train-scorer`` default (FR-024)
-and the missing-default-file guard (FR-026)."""
+"""``train-scorer``'s encoder source: no default, and a fresh Phase B run is refused
+without ``--encoder-checkpoint`` (FR-024, FR-026, task L06e)."""
 
 from __future__ import annotations
 
@@ -28,19 +28,21 @@ def _save_minimal_phase_a_checkpoint(path: Path) -> None:
     )
 
 
+_PATHS = ["--outcomes-path", "o.txt", "--cards-path", "cards", "--checkpoint-dir", "run"]
+
+
 class TestTrainScorerDefaults:
-    def test_default_encoder_checkpoint_is_sealed(self):
+    def test_there_is_no_default_encoder_checkpoint(self):
         config = TrainScorerConfig(
             outcomes_path=Path("x"),
             cards_path=Path("y"),
             checkpoint_dir=Path("z"),
         )
-        assert config.encoder_checkpoint == Path("models/sealed/encoder/latest.pt")
+        assert config.encoder_checkpoint is None
 
 
-class TestMissingDefaultFileGuard:
-    """run_train_scorer should error when Phase B fresh kickoff would
-    silently load a non-existent default sealed encoder."""
+class TestMissingEncoderGuard:
+    """run_train_scorer refuses a Phase B fresh kickoff that names no encoder."""
 
     def test_phase_b_fresh_kickoff_missing_encoder_exits_2(
         self, tmp_path: Path, capsys, monkeypatch,
@@ -55,13 +57,12 @@ class TestMissingDefaultFileGuard:
         args = parser.parse_args([
             "train-scorer",
             "--scorer-checkpoint", str(scorer_ckpt),
-            "--embedding-lr", "1e-5",
+            "--embedding-lr", "1e-5", *_PATHS,
         ])
         rc = run_train_scorer(args)
         captured = capsys.readouterr()
         assert rc == 2, captured.err
-        assert "Sealed encoder not found" in captured.err
-        assert "python -m sealed train-encoder" in captured.err
+        assert "--encoder-checkpoint is required" in captured.err
 
     def test_explicit_encoder_path_skips_guard(
         self, tmp_path: Path, capsys, monkeypatch,
@@ -80,7 +81,7 @@ class TestMissingDefaultFileGuard:
             "train-scorer",
             "--scorer-checkpoint", str(scorer_ckpt),
             "--embedding-lr", "1e-5",
-            "--encoder-checkpoint", str(explicit_missing),
+            "--encoder-checkpoint", str(explicit_missing), *_PATHS,
         ])
         rc = run_train_scorer(args)
         captured = capsys.readouterr()
@@ -102,21 +103,21 @@ class TestMissingDefaultFileGuard:
         # need a working outcomes file — we only care that the guard
         # message does NOT appear before the inevitable downstream error.
         parser = build_parser()
-        args = parser.parse_args(["train-scorer"])
+        args = parser.parse_args(["train-scorer", *_PATHS])
         rc = run_train_scorer(args)
         captured = capsys.readouterr()
-        assert "Sealed encoder not found" not in captured.err
+        assert "--encoder-checkpoint is required" not in captured.err
         # Returns non-zero (no real outcomes file), but for a reason
         # unrelated to the missing default sealed encoder.
         assert rc != 0
 
 
 class TestResumeUnaffected:
-    def test_phase_b_resume_does_not_require_default_encoder(
+    def test_phase_b_resume_does_not_require_an_encoder_flag(
         self, tmp_path: Path, monkeypatch, capsys,
     ):
         """Phase B resume pulls encoder weights from the resumed checkpoint;
-        the default-flip must not break that path."""
+        the missing-encoder guard must not break that path."""
         from sealed.infrastructure.cli import build_parser, run_train_scorer
 
         monkeypatch.chdir(tmp_path)
@@ -141,11 +142,11 @@ class TestResumeUnaffected:
         args = parser.parse_args([
             "train-scorer",
             "--resume", str(ckpt_path),
-            "--embedding-lr", "1e-5",
+            "--embedding-lr", "1e-5", *_PATHS,
         ])
         rc = run_train_scorer(args)
         captured = capsys.readouterr()
-        # The "Sealed encoder not found" guard MUST NOT fire on resume.
-        assert "Sealed encoder not found" not in captured.err
+        # The missing-encoder guard MUST NOT fire on resume.
+        assert "--encoder-checkpoint is required" not in captured.err
         # Some downstream error is fine (we didn't seed an outcomes file).
         assert rc != 0

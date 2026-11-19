@@ -15,6 +15,7 @@ services:
       - /mnt/tank/price-predictor/models:/app/models:ro
     command:
       - --workers=8
+      - --outcomes-dir=/app/output/sealed
       # Self-play mode: uncomment both lines and set the label for this
       # generation. Phase 0 (no generated-decks-path) uses the default CMD.
       # - --generated-decks-path=/app/output/sealed/generated-decks.txt

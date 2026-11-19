@@ -63,7 +63,8 @@ def test_a_command_failing_part_way_is_recorded_failed(tmp_path: Path, monkeypat
 
     monkeypatch.setattr(cli, "run_build_decks", build_decks)
     monkeypatch.setattr(sys, "argv", ["sealed", "build-decks", "--pools-path", "p",
-                                      "--label", "x", "--output", str(out)])
+                                      "--label", "x", "--checkpoint", "s.pt",
+                                      "--cards-path", "c", "--output", str(out)])
 
     with pytest.raises(SystemExit) as exit_:
         cli.main()
@@ -77,7 +78,8 @@ def test_a_refused_command_leaves_no_run_directory(tmp_path: Path, monkeypatch):
     out = tmp_path / "decks-run" / "generated-decks.txt"
     monkeypatch.setattr(cli, "run_build_decks", lambda _args: 2)
     monkeypatch.setattr(sys, "argv", ["sealed", "build-decks", "--pools-path", "p",
-                                      "--label", "x", "--output", str(out)])
+                                      "--label", "x", "--checkpoint", "s.pt",
+                                      "--cards-path", "c", "--output", str(out)])
 
     with pytest.raises(SystemExit):
         cli.main()

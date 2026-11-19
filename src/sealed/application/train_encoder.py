@@ -8,7 +8,7 @@ and shrunk per-card labels per FR-011, splits cards into train/val with
 FR-018 stratification, tokenizes the corpus once, then trains the
 dual-pool encoder + regression heads + MLM head jointly under FR-017's
 weighted MSE + cross-entropy objective and saves only the encoder
-weights to ``models/sealed/encoder/``.
+weights to its ``--model-output`` run directory.
 
 Per FR-013, aggregation is inline: there is no separate
 ``aggregate-labels`` subcommand. The human-readable label snapshot goes
@@ -901,23 +901,13 @@ def _per_batch_weighted_mse(
 
 @dataclass
 class TrainEncoderConfig:
-    cards_played_path: Path = field(
-        default_factory=lambda: Path("output/sealed/cards-played.txt"),
-    )
-    cards_folder: Path = field(
-        default_factory=lambda: Path("output/cardsfolder/"),
-    )
-    vocab_path: Path = field(
-        default_factory=lambda: Path("models/sealed/encoder/vocab.txt"),
-    )
-    model_output_dir: Path = field(
-        default_factory=lambda: Path("models/sealed/encoder/"),
-    )
+    cards_played_path: Path
+    cards_folder: Path
+    vocab_path: Path
+    model_output_dir: Path
     #: The per-card label snapshot, a table for inspection that the effects
     #: package's decodability battery also reads (``--win-rates``).
-    win_rates_path: Path = field(
-        default_factory=lambda: Path("output/sealed") / _WIN_RATES_FILENAME,
-    )
+    win_rates_path: Path
     batch_size: int = 64
     epochs: int = 100
     lr: float = 1e-4

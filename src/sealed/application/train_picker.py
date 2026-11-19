@@ -24,7 +24,7 @@ from __future__ import annotations
 import math
 import random
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -67,15 +67,13 @@ def _log(message: str) -> None:
 @dataclass
 class TrainPickerConfig:
     pools_path: Path
-    scorer_checkpoint: Path = field(
-        default_factory=lambda: Path("models/sealed/scorer/latest.pt"),
-    )
+    scorer_checkpoint: Path
+    cards_path: Path
+    checkpoint_dir: Path
     auditor_scorer_checkpoint: Path | None = None
-    cards_path: Path = field(default_factory=lambda: Path("output/cardsfolder/"))
     #: The ``.npz`` embeddings' tree, laid out like ``cards_path``; None
     #: reads them beside the cards.
     embeddings_path: Path | None = None
-    checkpoint_dir: Path = field(default_factory=lambda: Path("models/sealed/picker/"))
     resume: Path | None = None
     picker_checkpoint: Path | None = None
     d_model: int | None = None

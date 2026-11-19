@@ -35,4 +35,4 @@ Rules to respect when running or changing `match-outcomes`, its supervisor or it
 ## Outputs
 
 - `--effect-records` has no default: collection is an opt-in, and without the flag the two sealed corpora keep their exact format and content.
-- The two sealed corpora are appended to `--outcomes-dir`, by default the `--effect-records` directory when given, so a collection writes nothing outside its run directory. Their formats: `src/sealed/CLAUDE.md` § Corpus file formats.
+- The two sealed corpora are appended to `--outcomes-dir`, by default the `--effect-records` directory when given, so a collection writes nothing outside its run directory; a run with neither flag is refused (exit 2). Their formats: `src/sealed/CLAUDE.md` § Corpus file formats.

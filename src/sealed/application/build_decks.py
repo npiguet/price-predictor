@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -40,16 +40,12 @@ class BuildDecksConfig:
     deck. Consumed by ``match-outcomes`` self-play as the ``method_A`` /
     ``method_B`` value when a deck sampled from this file is played.
     """
-    checkpoint: Path = field(
-        default_factory=lambda: Path("models/sealed/scorer/latest.pt"),
-    )
-    cards_path: Path = field(default_factory=lambda: Path("output/cardsfolder/"))
+    checkpoint: Path
+    cards_path: Path
+    output: Path
     #: The ``.npz`` embeddings' tree, laid out like ``cards_path``; None
     #: reads them beside the cards.
     embeddings_path: Path | None = None
-    output: Path = field(
-        default_factory=lambda: Path("output/sealed/generated-decks.txt"),
-    )
     sa_temperature: float = 0.8
     sa_cooling: float = 0.85
     sa_max_iterations: int = 200

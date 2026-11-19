@@ -114,6 +114,9 @@ def test_shrinkage_diff_across_heads(tmp_path: Path):
 
     model_output = tmp_path / "models" / "sealed" / "encoder"
 
+    snapshot_k0_path = tmp_path / "snapshot_k0.txt"
+    snapshot_k20_path = tmp_path / "snapshot_k20.txt"
+
     cwd_before = Path.cwd()
     os.chdir(tmp_path)
     try:
@@ -123,16 +126,12 @@ def test_shrinkage_diff_across_heads(tmp_path: Path):
             cards_folder=cards_folder,
             vocab_path=vocab_path,
             model_output_dir=model_output,
+            win_rates_path=snapshot_k0_path,
             batch_size=2, epochs=1, lr=1e-3, patience=1,
             n_layers=2, n_heads=2, n_pool_queries=2,
             shrinkage_k=0.0,
         )
         run_train_encoder(cfg_k0)
-        snapshot_k0 = (tmp_path / "output" / "sealed" / "cards-win-rates.txt").read_text(
-            encoding="utf-8",
-        )
-        snapshot_k0_path = tmp_path / "snapshot_k0.txt"
-        snapshot_k0_path.write_text(snapshot_k0, encoding="utf-8")
 
         # k = 20 run.
         cfg_k20 = TrainEncoderConfig(
@@ -140,18 +139,12 @@ def test_shrinkage_diff_across_heads(tmp_path: Path):
             cards_folder=cards_folder,
             vocab_path=vocab_path,
             model_output_dir=model_output,
+            win_rates_path=snapshot_k20_path,
             batch_size=2, epochs=1, lr=1e-3, patience=1,
             n_layers=2, n_heads=2, n_pool_queries=2,
             shrinkage_k=20.0,
         )
         run_train_encoder(cfg_k20)
-        snapshot_k20_path = tmp_path / "snapshot_k20.txt"
-        snapshot_k20_path.write_text(
-            (tmp_path / "output" / "sealed" / "cards-win-rates.txt").read_text(
-                encoding="utf-8",
-            ),
-            encoding="utf-8",
-        )
 
         rows_k0 = _parse_win_rates(snapshot_k0_path)
         rows_k20 = _parse_win_rates(snapshot_k20_path)

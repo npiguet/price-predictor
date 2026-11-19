@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Callable
 from pathlib import Path
 
 from price_predictor.domain.worker_status import ALLOW_DEGRADED_HELP
@@ -24,7 +23,6 @@ from sealed.application.evaluate_scorer import EvaluateScorerConfig
 from sealed.application.train_scorer import TrainScorerConfig
 from sealed.domain.greedy_deck_builder import COLOR_PAIRS_STRATEGY
 from sealed.infrastructure.cli_resume import (
-    dataclass_default,
     resolve_resumable_args,
 )
 from sealed.infrastructure.collection_conversion import (
@@ -100,9 +98,8 @@ def _parse_label(value: str) -> str:
 
 def _add_cards_path(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "--cards-path",
-        default="output/cardsfolder/",
-        help="Directory with .npz card embeddings (default: output/cardsfolder/)",
+        "--cards-path", required=True,
+        help="Directory with the converted cards and, beside them, their .npz embeddings.",
     )
 
 
@@ -151,8 +148,8 @@ def _build_analyze_generated_decks_parser(subparsers) -> None:
     )
     parser.set_defaults(func=run_analyze_generated_decks)
     parser.add_argument(
-        "decks_files", nargs="*", type=Path,
-        help="Generated-decks files (default: output/sealed/generated-decks.txt).",
+        "decks_files", nargs="+", type=Path,
+        help="Generated-decks files.",
     )
     _add_cards_path(parser)
     parser.add_argument(
@@ -165,18 +162,17 @@ def _build_build_vocab_parser(subparsers) -> None:
     parser = subparsers.add_parser(
         "build-vocab",
         help=(
-            "Build the sealed-side tokenizer vocabulary "
-            "(models/sealed/encoder/vocab.txt) from the converted corpus"
+            "Build the sealed-side tokenizer vocabulary from the converted corpus"
         ),
     )
     parser.set_defaults(func=run_build_vocab)
     parser.add_argument(
-        "--cards-folder", default="output/cardsfolder/",
-        help="Directory of converted .txt files (default: output/cardsfolder/)",
+        "--cards-folder", required=True,
+        help="Directory of converted .txt files",
     )
     parser.add_argument(
-        "--vocab-path", default="models/sealed/encoder/vocab.txt",
-        help="Output vocab file (default: models/sealed/encoder/vocab.txt)",
+        "--vocab-path", required=True,
+        help="Output vocab file",
     )
     parser.add_argument(
         "--target-size", type=int, default=5000,
@@ -194,29 +190,26 @@ def _build_train_encoder_parser(subparsers) -> None:
     )
     parser.set_defaults(func=run_train_encoder)
     parser.add_argument(
-        "--cards-played-path", default="output/sealed/cards-played.txt",
-        help="Path to cards-played.txt (default: output/sealed/cards-played.txt)",
+        "--cards-played-path", required=True,
+        help="Path to cards-played.txt",
     )
     parser.add_argument(
-        "--cards-folder", default="output/cardsfolder/",
-        help="Directory of converted card .txt files (default: output/cardsfolder/)",
+        "--cards-folder", required=True,
+        help="Directory of converted card .txt files",
     )
     parser.add_argument(
-        "--vocab-path", default="models/sealed/encoder/vocab.txt",
-        help="Tokenizer vocab file (default: models/sealed/encoder/vocab.txt)",
+        "--vocab-path", required=True,
+        help="Tokenizer vocab file",
     )
     parser.add_argument(
-        "--model-output", default=_TRAIN_ENCODER_DEFAULT_OUTPUT,
-        help=(
-            "Output directory for {timestamp}.pt + latest.pt (default: "
-            f"{_TRAIN_ENCODER_DEFAULT_OUTPUT})"
-        ),
+        "--model-output", required=True,
+        help="Output directory for {timestamp}.pt + latest.pt (the run directory)",
     )
     parser.add_argument(
         "--win-rates-output", default=None,
         help=(
             f"The per-card win-rate table's file (default: {_WIN_RATES_NAME} in "
-            f"--model-output when that is given, else {_DEFAULT_WIN_RATES})"
+            "--model-output)"
         ),
     )
     parser.add_argument(
@@ -311,10 +304,9 @@ def _build_encode_cards_parser(subparsers) -> None:
         "--encoder-checkpoint",
         default=None,
         help=(
-            "Encoder weights source (default: "
-            "models/price-predictor/transformer/latest.pt). "
-            "Mutually exclusive with --scorer-checkpoint when both are "
-            "explicitly passed."
+            "Encoder weights source: a sealed encoder or a price-predictor "
+            "transformer checkpoint. One of this and --scorer-checkpoint is "
+            "required; they are mutually exclusive."
         ),
     )
     encode_parser.add_argument(
@@ -322,23 +314,18 @@ def _build_encode_cards_parser(subparsers) -> None:
         default=None,
         help=(
             "Extract encoder weights from a Phase B scorer checkpoint "
-            "(no default). Mutually exclusive with an explicit "
-            "--encoder-checkpoint. Rejected if the supplied checkpoint is "
+            "Mutually exclusive with --encoder-checkpoint. Rejected if the supplied checkpoint is "
             "Phase A (no encoder_state_dict)."
         ),
     )
     encode_parser.add_argument(
         "--vocab-path",
-        default="models/sealed/encoder/vocab.txt",
-        help=(
-            "Path to the tokenizer vocabulary file "
-            "(default: models/sealed/encoder/vocab.txt — paired with the "
-            "default sealed encoder checkpoint)"
-        ),
+        required=True,
+        help="Path to the tokenizer vocabulary file (the one the encoder was trained with)",
     )
     encode_parser.add_argument(
         "--cards-path",
-        default="output/cardsfolder/",
+        required=True,
         help="Directory containing .txt card script files (searched recursively)",
     )
     encode_parser.add_argument(
@@ -392,11 +379,10 @@ def _build_generate_pools_parser(subparsers) -> None:
     )
     generate_parser.add_argument(
         "--pools-path",
-        default=None,
+        required=True,
         help=(
             "Output directory; pools.txt is written here. "
-            "Default: output/sealed/pools/{set}/ when --set is given, "
-            "output/sealed/pools/ otherwise."
+            "'{set}' in it is replaced by --set when that is given."
         ),
     )
 
@@ -425,15 +411,15 @@ def _build_build_decks_parser(subparsers) -> None:
     )
     build_parser.add_argument(
         "--checkpoint",
-        default="models/sealed/scorer/latest.pt",
-        help="Scorer model checkpoint (default: models/sealed/scorer/latest.pt)",
+        required=True,
+        help="Scorer model checkpoint",
     )
     _add_cards_path(build_parser)
     _add_embeddings_path(build_parser)
     build_parser.add_argument(
         "--output",
-        default="output/sealed/generated-decks.txt",
-        help="Output generated-decks file (default: output/sealed/generated-decks.txt)",
+        required=True,
+        help="Output generated-decks file",
     )
     build_parser.add_argument(
         "--sa-temperature",
@@ -514,8 +500,8 @@ def _build_train_picker_parser(subparsers) -> None:
     parser.add_argument(
         "--scorer-checkpoint", default=None,
         help=(
-            "Frozen scorer used as the reward function "
-            "(default: models/sealed/scorer/latest.pt). Must exist. Resumable."
+            "Frozen scorer used as the reward function. Must exist. Required "
+            "unless --resume. Resumable."
         ),
     )
     parser.add_argument(
@@ -527,14 +513,14 @@ def _build_train_picker_parser(subparsers) -> None:
     )
     parser.add_argument(
         "--cards-path", default=None,
-        help="Directory of .npz card embeddings (default: output/cardsfolder/). Resumable.",
+        help="Directory of .npz card embeddings. Required unless --resume. Resumable.",
     )
     _add_embeddings_path(parser, resumable=True)
     parser.add_argument(
         "--checkpoint-dir", default=None,
         help=(
-            "Output dir for latest.pt + best_{timestamp}.pt "
-            "(default: models/sealed/picker/). Resumable."
+            "Output dir for latest.pt + best_{timestamp}.pt (the run directory). "
+            "Required unless --resume. Resumable."
         ),
     )
     parser.add_argument(
@@ -697,8 +683,8 @@ def _build_pick_decks_parser(subparsers) -> None:
         help="Input pools file (with SET_CODE; prefixes).",
     )
     parser.add_argument(
-        "--picker-checkpoint", default="models/sealed/picker/latest.pt",
-        help="Picker weights (default: models/sealed/picker/latest.pt).",
+        "--picker-checkpoint", required=True,
+        help="Picker weights.",
     )
     _add_cards_path(parser)
     _add_embeddings_path(parser)
@@ -710,8 +696,8 @@ def _build_pick_decks_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
-        "--output", default="output/sealed/generated-decks.txt",
-        help="Output generated-decks file (default: output/sealed/generated-decks.txt).",
+        "--output", required=True,
+        help="Output generated-decks file.",
     )
     parser.add_argument(
         "--resume", action="store_true",
@@ -758,8 +744,7 @@ def _build_train_scorer_parser(subparsers) -> None:
         "--outcomes-path",
         default=None,
         help=(
-            "Path to match outcomes file "
-            "(default: output/sealed/match-outcomes.txt). "
+            "Path to match outcomes file. Required unless --resume. "
             "Resumable: on --resume, falls back to the resumed checkpoint's "
             "value when omitted."
         ),
@@ -768,7 +753,7 @@ def _build_train_scorer_parser(subparsers) -> None:
         "--cards-path",
         default=None,
         help=(
-            "Directory with .npz card embeddings (default: output/cardsfolder/). "
+            "Directory with .npz card embeddings. Required unless --resume. "
             "Resumable."
         ),
     )
@@ -777,8 +762,8 @@ def _build_train_scorer_parser(subparsers) -> None:
         "--checkpoint-dir",
         default=None,
         help=(
-            "Directory for saving checkpoints (default: models/sealed/scorer/). "
-            "Resumable."
+            "Directory for saving checkpoints (the run directory). "
+            "Required unless --resume. Resumable."
         ),
     )
     train_parser.add_argument(
@@ -806,8 +791,7 @@ def _build_train_scorer_parser(subparsers) -> None:
         default=None,
         help=(
             "Source of encoder weights when starting a fresh Phase B run via "
-            "--scorer-checkpoint (default: "
-            "models/price-predictor/transformer/latest.pt). "
+            "--scorer-checkpoint (required then). "
             "No effect on Phase A. Forbidden when explicitly passed alongside "
             "a Phase B --resume (the resumed checkpoint already carries "
             "fine-tuned encoder weights)."
@@ -1060,7 +1044,7 @@ def _build_match_outcomes_parser(subparsers) -> None:
             "Directory the two sealed corpora, match-outcomes.txt and"
             " cards-played.txt, are appended to. Default: the --effect-records"
             " directory when given, so a collection keeps them in its own run"
-            f" directory; else {DEFAULT_OUTCOMES_DIR}/."
+            " directory; one of the two flags is required."
         ),
     )
     _add_effect_record_flags(match_parser)
@@ -1075,20 +1059,24 @@ def _build_match_outcomes_parser(subparsers) -> None:
 # content.
 
 
-#: Where a plain ``match-outcomes`` run appends the two sealed corpora.
-DEFAULT_OUTCOMES_DIR = "output/sealed"
 #: The match-outcomes corpus; the worker writes cards-played.txt beside it.
 MATCH_OUTCOMES_FILE = "match-outcomes.txt"
 
 
-def outcomes_dir(args: argparse.Namespace) -> Path:
+def outcomes_dir(args: argparse.Namespace) -> Path | None:
     """The directory ``match-outcomes.txt`` and ``cards-played.txt`` go to:
-    ``--outcomes-dir``, else the ``--effect-records`` run directory, else
-    :data:`DEFAULT_OUTCOMES_DIR`, where a run without either flag always wrote."""
+    ``--outcomes-dir``, else the ``--effect-records`` run directory, else None."""
     for value in (getattr(args, "outcomes_dir", None), getattr(args, "effect_records", None)):
         if value:
             return Path(value)
-    return Path(DEFAULT_OUTCOMES_DIR)
+    return None
+
+
+def outcomes_dir_error(args: argparse.Namespace) -> str | None:
+    """Why ``match-outcomes`` has nowhere to append its corpora, or None."""
+    if outcomes_dir(args) is None:
+        return "--outcomes-dir or --effect-records is required: no default directory"
+    return None
 
 
 def _effect_collection_caps(args: argparse.Namespace) -> dict[str, str]:
@@ -1225,31 +1213,15 @@ def check_random_seat_flags(args: argparse.Namespace) -> str | None:
     return None
 
 
-_ENCODE_CARDS_DEFAULT_ENCODER = "models/sealed/encoder/latest.pt"
-
-
-_TRAIN_ENCODER_DEFAULT_OUTPUT = "models/sealed/encoder/"
 _WIN_RATES_NAME = "cards-win-rates.txt"
-_DEFAULT_WIN_RATES = f"output/sealed/{_WIN_RATES_NAME}"
 
 
 def _win_rates_output(args: argparse.Namespace) -> Path:
     """``train-encoder``'s win-rate table: ``--win-rates-output``, else the
-    ``--model-output`` run directory, else, on the default directory, the
-    path every run wrote before the flag existed."""
+    ``--model-output`` run directory."""
     if args.win_rates_output:
         return Path(args.win_rates_output)
-    if Path(args.model_output) != Path(_TRAIN_ENCODER_DEFAULT_OUTPUT):
-        return Path(args.model_output) / _WIN_RATES_NAME
-    return Path(_DEFAULT_WIN_RATES)
-
-
-def _missing_sealed_encoder_message(path: Path) -> str:
-    return (
-        f"Sealed encoder not found at {path}.\n"
-        "Run python -m sealed train-encoder, or pass --encoder-checkpoint <path> "
-        "explicitly."
-    )
+    return Path(args.model_output) / _WIN_RATES_NAME
 
 
 def _load_encoder_for_encode_cards(encoder_path: Path):
@@ -1284,10 +1256,11 @@ def run_encode_cards(args: argparse.Namespace) -> int:
     from sealed.infrastructure.embedding_store import EmbeddingStore
     from sealed.infrastructure.scorer_store import ScorerStore
 
-    if args.encoder_checkpoint is not None and args.scorer_checkpoint is not None:
+    if (args.encoder_checkpoint is None) == (args.scorer_checkpoint is None):
         print(
             "Error: --encoder-checkpoint and --scorer-checkpoint are mutually "
-            "exclusive: choose one source for the encoder weights.",
+            "exclusive and one of them is required: they are the two sources of "
+            "the encoder weights.",
             file=sys.stderr,
         )
         return 2
@@ -1311,18 +1284,9 @@ def run_encode_cards(args: argparse.Namespace) -> int:
         model.load_state_dict(loaded.encoder_state_dict)
         config = cfg
     else:
-        explicit_encoder = args.encoder_checkpoint is not None
-        encoder_path = Path(
-            args.encoder_checkpoint or _ENCODE_CARDS_DEFAULT_ENCODER,
-        )
+        encoder_path = Path(args.encoder_checkpoint)
         if not encoder_path.exists():
-            if not explicit_encoder:
-                print(
-                    f"Error: {_missing_sealed_encoder_message(encoder_path)}",
-                    file=sys.stderr,
-                )
-            else:
-                print(f"Error: Encoder model not found: {encoder_path}", file=sys.stderr)
+            print(f"Error: Encoder model not found: {encoder_path}", file=sys.stderr)
             return 2
         model, config = _load_encoder_for_encode_cards(encoder_path)
 
@@ -1386,14 +1350,7 @@ def run_generate_pools(args: argparse.Namespace) -> int:
     set_code = args.set_code
     pool_count = args.size
 
-    if args.pools_path is None:
-        if set_code is None:
-            pools_path = Path("output") / "sealed" / "pools"
-        else:
-            pools_path = Path("output") / "sealed" / "pools" / set_code
-    else:
-        raw = args.pools_path.replace("{set}", set_code) if set_code else args.pools_path
-        pools_path = Path(raw)
+    pools_path = _pools_dir(args)
 
     connector = PoolConnector()
     use_case = GeneratePoolsUseCase()
@@ -1464,13 +1421,31 @@ _PATH_FIELDS: frozenset[str] = frozenset({
     "outcomes_path", "cards_path", "embeddings_path", "checkpoint_dir",
     "encoder_checkpoint", "scorer_checkpoint", "resume",
 })
-# Fallback CLI defaults for fields that lack a dataclass default (required fields).
-# These mirror the help-text defaults registered in `_build_train_scorer_parser`.
-_REQUIRED_FIELD_CLI_DEFAULTS: dict[str, str] = {
-    "outcomes_path": "output/sealed/match-outcomes.txt",
-    "cards_path": "output/cardsfolder/",
-    "checkpoint_dir": "models/sealed/scorer/",
-}
+#: The path flags a fresh run must give: a resumed run inherits them from its checkpoint.
+_SCORER_REQUIRED_PATHS: tuple[str, ...] = ("outcomes_path", "cards_path", "checkpoint_dir")
+_PICKER_REQUIRED_PATHS: tuple[str, ...] = (
+    "scorer_checkpoint", "cards_path", "checkpoint_dir",
+)
+
+
+def _missing_paths_error(
+    args: argparse.Namespace, resumed_train_config: dict | None, names: tuple[str, ...],
+) -> int | None:
+    """Exit 2 naming each of ``names`` that was not given and cannot be inherited
+    from the resumed run, or None."""
+    recorded = resumed_train_config or {}
+    missing = [
+        "--" + name.replace("_", "-") for name in names
+        if getattr(args, name) is None and not recorded.get(name)
+    ]
+    if not missing:
+        return None
+    print(
+        f"Error: {', '.join(missing)} required (a resumed run inherits them from "
+        "its checkpoint).",
+        file=sys.stderr,
+    )
+    return 2
 
 
 def _validate_scorer_exclusive_flags(args: argparse.Namespace) -> int | None:
@@ -1505,7 +1480,7 @@ def _validate_scorer_exclusive_flags(args: argparse.Namespace) -> int | None:
 
 def _resolve_scorer_encoder_checkpoint(
     args: argparse.Namespace, resumed_train_config: dict | None,
-) -> Path:
+) -> Path | None:
     """Resolve --encoder-checkpoint with resume precedence (explicit > resumed
     > dataclass default). No effect on Phase A; consumed only on Phase B."""
     if args.encoder_checkpoint is not None:
@@ -1515,7 +1490,7 @@ def _resolve_scorer_encoder_checkpoint(
         and resumed_train_config.get("encoder_checkpoint") is not None
     ):
         return Path(resumed_train_config["encoder_checkpoint"])
-    return dataclass_default(TrainScorerConfig, "encoder_checkpoint")
+    return None
 
 
 def _validate_scorer_phase(
@@ -1523,7 +1498,7 @@ def _validate_scorer_phase(
     embedding_lr: float,
     requested_phase_b: bool,
     resumed_is_phase_b: bool | None,
-    encoder_checkpoint: Path,
+    encoder_checkpoint: Path | None,
 ) -> int | None:
     """Reject Phase A/B flag combinations that are only knowable post-resolution.
 
@@ -1589,19 +1564,14 @@ def _validate_scorer_phase(
         )
         return 2
 
-    # Missing-default-file guard (FR-026 / cli.md "New error condition").
-    # Only fires on Phase B fresh kickoffs where the encoder is actually
-    # loaded from `--encoder-checkpoint`; Phase A skips the encoder load
-    # path entirely, and Phase B resumes pull encoder weights from the
-    # resumed checkpoint.
+    # A fresh Phase B kickoff loads the encoder from `--encoder-checkpoint`;
+    # Phase A skips the encoder load path entirely, and Phase B resumes pull
+    # encoder weights from the resumed checkpoint.
     is_phase_b_fresh_kickoff = requested_phase_b and args.resume is None
-    if (
-        is_phase_b_fresh_kickoff
-        and args.encoder_checkpoint is None
-        and not encoder_checkpoint.exists()
-    ):
+    if is_phase_b_fresh_kickoff and encoder_checkpoint is None:
         print(
-            f"Error: {_missing_sealed_encoder_message(encoder_checkpoint)}",
+            "Error: --encoder-checkpoint is required to start a fresh Phase B run: "
+            "it names the encoder weights to fine-tune.",
             file=sys.stderr,
         )
         return 2
@@ -1635,13 +1605,16 @@ def run_train_scorer(args: argparse.Namespace) -> int:
             print(f"Error: {exc}", file=sys.stderr)
             return 2
 
+    missing_err = _missing_paths_error(args, resumed_train_config, _SCORER_REQUIRED_PATHS)
+    if missing_err is not None:
+        return missing_err
+
     resolved = resolve_resumable_args(
         args,
         flag_names=_RESUMABLE_FLAG_NAMES,
         config_cls=TrainScorerConfig,
         path_fields=_PATH_FIELDS,
         resumed_config=resumed_train_config,
-        required_defaults=_REQUIRED_FIELD_CLI_DEFAULTS,
     )
 
     embedding_lr = float(resolved["embedding_lr"])
@@ -1723,6 +1696,10 @@ def run_train_picker(args: argparse.Namespace) -> int:
             print(f"Error: {exc}", file=sys.stderr)
             return 2
         resumed_train_config = resumed.train_config
+
+    missing_err = _missing_paths_error(args, resumed_train_config, _PICKER_REQUIRED_PATHS)
+    if missing_err is not None:
+        return missing_err
 
     resolved = resolve_resumable_args(
         args,
@@ -1950,8 +1927,8 @@ def _directed_startup_error(args: argparse.Namespace) -> str | None:
 def _effect_flags_usage_error(args: argparse.Namespace) -> str | None:
     """The first exit-2 refusal of the random-seat, worker-stop,
     ``--allow-degraded`` and sampling-rate flags, in that order, or None."""
-    for check in (cards_folder_error, check_random_seat_flags, worker_stop_error,
-                  allow_degraded_error, candidate_rate_error):
+    for check in (outcomes_dir_error, cards_folder_error, check_random_seat_flags,
+                  worker_stop_error, allow_degraded_error, candidate_rate_error):
         error = check(args)
         if error is not None:
             return error
@@ -2063,13 +2040,10 @@ def _supervise_match_outcomes(
 
 def run_analyze_generated_decks(args: argparse.Namespace) -> int:
     """Print composition stats over generated-decks files."""
-    from sealed.application.analyze_generated_decks import (
-        DEFAULT_DECKS_PATH,
-        analyze_decks,
-    )
+    from sealed.application.analyze_generated_decks import analyze_decks
     from sealed.infrastructure.pool_file_reader import parse_generated_decks
 
-    deck_paths: list[Path] = list(args.decks_files) or [DEFAULT_DECKS_PATH]
+    deck_paths: list[Path] = list(args.decks_files)
     all_decks = []
     source_summary: list[tuple[str, int]] = []
     for path in deck_paths:
@@ -2095,54 +2069,33 @@ def run_analyze_generated_decks(args: argparse.Namespace) -> int:
 
 
 def _pools_dir(args: argparse.Namespace) -> Path:
-    """``generate-pools``' output directory, resolved as ``run_generate_pools`` does."""
-    if args.pools_path is None:
-        root = Path("output") / "sealed" / "pools"
-        return root if args.set_code is None else root / args.set_code
+    """``generate-pools``' output directory: ``--pools-path``, ``{set}`` filled in."""
     return Path(args.pools_path.replace("{set}", args.set_code) if args.set_code
                 else args.pools_path)
 
 
-def _checkpoint_dir(default: str) -> Callable[[argparse.Namespace], Path]:
+def _checkpoint_dir(args: argparse.Namespace) -> Path | None:
     """A trainer's checkpoint directory: ``--checkpoint-dir``, else the one
     ``--resume``'s checkpoint sits in (where the resumed run writes), else
-    the default."""
-    def resolve(args: argparse.Namespace) -> Path:
-        if args.checkpoint_dir is not None:
-            return Path(args.checkpoint_dir)
-        return Path(args.resume).parent if args.resume is not None else Path(default)
-    return resolve
-
-
-def _encode_cards_encoder(args: argparse.Namespace) -> str | None:
-    if args.scorer_checkpoint is not None:
-        return None
-    return args.encoder_checkpoint or _ENCODE_CARDS_DEFAULT_ENCODER
+    None (the run is refused)."""
+    if args.checkpoint_dir is not None:
+        return Path(args.checkpoint_dir)
+    return Path(args.resume).parent if args.resume is not None else None
 
 
 def _train_scorer_inputs(args: argparse.Namespace) -> list[str | None]:
     """What a scorer run reads; a resume reads its recorded paths unless overridden."""
-    defaults = {} if args.resume is not None else _REQUIRED_FIELD_CLI_DEFAULTS
     return [
-        args.outcomes_path or defaults.get("outcomes_path"),
-        args.cards_path or defaults.get("cards_path"),
+        args.outcomes_path, args.cards_path,
         args.embeddings_path, args.resume, args.scorer_checkpoint, args.encoder_checkpoint,
     ]
 
 
 def _train_picker_inputs(args: argparse.Namespace) -> list[str | Path | None]:
     """What a picker run reads; a resume reads its recorded paths unless overridden."""
-    from sealed.application.train_picker import TrainPickerConfig
-
-    def path(name: str) -> str | Path | None:
-        given = getattr(args, name)
-        if given is not None or args.resume is not None:
-            return given
-        return dataclass_default(TrainPickerConfig, name)
-
     return [
-        args.pools_path, path("scorer_checkpoint"), args.auditor_scorer_checkpoint,
-        path("cards_path"), args.embeddings_path, args.resume, args.picker_checkpoint,
+        args.pools_path, args.scorer_checkpoint, args.auditor_scorer_checkpoint,
+        args.cards_path, args.embeddings_path, args.resume, args.picker_checkpoint,
     ]
 
 
@@ -2154,17 +2107,14 @@ RUN_MANIFESTS: ManifestTable = {
     "encode-cards": Writes(
         lambda args: args.embeddings_path or args.cards_path,
         create=lambda args: args.embeddings_path is not None,
-        inputs=(_encode_cards_encoder, "scorer_checkpoint", "vocab_path", "cards_path"),
+        inputs=("encoder_checkpoint", "scorer_checkpoint", "vocab_path", "cards_path"),
     ),
     "generate-pools": Writes(_pools_dir, inputs=("exclude_cards",)),
     "build-decks": Writes(
         "output", file=True,
         inputs=("pools_path", "checkpoint", "cards_path", "embeddings_path"),
     ),
-    "train-scorer": Writes(
-        _checkpoint_dir(_REQUIRED_FIELD_CLI_DEFAULTS["checkpoint_dir"]),
-        inputs=(_train_scorer_inputs,),
-    ),
+    "train-scorer": Writes(_checkpoint_dir, inputs=(_train_scorer_inputs,)),
     # Without --work-dir the evaluation works in a temporary directory.
     "evaluate-scorer": Writes(
         "work_dir", inputs=("checkpoint", "cards_path", "embeddings_path"),
@@ -2179,10 +2129,7 @@ RUN_MANIFESTS: ManifestTable = {
         "model_output", inputs=("cards_played_path", "cards_folder", "vocab_path"),
     ),
     "build-vocab": Writes("vocab_path", file=True, inputs=("cards_folder",)),
-    "train-picker": Writes(
-        _checkpoint_dir("models/sealed/picker/"),
-        inputs=(_train_picker_inputs,),
-    ),
+    "train-picker": Writes(_checkpoint_dir, inputs=(_train_picker_inputs,)),
     "pick-decks": Writes(
         "output", file=True,
         inputs=("pools_path", "picker_checkpoint", "cards_path", "embeddings_path"),

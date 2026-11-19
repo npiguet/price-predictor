@@ -9,18 +9,20 @@ import pytest
 
 from sealed.infrastructure.cli import build_parser
 
+_PATHS = [
+    "--cards-played-path", "played.txt", "--cards-folder", "cards",
+    "--vocab-path", "vocab.txt", "--model-output", "run",
+]
+
 
 def _parse(args: list[str]) -> argparse.Namespace:
-    return build_parser().parse_args(args)
+    """Parse a ``train-encoder`` command line, the required path flags added."""
+    return build_parser().parse_args([*args, *_PATHS])
 
 
 class TestTrainEncoderArgs:
     def test_defaults_match_fr021(self):
         ns = _parse(["train-encoder"])
-        assert ns.cards_played_path == "output/sealed/cards-played.txt"
-        assert ns.cards_folder == "output/cardsfolder/"
-        assert ns.vocab_path == "models/sealed/encoder/vocab.txt"
-        assert ns.model_output == "models/sealed/encoder/"
         assert ns.batch_size == 64
         assert ns.epochs == 100
         assert ns.lr == 1e-4
@@ -52,8 +54,14 @@ class TestTrainEncoderArgs:
 
     def test_mlm_flags_surface_on_resolved_config(self):
         """The two new flags must reach the TrainEncoderConfig dataclass."""
+        from pathlib import Path
+
         from sealed.application.train_encoder import TrainEncoderConfig
-        cfg = TrainEncoderConfig(mlm_weight=0.4, mlm_mask_prob=0.3)
+        cfg = TrainEncoderConfig(
+            cards_played_path=Path("played.txt"), cards_folder=Path("cards"),
+            vocab_path=Path("vocab.txt"), model_output_dir=Path("run"),
+            win_rates_path=Path("rates.txt"), mlm_weight=0.4, mlm_mask_prob=0.3,
+        )
         assert cfg.mlm_weight == 0.4
         assert cfg.mlm_mask_prob == 0.3
 
@@ -95,17 +103,11 @@ class TestTrainEncoderArgs:
 
 class TestWhereTheWinRatesGo:
     """``--win-rates-output`` names the per-card win-rate table's file. Unset,
-    a run given its own ``--model-output`` keeps the table there, and a run
-    on the default directory writes ``output/sealed/cards-win-rates.txt`` as
-    it always did."""
+    the table goes to ``--model-output``."""
 
     @pytest.mark.parametrize(("argv", "expected"), [
-        ((), "output/sealed/cards-win-rates.txt"),
-        (("--model-output", "models/effects/gen3/encoder/run"),
-         "models/effects/gen3/encoder/run/cards-win-rates.txt"),
+        ((), "run/cards-win-rates.txt"),
         (("--win-rates-output", "elsewhere/rates.txt"), "elsewhere/rates.txt"),
-        (("--model-output", "models/x/run", "--win-rates-output", "elsewhere/rates.txt"),
-         "elsewhere/rates.txt"),
     ])
     def test_the_pipeline_is_given_the_path_the_flags_name(self, monkeypatch, argv, expected):
         from pathlib import Path
@@ -117,10 +119,3 @@ class TestWhereTheWinRatesGo:
         monkeypatch.setattr(module, "run", lambda config: seen.setdefault("config", config))
         assert run_train_encoder(_parse(["train-encoder", *argv])) == 0
         assert seen["config"].win_rates_path == Path(expected)
-
-    def test_the_config_default_is_the_old_path(self):
-        from pathlib import Path
-
-        from sealed.application.train_encoder import TrainEncoderConfig
-
-        assert TrainEncoderConfig().win_rates_path == Path("output/sealed/cards-win-rates.txt")

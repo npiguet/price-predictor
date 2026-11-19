@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from sealed.application.analyze_generated_decks import (
     _bucket_mv,
@@ -71,7 +72,9 @@ def test_bucket_mv_edges() -> None:
 
 
 def test_sealed_subcommand_dispatches() -> None:
-    args = build_parser().parse_args(["analyze-generated-decks"])
+    args = build_parser().parse_args(
+        ["analyze-generated-decks", "decks.txt", "--cards-path", "cards"],
+    )
     assert args.func is run_analyze_generated_decks
-    assert args.decks_files == []               # defaults to generated-decks.txt
+    assert args.decks_files == [Path("decks.txt")]
     assert args.no_rarity is False
