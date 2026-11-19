@@ -66,60 +66,72 @@ final class TriggerChannel {
      * <p>Package-private: the argument order has no compiler behind it, so
      * this hook's own game-identity test calls it with a synthesized argument
      * array.
+     *
+     * <p>What the collector's own enumeration at a priority stop sets off is
+     * dropped whole, evaluations and runs alike ({@link
+     * LiveGame#enumerate}): its rules queries run Forge's static check, which
+     * evaluates every state trigger, and none of that is the game's.
      */
     PatchHooks.Listener handler() {
         return PatchHooks.TRIGGER_LISTENER.listener((callback, args) -> {
-            if (callback == PatchHooks.Callback.ON_TRIGGER_RUN) {
-                if (!live.foreign(args.get(0))) {
-                    ran(args.get(0), args.get(1));
-                }
-                return;
-            }
-            // Checked first, before this evaluation can spend any of the
-            // mode's negative-sampling budget (offer/keep below) -- a fork's
-            // trigger evaluations must not skew the live game's ratio
-            // bookkeeping any more than they must reach its shard. args[0] is
-            // declared Trigger on Forge's side, always a CardTraitBase with a
-            // real host.
-            Object trait = args.get(0);
-            if (live.foreign(trait)) {
-                return;
-            }
-            boolean fired = Boolean.TRUE.equals(args.get(2));
-            String mode = RunParamNormalizer.modeOf(trait);
-            if (mode == null) {
-                mode = RunParamNormalizer.UNKNOWN_MODE;
-            }
-            // A not-fired evaluation a directed fork keeps (FR-010c) is offered
-            // whatever the mode's balance says, and repays none of it.
-            boolean kept = !fired && context.kept().keepsNegative(trait);
-            if (!kept && !negatives.offer(mode, fired)) {
-                return;
-            }
-            ProvenanceKey.Resolved line = LiveGame.lineOf(trait);
-            String key = lineKey(trait, line, mode);
-            if (fired) {
-                evaluatedFiring(trait, line, args.get(1), mode, key);
-                return;
-            }
-            // The line's flood cap is asked before the snapshot is built, so
-            // a line at its cap costs a key lookup rather than a whole board.
-            if (!negatives.lineHasRoomForNegative(key)) {
-                return;
-            }
-            if (!context.emitDistinct(record(trait, line, args.get(1), fired), dedup)) {
-                return;
-            }
-            // Counted only for a record that reaches the shard, so a
-            // suppressed duplicate or one the per-game cap withheld spends
-            // neither the negatives' quota nor the line's cap, and the ratio
-            // holds over what reaches the shard.
-            if (kept) {
-                negatives.keepOutsideTheBalance(key);
-            } else {
-                negatives.keep(mode, key, fired);
+            if (!live.enumeratingHere()) {
+                reported(callback, args);
             }
         });
+    }
+
+    /** A callback of the hook's, outside the collector's own enumeration. */
+    private void reported(PatchHooks.Callback callback, PatchHooks.Args args) {
+        if (callback == PatchHooks.Callback.ON_TRIGGER_RUN) {
+            if (!live.foreign(args.get(0))) {
+                ran(args.get(0), args.get(1));
+            }
+            return;
+        }
+        // Checked first, before this evaluation can spend any of the
+        // mode's negative-sampling budget (offer/keep below) -- a fork's
+        // trigger evaluations must not skew the live game's ratio
+        // bookkeeping any more than they must reach its shard. args[0] is
+        // declared Trigger on Forge's side, always a CardTraitBase with a
+        // real host.
+        Object trait = args.get(0);
+        if (live.foreign(trait)) {
+            return;
+        }
+        boolean fired = Boolean.TRUE.equals(args.get(2));
+        String mode = RunParamNormalizer.modeOf(trait);
+        if (mode == null) {
+            mode = RunParamNormalizer.UNKNOWN_MODE;
+        }
+        // A not-fired evaluation a directed fork keeps (FR-010c) is offered
+        // whatever the mode's balance says, and repays none of it.
+        boolean kept = !fired && context.kept().keepsNegative(trait);
+        if (!kept && !negatives.offer(mode, fired)) {
+            return;
+        }
+        ProvenanceKey.Resolved line = LiveGame.lineOf(trait);
+        String key = lineKey(trait, line, mode);
+        if (fired) {
+            evaluatedFiring(trait, line, args.get(1), mode, key);
+            return;
+        }
+        // The line's flood cap is asked before the snapshot is built, so
+        // a line at its cap costs a key lookup rather than a whole board.
+        if (!negatives.lineHasRoomForNegative(key)) {
+            return;
+        }
+        if (!context.emitDistinct(record(trait, line, args.get(1), fired), dedup)) {
+            return;
+        }
+        // Counted only for a record that reaches the shard, so a
+        // suppressed duplicate or one the per-game cap withheld spends
+        // neither the negatives' quota nor the line's cap, and the ratio
+        // holds over what reaches the shard.
+        if (kept) {
+            negatives.keepOutsideTheBalance(key);
+        } else {
+            negatives.keep(mode, key, fired);
+        }
     }
 
     /**

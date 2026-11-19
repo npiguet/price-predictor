@@ -109,8 +109,18 @@ public final class PriorityCandidates {
      * both sampling stages keep, the player without priority included, and
      * each a directed fork keeps whatever they draw, unless the fork has
      * written it failing the same checks at an earlier stop.
+     *
+     * <p>Run as the collector's own enumeration ({@link LiveGame#enumerate}):
+     * the rules queries it makes are not the game's, so the state triggers
+     * Forge's static check evaluates and queues inside them reach no channel
+     * and leave nothing on the way to the stack. A candidate read later, when
+     * the random seat draws, is the seat's own query, as the AI's are.
      */
     void settle(Player priorityPlayer) {
+        live.enumerate(() -> enumerate(priorityPlayer));
+    }
+
+    private void enumerate(Player priorityPlayer) {
         Game game = live.game();
         List<Candidate> candidates = new ArrayList<>();
         for (Player player : game.getPlayers()) {

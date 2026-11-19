@@ -38,6 +38,14 @@ final class LiveGame {
 
     private final Game game;
     private final SnapshotBuilder snapshots;
+    /**
+     * The thread running the collector's own enumeration of this game's
+     * candidates, or null: a flag scoped to one thread, so a query the AI
+     * makes of this game on a thread of its own is not taken for it, and to
+     * this game, so a fork, which has a {@code LiveGame} of its own, never
+     * inherits it.
+     */
+    private volatile Thread enumerating;
 
     LiveGame(Game game) {
         this.game = game;
@@ -46,6 +54,39 @@ final class LiveGame {
 
     Game game() {
         return game;
+    }
+
+    /**
+     * Run {@code enumeration}, the collector's own rules queries of this
+     * game, as invisible to the channels (finding 8.5).
+     *
+     * <p>A query reads a candidate on a stand-in card (a morph's face-down
+     * cast, a face-down permanent turned up, a spell with an alternate
+     * host), and Forge then re-applies every static to the live game and
+     * runs its state triggers: each state trigger is evaluated, and one whose
+     * condition holds is run and queued for the stack. None of that is the
+     * game's. The trigger channel drops every evaluation and run reported
+     * while {@link #enumeratingHere()} holds, and the triggers the
+     * enumeration queued are taken off again before it ends
+     * ({@link QueuedTriggers}), whatever it threw.
+     */
+    void enumerate(Runnable enumeration) {
+        QueuedTriggers queued = QueuedTriggers.of(game.getStack());
+        enumerating = Thread.currentThread();
+        try {
+            enumeration.run();
+        } finally {
+            try {
+                queued.dropQueuedSince();
+            } finally {
+                enumerating = null;
+            }
+        }
+    }
+
+    /** Whether this thread is running the collector's own enumeration of this game. */
+    boolean enumeratingHere() {
+        return enumerating == Thread.currentThread();
     }
 
     /** How this game's state is rendered into a record. */

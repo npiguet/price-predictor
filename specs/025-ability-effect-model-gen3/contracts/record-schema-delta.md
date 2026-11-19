@@ -493,7 +493,10 @@ position a card left a library from, and a search of another player's library.
 - A `trigger` record with `fired: true` is a trigger Forge ran (`onTriggerRun`): its condition held
   and the trigger went on the stack, or a static trigger's ability was played. Its board is read
   when the condition was evaluated. An evaluation whose condition held and that Forge never ran
-  writes no record. Several runs of one evaluation (Panharmonicon) write one record.
+  writes no record. Several runs of one evaluation (Panharmonicon) write one record. An evaluation
+  or a run the collector's own enumeration of decision candidates at a priority stop sets off
+  (Forge's static check inside a rules query) writes no record and is offered to no sampler, and a
+  trigger that enumeration queued is taken off the queue again.
 - A game's fired `trigger` records and its mana records are written at its end, after its other
   records and before its marker, and are never withheld by `--max-records-per-game`.
 - A `coin_flipped` event names the player who flipped as its subject. No coin flipped writes no
