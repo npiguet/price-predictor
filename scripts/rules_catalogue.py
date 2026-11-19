@@ -1097,32 +1097,53 @@ def lacking_polarities(fires, does_not_fire):
             | ({DOES_NOT_FIRE} if does_not_fire == 0 else set()))
 
 
-def forkable_variants(scenarios, lacking):
+def forkable_variants(scenarios, lacking, registered):
     """``(scenario id, label, polarity, operation)`` of every non-base variant
-    classified into an operation, those of a polarity the counts lack first."""
+    classified into an operation and in ``registered`` (the labels the Java
+    registry registers for the rule), those of a polarity the counts lack first."""
     found = [(s["id"], v["label"], v["polarity"], v["operation"])
              for s in scenarios for v in s.get("variants", [])[1:]
-             if isinstance(v.get("operation"), str)]
+             if isinstance(v.get("operation"), str) and v["label"] in registered]
     return sorted(found, key=lambda f: f[2] not in lacking)
 
 
-def directed_rules(counts, by_rule):
+def registered_sides(rules_dir):
+    """``rule -> {variant label -> Polarity}`` of every registered rule: the
+    collector's own definition of a rule's sides (``forkable_sides``)."""
+    from effects.domain.directed_sides import forkable_sides
+    from effects.infrastructure.rules_catalogue_io import load_registered_variants, load_scenarios
+
+    registered = load_registered_variants(rules_dir)
+    return forkable_sides(load_scenarios(rules_dir), list(registered), registered)
+
+
+def counted_sides(variants):
+    """The polarities of a rule's registered variants that name a side: the
+    collector counts a rule's forks under these alone, ``other`` is no side."""
+    from effects.domain.directed_sides import COUNTED_SIDES
+
+    return frozenset(str(p) for p in variants.values() if p in COUNTED_SIDES)
+
+
+def directed_rules(counts, by_rule, sides):
     """The rules FR-014b enables, in unit order: ``rule -> {counts, lacking,
-    variants, by_counts}``; ``by_counts`` is False for a rule listed only as
-    one of ``ALWAYS_DIRECTED``. A rule of ``NOT_DIRECTED`` is never listed."""
+    variants, by_counts, sides}``; ``by_counts`` is False for a rule listed only
+    as one of ``ALWAYS_DIRECTED``; ``sides`` are the counted polarities of the
+    rule's registered variants, ``sides`` being ``registered_sides``. A rule of
+    ``NOT_DIRECTED`` or one no variant is registered for is never listed."""
     out = {}
     for rule, scenarios in by_rule.items():
-        if rule in NOT_DIRECTED:
+        if rule in NOT_DIRECTED or not sides.get(rule):
             continue
         found = rule_counts(counts, rule, scenarios)
         lacking = lacking_polarities(*found) if found is not None else set()
         by_counts = bool(lacking)
         if not by_counts and rule not in ALWAYS_DIRECTED:
             continue
-        variants = forkable_variants(scenarios, lacking)
+        variants = forkable_variants(scenarios, lacking, sides[rule])
         if variants:
             out[rule] = {"counts": found, "lacking": lacking, "variants": variants,
-                         "by_counts": by_counts}
+                         "by_counts": by_counts, "sides": counted_sides(sides[rule])}
     return dict(sorted(out.items(), key=lambda item: (unit_sort_key(rule_unit(item[0])),
                                                       rule_sort_key(item[0]))))
 
@@ -1198,17 +1219,28 @@ def write_decided_from(path, counts):
 
 
 def directed_probabilities(chosen, count):
-    """``rule -> probability`` of each listed rule, from its counts of the two
-    sides against ``count`` records a side; 1 for a rule the counts cannot speak for."""
-    return {rule: 1.0 if row["counts"] is None else directed_fork_probability(row["counts"], count)
-            for rule, row in chosen.items()}
+    """``rule -> probability`` of each listed rule, from the counts of the sides
+    its registered variants make (the collector's sides) against ``count``
+    records a side; 1 for a rule the counts cannot speak for. A rule whose
+    registered variants are all polarity ``other`` has no side to fill and no
+    entry: ``match-outcomes`` gives it the run's ``--directed-fork-probability``,
+    as ``collect-variants`` does."""
+    out = {}
+    for rule, row in chosen.items():
+        if row["counts"] is None:
+            out[rule] = 1.0
+        elif row["sides"]:
+            by_side = dict(zip((FIRES, DOES_NOT_FIRE), row["counts"], strict=True))
+            out[rule] = directed_fork_probability(
+                [by_side[side] for side in sorted(row["sides"])], count)
+    return out
 
 
 def cmd_directed_rules(args):
     rules_dir = args.rules_dir
     counts = json.loads(args.counts.read_text(encoding="utf-8"))
     by_rule = load_scenarios_by_rule(rules_dir)
-    chosen = directed_rules(counts, by_rule)
+    chosen = directed_rules(counts, by_rule, registered_sides(rules_dir))
     cards, unknown = wording_cards(chosen, by_rule, converted_card_of_face(args.cards_folder))
     (rules_dir / "directed-fork-rules.txt").write_text(
         "".join(f"{rule}\n" for rule in chosen), encoding="utf-8", newline="\n")

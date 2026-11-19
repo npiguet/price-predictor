@@ -53,10 +53,14 @@ forkable variants, those of the polarity its counts lack first and starred.
 `--probabilities-output FILE` writes a JSON object from each listed rule to its directed-fork
 probability, in list order, for `match-outcomes --directed-fork-probabilities`:
 `{"121.2": 1.0, "702.9a": 0.6, "704.5f": 0.0}`. A rule's probability is
-`effects.domain.directed_fork_probabilities.directed_fork_probability` over its `fires` and
-`does_not_fire` totals and `--count-per-side`: 0 when both sides have reached the count, 1 when a
+`effects.domain.directed_fork_probabilities.directed_fork_probability` over the record totals of
+the sides its registered variants make (`rules/directed-fork-variants.tsv`; the polarities `fires` and
+`does_not_fire` of `effects.domain.directed_sides.forkable_sides`, as the collector takes them) and
+`--count-per-side`: 0 when both sides have reached the count, 1 when a
 side has none, else the larger of 0.05 and the share of the count the shorter side still misses. A
-rule the counts cannot speak for gets 1.
+rule the counts cannot speak for gets 1; a rule whose registered variants are all polarity `other`
+gets no entry, so `match-outcomes` gives it `--directed-fork-probability`. Only registered rules are
+listed, so `directed-fork-rules.txt` and the file agree with `match-outcomes`' reader.
 
 ## `python -m effects rule-counts` (new)
 

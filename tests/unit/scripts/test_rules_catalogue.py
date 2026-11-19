@@ -194,6 +194,12 @@ def catalogue(tmp_path, monkeypatch):
     }
     counts_path = tmp_path / "rule-counts.json"
     counts_path.write_text(json.dumps(counts), encoding="utf-8")
+    registered = sorted(
+        (rule, v["label"]) for scenarios in units.values() for s in scenarios
+        for rule in s["rules"] for v in s["variants"][1:] if isinstance(v["operation"], str))
+    (rules / "directed-fork-variants.tsv").write_text(
+        "rule\tvariant\n" + "".join(f"{rule}\t{label}\n" for rule, label in registered),
+        encoding="utf-8")
     cards = tmp_path / "cardsfolder" / "c"
     cards.mkdir(parents=True)
     (cards / "cut_ribbons.txt").write_text(
@@ -319,9 +325,9 @@ def test_the_rules_left_out_are_those_the_user_dropped_each_with_a_reason():
 
 
 #: The rules whose detectors read gen-3 fields only: the counts checked in
-#: beside the list are the gen-2 corpus's and omit them, so ``directed-rules``
-#: now reads them as rules with a detector and no record, which the committed
-#: list, decided before, does not hold. A gen-3 corpus's counts decide them.
+#: beside the list are the gen-2 corpus's and omit them, so they read as rules
+#: with a detector and no record; the Java registry registers none of them, so
+#: ``directed-rules`` never chooses them.
 GEN3_ONLY_RULES = frozenset({"514.1", "702.26a", "703.4c"})
 
 
@@ -330,10 +336,11 @@ def test_the_regenerated_list_is_the_committed_one():
     the committed list, order included, on any machine, bar the rules the
     gen-2 counts could not show."""
     counts = json.loads((rc.RULES / rc.DIRECTED_COUNTS).read_text(encoding="utf-8"))
-    chosen = rc.directed_rules(counts, rc.load_scenarios_by_rule(rc.RULES))
+    chosen = rc.directed_rules(counts, rc.load_scenarios_by_rule(rc.RULES),
+                               rc.registered_sides(rc.RULES))
     listed = (rc.RULES / "directed-fork-rules.txt").read_text(encoding="utf-8").split()
-    assert [rule for rule in chosen if rule not in GEN3_ONLY_RULES] == listed
-    assert GEN3_ONLY_RULES <= set(chosen)
+    assert list(chosen) == listed
+    assert not GEN3_ONLY_RULES & set(chosen), "unregistered, so never chosen"
 
 
 def test_the_subcommand_writes_the_counts_it_decided_from(catalogue, capsys):
@@ -342,7 +349,8 @@ def test_the_subcommand_writes_the_counts_it_decided_from(catalogue, capsys):
     counts = json.loads(catalogue.counts.read_text(encoding="utf-8"))
     assert written == rc.decided_from(counts)
     assert "review" not in written and "records" not in written
-    assert list(rc.directed_rules(written, rc.load_scenarios_by_rule(catalogue.rules_dir))) == (
+    assert list(rc.directed_rules(written, rc.load_scenarios_by_rule(catalogue.rules_dir),
+                                  rc.registered_sides(catalogue.rules_dir))) == (
         catalogue.rules_dir / "directed-fork-rules.txt").read_text(encoding="utf-8").split()
 
 
