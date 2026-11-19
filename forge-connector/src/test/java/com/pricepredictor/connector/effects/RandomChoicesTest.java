@@ -38,7 +38,8 @@ class RandomChoicesTest {
     private static final int SEEDS = 200;
 
     /**
-     * The draws for one seed, scrambled the way production seeds are: a
+     * The draws for one seed, scrambled through {@code scramble} (the choices' own seeding is
+     * {@code SeedStreams}, not this): a
      * linear congruential generator's first output is nearly linear in its
      * seed, so consecutive raw seeds all make nearly the same first draw and
      * a range test over them sees one value.

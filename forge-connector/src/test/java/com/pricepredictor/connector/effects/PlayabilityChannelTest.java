@@ -48,41 +48,47 @@ class PlayabilityChannelTest {
      * is sampled is what this pins.
      *
      * <p>Both collectors share one seed (1) and one {@code playabilityRate}
-     * (0.5). The sampler is <em>not</em> {@code new Random(1L)}: it is
-     * {@code new Random(scramble(seed))}, and {@code scramble} is SplitMix64's
-     * finalizer, so the draws are those of {@code Random(scramble(1L))} --
-     * {@code 0.9245, 0.1142}, not {@code Random(1L)}'s {@code 0.7309, 0.4101};
-     * the conclusion holds either way, so do not reproduce the latter against
-     * the real {@code sampler}.
+     * (0.8). The sampler is {@code SeedStreams.random(1, SAMPLER)}, whose
+     * first two draws are {@code 0.8179} and {@code 0.7792}: at rate 0.8 the
+     * first is sampled out (0.8179 &ge; 0.8) and the second in (0.7792 &lt;
+     * 0.8). A solo run settling the live game twice shows the second premise
+     * (it admits a record).
      *
      * <p>The live board offers one candidate, which draws only the first
-     * (0.9245 &gt; 0.5, sampled out). If a fork's stop ahead of it drew for
-     * the fork's candidate before being dropped, the live candidate behind it
-     * would draw the second (0.1142 &le; 0.5, sampled in) -- a live record
-     * appearing only because a fork's stop happened to precede it.
+     * (sampled out). If a fork's stop ahead of it drew for the fork's
+     * candidate before being dropped, the live candidate behind it would draw
+     * the second (sampled in) -- a live record appearing only because a fork's
+     * stop happened to precede it.
      */
     @Test
     void aForkPriorityStopDoesNotShiftTheLiveSampleStream() throws Throwable {
         // Stage 2 keeps whatever stage 1 does, so the stream is stage 1's alone.
-        CollectionCaps halfRate = caps().playabilityRate(0.5).candidateRates(0.5, 0.5).build();
+        CollectionCaps rate = caps().playabilityRate(0.8).candidateRates(0.8, 0.8).build();
         Game live = oneCandidate(TestBoard.twoPlayerGame(PhaseType.MAIN1));
         Player seat = live.getPlayers().get(0);
         Game fork = oneCandidate(TestBoard.twoPlayerGame(PhaseType.MAIN1));
 
-        Path solo = ShardRun.shardOf(tempDir.resolve("solo"), live, halfRate,
+        Path solo = ShardRun.shardOf(tempDir.resolve("solo"), live, rate,
                 (bracket, collectors) -> settle(collectors, live, seat));
         boolean soloAdmitted = admitsAPlayabilityRecord(solo);
 
-        Path paired = ShardRun.shardOf(tempDir.resolve("paired"), live, halfRate,
+        Path twice = ShardRun.shardOf(tempDir.resolve("twice"), live, rate,
+                (bracket, collectors) -> {
+                    settle(collectors, live, seat);
+                    settle(collectors, live, seat);
+                });
+        boolean twiceAdmitted = admitsAPlayabilityRecord(twice);
+
+        Path paired = ShardRun.shardOf(tempDir.resolve("paired"), live, rate,
                 (bracket, collectors) -> {
                     settle(collectors, fork, fork.getPlayers().get(0));
                     settle(collectors, live, seat);
                 });
         boolean pairedAdmitted = admitsAPlayabilityRecord(paired);
 
-        // The premise: the first live draw is sampled out, the second in, so
-        // a fork's draw leaking into the live stream would admit the record.
         assertFalse(soloAdmitted, "premise: alone, the live game's first draw is sampled out");
+        assertTrue(twiceAdmitted, "premise: the sampler's second draw is sampled in, so a leaked "
+                + "draw would admit the live record");
         assertEquals(soloAdmitted, pairedAdmitted,
                 "a fork's stop ahead of it must not change whether the live candidate "
                         + "behind it is sampled in: solo=" + soloAdmitted
