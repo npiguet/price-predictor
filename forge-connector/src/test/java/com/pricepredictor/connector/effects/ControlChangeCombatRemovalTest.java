@@ -2,11 +2,13 @@ package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
+import forge.game.ability.AbilityKey;
 import forge.game.card.Card;
 import forge.game.combat.Combat;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
+import forge.game.trigger.TriggerType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -166,6 +168,48 @@ class ControlChangeCombatRemovalTest {
         Seats seats = Seats.inCombat();
         yourAttackingBearsAreTaken(seats, bears -> seats.castAt(seats.opponent(), "Act of Treason", bears),
                 "cardsfolder/a/act_of_treason.txt");
+    }
+
+    /**
+     * The opponent's tapped Tahngarth, First Mate, its "whenever an opponent
+     * attacks" trigger put on the stack by the engine when your Grizzly Bears
+     * attack, and accepted: its one {@code GainControl} clause gives you
+     * control of Tahngarth until end of combat. The clause sets the controller
+     * and corrects the zone and publishes no stats change, so its {@code
+     * control_change} is read where the zone is corrected: the resolution's
+     * half holds it, the clause's, {@code root} (finding 9.9, task B42).
+     */
+    @Test
+    void aRealTriggersControlChangeIsInItsRecord() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DECLARE_BLOCKERS,
+                new forge.ai.LobbyPlayerAi("a", null), DecliningSeat.accepting("b"));
+        game.setAge(forge.game.GameStage.Play);
+        Seats seats = new Seats(game, game.getPlayers().get(0), game.getPlayers().get(1));
+        Card bears = seats.yours("Grizzly Bears");
+        Card tahngarth = seats.theirs("Tahngarth, First Mate");
+        tahngarth.tap(true, null, null);
+        Combat combat = seats.attacking(bears);
+        game.getTriggerHandler().resetActiveTriggers();
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            Map<AbilityKey, Object> params = AbilityKey.newMap();
+            params.put(AbilityKey.Attackers, combat.getAttackers());
+            params.put(AbilityKey.AttackingPlayer, seats.you());
+            params.put(AbilityKey.AttackedTarget, List.of(seats.opponent()));
+            game.getTriggerHandler().runTrigger(TriggerType.AttackersDeclared, params, false);
+            game.getStack().addAllTriggeredAbilitiesToStack();
+            game.getStack().resolveStack();
+            game.getAction().checkStateEffects(false);
+            TestBoard.nextStep(game);
+        });
+
+        assertEquals(seats.you(), tahngarth.getController(), "the premise: the trigger took Tahngarth");
+        String half = only(records, "resolution", "cardsfolder/t/tahngarth_first_mate.txt");
+        List<Map<String, Object>> changes = events(half).stream()
+                .filter(event -> "control_change".equals(event.get("type"))).toList();
+        assertEquals(1, changes.size(), half);
+        assertEquals(List.of(Refs.of(tahngarth)), changes.get(0).get("subjects"), half);
+        assertEquals("root", changes.get(0).get("attributed_to"), half);
     }
 
     /**

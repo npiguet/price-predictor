@@ -58,11 +58,14 @@ final class StatDiffer {
     private record Stats(
             int power, int toughness, int basePower, int baseToughness, List<String> keywords,
             List<String> hiddenKeywords, List<String> abilities,
-            Set<String> types, Set<String> colors, String controller,
+            Set<String> types, Set<String> colors,
             String name, String manaCost, int manaValue, String face, int copies) {
     }
 
     private final Map<Integer, Stats> last = new HashMap<>();
+
+    /** Each card's controller as last read, kept beside its stats: {@link #controlChange} reads it alone. */
+    private final Map<Integer, String> controllers = new HashMap<>();
 
     /**
      * What changed on this card since it was last read, as events.
@@ -77,27 +80,15 @@ final class StatDiffer {
         }
         Stats now = read(card);
         Stats before = last.put(card.getId(), now);
+        EffectEvent control = controlChange(card);
         if (before == null || before.equals(now)) {
-            return List.of();
+            return control == null ? List.of() : List.of(control);
         }
         String subject = Refs.of(card);
         List<EffectEvent> events = new ArrayList<>();
 
-        boolean baseMoved = before.basePower() != now.basePower()
-                || before.baseToughness() != now.baseToughness();
-        if (before.power() != now.power() || before.toughness() != now.toughness()
-                || (baseMoved && card.isCreature())) {
-            EffectEvent pt = new EffectEvent(EventType.PT_CHANGE)
-                    .subject(subject)
-                    .param("power_delta", now.power() - before.power())
-                    .param("toughness_delta", now.toughness() - before.toughness());
-            // The base a setting effect gave it (layer 7b, or a CDA's 7a), as
-            // the snapshot's base_pt spells it: without it a 0/0 artifact
-            // animated into a 5/5 reads the same as a 0/0 creature pumped
-            // +5/+5. Only on a creature, as base_pt is.
-            if (baseMoved && card.isCreature()) {
-                pt.param("set_pt", List.of(now.basePower(), now.baseToughness()));
-            }
+        EffectEvent pt = ptChange(card, before, now);
+        if (pt != null) {
             events.add(pt);
         }
         addKeywordEvents(events, subject, before.keywords(), now.keywords(), false);
@@ -112,10 +103,8 @@ final class StatDiffer {
         // a colour went away.
         addSetChangeEvent(events, subject, EventType.COLOR_CHANGE,
                 "colors", "colors_removed", before.colors(), now.colors());
-        if (!java.util.Objects.equals(before.controller(), now.controller())) {
-            events.add(new EffectEvent(EventType.CONTROL_CHANGE)
-                    .subject(subject)
-                    .param("controller", now.controller()));
+        if (control != null) {
+            events.add(control);
         }
         // A name or mana cost a face change or a copy effect brought is that
         // change's: the face_change and the copy say it already.
@@ -134,6 +123,49 @@ final class StatDiffer {
         return events;
     }
 
+    /** The {@code pt_change} between two readings of a card, or null when its power and toughness did not move. */
+    private static EffectEvent ptChange(Card card, Stats before, Stats now) {
+        boolean setsBase = card.isCreature() && (before.basePower() != now.basePower()
+                || before.baseToughness() != now.baseToughness());
+        boolean moved = before.power() != now.power() || before.toughness() != now.toughness();
+        if (!moved && !setsBase) {
+            return null;
+        }
+        EffectEvent pt = new EffectEvent(EventType.PT_CHANGE)
+                .subject(Refs.of(card))
+                .param("power_delta", now.power() - before.power())
+                .param("toughness_delta", now.toughness() - before.toughness());
+        // The base a setting effect gave it (layer 7b, or a CDA's 7a), as
+        // the snapshot's base_pt spells it: without it a 0/0 artifact
+        // animated into a 5/5 reads the same as a 0/0 creature pumped
+        // +5/+5. Only on a creature, as base_pt is.
+        if (setsBase) {
+            pt.param("set_pt", List.of(now.basePower(), now.baseToughness()));
+        }
+        return pt;
+    }
+
+    private static EffectEvent controlChangeEvent(String subject, String controller) {
+        return new EffectEvent(EventType.CONTROL_CHANGE).subject(subject).param("controller", controller);
+    }
+
+    /**
+     * The change of control a card has had since it was last read, alone,
+     * or null: nothing else it changed is read, and the reading it is
+     * compared with keeps every other value, so a later {@link #diff} still
+     * reports those. For a clause that only gains control, which publishes
+     * no stats change.
+     */
+    EffectEvent controlChange(Card card) {
+        if (card == null) {
+            return null;
+        }
+        boolean seen = controllers.containsKey(card.getId());
+        String now = Refs.ofNullable(card.getController());
+        String before = controllers.put(card.getId(), now);
+        return seen && !java.util.Objects.equals(before, now) ? controlChangeEvent(Refs.of(card), now) : null;
+    }
+
     /**
      * Remember a card's characteristics without reporting a change.
      *
@@ -144,6 +176,7 @@ final class StatDiffer {
     void prime(Card card) {
         if (card != null) {
             last.put(card.getId(), read(card));
+            controllers.put(card.getId(), Refs.ofNullable(card.getController()));
         }
     }
 
@@ -166,6 +199,7 @@ final class StatDiffer {
     /** Forget a card, so a re-entering permanent is a new object. */
     void forget(int cardId) {
         last.remove(cardId);
+        controllers.remove(cardId);
     }
 
     /**
@@ -315,7 +349,6 @@ final class StatDiffer {
                 sorted(StaticSuppression.NONE.hiddenKeywords(card)),
                 sorted(abilities), types,
                 new LinkedHashSet<>(CardSpelling.colorLetters(card.getColor())),
-                Refs.ofNullable(card.getController()),
                 card.getName(), CardFacts.manaCostJson(card), card.getCMC(),
                 CardFacts.faceState(card), card.getCloneStates().size());
     }

@@ -26,6 +26,7 @@ import forge.game.event.GameEventShuffle;
 import forge.game.event.GameEventSpeedChanged;
 import forge.game.event.GameEventSurveil;
 import forge.game.event.GameEventTurnPhase;
+import forge.game.event.EventValueChangeType;
 import forge.game.event.GameEventZone;
 import forge.game.player.Player;
 import forge.game.player.PlayerView;
@@ -293,8 +294,27 @@ abstract class BusEventReader {
         }
         if (event.zoneType() == ZoneType.Battlefield) {
             file(ControlCorrection.removalAt(game, event), null);
+            controlMoved(event);
         } else if (event.zoneType() == ZoneType.Command) {
             commandZoneChanged(event);
+        }
+    }
+
+    /**
+     * A permanent added to a battlefield that is its controller's new one:
+     * the change of control that moved it, read alone ({@link StatDiffer#controlChange}).
+     * A clause that only gains control publishes no stats change (Forge's
+     * {@code GainControl} sets the controller and corrects the zone), so the
+     * {@code control_change} it made is read here, once the zone is
+     * corrected.
+     */
+    private void controlMoved(GameEventZone event) {
+        if (event.mode() != EventValueChangeType.Added || event.card() == null) {
+            return;
+        }
+        EffectEvent changed = stats.controlChange(cardById(event.card().getId()));
+        if (changed != null) {
+            fileOutcome(changed, null);
         }
     }
 

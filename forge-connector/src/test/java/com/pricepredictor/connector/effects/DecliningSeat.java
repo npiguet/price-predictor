@@ -7,6 +7,7 @@ import forge.game.card.Card;
 import forge.game.player.Player;
 import forge.game.player.PlayerActionConfirmMode;
 import forge.game.spellability.SpellAbility;
+import forge.game.trigger.WrappedAbility;
 
 import java.util.List;
 import java.util.Map;
@@ -14,34 +15,61 @@ import java.util.Map;
 /**
  * A seat whose controller refuses every "you may" it is asked, through the
  * confirm hook, in the live game and in every copy of it: {@code GameCopier}
- * keeps a seat's lobby player, which builds the copy's controller.
+ * keeps a seat's lobby player, which builds the copy's controller. {@link
+ * #accepting} is the same seat answering yes to every one.
  */
 final class DecliningSeat extends LobbyPlayerAi {
 
+    private final boolean answer;
+
     DecliningSeat(String name) {
+        this(name, false);
+    }
+
+    private DecliningSeat(String name, boolean answer) {
         super(name, null);
+        this.answer = answer;
+    }
+
+    /** A seat that accepts every "you may" it is asked. */
+    static DecliningSeat accepting(String name) {
+        return new DecliningSeat(name, true);
     }
 
     @Override
     public Player createIngamePlayer(Game game, int id) {
         Player player = new Player(getName(), game, id);
-        player.setFirstController(new Declining(game, player, this));
+        player.setFirstController(new Declining(game, player, this, answer));
         return player;
     }
 
     private static final class Declining extends PlayerControllerAi {
-        Declining(Game game, Player player, LobbyPlayerAi lobby) {
+        private final boolean answer;
+
+        Declining(Game game, Player player, LobbyPlayerAi lobby, boolean answer) {
             super(game, player, lobby);
+            this.answer = answer;
         }
 
         @Override
         public boolean confirmAction(SpellAbility sa, PlayerActionConfirmMode mode, String message,
                                      List<String> options, Card cardToShow, Map<String, Object> params) {
+            return noted(sa, answer);
+        }
+
+        /** An accepting seat takes every optional trigger; a declining one leaves them to the AI. */
+        @Override
+        public boolean confirmTrigger(WrappedAbility wrapper) {
+            return answer && !wrapper.isMandatory()
+                    ? noted(wrapper.getWrappedAbility(), true) : super.confirmTrigger(wrapper);
+        }
+
+        private static boolean noted(SpellAbility sa, boolean confirmed) {
             try {
                 java.lang.reflect.Method note = PlayerControllerAi.class.getDeclaredMethod(
                         "noteEffectRecordConfirm", SpellAbility.class, boolean.class);
                 note.setAccessible(true);
-                return (Boolean) note.invoke(null, sa, false);
+                return (Boolean) note.invoke(null, sa, confirmed);
             } catch (ReflectiveOperationException e) {
                 throw new AssertionError(e);
             }
