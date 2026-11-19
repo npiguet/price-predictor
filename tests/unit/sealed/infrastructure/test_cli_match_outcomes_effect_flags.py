@@ -453,3 +453,51 @@ class TestWhereTheTwoSealedCorporaGo:
         monkeypatch.setattr(forge_jvm, "check_worker_prerequisites", lambda **_: None)
         assert run_match_outcomes(parse("match-outcomes", "--workers", "1", *argv)) == 0
         return made
+
+
+class TestTheEngineRefusal:
+    """Finding 11.1 (task K01c): a run collecting effect records whose workers'
+    engine is not whole exits 1, its reason in ``run.json``'s outcome, unless
+    ``--allow-degraded``; the flag needs ``--effect-records``."""
+
+    def test_it_is_off_by_default_and_reaches_the_supervisor(self, monkeypatch):
+        from unittest.mock import MagicMock
+
+        import sealed.application.match_outcomes as module
+        from price_predictor.infrastructure import forge_jvm
+
+        made = []
+        monkeypatch.setattr(module, "MatchOutcomeSupervisor", lambda **kwargs: (
+            made.append(kwargs["allow_degraded"]) or MagicMock(collected_nothing=False)))
+        monkeypatch.setattr(forge_jvm, "check_worker_prerequisites", lambda **_: None)
+        for extra in ((), ("--allow-degraded",)):
+            run_match_outcomes(parse("match-outcomes", "--effect-records", "records", *extra))
+
+        assert made == [False, True]
+
+    def test_without_effect_records_it_is_refused(self, monkeypatch, capsys):
+        import sealed.application.match_outcomes as module
+
+        monkeypatch.setattr(module, "MatchOutcomeSupervisor", lambda **_: pytest.fail("ran"))
+        assert run_match_outcomes(parse("match-outcomes", "--allow-degraded")) == 2
+        assert "--allow-degraded needs --effect-records" in capsys.readouterr().err
+
+    def test_a_refused_engine_exits_1_and_its_reason_reaches_the_outcome(
+        self, monkeypatch, capsys,
+    ):
+        from unittest.mock import MagicMock
+
+        import sealed.application.match_outcomes as module
+        from price_predictor.domain.worker_status import WorkerEngineRefused
+        from price_predictor.infrastructure import forge_jvm
+        from price_predictor.infrastructure.cli_run_manifest import REFUSAL_DEST
+
+        supervisor = MagicMock()
+        supervisor.run.side_effect = WorkerEngineRefused("the engine is not whole: mode degraded")
+        monkeypatch.setattr(module, "MatchOutcomeSupervisor", lambda **_: supervisor)
+        monkeypatch.setattr(forge_jvm, "check_worker_prerequisites", lambda **_: None)
+        args = parse("match-outcomes", "--effect-records", "records")
+
+        assert run_match_outcomes(args) == 1
+        assert getattr(args, REFUSAL_DEST) == "the engine is not whole: mode degraded"
+        assert "Error: the engine is not whole" in capsys.readouterr().err

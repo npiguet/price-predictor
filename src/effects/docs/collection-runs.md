@@ -33,6 +33,13 @@ Rules to respect when running, babysitting or changing `collect-coverage`, `coll
 - A round is counted only once every worker of its pool has ended.
 - Each round reports, and `run.json` records, how the workers ended (`worker_stops`) and how many games the counts left out as cut (`cut_games`).
 
+## The workers' engine
+
+- A run collecting effect records (`collect-coverage`, `collect-variants`, `sealed match-outcomes --effect-records`) runs only on an engine `patched` with every hook. The supervisor reads each worker's status line at every status interval and at each round's end (`worker_status.judge_engine`, `WorkerLogReport.review_engine`): a first lifetime whose mode is not `patched` or whose `gaps` is not empty stops the run by the stop protocol, as a reached target does, and it exits 1 naming the mode and each gap, the message in `run.json`'s outcome. Otherwise stock Forge or a stale installed Forge jar collects a corpus of `degraded` records, or one with an empty channel, and exits 0.
+- `--allow-degraded` lets such a run go on, warning once with what is missing. A later lifetime whose mode, gaps or pinned preferences differ from the first's stops the run even with the flag: a run's records come from one engine.
+- The records written before the stop stay in the run directory, stamped with the engine that wrote them; nothing deletes them.
+- `run.json` records the first lifetime's engine as `worker_engine` (`{"mode", "gaps", "pinned_preferences"}`), `null` while no worker has printed its status line.
+
 ## Restarts are the normal condition
 
 - An eight-hour run is hundreds of JVM lifetimes across its worker slots, and a crash or a kill ends a JVM mid-game without a stop. Record identity, game boundaries and any resume logic must be correct across hundreds of restarts and across a JVM ended mid-game. This is a correctness constraint, not a throughput one.

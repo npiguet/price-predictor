@@ -11,10 +11,13 @@ import re
 from price_predictor.domain.worker_failures import classify
 from price_predictor.domain.worker_status import (
     STATUS_PREFIX,
+    EngineCheck,
     SlotStatuses,
     directed_fork_tally_document,
+    engine_document,
     fork_refusal_document,
     hook_failure_document,
+    judge_engine,
     parse_status_line,
     render_fork_refusals,
     render_hook_failures,
@@ -153,3 +156,88 @@ def test_the_directed_tally_adds_up_over_lifetimes_and_slots_in_rule_name_order(
     assert document["704.5f"] == directed_counts(matched=9, taken=2)
     assert document["a, b=c"] == directed_counts(drawn=1)
     assert directed_fork_tally_document([]) == {}
+
+
+# ── The engine a run's workers link (finding 11.1, task K01c) ───────────
+
+
+def _status(lifetime: str = "a", **members):
+    return parse_status_line(status_line(lifetime, **members))
+
+
+def _hooks(mode: str, *gaps: str) -> dict:
+    return {"hooks": {"mode": mode, "gaps": list(gaps)}}
+
+
+def test_a_whole_engine_is_never_refused():
+    verdict = judge_engine(_status(), [_slot(status_line("a"))])
+
+    assert verdict.shortfall == ()
+    assert verdict.refusal(allow_degraded=False) is None
+    assert verdict.warning() is None
+
+
+def test_no_status_line_yet_is_no_verdict():
+    verdict = judge_engine(None, [])
+    assert verdict.refusal(allow_degraded=False) is None
+
+
+def test_a_degraded_engine_is_refused_naming_the_mode_and_each_gap():
+    first = _status(**_hooks("degraded", "ApiEvents missing", AWKWARD))
+
+    refusal = judge_engine(first, []).refusal(allow_degraded=False)
+
+    assert "mode degraded (no effect-record hooks); ApiEvents missing; " + AWKWARD in refusal
+    assert "worker lifetime a" in refusal
+    assert "--allow-degraded" in refusal
+
+
+def test_a_patched_engine_with_a_gap_is_refused_naming_the_gap_alone():
+    refusal = judge_engine(_status(**_hooks("patched", "Listener.onX missing")), []).refusal(
+        allow_degraded=False)
+
+    assert "): Listener.onX missing." in refusal
+    assert "mode" not in refusal.partition("): ")[2].partition(".")[0]
+
+
+def test_allowed_a_shortfall_is_a_warning_and_no_refusal():
+    verdict = judge_engine(_status(**_hooks("degraded")), [])
+
+    assert verdict.refusal(allow_degraded=True) is None
+    assert verdict.warning() == (
+        "--allow-degraded: collecting on an engine that is not whole (worker "
+        "lifetime a): mode degraded (no effect-record hooks)")
+
+
+def test_a_later_lifetime_on_another_engine_is_refused_even_when_allowed():
+    first = _status("a")
+    slots = [_slot(status_line("a"), status_line(
+        "b", pinned_preferences={**PINNED_PREFERENCES, "ui_language": "de-DE"}))]
+
+    verdict = judge_engine(first, slots)
+
+    assert set(verdict.changed) == {"b"}
+    refusal = verdict.refusal(allow_degraded=True)
+    assert refusal.startswith("worker lifetime b runs another engine than the run's first "
+                              "(lifetime a): pinned_preferences ")
+    assert "'de-DE'" in refusal
+
+
+def test_the_engine_document_is_the_three_members_run_json_keeps():
+    assert engine_document(_status(**_hooks("patched", "g"))) == {
+        "mode": "patched", "gaps": ["g"], "pinned_preferences": PINNED_PREFERENCES}
+
+
+def test_the_check_keeps_its_first_refusal_and_warns_once():
+    degraded = judge_engine(_status(**_hooks("degraded")), [])
+    allowed = EngineCheck(allow_degraded=True)
+
+    assert allowed.review(degraded) is not None
+    assert allowed.review(degraded) is None, "once a run"
+    assert allowed.refusal is None
+
+    refusing = EngineCheck()
+    assert refusing.review(degraded) is None, "no warning without the flag"
+    first_reason = refusing.refusal
+    refusing.review(judge_engine(_status(), []))
+    assert refusing.refusal == first_reason is not None

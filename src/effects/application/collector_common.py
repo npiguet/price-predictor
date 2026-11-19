@@ -21,6 +21,7 @@ from effects.domain import default_paths
 from effects.domain.card_names import fold_card_name
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.split import HoldoutRule
+from price_predictor.domain.worker_status import ALLOW_DEGRADED_HELP
 from price_predictor.infrastructure.forge_jvm import (
     DEFAULT_RECYCLE_SECONDS,
     DEFAULT_STOP_TIMEOUT,
@@ -128,6 +129,7 @@ class CollectorConfig:
         "type": recycle_seconds,
         "help": RECYCLE_SECONDS_HELP,
     })
+    allow_degraded: bool = field(default=False, metadata={"help": ALLOW_DEGRADED_HELP})
     #: Every record a collector writes is aimed (FR-009a): at the run's
     #: ``--directed-fork-rules``, and at no rule, ``[]``, where it names none.
     caps: CollectionCaps = CollectionCaps(aimed_at=())
@@ -319,16 +321,18 @@ def collector_supervisor(
     caps: CollectionCaps,
     variant_scripts: Path | None = None,
     stop: WorkerStopSettings | None = None,
+    allow_degraded: bool = False,
 ) -> Iterator[CollectorSupervisor]:
     """A records-only supervisor under a fresh run id, stopped however its
     rounds end: without ``stop()`` the worker logs holding the latched failure
-    reports stay unflushed until the interpreter exits."""
+    reports stay unflushed until the interpreter exits. ``allow_degraded``:
+    ``--allow-degraded``, the run goes on over an engine that is not whole."""
     from effects.infrastructure.collector_connector import CollectorSupervisor
 
     supervisor = CollectorSupervisor(
         worker_count=workers, effect_records=effect_records,
         run_id=str(uuid.uuid4()), caps=caps, variant_scripts=variant_scripts,
-        stop=stop,
+        stop=stop, allow_degraded=allow_degraded,
     )
     try:
         yield supervisor

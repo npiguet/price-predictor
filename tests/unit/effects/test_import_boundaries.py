@@ -55,8 +55,12 @@ _ALLOWED: dict[str, set[str] | None] = {
     "price_predictor.infrastructure.run_manifest": {"annotate_run"},
     # The worker-log scan, shared with sealed match-outcomes (V4 #3).
     "price_predictor.domain.worker_failures": {"WorkerFailures"},
-    # The worker status line's run totals, rendered for the round report (K01b).
-    "price_predictor.domain.worker_status": {"render_fork_refusals", "render_hook_failures"},
+    # The worker status line's run totals, rendered for the round report (K01b),
+    # and the refusal of a run whose workers' engine is not whole (K01c).
+    "price_predictor.domain.worker_status": {
+        "render_fork_refusals", "render_hook_failures", "ALLOW_DEGRADED_HELP",
+        "WorkerEngineRefused",
+    },
     "price_predictor.infrastructure.worker_log_scan": {"WorkerLogReport"},
     # A directed rule's fork probability, one formula for collect-variants and
     # sealed match-outcomes, which never imports effects (DR1).

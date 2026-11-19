@@ -188,14 +188,15 @@ the shards at its top level, every worker log under `DIR/logs/` (`<run id>.<slot
 beside the shards), each worker's stop file beside its log and the run's progress file
 (`logs/<run id>.progress.txt`, a line per match played to its end, random-seat matches
 included). The workers honour the stop protocol (§ Match worker stop protocol, with
-`--stop-timeout` and `--recycle-seconds`, both refused without `--effect-records`, exit 2). At
+`--stop-timeout` and `--recycle-seconds`, both refused without `--effect-records`, exit 2; the
+workers' engine is judged there too, `--allow-degraded` refused without `--effect-records`, exit 2). At
 every status line and at the end the supervisor scans what the logs gained for failure lines
 (`price_predictor.domain.worker_failures`, as on the collectors) and prints them by kind; at the
 end it prints the run's totals, the hook-failure counts, the fork refusals and how the workers
 ended, and records in
 its `run.json` entry, at start, the resolved `caps` (the collectors' members, so the three rates of every run can be compared), and at the end `run_id`, `matches` (outcome rows), `matches_played` (progress lines),
 `worker_failures`, `worker_failure_examples`, `hook_failures`, `fork_refusals`, `directed_fork_tally`, `worker_survivors`,
-`worker_stops`, `stop_timeout`, `recycle_seconds`, `match_outcomes` (the outcome file's path) and `final_directed_rule_probabilities` (each listed rule's probability as last recomputed; the caps' `directed_rule_probabilities` when the run was given no `--directed-fork-probabilities`). A run that played matches (outcome rows, progress lines or
+`worker_stops`, `worker_engine`, `stop_timeout`, `recycle_seconds`, `match_outcomes` (the outcome file's path) and `final_directed_rule_probabilities` (each listed rule's probability as last recomputed; the caps' `directed_rule_probabilities` when the run was given no `--directed-fork-probabilities`). A run that played matches (outcome rows, progress lines or
 random-seat match errors, so a run of random-seat matches alone counts) and wrote no effect
 record exits 1. `match-outcomes.txt` and `cards-played.txt` go to `--outcomes-dir`, which defaults
 to `DIR`: a collection writes nothing outside its run directory. Their format and content do not
@@ -238,6 +239,8 @@ and 1 when units remain that no deck could hold. A steered round (`--round steer
 | `--stop-timeout` (default 600) | 1 to 3600 | 2 (usage) |
 | `--recycle-seconds` (default 600) | 300 to 86400 | 2 (usage) |
 
+Both take `--allow-degraded` (§ Match worker stop protocol, the workers' engine).
+
 A missing `--exclude-cards`, `--only-cards`, `--split-from` or `--wording-cards` file exits 1
 naming it, before any worker starts.
 
@@ -259,7 +262,8 @@ reads each shard; a damaged shard's game past the damage counts as cut; the card
 showed still count as shown). The running command's entry in `run.json`'s `invocations` records
 `run_id` (the supervisor's), `caps` (every `CollectionCaps` field, resolved), `stop_timeout`,
 `recycle_seconds`, `rounds`, `worker_failures` (kind to line count), `worker_failure_examples`
-(kind to its first line), `hook_failures`, `fork_refusals`, `worker_stops`, `worker_survivors` (PIDs) and
+(kind to its first line), `hook_failures`, `fork_refusals`, `directed_fork_tally`, `worker_engine`,
+`worker_stops`, `worker_survivors` (PIDs) and
 `cut_games` (`{"before_rounds": n, "by_round": [n, …], "total": n}`, the games the counts left
 out, the shards read before the first round apart). The castability consult and the sidecar
 pass are one-shot JVMs killed after `max(3600, 600 + 0.1 × scripts handed over)` seconds: the
@@ -453,6 +457,30 @@ them in the round report (collectors) or at the run's end (`match-outcomes`) —
 `Fork refusals over the run (expected, no failure): <n> <kind> <reason>, …`, at info level — and
 records them in `run.json` as `hook_failures`: `{"connector": {hook: calls}, "forge": {slot:
 calls}}`, `fork_refusals`: `{"<kind> <reason>": forks}`, keys in name order, and `directed_fork_tally`: `{rule: {matched, drawn, budget_blocked, taken, kept, precondition_threw}}`, rules in name order. Refusals count toward no failure kind, no failure threshold and no exit code.
+
+The supervisor of every collecting command (`collect-coverage`, `collect-variants`,
+`match-outcomes --effect-records`) judges the workers' engine from the status lines at every
+status line's log scan and at each round's end (`price_predictor.domain.worker_status.judge_engine`):
+
+- The run's first status line names the engine: a `hooks.mode` other than `patched` or a
+  non-empty `hooks.gaps` refuses the run.
+- A later JVM lifetime whose `hooks` or `pinned_preferences` differ from the first's refuses the
+  run, `--allow-degraded` or not.
+- On a refusal the supervisor prints `Stopping the run: <reason>` and ends the pool by the stop
+  protocol, as a reached target does; the command then exits 1 with
+  `<reason>. The records written before the stop stay under <run dir>`, the message in `run.json`'s
+  outcome. The records already written stay in the run directory.
+- `--allow-degraded` (off; on `match-outcomes` refused without `--effect-records`, exit 2) lets a
+  run on an engine that is not whole go on, printing once
+  `--allow-degraded: collecting on an engine that is not whole (worker lifetime <token>): <what is missing>`.
+- `run.json` records the first lifetime's engine as `worker_engine`: `{"mode", "gaps",
+  "pinned_preferences"}` as the status line carries them, `null` while no worker has printed one.
+
+The reason for an engine that is not whole:
+`the Forge workers' engine is not whole (worker lifetime <token>): <what is missing>. A run collecting effect records needs every hook: rebuild ../forge on its effect-record-hooks branch and the connector JAR (src/effects/CLAUDE.md § The engine hooks), or pass --allow-degraded to collect anyway`,
+`<what is missing>` being `mode degraded (no effect-record hooks)` when the mode is not
+`patched`, then each gap, joined by `; `. For an engine that changed:
+`worker lifetime <token> runs another engine than the run's first (lifetime <token>): <member> <first> -> <later>; …; a run's records come from one engine (was a Forge or connector jar installed during the run?)`.
 
 ## `python -m effects collect-variants` (existing)
 

@@ -141,3 +141,23 @@ def test_the_totals_reach_the_manifest_fields(tmp_path):
     assert fields["hook_failures"] == {"connector": {"RESOLVE": 2}, "forge": {"resolve": 2}}
     assert fields["fork_refusals"] == {"directed dies": 2}
     assert fields["worker_failures"] == {}
+
+
+def test_the_first_status_line_stays_the_first_and_later_lifetimes_are_compared(tmp_path):
+    """Finding 11.1: the run's engine is its first lifetime's; a later one on
+    another engine shows in the verdict."""
+    logs = [tmp_path / "run.0.log", tmp_path / "run.1.log"]
+    scan = WorkerLogScan()
+    assert scan.first_status() is None
+    scan.scan(logs)
+    assert scan.first_status() is None
+
+    _append(logs[1], status_line("b") + "\n")
+    scan.scan(logs)
+    _append(logs[0], status_line("c", hooks={"mode": "degraded", "gaps": []}) + "\n")
+    scan.scan(logs)
+
+    assert scan.first_status().lifetime == "b"
+    verdict = scan.engine_verdict()
+    assert verdict.first.lifetime == "b"
+    assert set(verdict.changed) == {"c"}

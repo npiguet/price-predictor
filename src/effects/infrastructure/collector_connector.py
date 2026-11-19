@@ -17,7 +17,11 @@ from pathlib import Path
 from effects.domain.collection_caps import CollectionCaps
 from effects.infrastructure.deck_file import write_deck_file
 from price_predictor.domain.worker_failures import WorkerFailures
-from price_predictor.domain.worker_status import render_fork_refusals, render_hook_failures
+from price_predictor.domain.worker_status import (
+    WorkerEngineRefused,
+    render_fork_refusals,
+    render_hook_failures,
+)
 from price_predictor.infrastructure.forge_jvm import (
     ForgeWorkerPool,
     WorkerLogFiles,
@@ -60,6 +64,12 @@ class CollectorSupervisor:
     and each has finished its game (or been killed past ``stop.timeout``),
     so a round's shards are final when ``play_round`` returns; workers
     recycle themselves at a game end after ``stop.recycle_seconds``.
+
+    Every status interval, and at each round's end, it reads the workers'
+    status lines: an engine not ``patched`` with every hook stops the round
+    by that same protocol and ``play_round`` raises
+    :class:`WorkerEngineRefused`, unless ``allow_degraded``; an engine that
+    changes under the run always does (``worker_status.EngineVerdict``).
     """
 
     def __init__(
@@ -71,6 +81,7 @@ class CollectorSupervisor:
         caps: CollectionCaps,
         variant_scripts: Path | None = None,
         stop: WorkerStopSettings | None = None,
+        allow_degraded: bool = False,
     ) -> None:
         self._worker_count = worker_count
         self._effect_records = Path(effect_records)
@@ -83,7 +94,10 @@ class CollectorSupervisor:
         # A real log destination, or the JVM's latched emitter-failure reports
         # vanish into DEVNULL and look like a mechanic that never occurred.
         self._worker_logs = WorkerLogFiles(self.logs_dir, self._run_id)
-        self._log_report = WorkerLogReport(self._worker_logs, worker_count)
+        self._log_report = WorkerLogReport(
+            self._worker_logs, worker_count, allow_degraded=allow_degraded)
+        #: The failure lines the current round's status-interval scans found.
+        self._round_failures = WorkerFailures()
         self._stop = stop if stop is not None else WorkerStopSettings()
         self._graceful = self._worker_logs.graceful_stop(self._stop)
         #: PIDs of workers a round's kill could not end.
@@ -203,6 +217,7 @@ class CollectorSupervisor:
             spawn_worker=functools.partial(self.start_worker, decks_file=Path(decks_file)),
             output_path=self.progress_path,
             should_stop=lambda completed: completed >= matches,
+            on_status=self._scan_logs,
             graceful=self._graceful,
         )
         logger.info("Playing %d matches from %d decks", matches, deck_count)
@@ -210,11 +225,38 @@ class CollectorSupervisor:
             self._pool.run()
         finally:
             self._report_round(self._pool)
+        refusal = self._log_report.engine_refusal
+        if refusal is not None:
+            raise WorkerEngineRefused(
+                f"{refusal}. The records written before the stop stay under "
+                f"{self._effect_records}"
+            )
+
+    def _scan_logs(self) -> None:
+        """At a status line: read what the logs gained, and stop the round's
+        pool by the stop protocol once the workers' engine is refused."""
+        self._round_failures.merge(self._log_report.scan())
+        self._review_engine(self._pool)
+
+    def _review_engine(self, pool: ForgeWorkerPool) -> None:
+        """Judge the workers' engine: warn once under ``--allow-degraded``;
+        on a refusal, say so and ask ``pool`` to stop every worker at its
+        game's end, as a run reaching its target does."""
+        refused_before = self._log_report.engine_refusal is not None
+        warning = self._log_report.review_engine()
+        if warning is not None:
+            logger.warning("%s", warning)
+        refusal = self._log_report.engine_refusal
+        if refusal is not None and not refused_before:
+            logger.error("Stopping the run: %s", refusal)
+            pool.request_shutdown()
 
     def _report_round(self, pool: ForgeWorkerPool) -> None:
         """Say what the round's workers logged, how they ended and which
         outlived the kill, and record the run's totals in ``run.json``."""
-        failures = self._log_report.scan()
+        failures, self._round_failures = self._round_failures, WorkerFailures()
+        failures.merge(self._log_report.scan())
+        self._review_engine(pool)
         if failures:
             logger.warning(
                 "Round %d worker logs: %s (under %s)",

@@ -332,7 +332,7 @@ def collect_steered(config: CollectVariantsConfig, sources: list[Path]) -> int:
         with collector_supervisor(
             workers=config.workers, effect_records=config.effect_records,
             caps=config.caps, variant_scripts=config.variant_scripts,
-            stop=config.worker_stop,
+            stop=config.worker_stop, allow_degraded=config.allow_degraded,
         ) as supervisor:
             games = VariantGameCounter(config.effect_records, supervisor.run_id, config.workers)
             ruled = RunRuleCounter(

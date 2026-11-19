@@ -408,6 +408,7 @@ def _collect_coverage_parser(subparsers) -> None:
     add_config_flags(parser, CollectCoverageConfig, only=(
         "wording_cards", "min_text_games", "target_records", "no_progress_rounds",
         "decks_per_round", "workers", "stop_timeout", "recycle_seconds", "seed",
+        "allow_degraded",
     ))
     parser.add_argument(
         "--count-from", type=Path, action="append", default=None, metavar="DIR",
@@ -452,6 +453,7 @@ def _collect_variants_parser(subparsers) -> None:
     _add_holdout_flags(parser)
     add_config_flags(parser, CollectVariantsConfig, only=(
         "decks_per_round", "workers", "stop_timeout", "recycle_seconds",
+        "allow_degraded",
     ))
     parser.add_argument(
         "--continues", action="append", default=None, metavar="RUN_ID",
@@ -628,12 +630,14 @@ def _collector_runner(command: str, config_type: type, module: str) -> Callable:
     imports its application module, so ``--help`` never pays for it. A
     ValueError out of the collection itself is not a refusal and keeps its
     traceback; a record of an older generation met counting the shards
-    already there is a refusal, as every reader's.
+    already there is a refusal, as every reader's, and so is a run stopped
+    for its workers' engine (``WorkerEngineRefused``).
     """
 
     @exits_with({
         CollectorRefusal: 1, _LAYOUT_REFUSED: 1, UnacceptedGenerationError: 1,
         "price_predictor.infrastructure.forge_jvm.WorkerStartError": 1,
+        "price_predictor.domain.worker_status.WorkerEngineRefused": 1,
     })
     def run(args: argparse.Namespace) -> int:
         error = _flag_error(args)

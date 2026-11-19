@@ -7,9 +7,11 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from price_predictor.domain.worker_status import ALLOW_DEGRADED_HELP
 from price_predictor.infrastructure.cli_helpers import add_dataclass_arg
 from price_predictor.infrastructure.cli_run_manifest import (
     READ_ONLY,
+    REFUSAL_DEST,
     ManifestTable,
     Writes,
     dispatch,
@@ -1148,6 +1150,10 @@ def _add_effect_record_flags(parser: argparse.ArgumentParser) -> None:
     # The stop protocol needs the worker logs, which only a run collecting
     # effect records keeps; without them the pool kills as it always did.
     add_worker_stop_flags(parser, only_with="--effect-records")
+    parser.add_argument(
+        "--allow-degraded", action="store_true",
+        help=ALLOW_DEGRADED_HELP + "; only with --effect-records",
+    )
 
 
 def worker_stop_settings(args: argparse.Namespace):
@@ -1180,6 +1186,17 @@ def worker_stop_error(args: argparse.Namespace) -> str | None:
         return (
             f"{' and '.join(given)} need --effect-records: without it the workers "
             "keep no log, and the pool recycles and ends them by the kill"
+        )
+    return None
+
+
+def allow_degraded_error(args: argparse.Namespace) -> str | None:
+    """Why ``--allow-degraded`` cannot apply, or None: only a run collecting
+    effect records keeps the worker logs whose engine it judges."""
+    if getattr(args, "allow_degraded", False) and not getattr(args, "effect_records", None):
+        return (
+            "--allow-degraded needs --effect-records: without it nothing judges "
+            "the workers' engine"
         )
     return None
 
@@ -1925,9 +1942,10 @@ def _directed_startup_error(args: argparse.Namespace) -> str | None:
 
 
 def _effect_flags_usage_error(args: argparse.Namespace) -> str | None:
-    """The first exit-2 refusal of the random-seat, worker-stop and sampling-rate
-    flags, in that order, or None."""
-    for check in (check_random_seat_flags, worker_stop_error, candidate_rate_error):
+    """The first exit-2 refusal of the random-seat, worker-stop,
+    ``--allow-degraded`` and sampling-rate flags, in that order, or None."""
+    for check in (check_random_seat_flags, worker_stop_error, allow_degraded_error,
+                  candidate_rate_error):
         error = check(args)
         if error is not None:
             return error
@@ -1936,8 +1954,6 @@ def _effect_flags_usage_error(args: argparse.Namespace) -> str | None:
 
 def run_match_outcomes(args: argparse.Namespace) -> int:
     """Execute the match-outcomes command."""
-    from sealed.application.match_outcomes import MatchOutcomeSupervisor
-
     if args.best_of < 1 or args.best_of % 2 == 0:
         print(
             f"Error: --best-of must be a positive odd integer, got: {args.best_of}",
@@ -1969,6 +1985,19 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
         print(f"Error: {directed_error}", file=sys.stderr)
         return 1
 
+    return _supervise_match_outcomes(args, explicit_side_b_weight)
+
+
+def _supervise_match_outcomes(
+    args: argparse.Namespace, explicit_side_b_weight: int | None,
+) -> int:
+    """Run the match-outcomes supervisor over the checked flags: 2 when a
+    worker cannot start, 1 when the workers' engine was refused (the reason
+    reaches ``run.json``) or when matches recorded nothing, else 0."""
+    from price_predictor.domain.worker_status import WorkerEngineRefused
+    from price_predictor.infrastructure import forge_jvm
+    from sealed.application.match_outcomes import MatchOutcomeSupervisor
+
     output_path = outcomes_dir(args) / MATCH_OUTCOMES_FILE
     side_a_decks = Path(args.side_a_decks) if args.side_a_decks else None
     side_b_decks = Path(args.side_b_decks) if args.side_b_decks else None
@@ -1977,7 +2006,6 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
         if explicit_side_b_weight is not None
         else DEFAULT_SIDE_B_DECKS_WEIGHT
     )
-
     # Absent, the supervisor and its workers behave exactly as they do today:
     # no shard is opened and match-outcomes.txt and cards-played.txt keep their
     # format and content untouched (FR-030).
@@ -1991,8 +2019,6 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
                 getattr(args, "probes_per_game", EFFECT_PROBES_PER_GAME),
             )
         )
-
-    from price_predictor.infrastructure import forge_jvm
 
     exclude_cards = Path(args.exclude_cards) if args.exclude_cards else None
     try:
@@ -2010,12 +2036,17 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
             collection_caps=_effect_collection_caps(args),
             exclude_cards_path=exclude_cards,
             worker_stop=worker_stop_settings(args),
+            allow_degraded=getattr(args, "allow_degraded", False),
         )
         supervisor.steer_directed_forks(getattr(args, "directed_fork_needs", None))
         supervisor.run()
     except (FileNotFoundError, forge_jvm.WorkerStartError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
+    except WorkerEngineRefused as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        setattr(args, REFUSAL_DEST, str(exc))
+        return 1
 
     # Matches played and no effect record written: the run's output is unusable.
     return 1 if supervisor.collected_nothing else 0

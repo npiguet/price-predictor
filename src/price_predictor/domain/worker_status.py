@@ -11,6 +11,11 @@ summed, the lifetime told by the line's own ``lifetime`` member.
 The line is read as JSON and never split, so a refusal reason, a gap or a
 rule id may hold any character. It is the one line the supervisor reads
 counts from; none of it is a failure line (``worker_failures``).
+
+The run's first line also names the engine its workers link, judged here
+once for every collecting supervisor (:func:`judge_engine`): one not
+``patched`` with every hook, or one that changes under the run, stops the
+run (:class:`WorkerEngineRefused`), the first unless ``--allow-degraded``.
 """
 
 from __future__ import annotations
@@ -147,3 +152,137 @@ def render_fork_refusals(document: dict[str, int]) -> str:
     if not document:
         return "no fork refusals"
     return ", ".join(f"{n} {key}" for key, n in document.items())
+
+
+# ── The engine a run's workers link (finding 11.1) ──────────────────────
+
+#: ``AttributionMode.PATCHED``: the engine carries the effect-record hooks.
+PATCHED = "patched"
+
+#: How the refusal says what to do, the same on every collecting command.
+_REMEDY = (
+    "A run collecting effect records needs every hook: rebuild ../forge on "
+    "its effect-record-hooks branch and the connector JAR (src/effects/CLAUDE.md "
+    "§ The engine hooks), or pass --allow-degraded to collect anyway"
+)
+
+
+#: ``--allow-degraded``'s help, on every command that collects effect records.
+ALLOW_DEGRADED_HELP = (
+    "Collect even when the Forge workers' engine is not patched with every "
+    "effect-record hook (stock Forge, a stale installed Forge jar): the run "
+    "warns once, naming what is missing, instead of stopping with exit 1. "
+    "An engine that changes under the run still stops it"
+)
+
+
+class WorkerEngineRefused(RuntimeError):
+    """A run collecting effect records stopped for the engine its workers link:
+    one not ``patched`` with every hook, or one that changed under the run."""
+
+
+def engine_document(status: WorkerStatus) -> dict[str, object]:
+    """The engine a worker lifetime runs, as ``run.json``'s ``worker_engine``
+    records it: ``{"mode", "gaps", "pinned_preferences"}``."""
+    return {
+        "mode": status.mode,
+        "gaps": list(status.gaps),
+        "pinned_preferences": dict(status.pinned_preferences),
+    }
+
+
+def engine_shortfall(status: WorkerStatus) -> tuple[str, ...]:
+    """What the engine lacks: its mode when not ``patched``, then each gap
+    ``PatchHooks.report()`` named; empty when it is whole."""
+    if status.mode == PATCHED:
+        return status.gaps
+    return (f"mode {status.mode} (no effect-record hooks)", *status.gaps)
+
+
+def engine_change(first: WorkerStatus, later: WorkerStatus) -> tuple[str, ...]:
+    """How ``later``'s engine differs from ``first``'s, one entry per member
+    that differs; empty when they are the same."""
+    before, after = engine_document(first), engine_document(later)
+    return tuple(
+        f"{name} {before[name]!r} -> {after[name]!r}"
+        for name in before if before[name] != after[name]
+    )
+
+
+@dataclass(frozen=True)
+class EngineVerdict:
+    """The engine a run's status lines show so far: the first lifetime's, and
+    every later lifetime whose engine is not the same."""
+
+    #: The run's first status line; None before any worker printed one.
+    first: WorkerStatus | None = None
+    #: Per lifetime whose engine differs from the first's: how.
+    changed: dict[str, tuple[str, ...]] = field(default_factory=dict)
+
+    @property
+    def shortfall(self) -> tuple[str, ...]:
+        """What the first lifetime's engine lacks (:func:`engine_shortfall`)."""
+        return () if self.first is None else engine_shortfall(self.first)
+
+    def refusal(self, *, allow_degraded: bool) -> str | None:
+        """Why the run must stop, or None: an engine that changed under the
+        run, always; one that is not whole, unless ``allow_degraded``."""
+        if self.changed:
+            return self._change_refusal()
+        if self.shortfall and not allow_degraded:
+            return (
+                f"the Forge workers' engine is not whole (worker lifetime "
+                f"{self.first.lifetime}): {'; '.join(self.shortfall)}. {_REMEDY}"
+            )
+        return None
+
+    def _change_refusal(self) -> str:
+        lifetime, change = next(iter(self.changed.items()))
+        return (
+            f"worker lifetime {lifetime} runs another engine than the run's first "
+            f"(lifetime {self.first.lifetime}): {'; '.join(change)}; a run's records "
+            "come from one engine (was a Forge or connector jar installed during the run?)"
+        )
+
+    def warning(self) -> str | None:
+        """Under ``--allow-degraded``, what the run collects without, or None."""
+        if not self.shortfall:
+            return None
+        return (
+            f"--allow-degraded: collecting on an engine that is not whole (worker "
+            f"lifetime {self.first.lifetime}): {'; '.join(self.shortfall)}"
+        )
+
+
+def judge_engine(first: WorkerStatus | None, slots: Iterable[SlotStatuses]) -> EngineVerdict:
+    """The verdict on ``first``, the run's first status line, and on every
+    lifetime ``slots`` hold, each compared with it."""
+    if first is None:
+        return EngineVerdict()
+    changed = {
+        status.lifetime: change
+        for status in _latest(slots)
+        if (change := engine_change(first, status))
+    }
+    return EngineVerdict(first, changed)
+
+
+@dataclass
+class EngineCheck:
+    """A run's watch over its workers' engine, at every log scan: the first
+    refusal stands, and the ``--allow-degraded`` warning is given once."""
+
+    allow_degraded: bool = False
+    #: Why the run must stop, once a scan found a reason.
+    refusal: str | None = None
+    _warned: bool = False
+
+    def review(self, verdict: EngineVerdict) -> str | None:
+        """Take in ``verdict``; the warning to give now, at most once a run."""
+        if self.refusal is None:
+            self.refusal = verdict.refusal(allow_degraded=self.allow_degraded)
+        if self._warned or not self.allow_degraded:
+            return None
+        warning = verdict.warning()
+        self._warned = warning is not None
+        return warning

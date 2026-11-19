@@ -9,7 +9,11 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from price_predictor.domain.worker_failures import WorkerFailure
-from price_predictor.domain.worker_status import render_fork_refusals, render_hook_failures
+from price_predictor.domain.worker_status import (
+    WorkerEngineRefused,
+    render_fork_refusals,
+    render_hook_failures,
+)
 from price_predictor.infrastructure.append_only import has_shard_record
 from price_predictor.infrastructure.forge_jvm import (
     ForgeWorkerPool,
@@ -49,6 +53,13 @@ class MatchOutcomeSupervisor:
     recycles and ends them by the kill, as it always did: there is no shard
     whose games a kill could cut.
 
+    With effect records, every log scan also judges the workers' engine from
+    their status lines: one not ``patched`` with every hook ends the run by
+    the stop protocol and :meth:`run` raises :class:`WorkerEngineRefused`,
+    unless ``allow_degraded``; an engine that changes under the run always
+    does (``worker_status.EngineVerdict``). Without, the workers keep no log
+    and nothing is judged.
+
     Those mechanics live in :class:`ForgeWorkerPool` and are shared with
     ``draft play-draft-games``; this class owns what is sealed-specific — the run
     id and the worker command's side-deck arguments.
@@ -68,6 +79,7 @@ class MatchOutcomeSupervisor:
         collection_caps: Mapping[str, object] | None = None,
         exclude_cards_path: Path | None = None,
         worker_stop: WorkerStopSettings | None = None,
+        allow_degraded: bool = False,
     ) -> None:
         self._worker_count = worker_count
         self._output_path = output_path
@@ -106,7 +118,7 @@ class MatchOutcomeSupervisor:
             if effect_records_dir is not None else None
         )
         self._log_report = (
-            WorkerLogReport(self._worker_logs, worker_count)
+            WorkerLogReport(self._worker_logs, worker_count, allow_degraded=allow_degraded)
             if self._worker_logs is not None else None
         )
         self._worker_stop = (
@@ -186,7 +198,8 @@ class MatchOutcomeSupervisor:
     def run(self) -> None:
         """Start all workers and block until shutdown, then report the
         workers' failure lines and print the dropped-event table when the run
-        counted dropped events (FR-041)."""
+        counted dropped events (FR-041). Raises :class:`WorkerEngineRefused`
+        once the run ended for its workers' engine."""
         baseline = self._pool.output_line_count()
         self._record_caps()
         try:
@@ -200,6 +213,7 @@ class MatchOutcomeSupervisor:
                     self._matches_played = sum(1 for _ in progress)
             if self._effect_records_dir is not None:
                 self._finish_effect_records()
+        self._raise_engine_refusal()
         if self._counts_dropped_events():
             print(dropped_events_report(self._effect_records_dir, self._run_id))
 
@@ -217,6 +231,7 @@ class MatchOutcomeSupervisor:
         found = self._log_report.scan()
         if found:
             print(f"Worker logs: {found.render()} (under {self._worker_logs_dir})")
+        self._review_engine()
         if self._directed_needs is not None:
             self._recompute_directed_probabilities()
 
@@ -229,6 +244,28 @@ class MatchOutcomeSupervisor:
         self._directed_probabilities = after
         if moved:
             print(f"Directed fork probabilities for the next workers: {', '.join(moved)}")
+
+    def _review_engine(self) -> None:
+        """Judge the workers' engine: warn once under ``--allow-degraded``; on
+        a refusal, say so and ask the pool to stop every worker at its game's
+        end, as a first Ctrl-C does."""
+        refused_before = self._log_report.engine_refusal is not None
+        warning = self._log_report.review_engine()
+        if warning is not None:
+            print(f"Warning: {warning}")
+        refusal = self._log_report.engine_refusal
+        if refusal is not None and not refused_before:
+            print(f"Stopping the run: {refusal}")
+            self._pool.request_shutdown()
+
+    def _raise_engine_refusal(self) -> None:
+        """Raise :class:`WorkerEngineRefused` when the run ended for its engine."""
+        refusal = self._log_report.engine_refusal if self._log_report is not None else None
+        if refusal is not None:
+            raise WorkerEngineRefused(
+                f"{refusal}. The records written before the stop stay under "
+                f"{self._effect_records_dir}"
+            )
 
     @property
     def _worker_logs_dir(self) -> Path:
