@@ -195,6 +195,22 @@ final class StaticSuppression {
     }
 
     /**
+     * Gives the live card this board's controller, for a read Forge makes of
+     * the live board only, by taking off the control change the suppressed
+     * static filed. Where the two controllers differ that change is the one
+     * in force, so putting it back under its timestamp restores the card
+     * exactly. Returns what puts it back, or null when the controllers agree.
+     */
+    Runnable lendController(Card card) {
+        Player live = card.getController();
+        if (live.equals(controller(card))) {
+            return null;
+        }
+        card.removeTempController(timestamp);
+        return () -> card.addTempController(live, timestamp);
+    }
+
+    /**
      * Summoning sickness as Forge reads it — controlled since the turn
      * began, no haste, a creature — from this board's keywords and type.
      */

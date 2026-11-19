@@ -32,10 +32,15 @@ import java.util.List;
  * <p>On a continuous record's board ({@link StaticSuppression}) the static's
  * work is left out: the mana abilities it granted (Chromatic Lantern's), the
  * ones it took away back, the permanents it took control of with their
- * controller before it, and the haste it gave a creature that came under its
- * controller's control this turn. Forge's own activation checks still read
- * the live board, so the permanent's live controller is the one asked
- * whether it could activate the ability.
+ * controller before it, the haste it gave a creature that came under its
+ * controller's control this turn, and the summoning sickness of a permanent
+ * it made a creature (March of the Machines on an artifact that entered this
+ * turn). Forge's own activation checks read the live board only: they ask
+ * whether the activator is the card's live controller and whether the live
+ * card is sick. So for the read the live cards the static took control of
+ * are given their controller without it, and a host sick only as the
+ * static's creature is read as not sick; both are put back after, so the
+ * read changes nothing in the game.
  */
 final class UntappedProduction {
 
@@ -44,13 +49,39 @@ final class UntappedProduction {
 
     /** What {@code player} could still make on {@code board}. */
     static ManaCounts of(Game game, Player player, StaticSuppression board) {
+        List<Runnable> restore = lendControllers(game, board);
+        try {
+            return ManaCounts.tally(producibleFor(game, player, board));
+        } finally {
+            restore.forEach(Runnable::run);
+        }
+    }
+
+    /**
+     * Gives every live permanent whose controller the static changed its
+     * controller on {@code board}, so Forge's controller checks (an ability's
+     * activator is its card's controller, "permanents you control") read
+     * that board; what puts each back.
+     */
+    private static List<Runnable> lendControllers(Game game, StaticSuppression board) {
+        List<Runnable> restore = new ArrayList<>();
+        for (Card card : game.getCardsIn(ZoneType.Battlefield)) {
+            Runnable undo = board.lendController(card);
+            if (undo != null) {
+                restore.add(undo);
+            }
+        }
+        return restore;
+    }
+
+    private static List<Byte> producibleFor(Game game, Player player, StaticSuppression board) {
         List<Byte> producible = new ArrayList<>();
         for (Card card : game.getCardsIn(ZoneType.Battlefield)) {
             if (!card.isTapped() && player.equals(board.controller(card))) {
                 producible.addAll(producibleBy(card, board));
             }
         }
-        return ManaCounts.tally(producible);
+        return producible;
     }
 
     /** The colours each of one permanent's mana abilities on {@code board} can make now. */
@@ -58,7 +89,7 @@ final class UntappedProduction {
         List<Byte> producible = new ArrayList<>();
         for (SpellAbility ability : board.spellAbilities(card.getCurrentState())) {
             if (isManaAbility(ability) && !sickOnThisBoard(ability, board)) {
-                producible.addAll(colorsOf(ability, card.getController()));
+                producible.addAll(colorsOnThisBoard(ability, board));
             }
         }
         return producible;
@@ -77,6 +108,34 @@ final class UntappedProduction {
         Card host = ability.getHostCard();
         return board.active() && tapsItsHost(ability.getPayCosts()) && board.sick(host)
                 && !StaticAbilityActivateAbilityAsIfHaste.canActivate(host);
+    }
+
+    /**
+     * The colours the ability can make with its host as sick as on
+     * {@code board}: a host sick only because the static made it a creature
+     * is no creature there, so never sick, and its sickness is taken off the
+     * live card for the read and put back after.
+     */
+    private static List<Byte> colorsOnThisBoard(SpellAbility ability, StaticSuppression board) {
+        Card host = ability.getHostCard();
+        if (!sickOnlyLive(ability, board)) {
+            return colorsOf(ability, host.getController());
+        }
+        host.setSickness(false);
+        try {
+            return colorsOf(ability, host.getController());
+        } finally {
+            host.setSickness(true);
+        }
+    }
+
+    /** Whether the ability taps or untaps a host sick on the live board though not on {@code board}. */
+    private static boolean sickOnlyLive(SpellAbility ability, StaticSuppression board) {
+        Card host = ability.getHostCard();
+        if (!board.active() || !tapsItsHost(ability.getPayCosts())) {
+            return false;
+        }
+        return host.isSick() && !board.sick(host);
     }
 
     private static boolean tapsItsHost(Cost cost) {

@@ -37,6 +37,7 @@ class StaticSuppressionTest {
     /** An {@code untapped_production} with no mana, and with one green. */
     private static final String NO_MANA = "{\"W\":0,\"U\":0,\"B\":0,\"R\":0,\"G\":0,\"C\":0}";
     private static final String ONE_GREEN = "{\"W\":0,\"U\":0,\"B\":0,\"R\":0,\"G\":1,\"C\":0}";
+    private static final String ONE_COLORLESS = "{\"W\":0,\"U\":0,\"B\":0,\"R\":0,\"G\":0,\"C\":1}";
 
     @TempDir
     Path tempDir;
@@ -299,6 +300,64 @@ class StaticSuppressionTest {
         assertTrue(elves.isFirstTurnControlled() && !elves.isSick(), "the elves are not hasted");
 
         assertProduction(board, fires, ONE_GREEN, NO_MANA);
+    }
+
+    /**
+     * A permanent the static makes a creature is summoning sick only with
+     * the static: on March of the Machines' record a Sol Ring that entered
+     * this turn, no creature there, taps for its colourless, where on the
+     * live board it is a sick creature and makes nothing. The live card is
+     * as sick after the snapshot as before.
+     */
+    @Test
+    void aPlayersProductionCountsAHostOnlyTheStaticMadeSummoningSick() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card march = board.battlefield("March of the Machines", board.you);
+        Card ring = board.battlefield("Sol Ring", board.you);
+        board.game.getAction().checkStaticAbilities();
+        assertTrue(ring.isCreature() && ring.isSick(), "March did not make the Sol Ring a sick creature");
+
+        assertProduction(board, march, NO_MANA, ONE_COLORLESS);
+        assertTrue(ring.isSick() && ring.getView().isFirstTurnControlled(),
+                "the snapshot changed the Sol Ring's sickness");
+    }
+
+    /**
+     * A mana ability whose colours depend on its activator's permanents is
+     * read with the controller the board without the static gives it: on
+     * Control Magic's record the opponent's Bloom Tender sees the opponent's
+     * permanents, itself and a Hill Giant (green and red), not yours, the
+     * Grizzly Bears and Control Magic (green and blue). The live card keeps
+     * its controller and its ability's activator.
+     */
+    @Test
+    void aPlayersProductionReadsItsColoursWithTheControllerWithoutTheStatic() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        board.battlefield("Grizzly Bears", board.you);
+        board.battlefield("Hill Giant", board.opponent);
+        Card magic = enchant(board, "Control Magic", board.battlefield("Bloom Tender", board.opponent));
+        Card tender = magic.getAttachedTo();
+        tender.setSickness(false); // Control Magic resolved on an earlier turn
+        forge.game.spellability.SpellAbility mana = tender.getManaAbilities().get(0);
+        forge.game.player.Player activator = mana.getActivatingPlayer();
+
+        assertEquals(parse(greenAnd("U")), production(parse(PlayerJson.render(
+                board.game, board.you, StaticSuppression.NONE))), "the live board's production");
+        assumeSuppression();
+        String record = continuousRecordOf(board, magic);
+        assertEquals(parse(greenAnd("R")), production(player(record, board.opponent)),
+                "the opponent's production without Control Magic");
+        assertEquals(parse(NO_MANA), production(player(record, board.you)),
+                "your production without Control Magic");
+        assertEquals(board.you, tender.getController(), "the snapshot changed the Tender's controller");
+        assertEquals(board.you.getView(), tender.getView().getController(), "nor its view's");
+        assertEquals(activator, mana.getActivatingPlayer(), "the snapshot changed its activator");
+    }
+
+    /** One green and one of {@code color}, as an {@code untapped_production}. */
+    private static String greenAnd(String color) {
+        return NO_MANA.replace("\"G\":0", "\"G\":1")
+                .replace("\"" + color + "\":0", "\"" + color + "\":1");
     }
 
     /**
