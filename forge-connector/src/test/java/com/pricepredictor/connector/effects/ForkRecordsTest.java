@@ -324,7 +324,8 @@ class ForkRecordsTest {
 
         List<String> records = fork.records();
         assertEquals(1, records.size(), records.toString());
-        assertTrue(records.get(0).contains("\"modes\":[],\"x\":3,"), records.get(0));
+        assertTrue(records.get(0).contains("\"modes\":[],\"x\":2,"), records.get(0));
+        assertTrue(records.get(0).contains("\"x_paid\":2"), records.get(0));
     }
 
     // ── a forced resolution's state is read where an observed one's is ──
