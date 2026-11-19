@@ -276,6 +276,14 @@ class EffectRecordTest {
         assertTrue(json.contains("\"ability_unresolved\":\"unknown_kind\""), json);
     }
 
+    /** A record that seeks no line (the game-end record) owes no reason for having none. */
+    @Test
+    void aRecordThatSeeksNoLineIsEmptyWithNoReason() {
+        String json = resolution(Moment.RESOLUTION).seeksNoLine().toJson();
+
+        assertTrue(json.contains("\"ability\":[],\"ability_unresolved\":null"), json);
+    }
+
     // ── combat payloads ─────────────────────────────────────────────────
 
     /** A combat with nobody in it still carries all three combat fields. */

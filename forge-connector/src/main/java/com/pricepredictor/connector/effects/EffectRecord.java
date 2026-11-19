@@ -253,6 +253,17 @@ public final class EffectRecord {
         return this;
     }
 
+    /**
+     * This record seeks no acting line (the game-end record): {@code ability}
+     * is the empty array and there is no reason, since nothing failed to
+     * resolve. A record that does seek a line goes through {@link #ability}.
+     */
+    public EffectRecord seeksNoLine() {
+        this.ability = List.of();
+        this.abilityUnresolved = null;
+        return this;
+    }
+
     public EffectRecord state(String json) {
         this.stateJson = json;
         return this;

@@ -1455,9 +1455,9 @@ public final class BusBracketCollector extends BusEventReader {
      * last cast or resolution — is counted as dropped: none is the outcome's
      * doing, and the board is read after them.
      *
-     * <p>{@code ability} is absent, as on a combat record: no resolution is
-     * open, so there is no acting line. {@code state} is read now, the board
-     * the game ended on.
+     * <p>{@code ability} is the empty array with no {@code ability_unresolved}:
+     * no resolution is open, so the record seeks no acting line. {@code state}
+     * is read now, the board the game ended on.
      */
     private void writeGameEnd() {
         brackets.discardOrphans();
@@ -1465,7 +1465,7 @@ public final class BusBracketCollector extends BusEventReader {
             return;
         }
         context.emit(context.newResolution(Moment.RESOLUTION)
-                .ability(ProvenanceKey.Resolved.UNKNOWN)
+                .seeksNoLine()
                 .state(snapshots.ofBoard().render())
                 .payload(RecordPayloads.resolutionPayload(List.copyOf(gameEnd), List.of(), null)));
         gameEnd.clear();

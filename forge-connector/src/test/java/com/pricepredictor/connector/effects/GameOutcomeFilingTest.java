@@ -155,6 +155,8 @@ class GameOutcomeFilingTest {
         String end = only(withEventOfType(records, "player_lost"));
         assertEquals(List.of("player_lost", "player_won"), eventTypes(end), end);
         assertEquals("Milled", params(events(end).get(0)).get("reason"), end);
+        assertTrue(end.contains("\"ability\":[],\"ability_unresolved\":null"),
+                "the game-end record seeks no line, so it names no reason: " + end);
         assertEquals(1L, dropped.get().get(new DroppedEvents.Key("zone_change", "main1")),
                 "the land's move: " + dropped.get());
         assertEquals(1L, dropped.get().get(new DroppedEvents.Key("tapped", "combat_declare_attackers")),
