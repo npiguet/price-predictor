@@ -69,6 +69,28 @@ public final class RecordShardWriter implements AutoCloseable {
 
     public static final String SUFFIX = ".jsonl.gz";
 
+    /**
+     * Consecutive failed appends after which the writer fails for good. One
+     * failure followed by a success is a hiccup the kept block rides out; this
+     * many in a row is a full disk or a lost share, and the kept block would
+     * only grow in the worker's heap. The block then holds at most
+     * {@code BLOCK_RECORDS + MAX_FAILED_APPENDS - 1} records.
+     */
+    static final int MAX_FAILED_APPENDS = 3;
+
+    /**
+     * The writer can no longer append and has dropped what it held. An
+     * {@link Error}, so it passes the game's, the match's and the worker
+     * loop's {@code catch (Exception)} (and the engine's hook containment,
+     * which lets an {@code Error} through) and ends the worker, which the
+     * supervisor reports as a crash.
+     */
+    public static final class ShardUnwritable extends Error {
+        ShardUnwritable(String message, IOException last) {
+            super(message, last);
+        }
+    }
+
     private final String runId;
     /** {@code {worker}-{lifetime}}: this shard's identity and the middle segment of every id it issues. */
     private final String shard;
@@ -77,6 +99,8 @@ public final class RecordShardWriter implements AutoCloseable {
     private final StringBuilder block = new StringBuilder();
     private int blockRecords;
     private boolean closed;
+    private int failedAppends;
+    private ShardUnwritable gaveUp;
     private final AtomicLong recordCounter = new AtomicLong();
     private final AtomicLong gameCounter = new AtomicLong();
     /** The records one game may write before the rest are withheld (FR-041a). */
@@ -109,6 +133,11 @@ public final class RecordShardWriter implements AutoCloseable {
     /** Append through {@code channel}: a test's, which fails. */
     void appendThrough(ShardAppender.Channel channel) {
         appender.through(channel);
+    }
+
+    /** The records buffered and not yet appended. */
+    synchronized int heldRecords() {
+        return blockRecords;
     }
 
     public Path path() {
@@ -167,9 +196,7 @@ public final class RecordShardWriter implements AutoCloseable {
      * @return whether the line was written, false for one the cap withheld
      */
     public synchronized boolean write(String recordJson) {
-        if (closed) {
-            throw new IllegalStateException("shard already closed: " + path);
-        }
+        requireWritable();
         String game = RecordLine.string(recordJson, "game_id");
         if (game != null) {
             GameRecords records = games.computeIfAbsent(game, id -> new GameRecords());
@@ -184,6 +211,16 @@ public final class RecordShardWriter implements AutoCloseable {
             flushBlock();
         }
         return true;
+    }
+
+    /** Refuses a write to a closed shard, or to one that failed for good. */
+    private void requireWritable() {
+        if (closed) {
+            throw new IllegalStateException("shard already closed: " + path);
+        }
+        if (gaveUp != null) {
+            throw gaveUp;
+        }
     }
 
     /**
@@ -203,9 +240,7 @@ public final class RecordShardWriter implements AutoCloseable {
      * last and so would be the first a cap withheld (V3 #5).
      */
     public synchronized void writeUncapped(String recordJson) {
-        if (closed) {
-            throw new IllegalStateException("shard already closed: " + path);
-        }
+        requireWritable();
         block.append(recordJson).append('\n');
         if (++blockRecords >= BLOCK_RECORDS) {
             flushBlock();
@@ -228,6 +263,9 @@ public final class RecordShardWriter implements AutoCloseable {
      * ({@link #flushFailed}) so it gets no game-end marker.
      */
     private void flushBlock() {
+        if (gaveUp != null) {
+            throw gaveUp;
+        }
         if (blockRecords == 0) {
             return;
         }
@@ -239,8 +277,16 @@ public final class RecordShardWriter implements AutoCloseable {
             appender.append(member.toByteArray());
         } catch (IOException e) {
             games.values().forEach(game -> game.flushFailed = true);
+            if (++failedAppends >= MAX_FAILED_APPENDS) {
+                block.setLength(0);
+                blockRecords = 0;
+                gaveUp = new ShardUnwritable("effect-record shard " + path + " could not be"
+                        + " appended to " + failedAppends + " times in a row; last failure: " + e, e);
+                throw gaveUp;
+            }
             throw new UncheckedIOException("cannot append to " + path, e);
         }
+        failedAppends = 0;
         block.setLength(0);
         blockRecords = 0;
     }
@@ -358,7 +404,9 @@ public final class RecordShardWriter implements AutoCloseable {
             return;
         }
         try {
-            flushBlock();
+            if (gaveUp == null) {
+                flushBlock();
+            }
         } finally {
             closed = true;
         }

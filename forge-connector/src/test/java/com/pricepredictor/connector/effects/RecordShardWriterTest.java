@@ -378,4 +378,64 @@ class RecordShardWriterTest {
         assertEquals(2 * RecordShardWriter.BLOCK_RECORDS, strictLines(writer.path()).size(),
                 "the kept block is written by the next flush");
     }
+
+    /**
+     * A channel that always fails: after {@code MAX_FAILED_APPENDS} appends in
+     * a row the writer fails for good with an Error naming the shard and the
+     * last IOException, holds nothing, and keeps failing on later writes.
+     */
+    @Test
+    void aWriterWhoseAppendsKeepFailingGivesUpAtTheBound() {
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        int[] attempts = {0};
+        writer.appendThrough((path, bytes) -> {
+            throw new IOException("disk full " + ++attempts[0]);
+        });
+        for (int i = 0; i < RecordShardWriter.BLOCK_RECORDS - 1; i++) {
+            writer.write("{\"game_id\":\"g1\",\"n\":" + i + "}");
+        }
+        // The block is full: each further write flushes, and fails.
+        for (int failure = 1; failure < RecordShardWriter.MAX_FAILED_APPENDS; failure++) {
+            assertThrows(java.io.UncheckedIOException.class,
+                    () -> writer.write("{\"game_id\":\"g1\"}"));
+        }
+        assertTrue(writer.heldRecords()
+                <= RecordShardWriter.BLOCK_RECORDS + RecordShardWriter.MAX_FAILED_APPENDS - 1);
+
+        RecordShardWriter.ShardUnwritable gaveUp = assertThrows(
+                RecordShardWriter.ShardUnwritable.class,
+                () -> writer.write("{\"game_id\":\"g1\"}"));
+
+        assertEquals(RecordShardWriter.MAX_FAILED_APPENDS, attempts[0]);
+        assertTrue(gaveUp.getMessage().contains(writer.path().toString()), gaveUp.getMessage());
+        assertTrue(gaveUp.getMessage().contains("disk full 3"), gaveUp.getMessage());
+        assertEquals(0, writer.heldRecords());
+        assertThrows(RecordShardWriter.ShardUnwritable.class,
+                () -> writer.write("{\"game_id\":\"g1\"}"));
+        assertEquals(RecordShardWriter.MAX_FAILED_APPENDS, attempts[0], "no append after giving up");
+        writer.close();
+    }
+
+    /** A channel that fails once, then works: nothing is lost and the writer never gives up. */
+    @Test
+    void aSingleFailedAppendFollowedBySuccessesNeverGivesUp() throws IOException {
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        boolean[] failed = {false};
+        writer.appendThrough((path, bytes) -> {
+            if (!failed[0]) {
+                failed[0] = true;
+                throw new IOException("once");
+            }
+            ShardAppender.FILES.append(path, bytes);
+        });
+        for (int i = 0; i < RecordShardWriter.BLOCK_RECORDS - 1; i++) {
+            writer.write("{\"game_id\":\"g1\",\"n\":" + i + "}");
+        }
+        assertThrows(java.io.UncheckedIOException.class,
+                () -> writer.write("{\"game_id\":\"g1\",\"n\":9999}"));
+        writer.write("{\"game_id\":\"g1\",\"n\":10000}");
+        writer.close();
+
+        assertEquals(RecordShardWriter.BLOCK_RECORDS + 1, strictLines(writer.path()).size());
+    }
 }
