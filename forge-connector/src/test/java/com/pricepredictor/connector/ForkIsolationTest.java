@@ -270,7 +270,9 @@ class ForkIsolationTest {
      */
     @Test
     void forksForcingARandomSeatsPlayLeaveTheLiveRecordsAsTheyWere() throws IOException {
-        for (long seed : new long[] {31, 32, 33, 34, 35, 36, 37, 38}) {
+        // Under the per-game random streams, seeds 44 and 45 are matches in
+        // which the random seat makes a 704.5f fork's forced cast.
+        for (long seed : new long[] {38, 39, 40, 41, 42, 43, 44, 45}) {
             assertForksLeaveTheLiveGame("random" + seed, boros(), rakdos(), seed,
                     off(randomSeat()), allForks(randomSeat()));
         }

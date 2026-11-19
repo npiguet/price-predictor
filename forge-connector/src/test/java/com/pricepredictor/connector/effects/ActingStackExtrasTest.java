@@ -18,6 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 
 import static com.pricepredictor.connector.effects.RecordLines.asMap;
@@ -296,7 +297,9 @@ class ActingStackExtrasTest {
         Map<String, Object> extras = extrasOf(half, arcLightning);
         Map<String, Object> amounts = asMap(extras.get("per_target_amounts"));
         assertEquals(3L, amounts.values().stream().mapToLong(each -> (Long) each).sum(), half);
-        assertEquals(extras.get("targets"), List.copyOf(amounts.keySet()), half);
+        // A JSON object's members have no order (the parser hands back a
+        // HashMap): the shares name the targets, whatever order each lists.
+        assertEquals(Set.copyOf((List<?>) extras.get("targets")), amounts.keySet(), half);
     }
 
     /**
