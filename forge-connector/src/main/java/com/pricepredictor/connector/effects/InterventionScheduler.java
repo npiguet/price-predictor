@@ -111,9 +111,6 @@ final class InterventionScheduler {
      */
     static final int TYPICAL_GAME_TURNS = 20;
 
-    /** Kept apart from the other streams the same game seed seeds. */
-    private static final long SEED_SALT = 0x2545F4914F6CDD1DL;
-
     /** A gate every boundary passes, for a caller that forces at each one. */
     static final Gate EVERY_BOUNDARY = (turn, phase) -> true;
 
@@ -145,7 +142,7 @@ final class InterventionScheduler {
      * offer nothing to force carries it forward rather than losing it.
      */
     static Gate spreadOverTheGame(long seed, int budget) {
-        return new SpreadGate(new Random(GameRecording.scramble(seed ^ SEED_SALT)), budget);
+        return new SpreadGate(SeedStreams.random(seed, SeedStreams.Consumer.SPREAD_GATE), budget);
     }
 
     /** {@link #spreadOverTheGame}'s gate. */

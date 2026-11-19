@@ -4,6 +4,7 @@ import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.DeckRules;
 import com.pricepredictor.connector.effects.FruitlessActivations;
 import com.pricepredictor.connector.effects.GameRecording;
+import com.pricepredictor.connector.effects.SeedStreams;
 import com.pricepredictor.connector.effects.PriorityCandidates;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 import com.pricepredictor.connector.effects.Refs;
@@ -240,12 +241,9 @@ public class GamePlayer {
     public PlayedMatch playMatch(Deck deckA, Deck deckB, DeckRules deckRules) {
         long wallStart = System.currentTimeMillis();
         long startMillis = clock.getAsLong();
-        // The match's own seeded source, scrambled for the reason the
-        // collectors' sampler is: consecutive matches start milliseconds
-        // apart, and a linear congruential generator's first draw is nearly
-        // a linear function of its seed.
-        java.util.Random matchRandom =
-                new java.util.Random(GameRecording.scramble(startMillis));
+        // The match's own seeded source: the seat consumer's stream of the
+        // match's first game's seed, which no other consumer shares.
+        java.util.Random matchRandom = SeedStreams.random(startMillis, SeedStreams.Consumer.SEAT);
         Optional<Side> randomSeat = drawRandomSeat(caps, matchRandom);
         List<GameOutcome> outcomes = new ArrayList<>();
         // Seeds each game's recording, so a worker's games sample

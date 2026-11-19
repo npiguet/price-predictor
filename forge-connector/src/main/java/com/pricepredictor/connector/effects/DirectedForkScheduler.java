@@ -46,9 +46,6 @@ final class DirectedForkScheduler {
         boolean take(DirectedRule rule, String variant, Application application, Binding binding);
     }
 
-    /** Kept apart from the other streams the same game seed seeds. */
-    private static final long SEED_SALT = 0x2545F4914F6CDD1DL;
-
     private final Game game;
     /** The run's rules that are registered, in {@code --directed-fork-rules} order. */
     private final List<DirectedRule> enabled;
@@ -77,7 +74,7 @@ final class DirectedForkScheduler {
         this.probability = caps.directedForkProbability();
         this.budget = budget;
         this.tally = tally;
-        this.random = new Random(GameRecording.scramble(seed ^ SEED_SALT));
+        this.random = SeedStreams.random(seed, SeedStreams.Consumer.DIRECTED_FORKS);
         this.fork = fork;
     }
 

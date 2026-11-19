@@ -883,7 +883,6 @@ class RecordCharacterizationTest {
         CollectionCaps caps = TestCaps.caps().interventions(0).probes(0).build();
         RecordShardWriter writer = ShardRun.writer(tempDir);
         boolean kept;
-        Forks.restartStreams();
         try (GameRecording recording = new GameRecording(board.game, writer, ShardRun.GAME_ID, caps, 7L, null)) {
             recording.open();
             kept = new ProtectionFork(board.game, new ForkBudget(caps), recording.playForward(), 7L)
@@ -921,7 +920,6 @@ class RecordCharacterizationTest {
                                         .PtOperation(binding.card("creature"), null, 5)));
         RecordShardWriter writer = ShardRun.writer(tempDir);
         boolean kept;
-        Forks.restartStreams();
         try (GameRecording recording = new GameRecording(board.game, writer, ShardRun.GAME_ID, caps, 7L, null)) {
             recording.open();
             kept = new DirectedFork(board.game, recording.playForward(), () -> board.you)

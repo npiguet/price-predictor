@@ -74,11 +74,9 @@ final class InterventionFork implements InterventionScheduler.Forcing {
         this.live = live;
         this.budget = budget;
         this.seed = seed;
-        // Seeded so a rerun of a game forces the same choices. Scrambled as
-        // the sampler's seed is: games are seeded consecutively, and the first
-        // draw here is a mode or target count, which an unscrambled seed would
-        // make nearly the same in every game.
-        this.random = new Random(GameRecording.scramble(seed));
+        // Seeded so a rerun of a game forces the same choices, from a stream
+        // of its own: the sampler and the seat draw do not share it.
+        this.random = SeedStreams.random(seed, SeedStreams.Consumer.INTERVENTION_CHOICES);
         this.choices = new RandomChoices(random);
     }
 

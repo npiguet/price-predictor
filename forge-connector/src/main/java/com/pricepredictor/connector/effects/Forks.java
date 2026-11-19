@@ -452,7 +452,7 @@ final class Forks {
             try {
                 // The whole span is the fork, not just its run: see FORK_RUNNING
                 // for what a narrower scope left uncovered.
-                return asFork(() -> isolated(() -> {
+                return asFork(() -> isolated(SeedStreams.nextForkStream(live), () -> {
                     spend.run();
                     Optional<VerifiedFork> verified = copyAndVerify(kind, live, perspective);
                     if (verified.isEmpty()) {
@@ -646,29 +646,18 @@ final class Forks {
         }
     }
 
-    /** Seeds each fork's own random stream ({@link #isolated}); never the live game's. */
-    private static final java.util.concurrent.atomic.AtomicLong FORK_STREAMS =
-            new java.util.concurrent.atomic.AtomicLong();
-
-    /**
-     * Seed the next fork's stream as this JVM's first fork's: for a test whose
-     * fork plays on and whose written records must not depend on how many
-     * forks the JVM took before it.
-     */
-    static void restartStreams() {
-        FORK_STREAMS.set(0);
-    }
-
     /**
      * Run {@code action} with Forge's global random stream ({@code MyRandom})
-     * replaced by a fresh one of the fork's own, and the live game's put back
+     * replaced by {@code stream}, the fork's own, and the live game's put back
      * however the action ends, so the fork draws nothing from it. Nothing is
      * lost by the fresh stream's seed: the live stream is an unseeded one,
-     * which no rerun reproduces anyway.
+     * which no rerun reproduces anyway. The fork's stream is the next of its
+     * game's ({@link SeedStreams#nextForkStream}), so the n-th fork of two
+     * games, or of two worker lifetimes, does not replay the same draws.
      */
-    static <T> T isolated(Supplier<T> action) {
+    static <T> T isolated(Random stream, Supplier<T> action) {
         Random live = MyRandom.getRandom();
-        MyRandom.setRandom(new Random(GameRecording.scramble(FORK_STREAMS.incrementAndGet())));
+        MyRandom.setRandom(stream);
         try {
             return action.get();
         } finally {

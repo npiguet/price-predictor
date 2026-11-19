@@ -128,6 +128,7 @@ public final class GameRecording implements AutoCloseable {
         this.game = game;
         this.fork = false;
         this.caps = caps;
+        SeedStreams.register(game, seed);
         AttributionMode mode = AttributionMode.detect();
         // The game's aim: the run's list, or a steered game's decks' rules.
         List<String> aimedAt = decks.aimedAt(caps.aimedAt());

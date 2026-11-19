@@ -40,7 +40,7 @@ record Channels(
             BusBracketCollector bracket) {
         LiveGame live = new LiveGame(game);
         RecordDedup dedup = new RecordDedup();
-        Random sampler = new Random(GameRecording.scramble(seed));
+        Random sampler = SeedStreams.random(seed, SeedStreams.Consumer.SAMPLER);
         PlayabilityChannel playability =
                 new PlayabilityChannel(live, context, dedup, sampler, caps);
         PriorityCandidates candidates = new PriorityCandidates(live, playability);

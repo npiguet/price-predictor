@@ -110,6 +110,27 @@ class ForkRunTest {
         }
     }
 
+    private static long firstForkDraw(long gameSeed) {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        TestBoard.inPlay(live, live.getPlayers().get(0), "Grizzly Bears");
+        SeedStreams.register(live, gameSeed);
+        Object drawn = run("directed", live, new AtomicInteger()).take(
+                (verified, snapshots) -> MyRandom.getRandom().nextLong(), (verified, produced) -> produced);
+        assertTrue(drawn instanceof Long, "the body did not run: " + drawn);
+        return (Long) drawn;
+    }
+
+    /**
+     * A fork's stream is its game's next, seeded from the game's seed: the
+     * first fork of two games draws differently, and of a game seeded again
+     * the same.
+     */
+    @Test
+    void theFirstForkOfTwoGamesDrawsDifferentSequences() {
+        assertEquals(firstForkDraw(41L), firstForkDraw(41L));
+        assertTrue(firstForkDraw(41L) != firstForkDraw(42L), "two games' first forks drew alike");
+    }
+
     /**
      * What the copier left out is read off the copy and handed to every
      * record of the fork as {@code copy_dropped}: a card remembering a token

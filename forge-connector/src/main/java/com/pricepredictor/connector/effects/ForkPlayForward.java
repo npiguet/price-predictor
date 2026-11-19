@@ -48,9 +48,6 @@ final class ForkPlayForward {
      */
     static final int MAX_STEPS = 5_000;
 
-    /** Kept apart from the forced resolutions' stream, which the same game seed also seeds. */
-    private static final long SEED_SALT = 0x5DEECE66DL;
-
     private final GameRecording live;
     private final ForkSeats seats;
     /** Each fork's seat and sampling seeds, drawn per game rather than from the match's source. */
@@ -64,7 +61,7 @@ final class ForkPlayForward {
     ForkPlayForward(GameRecording live, ForkSeats seats, long seed) {
         this.live = live;
         this.seats = seats;
-        this.forkSeeds = new Random(GameRecording.scramble(seed ^ SEED_SALT));
+        this.forkSeeds = SeedStreams.random(seed, SeedStreams.Consumer.PLAY_FORWARD_SEEDS);
     }
 
     /**

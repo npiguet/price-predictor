@@ -61,9 +61,6 @@ final class ProtectionFork {
     /** Every record of a protection fork carries these flags. */
     static final Consumer<EffectRecord> FLAGS = record -> record.fork(ForkKind.PROTECTION).interventional(true);
 
-    /** Kept apart from the other streams the same game seed seeds. */
-    private static final long SEED_SALT = 0x7F4A7C159E3779B9L;
-
     private final Game game;
     private final ForkBudget budget;
     private final ForkPlayForward playForward;
@@ -74,7 +71,7 @@ final class ProtectionFork {
         this.game = game;
         this.budget = budget;
         this.playForward = playForward;
-        this.random = new Random(GameRecording.scramble(seed ^ SEED_SALT));
+        this.random = SeedStreams.random(seed, SeedStreams.Consumer.PROTECTION);
     }
 
     /**
