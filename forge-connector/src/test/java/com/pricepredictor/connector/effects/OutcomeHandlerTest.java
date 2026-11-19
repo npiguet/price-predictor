@@ -242,11 +242,12 @@ class OutcomeHandlerTest {
     }
 
     /**
-     * A reveal from a library names the players it came from; any other
-     * reveal arrives with an empty list and names nobody.
+     * A reveal names the players who revealed (a clash's two clashers), and
+     * a hand's reveal its revealer too: the zone, not the subjects, says
+     * whose library it was.
      */
     @Test
-    void cardRevealedNamesTheLibrariesItCameFrom() throws Throwable {
+    void cardRevealedNamesItsRevealersFromAnyZone() throws Throwable {
         Player first = new Player("first", TestCards.game(), 93202);
         Player second = new Player("second", TestCards.game(), 93203);
 
@@ -255,7 +256,7 @@ class OutcomeHandlerTest {
                         Map.of("count", 2, "from_zone", "Library",
                                 "subjects", List.of(first, second))},
                 new Object[]{null, "card_revealed",
-                        Map.of("count", 1, "from_zone", "Hand", "subjects", List.of())});
+                        Map.of("count", 1, "from_zone", "Hand", "subjects", List.of(second))});
 
         assertEquals(2, events.size(), events.toString());
         Map<String, Object> fromLibraries = events.get(0);
@@ -263,7 +264,7 @@ class OutcomeHandlerTest {
                 fromLibraries.get("subjects"), fromLibraries.toString());
         assertEquals(Map.of("count", 2L, "from_zone", "library"), params(fromLibraries),
                 fromLibraries.toString());
-        assertEquals(List.of(), events.get(1).get("subjects"), events.get(1).toString());
+        assertEquals(List.of(Refs.of(second)), events.get(1).get("subjects"), events.get(1).toString());
         assertEquals("hand", params(events.get(1)).get("from_zone"), events.get(1).toString());
     }
 

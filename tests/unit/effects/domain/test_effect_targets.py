@@ -591,7 +591,6 @@ class TestEverySimpleEventType:
     @pytest.mark.parametrize(("event_type", "flag"), [
         (EventType.CARD_LOOKED_AT, "scry"),
         (EventType.LIBRARY_REORDERED, "reorder"),
-        (EventType.CARD_REVEALED, "reveal"),
     ])
     def test_its_library_flag(self, event_type, flag):
         targets = derive_targets(_resolution(

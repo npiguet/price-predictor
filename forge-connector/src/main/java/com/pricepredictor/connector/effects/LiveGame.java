@@ -112,7 +112,7 @@ final class LiveGame {
      * they name none: the {@code "source"} card, else the first of the
      * {@code "subjects"} with a game. The objects decide first because they
      * are the evidence; the thread's signals are a guess for an outcome that
-     * names no object ({@code card_revealed} from a library, a bare amount).
+     * names no object (a bare amount).
      */
     private static Game gameNamedBy(Map<?, ?> params) {
         Game ofSource = gameOf(params.get("source"));

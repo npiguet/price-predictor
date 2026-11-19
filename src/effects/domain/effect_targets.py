@@ -84,7 +84,6 @@ _ZONE_BY_DESTINATION: dict[str, ZoneOutcome] = {
 }
 _LIBRARY_EVENT_BY_TYPE: dict[EventType, LibraryEvent] = {
     EventType.LIBRARY_REORDERED: LibraryEvent.REORDER,
-    EventType.CARD_REVEALED: LibraryEvent.REVEAL,
     EventType.LIBRARY_SHUFFLED: LibraryEvent.SHUFFLE,
 }
 
@@ -205,10 +204,13 @@ class RecordTargets(dict[str, EntityTargets]):
 def unsupervised_kind(event: Event) -> str | None:
     """The kind an event is counted under when no output column reads it,
     else None: a change of Forge's hidden keywords (its text, ``CARDNAME can't
-    block.``, names no keyword column), a name change and a mana cost change
-    (no column in the gen-3 layout)."""
+    block.``, names no keyword column), a reveal from any zone but a library
+    (``library_events`` reads a library's only), a name change and a mana cost
+    change (no column in the gen-3 layout)."""
     if event.type is EventType.KEYWORD_CHANGE and event.params.get("hidden"):
         return "hidden_keyword_change"
+    if event.type is EventType.CARD_REVEALED and not _from_a_library(event):
+        return "card_revealed_off_library"
     if event.type in (EventType.NAME_CHANGE, EventType.MANA_COST_CHANGE):
         return event.type.value
     return None
@@ -307,6 +309,17 @@ def _apply_library_event(
     entry: EntityTargets, _event: Event, *, library_event: LibraryEvent,
 ) -> None:
     _flag_library(entry, library_event)
+
+
+def _apply_card_revealed(entry: EntityTargets, event: Event) -> None:
+    """A reveal names the player who revealed; only a library's reveal is a
+    library event, a hand's (Duress) is none."""
+    if _from_a_library(event):
+        _flag_library(entry, LibraryEvent.REVEAL)
+
+
+def _from_a_library(event: Event) -> bool:
+    return str(event.params.get("from_zone", "")).lower() == Zone.LIBRARY
 
 
 def _flag_library(entry: EntityTargets, library_event: LibraryEvent) -> None:
@@ -534,6 +547,7 @@ _PARAMETER_APPLIERS: dict[EventType, Callable[[EntityTargets, Event], None]] = {
     EventType.STATE_FLAG_CHANGE: _apply_state_flag,
     EventType.ABILITY_CHANGE: _apply_ability_change,
     EventType.SPEED_CHANGED: _apply_speed,
+    EventType.CARD_REVEALED: _apply_card_revealed,
 }
 
 #: ``event type -> how it folds into an entity's targets``.

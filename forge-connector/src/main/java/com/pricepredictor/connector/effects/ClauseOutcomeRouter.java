@@ -309,7 +309,7 @@ final class ClauseOutcomeRouter {
      * <ul>
      *   <li>{@code "subjects"}, carrying the raw Card/Player list of who the
      *   outcome happened to (the cards a restriction landed on, the players
-     *   whose library a reveal came from, the player or creature prevented
+     *   who revealed cards, the player or creature prevented
      *   damage would have been dealt to), is pulled out and converted to refs
      *   on {@link EffectEvent#subject} instead -- the schema's per-type rows
      *   do not list it, so a raw {@code subjects} entry left in {@code params}
