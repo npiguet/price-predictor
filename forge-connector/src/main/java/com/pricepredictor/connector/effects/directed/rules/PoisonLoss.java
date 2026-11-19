@@ -82,9 +82,7 @@ public final class PoisonLoss {
         boolean spell = card.getSpells().stream()
                 .anyMatch(ability -> ability.getApi() == ApiType.Poison && "Player".equals(ability.getParam("Defined")));
         boolean entering = card.getTriggers().stream()
-                .filter(trigger -> trigger.getMode() == TriggerType.ChangesZone
-                        && "Battlefield".equals(trigger.getParam("Destination"))
-                        && "Card.Self".equals(trigger.getParam("ValidCard")))
+                .filter(Triggers::entersItself)
                 .map(Boards::executed)
                 .anyMatch(script -> ApiType.Poison.name().equals(Boards.api(script))
                         && "Player".equals(script.get("Defined")));

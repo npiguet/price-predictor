@@ -58,12 +58,13 @@ public final class ConniveWithoutDraw {
     }
 
     static Optional<Binding> bind(Game live) {
-        if (!Boards.atMainPhase(live) || !Boards.watched(live, TriggerType.Connives)) {
+        if (!Boards.atMainPhase(live)) {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        Optional<Card> conniver = Boards.acting(active, CONNIVING);
-        if (!spiritWouldStopTheDraw(active) || conniver.isEmpty()) {
+        Optional<Card> conniver = Boards.acting(active, CONNIVING)
+                .filter(card -> Boards.watched(live, TriggerType.Connives, active, card));
+        if (conniver.isEmpty() || !spiritWouldStopTheDraw(active)) {
             return Optional.empty();
         }
         return active.getOpponents().stream().findFirst()

@@ -55,11 +55,12 @@ public final class ExploreEmptyLibrary {
     }
 
     static Optional<Binding> bind(Game live) {
-        if (!Boards.atMainPhase(live) || !Boards.watched(live, TriggerType.Explores)) {
+        if (!Boards.atMainPhase(live)) {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        Optional<Card> explorer = Boards.acting(active, EXPLORING);
+        Optional<Card> explorer = Boards.acting(active, EXPLORING)
+                .filter(card -> Boards.watched(live, TriggerType.Explores, active, card));
         if (active.getCardsIn(ZoneType.Library).isEmpty()) {
             return Optional.empty();
         }

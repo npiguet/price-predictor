@@ -56,11 +56,12 @@ public final class DiscoverNothingFound {
     }
 
     static Optional<Binding> bind(Game live) {
-        if (!Boards.atMainPhase(live) || !Boards.watched(live, TriggerType.Discover)) {
+        if (!Boards.atMainPhase(live)) {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        Optional<Card> discoverer = Boards.acting(active, DISCOVERING);
+        Optional<Card> discoverer = Boards.acting(active, DISCOVERING)
+                .filter(card -> Boards.watched(live, TriggerType.Discover, active, card));
         if (active.getCardsIn(ZoneType.Library).isEmpty()) {
             return Optional.empty();
         }

@@ -357,7 +357,8 @@ final class Boards {
             return true;
         }
         CardState state = spell.getCardState();
-        return state != null && state.getTriggers().stream().anyMatch(trigger -> api.equals(api(executed(trigger))));
+        return state != null && state.getTriggers().stream()
+                .anyMatch(trigger -> Triggers.entersItself(trigger) && api.equals(api(executed(trigger))));
     }
 
     /** The first card {@code player} holds with a castable spell of {@code line} ({@link #castableInHand}). */
@@ -365,11 +366,13 @@ final class Boards {
         return castableInHand(player, line).stream().findFirst();
     }
 
-    /** Whether a permanent on the battlefield has a trigger of {@code mode} (Explores, Connives, Discover). */
-    static boolean watched(Game live, TriggerType mode) {
-        return live.getCardsIn(ZoneType.Battlefield).stream()
-                .flatMap(card -> card.getTriggers().stream())
-                .anyMatch(trigger -> trigger.getMode() == mode);
+    /**
+     * Whether a permanent on the battlefield has a trigger of {@code mode}
+     * (Explores, Connives, Discover) that {@code active}'s {@code actor}
+     * sets off ({@link Triggers#watchedFor}).
+     */
+    static boolean watched(Game live, TriggerType mode, Player active, Card actor) {
+        return Triggers.watchedFor(live.getCardsIn(ZoneType.Battlefield), mode, active, actor);
     }
 
     /** Whether a comma-separated script value lists {@code item}. */
