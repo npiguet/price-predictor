@@ -42,6 +42,9 @@ final class DamageStepProbe {
         this.budget = budget;
     }
 
+    /** A refusal's reason: the copy holds no combat to deal. */
+    static final String NO_COMBAT = "no combat in the copy";
+
     /**
      * Re-run this damage step without one creature's keyword.
      *
@@ -60,9 +63,6 @@ final class DamageStepProbe {
      * @param step the damage step about to be dealt, which the fork deals too
      * @return the held branch, or null when the fork could not be taken
      */
-    /** A refusal's reason: the copy holds no combat to deal. */
-    static final String NO_COMBAT = "no combat in the copy";
-
     HeldProbe probe(String keyword, Card carrier, DamageStep step) {
         if (!budget.mayProbe(keyword) || carrier == null) {
             return null;
