@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.RecordShardWriter;
 import com.pricepredictor.connector.effects.TestCaps;
 import forge.deck.Deck;
 import forge.game.Match;
+import forge.util.MyRandom;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -18,6 +19,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
@@ -33,13 +35,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Poltergeist's "Pay 1 life" until it reaches 0 life, with the ability still
  * on the stack, as the pilot's seat did. Each game still writes its loss and
  * its win once, in a game-end record holding nothing else, and its marker
- * last.
+ * last. The match draws from a seeded Forge random stream, restored after, so
+ * both games are the same whatever ran before in the JVM and each ends by the
+ * life payment.
  */
 @ExtendWith(ForgeExtension.class)
 class GameOutcomeRecordingTest {
 
     private static final Pattern GAME_ID = Pattern.compile("\"game_id\":\"([^\"]+)\"");
     private static final Pattern EVENT_TYPE = Pattern.compile("\"type\":\"([a-z_]+)\"");
+
+    /** Forge's global random stream for the match: the same two games whatever ran before in the JVM. */
+    private static final long MATCH_SEED = 1L;
 
     @TempDir
     Path dir;
@@ -52,7 +59,13 @@ class GameOutcomeRecordingTest {
         GamePlayer player = new GamePlayer(
                 2, writer, randomSeat, WorkerStop.NEVER, Match::startGame, () -> 1L);
 
-        player.playMatch(poltergeists(), poltergeists());
+        Random was = MyRandom.getRandom();
+        MyRandom.setRandom(new Random(MATCH_SEED));
+        try {
+            player.playMatch(poltergeists(), poltergeists());
+        } finally {
+            MyRandom.setRandom(was);
+        }
         writer.close();
 
         Map<String, List<String>> games = byGame(writer.path());
