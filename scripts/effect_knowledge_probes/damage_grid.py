@@ -35,7 +35,7 @@ def _options(parser) -> None:
                         default="validation")
     parser.add_argument("--half", choices=("reporting", "selection", "both"),
                         default="reporting")
-    parser.add_argument("--probe-set-dir", type=Path, default=common.REPORTS,
+    parser.add_argument("--probe-set-dir", type=Path, required=True,
                         help="where the corpus's selection set is (validation source)")
 
 

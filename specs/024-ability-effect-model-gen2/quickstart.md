@@ -168,7 +168,9 @@ python -u scripts/repair_first_strike_steps.py --corpus output/effects/corpus-ge
 
 ```bash
 python -u scripts/effect_sweep_arm.py --run-dir models/effects/runs/2026-10-gen2-<arm>/ \
-    --corpus output/effects/corpus-gen2/ [--freeze-probe-set] -- \
+    --corpus output/effects/corpus-gen2/ --vocab-path models/effects/vocab-script.txt \
+    --variant-scripts output/effects/variant-scripts --probe-set-dir output/effects/reports \
+    [--freeze-probe-set] -- \
     --e-dim D --encoder-layers L --encoder-d-model W --e-noise R --withhold-keyword K
 ```
 

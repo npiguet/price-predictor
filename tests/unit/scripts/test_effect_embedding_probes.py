@@ -11,6 +11,7 @@ pass by assuming 64.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import datetime
 import json
 import shutil
@@ -62,36 +63,47 @@ def tree(tmp_path):
     return SimpleNamespace(cards=cards, abilities=abilities, root=tmp_path)
 
 
+_UNUSED_REPORTS = Path("unused-reports")
+
+
+def _paths_for(checkpoint, abilities, provenance, options=None):
+    """``paths_for`` with the reports directory the flag now requires."""
+    options = options or common.PathOptions()
+    if options.reports_dir is None:
+        options = dataclasses.replace(options, reports_dir=_UNUSED_REPORTS)
+    return common.paths_for(checkpoint, abilities, provenance, options)
+
+
 class TestResolvePaths:
     """Scenario 9: vocabulary, cache and width come from the run, not constants."""
 
     def test_the_width_of_e_is_read_from_the_cache(self, tree):
-        paths = common.paths_for(
+        paths = _paths_for(
             tree.root / "arm" / "latest.pt", tree.abilities, _provenance(),
             options=common.PathOptions(cards_folders=[tree.cards]),
         )
         assert paths.e_width == _WIDTH
 
     def test_the_surface_follows_the_checkpoint_s_vocabulary(self, tree):
-        script = common.paths_for(
+        script = _paths_for(
             Path("c.pt"), tree.abilities, _provenance("models/effects/vocab-script.txt"),
         )
-        prose = common.paths_for(
+        prose = _paths_for(
             Path("c.pt"), tree.abilities, _provenance("models/effects/vocab.txt"),
         )
         assert (script.surface, prose.surface) == ("script", "prose")
 
     def test_output_is_named_by_checkpoint_and_date(self, tree):
-        paths = common.paths_for(
+        paths = _paths_for(
             tree.root / "2026-10-gen3-a" / "latest.pt", tree.abilities, _provenance(),
             options=common.PathOptions(today=datetime.date(2026, 10, 8)),
         )
         assert paths.out.name == "embedding-probes-2026-10-gen3-a-latest-20261008"
-        assert paths.out.parent == common.REPORTS
+        assert paths.out.parent == _UNUSED_REPORTS
 
     def test_a_reports_dir_moves_the_output_beside_the_arm(self, tree):
         arm = tree.root / "2026-10-gen3-a"
-        paths = common.paths_for(
+        paths = _paths_for(
             arm / "latest.pt", tree.abilities, _provenance(),
             options=common.PathOptions(
                 today=datetime.date(2026, 10, 8), reports_dir=arm / "reports"),
@@ -101,7 +113,7 @@ class TestResolvePaths:
         )
 
     def test_sidecar_trees_default_to_what_the_checkpoint_recorded(self, tree):
-        paths = common.paths_for(
+        paths = _paths_for(
             Path("c.pt"), tree.abilities, _provenance(),
             options=common.PathOptions(recorded_folders=(str(tree.cards),)),
         )
@@ -109,30 +121,31 @@ class TestResolvePaths:
         assert paths.tree_root("cardsfolder") == tree.cards
 
     def test_the_manifest_comes_from_the_recorded_corpus(self, tree):
-        paths = common.paths_for(
+        paths = _paths_for(
             Path("c.pt"), tree.abilities, _provenance(corpus="output/effects/corpus"),
         )
         assert paths.manifest == Path("output/effects/corpus/manifest.json")
         assert common.load_manifest_sets(
-            common.paths_for(Path("c.pt"), tree.abilities, _provenance()),
+            _paths_for(Path("c.pt"), tree.abilities, _provenance()),
         ) == (set(), {})
 
     def test_an_empty_cache_root_is_refused(self, tmp_path):
         with pytest.raises(FileNotFoundError, match="encode-abilities"):
-            common.paths_for(Path("c.pt"), tmp_path, _provenance())
+            _paths_for(Path("c.pt"), tmp_path, _provenance())
 
     def test_a_table_built_on_an_earlier_day_is_found(self, tree, monkeypatch):
-        monkeypatch.setattr(common, "REPORTS", tree.root / "reports")
         checkpoint = tree.root / "arm" / "latest.pt"
-        yesterday = common.paths_for(
+        yesterday = _paths_for(
             checkpoint, tree.abilities, _provenance(),
-            options=common.PathOptions(today=datetime.date(2026, 10, 7)),
+            options=common.PathOptions(
+                today=datetime.date(2026, 10, 7), reports_dir=tree.root / "reports"),
         )
         yesterday.text_table.parent.mkdir(parents=True)
         yesterday.text_table.write_bytes(b"")
-        today = common.paths_for(
+        today = _paths_for(
             checkpoint, tree.abilities, _provenance(),
-            options=common.PathOptions(today=datetime.date(2026, 10, 8)),
+            options=common.PathOptions(
+                today=datetime.date(2026, 10, 8), reports_dir=tree.root / "reports"),
         )
         assert today.reusable("cache/texts.pkl") == yesterday.text_table
 
@@ -140,16 +153,12 @@ class TestResolvePaths:
 class TestTheTextTable:
     """Scenario 9: a cache with no taxonomy baseline still yields rows."""
 
-    @pytest.fixture(autouse=True)
-    def _no_variant_tree(self, tree, monkeypatch):
-        """The real variant-script tree is tens of thousands of sidecars."""
-        monkeypatch.setattr(build_texts, "VARIANT_TREE", tree.root / "no-variants")
 
     def test_rows_are_built_with_no_taxonomy_cache(self, tree, monkeypatch):
-        monkeypatch.setattr(common, "REPORTS", tree.root / "reports")
-        paths = common.paths_for(
+        paths = _paths_for(
             tree.root / "arm" / "latest.pt", tree.abilities, _provenance(),
-            options=common.PathOptions(cards_folders=[tree.cards]),
+            options=common.PathOptions(
+                cards_folders=[tree.cards], reports_dir=tree.root / "reports"),
         )
         paths.out.mkdir(parents=True)
         table = build_texts.build(paths)
@@ -161,10 +170,10 @@ class TestTheTextTable:
     def test_keys_name_the_source_tree_not_the_kept_aside_folder(self, tree, monkeypatch):
         import pickle
 
-        monkeypatch.setattr(common, "REPORTS", tree.root / "reports")
-        paths = common.paths_for(
+        paths = _paths_for(
             tree.root / "arm" / "latest.pt", tree.abilities, _provenance(),
-            options=common.PathOptions(cards_folders=[tree.cards]),
+            options=common.PathOptions(
+                cards_folders=[tree.cards], reports_dir=tree.root / "reports"),
         )
         paths.out.mkdir(parents=True)
         build_texts.build(paths)
@@ -183,10 +192,9 @@ class TestTheKeymap:
     @pytest.fixture
     def keymap(self, tmp_path, monkeypatch):
         """The real gen-3 sidecars, Binding the Old Gods among them."""
-        monkeypatch.setattr(build_texts, "VARIANT_TREE", tmp_path / "no-variants")
         gen3 = _FIXTURES / "gen3-sidecars"
         paths = SimpleNamespace(cards_folders=[gen3 / "cardsfolder", gen3 / "tokenscripts"],
-                                surface="script")
+                                surface="script", variant_scripts=tmp_path / "no-variants")
         return build_texts.keymap_of(paths)
 
     def test_each_chapter_of_a_saga_is_its_own_entry(self, keymap):
@@ -232,7 +240,8 @@ class TestRunManifest:
 
     def test_a_script_run_is_recorded_in_its_report_directory(self, tmp_path, monkeypatch):
         checkpoint = tmp_path / "arm" / "latest.pt"
-        argv = ["--checkpoint", str(checkpoint), "--reports-dir", str(tmp_path / "reports")]
+        argv = ["--checkpoint", str(checkpoint), "--abilities-root", str(tmp_path / "abilities"),
+                "--reports-dir", str(tmp_path / "reports")]
         monkeypatch.setattr(sys, "argv", ["build_texts.py", *argv])
 
         with pytest.raises(SystemExit) as exit_:
@@ -250,7 +259,8 @@ class TestRunManifest:
     def test_output_names_the_report_directory_itself(self, tmp_path, monkeypatch):
         """The layout's report run directory, its manifest and files in it."""
         report = tmp_path / "reports" / "2026-11-20-rule-mask-hard-embedding"
-        argv = ["--checkpoint", str(tmp_path / "arm" / "latest.pt"), "--output", str(report)]
+        argv = ["--checkpoint", str(tmp_path / "arm" / "latest.pt"),
+                "--abilities-root", str(tmp_path / "abilities"), "--output", str(report)]
         monkeypatch.setattr(sys, "argv", ["build_texts.py", *argv])
 
         with pytest.raises(SystemExit):

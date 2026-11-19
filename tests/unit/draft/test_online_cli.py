@@ -42,6 +42,7 @@ def _argv(ckpt: Path, scorer: Path, **overrides: str | None) -> list[str]:
         "--frozen": f"gen-1={ckpt}",
         "--mix": "gen-3:5,gen-1:3,forge-r30:1",
         "--scorer-checkpoint": str(scorer),
+        "--cards-path": "cards",
         "--agent-temp": "gen-3=2.0",
         "--max-rounds": "1",
     }
@@ -77,7 +78,7 @@ def _never_run(monkeypatch: pytest.MonkeyPatch):
 
 def test_missing_learner_is_rejected(scorer: Path, capsys) -> None:
     argv = [
-        "train-draft-agent-online", "--scorer-checkpoint", str(scorer),
+        "train-draft-agent-online", "--scorer-checkpoint", str(scorer), "--cards-path", "cards",
         "--agent-temp", "gen-3=2.0",
     ]
     assert _run(argv) == 2
@@ -374,7 +375,7 @@ def test_gen2_knobs_are_not_registered(flag: str) -> None:
 
 def test_run_control_is_disabled_by_default() -> None:
     args = build_parser().parse_args([
-        "train-draft-agent-online", "--learner", "gen-3=x.pt",
+        "train-draft-agent-online", "--learner", "gen-3=x.pt", "--cards-path", "cards",
         "--agent-temp", "gen-3=2.0",
     ])
     assert args.patience is None
@@ -478,7 +479,7 @@ def test_min_lr_must_be_positive_and_not_above_lr(
 
 def test_the_three_tunable_knobs_are_registered() -> None:
     args = build_parser().parse_args([
-        "train-draft-agent-online",
+        "train-draft-agent-online", "--cards-path", "cards",
         "--learner", "gen-3=x.pt", "--agent-temp", "gen-3=1.5", "--lr", "5e-5",
         "--drafts-per-round", "20",
     ])
@@ -489,7 +490,7 @@ def test_the_three_tunable_knobs_are_registered() -> None:
 
 def test_defaults_match_the_contract() -> None:
     args = build_parser().parse_args([
-        "train-draft-agent-online", "--learner", "gen-3=x.pt",
+        "train-draft-agent-online", "--learner", "gen-3=x.pt", "--cards-path", "cards",
         "--agent-temp", "gen-3=2.0",
     ])
     assert args.lr == 1e-4

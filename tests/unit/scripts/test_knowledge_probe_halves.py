@@ -230,7 +230,8 @@ class TestTheProbingRun:
     @pytest.fixture(scope="class")
     def scorecard(self, frozen_corpus, sidecars, probe_model, tmp_path_factory):
         args = run.parse_args(["--checkpoint", "latest.pt", "--no-ablation", "--no-board",
-                               "--abilities-root", str(tmp_path_factory.mktemp("cache"))])
+                               "--abilities-root", str(tmp_path_factory.mktemp("cache")),
+                               "--reports-dir", "reports"])
         return run.probe(args, _context(frozen_corpus, sidecars, probe_model),
                          frozen_corpus.selection)
 

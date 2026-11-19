@@ -29,9 +29,7 @@ from _lib.stats import auc  # noqa: F401  (re-exported: the probes score with co
 # Re-exported: both probe batteries name a checkpoint's report directory and
 # read their default trees one way, so the two reports of one arm read alike.
 from effect_embedding_probes.common import (  # noqa: F401
-    DEFAULT_ABILITIES,
     DEFAULT_CARDS_FOLDERS,
-    REPORTS,
     card_facts,
     checkpoint_label,
 )

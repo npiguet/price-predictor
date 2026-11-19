@@ -26,11 +26,10 @@ just low-variance. (Caveat: variance ≠ usefulness; this supervised view
 is the corrective.)
 
     python scripts/embedding_effective_rank.py \
-        [--encoder-checkpoint models/sealed/encoder/latest.pt] \
-        [--vocab-path models/sealed/encoder/vocab.txt] \
-        [--cards-folder output/cardsfolder/] \
+        --encoder-checkpoint <encoder .pt> --vocab-path <vocab.txt> \
+        --cards-folder <converted cardsfolder> \
         [--batch-size 256] [--device auto] [--standardize] \
-        [--cards-played output/sealed/cards-played.txt] [--shrinkage-k 20]
+        [--cards-played <cards-played.txt>] [--shrinkage-k 20]
 """
 
 from __future__ import annotations
@@ -53,9 +52,6 @@ from _lib.stats import participation_ratio  # noqa: E402
 # The report (and --help) print math symbols (≈, ‖·‖, ²) cp1252 cannot encode.
 utf8_console()
 
-DEFAULT_CKPT = Path("models/sealed/encoder/latest.pt")
-DEFAULT_VOCAB = Path("models/sealed/encoder/vocab.txt")
-DEFAULT_CARDS = Path("output/cardsfolder/")
 _K_GRID = (1, 2, 5, 10, 20, 50, 100, 200, 350, 512)
 
 
@@ -210,9 +206,9 @@ def main() -> int:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--encoder-checkpoint", type=Path, default=DEFAULT_CKPT)
-    parser.add_argument("--vocab-path", type=Path, default=DEFAULT_VOCAB)
-    parser.add_argument("--cards-folder", type=Path, default=DEFAULT_CARDS)
+    parser.add_argument("--encoder-checkpoint", type=Path, required=True)
+    parser.add_argument("--vocab-path", type=Path, required=True)
+    parser.add_argument("--cards-folder", type=Path, required=True)
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--device", default="auto", help="auto | cpu | cuda")
     parser.add_argument(

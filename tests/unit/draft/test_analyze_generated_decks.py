@@ -76,7 +76,7 @@ def test_format_deck_score_section_renders_labels() -> None:
 
 def test_draft_subcommand_dispatches() -> None:
     args = build_parser().parse_args(
-        ["analyze-generated-decks", "--agent", "draft-agent"]
+        ["analyze-generated-decks", "--agent", "draft-agent", "--cards-path", "cards"]
     )
     assert args.func is run_analyze_generated_decks
     assert args.agent == "draft-agent"

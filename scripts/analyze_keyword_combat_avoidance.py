@@ -30,8 +30,9 @@ blocking half reads Forge's own legal-blocker lists.
 Usage
 -----
     python scripts/analyze_keyword_combat_avoidance.py \\
-        output/effects/corpus/validation/game-disjoint \\
-        output/effects/corpus/validation/card-disjoint
+        --cards-folder <cardsfolder> --tokenscripts <tokenscripts> \\
+        --variant-scripts <variant-scripts> \\
+        <records>/validation/game-disjoint <records>/validation/card-disjoint
 
 Point it only at directories whose games are whole (the validation strata or
 the raw corpus). The curated training directory samples records per record,
@@ -186,12 +187,8 @@ class Tally:
                 c["blocked"] += (blocker_id, attacker.id) in pairs
 
 
-def run(directories: list[Path]) -> Tally:
-    resolver = KeywordResolver(SidecarCache({
-        "cardsfolder": Path("output/cardsfolder"),
-        "tokenscripts": Path("output/tokenscripts"),
-        "variant-scripts": Path("output/effects/variant-scripts"),
-    }))
+def run(directories: list[Path], sidecar_roots: dict[str, Path]) -> Tally:
+    resolver = KeywordResolver(SidecarCache(sidecar_roots))
     kw = resolver.keywords_of
     tally = Tally()
     for directory in directories:
@@ -230,8 +227,18 @@ def _table(title, rows, outcome) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("directories", nargs="+", type=Path)
+    parser.add_argument("--cards-folder", type=Path, required=True,
+                        help="the converted cardsfolder tree the records name")
+    parser.add_argument("--tokenscripts", type=Path, required=True,
+                        help="the converted tokenscripts tree the records name")
+    parser.add_argument("--variant-scripts", type=Path, required=True,
+                        help="the variant-script tree the records name")
     args = parser.parse_args()
-    tally = run(args.directories)
+    tally = run(args.directories, {
+        "cardsfolder": args.cards_folder,
+        "tokenscripts": args.tokenscripts,
+        "variant-scripts": args.variant_scripts,
+    })
     for key, n in tally.phases.most_common(12):
         print("record phase", key, n)
     print(

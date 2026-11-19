@@ -43,11 +43,7 @@ from effects.domain import default_paths
 # These probe scripts predate the artifact layout: the paths below are theirs
 # alone now (the effects package keeps no default for them) and are the next
 # thing to become required flags.
-REPORTS = REPO / "output/effects/reports/"
-DEFAULT_CHECKPOINT = REPO / "models/effects/effect-model/latest.pt"
-DEFAULT_ABILITIES = REPO / "output/effects/abilities/"
 DEFAULT_CARDS_FOLDERS = tuple(REPO / folder for folder in default_paths.DEFAULT_CARDS_FOLDERS)
-VARIANT_TREE = REPO / "output/effects/variant-scripts/"
 SEED = 42
 
 
@@ -75,6 +71,7 @@ class ProbePaths:
     surface: str
     e_width: int
     manifest: Path | None
+    variant_scripts: Path | None = None
 
     @property
     def label(self) -> str:
@@ -133,11 +130,11 @@ class ProbePaths:
 def add_probe_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     """The two flags every script takes (FR-072), plus the sidecar trees."""
     parser.add_argument(
-        "--checkpoint", type=Path, default=DEFAULT_CHECKPOINT,
+        "--checkpoint", type=Path, required=True,
         help="Effects checkpoint whose vocabulary and cache the probes read",
     )
     parser.add_argument(
-        "--abilities-root", type=Path, default=DEFAULT_ABILITIES,
+        "--abilities-root", type=Path, required=True,
         help="The ability cache that checkpoint encoded",
     )
     parser.add_argument(
@@ -149,18 +146,19 @@ def add_probe_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentPar
             "output/effects/gen3/converted/tokenscripts"
         ),
     )
-    parser.add_argument(
+    where = parser.add_mutually_exclusive_group(required=True)
+    where.add_argument(
         "--reports-dir", type=Path, default=None,
         help=(
             "Directory the run's embedding-probes-<checkpoint>-<date>/ folder "
-            "goes in (default: output/effects/reports/)"
+            "goes in (one of --reports-dir and --output is required)"
         ),
     )
-    parser.add_argument(
+    where.add_argument(
         "--output", type=Path, default=None,
         help=(
             "The run's report directory itself, its run.json included, shared "
-            "by every script of the battery given it (default: the dated "
+            "by every script of the battery given it (instead of the dated "
             "folder under --reports-dir)"
         ),
     )
@@ -190,6 +188,7 @@ class PathOptions:
     today: datetime.date | None = None
     reports_dir: Path | None = None
     output: Path | None = None
+    variant_scripts: Path | None = None
 
 
 def paths_for(
@@ -221,6 +220,7 @@ def paths_for(
         surface=surface_of(Path(provenance.vocab_path)),
         e_width=cache_e_width(abilities_root),
         manifest=manifest,
+        variant_scripts=options.variant_scripts,
     )
 
 
@@ -232,8 +232,10 @@ def report_dir(
     ``<reports-dir>/embedding-probes-<checkpoint>-<date>/``."""
     if output is not None:
         return Path(output)
+    if reports_dir is None:
+        raise ValueError("one of --reports-dir and --output is required")
     date = (today or datetime.date.today()).strftime("%Y%m%d")
-    return (Path(reports_dir) if reports_dir else REPORTS) / (
+    return Path(reports_dir) / (
         f"embedding-probes-{checkpoint_label(Path(checkpoint))}-{date}"
     )
 
@@ -268,6 +270,7 @@ def resolve_paths(args: argparse.Namespace) -> ProbePaths:
         cards_folders=getattr(args, "cards_folders", None),
         reports_dir=getattr(args, "reports_dir", None),
         output=getattr(args, "output", None),
+        variant_scripts=getattr(args, "variant_scripts", None),
     ))
     if loaded.encoder_config.e_dim != paths.e_width:
         raise ValueError(

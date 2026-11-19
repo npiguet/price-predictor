@@ -308,7 +308,7 @@ $corpus = "$gen3\corpus\$corpusStart-curated"
 if (-not (Test-Path variable:freezeStart)) { $freezeStart = Run-Start "$gen3\reports" selection-set }
 $freeze = "$gen3\reports\$freezeStart-selection-set"
 Run-Logged $corpus "$py -u -m effects build-corpus --records-dir $gen3\records --output $corpus $cards --variant-scripts $variants $tokens --workers 10"
-& $py scripts\scan_output_vocabularies.py --manifest $corpus\manifest.json
+& $py scripts\scan_output_vocabularies.py --manifest $corpus\manifest.json --keyword-definitions $kw
 & $py -m pytest tests\unit\effects\domain\test_layout_vocabularies.py
 Run-Logged $freeze "$py -u scripts\effect_knowledge_probes\run.py --freeze-probe-set --corpus $corpus $cards $tokens --reports-dir $freeze"
 ```
@@ -359,7 +359,7 @@ $cache  = "$gen3\cache\$(Split-Path -Leaf $train)"
 $report = "$gen3\reports\$(Split-Path -Leaf $train)"
 Run-Logged $cache  "$py -u -m effects encode-abilities --checkpoint $ckpt $cards --variant-scripts $variants $tokens --output-root $cache"
 Run-Logged "$report-evaluation" "$py -u -m effects evaluate-effect-model --checkpoint $ckpt $cards --variant-scripts $variants $tokens --corpus $corpus --abilities-root $cache --win-rates $gen3\inputs\cards-win-rates.txt --reports-dir $freeze --output $report-evaluation"
-Run-Logged $report "$py -u scripts\effect_knowledge_probes\run.py --checkpoint $ckpt --corpus $corpus $cards $tokens --abilities-root $cache --probe-set-dir $freeze --output $report"
+Run-Logged $report "$py -u scripts\effect_knowledge_probes\run.py --checkpoint $ckpt --corpus $corpus $cards $tokens --abilities-root $cache --probe-set-dir $freeze --reports-dir $gen3\reports --output $report"
 ```
 
 `evaluate-effect-model`'s decodability check reads a per-card win-rate table, which `--win-rates`

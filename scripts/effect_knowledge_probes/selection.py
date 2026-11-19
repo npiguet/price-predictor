@@ -55,8 +55,8 @@ class ProbeItems:
 REPORTING = ("reporting",)
 
 
-def frozen_grid_records(context, prefix: str, *, halves: Sequence[str] = REPORTING,
-                        reports_dir=None) -> list[tuple[object, tuple[str, ...]]]:
+def frozen_grid_records(context, prefix: str, *, reports_dir, halves: Sequence[str] = REPORTING,
+                        ) -> list[tuple[object, tuple[str, ...]]]:
     """``(record, entities)`` of every frozen grid named ``prefix``…, in the
     named halves of both validation strata, each record once, read from the
     selection set frozen for the checkpoint's corpus rather than by scanning

@@ -91,7 +91,7 @@ class TestTheOfflineTrainersCheckpointDirectory:
 
 def _online(*extra: str):
     return _args("train-draft-agent-online", "--learner", "gen-3=a.pt", "--frozen", "gen-1=b.pt",
-                 "--agent-temp", "gen-3=2.0", *extra)
+                 "--cards-path", "cards", "--agent-temp", "gen-3=2.0", *extra)
 
 
 class TestTheOnlineTrainersRunDirectory:
@@ -167,7 +167,7 @@ class TestGenerateDraftDataWorkerLogs:
         seen = []
         monkeypatch.setattr(generate_draft_data.GenerateDraftDataSupervisor, "run",
                             lambda self: seen.append(self._config) or 0)
-        args = _args("generate-draft-data", "--n-drafts", "1", *extra)
+        args = _args("generate-draft-data", "--n-drafts", "1", "--cards-path", "cards", *extra)
         assert args.func(args) == 0
         return seen[0]
 
@@ -231,7 +231,8 @@ class TestEmbeddingsPath:
         seen = []
         monkeypatch.setattr(validate_builder, "run_validate", lambda config: seen.append(config))
         monkeypatch.setattr(validate_builder, "format_diagnostic", lambda _diagnostic: "")
-        args = _args("validate-builder", "--pools-from", "d.jsonl", "--embeddings-path", _CACHE)
+        args = _args("validate-builder", "--pools-from", "d.jsonl", "--cards-path", "cards",
+                     "--embeddings-path", _CACHE)
         assert args.func(args) == 0
         assert seen[0].embeddings_path == Path(_CACHE)
 
@@ -245,9 +246,10 @@ class TestEmbeddingsPath:
         assert probe_embedding_width(tmp_path / "cache") == 6
 
     @pytest.mark.parametrize("argv", [
-        ["generate-draft-data", "--n-drafts", "1"],
+        ["generate-draft-data", "--n-drafts", "1", "--cards-path", "cards"],
         ["train-draft-agent"],
-        ["train-draft-agent-online", "--learner", "gen-3=a.pt", "--output-path", "o/d.jsonl"],
+        ["train-draft-agent-online", "--learner", "gen-3=a.pt", "--cards-path", "cards",
+         "--output-path", "o/d.jsonl"],
     ])
     def test_every_writer_lists_the_embeddings_it_read(self, argv):
         args = _args(*argv, "--embeddings-path", _CACHE)

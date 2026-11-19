@@ -67,7 +67,7 @@ class TestTheSelectionSet:
         monkeypatch.setattr(common, "probe_context", lambda *a, **k: context)
         with pytest.raises(SystemExit, match="--freeze-probe-set"):
             run.main(["--checkpoint", str(tmp_path / "latest.pt"),
-                      "--reports-dir", str(tmp_path)])
+                      "--abilities-root", str(tmp_path), "--reports-dir", str(tmp_path)])
 
 
 # ── compare ─────────────────────────────────────────────────────────────

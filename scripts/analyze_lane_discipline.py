@@ -58,7 +58,6 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from draft_corpus_common import (
-    DEFAULT_CARDS_PATH,
     ColourResolver,
     Decision,
     Lane,
@@ -284,7 +283,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--drafts", action="append", required=True, metavar="PATH")
-    ap.add_argument("--cards-path", type=Path, default=DEFAULT_CARDS_PATH)
+    ap.add_argument("--cards-path", type=Path, required=True)
     ap.add_argument("--winrates", type=Path, required=True)
     ap.add_argument("--min-obs", type=int, default=20)
     ap.add_argument("--min-pool", type=int, default=5,

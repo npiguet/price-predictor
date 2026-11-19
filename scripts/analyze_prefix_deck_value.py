@@ -59,7 +59,6 @@ from pathlib import Path
 
 from _lib.markdown import banner
 from draft_corpus_common import (
-    DEFAULT_CARDS_PATH,
     iter_prefix_records,
     load_labeler_and_scorer,
     prefix_curves,
@@ -259,11 +258,9 @@ def main() -> None:
                          "the corpus's deck_score, which for every online-trained corpus is "
                          "greedy. GenerateDraftDataConfig defaults to picker, so leaving this "
                          "unset silently measures a different pipeline.")
-    ap.add_argument("--cards-path", type=Path, default=DEFAULT_CARDS_PATH)
-    ap.add_argument("--scorer", type=Path, default=Path(
-        "models/sealed/scorer/512-best_l6_h4_s4_ff2176_mlp512_lr1e-05_mwlog.pt"))
-    ap.add_argument("--picker", type=Path, default=Path(
-        "models/sealed/picker/best_20260524_203230-4l-8h-4top256-1e-5lr.pt"))
+    ap.add_argument("--cards-path", type=Path, required=True)
+    ap.add_argument("--scorer", type=Path, required=True)
+    ap.add_argument("--picker", type=Path, required=True)
     args = ap.parse_args()
 
     if not args.report_only:

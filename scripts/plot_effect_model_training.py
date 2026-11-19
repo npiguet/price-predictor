@@ -329,7 +329,7 @@ def _save(fig, out_stub: Path) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--runs-dir", type=Path, default=Path("models/effects/runs"))
+    ap.add_argument("--runs-dir", type=Path, required=True)
     ap.add_argument("--prefix", default="2026-09-17")
     ap.add_argument("--out-dir", type=Path, default=Path("experiments/images"))
     ap.add_argument("--name-prefix", default="2026-09-19-effect-model-")

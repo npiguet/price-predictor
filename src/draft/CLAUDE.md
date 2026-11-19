@@ -50,7 +50,7 @@ Append-only data contracts spanning the Java writers and the Python readers — 
 - `method_A`/`method_B` carry the two seats' labels; `run_id` is the `play-draft-games` invocation.
 - Both decks of a row were drafted in the same pod, but the format has no field for pod identity.
 - It is kept in a separate file from the sealed corpus on purpose: these are draft-pool matches, and `train-scorer` and `train-encoder` must not read them.
-- Tally with `python scripts/analyze_winrates.py <run dir>/draft-games.txt`.
+- Tally with `python scripts/analyze_winrates.py <run dir>/draft-games.txt --cards-path <converted cardsfolder>`.
 
 ## Model artifacts
 

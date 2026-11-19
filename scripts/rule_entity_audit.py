@@ -631,7 +631,7 @@ def _rule_order(rule: str):
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--corpus", type=Path, default=Path("output/effects/corpus-gen3-pilot3"),
+    parser.add_argument("--corpus", type=Path, required=True,
                         help="A curated corpus; its strata and manifest are read")
     parser.add_argument("--records-dir", type=Path, default=None,
                         help="A raw records directory instead of the corpus's strata "
@@ -640,8 +640,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="The manifest whose rule_map is read (default: the corpus's)")
     parser.add_argument("--rules-dir", type=Path, default=Path("rules"))
     parser.add_argument("--cards-folder", dest="cards_folders", type=Path, action="append")
-    parser.add_argument("--output", type=Path,
-                        default=Path("output/effects/reports/rule-entity-audit"))
+    parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--unsupported", type=Path, default=None,
                         help="Also write the list of map outputs no tagged record carries "
                              "(needs a manifest recording effective outputs)")

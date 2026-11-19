@@ -27,9 +27,6 @@ from draft.infrastructure import draft_record_io
 from price_predictor.domain.value_objects import WUBRG
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
-# Relative to the working directory, as every draft-corpus script is run from
-# the repository root.
-DEFAULT_CARDS_PATH = Path("output/cardsfolder-512")
 BASIC_LAND_TYPES = frozenset(
     {"Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes"}
 )

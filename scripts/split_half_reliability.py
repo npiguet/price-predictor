@@ -24,8 +24,8 @@ chase, and a low ``r_full`` on a colour head explains a low model corr
 without anything being wrong.
 
     python scripts/split_half_reliability.py \
-        [--cards-played output/sealed/cards-played.txt] \
-        [--cards-folder output/cardsfolder/] \
+        --cards-played <cards-played.txt> \
+        --cards-folder <converted cardsfolder> \
         [--shrinkage-k 20] [--seed 42] [--keep-missing]
 """
 
@@ -48,9 +48,6 @@ from sealed.application.train_encoder import (
 )
 from sealed.infrastructure.cards_played_reader import CardsPlayedRow, iter_rows
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
-
-DEFAULT_CARDS_PLAYED = Path("output/sealed/cards-played.txt")
-DEFAULT_CARDS_FOLDER = Path("output/cardsfolder/")
 
 
 def _spearman_brown(r_half: float) -> float:
@@ -77,8 +74,8 @@ def main() -> int:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--cards-played", type=Path, default=DEFAULT_CARDS_PLAYED)
-    parser.add_argument("--cards-folder", type=Path, default=DEFAULT_CARDS_FOLDER)
+    parser.add_argument("--cards-played", type=Path, required=True)
+    parser.add_argument("--cards-folder", type=Path, required=True)
     parser.add_argument("--shrinkage-k", type=float, default=20.0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(

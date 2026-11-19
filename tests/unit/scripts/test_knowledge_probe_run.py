@@ -117,7 +117,8 @@ class TestFreezeSelectionSet:
     checkpoint, and the combat and evasion grids read the records it froze."""
 
     def test_the_freeze_takes_a_corpus_and_refuses_a_checkpoint(self, tmp_path):
-        args = run.parse_args(["--freeze-probe-set", "--corpus", str(tmp_path)])
+        args = run.parse_args(["--freeze-probe-set", "--corpus", str(tmp_path),
+                               "--reports-dir", "p"])
         assert args.checkpoint is None and args.corpus == tmp_path
         for argv in (["--freeze-probe-set", "--corpus", "c", "--checkpoint", "x.pt"],
                      ["--freeze-probe-set"], []):
@@ -139,7 +140,7 @@ class TestFreezeSelectionSet:
         monkeypatch.setattr(freeze_selection_set, "run", fake_run)
         monkeypatch.setattr(common, "probe_context", lambda *a, **k: pytest.fail("no checkpoint"))
         code = run.main(["--freeze-probe-set", "--corpus", str(corpus),
-                         "--probe-set-dir", str(tmp_path / "sets"),
+                         "--probe-set-dir", str(tmp_path / "sets"), "--reports-dir", "p",
                          "--cards-folder", str(GEN3_SIDECAR_FOLDERS[0])])
         assert code == 1
         assert seen["corpus"] == corpus and seen["reports_dir"] == tmp_path / "sets"
@@ -241,23 +242,27 @@ class TestTheReportDirectory:
     ``--reports-dir``."""
 
     def test_without_output_the_report_is_dated_under_reports_dir(self, tmp_path):
-        args = run.parse_args(["--checkpoint", "m/run/latest.pt", "--reports-dir", str(tmp_path)])
+        args = run.parse_args(["--checkpoint", "m/run/latest.pt", "--abilities-root", "cache",
+                               "--reports-dir", str(tmp_path)])
         assert args.output is None
         assert run.output_dir(args, "2026-11-20") == (
             tmp_path / "knowledge-probes-run-latest-20261120")
 
     def test_output_names_the_report_directory(self, tmp_path):
-        args = run.parse_args(["--checkpoint", "m/run/latest.pt", "--output", str(tmp_path / "r")])
+        args = run.parse_args(["--checkpoint", "m/run/latest.pt", "--abilities-root", "cache",
+                               "--reports-dir", str(tmp_path), "--output", str(tmp_path / "r")])
         assert run.output_dir(args, "2026-11-20") == tmp_path / "r"
 
     def test_the_freeze_refuses_it(self):
         with pytest.raises(SystemExit):
-            run.parse_args(["--freeze-probe-set", "--corpus", "c", "--output", "r"])
+            run.parse_args(["--freeze-probe-set", "--corpus", "c", "--reports-dir", "p",
+                            "--output", "r"])
 
     def test_the_manifest_is_kept_in_it(self, tmp_path, monkeypatch):
         report = tmp_path / "reports" / "2026-11-20-rule-mask-hard"
         monkeypatch.setattr(run, "_probe_run", lambda args: 0)
         assert run.main(["--checkpoint", str(tmp_path / "latest.pt"), "--output", str(report),
+                         "--abilities-root", str(tmp_path), "--reports-dir", str(tmp_path),
                          "--probe-set-dir", str(tmp_path / "sets")]) == 0
         assert json.loads((report / "run.json").read_text(encoding="utf-8"))["status"] == (
             "finished")

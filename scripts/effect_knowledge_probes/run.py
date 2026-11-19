@@ -76,7 +76,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cards-folder", action="append", type=Path,
                         help="sidecar tree (repeatable); default the trees the "
                              "checkpoint recorded")
-    parser.add_argument("--abilities-root", type=Path, default=common.DEFAULT_ABILITIES)
+    parser.add_argument("--abilities-root", type=Path,
+                        help="the ability cache the checkpoint encoded; required unless "
+                             "--freeze-probe-set")
     parser.add_argument("--vocab-path", type=Path)
     parser.add_argument("--keyword-definitions", type=Path)
     parser.add_argument("--freeze-probe-set", action="store_true")
@@ -95,7 +97,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-gen3-probes", action="store_true",
                         help="skip the turn and step conditions, anthem and "
                              "target-legality probes")
-    parser.add_argument("--reports-dir", type=Path, default=common.REPORTS,
+    parser.add_argument("--reports-dir", type=Path, required=True,
                         help="where the dated report directory goes unless --output "
                              "is given, and the selection set unless --probe-set-dir is")
     parser.add_argument("--output", type=Path, default=None,
@@ -139,6 +141,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         _check_freeze_args(parser, args)
     elif args.checkpoint is None:
         parser.error("--checkpoint is required (or --freeze-probe-set --corpus DIR)")
+    elif args.abilities_root is None:
+        parser.error("--abilities-root is required unless --freeze-probe-set")
     return args
 
 

@@ -47,9 +47,9 @@ PROBE_RECORDS = 1000
 PROBE_PER_GAME = 3
 
 
-def load_selection(context, directory=None):
+def load_selection(context, directory):
     """The selection set frozen for ``context``'s corpus under ``directory``
-    (default ``common.REPORTS``); exits naming the file when it is missing,
+    (required); exits naming the file when it is missing,
     frozen against another corpus or edited."""
     from effects.domain.selection_set import (
         SelectionSetError,
@@ -57,7 +57,7 @@ def load_selection(context, directory=None):
         selection_set_path,
     )
 
-    path = selection_set_path(directory or common.REPORTS, context.corpus_digest)
+    path = selection_set_path(directory, context.corpus_digest)
     try:
         return load_selection_set(path, context.corpus_digest)
     except SelectionSetError as error:

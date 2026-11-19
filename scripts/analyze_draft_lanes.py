@@ -59,7 +59,6 @@ from pathlib import Path
 from _lib.markdown import banner
 from _lib.stats import mean_se
 from draft_corpus_common import (
-    DEFAULT_CARDS_PATH,
     WUBRG,
     ColourResolver,
     Decision,
@@ -281,7 +280,7 @@ def main() -> None:
         "--drafts", action="append", required=True, metavar="LABEL=PATH",
         help="corpus to analyze; repeatable. Bare PATH labels by file stem.",
     )
-    parser.add_argument("--cards-path", type=Path, default=DEFAULT_CARDS_PATH)
+    parser.add_argument("--cards-path", type=Path, required=True)
     parser.add_argument(
         "--agents", default=None,
         help="comma-separated mix labels to report (default: all seen)",

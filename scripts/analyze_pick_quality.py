@@ -54,7 +54,6 @@ from statistics import mean, median
 
 from _lib.markdown import banner
 from draft_corpus_common import (
-    DEFAULT_CARDS_PATH,
     ColourResolver,
     Lane,
     parse_drafts_arg,
@@ -64,7 +63,6 @@ from draft_corpus_common import (
     top_two_colours,
 )
 
-DEFAULT_WINRATES = Path("output/sealed/cards-win-rates.txt")
 QUALITY_COLUMN = "shrunk_score_play"
 
 
@@ -142,6 +140,14 @@ def analyze(
     print()
 
 
+def _require_winrates(winrates: Path | None) -> None:
+    if winrates is None or not winrates.exists():
+        raise SystemExit(
+            f"--winrates PATH ({winrates}) not found — pass it, or use "
+            f"--quality pickrate to derive a scale from the corpus itself"
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -150,9 +156,10 @@ def main() -> None:
         "--drafts", action="append", required=True, metavar="LABEL=PATH",
         help="corpus to analyze; repeatable. Bare PATH labels by file stem.",
     )
-    parser.add_argument("--cards-path", type=Path, default=DEFAULT_CARDS_PATH)
+    parser.add_argument("--cards-path", type=Path, required=True)
     parser.add_argument("--quality", choices=("winrates", "pickrate"), default="winrates")
-    parser.add_argument("--winrates", type=Path, default=DEFAULT_WINRATES)
+    parser.add_argument("--winrates", type=Path, default=None,
+                        help="Required with --quality winrates")
     parser.add_argument(
         "--reference-agents", default="gen1,forge-full",
         help="seats defining the pickrate scale (--quality pickrate only)",
@@ -168,11 +175,7 @@ def main() -> None:
     agents = tuple(a.strip() for a in args.agents.split(",")) if args.agents else None
 
     if args.quality == "winrates":
-        if not args.winrates.exists():
-            raise SystemExit(
-                f"{args.winrates} not found — pass --winrates PATH, or use "
-                f"--quality pickrate to derive a scale from the corpus itself"
-            )
+        _require_winrates(args.winrates)
         quality = score_play(args.winrates)
         values = sorted(quality.values())
         print(

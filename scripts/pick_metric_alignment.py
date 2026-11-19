@@ -68,7 +68,6 @@ from _lib.corpora import load_win_rates
 from _lib.markdown import banner
 from _lib.stats import spearman
 from draft_corpus_common import (
-    DEFAULT_CARDS_PATH,
     WUBRG,
     ColourResolver,
     parse_drafts_arg,
@@ -161,7 +160,7 @@ def report_axis_correlations(wr: dict) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--drafts", action="append", required=True)
-    ap.add_argument("--cards-path", type=Path, default=DEFAULT_CARDS_PATH)
+    ap.add_argument("--cards-path", type=Path, required=True)
     ap.add_argument("--winrates", required=True)
     ap.add_argument("--min-obs", type=int, default=20)
     ap.add_argument("--min-choices", type=int, default=5)

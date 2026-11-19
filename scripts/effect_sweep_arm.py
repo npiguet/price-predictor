@@ -37,7 +37,6 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SHARED_REPORTS = ROOT / "output" / "effects" / "reports"
 EMBEDDING_PROBES = (
     "build_texts", "effect_profiles", "pca_directions",
     "linear_probes", "type_merging", "neighbours", "keyword_expansion",
@@ -121,7 +120,8 @@ def plan(args: argparse.Namespace, train_args: list[str]) -> list[tuple[str, lis
         commands.append((
             "embedding-probes",
             python + [str(Path("scripts") / "effect_embedding_probes" / f"{script}.py"),
-                      *probe, "--reports-dir", reports],
+                      *probe, "--reports-dir", reports,
+                      *(variants if script == "build_texts" else [])],
             f"probes-{script}.log",
         ))
     commands.append(("knowledge-probes", knowledge + [
@@ -142,14 +142,14 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--corpus", type=Path, required=True,
                         help="curated dataset every arm trains on")
     parser.add_argument("--vocab-path", type=Path,
-                        default=Path("models/effects/vocab-script.txt"),
+                        required=True,
                         help="the vocabulary build-corpus was given")
     parser.add_argument("--variant-scripts", type=Path,
-                        default=Path("output/effects/variant-scripts"),
+                        required=True,
                         help="the variant tree build-corpus was given")
     parser.add_argument("--from-step", choices=STEPS[1:], default="train",
                         help="skip the steps before this one, e.g. after a crash")
-    parser.add_argument("--probe-set-dir", type=Path, default=SHARED_REPORTS,
+    parser.add_argument("--probe-set-dir", type=Path, required=True,
                         help="where the shared selection set lives")
     parser.add_argument("--cache-dir", type=Path, default=None,
                         help="the ability cache's directory (default: abilities/ "

@@ -120,7 +120,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--targets", default="damage_taken,may_block,dies")
     parser.add_argument("--half", choices=("reporting", "selection", "both"),
                         default="reporting")
-    parser.add_argument("--probe-set-dir", type=Path, default=common.REPORTS,
+    parser.add_argument("--probe-set-dir", type=Path, required=True,
                         help="where the corpus's selection set is")
     return parser.parse_args()
 

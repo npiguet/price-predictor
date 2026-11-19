@@ -20,8 +20,6 @@ from price_predictor.domain.value_objects import WUBRG
 from price_predictor.infrastructure.converted_card_parser import parse_converted_file
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
-DEFAULT_PATH = Path("output/sealed/match-outcomes.txt")
-DEFAULT_CARDS_PATH = Path("output/cardsfolder")
 BEST_OFS = [1, 3, 5, 7]  # match-length variants to simulate
 COLOR_BUCKETS = (1, 2, 3, 4, 5)
 CREATURE_BUCKETS = ("<=13", "14", "15", "16", "17", "18", "19", ">=20")
@@ -249,19 +247,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "path",
-        nargs="?",
         type=Path,
-        default=DEFAULT_PATH,
-        help=f"Path to match-outcomes file (default: {DEFAULT_PATH})",
+        help="Path to match-outcomes file",
     )
     parser.add_argument(
         "--cards-path",
         type=Path,
-        default=DEFAULT_CARDS_PATH,
-        help=(
-            "Path to converted cardsfolder, used for the per-color-count "
-            f"win-rate table (default: {DEFAULT_CARDS_PATH})"
-        ),
+        required=True,
+        help="Path to converted cardsfolder, used for the per-color-count win-rate table",
     )
     args = parser.parse_args()
     path: Path = args.path

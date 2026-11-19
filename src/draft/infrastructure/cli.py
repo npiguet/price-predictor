@@ -196,8 +196,8 @@ def _build_analyze_generated_decks_parser(subparsers) -> None:
         help="Drafts corpus to analyze (default: output/draft/drafts.jsonl).",
     )
     parser.add_argument(
-        "--cards-path", default="output/cardsfolder/",
-        help="Directory with converted card files (default: output/cardsfolder/).",
+        "--cards-path", required=True,
+        help="Directory with converted card files.",
     )
     parser.add_argument(
         "--no-rarity", action="store_true",
@@ -256,7 +256,7 @@ def _build_train_draft_agent_online_parser(subparsers) -> None:
         help="Used only with --build-method picker; must exist then.",
     )
     parser.add_argument(
-        "--cards-path", default="output/cardsfolder/",
+        "--cards-path", required=True,
         help=".npz embedding cache; fixes the model/scorer input width.",
     )
     _add_embeddings_path(parser)
@@ -390,8 +390,8 @@ def _build_validate_builder_parser(subparsers) -> None:
         help="Picker (default: models/sealed/picker/latest.pt).",
     )
     parser.add_argument(
-        "--cards-path", default="output/cardsfolder/",
-        help=".npz cache (default: output/cardsfolder/).",
+        "--cards-path", required=True,
+        help=".npz cache.",
     )
     _add_embeddings_path(parser)
 
@@ -440,8 +440,8 @@ def _build_generate_draft_data_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
-        "--cards-path", default="output/cardsfolder/",
-        help=".npz embedding cache (default: output/cardsfolder/).",
+        "--cards-path", required=True,
+        help=".npz embedding cache.",
     )
     _add_embeddings_path(parser)
     parser.add_argument(
@@ -583,7 +583,7 @@ def _build_train_draft_agent_rl_parser(subparsers) -> None:
     )
     parser.add_argument(
         "--cards-path", default=None,
-        help=".npz embedding cache (default: output/cardsfolder/). Resumable.",
+        help=".npz embedding cache. Required on a fresh run; Resumable.",
     )
     _add_embeddings_path(parser, resumable=True)
     _add_checkpoint_dir(parser, help_text=(
@@ -681,7 +681,7 @@ def _build_train_draft_agent_parser(subparsers) -> None:
     )
     parser.add_argument(
         "--cards-path", default=None,
-        help=".npz cache (default: output/cardsfolder/). Resumable.",
+        help=".npz cache. Required on a fresh run; Resumable.",
     )
     _add_embeddings_path(parser, resumable=True)
     _add_checkpoint_dir(parser, help_text=(
@@ -856,6 +856,20 @@ def run_generate_draft_data(args: argparse.Namespace) -> int:
     return 0
 
 
+def _require_cards_path(args: argparse.Namespace, resumed_train_config: dict | None) -> None:
+    """Exit 2 when no --cards-path was given and none can be inherited from a resumed run."""
+    inherited = (resumed_train_config or {}).get("cards_path")
+    if args.cards_path is not None:
+        return
+    if inherited:
+        return
+    print(
+        "Error: --cards-path is required (a resumed run inherits it from its checkpoint).",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
+
+
 def run_train_draft_agent(args: argparse.Namespace) -> int:
     """Execute the train-draft-agent command."""
     from draft.application.train_draft_agent import TrainDraftAgentUseCase
@@ -894,6 +908,7 @@ def run_train_draft_agent(args: argparse.Namespace) -> int:
             return 2
         resumed_train_config = resumed.train_config
 
+    _require_cards_path(args, resumed_train_config)
     config = _resolve_train_agent_config(args, resumed_train_config)
 
     try:
@@ -935,6 +950,7 @@ def run_train_draft_agent_rl(args: argparse.Namespace) -> int:
             return 2
         resumed_train_config = resumed.train_config
 
+    _require_cards_path(args, resumed_train_config)
     config = _resolve_train_agent_rl_config(args, resumed_train_config)
 
     if not config.learner_agents:

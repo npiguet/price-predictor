@@ -38,7 +38,6 @@ from effects.domain.records import EffectRecord
 from effects.infrastructure.shard_io import read_records, read_shard
 
 OUTPUT = REPO / "src" / "effects" / "domain" / "output_vocabularies.py"
-KEYWORD_DEFINITIONS = REPO / "output" / "effects" / "keyword-definitions.json"
 
 
 def forge_keywords(definitions: Path) -> frozenset[str]:
@@ -117,8 +116,8 @@ def main(argv: list[str] | None = None) -> None:
                         help="a records directory, or one shard, to survey (repeatable)")
     source.add_argument("--manifest", type=Path,
                         help="a gen-3 corpus manifest whose recorded lists to copy")
-    parser.add_argument("--keyword-definitions", type=Path, default=KEYWORD_DEFINITIONS,
-                        help="Forge's keyword table (default: %(default)s)")
+    parser.add_argument("--keyword-definitions", type=Path, required=True,
+                        help="Forge's keyword table")
     parser.add_argument("--output", type=Path, default=OUTPUT,
                         help="the module to write (default: %(default)s)")
     args = parser.parse_args(argv)

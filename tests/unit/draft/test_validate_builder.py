@@ -64,7 +64,7 @@ def test_matches_scipy_on_noisy_data() -> None:
 def test_validate_builder_subcommand_dispatches() -> None:
     args = build_parser().parse_args(
         ["validate-builder", "--pools-from", "output/draft/drafts.jsonl",
-         "--n-pools", "50"]
+         "--cards-path", "cards", "--n-pools", "50"]
     )
     assert args.func is run_validate_builder
     assert args.pools_from == "output/draft/drafts.jsonl"

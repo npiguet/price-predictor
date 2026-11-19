@@ -51,7 +51,8 @@ def test_play_draft_games_records_an_interrupt(tmp_path: Path, monkeypatch):
 
 def test_generate_draft_data_lists_its_agent_checkpoints():
     args = cli.build_parser().parse_args([
-        "generate-draft-data", "--n-drafts", "1", "--output-path", "output/draft/x/drafts.jsonl",
+        "generate-draft-data", "--n-drafts", "1", "--cards-path", "cards",
+        "--output-path", "output/draft/x/drafts.jsonl",
         "--agent-checkpoint", "gen-2=models/draft/agent/a.pt",
     ])
     spec = cli.RUN_MANIFESTS["generate-draft-data"]

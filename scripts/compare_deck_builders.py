@@ -32,7 +32,6 @@ Example:
 from __future__ import annotations
 
 import argparse
-import secrets
 import sys
 from pathlib import Path
 
@@ -68,12 +67,11 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
                          "decks AND scores all three methods' decks.")
     ap.add_argument("--picker-checkpoint", required=True, type=Path,
                     help="Trained picker checkpoint for the deck-picker method.")
-    ap.add_argument("--cards-path", type=Path, default=Path("output/cardsfolder/"),
+    ap.add_argument("--cards-path", type=Path, required=True,
                     help="Converted-card / .npz cache dir (must match the "
                          "encoder the scorer and picker were trained on).")
-    ap.add_argument("--output-dir", type=Path, default=None,
-                    help="Directory for the three output files. Default: a fresh "
-                         "output/decks_<randomId>/ folder created per run.")
+    ap.add_argument("--output-dir", type=Path, required=True,
+                    help="Directory for the three output files (the run directory).")
     ap.add_argument("--pools-path", type=Path, default=None,
                     help="Reuse an existing pools.txt instead of generating "
                          "new pools (skips the Forge pool-generation step).")
@@ -154,8 +152,6 @@ def _build_picker_decks(
 
 def main(argv: list[str]) -> int:
     args = _parse_args(argv)
-    if args.output_dir is None:
-        args.output_dir = Path("output") / f"decks_{secrets.token_hex(4)}"
     args.output_dir.mkdir(parents=True, exist_ok=True)
     return run_script(
         args.output_dir, lambda: _run(args), script=__file__, argv=argv,

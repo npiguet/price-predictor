@@ -23,18 +23,18 @@ def test_requires_exactly_one_of_checkpoint_or_resume() -> None:
 
 
 def test_empty_learner_agents_rejected() -> None:
-    args = _args(["--checkpoint", "ref.pt", "--rollout-temperature", "1.0"])
+    args = _args(["--checkpoint", "ref.pt", "--cards-path", "c", "--rollout-temperature", "1.0"])
     assert run_train_draft_agent_rl(args) == 2
 
 
 def test_missing_rollout_temperature_rejected() -> None:
-    args = _args(["--checkpoint", "ref.pt", "--learner-agents", "gen-k"])
+    args = _args(["--checkpoint", "ref.pt", "--cards-path", "c", "--learner-agents", "gen-k"])
     assert run_train_draft_agent_rl(args) == 2
 
 
 def test_nonpositive_rollout_temperature_rejected() -> None:
     args = _args([
-        "--checkpoint", "ref.pt", "--learner-agents", "gen-k",
+        "--checkpoint", "ref.pt", "--cards-path", "c", "--learner-agents", "gen-k",
         "--rollout-temperature", "0",
     ])
     assert run_train_draft_agent_rl(args) == 2

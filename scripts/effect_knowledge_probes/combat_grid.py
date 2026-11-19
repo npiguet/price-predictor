@@ -115,7 +115,7 @@ def main() -> None:
                             default=["all"])
         parser.add_argument("--half", choices=("reporting", "selection", "both"),
                             default="reporting")
-        parser.add_argument("--probe-set-dir", type=Path, default=common.REPORTS,
+        parser.add_argument("--probe-set-dir", type=Path, required=True,
                             help="where the corpus's selection set is")
 
     args, context = common.grid_run(__doc__, records=40, options=options)

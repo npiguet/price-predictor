@@ -8,9 +8,27 @@ from pathlib import Path
 
 import effect_sweep_arm as arm
 
+VOCAB = Path("vocab.txt")
+VARIANTS = Path("variants")
+PROBE_SET = Path("probe-set")
+REQUIRED = {"--vocab-path": VOCAB, "--variant-scripts": VARIANTS, "--probe-set-dir": PROBE_SET}
+
+
+def _with_paths(argv):
+    """The arguments, with the path flags the test does not name given scratch values."""
+    cut = argv.index("--") if "--" in argv else len(argv)
+    own, rest = list(argv[:cut]), list(argv[cut:])
+    own += [part for flag, value in REQUIRED.items() if flag not in own
+            for part in (flag, str(value))]
+    return own + rest
+
+
+def _main(argv):
+    return arm.main(_with_paths(argv))
+
 
 def _plan(argv):
-    args, train_args = arm.parse_args(argv)
+    args, train_args = arm.parse_args(_with_paths(argv))
     return arm.plan(args, train_args)
 
 
@@ -63,10 +81,10 @@ class TestPlan:
         for step in ("train", "encode", "evaluate"):
             command = steps[step]
             assert command[command.index("--variant-scripts") + 1] == str(
-                Path("output/effects/variant-scripts"))
+                VARIANTS)
         train = steps["train"]
         assert train[train.index("--vocab-path") + 1] == str(
-            Path("models/effects/vocab-script.txt"))
+            VOCAB)
 
     def test_each_embedding_probe_gets_its_own_log(self, tmp_path):
         logs = [log for step, _, log in _plan(
@@ -85,9 +103,9 @@ class TestPlan:
         knowledge = [c for s, c, _ in plain if s == "knowledge-probes"]
         assert len(knowledge) == 1 and "--freeze-probe-set" not in knowledge[0]
         assert knowledge[0][knowledge[0].index("--probe-set-dir") + 1] == str(
-            arm.SHARED_REPORTS)
+            PROBE_SET)
         train = next(c for s, c, _ in plain if s == "train")
-        assert train[train.index("--reports-dir") + 1] == str(arm.SHARED_REPORTS)
+        assert train[train.index("--reports-dir") + 1] == str(PROBE_SET)
 
 
 class TestLogging:
@@ -113,12 +131,12 @@ class TestLogging:
 class TestMain:
     def test_a_trained_arm_is_never_trained_over(self, tmp_path, capsys):
         (tmp_path / "latest.pt").write_bytes(b"")
-        code = arm.main(["--run-dir", str(tmp_path), "--corpus", "c", "--", "--e-dim", "64"])
+        code = _main(["--run-dir", str(tmp_path), "--corpus", "c", "--", "--e-dim", "64"])
         assert code == 2
         assert "--from-step" in capsys.readouterr().err
 
     def test_training_needs_its_flags(self, tmp_path):
-        assert arm.main(["--run-dir", str(tmp_path / "a"), "--corpus", "c"]) == 2
+        assert _main(["--run-dir", str(tmp_path / "a"), "--corpus", "c"]) == 2
 
     def test_a_failed_step_stops_the_arm_and_names_the_resume_step(
         self, tmp_path, monkeypatch,
@@ -130,7 +148,7 @@ class TestMain:
             return 1 if log.name == "evaluate.log" else 0
 
         monkeypatch.setattr(arm, "run_logged", fake)
-        code = arm.main(["--run-dir", str(tmp_path), "--corpus", "c", "--from-step", "encode"])
+        code = _main(["--run-dir", str(tmp_path), "--corpus", "c", "--from-step", "encode"])
         assert code == 1
         assert ran == ["encode.log", "evaluate.log"]
         assert "continue with --from-step evaluate" in (tmp_path / "arm.log").read_text(
@@ -152,14 +170,14 @@ class TestResume:
         (tmp_path / "resume.pt").write_bytes(b"")
         ran = []
         monkeypatch.setattr(arm, "run_logged", lambda command, log: ran.append(command) or 0)
-        code = arm.main([
+        code = _main([
             "--run-dir", str(tmp_path), "--corpus", "c", "--resume", "--", "--e-dim", "64",
         ])
         assert code == 0
         assert ran[0][-1] == "--resume"
 
     def test_resume_without_a_resume_file_is_refused(self, tmp_path, capsys):
-        code = arm.main([
+        code = _main([
             "--run-dir", str(tmp_path), "--corpus", "c", "--resume", "--", "--e-dim", "64",
         ])
         assert code == 2
@@ -167,36 +185,37 @@ class TestResume:
 
     def test_resume_continues_training_only(self, tmp_path):
         (tmp_path / "resume.pt").write_bytes(b"")
-        assert arm.main([
+        assert _main([
             "--run-dir", str(tmp_path), "--corpus", "c", "--resume", "--from-step", "encode",
         ]) == 2
 
     def test_a_failed_training_step_names_resume(self, tmp_path, monkeypatch):
         monkeypatch.setattr(arm, "run_logged", lambda command, log: 1)
-        arm.main(["--run-dir", str(tmp_path), "--corpus", "c", "--", "--e-dim", "64"])
+        _main(["--run-dir", str(tmp_path), "--corpus", "c", "--", "--e-dim", "64"])
         assert "continue with --resume" in (tmp_path / "arm.log").read_text(encoding="utf-8")
 
     def test_the_arm_keeps_one_run_manifest(self, tmp_path, monkeypatch):
         """The arm is one run: its manifest lists the arm, and each step's own
         command appends itself to the same file."""
         monkeypatch.setattr(arm, "run_logged", lambda command, log: 0)
-        arm.main(["--run-dir", str(tmp_path), "--corpus", "c", "--", "--e-dim", "64"])
+        _main(["--run-dir", str(tmp_path), "--corpus", "c", "--", "--e-dim", "64"])
         manifest = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))
         assert manifest["commands"] == [
             "python scripts/effect_sweep_arm.py --run-dir "
-            f"{tmp_path} --corpus c -- --e-dim 64",
+            f"{tmp_path} --corpus c --vocab-path {VOCAB} --variant-scripts {VARIANTS} "
+            f"--probe-set-dir {PROBE_SET} -- --e-dim 64",
         ]
         assert (manifest["status"], manifest["outcome"]) == ("finished", "exit 0")
 
     def test_a_refused_arm_writes_no_manifest(self, tmp_path):
-        assert arm.main(["--run-dir", str(tmp_path / "a"), "--corpus", "c"]) == 2
+        assert _main(["--run-dir", str(tmp_path / "a"), "--corpus", "c"]) == 2
         assert not (tmp_path / "a").exists()
 
     def test_the_arm_log_records_the_arguments_main_was_given(self, tmp_path, monkeypatch):
         """A caller passing argv (a test, a driver script) is what ran, not sys.argv."""
         monkeypatch.setattr(arm, "run_logged", lambda command, log: 0)
         monkeypatch.setattr(sys, "argv", ["pytest", "--something-else"])
-        arm.main(["--run-dir", str(tmp_path), "--corpus", "c", "--", "--e-dim", "64"])
+        _main(["--run-dir", str(tmp_path), "--corpus", "c", "--", "--e-dim", "64"])
         first = (tmp_path / "arm.log").read_text(encoding="utf-8").splitlines()[0]
         assert "--e-dim 64" in first
         assert "--something-else" not in first

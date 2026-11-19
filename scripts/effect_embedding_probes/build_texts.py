@@ -44,7 +44,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from effect_embedding_probes.common import (  # noqa: E402
     CARD_TYPES,
-    VARIANT_TREE,
     ProbePaths,
     add_probe_arguments,
     affected_features,
@@ -73,7 +72,7 @@ def keymap_of(paths: ProbePaths) -> dict[ProvenanceKey, str]:
     """Every key a line under the checkpoint's trees or the variant tree
     declares, to its encoding text through the join; a line with no text is
     left out, so a record acting through it names none."""
-    roots = sidecar_roots(paths.cards_folders, VARIANT_TREE)
+    roots = sidecar_roots(paths.cards_folders, paths.variant_scripts)
     return {key: text for key, text in texts_by_key(roots, paths.surface).items() if text}
 
 
@@ -81,6 +80,10 @@ def main() -> None:
     parser = add_probe_arguments(argparse.ArgumentParser(
         description=__doc__.splitlines()[0],
     ))
+    parser.add_argument(
+        "--variant-scripts", type=Path, required=True,
+        help="The variant tree the checkpoint's corpus was built with",
+    )
     build(resolve_paths(parser.parse_args()))
 
 
