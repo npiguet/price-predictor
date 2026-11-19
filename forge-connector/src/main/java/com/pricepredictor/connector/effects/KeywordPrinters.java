@@ -8,6 +8,7 @@ import forge.game.card.CardCloneStates;
 import forge.game.card.CardState;
 import forge.game.keyword.KeywordCollection;
 import forge.game.keyword.KeywordInterface;
+import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,7 +25,9 @@ import java.util.Objects;
  * keywords are read through the printed state of what the Clone copied
  * when the token was made ({@link #printingSourceOf}), which a later copy
  * effect on the Clone (Mirrorweave) does not change, as it does not change
- * the token (707.2).
+ * the token (707.2). A keyword the Clone's own copy effect added as an
+ * exception (707.9b: Dack's Duplicate's haste and dethrone) is printed in
+ * that effect's line of the Clone's own card ({@link #copyClauseOf}).
  *
  * <p>Neither is a copy {@code Card.isCloned} names, so
  * {@link ProvenanceResolver} does not read them through what they copy, and
@@ -91,7 +94,8 @@ final class KeywordPrinters {
      * back face into its own front), the first holding the keyword. Its
      * printed state, not the one it shows, which a later copy effect on it
      * changes. Null for a keyword neither holds: one the token's own copy
-     * effect added (Kiki-Jiki's haste), or one the Clone's did.
+     * effect added (Kiki-Jiki's haste), or one the Clone's did
+     * ({@link #copyClauseOf}).
      */
     private static CardState copiedPrinterOf(Card source, CardState state, KeywordInterface keyword) {
         int rank = rankOf(state, keyword);
@@ -130,6 +134,50 @@ final class KeywordPrinters {
     static boolean isStateCopy(Card host) {
         Card copied = host == null ? null : host.getCopiedPermanent();
         return copied != null && copied != host;
+    }
+
+    /**
+     * The copy clause of a copied Clone's own printed state that added
+     * {@code keyword} of a token copy's {@code state} as an exception
+     * (707.9b), through a token copy of a token copy to the Clone: the
+     * {@code Clone} clause whose {@code AddKeywords$} lists it
+     * ({@link CopyExceptions}). Null for none: a keyword the token's own
+     * copy effect added (Kiki-Jiki's haste, where the Clone adds none).
+     */
+    static SpellAbility copyClauseOf(CardState state, KeywordInterface keyword) {
+        Card link = state.getCard();
+        for (int depth = 0; isStateCopy(link) && depth < MAX_COPY_DEPTH; depth++) {
+            Card copied = copiedPermanentOf(link);
+            SpellAbility clause = CopyExceptions.clauseAdding(
+                    ownStateOf(copied, state.getStateName()), keyword.getOriginal());
+            if (clause != null) {
+                return clause;
+            }
+            link = copied;
+        }
+        return null;
+    }
+
+    /**
+     * The permanent a token copy's prototype copied
+     * ({@code Card.getEffectRecordCopiedPermanent}, which the patch sets in
+     * {@code CopyPermanentEffect.getProtoType}); null on a checkout without
+     * the hook.
+     */
+    private static Card copiedPermanentOf(Card host) {
+        return PatchHooks.COPIED_PERMANENT.read(host.getCopiedPermanent()) instanceof Card copied ? copied : null;
+    }
+
+    /**
+     * A card's own state of {@code name}, else its own front: its printed
+     * state, which no copy effect on it changes. Null for no card.
+     */
+    private static CardState ownStateOf(Card card, CardStateName name) {
+        if (card == null) {
+            return null;
+        }
+        CardState own = card.getOriginalState(name);
+        return own != null ? own : card.getOriginalState(CardStateName.Original);
     }
 
     /** How many token copies of token copies {@link #printingSourceOf} follows. */

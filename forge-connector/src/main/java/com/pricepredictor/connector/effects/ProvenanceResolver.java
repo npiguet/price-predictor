@@ -472,9 +472,11 @@ public final class ProvenanceResolver {
      * for {@code keyword}: a mutated permanent's keyword in the file of the
      * merged card that prints it, a token or spell copy's in the original's
      * file at the original's ordinal, a token copy of a Clone's through the
-     * Clone's copy state into what the Clone copies, and none for one its
-     * copy effect added ({@link KeywordPrinters}); any other state's at its
-     * own ordinal.
+     * printed state of what the Clone copied when the token was made, and
+     * none for one its copy effect added ({@link KeywordPrinters}), unless
+     * the Clone's own copy effect added it, which keys to that effect's line
+     * ({@link KeywordPrinters#copyClauseOf}); any other state's at its own
+     * ordinal.
      */
     private static ProvenanceKey keyOfUncloned(CardState state, KeywordInterface keyword,
                                                ProvenanceKey.Built built, int depth) {
@@ -482,7 +484,11 @@ public final class ProvenanceResolver {
         if (printer == state) {
             return withBuilt(keyAt(state, TraitKind.KEYWORD, KeywordPrinters.indexOf(state, keyword)), built);
         }
-        return printer == null || depth >= MAX_COPY_DEPTH ? null : keyOfPrinted(printer, keyword, built, depth + 1);
+        if (printer == null) {
+            SpellAbility clause = KeywordPrinters.copyClauseOf(state, keyword);
+            return clause == null ? null : of(clause);
+        }
+        return depth >= MAX_COPY_DEPTH ? null : keyOfPrinted(printer, keyword, built, depth + 1);
     }
 
     private static ProvenanceKey withBuilt(ProvenanceKey key, ProvenanceKey.Built built) {
