@@ -171,14 +171,24 @@ final class StackBrackets {
      *             no ability, after which no bracket is open
      */
     void openCast(OpenResolution cast) {
-        // Nothing is cast before Forge has finished the last resolution, and
-        // the id it watched may be cast again from here on.
-        finishing = null;
+        // The finishing window stays open until priority or the next
+        // resolution: every item Forge pushes as it finishes the last
+        // resolution (two copies of it, a copy and a trigger) is that
+        // resolution's consequence, not a player's next action. Only the
+        // watched id itself, cast again, is a new item and ends the window.
+        if (isTheFinishedItem(cast)) {
+            finishing = null;
+        }
         discardOrphans();
         if (cast != null) {
             items.add(cast);
         }
         open = cast;
+    }
+
+    /** Whether {@code cast} is the item whose resolution is being finished, cast again. */
+    private boolean isTheFinishedItem(OpenResolution cast) {
+        return cast != null && Integer.valueOf(cast.ability.getId()).equals(finishing);
     }
 
     /**
