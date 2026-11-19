@@ -55,8 +55,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * scenario's objects, and on a board missing the base it binds nothing; and
  * the fork, copied as a directed fork copies the live game and edited by the
  * rule's variant, differs from its real twin, the live board, by that
- * variant's one fact (story 3, acceptance 3). One rule per operation, so the
- * ten together cover every operation.
+ * variant's one fact (story 3, acceptance 3).
  *
  * <p>The twin comparison reads the board-only snapshot a record would carry,
  * member by member ({@code BoardChanges}), and checks first that the unedited
@@ -67,13 +66,20 @@ class RegisteredRulesTest {
 
     // ── the registry ────────────────────────────────────────────────────
 
+    /**
+     * Every operation but {@code keyword} and {@code colour_type} is a
+     * registered rule's: their rules (702.63c, 702.13b) were registered for
+     * no listed run and left the registry. The protection forks edit through
+     * {@code keyword}, and {@code ForkOperationsTest} checks each operation's
+     * one fact.
+     */
     @Test
-    void theRegisteredRulesCoverEveryOperation() {
+    void theRegisteredRulesCoverEveryOperationButKeywordAndColourType() {
         Set<ForkOperation> covered = EnumSet.noneOf(ForkOperation.class);
         for (DirectedRule rule : DirectedRules.registered().rules()) {
             rule.variants().values().forEach(application -> covered.add(application.operation()));
         }
-        assertEquals(EnumSet.allOf(ForkOperation.class), covered);
+        assertEquals(EnumSet.complementOf(EnumSet.of(ForkOperation.KEYWORD, ForkOperation.COLOUR_TYPE)), covered);
     }
 
     // ── 704.5f, toughness 0 (T094, acceptance 1) ────────────────────────
@@ -155,78 +161,6 @@ class RegisteredRulesTest {
         Twin twin = board.twin(LifeExchange.rule());
         assertEquals(Set.of("P1.life"), twin.changes());
         assertEquals(20, twin.fork().player("opponent").getLife());
-    }
-
-    // ── 702.13b, intimidate: colour_type ────────────────────────────────
-
-    /** Bladetusk Boar (red, intimidate) attacks B, who controls {@code blocker}; no blocker declared yet. */
-    private static Board intimidateBoard(String blocker) {
-        Board board = new Board(PhaseType.COMBAT_DECLARE_BLOCKERS);
-        board.other = board.card(board.you, "Bladetusk Boar");
-        board.subject = board.card(board.opponent, blocker);
-        board.attacking(board.other);
-        return board;
-    }
-
-    @Test
-    void intimidateBindsTheAttackerAndAGreenCreature() {
-        Board board = intimidateBoard("Grizzly Bears");
-        Binding binding = Intimidate.bind(board.game).orElseThrow();
-        assertEquals(board.other, binding.card("attacker"));
-        assertEquals(board.subject, binding.card("blocker"));
-    }
-
-    @Test
-    void intimidateBindsNothingWhenEveryCreatureMayBlock() {
-        assertTrue(Intimidate.bind(intimidateBoard("Hill Giant").game).isEmpty());
-        assertTrue(Intimidate.bind(intimidateBoard("Phyrexian Walker").game).isEmpty());
-    }
-
-    @Test
-    void intimidateForksARedBlocker() {
-        Board board = intimidateBoard("Grizzly Bears");
-        Twin twin = board.twin(Intimidate.rule());
-        assertEquals(Set.of(id(board.subject) + ".colors"), twin.changes());
-        Card bears = twin.fork().card("blocker");
-        assertTrue(bears.getColor().hasRed());
-        assertFalse(bears.getColor().hasGreen());
-    }
-
-    // ── 702.63c, vanishing instances: keyword ───────────────────────────
-
-    private static Board djinnBoard(int instances) {
-        Board board = new Board(PhaseType.UPKEEP);
-        board.subject = board.card(board.you, "Maelstrom Djinn");
-        for (int i = 0; i < instances; i++) {
-            KeywordEdit.add(board.game, board.subject, "Vanishing");
-        }
-        board.subject.setCounters(CounterEnumType.TIME, 2);
-        assertEquals(instances, board.subject.getAmountOfKeyword(Keyword.VANISHING));
-        return board;
-    }
-
-    @Test
-    void vanishingInstancesBindsAPermanentWithTwo() {
-        Board board = djinnBoard(2);
-        assertEquals(board.subject, VanishingInstances.bind(board.game).orElseThrow().card("permanent"));
-    }
-
-    @Test
-    void vanishingInstancesBindsNothingOnOne() {
-        assertTrue(VanishingInstances.bind(djinnBoard(1).game).isEmpty());
-    }
-
-    @Test
-    void vanishingInstancesForksOneInstance() {
-        Board board = djinnBoard(2);
-        Twin twin = board.twin(VanishingInstances.rule());
-        String djinn = id(board.subject);
-        assertFalse(twin.changes().isEmpty());
-        assertTrue(Set.of(djinn + ".lines", djinn + ".granted_temporary").containsAll(twin.changes()),
-                twin.changes().toString());
-        Card forked = twin.fork().card("permanent");
-        assertEquals(1, forked.getAmountOfKeyword(Keyword.VANISHING));
-        assertTrue(forked.hasKeyword(Keyword.FLYING), "the djinn's other keywords stay");
     }
 
     // ── 702.105a, dethrone: life ────────────────────────────────────────

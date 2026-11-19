@@ -26,6 +26,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 
 /**
@@ -66,10 +69,16 @@ import java.util.function.UnaryOperator;
  * face-down or phased-out permanent, a Class above its first level, a
  * permanent holding chosen values (a player, number, type, colour, card,
  * name or parity its text chose) or remembered, imprinted or exiled-with
- * cards, and a permanent a pending command names that cannot be rewritten.
- * It also refuses, after the edit, a replacing creature the next
+ * cards, a merged (mutated) or melded permanent, whose other cards the edit
+ * would leave orphaned, a token, which a card in its place would turn into a
+ * real card, and a permanent a pending command names that cannot be
+ * rewritten. It also refuses, after the edit, a replacing creature the next
  * state-based check would put into a graveyard: the damage and counters it
  * carried, with its boosts and resolved effects, are lethal to it.
+ *
+ * <p>Summoning sickness is carried as the raw flag: a hasty creature that
+ * came under its controller's control this turn is replaced by a card that
+ * is sick unless it has haste of its own.
  *
  * @param permanent the fork's permanent to replace
  * @param cardName  the replacing card's name in the card database
@@ -90,9 +99,28 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
     public static final String PHASED_OUT = "replace_card phased-out permanent";
     public static final String CLASS_LEVEL = "replace_card class level";
     public static final String CHOSEN_VALUES = "replace_card chosen values";
-    public static final String LINKED_CARDS = "replace_card remembered, imprinted or exiled cards";
+    /** No comma: the tally the supervisor reads is a printed map split on {@code ", "}. */
+    public static final String LINKED_CARDS = "replace_card remembered or imprinted or exiled cards";
     public static final String UNREWRITABLE_COMMAND = "replace_card command that cannot be rewritten";
     public static final String DIES = "replace_card replacement dies at the first state-based check";
+    public static final String MERGED = "replace_card merged permanent";
+    public static final String MELDED = "replace_card melded permanent";
+    public static final String TOKEN = "replace_card token";
+
+    /** A refusal: what the old card holds that its replacement cannot take over, and its reason. */
+    private record Refusal(Predicate<Card> holds, String reason) {
+    }
+
+    /** The refusals before the edit, in the order they are asked; see the class comment. */
+    private static final List<Refusal> REFUSALS = List.of(
+            new Refusal(Card::isFaceDown, FACE_DOWN),
+            new Refusal(Card::isPhasedOut, PHASED_OUT),
+            new Refusal(card -> card.getClassLevel() > 1, CLASS_LEVEL),
+            new Refusal(ReplaceCardOperation::holdsChosenValues, CHOSEN_VALUES),
+            new Refusal(ReplaceCardOperation::holdsLinkedCards, LINKED_CARDS),
+            new Refusal(Card::hasMergedCard, MERGED),
+            new Refusal(card -> card.getMeldedWith() != null, MELDED),
+            new Refusal(Card::isToken, TOKEN));
 
     @Override
     public void apply(Game fork) {
@@ -152,9 +180,9 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
      * the fork's first state-based check, read off the live permanent before
      * any edit: the replacing card's toughness is its printed toughness, or
      * the last toughness a resolved effect set on the permanent, which it
-     * carries, plus the permanent's toughness boosts and counters, which it
-     * carries too, against the permanent's marked damage and deathtouch
-     * damage. A boost from a static ability is read as it applies to the
+     * carries ({@link #carriedSetPt}), plus the permanent's toughness boosts
+     * and counters, which it carries too, against the permanent's marked
+     * damage and deathtouch damage. A boost from a static ability is read as it applies to the
      * permanent: the static check the edit ends with applies it to the new
      * card anew, which differs only where the static selects by a
      * characteristic the two cards do not share. A replacing card that is
@@ -167,13 +195,8 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
         if (!rules.getType().isCreature()) {
             return false;
         }
-        int toughness = rules.getMainPart().getIntToughness();
-        for (Pair<Integer, Integer> set : permanent.getPTIterable()) {
-            if (set.getRight() != null) {
-                toughness = set.getRight();
-            }
-        }
-        toughness += permanent.getTempToughnessBoost() + permanent.getToughnessBonusFromCounters();
+        int toughness = carriedSetPt(permanent, Pair::getRight).orElse(rules.getMainPart().getIntToughness())
+                + permanent.getTempToughnessBoost() + permanent.getToughnessBonusFromCounters();
         return diesOf(toughness, permanent.getDamage(), permanent.hasBeenDealtDeathtouchDamage());
     }
 
@@ -192,33 +215,53 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
         if (!rules.getType().isCreature()) {
             return 0;
         }
-        int power = rules.getMainPart().getIntPower();
-        for (Pair<Integer, Integer> set : permanent.getPTIterable()) {
-            if (set.getLeft() != null) {
-                power = set.getLeft();
-            }
-        }
-        return power + permanent.getTempPowerBoost() + permanent.getPowerBonusFromCounters();
+        return carriedSetPt(permanent, Pair::getLeft).orElse(rules.getMainPart().getIntPower())
+                + permanent.getTempPowerBoost() + permanent.getPowerBonusFromCounters();
     }
 
-    /** Refuse a permanent whose state belongs to its own text or face; see the class comment. */
+    /**
+     * The last power or toughness ({@code part}) a resolved effect set on the
+     * permanent: the set-P/T rows the edit carries ({@link #carryState}). A
+     * characteristic-defining ability's row (Tarmogoyf's) belongs
+     * to the old card's text and is not carried, so it is not read either.
+     */
+    private static Optional<Integer> carriedSetPt(
+            Card permanent, Function<Pair<Integer, Integer>, Integer> part) {
+        Integer last = null;
+        for (Pair<Integer, Integer> set : permanent.getSetPTTable().values()) {
+            Integer value = part.apply(set);
+            last = value == null ? last : value;
+        }
+        return Optional.ofNullable(last);
+    }
+
+    /**
+     * Whether the edit takes {@code permanent} on at all: no refusal before
+     * the edit ({@link #REFUSALS}) holds for it. Read off the live permanent
+     * by the preconditions, so they bind no board the edit would refuse.
+     */
+    public static boolean carries(Card permanent) {
+        return REFUSALS.stream().noneMatch(refusal -> refusal.holds().test(permanent));
+    }
+
+    /** Refuse a permanent whose state the new card cannot take over ({@link #REFUSALS}). */
     private static void refuseWhatCannotBeCarried(Card old) {
-        if (old.isFaceDown()) {
-            throw new ForkRefusal(FACE_DOWN);
+        for (Refusal refusal : REFUSALS) {
+            if (refusal.holds().test(old)) {
+                throw new ForkRefusal(refusal.reason());
+            }
         }
-        if (old.isPhasedOut()) {
-            throw new ForkRefusal(PHASED_OUT);
-        }
-        if (old.getClassLevel() > 1) {
-            throw new ForkRefusal(CLASS_LEVEL);
-        }
-        if (old.hasChosenPlayer() || old.hasChosenNumber() || old.hasChosenType() || old.hasChosenColor()
-                || old.hasChosenCard() || old.hasNamedCard() || old.hasChosenEvenOdd()) {
-            throw new ForkRefusal(CHOSEN_VALUES);
-        }
-        if (old.hasRemembered() || old.hasImprintedCard() || old.hasExiledCard()) {
-            throw new ForkRefusal(LINKED_CARDS);
-        }
+    }
+
+    /** Whether the card holds a value its text chose: a player, number, type, colour, card, name or parity. */
+    private static boolean holdsChosenValues(Card card) {
+        return card.hasChosenPlayer() || card.hasChosenNumber() || card.hasChosenType() || card.hasChosenColor()
+                || card.hasChosenCard() || card.hasNamedCard() || card.hasChosenEvenOdd();
+    }
+
+    /** Whether the card remembers, imprints or has exiled cards. */
+    private static boolean holdsLinkedCards(Card card) {
+        return card.hasRemembered() || card.hasImprintedCard() || card.hasExiledCard();
     }
 
     /**

@@ -78,15 +78,17 @@ final class Boards {
     }
 
     /**
-     * Whether {@code cardName} put in {@code permanent}'s place by
-     * {@code replace_card} survives the fork's first state-based check,
-     * carrying the permanent's marked damage, deathtouch damage, counters,
-     * boosts and resolved effects: the edit's own reading
+     * Whether {@code replace_card} puts {@code cardName} in {@code permanent}'s
+     * place, refusing none of what the permanent holds (a token, a merged or
+     * melded permanent, a face-down one: {@link ReplaceCardOperation#carries}),
+     * and the new card survives the fork's first state-based check, carrying
+     * the permanent's marked damage, deathtouch damage, counters, boosts and
+     * resolved effects: the edit's own readings
      * ({@link ReplaceCardOperation#replacementDies}), so a precondition binds
      * no board the edit would refuse.
      */
     static boolean replacementSurvives(Card permanent, String cardName) {
-        return !ReplaceCardOperation.replacementDies(permanent, cardName);
+        return ReplaceCardOperation.carries(permanent) && !ReplaceCardOperation.replacementDies(permanent, cardName);
     }
 
     /**

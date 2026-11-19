@@ -2,13 +2,11 @@ package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.effects.directed.DirectedRules;
-import com.pricepredictor.connector.effects.directed.KeywordEdit;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.card.CounterEnumType;
 import forge.game.combat.Combat;
 import forge.game.event.GameEventGameFinished;
-import forge.game.keyword.Keyword;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import org.junit.jupiter.api.Test;
@@ -54,9 +52,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>{@code pt} is played forward by
  * {@code ForkRecordsTest.theRegisteredToughnessZeroRuleForksATougherCreatureToTheEndOfTheTurn}.
- * The families left out ({@code tap}, {@code colour_type}) have no
- * registered rule whose point happens without a seat's choice: a spell
- * cast, an attack, a block.
+ * The families left out have no registered rule whose point happens
+ * without a seat's choice ({@code tap}: a spell cast, an attack, a block),
+ * or no registered rule at all ({@code keyword}, {@code colour_type}).
  */
 @ExtendWith(ForgeExtension.class)
 class DirectedForkPlayedForwardTest {
@@ -254,29 +252,6 @@ class DirectedForkPlayedForwardTest {
 
     private static String ref(Card card) {
         return "E" + card.getId();
-    }
-
-    /**
-     * {@code keyword}, 702.63c: Maelstrom Djinn with vanishing twice and two
-     * time counters as the upkeep begins. The live game's two triggers take
-     * both counters and sacrifice it; the fork's one instance takes one, and
-     * the Djinn stays.
-     */
-    @Test
-    void oneInstanceOfVanishingTakesOneCounter() throws Throwable {
-        Game game = board(PhaseType.UPKEEP);
-        Player active = game.getPlayers().get(0);
-        Card djinn = permanent(game, active, "Maelstrom Djinn");
-        KeywordEdit.add(game, djinn, "Vanishing");
-        KeywordEdit.add(game, djinn, "Vanishing");
-        djinn.setCounters(CounterEnumType.TIME, 2);
-        assertEquals(2, djinn.getAmountOfKeyword(Keyword.VANISHING));
-
-        List<String> fork = forkOf(game, PhaseType.UPKEEP, "702.63c", "one_instance");
-
-        List<Map<String, Object>> removed = eventsOf(fork, "counter_change", ref(djinn));
-        assertEquals(1, removed.size(), "one trigger, one counter: " + removed);
-        assertTrue(eventsOf(fork, "sacrificed", ref(djinn)).isEmpty(), "the Djinn stays in the fork");
     }
 
     /**

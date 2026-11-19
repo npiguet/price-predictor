@@ -430,7 +430,9 @@ them in the round report (collectors) or at the run's end (`match-outcomes`) —
 `Fork refusals over the run (expected, no failure): <n> <kind> <reason>, …`, at info level — and
 records them in `run.json` as `hook_failures`: `{"connector": {hook: calls}, "forge": {slot:
 calls}}`, `fork_refusals`: `{"<kind> <reason>": forks}`, keys in name order, and `directed_fork_tally`: `{rule: {matched, drawn, budget_blocked, taken, kept, precondition_threw}}`, each JVM lifetime's last tally line summed over lifetimes and slots, rules in name order. Refusals count
-toward no failure kind, no failure threshold and no exit code.
+toward no failure kind, no failure threshold and no exit code. A refusal reason holds no comma and
+no brace: the tally line is a printed Java map, which the scan reads between braces and splits on
+`", "` (`ForkRefusalReasonsTest`).
 
 ## `python -m effects collect-variants` (existing)
 

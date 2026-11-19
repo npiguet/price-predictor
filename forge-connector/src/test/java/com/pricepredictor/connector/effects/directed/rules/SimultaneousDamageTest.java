@@ -4,7 +4,9 @@ import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.effects.TestBoard;
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.card.CardCopyService;
 import forge.game.card.CounterEnumType;
+import forge.game.card.token.TokenInfo;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import org.junit.jupiter.api.Test;
@@ -67,5 +69,28 @@ class SimultaneousDamageTest {
         Blocked board = Blocked.of("Hill Giant", "Grizzly Bears");
         board.blocker().setCounters(CounterEnumType.P1P1, 1);
         assertTrue(board.binds());
+    }
+
+    /**
+     * A Grizzly Bears token blocks the damaged Giant: {@code replace_card}
+     * refuses a token, since a card in its place would be a real card, so the
+     * board binds nothing where the nontoken Bears binds.
+     */
+    @Test
+    @SuppressWarnings("deprecation")
+    void aTokenBlockerDoesNotBind() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.COMBAT_FIRST_STRIKE_DAMAGE);
+        Player you = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card giant = Blocked.permanent(game, you, "Hill Giant");
+        giant.setDamage(1);
+        Card bears = TestBoard.card(game, opponent, "Grizzly Bears");
+        Card copy = new TokenInfo(bears).makeOneToken(opponent, game.nextCardId());
+        new CardCopyService(bears).copyCopiableCharacteristics(copy, null, null);
+        Card token = game.getAction().moveToPlay(copy, opponent, null, null);
+        token.setSickness(false);
+        token.setGameTimestamp(game.getNextTimestamp());
+        TestBoard.blockedCombat(game, you, opponent, giant, token);
+        assertFalse(SimultaneousDamage.bind(game).isPresent());
     }
 }

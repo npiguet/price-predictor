@@ -18,6 +18,11 @@ import java.lang.reflect.Field;
  * interface reads, is left as it was; the engine, the AI and the snapshot read
  * the field.
  *
+ * <p>The life the player started the turn with is set to the same total: the
+ * variant's player has been at that life since the turn began, and a script
+ * comparing the two ({@code LifeStartedThisTurnWith}) reads no change the
+ * edit made.
+ *
  * <p>A Forge that renamed the field fails the edit, and the fork is discarded:
  * the edit never falls back on {@code setLife}'s triggers.
  *
@@ -52,6 +57,7 @@ public record LifeOperation(Player player, int life) implements BoardEdit {
         }
         try {
             LIFE.setInt(player, life);
+            player.setLifeStartedThisTurnWith(life);
         } catch (IllegalAccessException e) {
             throw new IllegalStateException("cannot write Player.life", e);
         }

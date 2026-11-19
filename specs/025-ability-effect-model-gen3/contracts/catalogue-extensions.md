@@ -90,8 +90,9 @@ registration under any of its rules, and no rule id is in two registrations. A J
 reads `rules/scenarios/*.json` and fails, for each rule of a registration, when its scenario does
 not exist or does not list the rule, a registered variant is missing from it, is its base variant,
 or its operation differs; when a card a rule class names (a `static final String` the card database
-knows) is not one of the cards of its registrations' scenarios; and when a rule
-`rules/directed-fork-rules.txt` lists has no registration. `DirectedRulesMain` prints every
+knows) is not one of the cards of its registrations' scenarios; and when the rules
+`rules/directed-fork-rules.txt` lists are not the registered rules (a listed rule without a
+registration, or a registration no run lists). `DirectedRulesMain` prints every
 registered rule id, one per line, a registration of several rules printing each.
 
 A precondition binds only a board where its variant's edit makes the variant true for the turn the
@@ -99,8 +100,8 @@ fork plays: a `remove_permanent` variant binds the one permanent doing what it r
 one would do it in its place); a "one land short" variant binds only when the active player holds no
 card it could play as a land or has used its land drops; a spell the variant waits for is castable
 at this boundary (a sorcery only in the active player's hand); a `replace_card` variant binds a
-permanent whose replacing card survives the fork's first state-based check carrying the permanent's
-marked damage, deathtouch damage, counters, boosts and resolved effects
+permanent the edit does not refuse (`ReplaceCardOperation.carries`) whose replacing card survives
+the fork's first state-based check carrying the permanent's marked damage, deathtouch damage, counters, boosts and resolved effects
 (`ReplaceCardOperation.replacementDies`, the reading the edit's own refusal shares), and whose
 keyword the variant takes away is of its own text (none granted by an attachment, a static or a
 resolved effect); a `counters` variant adding a +1/+1 counter binds no permanent with a -1/-1
@@ -112,10 +113,13 @@ counted per source (a bounce land makes two, a mana creature one); a bound targe
 can target; a forced cast plays the line the precondition matched (`ForcedPlay.Line.spell`), so a
 split card's matching half is cast; and a meld host is bound only while its meld trigger's phase is
 still to begin this turn and its SVar check holds. A
-`replace_card` edit refuses (`replace_card replacement dies at the first state-based check`) a
-replacing creature that what it carried leaves at toughness 0 or less, with lethal damage, or with
-deathtouch damage. 702.63c's `keyword` edit refuses (`keyword vanishing not left at one instance`)
-a permanent the edit's closing static check leaves with other than one instance of vanishing.
+`replace_card` edit refuses a merged (mutated), melded or token permanent (`replace_card merged
+permanent`, `replace_card melded permanent`, `replace_card token`), and
+(`replace_card replacement dies at the first state-based check`) a replacing creature that what it
+carried leaves at toughness 0 or less, with lethal damage, or with deathtouch damage; its
+prediction (`replacementDies`) reads the set-P/T rows the edit carries, not a
+characteristic-defining ability's. No refusal reason holds a comma or a brace: the supervisor reads
+the refusal tally as a printed Java map split on `", "`.
 
 An `Application` may also name the records its fork keeps (`KeptRecords`, FR-010c), built from the
 fork's binding before the edit: the decision candidates of the cards it names

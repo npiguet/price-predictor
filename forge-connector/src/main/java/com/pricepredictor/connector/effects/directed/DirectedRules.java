@@ -17,7 +17,6 @@ import com.pricepredictor.connector.effects.directed.rules.DrawFromEmptyLibrary;
 import com.pricepredictor.connector.effects.directed.rules.ExploreEmptyLibrary;
 import com.pricepredictor.connector.effects.directed.rules.FinalChapterResolves;
 import com.pricepredictor.connector.effects.directed.rules.Improvise;
-import com.pricepredictor.connector.effects.directed.rules.Intimidate;
 import com.pricepredictor.connector.effects.directed.rules.JumpStartFromHand;
 import com.pricepredictor.connector.effects.directed.rules.LifeExchange;
 import com.pricepredictor.connector.effects.directed.rules.LifeTotalWin;
@@ -44,7 +43,6 @@ import com.pricepredictor.connector.effects.directed.rules.TrampleOverPlaneswalk
 import com.pricepredictor.connector.effects.directed.rules.TypeSettingAura;
 import com.pricepredictor.connector.effects.directed.rules.Unearth;
 import com.pricepredictor.connector.effects.directed.rules.UnleashCantBlock;
-import com.pricepredictor.connector.effects.directed.rules.VanishingInstances;
 import com.pricepredictor.connector.effects.directed.rules.VirtuousRole;
 import com.pricepredictor.connector.effects.directed.rules.WebSlinging;
 
@@ -104,11 +102,9 @@ public final class DirectedRules {
             ConniveWithoutDraw.rule(),
             DiscoverNothingFound.rule(),
             SharedKeywords.rule(),
-            Intimidate.rule(),
             TrampleOverPlaneswalkers.rule(),
             NoDamageToAGonePlaneswalker.rule(),
             ManaValueSearch.transmute(),
-            VanishingInstances.rule(),
             AuraSwapCantEnchant.rule(),
             ManaValueSearch.transfigure(),
             Unearth.rule(),

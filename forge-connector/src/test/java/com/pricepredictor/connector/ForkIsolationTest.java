@@ -65,7 +65,16 @@ class ForkIsolationTest {
 
     /** Creatures, first and double strikers, burn, tokens, an aura, a fog: what forks reach. */
     private static Deck boros() {
-        return deck("Mountain", 9, "Plains", 8, "Pacifism", 2, "Serra Angel", 2, "Arc Trail", 2,
+        return boros("Arc Trail");
+    }
+
+    /**
+     * {@link #boros}, two {@code twoOf} in the Arc Trails' place: the mixed
+     * matches hold two Savannah Lions, a nontoken blocker 510.2's directed
+     * fork binds ({@code replace_card} refuses a token).
+     */
+    private static Deck boros(String twoOf) {
+        return deck("Mountain", 9, "Plains", 8, "Pacifism", 2, "Serra Angel", 2, twoOf, 2,
                 "Shock", 2, "Youthful Knight", 2, "Lightning Bolt", 2, "Boros Charm", 2, "Fireball", 1,
                 "Healing Salve", 1, "Raise the Alarm", 1, "Prodigal Pyromancer", 1, "Holy Day", 1,
                 "Fencing Ace", 2, "Mogg Fanatic", 1, "Hill Giant", 1);
@@ -223,7 +232,7 @@ class ForkIsolationTest {
     @Test
     void forksLeaveAMixedMatchsLiveRecordsAsTheyWere() throws IOException {
         for (long seed : new long[] {11, 12, 13, 14, 15, 16}) {
-            assertForksLeaveTheLiveGame("mixed" + seed, boros(), boros(), seed);
+            assertForksLeaveTheLiveGame("mixed" + seed, boros("Savannah Lions"), boros("Savannah Lions"), seed);
         }
         // The matches reach every kind of fork: forced resolutions and protection
         // forks (interventional), probes (a mirror) and directed forks.

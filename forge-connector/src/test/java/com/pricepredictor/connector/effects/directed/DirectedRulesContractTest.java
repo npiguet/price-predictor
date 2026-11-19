@@ -218,17 +218,21 @@ class DirectedRulesContractTest {
     }
 
     /**
-     * Every rule {@code rules/directed-fork-rules.txt} lists has a
-     * registration, which the supervisor's startup check otherwise finds only
-     * by running {@code DirectedRulesMain}.
+     * The rules {@code rules/directed-fork-rules.txt} lists are the registered
+     * rules: a listed rule without a registration the supervisor's startup
+     * check otherwise finds only by running {@code DirectedRulesMain}, and a
+     * registration no run lists is code no run exercises.
      */
     @Test
-    void everyListedRuleIsRegistered() throws IOException {
+    void theListedRulesAreTheRegisteredRules() throws IOException {
         List<String> listed = Files.readAllLines(Path.of("..", "rules", "directed-fork-rules.txt"),
                 StandardCharsets.UTF_8).stream().map(String::trim).filter(line -> !line.isEmpty()).toList();
-        List<String> missing = listed.stream()
-                .filter(rule -> DirectedRules.registered().find(rule).isEmpty()).toList();
-        assertEquals(List.of(), missing);
+        List<String> registered = DirectedRules.registered().rules().stream()
+                .flatMap(rule -> rule.rules().stream()).toList();
+        assertEquals(List.of(), listed.stream().filter(rule -> !registered.contains(rule)).toList(),
+                "listed, not registered");
+        assertEquals(List.of(), registered.stream().filter(rule -> !listed.contains(rule)).toList(),
+                "registered, not listed");
     }
 
     /**

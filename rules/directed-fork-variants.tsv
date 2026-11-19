@@ -31,7 +31,6 @@ rule	variant
 702.127a	from_hand
 702.131a	ten_permanents
 702.133a	cast_from_hand
-702.13b	recolored_blocker
 702.170c	small_card_in_hand
 702.187b	one_mountain
 702.188a	creature_untapped
@@ -39,7 +38,6 @@ rule	variant
 702.19f	trample_over_planeswalkers
 702.1c	no_keywords
 702.53a	no_match
-702.63c	one_instance
 702.65a	aura_in_hand
 702.65b	can_enchant
 702.71a	no_matching_value
