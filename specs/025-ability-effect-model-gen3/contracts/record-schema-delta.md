@@ -569,9 +569,9 @@ position a card left a library from, and a search of another player's library.
   over links; `up_to_counts.chosen` counts every link's targets, a target two links share twice,
   and is present when a link of the chain targets. On an effect half the acting item's entity
   reads them from its targets as cast, the refs `refs.targets_at_cast` lists, never from those
-  left after Forge's check for illegal targets. Forge drops a removed target's divided share
-  with it: a link that lost one target gives it what the link's announced total leaves; a link
-  that lost two or more writes no share for them. Every other entity, and every record that is no
+  left after Forge's check for illegal targets. `per_target_amounts` on such an entity holds
+  every target's share as announced when the item went on the stack, the targets the check
+  removed included, however many a link lost. Every other entity, and every record that is no
   effect half, reads what its item holds.
 - Forge deals a chain's damage from one damage map when its last clause resolves (Arc Trail's
   `DamageResolve`). A `damage_dealt` whose subject the resolving clause does not target, but an

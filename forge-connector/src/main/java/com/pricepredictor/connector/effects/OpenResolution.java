@@ -34,6 +34,8 @@ final class OpenResolution {
      * cast ({@link #castTargets}).
      */
     final int targetsAtCast;
+    /** The divided shares its chain announced, read when it went on the stack. */
+    private final DividedAllocation allocation;
     /**
      * What the bus filed for this item, split by chosen mode as it resolves;
      * its own and no other's. From its cast to its resolution's start it
@@ -106,6 +108,7 @@ final class OpenResolution {
         this.linkId = linkId;
         this.costs = costs;
         this.targetsAtCast = targetCount(ability);
+        this.allocation = DividedAllocation.of(ability);
         if (linkId != null) {
             readX();
         }
@@ -131,6 +134,11 @@ final class OpenResolution {
         castTargets = atCast;
         declined = false;
         readX();
+    }
+
+    /** The divided shares its chain announced as it went on the stack. */
+    DividedAllocation allocation() {
+        return allocation;
     }
 
     /**

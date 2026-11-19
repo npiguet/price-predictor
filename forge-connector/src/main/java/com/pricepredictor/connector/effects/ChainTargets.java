@@ -84,9 +84,15 @@ final class ChainTargets {
 
     /**
      * One target of a link: the object Forge holds, the ref the refs block
-     * writes it as, and what it is.
+     * writes it as, what it is, and its share of the link's divided total
+     * ({@link DividedAllocation}), null where the link divides nothing.
      */
-    record Target(GameObject object, String ref, Kind kind) {
+    record Target(GameObject object, String ref, Kind kind, Integer share) {
+
+        /** This target with its divided share on the link that chose it, null where none. */
+        Target withShare(Integer divided) {
+            return new Target(object, ref, kind, divided);
+        }
 
         /**
          * The card a snapshot holds for it: the targeted card itself, the
@@ -130,7 +136,7 @@ final class ChainTargets {
             links.add(link.getTargets() == null ? List.of() : List.copyOf(link.getTargets()));
         }
         // Targets an item holds now passed Forge's check, or were just chosen.
-        return of(item, links, false);
+        return of(item, links, false, DividedAllocation.of(item));
     }
 
     /**
@@ -138,10 +144,15 @@ final class ChainTargets {
      * chain, root first, as the resolution hook's {@code targetsAtCast} gives
      * them; null when the hook gave none (it could not copy them) or a list
      * that does not match the chain.
+     *
+     * @param allocation the divided shares read when the item went on the
+     *                   stack, or null where none was read
      */
-    static ChainTargets atCast(SpellAbility item, Object perLink) {
+    static ChainTargets atCast(SpellAbility item, Object perLink, DividedAllocation allocation) {
         List<Collection<?>> links = item == null ? null : listsOf(perLink);
-        return links != null && chainLength(item) == links.size() ? of(item, links, true) : null;
+        return links != null && chainLength(item) == links.size()
+                ? of(item, links, true, allocation == null ? DividedAllocation.NONE : allocation)
+                : null;
     }
 
     /** {@code perLink} as one collection per link, or null where it is no such list. */
@@ -168,12 +179,13 @@ final class ChainTargets {
     }
 
     private static ChainTargets of(
-            SpellAbility item, List<Collection<?>> links, boolean asCast) {
+            SpellAbility item, List<Collection<?>> links, boolean asCast,
+            DividedAllocation allocation) {
         Game game = item.getHostCard() == null ? null : item.getHostCard().getGame();
         Reading reading = new Reading(game, asCast);
         int index = 0;
         for (SpellAbility link = item; link != null; link = link.getSubAbility(), index++) {
-            reading.link(link, links.get(index));
+            reading.link(link, links.get(index), allocation.ofLink(index));
         }
         return new ChainTargets(reading);
     }
@@ -197,7 +209,7 @@ final class ChainTargets {
             this.asCast = asCast;
         }
 
-        void link(SpellAbility link, Collection<?> targets) {
+        void link(SpellAbility link, Collection<?> targets, Map<GameObject, Integer> shares) {
             CharmModes.ModeStart start = CharmModes.modeStartOf(link);
             if (start != null) {
                 into = new ArrayList<>();
@@ -208,6 +220,7 @@ final class ChainTargets {
                 count++;
                 Target read = targetOf(target, asCast ? game : null);
                 if (read != null) {
+                    read = read.withShare(shares.get(read.object()));
                     note(read);
                     into.add(read);
                     named.add(read);
@@ -246,14 +259,14 @@ final class ChainTargets {
     static Target targetOf(Object target, Game asCastIn) {
         if (target instanceof Card card) {
             return isGone(asCastIn, card)
-                    ? new Target(card, lastKnownRef(card), Kind.LAST_KNOWN)
-                    : new Target(card, Refs.of(card), Kind.CARD);
+                    ? new Target(card, lastKnownRef(card), Kind.LAST_KNOWN, null)
+                    : new Target(card, Refs.of(card), Kind.CARD, null);
         }
         if (target instanceof SpellAbility ability && ability.getHostCard() != null) {
             return new Target(ability, Refs.of(ability.getHostCard()),
-                    ability.isSpell() ? Kind.SPELL : Kind.ABILITY);
+                    ability.isSpell() ? Kind.SPELL : Kind.ABILITY, null);
         }
-        return target instanceof Player player ? new Target(player, Refs.of(player), Kind.PLAYER) : null;
+        return target instanceof Player player ? new Target(player, Refs.of(player), Kind.PLAYER, null) : null;
     }
 
     /**
@@ -379,7 +392,7 @@ final class ChainTargets {
 
     /**
      * Each link of the chain, root first, with its targets that have a ref:
-     * where a target's divided share is read ({@link StackExtras}).
+     * where the extras read each target's divided share ({@link StackExtras}).
      */
     List<Link> links() {
         return links;

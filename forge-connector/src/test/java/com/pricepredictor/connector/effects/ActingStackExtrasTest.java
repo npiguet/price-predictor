@@ -67,6 +67,26 @@ class ActingStackExtrasTest {
         TestBoard.nextStep(game);
     }
 
+    /** The effect half of {@code script}'s spell, resolved once {@code play} has put it on the stack. */
+    private String resolutionHalf(Game game, String script, Runnable play) throws Throwable {
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            play.run();
+            resolveAndMoveOn(game);
+        });
+        return RecordLines.only(records, "resolution", script);
+    }
+
+    /**
+     * The extras of {@code host} on {@code half} name {@code expected} as the
+     * refs' {@code targets_at_cast} do, and count them as chosen.
+     */
+    private static void assertTargetsAsCast(String half, Card host, List<String> expected) {
+        Map<String, Object> extras = extrasOf(half, host);
+        assertEquals(expected, extras.get("targets"), half);
+        assertEquals(refsOf(half).get("targets_at_cast"), extras.get("targets"), half);
+        assertEquals(Map.of("chosen", (long) expected.size()), extras.get("up_to_counts"), half);
+    }
+
     /**
      * Lightning Bolt whose target was sacrificed in response fizzles; its
      * extras still name the creature as cast, as it last existed, with one
@@ -81,18 +101,12 @@ class ActingStackExtrasTest {
         Card bolt = TestBoard.inHand(game, caster, "Lightning Bolt");
         SpellAbility[] cast = {null};
 
-        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+        String half = resolutionHalf(game, "cardsfolder/l/lightning_bolt.txt", () -> {
             cast[0] = TestBoard.cast(game, bolt, caster, bears);
             sacrifice(game, bears);
-            resolveAndMoveOn(game);
         });
-
-        String half = RecordLines.only(records, "resolution", "cardsfolder/l/lightning_bolt.txt");
         assertEquals("fizzled", outcomeOf(half), half);
-        Map<String, Object> extras = extrasOf(half, cast[0].getHostCard());
-        assertEquals(List.of("L" + bears.getId()), extras.get("targets"), half);
-        assertEquals(refsOf(half).get("targets_at_cast"), extras.get("targets"), half);
-        assertEquals(Map.of("chosen", 1L), extras.get("up_to_counts"), half);
+        assertTargetsAsCast(half, cast[0].getHostCard(), List.of("L" + bears.getId()));
     }
 
     /**
@@ -109,27 +123,22 @@ class ActingStackExtrasTest {
         Card arcTrail = TestBoard.inHand(game, caster, "Arc Trail");
         SpellAbility[] cast = {null};
 
-        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+        String half = resolutionHalf(game, "cardsfolder/a/arc_trail.txt", () -> {
             cast[0] = TestBoard.spellOf(game.getAction().moveToStack(arcTrail, null), caster);
             cast[0].getTargets().add(bears);
             cast[0].getSubAbility().getTargets().add(opponent);
             game.getStack().add(cast[0]);
             sacrifice(game, bears);
-            resolveAndMoveOn(game);
         });
-
-        String half = RecordLines.only(records, "resolution", "cardsfolder/a/arc_trail.txt");
         assertEquals("partially_fizzled", outcomeOf(half), half);
-        Map<String, Object> extras = extrasOf(half, cast[0].getHostCard());
-        assertEquals(List.of("L" + bears.getId(), Refs.of(opponent)), extras.get("targets"), half);
-        assertEquals(refsOf(half).get("targets_at_cast"), extras.get("targets"), half);
-        assertEquals(Map.of("chosen", 2L), extras.get("up_to_counts"), half);
+        assertTargetsAsCast(half, cast[0].getHostCard(),
+                List.of("L" + bears.getId(), Refs.of(opponent)));
     }
 
     /**
      * Forked Bolt split 1 and 1, one of its creatures sacrificed in
      * response: Forge drops that target's share with the target, and the
-     * extras give it back, what the other leaves of the 2 announced.
+     * extras keep it as announced.
      */
     @Test
     void aPartiallyFizzledDividedSpellKeepsTheShareOfItsLostTarget() throws Throwable {
@@ -159,6 +168,68 @@ class ActingStackExtrasTest {
         String lost = "L" + bears.getId();
         assertEquals(List.of(lost, Refs.of(wurm)), extras.get("targets"), half);
         assertEquals(Map.of(lost, 1L, Refs.of(wurm), 1L), extras.get("per_target_amounts"), half);
+    }
+
+    /**
+     * Arc Lightning split 1, 1 and 1 over three creatures, two of them
+     * sacrificed in response: Forge drops each lost target's share with it,
+     * and the extras keep all three shares as announced, which the lone-target
+     * arithmetic could not give back for two (finding 4.1).
+     */
+    @Test
+    void aDividedSpellThatLostTwoTargetsKeepsAllThreeShares() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card bears = TestBoard.inPlay(game, opponent, "Grizzly Bears");
+        Card wurm = TestBoard.inPlay(game, opponent, "Craw Wurm");
+        Card giant = TestBoard.inPlay(game, opponent, "Hill Giant");
+        Card arcLightning = TestBoard.inHand(game, caster, "Arc Lightning");
+        SpellAbility[] cast = {null};
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            cast[0] = TestBoard.spellOf(game.getAction().moveToStack(arcLightning, null), caster);
+            cast[0].clearTargets();
+            for (Card target : List.of(bears, wurm, giant)) {
+                cast[0].getTargets().add(target);
+                cast[0].addDividedAllocation(target, 1);
+            }
+            game.getStack().add(cast[0]);
+            sacrifice(game, bears);
+            sacrifice(game, wurm);
+            resolveAndMoveOn(game);
+        });
+
+        String half = RecordLines.only(records, "resolution", "cardsfolder/a/arc_lightning.txt");
+        assertEquals("partially_fizzled", outcomeOf(half), half);
+        Map<String, Object> extras = extrasOf(half, cast[0].getHostCard());
+        assertEquals(Map.of("L" + bears.getId(), 1L, "L" + wurm.getId(), 1L, Refs.of(giant), 1L),
+                extras.get("per_target_amounts"), half);
+    }
+
+    /**
+     * The same spell forced in a fork reads the shares it announced at its
+     * forced cast: all of Arc Lightning's 3 damage, shared out over the
+     * targets its extras name, as the live half's are.
+     */
+    @Test
+    void aForcedDividedSpellsExtrasShareOutItsWholeTotal() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        TestBoard.inPlay(game, game.getPlayers().get(1), "Hill Giant");
+        TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
+        Card arcLightning = TestBoard.inHand(game, caster, "Arc Lightning");
+        SpellAbility spell = arcLightning.getFirstSpellAbility();
+        spell.setActivatingPlayer(caster);
+        CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(1).probes(0).build();
+
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(tempDir, game, caps, 1L, spell, WHY);
+
+        String half = RecordLines.only(fork.records(), "resolution", "cardsfolder/a/arc_lightning.txt");
+        Map<String, Object> extras = extrasOf(half, arcLightning);
+        Map<String, Object> amounts = asMap(extras.get("per_target_amounts"));
+        assertEquals(3L, amounts.values().stream().mapToLong(each -> (Long) each).sum(), half);
+        assertEquals(extras.get("targets"), List.copyOf(amounts.keySet()), half);
     }
 
     /**

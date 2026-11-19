@@ -361,7 +361,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
                     // resolves as a creature spell, as the live bracket reads it.
                     fizzled[0] = itemFizzled && !BusBracketCollector.resolvesAsACreature(item);
                     targets[0] = ChainTargets.now(item);
-                    targets[1] = ChainTargets.atCast(item, targetsAtCast);
+                    targets[1] = ChainTargets.atCast(item, targetsAtCast, cast.allocation());
                     sink.resolutionStarted(snapshots.ofResolving(onStack, targets[1]));
                 }
             }
@@ -579,6 +579,8 @@ final class InterventionFork implements InterventionScheduler.Forcing {
         /** The X the forced ability announced, read at its cast. */
         private Integer x;
         private int targetsAtCast;
+        /** The divided shares the forced ability announced when it was pushed. */
+        private DividedAllocation allocation = DividedAllocation.NONE;
         /**
          * Re-reads the sink's stat differ once the board is taken, so the
          * forced bracket's stat changes are the ones after its snapshot, as
@@ -610,6 +612,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
                 x = RefsJson.announcedX(onStack);
                 state = snapshots.ofResolving(onStack);
                 targetsAtCast = OpenResolution.targetCount(onStack);
+                allocation = DividedAllocation.of(onStack);
                 atSnapshot.run();
             }
         }
@@ -629,6 +632,11 @@ final class InterventionFork implements InterventionScheduler.Forcing {
 
         Snapshot state() {
             return state;
+        }
+
+        /** The divided shares the forced ability announced when it was pushed. */
+        DividedAllocation allocation() {
+            return allocation;
         }
 
         /** How many targets the forced ability's root line had when it was pushed. */

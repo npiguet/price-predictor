@@ -3,9 +3,7 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.json.Json;
 import forge.game.spellability.SpellAbility;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -71,33 +69,15 @@ final class StackExtras {
     }
 
     /**
-     * Each target's divided share on one link, summed per ref. A target
-     * Forge's check removed lost its share with it; a lone such target on a
-     * link takes what the others leave of the link's announced total, and
-     * two or more cannot be told apart, so none of them is written.
+     * Each target's divided share on one link, summed per ref: the share
+     * announced when the item went on the stack ({@link DividedAllocation}),
+     * which a target Forge's check removed keeps in the reading as cast.
      */
     private static void addShares(ChainTargets.Link link, Map<String, Integer> into) {
-        SpellAbility ability = link.ability();
-        List<ChainTargets.Target> unshared = new ArrayList<>();
-        int shared = 0;
         for (ChainTargets.Target target : link.targets()) {
-            Integer share = ability.getDividedValue(target.object());
-            if (share == null) {
-                unshared.add(target);
-            } else {
-                into.merge(target.ref(), share, Integer::sum);
-                shared += share;
+            if (target.share() != null) {
+                into.merge(target.ref(), target.share(), Integer::sum);
             }
         }
-        Integer left = leftOf(ability, shared);
-        if (unshared.size() == 1 && left != null) {
-            into.merge(unshared.get(0).ref(), left, Integer::sum);
-        }
-    }
-
-    /** What a divided link's announced total leaves past {@code shared}; null when nothing. */
-    private static Integer leftOf(SpellAbility ability, int shared) {
-        Integer total = ability.isDividedAsYouChoose() ? ability.getDividedValue() : null;
-        return total == null || total <= shared ? null : total - shared;
     }
 }

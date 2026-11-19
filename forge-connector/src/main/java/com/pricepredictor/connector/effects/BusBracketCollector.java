@@ -305,7 +305,7 @@ public final class BusBracketCollector extends BusEventReader {
             return;
         }
         brackets.countDropped(resolving, DroppedEvents.phaseOf(game));
-        ChainTargets atCast = ChainTargets.atCast(item, targetsAtCast);
+        ChainTargets atCast = ChainTargets.atCast(item, targetsAtCast, resolving.allocation());
         Snapshot board = snapshots.ofResolving(resolving.ability, atCast);
         resolving.resolutionStarted(board, ChainTargets.now(item), atCast);
         if (fizzled) {
