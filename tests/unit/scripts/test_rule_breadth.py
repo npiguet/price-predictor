@@ -37,7 +37,8 @@ def test_a_detector_cut_to_nothing_of_a_large_pool_is_flagged(tmp_path, capsys):
     out = tmp_path / "breadth.json"
     assert rule_breadth.main([
         "--records-dir", str(records), "--rules-dir", str(_rules(tmp_path)),
-        "--cards-folder", str(SIDECARS / "cardsfolder"), "--workers", "1",
+        "--cards-folder", str(SIDECARS / "cardsfolder"),
+        "--variant-scripts", str(tmp_path / "variants"), "--workers", "1",
         "--min-pool", "5", "--output", str(out)]) == 0
     document = json.loads(out.read_text(encoding="utf-8"))
     rows = {row["scenario"]: row for row in document["scenarios"]}
@@ -57,7 +58,8 @@ def test_a_set_of_an_older_generation_exits_1_naming_it(tmp_path, caplog):
     with caplog.at_level("ERROR"):
         assert rule_breadth.main([
             "--records-dir", str(records), "--rules-dir", str(_rules(tmp_path)),
-            "--cards-folder", str(SIDECARS / "cardsfolder"), "--workers", "1",
+            "--cards-folder", str(SIDECARS / "cardsfolder"),
+            "--variant-scripts", str(tmp_path / "variants"), "--workers", "1",
             "--output", str(tmp_path / "breadth.json")]) == 1
     assert any("gen2.jsonl, line 1: the record is gen-2 " in r.getMessage()
                for r in caplog.records)
