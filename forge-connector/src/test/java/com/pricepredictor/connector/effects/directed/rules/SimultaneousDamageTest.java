@@ -12,6 +12,7 @@ import forge.game.player.Player;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -95,6 +96,19 @@ class SimultaneousDamageTest {
         Blocked board = Blocked.of("Hill Giant", "Grizzly Bears");
         board.attacker().setDamage(2);
         assertTrue(board.binds());
+    }
+
+    /**
+     * The bind builds a Youthful Knight probe card to read the damage
+     * prevention against: it runs on the live game and leaves it as it was.
+     */
+    @Test
+    void aBindThatBuildsTheProbeLeavesTheLiveGameAsItWas() {
+        Blocked board = Blocked.of("Hill Giant", "Grizzly Bears");
+        board.attacker().setDamage(1);
+        LiveGameMarks before = LiveGameMarks.of(board.game());
+        assertTrue(board.binds());
+        assertEquals(before, LiveGameMarks.of(board.game()));
     }
 
     /**
