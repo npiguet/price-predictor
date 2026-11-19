@@ -7,7 +7,9 @@ import forge.game.keyword.KeywordInterface;
 import forge.game.zone.ZoneType;
 
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -71,12 +73,14 @@ final class ProbeScheduler {
         // battlefield order would probe the same few keywords game after game
         // and leave the rest unprobed -- and gate 2 is a per-keyword decision,
         // so an unprobed keyword gets no check whatever.
-        String focus = probeFocus();
-        if (probeCombatants(focus, step) == 0) {
+        Set<String> tried = new HashSet<>();
+        if (probeCombatants(new ProbePass(probeFocus(), step, tried)) == 0) {
             // The focus is a rotation, not a restriction: a game whose combat
             // carries none of it still spends its budget rather than saving it
-            // for a keyword that is not there.
-            probeCombatants(null, step);
+            // for a keyword that is not there. It passes over what the focused
+            // pass tried: a fork discarded there would be taken again on the
+            // same creature and keyword, and spend the budget twice on it.
+            probeCombatants(new ProbePass(null, step, tried));
         }
     }
 
@@ -101,47 +105,90 @@ final class ProbeScheduler {
     }
 
     /**
+     * One pass over the combatants: the keyword it spends on (null for any
+     * probed one), the step, and the creature and keyword pairs this step's
+     * passes have already forked.
+     */
+    private record ProbePass(String focus, DamageStep step, Set<String> tried) {
+
+        /** Whether this pass forks {@code card} for {@code normalized}, the flag's checks aside. */
+        boolean admits(Card card, String normalized) {
+            if (focus != null && !focus.equals(normalized)) {
+                return false;
+            }
+            if (step == DamageStep.REGULAR && FIRST_STRIKE.equals(normalized)) {
+                return false;
+            }
+            return !tried.contains(triedKey(card, normalized));
+        }
+
+        /** Mark {@code card} and {@code normalized} forked at this step. */
+        void tried(Card card, String normalized) {
+            tried.add(triedKey(card, normalized));
+        }
+
+        private static String triedKey(Card card, String normalized) {
+            return card.getId() + " " + normalized;
+        }
+    }
+
+    /**
      * Take a probe for each combatant carrying a probed keyword.
      *
-     * @param focus the one keyword to spend on, or null for any probed one
      * @return how many branches were taken
      */
-    private int probeCombatants(String focus, DamageStep step) {
+    private int probeCombatants(ProbePass pass) {
         int taken = 0;
         for (Card card : game.getCardsIn(ZoneType.Battlefield)) {
-            if (!inCombat(card)) {
-                continue;
-            }
-            // One probe per keyword a creature carries, however many
-            // spellings it has of it (trample, and trample over
-            // planeswalkers): the probe strips them all, so a second
-            // spelling's branch is the first's again.
-            Set<String> probed = new HashSet<>();
-            for (KeywordInterface keyword : card.getKeywords()) {
-                String original = keyword.getOriginal();
-                if (original == null || original.isEmpty()) {
-                    continue;
-                }
-                // The flag names keywords in the corpus's spelling
-                // (first_strike); the card carries Forge's (First Strike).
-                // Matched on the normalized form and stripped by the card's own,
-                // so neither side has to guess the other's.
-                String normalized = KeywordEdit.normalize(original);
-                if (!caps.probeKeywords().contains(normalized)
-                        || (focus != null && !focus.equals(normalized))
-                        || (step == DamageStep.REGULAR && FIRST_STRIKE.equals(normalized))
-                        || !probed.add(normalized)) {
-                    continue;
-                }
-                DamageStepProbe.HeldProbe held =
-                        forks.probe(original, card, step);
-                if (held != null) {
-                    hold(held);
-                    taken++;
-                }
+            if (inCombat(card)) {
+                taken += probeCombatant(card, pass);
             }
         }
         return taken;
+    }
+
+    /** Take a probe for each keyword of {@code card} this pass forks. */
+    private int probeCombatant(Card card, ProbePass pass) {
+        int taken = 0;
+        for (Map.Entry<String, String> keyword : probedKeywords(card, pass).entrySet()) {
+            pass.tried(card, keyword.getKey());
+            DamageStepProbe.HeldProbe held = forks.probe(keyword.getValue(), card, pass.step());
+            if (held != null) {
+                hold(held);
+                taken++;
+            }
+        }
+        return taken;
+    }
+
+    /**
+     * The keywords of {@code card} this pass forks, by their normalized form,
+     * each in the card's own spelling.
+     *
+     * <p>One per keyword a creature carries, however many spellings it has
+     * of it (trample, and trample over planeswalkers): the probe strips them
+     * all, so a second spelling's branch is the first's again. The flag names
+     * keywords in the corpus's spelling (first_strike); the card carries
+     * Forge's (First Strike). Matched on the normalized form and stripped by
+     * the card's own, so neither side has to guess the other's.
+     */
+    private Map<String, String> probedKeywords(Card card, ProbePass pass) {
+        Map<String, String> spellings = new LinkedHashMap<>();
+        for (KeywordInterface keyword : card.getKeywords()) {
+            String original = keyword.getOriginal();
+            if (original != null && !original.isEmpty()) {
+                spellings.putIfAbsent(KeywordEdit.normalize(original), original);
+            }
+        }
+        spellings.keySet().removeIf(normalized -> !probed(card, normalized, pass));
+        return spellings;
+    }
+
+    private boolean probed(Card card, String normalized, ProbePass pass) {
+        if (!caps.probeKeywords().contains(normalized) || !pass.admits(card, normalized)) {
+            return false;
+        }
+        return strikesIn(card, pass.step()) || ACTS_ON_DAMAGE_DEALT_TO_IT.contains(normalized);
     }
 
     /**
@@ -152,10 +199,37 @@ final class ProbeScheduler {
      */
     static final String FIRST_STRIKE = "first_strike";
 
+    /** Double strike, as the flag spells it. */
+    static final String DOUBLE_STRIKE = "double_strike";
+
+    /**
+     * The probed keyword that acts on the damage its carrier is dealt rather
+     * than on the damage it deals. Every other one (trample, deathtouch,
+     * lifelink, wither, infect, first and double strike) changes nothing on
+     * a combatant that deals no damage in the step, and its branch would be
+     * the real step again: trample on a creature without first strike at the
+     * first-strike step, or on a first striker at the regular step.
+     */
+    private static final Set<String> ACTS_ON_DAMAGE_DEALT_TO_IT = Set.of("indestructible");
+
+    /**
+     * Whether {@code card} deals combat damage in {@code step} (510.4): first
+     * and double strikers in the first-strike step, double strikers and the
+     * creatures without first strike in the regular one. A creature that
+     * changed its first strike between the two steps is read by what it
+     * carries now, where Forge reads whether it dealt first-strike damage.
+     */
+    static boolean strikesIn(Card card, DamageStep step) {
+        if (step == DamageStep.FIRST_STRIKE) {
+            return card.hasFirstStrike() || card.hasDoubleStrike();
+        }
+        return card.hasSecondStrike();
+    }
+
     /** Is anything in this combat going to deal first-strike damage? */
     private boolean anyFirstStriker() {
         for (Card card : game.getCardsIn(ZoneType.Battlefield)) {
-            if (inCombat(card) && (card.hasFirstStrike() || card.hasDoubleStrike())) {
+            if (inCombat(card) && strikesIn(card, DamageStep.FIRST_STRIKE)) {
                 return true;
             }
         }

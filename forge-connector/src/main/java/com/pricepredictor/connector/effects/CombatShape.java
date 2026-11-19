@@ -69,6 +69,9 @@ final class CombatShape {
      * redirection rewrote the damage, so a double striker's regular step
      * carries its own assignment and a prevented hit still shows what was
      * assigned. The observed record and its probe branch read the same thing.
+     *
+     * <p>A probe branch that deals two steps adds both, and a source assigning
+     * to one target in each (a double striker) is given the sum.
      */
     void addAssignment(Combat combat) {
         if (combat == null) {
@@ -84,7 +87,7 @@ final class CombatShape {
             }
             Refs.ofAny(cell.getColumnKey()).ifPresent(target -> assignment
                     .computeIfAbsent(Refs.of(source), key -> new LinkedHashMap<>())
-                    .put(target, amount));
+                    .merge(target, amount, Integer::sum));
         }
     }
 

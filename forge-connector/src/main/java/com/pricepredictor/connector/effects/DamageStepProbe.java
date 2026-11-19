@@ -3,11 +3,14 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.effects.directed.KeywordEdit;
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.combat.Combat;
+import forge.game.event.GameEventCardStatsChanged;
 import forge.game.spellability.SpellAbility;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A <b>damage-step probe</b>: a fork that re-runs one combat with a keyword
@@ -89,7 +92,7 @@ final class DamageStepProbe {
             // The state is the board as the step began, with the keyword
             // already gone: that is the input the counterfactual answers for.
             String state = snapshots.ofBoard().render();
-            ProbedStep dealt = runDamageStep(fork, step == DamageStep.FIRST_STRIKE);
+            ProbedStep dealt = runDamageSteps(fork, stepsDealt(keyword, step));
             return new HeldProbe(
                     KeywordEdit.normalize(keyword),
                     Refs.of(carrier), state, dealt.events(),
@@ -111,12 +114,32 @@ final class DamageStepProbe {
     }
 
     /**
-     * Assign and deal the fork's damage for one step, then let the deaths
-     * happen, listening throughout.
+     * The damage steps a branch deals: the one it forked ahead of, and after
+     * a first-strike step whose first or double strike was stripped, the
+     * regular step as well.
      *
-     * @param firstStrike whether this is the first-strike damage step
+     * <p>The stripped creature's damage moves to the regular step: Forge lets
+     * every combatant that dealt no first-strike damage deal damage there
+     * ({@code Combat.dealDamageThisPhase}), and the branch's creature never
+     * had first strike when its first-strike damage was dealt. A branch that
+     * stopped after the first-strike step would hold nothing of what the
+     * creature did without the keyword.
      */
-    private static ProbedStep runDamageStep(Game fork, boolean firstStrike) {
+    static List<DamageStep> stepsDealt(String keyword, DamageStep step) {
+        String normalized = KeywordEdit.normalize(keyword);
+        boolean strikeStripped = ProbeScheduler.FIRST_STRIKE.equals(normalized)
+                || ProbeScheduler.DOUBLE_STRIKE.equals(normalized);
+        if (step == DamageStep.FIRST_STRIKE && strikeStripped) {
+            return List.of(DamageStep.FIRST_STRIKE, DamageStep.REGULAR);
+        }
+        return List.of(step);
+    }
+
+    /**
+     * Assign and deal the fork's damage for each of {@code steps}, letting
+     * the deaths happen after each, listening throughout.
+     */
+    private static ProbedStep runDamageSteps(Game fork, List<DamageStep> steps) {
         // Listening from here, once the keyword is gone: the stripped
         // keyword is the branch's input, and a sink primed before it
         // would report its removal as something the step did. No root:
@@ -131,11 +154,25 @@ final class DamageStepProbe {
         // assignment only exists after. Both are read as the observed
         // record reads them, so the branch and the record it mirrors agree.
         CombatShape shape = CombatShape.of(fork.getCombat());
-        // What the observed combat record takes from the hooks rather than
-        // the bus, damage a shield or a protection prevented above all, is
-        // the branch's too: without it the difference gate 2 reads would
-        // hold a prevention the stripped keyword did not cause.
-        Forks.ForkHooks hooks = new Forks.ForkHooks() {
+        Forks.listeningForHooks(hooksFiling(sink), () -> {
+            for (DamageStep step : steps) {
+                if (!fork.isGameOver()) {
+                    dealStep(fork, shape, step);
+                }
+            }
+            return null;
+        });
+        return new ProbedStep(shape, sink.events());
+    }
+
+    /**
+     * What the observed combat record takes from the hooks rather than the
+     * bus, damage a shield or a protection prevented above all, is the
+     * branch's too: without it the difference gate 2 reads would hold a
+     * prevention the stripped keyword did not cause.
+     */
+    private static Forks.ForkHooks hooksFiling(ForkEventSink sink) {
+        return new Forks.ForkHooks() {
             @Override
             public void clauseEvent(SpellAbility clause, EffectEvent event) {
                 sink.fileOutcome(event, null);
@@ -146,22 +183,39 @@ final class DamageStepProbe {
                 sink.fileOutcome(event, null);
             }
         };
-        Forks.listeningForHooks(hooks, () -> {
-            if (fork.getCombat().assignCombatDamage(firstStrike)) {
-                shape.addAssignment(fork.getCombat());
-                fork.getCombat().dealAssignedDamage();
-                // And then let the deaths happen. Damage alone kills nothing;
-                // a creature with lethal damage on it leaves the battlefield
-                // during state-based actions, and stopping before them would
-                // make the branch systematically miss every death the real
-                // step had — biasing the difference gate 2 computes towards
-                // "the keyword changed nothing". The same call Forge's own
-                // simulator makes after resolving a stack.
-                fork.getAction().checkStateEffects(false, new HashSet<>());
-            }
-            return null;
-        });
-        return new ProbedStep(shape, sink.events());
+    }
+
+    /** One damage step's turn-based action, as {@code PhaseHandler.onPhaseBegin} deals it. */
+    private static void dealStep(Game fork, CombatShape shape, DamageStep step) {
+        Combat combat = fork.getCombat();
+        combat.removeAbsentCombatants();
+        if (combat.assignCombatDamage(step == DamageStep.FIRST_STRIKE)) {
+            shape.addAssignment(combat);
+            combat.dealAssignedDamage();
+            checkStateEffects(fork);
+        }
+    }
+
+    /**
+     * Let the deaths happen, and publish the stat changes they made, as the
+     * live step's state-based check does ({@code
+     * PhaseHandler.checkStateBasedEffectsUnobserved}).
+     *
+     * <p>Damage alone kills nothing; a creature with lethal damage on it
+     * leaves the battlefield during state-based actions, and stopping before
+     * them would make the branch systematically miss every death the real
+     * step had, biasing the difference gate 2 computes towards "the keyword
+     * changed nothing". The stat changes those deaths cause (a lord dying,
+     * the creatures it pumped shrinking) reach the real combat record through
+     * the stats event the live check publishes after its loop; a branch that
+     * did not publish it would read them as the stripped keyword's doing.
+     */
+    private static void checkStateEffects(Game fork) {
+        Set<Card> affected = new HashSet<>();
+        fork.getAction().checkStateEffects(false, affected);
+        if (!affected.isEmpty()) {
+            fork.fireEvent(new GameEventCardStatsChanged(affected));
+        }
     }
 
     /**

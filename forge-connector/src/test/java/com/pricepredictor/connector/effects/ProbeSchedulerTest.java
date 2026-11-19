@@ -38,6 +38,26 @@ class ProbeSchedulerTest {
                 new DamageStepProbe(null, TestCollectors.context(writer, ShardRun.GAME_ID), new ForkBudget(probing)));
     }
 
+    /** What completing held branches does to a scheduler holding a first-strike and a regular branch. */
+    private interface Completion {
+        void complete(ProbeScheduler probes);
+    }
+
+    /**
+     * The {@code mirror_of} of each branch written once {@code completion}
+     * ran on a scheduler holding a first-strike branch, then a regular one.
+     */
+    private List<Object> mirrorsWritten(Completion completion) throws Exception {
+        try (RecordShardWriter writer = ShardRun.writer(tempDir)) {
+            ProbeScheduler probes = probing(writer);
+            probes.hold(branch(DamageStep.FIRST_STRIKE));
+            probes.hold(branch(DamageStep.REGULAR));
+            completion.complete(probes);
+        }
+        return ShardRun.readShard(tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX)).stream()
+                .map(line -> RecordLines.parse(line).get("mirror_of")).toList();
+    }
+
     /**
      * A branch is completed only against its own damage step.
      *
@@ -48,42 +68,26 @@ class ProbeSchedulerTest {
      */
     @Test
     void aBranchIsCompletedOnlyAgainstItsOwnDamageStep() throws Exception {
-        try (RecordShardWriter writer = ShardRun.writer(tempDir)) {
-            ProbeScheduler probes = probing(writer);
-            probes.hold(branch(DamageStep.FIRST_STRIKE));
-            probes.hold(branch(DamageStep.REGULAR));
-
+        List<Object> mirrors = mirrorsWritten(probes -> {
             probes.writeHeldProbes("run.0-l1.9", DamageStep.REGULAR);
             // The first-strike branch must still be waiting for its own step.
             probes.writeHeldProbes("run.0-l1.10", DamageStep.FIRST_STRIKE);
-        }
+        });
 
-        List<String> lines = ShardRun.readShard(
-                tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX));
-        assertEquals(2, lines.size(), lines.toString());
-        assertTrue(lines.get(0).contains("\"mirror_of\":\"run.0-l1.9\""), lines.get(0));
-        assertTrue(lines.get(1).contains("\"mirror_of\":\"run.0-l1.10\""), lines.get(1));
+        assertEquals(List.of("run.0-l1.9", "run.0-l1.10"), mirrors);
     }
 
     /** With no substep named, the oldest held step is the one being written. */
     @Test
     void theOldestHeldStepIsTheOneACombatRecordCompletes() throws Exception {
-        try (RecordShardWriter writer = ShardRun.writer(tempDir)) {
-            ProbeScheduler probes = probing(writer);
-            probes.hold(branch(DamageStep.FIRST_STRIKE));
-            probes.hold(branch(DamageStep.REGULAR));
-
+        List<Object> mirrors = mirrorsWritten(probes -> {
             probes.writeHeldProbes("run.0-l1.9");
             // One branch is left, and it is the regular step's.
             probes.writeHeldProbes("run.0-l1.10", DamageStep.FIRST_STRIKE);
             probes.writeHeldProbes("run.0-l1.11", DamageStep.REGULAR);
-        }
+        });
 
-        List<String> lines = ShardRun.readShard(
-                tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX));
-        assertEquals(2, lines.size(), lines.toString());
-        assertTrue(lines.get(0).contains("\"mirror_of\":\"run.0-l1.9\""), lines.get(0));
-        assertTrue(lines.get(1).contains("\"mirror_of\":\"run.0-l1.11\""), lines.get(1));
+        assertEquals(List.of("run.0-l1.9", "run.0-l1.11"), mirrors);
     }
 
     /** A branch whose step produced no record is dropped rather than mispaired. */
@@ -121,6 +125,19 @@ class ProbeSchedulerTest {
     }
 
     /**
+     * Collect {@code probes}' branches at {@code step} and complete them
+     * against a record of that step: whether a shard was written.
+     */
+    private boolean wroteABranch(ProbeScheduler probes, RecordShardWriter writer, DamageStep step)
+            throws Exception {
+        try (writer) {
+            probes.collect();
+            probes.writeHeldProbes("run.0-l1.9", step);
+        }
+        return Files.exists(tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX));
+    }
+
+    /**
      * A first-strike step nobody strikes in skips its probes, and still drops
      * the branches of a step left behind: a regular step's branch whose step
      * wrote no record would otherwise wait for this combat's regular record.
@@ -129,15 +146,11 @@ class ProbeSchedulerTest {
     void aFirstStrikeStepNobodyStrikesInStillDropsAStaleBranch() throws Exception {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.COMBAT_FIRST_STRIKE_DAMAGE);
         blockedBears(game, "Grizzly Bears");
-        try (RecordShardWriter writer = ShardRun.writer(tempDir)) {
-            ProbeScheduler probes = over(game, writer, "trample");
-            probes.hold(branch(DamageStep.REGULAR));
+        RecordShardWriter writer = ShardRun.writer(tempDir);
+        ProbeScheduler probes = over(game, writer, "trample");
+        probes.hold(branch(DamageStep.REGULAR));
 
-            probes.collect();
-            probes.writeHeldProbes("run.0-l1.9", DamageStep.REGULAR);
-        }
-
-        assertFalse(Files.exists(tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX)));
+        assertFalse(wroteABranch(probes, writer, DamageStep.REGULAR));
     }
 
     /**
@@ -152,12 +165,9 @@ class ProbeSchedulerTest {
         attacker.addChangedCardKeywords(
                 List.of("Trample:Planeswalker"), null, false, game.getNextTimestamp(), null);
         assertEquals(2, KeywordEdit.carried(attacker, "trample").size(), "trample in two spellings");
-        try (RecordShardWriter writer = ShardRun.writer(tempDir)) {
-            ProbeScheduler probes = over(game, writer, "trample");
+        RecordShardWriter writer = ShardRun.writer(tempDir);
 
-            probes.collect();
-            probes.writeHeldProbes("run.0-l1.9", DamageStep.REGULAR);
-        }
+        assertTrue(wroteABranch(over(game, writer, "trample"), writer, DamageStep.REGULAR));
 
         List<String> lines = ShardRun.readShard(tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX));
         assertEquals(1, lines.size(), lines.toString());
@@ -176,13 +186,27 @@ class ProbeSchedulerTest {
     void firstStrikeIsNotProbedAtTheRegularStep() throws Exception {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.COMBAT_DAMAGE);
         blockedBears(game, "Youthful Knight");
-        try (RecordShardWriter writer = ShardRun.writer(tempDir)) {
-            ProbeScheduler probes = over(game, writer, "first_strike");
+        RecordShardWriter writer = ShardRun.writer(tempDir);
 
-            probes.collect();
-            probes.writeHeldProbes("run.0-l1.9", DamageStep.REGULAR);
-        }
+        assertFalse(wroteABranch(over(game, writer, "first_strike"), writer, DamageStep.REGULAR));
+    }
 
-        assertFalse(Files.exists(tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX)));
+    /**
+     * A keyword acting through the damage its carrier deals is not probed on
+     * a combatant that deals none in the step: a trampler without first
+     * strike at the first-strike step, beside a first striker that makes the
+     * step happen, would give a branch identical to the real step.
+     */
+    @Test
+    void trampleIsNotProbedOnACreatureThatDoesNotStrikeInTheStep() throws Exception {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.COMBAT_FIRST_STRIKE_DAMAGE);
+        Card knight = blockedBears(game, "Youthful Knight");
+        Card dreadmaw = TestBoard.inPlay(game, game.getPlayers().get(0), "Colossal Dreadmaw");
+        game.getCombat().addAttacker(dreadmaw, game.getPlayers().get(1));
+        game.getCombat().setBlocked(dreadmaw, false);
+        assertTrue(knight.hasFirstStrike(), "the step has a first striker");
+        RecordShardWriter writer = ShardRun.writer(tempDir);
+
+        assertFalse(wroteABranch(over(game, writer, "trample"), writer, DamageStep.FIRST_STRIKE));
     }
 }
