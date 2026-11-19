@@ -58,6 +58,9 @@ _ALLOWED: dict[str, set[str] | None] = {
         "WorkerFailures", "render_fork_refusals", "render_hook_failures",
     },
     "price_predictor.infrastructure.worker_log_scan": {"WorkerLogReport"},
+    # A directed rule's fork probability, one formula for collect-variants and
+    # sealed match-outcomes, which never imports effects (DR1).
+    "price_predictor.domain.directed_fork_probabilities": {"directed_fork_probability"},
     "sealed.domain.manabase": {"compute_basic_lands"},
     "sealed.infrastructure.converted_card_locator": {"ConvertedCardLocator"},
     # The cap flags every collecting supervisor carries, one definition for

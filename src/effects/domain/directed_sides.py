@@ -19,10 +19,10 @@ from __future__ import annotations
 from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, field
 
-from effects.domain.directed_fork_probabilities import directed_fork_probability
 from effects.domain.fork_operation import ForkOperation
 from effects.domain.records import EffectRecord
 from effects.domain.rule_catalogue import Polarity, ScenarioCatalogue
+from price_predictor.domain.directed_fork_probabilities import directed_fork_probability
 
 #: The polarities a fork's records are counted under; ``other`` names no side.
 COUNTED_SIDES = frozenset({Polarity.FIRES, Polarity.DOES_NOT_FIRE})

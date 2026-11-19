@@ -15,7 +15,6 @@ from pathlib import Path
 
 import pytest
 
-from effects.domain.directed_fork_probabilities import directed_fork_probability
 from effects.domain.directed_sides import (
     DirectedForkGames,
     directed_rule_probabilities,
@@ -25,6 +24,7 @@ from effects.domain.directed_sides import (
 from effects.domain.rule_catalogue import Polarity
 from effects.infrastructure.record_codec import record_from_dict
 from effects.infrastructure.rules_catalogue_io import load_registered_variants, load_scenarios
+from price_predictor.domain.directed_fork_probabilities import directed_fork_probability
 
 _PLAYED = Path(__file__).parents[3] / "fixtures" / "effects" / "directed-702.19ef-combats.jsonl"
 _MELD = Path(__file__).parents[3] / "fixtures" / "effects" / "directed-meld-fork.jsonl"

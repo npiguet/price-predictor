@@ -21,9 +21,11 @@ from price_predictor.infrastructure.forge_jvm import (
 )
 from price_predictor.infrastructure.run_manifest import annotate_run
 from price_predictor.infrastructure.worker_log_scan import WorkerLogReport
+from sealed.domain.directed_fork_needs import DirectedForkNeeds
 from sealed.infrastructure.effect_collection_flags import (
     COUNT_DROPPED_EVENTS_PROPERTY,
     caps_manifest,
+    directed_rule_probability_properties,
     dropped_events_report,
 )
 from sealed.infrastructure.match_worker_connector import (
@@ -83,6 +85,15 @@ class MatchOutcomeSupervisor:
         # to its own defaults for anything absent.
         self._collection_caps = collection_caps
         self._exclude_cards_path = exclude_cards_path
+        #: Set by :meth:`steer_directed_forks`; without, every worker keeps the
+        #: caps' directed-fork probabilities.
+        self._directed_needs: DirectedForkNeeds | None = None
+        #: The listed rules' own probabilities the next worker starts with,
+        #: replaced whole at each log scan (read by the pool's monitor threads).
+        self._directed_probabilities: dict[str, float] = (
+            caps_manifest(collection_caps)["directed_rule_probabilities"]
+            if collection_caps is not None else {}
+        )
         self._run_id = str(uuid.uuid4())
         self._connector = MatchWorkerConnector()
         # Only constructed when a shard directory is: a plain match-outcomes
@@ -165,6 +176,16 @@ class MatchOutcomeSupervisor:
         ]
         return self._effect_records_dir is not None and played > 0 and not self._wrote_records
 
+    def steer_directed_forks(self, needs: DirectedForkNeeds | None) -> None:
+        """Recompute each rule of ``needs`` at every log scan from the forks
+        the workers kept, and start every later worker with the result, as
+        ``collect-variants`` does between its rounds (finding 6.1); None
+        leaves every worker the caps' probabilities."""
+        if needs is None:
+            return
+        self._directed_needs = needs
+        self._directed_probabilities = needs.probabilities()
+
     def run(self) -> None:
         """Start all workers and block until shutdown, then report the
         workers' failure lines and print the dropped-event table when the run
@@ -199,6 +220,18 @@ class MatchOutcomeSupervisor:
         found = self._log_report.scan()
         if found:
             print(f"Worker logs: {found.render()} (under {self._worker_logs_dir})")
+        if self._directed_needs is not None:
+            self._recompute_directed_probabilities()
+
+    def _recompute_directed_probabilities(self) -> None:
+        """The probabilities the kept forks summed at this scan give; the
+        rules whose probability moved are printed."""
+        before = self._directed_probabilities
+        after = self._directed_needs.probabilities(self._log_report.directed_fork_tally())
+        moved = [f"{rule} {p:.2f}" for rule, p in after.items() if before.get(rule) != p]
+        self._directed_probabilities = after
+        if moved:
+            print(f"Directed fork probabilities for the next workers: {', '.join(moved)}")
 
     @property
     def _worker_logs_dir(self) -> Path:
@@ -229,6 +262,7 @@ class MatchOutcomeSupervisor:
             worker_survivors=survivors,
             worker_stops=stops.as_dict(survived=len(survivors)),
             **self._worker_stop.manifest_fields(),
+            final_directed_rule_probabilities=self._directed_probabilities,
         )
         if self.collected_nothing:
             print(
@@ -275,7 +309,7 @@ class MatchOutcomeSupervisor:
             # The slot, not the process: a respawn passes the same number, so
             # this cannot be what makes a restarted worker's ids distinct.
             worker_index=worker_id,
-            collection_caps=self._collection_caps,
+            collection_caps=self._worker_caps(),
             exclude_cards_path=self._exclude_cards_path,
             progress_file=self._progress_path,
             stop_file=(
@@ -288,6 +322,14 @@ class MatchOutcomeSupervisor:
         )
         print(f"Worker {worker_id} started (PID {proc.pid})")
         return proc
+
+    def _worker_caps(self) -> Mapping[str, object] | None:
+        """The caps a worker spawned now starts with: the run's, each listed
+        rule's own probability as recomputed at the last log scan."""
+        if self._directed_needs is None or self._collection_caps is None:
+            return self._collection_caps
+        return {**self._collection_caps,
+                **directed_rule_probability_properties(self._directed_probabilities)}
 
     # ── Pool state, exposed under the names this class published before the
     # extraction so callers and tests keep working. ──────────────────────────

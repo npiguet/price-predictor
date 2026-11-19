@@ -329,11 +329,15 @@ from a real game.
   generator seeded per game. A rule's own probability is the property
   `effect.directed.probability.<rule>`; a rule without one takes
   `--directed-fork-probability`, and a rule at 0 is never forked.
-- A command that counts no shard (`match-outcomes`) takes the probabilities as
-  `--directed-fork-probabilities FILE`, a JSON map from rule to probability that
-  `scripts/rules_catalogue.py directed-rules --probabilities-output` writes from the counts file:
-  0 for a rule whose two sides have both reached their count, 1 for a rule with a side still at
-  zero, and in between the larger of 0.05 and the share of the count its shorter side misses.
+- A rule's probability is 0 once each of its sides has reached its count, 1 while a side is
+  still at zero, and in between the larger of 0.05 and the share of the count its shorter side
+  misses.
+- A command that counts no shard (`match-outcomes`) takes, as `--directed-fork-probabilities FILE`,
+  the count a side needs and each rule's records on its one registered side, which
+  `scripts/rules_catalogue.py directed-rules --probabilities-output` writes from the counts file.
+  It computes each rule's probability from them at start, and again at every status line with the
+  forks its workers report kept added; each worker started after takes those. A rule whose
+  registered variants make two sides is refused at start.
 - `collect-variants` recomputes the probabilities before its first round and after each round,
   from the directed forks (the games holding a record with `directed` set and `aimed_at` naming the rule,
   cut games left out) its own and its continued runs' shards hold, each shard counted once. A rule's

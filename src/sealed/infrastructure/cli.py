@@ -27,7 +27,7 @@ from sealed.infrastructure.cli_resume import (
 )
 from sealed.infrastructure.directed_fork_probabilities_file import (
     add_directed_fork_probabilities_flag,
-    read_directed_fork_probabilities,
+    read_directed_fork_needs,
 )
 from sealed.infrastructure.effect_collection_flags import (
     COUNT_DROPPED_EVENTS_PROPERTY,
@@ -1908,18 +1908,30 @@ def run_train_encoder(args: argparse.Namespace) -> int:
 
 def _directed_startup_error(args: argparse.Namespace) -> str | None:
     """Why the directed-fork flags cannot run, or None (FR-014): the
-    ``--directed-fork-probabilities`` file, read into
-    ``args.directed_rule_probabilities``, then the rules' startup check."""
+    ``--directed-fork-probabilities`` file, read into ``args.directed_fork_needs``
+    and its starting ``args.directed_rule_probabilities``, then the rules'
+    startup check."""
     rules = getattr(args, "directed_fork_rules", EFFECT_DIRECTED_FORK_RULES)
     path = getattr(args, "directed_fork_probabilities", None)
     if path is not None:
         try:
-            args.directed_rule_probabilities = read_directed_fork_probabilities(path, rules)
+            args.directed_fork_needs = read_directed_fork_needs(path, rules)
         except ValueError as exc:
             return str(exc)
+        args.directed_rule_probabilities = args.directed_fork_needs.probabilities()
     return directed_fork_error(
         rules, getattr(args, "directed_fork_probability", EFFECT_DIRECTED_FORK_PROBABILITY),
     )
+
+
+def _effect_flags_usage_error(args: argparse.Namespace) -> str | None:
+    """The first exit-2 refusal of the random-seat, worker-stop and sampling-rate
+    flags, in that order, or None."""
+    for check in (check_random_seat_flags, worker_stop_error, candidate_rate_error):
+        error = check(args)
+        if error is not None:
+            return error
+    return None
 
 
 def run_match_outcomes(args: argparse.Namespace) -> int:
@@ -1945,19 +1957,9 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
         )
         return 2
 
-    seat_error = check_random_seat_flags(args)
-    if seat_error is not None:
-        print(f"Error: {seat_error}", file=sys.stderr)
-        return 2
-
-    stop_error = worker_stop_error(args)
-    if stop_error is not None:
-        print(f"Error: {stop_error}", file=sys.stderr)
-        return 2
-
-    rate_error = candidate_rate_error(args)
-    if rate_error is not None:
-        print(f"Error: {rate_error}", file=sys.stderr)
+    usage_error = _effect_flags_usage_error(args)
+    if usage_error is not None:
+        print(f"Error: {usage_error}", file=sys.stderr)
         return 2
 
     # FR-014: exit 1 naming the rule, before any game. One JVM query, and
@@ -2009,6 +2011,7 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
             exclude_cards_path=exclude_cards,
             worker_stop=worker_stop_settings(args),
         )
+        supervisor.steer_directed_forks(getattr(args, "directed_fork_needs", None))
         supervisor.run()
     except (FileNotFoundError, forge_jvm.WorkerStartError) as exc:
         print(f"Error: {exc}", file=sys.stderr)

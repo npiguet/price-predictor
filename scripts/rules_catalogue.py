@@ -34,7 +34,6 @@ from pathlib import Path
 from _lib.paths import FORGE_RES, OUTPUT, REPO
 
 from effects.domain import rule_catalogue
-from effects.domain.directed_fork_probabilities import directed_fork_probability
 from effects.domain.variant_rounds import DEFAULT_STEER_FLOOR
 
 RULES = REPO / "rules"
@@ -1219,22 +1218,28 @@ def write_decided_from(path, counts):
                     "}\n", encoding="utf-8", newline="\n")
 
 
-def directed_probabilities(chosen, count):
-    """``rule -> probability`` of each listed rule, from the counts of the sides
-    its registered variants make (the collector's sides) against ``count``
-    records a side; 1 for a rule the counts cannot speak for. A rule whose
-    registered variants are all polarity ``other`` has no side to fill and no
-    entry: ``match-outcomes`` gives it the run's ``--directed-fork-probability``,
-    as ``collect-variants`` does."""
+def directed_side_records(chosen):
+    """``rule -> {side -> records}`` of each listed rule over the sides its
+    registered variants make (the collector's sides), each side's records 0
+    for a rule the counts cannot speak for. A rule whose registered variants
+    are all polarity ``other`` has no side to fill and no entry:
+    ``match-outcomes`` gives it the run's ``--directed-fork-probability``, as
+    ``collect-variants`` does."""
     out = {}
     for rule, row in chosen.items():
-        if row["counts"] is None:
-            out[rule] = 1.0
-        elif row["sides"]:
-            by_side = dict(zip((FIRES, DOES_NOT_FIRE), row["counts"], strict=True))
-            out[rule] = directed_fork_probability(
-                [by_side[side] for side in sorted(row["sides"])], count)
+        by_side = dict(zip((FIRES, DOES_NOT_FIRE), row["counts"] or (0, 0), strict=True))
+        if row["sides"]:
+            out[rule] = {side: by_side[side] for side in sorted(row["sides"])}
     return out
+
+
+def probabilities_document(chosen, count):
+    """The file ``match-outcomes --directed-fork-probabilities`` reads: the
+    records a side needs and each listed rule's records per side, from which
+    it computes each rule's probability at start and as its workers keep
+    forks (``sealed.infrastructure.directed_fork_probabilities_file``, its one
+    reader)."""
+    return {"count_per_side": count, "rules": directed_side_records(chosen)}
 
 
 def cmd_directed_rules(args):
@@ -1248,9 +1253,9 @@ def cmd_directed_rules(args):
     write_decided_from(rules_dir / DIRECTED_COUNTS, counts)
     output = getattr(args, "probabilities_output", None)
     if output is not None:
-        probabilities = directed_probabilities(
+        document = probabilities_document(
             chosen, getattr(args, "count_per_side", DEFAULT_STEER_FLOOR))
-        output.write_text(json.dumps(probabilities, indent=1) + "\n",
+        output.write_text(json.dumps(document, indent=1) + "\n",
                           encoding="utf-8", newline="\n")
     (rules_dir / "coverage-wording-cards.txt").write_text(
         "".join(f"{card}\n" for card in cards), encoding="utf-8", newline="\n")
@@ -1301,9 +1306,10 @@ def main():
                    help="the converted card tree whose names the wording list uses "
                    "(default: %(default)s)")
     p.add_argument("--probabilities-output", type=Path, default=None,
-                   help="also write each listed rule's directed-fork probability here, a JSON "
-                   "map for `sealed match-outcomes --directed-fork-probabilities` (none by "
-                   "default: nothing is written)")
+                   help="also write each listed rule's records per registered side and "
+                   "--count-per-side here, the JSON file `sealed match-outcomes "
+                   "--directed-fork-probabilities` computes each rule's probability from "
+                   "(none by default: nothing is written)")
     p.add_argument("--count-per-side", type=int, default=DEFAULT_STEER_FLOOR,
                    help="records each side of a rule needs; its probability is 0 once both "
                    "have them (default: %(default)s)")

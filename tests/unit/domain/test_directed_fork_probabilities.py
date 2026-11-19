@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from effects.domain.directed_fork_probabilities import (
+from price_predictor.domain.directed_fork_probabilities import (
     MIN_NEEDED_PROBABILITY,
     directed_fork_probability,
 )

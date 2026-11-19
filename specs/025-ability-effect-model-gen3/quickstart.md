@@ -75,6 +75,9 @@ $counts   = "$gen3\inputs\$countsStart-rule-counts\rule-counts.json"
 
 # The directed-fork list, as the comma-separated value --directed-fork-rules takes.
 $rules = (Get-Content rules\directed-fork-rules.txt | Where-Object { $_.Trim() -and -not $_.StartsWith('#') }) -join ','
+# Stage 1's records per side of each listed rule, which match-outcomes steers its directed forks from.
+if (-not (Test-Path variable:probabilitiesStart)) { $probabilitiesStart = Run-Start "$gen3\inputs" directed-fork-probabilities }
+$probabilities = "$gen3\inputs\$probabilitiesStart-directed-fork-probabilities\directed-fork-probabilities.json"
 
 # Runs a command with its console in its run directory's console.log, the command as its first line.
 function Run-Logged($run, $cmd) {
@@ -126,7 +129,7 @@ Set first: `$gen2Variants`, gen-2's variant-script tree (its run directory under
 if (-not (Test-Path variable:gen2CountsStart)) { $gen2CountsStart = Run-Start "$gen2\inputs" rule-counts }
 $gen2Counts = "$gen2\inputs\$gen2CountsStart-rule-counts"
 Run-Logged $gen2Counts "$py -u -m effects rule-counts --records-dir $gen2\records --cards-folder $gen2\converted\cardsfolder --cards-folder $gen2\converted\tokenscripts --variant-scripts $gen2Variants --rules-dir rules --workers 10 --output $gen2Counts\rule-counts.json"
-& $py scripts\rules_catalogue.py directed-rules --counts $gen2Counts\rule-counts.json --cards-folder $gen3\converted\cardsfolder
+Run-Logged (Split-Path $probabilities) "$py -u scripts\rules_catalogue.py directed-rules --counts $gen2Counts\rule-counts.json --cards-folder $gen3\converted\cardsfolder --probabilities-output $probabilities"
 ```
 
 Check: `validate` passes with every scenario declaring a detector or `none` and every non-base
@@ -135,6 +138,9 @@ records against Forge, starting with `rules/FINDINGS.md`'s suspected departures,
 on the scenarios. The counts decide which rules to enable for directed forks and coverage rounds:
 `directed-rules` writes `rules/directed-fork-rules.txt`, `rules/coverage-wording-cards.txt` and
 the part of the counts they are decided from, `rules/directed-fork-counts.json`, from them; record that choice in the gen-3 record.
+It also writes `$probabilities`, each listed rule's records on its registered side, from which every
+`match-outcomes` run below computes the rule's directed-fork probability and recomputes it as its
+workers keep forks; its console, the per-rule table, is that run directory's `console.log`.
 On a machine without the gen-2 shards, `rules/directed-fork-counts.json` serves as `--counts`.
 
 ## Stage 2 — the relation-aware trunk (story 4, no gen-3 data)
@@ -212,7 +218,7 @@ if (-not (Test-Path variable:auditStart)) { $auditStart = Run-Start "$gen3\scrat
 $audit = "$gen3\scratch\$auditStart-fork-fidelity"
 if (-not (Test-Path variable:auditChecksStart)) { $auditChecksStart = Run-Start "$gen3\scratch" fork-fidelity-checks }
 $auditChecks = "$gen3\scratch\$auditChecksStart-fork-fidelity-checks"
-Run-Logged $audit "$py -u -m sealed match-outcomes --workers 6 --effect-records $audit --outcomes-dir $audit --random-seat-share 0.25 --random-seat-probability 0.5 --interventions-per-game 4 --probes-per-game 4 --directed-fork-rules $rules --count-dropped-events"
+Run-Logged $audit "$py -u -m sealed match-outcomes --workers 6 --effect-records $audit --outcomes-dir $audit --random-seat-share 0.25 --random-seat-probability 0.5 --interventions-per-game 4 --probes-per-game 4 --directed-fork-rules $rules --directed-fork-probabilities $probabilities --count-dropped-events"
 Run-Logged $auditChecks "$py -u -m effects validate-corpus --effect-records $audit $cards --variant-scripts $variants"
 ```
 
@@ -244,13 +250,13 @@ $untarget  = "$gen3\records\$untargetStart-variants-untargeted"
 if (-not (Test-Path variable:steeredStart)) { $steeredStart = Run-Start "$gen3\records" variants-steered }
 $steered   = "$gen3\records\$steeredStart-variants-steered"
 
-Run-Logged $full      "$py -u -m sealed match-outcomes --effect-records $full --outcomes-dir $full --directed-fork-rules $rules $runFlags"
-Run-Logged $depleted  "$py -u -m sealed match-outcomes --effect-records $depleted --outcomes-dir $depleted --exclude-cards $holdout --directed-fork-rules $rules $runFlags"
+Run-Logged $full      "$py -u -m sealed match-outcomes --effect-records $full --outcomes-dir $full --directed-fork-rules $rules --directed-fork-probabilities $probabilities $runFlags"
+Run-Logged $depleted  "$py -u -m sealed match-outcomes --effect-records $depleted --outcomes-dir $depleted --exclude-cards $holdout --directed-fork-rules $rules --directed-fork-probabilities $probabilities $runFlags"
 Run-Logged $anytarget "$py -u -m effects collect-coverage --effect-records $anytarget $cards --wording-cards $anyTargetCards --exclude-cards $holdout --count-from $depleted $runFlags $collectorFlags"
 Run-Logged $wording   "$py -u -m effects collect-coverage --effect-records $wording $cards --wording-cards rules\coverage-wording-cards.txt --directed-fork-rules $rules --exclude-cards $holdout --count-from $depleted --count-from $anytarget $runFlags $collectorFlags"
 Run-Logged $untarget  "$py -u -m effects collect-variants --round untargeted --effect-records $untarget --forge-cards-path ..\forge\forge-gui\res\cardsfolder --variant-scripts $variants $cards --exclude-cards $holdout $runFlags $collectorFlags"
 Run-Logged (Split-Path $counts) "$py -u -m effects rule-counts --records-dir $gen3\records $cards --variant-scripts $variants --rules-dir rules --workers 10 --output $counts"
-Run-Logged $steered   "$py -u -m effects collect-variants --round steered --rule-counts $counts --effect-records $steered --forge-cards-path ..\forge\forge-gui\res\cardsfolder --variant-scripts $variants $cards --exclude-cards $holdout $runFlags $collectorFlags"
+Run-Logged $steered   "$py -u -m effects collect-variants --round steered --rule-counts $counts --directed-fork-rules $rules --effect-records $steered --forge-cards-path ..\forge\forge-gui\res\cardsfolder --variant-scripts $variants $cards --exclude-cards $holdout $runFlags $collectorFlags"
 ```
 
 The `match-outcomes` run without `--exclude-cards` plays full-strength pools and feeds the

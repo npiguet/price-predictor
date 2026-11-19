@@ -8,8 +8,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from effects.domain.directed_fork_probabilities import directed_fork_probability
 from effects.domain.directed_sides import DirectedForkGames, directed_side_counts, forkable_sides
+from price_predictor.domain.directed_fork_probabilities import directed_fork_probability
 
 if TYPE_CHECKING:
     from effects.application.collect_variants import CollectVariantsConfig

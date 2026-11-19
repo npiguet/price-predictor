@@ -1,9 +1,11 @@
 """How much a rule needs a directed fork: its probability from the records
 each of its two sides (``fires``, ``does_not_fire``) already has (D8).
 
-Shared by ``scripts/rules_catalogue.py directed-rules``, which reads the
-counts of a corpus, and the collectors, which read them off the records of
-their own run.
+One formula for every tool that steers directed forks: ``effects
+collect-variants``, which counts the forks of its own run's records, and
+``sealed match-outcomes``, which starts from the records per side
+``scripts/rules_catalogue.py directed-rules`` writes and adds the forks its
+workers keep. It lives here because ``sealed`` never imports ``effects``.
 """
 
 from __future__ import annotations

@@ -37,8 +37,8 @@ records the baseline.
 | Flag | Default | Meaning |
 |---|---|---|
 | `--counts PATH` | required | gen-2's per-rule counts, as `rule-counts` writes them |
-| `--probabilities-output FILE` | none | also write each listed rule's directed-fork probability here (below); nothing is written without it |
-| `--count-per-side N` | 100 | the records each side (`fires`, `does_not_fire`) of a rule needs; sets the probabilities |
+| `--probabilities-output FILE` | none | also write each listed rule's records per registered side here, the file `match-outcomes` computes its directed-fork probabilities from (below); nothing is written without it |
+| `--count-per-side N` | 100 | the records each side (`fires`, `does_not_fire`) of a rule needs; written into the file as `count_per_side` |
 | `--cards-folder DIR` | `output/cardsfolder` | the converted tree whose card names the wording list uses |
 
 Writes `rules/directed-fork-rules.txt` (FR-014b: the rules of `ALWAYS_DIRECTED`, 704.5f and 702.98a,
@@ -53,17 +53,18 @@ members of `--counts` the list is decided from (`rules`, and the rule ids of `no
 forkable variants, those of the polarity its counts lack first and starred.
 Being listed does not set a rule's probability: it follows the rule's counts (`--probabilities-output`, below).
 
-`--probabilities-output FILE` writes a JSON object from each listed rule to its directed-fork
-probability, in list order, for `match-outcomes --directed-fork-probabilities`:
-`{"121.2": 1.0, "702.9a": 0.6, "704.5f": 0.0}`. A rule's probability is
-`effects.domain.directed_fork_probabilities.directed_fork_probability` over the record totals of
-the sides its registered variants make (`rules/directed-fork-variants.tsv`; the polarities `fires` and
-`does_not_fire` of `effects.domain.directed_sides.forkable_sides`, as the collector takes them) and
-`--count-per-side`: 0 when both sides have reached the count, 1 when a
-side has none, else the larger of 0.05 and the share of the count the shorter side still misses. A
-rule the counts cannot speak for gets 1; a rule whose registered variants are all polarity `other`
-gets no entry, so `match-outcomes` gives it `--directed-fork-probability`. Only registered rules are
-listed, so `directed-fork-rules.txt` and the file agree with `match-outcomes`' reader.
+`--probabilities-output FILE` writes, for `match-outcomes --directed-fork-probabilities`, a JSON
+object holding `--count-per-side` and, in list order, each listed rule's record totals on the sides
+its registered variants make (`rules/directed-fork-variants.tsv`; the polarities `fires` and
+`does_not_fire` of `effects.domain.directed_sides.forkable_sides`, as the collector takes them):
+`{"count_per_side": 100, "rules": {"121.2": {"fires": 0}, "702.9a": {"does_not_fire": 40}}}`. A
+rule the counts cannot speak for has 0 records on each of its sides; a rule whose registered variants
+are all polarity `other` gets no entry, so `match-outcomes` gives it `--directed-fork-probability`.
+Only registered rules are listed, so `directed-fork-rules.txt` and the file agree with
+`match-outcomes`' reader. A rule's probability is
+`price_predictor.domain.directed_fork_probabilities.directed_fork_probability` over its sides' records
+and the count: 0 when every side has reached the count, 1 when a side has none, else the larger of
+0.05 and the share of the count the shorter side still misses.
 
 ## `python -m effects rule-counts` (new)
 
@@ -149,7 +150,7 @@ Every invariant prints the number it measured, passed or not.
 | `--directed-fork-rules LIST` | none | comma-separated rule ids |
 | `--directed-forks-per-game N` | 2 | directed-fork budget per game, beside the existing fork budgets |
 | `--directed-fork-probability P` | 0.25 | chance a matching boundary forks; must be in (0, 1] |
-| `--directed-fork-probabilities FILE` | none | JSON object from rule id to its own probability in [0, 1] (`rules_catalogue.py directed-rules --probabilities-output` writes it); a listed rule without an entry takes `--directed-fork-probability`, one at 0 is never forked |
+| `--directed-fork-probabilities FILE` | none | each listed rule's records on its registered side and the count a side needs (`rules_catalogue.py directed-rules --probabilities-output` writes it, § `python scripts/rules_catalogue.py directed-rules`); the rule's own probability, recomputed during the run (below); a listed rule without an entry takes `--directed-fork-probability`, one at 0 is never forked |
 | `--outcomes-dir DIR` | `--effect-records DIR` when given, else `output/sealed/` | the directory `match-outcomes.txt` and `cards-played.txt` are appended to |
 
 Startup, exit 1 naming the rule when a listed rule:
@@ -158,7 +159,7 @@ Startup, exit 1 naming the rule when a listed rule:
 - has no non-base variant classified into an operation;
 - is not registered in `forge-connector` (checked by one run of `DirectedRulesMain`).
 
-`--directed-fork-probability` outside (0, 1] exits 1. A `--directed-fork-probabilities` file that is missing, not a JSON object, holds a value that is no number in [0, 1], or names a rule not in `--directed-fork-rules` exits 1 naming the file and the rule. The flags ride the cap properties
+`--directed-fork-probability` outside (0, 1] exits 1. A `--directed-fork-probabilities` file that is missing, not `{"count_per_side": N, "rules": {rule: {side: records}}}` (the older flat map from rule to probability among them), names a rule not in `--directed-fork-rules`, or gives a rule two sides exits 1 naming the file and the rule: the workers' tally counts a rule's kept forks, not each side's. With `--effect-records`, the supervisor computes each rule's probability from the file at start, and again at every status line's log scan with the forks the rule's tally lines report `kept` added to its side's records; each worker spawned after a scan receives that scan's `effect.directed.probability.<rule>`, and a running worker keeps the value it started with. The flags ride the cap properties
 `effect.directed.fork.rules`, `effect.directed.forks.per.game`, `effect.directed.fork.probability`, `effect.directed.probability.<rule>` (one per file entry),
 `effect.count.dropped.events`, `effect.max.records.per.game`.
 
@@ -194,7 +195,7 @@ end it prints the run's totals, the hook-failure counts, the fork refusals and h
 ended, and records in
 its `run.json` entry, at start, the resolved `caps` (the collectors' members, so the three rates of every run can be compared), and at the end `run_id`, `matches` (outcome rows), `matches_played` (progress lines),
 `worker_failures`, `worker_failure_examples`, `hook_failures`, `fork_refusals`, `directed_fork_tally`, `worker_survivors`,
-`worker_stops`, `stop_timeout`, `recycle_seconds` and `match_outcomes` (the outcome file's path). A run that played matches (outcome rows, progress lines or
+`worker_stops`, `stop_timeout`, `recycle_seconds`, `match_outcomes` (the outcome file's path) and `final_directed_rule_probabilities` (each listed rule's probability as last recomputed; the caps' `directed_rule_probabilities` when the run was given no `--directed-fork-probabilities`). A run that played matches (outcome rows, progress lines or
 random-seat match errors, so a run of random-seat matches alone counts) and wrote no effect
 record exits 1. `match-outcomes.txt` and `cards-played.txt` go to `--outcomes-dir`, which defaults
 to `DIR`: a collection writes nothing outside its run directory. Their format and content do not
@@ -448,7 +449,7 @@ Takes `--count-dropped-events`, `--max-records-per-game`, `--directed-fork-rules
 Every record carries `aimed_at` (the listed rules, or `[]`; in a steered game, the rules of its
 two decks). Before its first round and after each one it sets every listed rule's own fork probability
 from the directed forks its shards hold, counting `--steer-floor` forks per side (the `count` of
-`effects.domain.directed_fork_probabilities.directed_fork_probability`): a rule's forks are the games holding a record
+`price_predictor.domain.directed_fork_probabilities.directed_fork_probability`): a rule's forks are the games holding a record
 with `directed` set and `aimed_at` the rule (no cut game), its sides are the `fires` and `does_not_fire`
 polarities of the variants the catalogue classifies into an operation and `rules/directed-fork-variants.tsv` lists as registered, and a fork's side is its variant's polarity
 (`other` counts for no side; a rule with no such variant keeps `--directed-fork-probability`). A fresh run starts every rule at 1; the
