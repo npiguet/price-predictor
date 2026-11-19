@@ -149,6 +149,112 @@ class PlayablePreconditionsTest {
         assertTrue(MorphFaceUp.bind(game).isEmpty(), "three Plains and the Chancery make five");
     }
 
+    // ── a keyword's cost, colours and sources ───────────────────────────
+
+    private void inLibrary(Player owner, String name) {
+        game.getAction().moveTo(ZoneType.Library, TestBoard.card(game, owner, name), null, null);
+    }
+
+    /** Dregscape Zombie in the graveyard (unearth {B}, 702.84a, Unearth): a Forest makes one land's mana, not the colour. */
+    @Test
+    void unearthNeedsTheColourOfItsCost() {
+        TestBoard.inGraveyard(game, you, "Dregscape Zombie");
+        permanent(you, "Forest");
+        assertTrue(Unearth.bind(game).isEmpty());
+
+        permanent(you, "Swamp");
+        assertTrue(Unearth.bind(game).isPresent());
+    }
+
+    /**
+     * Dimir Infiltrator in hand (transmute {1}{U}{B}, 702.53a, Transmute) with
+     * a Grizzly Bears of its mana value in the library: three lands, one
+     * short of the colours; and a Dimir Aqueduct, which makes {U}{B} alone,
+     * counts as the two mana it makes.
+     */
+    @Test
+    void transmuteNeedsTheColoursAndCountsABounceLandAsTwo() {
+        TestBoard.inHand(game, you, "Dimir Infiltrator");
+        inLibrary(you, "Grizzly Bears");
+        permanent(you, "Island");
+        permanents(you, "Forest", 2);
+        assertTrue(ManaValueSearch.transmute().precondition(game).isEmpty(), "no black");
+
+        permanent(you, "Swamp");
+        assertTrue(ManaValueSearch.transmute().precondition(game).isPresent());
+    }
+
+    @Test
+    void transmuteBindsOnABounceLandAndAForest() {
+        TestBoard.inHand(game, you, "Dimir Infiltrator");
+        inLibrary(you, "Grizzly Bears");
+        permanent(you, "Forest");
+        assertTrue(ManaValueSearch.transmute().precondition(game).isEmpty(), "one source");
+
+        permanent(you, "Dimir Aqueduct");
+        assertTrue(ManaValueSearch.transmute().precondition(game).isPresent(), "{U}{B} and {G} pay {1}{U}{B}");
+    }
+
+    /** Hopeful Eidolon (bestow {3}{W}, 702.103a, Bestow) over four Islands and Grizzly Bears. */
+    @Test
+    void bestowNeedsTheColourOfItsCost() {
+        TestBoard.inHand(game, you, "Hopeful Eidolon");
+        permanent(you, "Grizzly Bears");
+        permanents(you, "Island", 4);
+        assertTrue(BestowIllegalTarget.bind(game).isEmpty());
+
+        permanent(you, "Plains");
+        assertTrue(BestowIllegalTarget.bind(game).isPresent());
+    }
+
+    /** Spider-Man, Web-Slinger in hand (web-slinging {W}, 702.188a, Web-slinging) over a tapped Grizzly Bears. */
+    @Test
+    void webSlingingNeedsTheColourOfItsCost() {
+        TestBoard.inHand(game, you, "Spider-Man, Web-Slinger");
+        permanent(you, "Grizzly Bears").setTapped(true);
+        permanent(you, "Island");
+        assertTrue(WebSlinging.bind(game).isEmpty());
+
+        permanent(you, "Plains");
+        assertTrue(WebSlinging.bind(game).isPresent());
+    }
+
+    /** Arcanum Wings (aura swap {2}{U}, 702.65a, Aura swap) on Grizzly Bears, Giant Growth in hand, over three Plains. */
+    @Test
+    void auraSwapNeedsTheColourOfItsCost() {
+        Card bears = permanent(you, "Grizzly Bears");
+        permanent(you, "Arcanum Wings").attachToEntity(bears, null);
+        TestBoard.inHand(game, you, "Giant Growth");
+        permanents(you, "Plains", 3);
+        assertTrue(AuraSwap.bind(game).isEmpty());
+
+        permanent(you, "Island");
+        assertTrue(AuraSwap.bind(game).isPresent());
+    }
+
+    /**
+     * Krosan Verge ({2}, {T}, sacrifice: search, 701.23f, Search) under an Archivist of Oghma: the land
+     * taps for its own cost, so the {2} comes from the other sources: a Forest makes one, an Azorius Chancery two.
+     */
+    @Test
+    void searchUnderMindcensorCountsTheOtherSourcesMana() {
+        permanent(you, "Archivist of Oghma");
+        permanent(opponent, "Krosan Verge");
+        permanent(opponent, "Forest");
+        assertTrue(SearchUnderMindcensor.bind(game).isEmpty(), "one other mana");
+
+        permanent(opponent, "Azorius Chancery");
+        assertTrue(SearchUnderMindcensor.bind(game).isPresent(), "three other mana");
+    }
+
+    @Test
+    void searchUnderMindcensorCountsABounceLandAsTwo() {
+        permanent(you, "Archivist of Oghma");
+        permanent(opponent, "Krosan Verge");
+        permanent(opponent, "Azorius Chancery");
+        assertTrue(SearchUnderMindcensor.bind(game).isPresent(), "the Chancery's two mana pay {2}");
+    }
+
     // ── meld triggers ───────────────────────────────────────────────────
 
     /**

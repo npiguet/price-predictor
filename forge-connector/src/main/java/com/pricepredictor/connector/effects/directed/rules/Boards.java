@@ -17,6 +17,7 @@ import forge.game.keyword.KeywordWithCostInterface;
 import forge.game.keyword.KeywordsChange;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
+import forge.game.spellability.AlternativeCost;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
 import forge.game.trigger.TriggerType;
@@ -179,11 +180,6 @@ final class Boards {
         return player.getCreaturesInPlay().stream().filter(card -> !card.isTapped()).toList();
     }
 
-    /** How many untapped lands {@code player} controls: a cheap bound on the mana it can spend. */
-    static int untappedLands(Player player) {
-        return (int) player.getLandsInPlay().stream().filter(land -> !land.isTapped()).count();
-    }
-
     /** The highest life total among the game's players other than {@code player}. */
     static int mostLifeBesides(Player player) {
         return player.getGame().getPlayers().stream()
@@ -327,11 +323,22 @@ final class Boards {
     }
 
     /**
-     * Whether {@code player} has as many untapped lands as the mana value of
-     * one of the card's {@code keyword} costs: a cheap bound on paying it.
+     * Whether {@code player} can pay one of the card's abilities of
+     * {@code keyword} now ({@link #affordable(Player, SpellAbility)}): the
+     * activated ability of Transmute, Unearth or Aura swap, or the alternative
+     * cost of the spell that Bestow or Web-slinging makes. Keywords that pay
+     * by tapping creatures (Improvise, Convoke) are not asked here.
      */
     static boolean canPayKeyword(Player player, Card card, Keyword keyword) {
-        return keywordCosts(card, keyword).stream().anyMatch(cost -> manaValue(cost) <= untappedLands(player));
+        return card.getAllSpellAbilities().stream()
+                .filter(ability -> viaKeyword(ability, keyword))
+                .anyMatch(ability -> affordable(player, ability));
+    }
+
+    private static boolean viaKeyword(SpellAbility ability, Keyword keyword) {
+        return ability.isKeyword(keyword)
+                || keyword == Keyword.BESTOW && ability.isBestow()
+                || keyword == Keyword.WEB_SLINGING && ability.isAlternativeCost(AlternativeCost.WebSlinging);
     }
 
     /**

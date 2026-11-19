@@ -9,8 +9,6 @@ import com.pricepredictor.connector.effects.directed.operations.MoveCardOperatio
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.keyword.Keyword;
-import forge.game.keyword.KeywordInterface;
-import forge.game.keyword.KeywordWithCost;
 import forge.game.player.Player;
 import forge.game.zone.ZoneType;
 
@@ -133,14 +131,8 @@ public final class AuraSwap {
                 .map(aura -> Binding.empty().with("player", active).with("card", card).with("aura", aura));
     }
 
-    /** Whether the Aura has Aura swap and {@code player} has as many untapped lands as its cost's mana value. */
+    /** Whether the Aura has Aura swap and {@code player} can pay its cost now ({@link Boards#canPayKeyword}). */
     static boolean swappable(Card aura, Player player) {
-        for (KeywordInterface swap : aura.getKeywords(Keyword.AURA_SWAP)) {
-            if (swap instanceof KeywordWithCost withCost
-                    && Boards.manaValue(withCost.getCost()) <= Boards.untappedLands(player)) {
-                return true;
-            }
-        }
-        return false;
+        return Boards.canPayKeyword(player, aura, Keyword.AURA_SWAP);
     }
 }

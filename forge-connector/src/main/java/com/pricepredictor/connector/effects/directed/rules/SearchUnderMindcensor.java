@@ -94,13 +94,19 @@ public final class SearchUnderMindcensor {
     /**
      * Whether {@code card} has an activated ability searching its
      * controller's library that it may activate at any priority (no sorcery
-     * timing) with the mana {@code player}'s other lands make.
+     * timing) and that {@code player} can pay ({@link Boards#affordable}). The
+     * card taps for its own cost when it is an untapped land, so its mana is
+     * not counted toward the mana cost: that cost is covered by the other
+     * sources, counted per source ({@link Boards#manaUnits}).
      */
     static boolean searchesAtAnyPriority(Player player, Card card) {
+        int others = Boards.manaSources(player).stream()
+                .filter(source -> source != card || !card.isLand())
+                .mapToInt(Boards::manaUnits).sum();
         for (SpellAbility ability : card.getSpellAbilities()) {
             if (LIBRARY_SEARCH.matches(ability) && !ability.getRestrictions().isSorcerySpeed()
-                    && Boards.manaValue(ability.getPayCosts()) <= Boards.untappedLands(player)
-                    - (card.isLand() && !card.isTapped() ? 1 : 0)) {
+                    && Boards.manaValue(ability.getPayCosts()) <= others
+                    && Boards.affordable(player, ability)) {
                 return true;
             }
         }
