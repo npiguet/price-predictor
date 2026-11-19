@@ -118,7 +118,7 @@ final class StackBrackets {
      * The {@code attributed_to} of the last clause of the open bracket's line
      * that ran, or null when none is open or none has run.
      */
-    String lastClauseRan() {
+    SpellAbility lastClauseRan() {
         return open == null ? null : open.lastClauseRan();
     }
 

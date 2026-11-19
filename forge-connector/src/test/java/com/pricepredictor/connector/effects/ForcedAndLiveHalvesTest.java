@@ -243,7 +243,8 @@ class ForcedAndLiveHalvesTest {
      * a clause targeting the Equipment, then the Attach sub-ability. The
      * attaching, and the +2/+0 the static check after that last clause
      * applies, are the sub-ability's, {@code 0}, live and forced alike
-     * (finding 2.1).
+     * (finding 2.1), and so is the duration: the Attach's, permanent, not
+     * the Pump root's end of turn (finding 2.1, task BR4).
      */
     @Test
     void anEquipWithASubAbility() throws Throwable {
@@ -262,7 +263,8 @@ class ForcedAndLiveHalvesTest {
             attach.getSubAbility().getTargets().add(caster.getCreaturesInPlay().get(0));
         });
         assertAlike(play, false, linksAre(
-                List.of(List.of("attached", "0"), List.of("pt_change", "0"))));
+                List.of(List.of("attached", "0"), List.of("pt_change", "0")))
+                .andThen(ptChangeIsPermanent()));
     }
 
     /**
@@ -313,6 +315,13 @@ class ForcedAndLiveHalvesTest {
     private static Consumer<String> linksAre(List<List<Object>> expected) {
         return record -> assertEquals(expected, RecordLines.events(record).stream()
                 .map(event -> List.of(event.get("type"), event.get("attributed_to"))).toList(), record);
+    }
+
+    /** A check that the record's {@code pt_change} is permanent. */
+    private static Consumer<String> ptChangeIsPermanent() {
+        return record -> assertEquals("permanent", RecordLines.events(record).stream()
+                .filter(event -> "pt_change".equals(event.get("type")))
+                .map(event -> event.get("duration")).findFirst().orElseThrow(), record);
     }
 
     private static SpellAbility equipOfBonesplitter(Game game) {

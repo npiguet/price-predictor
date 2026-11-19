@@ -126,13 +126,36 @@ class EventAttributionTest {
         SpellAbility root = threeClauseAbility();
 
         String after = EventAttribution.stamp(
-                new EffectEvent(EventType.PT_CHANGE).subject("E1"), root, "1", null).toJson();
+                new EffectEvent(EventType.PT_CHANGE).subject("E1"), root,
+                root.getSubAbility().getSubAbility(), null).toJson();
         String before = EventAttribution.stamp(
                 new EffectEvent(EventType.PT_CHANGE).subject("E1"), root, null, null).toJson();
 
         assertTrue(after.contains("\"attributed_to\":\"1\""), after);
         assertTrue(before.contains("\"attributed_to\":\"unresolved\""), before);
         assertEquals(after.replace("\"1\"", "\"unresolved\""), before);
+    }
+
+    /**
+     * The same event reads its duration off the last clause that ran, not the
+     * line's root: a Pump root's end of turn gives way to an Attach
+     * sub-ability's permanent (finding 2.1, task BR4).
+     */
+    @Test
+    void anEventAfterTheLastClauseReadsItsDuration() {
+        Card host = TestCards.build("Fountain of Youth");
+        host.setSVar("DBPump",
+                "DB$ Pump | Defined$ Self | NumAtt$ 1 | Duration$ Permanent");
+        SpellAbility root = AbilityFactory.getAbility(
+                "AB$ Pump | Cost$ 1 | Defined$ Self | NumAtt$ 1 | SubAbility$ DBPump", host);
+        EffectEvent change = new EffectEvent(EventType.PT_CHANGE).subject("E1");
+
+        String after = EventAttribution.stamp(change, root, root.getSubAbility(), null).toJson();
+        String before = EventAttribution.stamp(
+                new EffectEvent(EventType.PT_CHANGE).subject("E1"), root, null, null).toJson();
+
+        assertTrue(after.contains("\"duration\":\"permanent\""), after);
+        assertTrue(before.contains("\"duration\":\"end_of_turn\""), before);
     }
 
     /**

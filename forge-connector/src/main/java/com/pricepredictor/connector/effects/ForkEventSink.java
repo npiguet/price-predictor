@@ -78,11 +78,11 @@ final class ForkEventSink extends BusEventReader {
      */
     private HeldHalves<ModeSplit.ModeHalf> held;
     /**
-     * The {@code attributed_to} of the forced ability's last clause whose own
+     * The forced ability's last clause whose own
      * effect ran, or null until one has, as the live bracket keeps it
      * ({@link OpenResolution#lastClauseRan}).
      */
-    private String lastClauseRan;
+    private SpellAbility lastClauseRan;
 
     /**
      * Where the forced ability stands, which decides what an intervention
@@ -290,7 +290,7 @@ final class ForkEventSink extends BusEventReader {
     void clauseResolved(SpellAbility clause, String run) {
         modes.noteCondition(ConditionsMet.of(clause, run));
         if (ClauseOutcomeRouter.ran(run)) {
-            lastClauseRan = EventAttribution.attributedTo(clause);
+            lastClauseRan = clause;
         }
     }
 

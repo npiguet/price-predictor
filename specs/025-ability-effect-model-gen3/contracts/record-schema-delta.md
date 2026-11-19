@@ -579,6 +579,13 @@ position a card left a library from, and a search of another player's library.
   `DamageResolve`). A `damage_dealt` whose subject the resolving clause does not target, but an
   earlier link of its chain does, carries that link's `attributed_to`; so does every other event
   a `DamageResolve` clause publishes about such a subject (the damaged player's `life_change`).
+- An event a resolution publishes after its last clause, while no clause is resolving (the static
+  check before "spell resolved": an Equip's `pt_change`), carries the last clause of the line that
+  ran: its `attributed_to`, its `duration` (its own `Duration$`, else its API's default) and its
+  `cause`, as an event published under that clause's pointer does. Brass Squire's Attach
+  sub-ability gives its `pt_change` `attributed_to: "0"` and `duration: permanent`, not the
+  Pump root's `end_of_turn`. `attributed_to` is `unresolved` only when no clause of the line has
+  run, and `duration` and `cause` are then the root's.
 - A combat record's snapshot precedes every damage event of its step.
 - An attackers record's snapshot is the board before the declaration, and the record is written when
   the declaration is made, at the next declaration, or at the game's end; only the first gives

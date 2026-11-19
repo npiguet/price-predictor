@@ -310,21 +310,42 @@ final class EventAttribution {
      * spell resolved ({@code MagicStack.resolveStack}): what it applies (an
      * Equip's +2/+0) follows from the last clause, as what the check between
      * two clauses applies follows from the earlier one, under whose pointer
-     * Forge makes it. Only its attribution moves; its duration and cause are
-     * read as for no clause.
+     * Forge makes it. Its attribution, duration and cause are read off that
+     * clause as for an event published under its pointer, except that a
+     * damage keeps the clause's own link ({@link #damageLink} is not applied).
      *
-     * @param lastRan the {@code attributed_to} of the last clause of the
-     *                resolution's line whose own effect ran, or null when none
-     *                has: an event published then is attributed to none
+     * @param lastRan the last clause of the resolution's line whose own
+     *                effect ran, or null when none has: an event published
+     *                then is attributed to none and reads its duration and
+     *                cause off {@code root}
      */
     static EffectEvent stamp(
-            EffectEvent event, SpellAbility root, String lastRan, String namedCause) {
+            EffectEvent event, SpellAbility root, SpellAbility lastRan, String namedCause) {
         Object pointer = PatchHooks.currentSubAbility();
-        EffectEvent stamped = stampAt(event, root, pointer, namedCause);
-        if (stamped != null && pointer == null) {
-            stamped.attributedTo(lastRan != null ? lastRan : UNRESOLVED);
+        if (pointer == null && lastRan != null) {
+            return stampAfter(event, root, lastRan, namedCause);
         }
-        return stamped;
+        return stampAt(event, root, pointer, namedCause);
+    }
+
+    private static EffectEvent stampAfter(
+            EffectEvent event, SpellAbility root, SpellAbility lastRan, String namedCause) {
+        if (event == null) {
+            return null;
+        }
+        return stampWith(event, root, lastRan, attributedTo(lastRan))
+                .cause(causeOf(namedCause, root, lastRan));
+    }
+
+    private static EffectEvent stampWith(
+            EffectEvent event, SpellAbility root, Object pointer, String attribution) {
+        return event
+                .duration(duration(root, pointer, event.type()))
+                .attributedTo(attribution);
+    }
+
+    private static String causeOf(String namedCause, SpellAbility root, Object pointer) {
+        return namedCause != null ? namedCause : cause(root, pointer);
     }
 
     /**
@@ -339,10 +360,8 @@ final class EventAttribution {
         if (event == null) {
             return null;
         }
-        return event
-                .duration(duration(root, pointer, event.type()))
-                .attributedTo(damageLink(event, pointer, attributedTo(pointer)))
-                .cause(namedCause != null ? namedCause : cause(root, pointer));
+        return stampWith(event, root, pointer, damageLink(event, pointer, attributedTo(pointer)))
+                .cause(causeOf(namedCause, root, pointer));
     }
 
     /**

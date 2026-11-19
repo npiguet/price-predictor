@@ -86,12 +86,12 @@ final class OpenResolution {
     private boolean declined;
 
     /**
-     * The {@code attributed_to} of the last clause of its line whose own
-     * effect ran while it resolved, or null until one has: what the static
-     * check after that clause applies is that clause's
-     * ({@link EventAttribution#stamp(EffectEvent, SpellAbility, String, String)}).
+     * The last clause of its line whose own effect ran while it resolved, or
+     * null until one has: what the static check after that clause applies
+     * reads its attribution, duration and cause off it
+     * ({@link EventAttribution#stamp(EffectEvent, SpellAbility, SpellAbility, String)}).
      */
-    private String lastClauseRan;
+    private SpellAbility lastClauseRan;
 
     OpenResolution(
             SpellAbility ability, ProvenanceKey.Resolved keys, String actor, Snapshot state) {
@@ -203,11 +203,11 @@ final class OpenResolution {
 
     /** A clause of its line has run its own effect: the last one so far. */
     void noteClauseRan(SpellAbility clause) {
-        lastClauseRan = EventAttribution.attributedTo(clause);
+        lastClauseRan = clause;
     }
 
-    /** The {@code attributed_to} of the last clause of its line that ran, or null. */
-    String lastClauseRan() {
+    /** The last clause of its line that ran, or null. */
+    SpellAbility lastClauseRan() {
         return lastClauseRan;
     }
 
