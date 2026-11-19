@@ -31,6 +31,7 @@ from effects.domain.records import (
     Moment,
     PlayabilitySubkind,
     RecordKind,
+    RecordOrigin,
     ResolutionPayload,
     TriggerPayload,
     TurnActionPayload,
@@ -687,7 +688,7 @@ class ProbeForks:
 
     def add(self, record: EffectRecord) -> None:
         payload = record.payload
-        if isinstance(payload, CombatPayload) and record.is_probe:
+        if isinstance(payload, CombatPayload) and record.origin is RecordOrigin.PROBE:
             self.probe_forks += 1
             if payload.probed_keyword:
                 self.probed_keywords[payload.probed_keyword] += 1
@@ -719,11 +720,11 @@ class LossyForks:
     Every record of a fork carries its copy's ``copy_dropped``, so a
     protection fork's ten records count ten times among the records. The
     wire names no fork, so the forks are counted as groups of records alike
-    in game, game turn and kind of fork (a probe also by the record it
-    mirrors, a directed fork by its variant and operation): two forks of one
-    kind taken in one turn of one game, and an intervention and a protection
-    fork there (no flag tells the two apart), count once, so the fork count
-    is a lower bound and both figures are reported.
+    in game, game turn and origin (``RecordOrigin``: a probe also by the record
+    it mirrors, a directed fork by its variant and operation): two forks of one
+    kind taken in one turn of one game count once, while an intervention and
+    a protection fork there are two, so the fork count is a lower bound and
+    both figures are reported.
     """
 
     def __init__(self) -> None:
@@ -735,13 +736,13 @@ class LossyForks:
     @staticmethod
     def group_of(record: EffectRecord) -> tuple:
         """The fork a record belongs to, as near as the wire says."""
+        origin = record.origin
+        extra: tuple = ()
         if record.directed is not None:
-            kind: tuple = ("directed", record.directed.variant, record.directed.operation.value)
-        elif record.interventional:
-            kind = ("interventional",)
-        else:
-            kind = ("probe", record.mirror_of)
-        return (record.game_id, record.state.global_.turn, *kind)
+            extra = (record.directed.variant, record.directed.operation.value)
+        elif origin is RecordOrigin.PROBE:
+            extra = (record.mirror_of,)
+        return (record.game_id, record.state.global_.turn, origin.value, *extra)
 
     def add(self, record: EffectRecord) -> None:
         if not record.fork:

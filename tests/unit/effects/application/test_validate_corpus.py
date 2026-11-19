@@ -46,6 +46,7 @@ from effects.domain.records import (
     CombatPayload,
     Costs,
     EffectRecord,
+    ForkKind,
     Moment,
     PlayabilitySubkind,
     RecordKind,
@@ -113,6 +114,9 @@ def _resolution(record_id: str, game_id: str = "run.0-L1.0", **overrides):
         ),
     }
     fields.update(overrides)
+    if fields.get("fork") and "fork_kind" not in fields:
+        probe = fields.get("kind") is RecordKind.COMBAT and not fields.get("interventional")
+        fields["fork_kind"] = ForkKind.PROBE if probe else ForkKind.INTERVENTION
     return make_record(**fields)
 
 
