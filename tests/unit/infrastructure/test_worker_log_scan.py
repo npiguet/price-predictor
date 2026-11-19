@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from price_predictor.infrastructure.worker_log_scan import WorkerLogScan
+from tests.unit.worker_status_line import directed_counts, status_line
 
 
 def _append(path: Path, text: str) -> None:
@@ -79,96 +80,64 @@ def test_a_log_rotated_twice_between_scans_reports_the_lost_generation(tmp_path)
     assert str(log) in found.examples["log_unread"]
 
 
-_REPORT = ("effect-record hook failures so far, listener calls that threw and lost their "
-           "records: {{RESOLVE={n}}}; contained by Forge, per slot: {{resolve={n}}}\n")
+def _hooks(n: int) -> dict:
+    return {"connector": {"RESOLVE": n}, "forge": {"resolve": n}}
 
 
-def test_the_hook_report_is_followed_across_scans_lifetimes_and_slots(tmp_path):
-    """A count each worker JVM prints and nothing read (WP7): the run's counts
-    are each lifetime's latest report, summed over lifetimes and slots, and
-    none of it is a failure line."""
+def test_the_status_lines_are_followed_across_scans_lifetimes_and_slots(tmp_path):
+    """Counts each worker JVM prints and no failure line (WP7, K01b): the
+    run's counts are each lifetime's latest status line, summed over
+    lifetimes and slots, a lifetime told by the line's own token."""
     first, second = tmp_path / "run.0.log", tmp_path / "run.1.log"
-    _append(first, "Effect records: x/run.0-a.jsonl.gz [mode=patched]\n" + _REPORT.format(n=1))
-    _append(second, _REPORT.format(n=4))
+    _append(first, status_line("a", hook_failures=_hooks(1)) + "\n")
+    _append(second, status_line("c", hook_failures=_hooks(4),
+                                fork_refusals={"directed dies": 4}) + "\n")
     scan = WorkerLogScan()
 
     assert not scan.scan([first, second])
-    _append(first, _REPORT.format(n=2) + "Effect records: x/run.0-b.jsonl.gz [mode=patched]\n"
-            + _REPORT.format(n=3))
-    scan.scan([first, second])
+    _append(first, status_line("a", hook_failures=_hooks(2), fork_refusals={"directed dies": 1})
+            + "\n" + status_line("b") + "\n"
+            + status_line("b", hook_failures=_hooks(3), fork_refusals={"directed dies": 2}) + "\n")
+    assert not scan.scan([first, second])
 
     assert scan.hook_failures() == {"connector": {"RESOLVE": 9}, "forge": {"resolve": 9}}
+    assert scan.fork_refusals() == {"directed dies": 7}
 
 
-def test_the_report_s_totals_reach_the_manifest_fields(tmp_path):
-    from price_predictor.infrastructure.forge_jvm import WorkerLogFiles
-    from price_predictor.infrastructure.worker_log_scan import WorkerLogReport
-
-    logs = WorkerLogFiles(tmp_path, "run")
-    _append(logs.path_for(0), _REPORT.format(n=2))
-    report = WorkerLogReport(logs, 1)
-    report.scan()
-
-    assert report.manifest_fields()["hook_failures"] == {
-        "connector": {"RESOLVE": 2}, "forge": {"resolve": 2},
-    }
-
-
-_REFUSALS = "Effect records: fork refusals so far, expected and no failure: {{directed dies={n}}}\n"
-
-
-def test_the_fork_refusal_tally_is_followed_across_scans_lifetimes_and_slots(tmp_path):
-    """A running map each worker JVM prints at a match end (WP5) and nothing
-    read: each lifetime's latest tally, summed over lifetimes and slots, and
-    no failure line."""
-    first, second = tmp_path / "run.0.log", tmp_path / "run.1.log"
-    _append(first, "Effect records: x/run.0-a.jsonl.gz [mode=patched]\n" + _REFUSALS.format(n=1))
-    _append(second, _REFUSALS.format(n=4))
+def test_a_status_line_still_being_written_is_read_whole_next_time(tmp_path):
+    log = tmp_path / "run.0.log"
+    line = status_line("a", fork_refusals={"directed dies": 2}) + "\n"
+    _append(log, line[:40])
     scan = WorkerLogScan()
+    scan.scan([log])
 
-    assert not scan.scan([first, second])
-    _append(first, _REFUSALS.format(n=2) + "Effect records: x/run.0-b.jsonl.gz [mode=patched]\n"
-            + _REFUSALS.format(n=3))
-    assert not scan.scan([first, second])
+    _append(log, line[40:])
+    scan.scan([log])
 
-    assert scan.fork_refusals() == {"directed dies": 9}
-
-
-def test_the_fork_refusals_reach_the_manifest_fields(tmp_path):
-    from price_predictor.infrastructure.forge_jvm import WorkerLogFiles
-    from price_predictor.infrastructure.worker_log_scan import WorkerLogReport
-
-    logs = WorkerLogFiles(tmp_path, "run")
-    _append(logs.path_for(0), _REFUSALS.format(n=2))
-    report = WorkerLogReport(logs, 1)
-    report.scan()
-
-    fields = report.manifest_fields()
-    assert fields["fork_refusals"] == {"directed dies": 2}
-    assert fields["worker_failures"] == {}
+    assert scan.fork_refusals() == {"directed dies": 2}
 
 
-_DIRECTED = (
-    'Effect records: directed fork tally so far: {{"704.5f":{{"matched":{n},"drawn":1,'
-    '"budget_blocked":0,"taken":1,"kept":1,"precondition_threw":0}}}}\n'
-)
-
-
-def test_the_directed_fork_tally_is_summed_and_reaches_the_manifest_fields(tmp_path):
+def test_the_totals_reach_the_manifest_fields(tmp_path):
     """Each lifetime's latest line, summed over lifetimes and slots, no failure line."""
     from price_predictor.infrastructure.forge_jvm import WorkerLogFiles
     from price_predictor.infrastructure.worker_log_scan import WorkerLogReport
 
+    def directed(n: int) -> dict:
+        return {"704.5f": directed_counts(matched=n, drawn=1, taken=1, kept=1)}
+
     logs = WorkerLogFiles(tmp_path, "run")
-    _append(logs.path_for(0), "Effect records: x/run.0-a.jsonl.gz [mode=patched]\n"
-            + _DIRECTED.format(n=1) + _DIRECTED.format(n=2)
-            + "Effect records: x/run.0-b.jsonl.gz [mode=patched]\n" + _DIRECTED.format(n=3))
-    _append(logs.path_for(1), _DIRECTED.format(n=4))
+    _append(logs.path_for(0), "\n".join([
+        status_line("a", directed=directed(1)),
+        status_line("a", directed=directed(2), hook_failures=_hooks(2)),
+        status_line("b", directed=directed(3), fork_refusals={"directed dies": 2}),
+    ]) + "\n")
+    _append(logs.path_for(1), status_line("c", directed=directed(4)) + "\n")
     report = WorkerLogReport(logs, 2)
     report.scan()
 
     fields = report.manifest_fields()
-    assert fields["directed_fork_tally"] == {"704.5f": {
-        "matched": 9, "drawn": 3, "budget_blocked": 0, "taken": 3, "kept": 3,
-        "precondition_threw": 0}}
+    assert fields["directed_fork_tally"] == {"704.5f": directed_counts(
+        matched=9, drawn=3, taken=3, kept=3)}
+    assert fields["hook_failures"] == {"connector": {"RESOLVE": 2}, "forge": {"resolve": 2}}
+    assert fields["fork_refusals"] == {"directed dies": 2}
     assert fields["worker_failures"] == {}

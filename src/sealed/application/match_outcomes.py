@@ -8,11 +8,8 @@ import uuid
 from collections.abc import Mapping
 from pathlib import Path
 
-from price_predictor.domain.worker_failures import (
-    WorkerFailure,
-    render_fork_refusals,
-    render_hook_failures,
-)
+from price_predictor.domain.worker_failures import WorkerFailure
+from price_predictor.domain.worker_status import render_fork_refusals, render_hook_failures
 from price_predictor.infrastructure.append_only import has_shard_record
 from price_predictor.infrastructure.forge_jvm import (
     ForgeWorkerPool,

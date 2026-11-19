@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 from sealed.application.match_outcomes import MatchOutcomeSupervisor
 from tests.unit.sealed.conftest import FakeProcess
+from tests.unit.worker_status_line import status_line
 
 
 class TestSupervisorSpawnCount:
@@ -457,13 +458,13 @@ class TestTheRunReportsWhatItsWorkersLogged:
 
         from price_predictor.infrastructure.run_manifest import run_recorded
 
-        tally = "Effect records: fork refusals so far, expected and no failure: {{{body}}}"
         found = {}
 
         def body():
             found["supervisor"] = self._run(tmp_path, matches=1, record_lines=2, log_lines=[
-                tally.format(body="directed dies=1"),
-                tally.format(body="directed dies=3, intervention no choices=2"),
+                status_line("a", fork_refusals={"directed dies": 1}),
+                status_line("a", fork_refusals={
+                    "directed dies": 3, "intervention no choices": 2}),
             ])
             return 0
 

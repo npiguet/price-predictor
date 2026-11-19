@@ -5,7 +5,6 @@ import com.pricepredictor.connector.json.Json;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLongArray;
@@ -16,17 +15,14 @@ import java.util.concurrent.atomic.AtomicLongArray;
  * a fork, kept it, and how often its precondition threw.
  *
  * <p>A JVM lifetime, not a run: the supervisor recycles workers, and a worker
- * can count only what it saw. The worker prints the tally as one line of
- * running totals ({@link #LINE}) whenever it changed, at each match end and
- * as it stops, and the supervisor sums each lifetime's last line. One
- * {@link #lifetime()} per JVM; a test builds its own.
+ * can count only what it saw. The worker prints the tally as running totals
+ * in its status line's {@code directed} member ({@code WorkerStatus}), and
+ * the supervisor sums each lifetime's last line. One {@link #lifetime()} per
+ * JVM; a test builds its own.
  */
 public final class DirectedForkTally {
 
-    /** How the tally's line starts; a JSON object follows, rule id to its counts. */
-    public static final String LINE = "Effect records: directed fork tally so far: ";
-
-    /** What is counted per rule, in the order the line writes the counts. */
+    /** What is counted per rule, in the order the tally's JSON writes the counts. */
     enum Count {
         /** A boundary where the rule had not yet forked this game and its precondition held. */
         MATCHED,
@@ -41,7 +37,7 @@ public final class DirectedForkTally {
         /** Precondition calls that threw, each read as not met. */
         PRECONDITION_THREW;
 
-        /** The count's name on the line. */
+        /** The count's name in the tally's JSON. */
         String wireName() {
             return name().toLowerCase(Locale.ROOT);
         }
@@ -56,9 +52,9 @@ public final class DirectedForkTally {
         return LIFETIME;
     }
 
-    /** The lifetime tally's line, empty while no rule has counted anything. */
-    public static Optional<String> lifetimeLine() {
-        return LIFETIME.line();
+    /** The lifetime tally as JSON, {@code {}} while no rule has counted anything. */
+    public static String lifetimeJson() {
+        return LIFETIME.json();
     }
 
     /** {@code rule}'s count of {@code count} so far. */
@@ -93,18 +89,14 @@ public final class DirectedForkTally {
     }
 
     /**
-     * The line: {@link #LINE}, then a JSON object from each rule that has
-     * counted anything, in name order, to its counts by {@link
-     * Count#wireName()}, every count present. A rule whose counts are all
-     * zero is left out. Empty while no rule has counted anything.
+     * A JSON object from each rule that has counted anything, in name order,
+     * to its counts by {@link Count#wireName()}, every count present; {@code {}}
+     * while no rule has counted anything.
      */
-    Optional<String> line() {
-        if (counts.isEmpty()) {
-            return Optional.empty();
-        }
+    String json() {
         Json.ObjectWriter rules = Json.object();
         new TreeMap<>(counts).forEach((rule, counted) -> rules.raw(rule, countsOf(counted)));
-        return Optional.of(LINE + rules.render());
+        return rules.render();
     }
 
     private static String countsOf(AtomicLongArray counted) {

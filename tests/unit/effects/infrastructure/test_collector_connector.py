@@ -17,6 +17,7 @@ from effects.domain.collection_caps import CollectionCaps
 from effects.infrastructure.collector_connector import CollectorSupervisor
 from price_predictor.infrastructure.forge_jvm import WorkerStopSettings
 from tests.unit.sealed.conftest import FakeProcess
+from tests.unit.worker_status_line import status_line
 
 #: The one deck every round here plays: a decks-only round refuses none.
 _DECKS = [["Plains"]]
@@ -365,8 +366,8 @@ class TestTheRoundReportsItsWorkerLogs:
         self, tmp_path, caplog,
     ):
         """WP7: the worker prints its hook-failure counts and nothing read them."""
-        report = ("effect-record hook failures so far, listener calls that threw and lost "
-                  "their records: {RESOLVE=3}; contained by Forge, per slot: {resolve=3}")
+        report = status_line("a", hook_failures={
+            "connector": {"RESOLVE": 3}, "forge": {"resolve": 3}})
         supervisor = self._round_logging(tmp_path, {0: [report]})
 
         assert "Effect-record hook failures over the run: 3 RESOLVE; contained by Forge: " \
@@ -384,15 +385,15 @@ class TestTheRoundReportsItsWorkerLogs:
 
         from price_predictor.infrastructure.run_manifest import run_recorded
 
-        tally = "Effect records: fork refusals so far, expected and no failure: {{{body}}}"
         found = {}
 
         def body():
             with caplog.at_level(logging.INFO):
                 found["supervisor"] = self._round_logging(tmp_path, {
-                    0: [tally.format(body="directed dies=1"),
-                        tally.format(body="directed dies=2, probe no combat=1")],
-                    1: [tally.format(body="probe no combat=4")],
+                    0: [status_line("a", fork_refusals={"directed dies": 1}),
+                        status_line("a", fork_refusals={
+                            "directed dies": 2, "probe no combat": 1})],
+                    1: [status_line("b", fork_refusals={"probe no combat": 4})],
                 })
             return 0
 

@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * budget is spent, as every taken fork's is, and it writes nothing; counted
  * here, a run's forks that wrote nothing are told apart from forks that
  * failed. Keys are {@code <kind> <reason>}; the worker prints the tally at a
- * match end whenever it changed ({@code MatchWorkerMain.HookFailureReport}).
+ * match end whenever it changed, in its status line ({@code WorkerStatus}).
  */
 public final class ForkRefusals {
 

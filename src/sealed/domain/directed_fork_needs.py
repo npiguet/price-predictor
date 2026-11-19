@@ -4,8 +4,8 @@ run, and the probability that follows (D8, finding 6.1).
 A rule's registered variants all make one side (``fires`` or
 ``does_not_fire``), so each fork it keeps adds a game to that side. The
 supervisor starts from the records the side has in the counts
-``--directed-fork-probabilities`` names, adds the forks the workers' tally
-lines report kept (``price_predictor.domain.directed_fork_tally``) and
+``--directed-fork-probabilities`` names, adds the forks the workers' status
+lines report kept (``price_predictor.domain.worker_status``) and
 recomputes the rule's probability with the formula ``collect-variants`` uses.
 """
 

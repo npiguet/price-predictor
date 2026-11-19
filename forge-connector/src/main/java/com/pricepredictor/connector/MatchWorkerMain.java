@@ -2,16 +2,13 @@ package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.AttributionMode;
-import com.pricepredictor.connector.effects.DirectedForkTally;
 import com.pricepredictor.connector.effects.GameRecording;
-import com.pricepredictor.connector.effects.HookFailures;
 import com.pricepredictor.connector.effects.PatchHooks;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 import com.pricepredictor.connector.effects.directed.DirectedRules;
 
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
 
@@ -264,7 +261,10 @@ public class MatchWorkerMain {
         CollectionCaps caps = config.caps();
         RecordShardWriter effectRecords = openEffectRecords(config, caps);
 
-        HookFailureReport hookFailureReport = new HookFailureReport();
+        // Forge is initialised by now, so the preferences read back are the
+        // engine's own; printed before the first match, whatever its counts.
+        WorkerStatus status = WorkerStatus.ofThisJvm(config.workerLifetime());
+        status.atStartup();
         // A stop file already there, or a recycle time already past, stops
         // the worker before its first match, once Forge is initialised.
         WorkerStop stop = config.stop();
@@ -284,29 +284,28 @@ public class MatchWorkerMain {
         WorkerLoop.Ending ending;
         try {
             ending = WorkerLoop.runUntilBroken(
-                    () -> oneMatch(generator::generateMatch, sealedCorpus, progress,
-                            hookFailureReport),
+                    () -> oneMatch(generator::generateMatch, sealedCorpus, progress, status),
                     matches, stop);
         } finally {
             // Whatever ended the loop, the counts so far are printed: a
             // worker giving up or stopping is when they matter most.
-            hookFailureReport.afterMatch();
+            status.afterMatch();
         }
         throw stopGracefully(ending, matches, gamePlayer.gamesPlayed(), effectRecords);
     }
 
     /**
-     * One match: played, recorded, and the hooks' failure counts reported
-     * however it ended, a match that threw included.
+     * One match: played, recorded, and the status line printed when its
+     * counts changed, however the match ended, one that threw included.
      */
     static WorkerLoop.Outcome oneMatch(
             java.util.function.Supplier<MatchGenerationResult> match,
             Optional<SealedCorpus> sealedCorpus, Optional<ProgressWriter> progress,
-            HookFailureReport report) {
+            WorkerStatus status) {
         try {
             recordMatch(match.get(), sealedCorpus, progress);
         } finally {
-            report.afterMatch();
+            status.afterMatch();
         }
         return WorkerLoop.Outcome.COMPLETED;
     }
@@ -368,7 +367,8 @@ public class MatchWorkerMain {
                         + " [mode=" + AttributionMode.detect().wireName() + "]");
         // The mode is one hook's answer, so a partly-applied patch still
         // reads "patched" while a channel this run meant to collect is
-        // quietly empty. This is what names that.
+        // quietly empty. This is what names that, for a reader of the log;
+        // the supervisor reads both from the status line (WorkerStatus).
         System.out.println(PatchHooks.report());
         if (caps.randomSeatEnabled()) {
             // Named at startup the way the probe state is: a run whose
@@ -398,69 +398,6 @@ public class MatchWorkerMain {
         // loses the game in progress only.
         Runtime.getRuntime().addShutdownHook(new Thread(effectRecords::close));
         return effectRecords;
-    }
-
-    /**
-     * Prints, at a match boundary, each effect-record hook's count of listener
-     * calls that threw, whenever the counts changed since the last report.
-     *
-     * <p>The engine contains a listener that throws, reports the slot's first
-     * failure once on stderr and goes on calling it, so a hook that fails now
-     * and then loses each failing call's records while the channel stays
-     * open. The counts say how many calls were lost ({@link HookFailures}).
-     */
-    static final class HookFailureReport {
-        private Map<String, Long> reported = Map.of();
-        private Map<String, Long> reportedByForge = Map.of();
-        private Map<String, Long> reportedRefusals = Map.of();
-        private Optional<String> reportedTally = Optional.empty();
-
-        /**
-         * Print the counts when they changed: the connector's
-         * ({@link HookFailures#counts}: listener calls, short calls,
-         * subscribers, boundary steps, unreadable candidates) and Forge's
-         * own per slot ({@link PatchHooks#forgeFailureCounts}), which also
-         * holds the argument builds Forge made inside a hook's call; a
-         * listener's failure is in both. Then, on a line of its own and only
-         * when it changed, the forks that refused, by kind and reason
-         * ({@code ForkRefusals}), which are no failures, and the directed
-         * fork tally ({@link DirectedForkTally}).
-         */
-        void afterMatch() {
-            Map<String, Long> counts = HookFailures.counts();
-            Map<String, Long> byForge = PatchHooks.forgeFailureCounts();
-            if (!counts.equals(reported) || !byForge.equals(reportedByForge)) {
-                System.err.println("effect-record hook failures so far, listener calls that threw"
-                        + " and lost their records: " + counts
-                        + "; contained by Forge, per slot: " + byForge);
-                reported = counts;
-                reportedByForge = byForge;
-            }
-            // Beside the failures and never among them: forks that declined
-            // for an expected reason, by kind and reason (ForkRefusals).
-            Map<String, Long> refusals = com.pricepredictor.connector.effects.ForkRefusals.counts();
-            if (!refusals.equals(reportedRefusals)) {
-                System.err.println(REFUSALS_LINE + refusals);
-                reportedRefusals = refusals;
-            }
-            reportTally();
-        }
-
-        /**
-         * The directed fork tally's line when it changed: running totals of
-         * the JVM, so the last one a worker printed holds its lifetime's
-         * counts, a worker stopping gracefully printing it last.
-         */
-        private void reportTally() {
-            Optional<String> tally = DirectedForkTally.lifetimeLine();
-            if (!tally.equals(reportedTally)) {
-                tally.ifPresent(System.err::println);
-                reportedTally = tally;
-            }
-        }
-
-        /** How the refusal tally's line starts; a count, not a failure line. */
-        static final String REFUSALS_LINE = "Effect records: fork refusals so far, expected and no failure: ";
     }
 
     /**

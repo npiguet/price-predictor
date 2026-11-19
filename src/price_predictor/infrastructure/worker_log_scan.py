@@ -8,10 +8,8 @@ the new one. Rotated twice between scans, the generation read so far is gone
 (the second rotation replaced its ``.1``): the loss is counted as
 ``log_unread``, and the ``.1`` there now, never read, is read whole.
 
-The same reading follows each slot's hook-failure report and fork refusal
-tally and directed fork tally, counts each worker JVM prints and no failure
-lines (``HookFailureCounts``, ``ForkRefusalCounts``,
-``DirectedForkTallyCounts``).
+The same reading follows each slot's status lines, the counts each worker
+JVM prints and no failure lines (``worker_status.SlotStatuses``).
 """
 
 from __future__ import annotations
@@ -21,15 +19,10 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from price_predictor.domain.directed_fork_tally import (
-    DirectedForkTallyCounts,
+from price_predictor.domain.worker_failures import WorkerFailure, WorkerFailures
+from price_predictor.domain.worker_status import (
+    SlotStatuses,
     directed_fork_tally_document,
-)
-from price_predictor.domain.worker_failures import (
-    ForkRefusalCounts,
-    HookFailureCounts,
-    WorkerFailure,
-    WorkerFailures,
     fork_refusal_document,
     hook_failure_document,
 )
@@ -44,12 +37,8 @@ class WorkerLogScan:
     def __init__(self) -> None:
         #: Per log path: the file's identity and how far it has been read.
         self._read: dict[Path, tuple[int, int]] = {}
-        #: Per log path: the hook-failure counts its worker JVMs printed.
-        self._hooks: dict[Path, HookFailureCounts] = {}
-        #: Per log path: the fork refusal tallies its worker JVMs printed.
-        self._refusals: dict[Path, ForkRefusalCounts] = {}
-        #: Per log path: the directed fork tallies its worker JVMs printed.
-        self._directed: dict[Path, DirectedForkTallyCounts] = {}
+        #: Per log path: the status lines its worker JVMs printed.
+        self._statuses: dict[Path, SlotStatuses] = {}
 
     def scan(self, paths: Iterable[Path]) -> WorkerFailures:
         """The failure lines ``paths`` gained since the last scan."""
@@ -60,25 +49,21 @@ class WorkerLogScan:
 
     def hook_failures(self) -> dict[str, dict[str, int]]:
         """The hook-failure counts every log read so far reports, summed
-        (``worker_failures.hook_failure_document``)."""
-        return hook_failure_document(list(self._hooks.values()))
+        (``worker_status.hook_failure_document``)."""
+        return hook_failure_document(self._statuses.values())
 
     def fork_refusals(self) -> dict[str, int]:
         """The fork refusals every log read so far reports, summed
-        (``worker_failures.fork_refusal_document``)."""
-        return fork_refusal_document(list(self._refusals.values()))
+        (``worker_status.fork_refusal_document``)."""
+        return fork_refusal_document(self._statuses.values())
 
     def directed_fork_tally(self) -> dict[str, dict[str, int]]:
         """The directed fork tallies every log read so far reports, summed
-        (``directed_fork_tally.directed_fork_tally_document``)."""
-        return directed_fork_tally_document(list(self._directed.values()))
+        (``worker_status.directed_fork_tally_document``)."""
+        return directed_fork_tally_document(self._statuses.values())
 
     def _scan_one(self, path: Path, failures: WorkerFailures) -> None:
-        hooks = _Tallies(
-            self._hooks.setdefault(path, HookFailureCounts()),
-            self._refusals.setdefault(path, ForkRefusalCounts()),
-            self._directed.setdefault(path, DirectedForkTallyCounts()),
-        )
+        statuses = self._statuses.setdefault(path, SlotStatuses())
         try:
             identity = os.stat(path).st_ino
         except OSError:
@@ -93,7 +78,7 @@ class WorkerLogScan:
             except OSError:
                 rotated_identity = None
             if rotated_identity == known:
-                _read_lines(rotated, offset, failures, hooks)
+                _read_lines(rotated, offset, failures, statuses)
             else:
                 failures.add(
                     WorkerFailure.LOG_UNREAD,
@@ -101,9 +86,9 @@ class WorkerLogScan:
                     "generation read so far is gone",
                 )
                 if rotated_identity is not None:
-                    _read_lines(rotated, 0, failures, hooks)
+                    _read_lines(rotated, 0, failures, statuses)
             offset = 0
-        self._read[path] = (identity, _read_lines(path, offset, failures, hooks))
+        self._read[path] = (identity, _read_lines(path, offset, failures, statuses))
 
 
 class WorkerLogReport:
@@ -152,31 +137,11 @@ class WorkerLogReport:
         }
 
 
-class _Tallies:
-    """The counts a worker JVM prints beside its failure lines, followed
-    line by line: the hook-failure report, the fork refusal tally and the
-    directed fork tally."""
-
-    def __init__(
-        self, hooks: HookFailureCounts, refusals: ForkRefusalCounts,
-        directed: DirectedForkTallyCounts,
-    ) -> None:
-        self._hooks = hooks
-        self._refusals = refusals
-        self._directed = directed
-
-    def add_line(self, line: str) -> None:
-        self._hooks.add_line(line)
-        self._refusals.add_line(line)
-        self._directed.add_line(line)
-
-
 def _read_lines(
-    path: Path, offset: int, failures: WorkerFailures, hooks: _Tallies,
+    path: Path, offset: int, failures: WorkerFailures, statuses: SlotStatuses,
 ) -> int:
     """Count the failure lines of ``path`` from ``offset`` to its last complete
-    line, and follow its hook-failure reports and fork refusal tallies; the
-    offset just past that line."""
+    line, and follow its status lines; the offset just past that line."""
     try:
         with open(path, "rb") as handle:
             handle.seek(offset)
@@ -188,5 +153,5 @@ def _read_lines(
         return offset
     for line in chunk[:end].decode("utf-8", errors="replace").splitlines():
         failures.add_line(line)
-        hooks.add_line(line)
+        statuses.add_line(line)
     return offset + end + 1

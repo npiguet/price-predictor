@@ -204,14 +204,14 @@ directory, stop the run, and count the `fork fidelity:` lines by field in its `l
 (the run's end prints their total as `fork_fidelity`). Then run `validate-corpus` on the scratch
 run: its watched line "fork records whose copy left something out" gives the share of fork records
 carrying each `copy_dropped` kind, and the share of forks (fork records grouped by game, game turn
-and kind of fork; the wire names no fork, so the count is a lower bound). The workers' hook-failure line counts the forks whose copy, score
+and kind of fork; the wire names no fork, so the count is a lower bound). The workers' status line
+(`Effect records: status: {…}`) counts, in its `hook_failures`, the forks whose copy, score
 check, body or writer threw, as `fork <kind> copy`, `fork <kind> score check`, `fork <kind> body` and
 `fork <kind> write`, and the forks that changed the live game, as `fork <kind> moved the live game`;
-the refusal line (`Effect records: fork refusals so far, expected and no failure: {…}`) counts the
-forks that declined, by kind and reason, and wrote nothing. None of these discards a record. The
-audit reads a fork's copy as it was taken, before any perturbation: it cannot tell what a fork did
-after that, and it never sees a fork that wrote nothing, which only the refusal line and the
-failure counts account for.
+its `fork_refusals` counts the forks that declined, by kind and reason, and wrote nothing. None of
+these discards a record. The audit reads a fork's copy as it was taken, before any perturbation: it
+cannot tell what a fork did after that, and it never sees a fork that wrote nothing, which only the
+refusal and failure counts account for.
 
 ```powershell
 if (-not (Test-Path variable:auditStart)) { $auditStart = Run-Start "$gen3\scratch" fork-fidelity }

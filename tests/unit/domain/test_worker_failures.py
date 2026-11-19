@@ -5,7 +5,6 @@ run that played fewer of them."""
 from __future__ import annotations
 
 import functools
-import re
 from pathlib import Path
 
 import pytest
@@ -185,13 +184,9 @@ def test_a_failure_line_behind_interleaved_output_is_still_found(kind):
     "Loading coverage decks from x",
     "Directed forks: none",
     "Random seat: share=0.25 probability=0.5",
-    "effect-record hook failures so far, listener calls that threw and lost their records: {}",
-    "effect-record hook failures so far, listener calls that threw and lost their records: "
-    "{game-end marker=2, RESOLVE=1}; contained by Forge, per slot: {resolve=1}",
     "Effect records: C:/out/run.0-ab.jsonl.gz [mode=patched]",
     "[Forge] random seat failed to play Shock",
     "Effect records: dropping a probe branch taken on turn 3 that would mirror x",
-    "Effect records: fork refusals so far, expected and no failure: {intervention no choices=2}",
 ])
 def test_routine_worker_output_is_no_failure(line):
     assert classify(line) is None
@@ -227,138 +222,3 @@ def test_the_stop_protocol_s_lines_are_no_failure():
                f"{java.DESCRIBE_OR}{java.DESCRIBE_RUN}600 s")
     for line in (stopped, recycled, startup):
         assert classify(line) is None, line
-
-
-def test_the_hook_report_and_the_shard_line_are_spelled_as_the_worker_prints_them():
-    from price_predictor.domain.worker_failures import HOOK_COUNTS_LINE, JVM_START_LINE
-
-    main = (_CONNECTOR_SOURCES / "com" / "pricepredictor" / "connector"
-            / "MatchWorkerMain.java").read_text(encoding="utf-8")
-    assert ('"effect-record hook failures so far, listener calls that threw"\n'
-            '                        + " and lost their records: " + counts\n'
-            '                        + "; contained by Forge, per slot: " + byForge') in main
-    assert '"Effect records: " + effectRecords.path()' in main
-    assert '+ " [mode=" + AttributionMode.detect().wireName() + "]"' in main
-    assert HOOK_COUNTS_LINE.search(
-        "effect-record hook failures so far, listener calls that threw and lost their "
-        "records: {a=1}; contained by Forge, per slot: {b=2}")
-    assert JVM_START_LINE.search("Effect records: C:/x y/r.0-l.jsonl.gz [mode=degraded]")
-
-
-class TestHookFailureCounts:
-    """The report is a running count per worker JVM, read by nothing before
-    (WP7): the run's counts are each lifetime's latest, summed."""
-
-    REPORT = ("effect-record hook failures so far, listener calls that threw and lost "
-              "their records: {{{own}}}; contained by Forge, per slot: {{{forge}}}")
-    START = "Effect records: C:/out/run.0-{life}.jsonl.gz [mode=patched]"
-
-    def test_a_lifetime_s_latest_report_stands_and_lifetimes_add_up(self):
-        from price_predictor.domain.worker_failures import (
-            HookFailureCounts,
-            hook_failure_document,
-        )
-
-        slot = HookFailureCounts()
-        for line in (
-            self.START.format(life="a"),
-            self.REPORT.format(own="RESOLVE=1", forge="resolve=1"),
-            self.REPORT.format(own="RESOLVE=3, game-end marker=1", forge="resolve=3"),
-            self.START.format(life="b"),
-            self.REPORT.format(own="RESOLVE=2", forge=""),
-        ):
-            slot.add_line(line)
-
-        assert hook_failure_document([slot]) == {
-            "connector": {"RESOLVE": 5, "game-end marker": 1},
-            "forge": {"resolve": 3},
-        }
-
-    def test_slots_add_up_and_render_on_one_line(self):
-        from price_predictor.domain.worker_failures import (
-            HookFailureCounts,
-            hook_failure_document,
-            render_hook_failures,
-        )
-
-        first, second = HookFailureCounts(), HookFailureCounts()
-        first.add_line(self.REPORT.format(own="RESOLVE=1", forge=""))
-        second.add_line(self.REPORT.format(own="RESOLVE=2, subscriber X.y=1", forge="s=4"))
-        document = hook_failure_document([first, second])
-
-        assert document == {"connector": {"RESOLVE": 3, "subscriber X.y": 1},
-                            "forge": {"s": 4}}
-        assert render_hook_failures(document) == (
-            "3 RESOLVE, 1 subscriber X.y; contained by Forge: 4 s")
-        assert render_hook_failures(hook_failure_document([])) == "no hook failures"
-
-
-class TestForkRefusalCounts:
-    """The worker prints, at a match end where it changed, how many forks
-    declined for an expected reason (``ForkRefusals``): a running map per JVM
-    lifetime that the supervisor did not read (WP5). Refusals are no
-    failures: they are counted apart from every failure line."""
-
-    LINE = "Effect records: fork refusals so far, expected and no failure: {{{body}}}"
-    START = "Effect records: C:/out/run.0-{life}.jsonl.gz [mode=patched]"
-
-    def test_the_line_is_spelled_as_the_worker_prints_it(self):
-        from price_predictor.domain.worker_failures import FORK_REFUSALS_LINE, JVM_START_LINE
-        from tests.unit.forge_sources import connector_source
-
-        main = connector_source("MatchWorkerMain.java")
-        literal = re.search(r'static final String REFUSALS_LINE = "([^"]*)";', main)
-        assert literal is not None, "MatchWorkerMain names the line's start in REFUSALS_LINE"
-        assert "System.err.println(REFUSALS_LINE + refusals);" in main
-        assert "ForkRefusals.counts()" in main
-        # A Java map in key order: ``{a b=1, c d=2}`` (TreeMap.toString).
-        refusals = connector_source("effects/ForkRefusals.java")
-        assert "Map<String, Long> counts = new TreeMap<>();" in refusals
-        assert 'kind + " " + reason' in refusals
-
-        line = literal.group(1) + "{directed no counterpart=2, intervention no choices=1}"
-        found = FORK_REFUSALS_LINE.search(line)
-        assert found is not None
-        assert found.group("refusals") == "directed no counterpart=2, intervention no choices=1"
-        assert not JVM_START_LINE.search(line), "a refusal line starts no lifetime"
-
-    def test_the_line_is_no_failure(self):
-        line = self.LINE.format(body="directed dies=3, probe no combat=1")
-        assert classify(line) is None
-
-    def test_a_lifetime_s_latest_tally_stands_and_lifetimes_add_up(self):
-        from price_predictor.domain.worker_failures import (
-            ForkRefusalCounts,
-            fork_refusal_document,
-        )
-
-        slot = ForkRefusalCounts()
-        for line in (
-            self.START.format(life="a"),
-            self.LINE.format(body="directed dies=1"),
-            self.LINE.format(body="directed dies=2, intervention no choices=1"),
-            self.START.format(life="b"),
-            self.LINE.format(body="directed dies=4"),
-            "Worker: 3 matches generated",
-        ):
-            slot.add_line(line)
-
-        assert fork_refusal_document([slot]) == {
-            "directed dies": 6, "intervention no choices": 1,
-        }
-
-    def test_slots_add_up_in_name_order_and_render_on_one_line(self):
-        from price_predictor.domain.worker_failures import (
-            ForkRefusalCounts,
-            fork_refusal_document,
-            render_fork_refusals,
-        )
-
-        first, second = ForkRefusalCounts(), ForkRefusalCounts()
-        first.add_line(self.LINE.format(body="probe no combat=2"))
-        second.add_line(self.LINE.format(body="directed dies=1, probe no combat=1"))
-        document = fork_refusal_document([first, second])
-
-        assert list(document.items()) == [("directed dies", 1), ("probe no combat", 3)]
-        assert render_fork_refusals(document) == "1 directed dies, 3 probe no combat"
-        assert render_fork_refusals(fork_refusal_document([])) == "no fork refusals"

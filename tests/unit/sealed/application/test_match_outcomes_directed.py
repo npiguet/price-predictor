@@ -13,15 +13,16 @@ from sealed.application.match_outcomes import MatchOutcomeSupervisor
 from sealed.domain.directed_fork_needs import DirectedForkNeeds, DirectedRuleNeed
 from sealed.infrastructure.cli import _effect_collection_caps
 from tests.unit.sealed.conftest import FakeProcess
+from tests.unit.worker_status_line import directed_counts, status_line
 
 NEEDS = DirectedForkNeeds(count_per_side=100, rules={
     "118.12b": DirectedRuleNeed("fires", 0),
     "704.5f": DirectedRuleNeed("does_not_fire", 6814),
 })
 
-#: 118.12b's side filled by this run's kept forks, in `DirectedForkTally.LINE`'s format.
-TALLY = ('Effect records: directed fork tally so far: {"118.12b":{"matched":140,"drawn":120,'
-         '"budget_blocked":20,"taken":100,"kept":100,"precondition_threw":0}}\n')
+#: 118.12b's side filled by this run's kept forks, in a worker's status line.
+TALLY = status_line("a", directed={"118.12b": directed_counts(
+    matched=140, drawn=120, budget_blocked=20, taken=100, kept=100)}) + "\n"
 
 PROPERTY = "effect.directed.probability.118.12b"
 

@@ -6,8 +6,9 @@ from __future__ import annotations
 
 import pytest
 
-from price_predictor.domain.directed_fork_tally import DirectedForkTallyCounts
+from price_predictor.domain.worker_status import SlotStatuses, directed_fork_tally_document
 from sealed.domain.directed_fork_needs import DirectedForkNeeds, DirectedRuleNeed
+from tests.unit.worker_status_line import directed_counts, status_line
 
 #: 118.12b and 704.5f as `rules_catalogue.py directed-rules --probabilities-output`
 #: writes them from `rules/directed-fork-counts.json` (fires 0 records, its one
@@ -19,14 +20,12 @@ NEEDS = DirectedForkNeeds(count_per_side=100, rules={
 
 
 def _tally(kept: dict[str, int]) -> dict[str, dict[str, int]]:
-    """The supervisor's summed tally after one worker printed ``kept``, in the
-    line format `DirectedForkTally.LINE` prints."""
-    body = ",".join(
-        f'"{rule}":{{"matched":{n + 5},"drawn":{n},"budget_blocked":0,"taken":{n},'
-        f'"kept":{n},"precondition_threw":0}}' for rule, n in kept.items())
-    counts = DirectedForkTallyCounts()
-    counts.add_line("Effect records: directed fork tally so far: {" + body + "}")
-    return counts.totals()
+    """The supervisor's summed tally after one worker's status line reported ``kept``."""
+    slot = SlotStatuses()
+    slot.add_line(status_line("a", directed={
+        rule: directed_counts(matched=n + 5, drawn=n, taken=n, kept=n)
+        for rule, n in kept.items()}))
+    return directed_fork_tally_document([slot])
 
 
 def test_the_starting_probabilities_follow_the_file_s_records():

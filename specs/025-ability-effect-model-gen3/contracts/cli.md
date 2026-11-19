@@ -392,10 +392,10 @@ after the seat was drawn: the match's set-up, a game, a game's recording closing
 
 A game whose marker could not be written prints, once per worker,
 `Effect records: the game-end marker of game <game id> could not be written, so the game reads as cut (later failures are counted, not printed): <exception>`;
-every such failure is counted under `game-end marker` in the worker's failure report
-(`effect-record hook failures so far, listener calls that threw and lost their records: {…}; contained by Forge, per slot: {…}`).
+every such failure is counted under `game-end marker` in the worker's failure counts, the status
+line's `hook_failures` (below).
 
-A fork's failures are counted in the same report, by kind of fork (`intervention`, `probe`,
+A fork's failures are counted in the same counts, by kind of fork (`intervention`, `probe`,
 `protection`, `directed`): `fork <kind> copy`, `fork <kind> score check`, `fork <kind> body`,
 `fork <kind> write`, and `fork <kind> moved the live game` for a fork after which the live game's
 timestamp, card id counters, random stream, players' life, poison, controllers, zone sizes or stack
@@ -405,42 +405,54 @@ or whose game was restarted. The first copy, body or write failure of each kind 
 with its stack; the first live-game change of each kind prints
 `Effect records: fork <kind> moved the live game; before the fork: <marks>, trigger ids <n>; after: <marks>, trigger ids <n>[; the fork restarted its game] (later ones are counted, not printed)`.
 A fork that declines for an expected reason is no failure: it is counted in a tally of its own,
-which the worker prints at a match end whenever it changed, on a line of its own:
-`Effect records: fork refusals so far, expected and no failure: {<kind> <reason>=<forks>, …}`
-(a Java map, running totals of the JVM, keys in name order).
+the status line's `fork_refusals`.
 
-Each worker also keeps a per-rule directed fork tally, running totals of the JVM, printed on stderr
-at each match end and as the worker ends (a graceful stop, giving up, an `Error`), each time only
-when it changed since the worker's last such line, so the last one holds the JVM's totals, as one line:
-`Effect records: directed fork tally so far: <JSON object>`. The object maps each rule id that has
+Each worker prints its state and counts on one status line on stderr: at start-up whatever its
+counts, then after each match and as it ends (a graceful stop, giving up, an `Error`), each time
+only when a count changed since its last status line, so the last one holds the JVM's totals:
+`Effect records: status: <JSON object>`. The object is one line of ASCII (every other character
+written as a `\uXXXX` escape), with these members in this order, every count a running total of
+the JVM:
+
+| Member | Value |
+|---|---|
+| `lifetime` | the JVM lifetime's token, the one its shard's name carries |
+| `hooks` | `{"mode": "patched" or "degraded", "gaps": [<gap>, …]}`: one string per required engine hook absent or whose listener is short of what the collectors read (`PatchHooks.gaps()`), `[]` when whole |
+| `pinned_preferences` | `{"mulligan_rule": …, "filtered_hands": …, "performance_mode": …, "ui_language": …}`, the four Forge preferences as the engine holds them (`PinnedForgePreferences.inEffect()`) |
+| `hook_failures` | `{"connector": {<hook>: <calls>}, "forge": {<slot>: <calls>}}`: the connector's failure counts (`HookFailures.counts()`), then Forge's own contained failures per hook slot, keys in name order |
+| `fork_refusals` | `{"<kind> <reason>": <forks>}`, keys in name order |
+| `directed` | the directed fork tally, `{}` while no rule has counted anything |
+
+Example:
+`Effect records: status: {"lifetime":"mf3k2a1b","hooks":{"mode":"patched","gaps":[]},"pinned_preferences":{"mulligan_rule":"London","filtered_hands":false,"performance_mode":false,"ui_language":"en-US"},"hook_failures":{"connector":{"game-end marker":1},"forge":{}},"fork_refusals":{"directed replace_card remembered, imprinted or exiled cards":2},"directed":{}}`.
+
+The directed fork tally maps each rule id that has
 counted anything, in name order, to an object holding all six counts, in this order: `matched` (a
 boundary where the rule had not forked in its game and its precondition held), `drawn` (of
 those, draws that came up a fork), `budget_blocked` (of those drawn, the game's
 `--directed-forks-per-game` already spent), `taken` (forks taken, the budget spent, kept or
 discarded), `kept`, and `precondition_threw` (precondition calls that threw, each read as not
 met). `drawn - budget_blocked - taken` is the forks the forced play's dry run refused (counted
-also in the refusal tally). A listed rule absent from the object has every count 0, and no line
-is printed while no rule has counted anything. Example:
-`Effect records: directed fork tally so far: {"118.12b":{"matched":31,"drawn":9,"budget_blocked":2,"taken":7,"kept":7,"precondition_threw":0},"704.5f":{"matched":0,"drawn":0,"budget_blocked":0,"taken":0,"kept":0,"precondition_threw":3}}`.
-The object is JSON (rule ids escaped as JSON strings), so a reader parses everything after the
-prefix with a JSON parser and never splits on `, ` or `=`. A killed worker's tally is its last
-printed line. The first throw of each rule's precondition prints
+also in the refusal tally). A listed rule absent from the object has every count 0. Example
+`directed` member:
+`{"118.12b":{"matched":31,"drawn":9,"budget_blocked":2,"taken":7,"kept":7,"precondition_threw":0},"704.5f":{"matched":0,"drawn":0,"budget_blocked":0,"taken":0,"kept":0,"precondition_threw":3}}`.
+A killed worker's counts are its last printed status line. The first throw of each rule's
+precondition prints
 `Effect records: directed rule <rule>'s precondition threw and reads as not met (later throws are counted in the directed fork tally, not printed): <exception>`
 with its stack; the line is the failure kind `directed_precondition_threw`.
 
 The supervisor's log scan reads these: `Error generating match: [random-seat match] ` is the
 failure kind `random_seat_match_error`, counted apart from `match_error`; the marker line is
 `game_end_marker_unwritten`; a fork's first-failure line is `fork_failed` and its live-game line
-`fork_moved_live_game`. The failure report and the refusal tally are running counts per worker
-JVM, not failure lines: the scan keeps each JVM lifetime's latest report and tally (a lifetime
-starts at its `Effect records: <shard> [mode=…]` line), sums them over lifetimes and slots, prints
+`fork_moved_live_game`. The status line is running counts per worker JVM, not a failure line,
+and the only line the scan reads counts from: it parses everything after the prefix as one JSON
+object and never splits it, so a reason, a gap or a rule id may hold any character. The scan keeps
+each JVM lifetime's latest status line (told apart by `lifetime`), sums the counts over lifetimes
+and slots, prints
 them in the round report (collectors) or at the run's end (`match-outcomes`) — the refusals as
 `Fork refusals over the run (expected, no failure): <n> <kind> <reason>, …`, at info level — and
 records them in `run.json` as `hook_failures`: `{"connector": {hook: calls}, "forge": {slot:
-calls}}`, `fork_refusals`: `{"<kind> <reason>": forks}`, keys in name order, and `directed_fork_tally`: `{rule: {matched, drawn, budget_blocked, taken, kept, precondition_threw}}`, each JVM lifetime's last tally line summed over lifetimes and slots, rules in name order. Refusals count
-toward no failure kind, no failure threshold and no exit code. A refusal reason holds no comma and
-no brace: the tally line is a printed Java map, which the scan reads between braces and splits on
-`", "` (`ForkRefusalReasonsTest`).
+calls}}`, `fork_refusals`: `{"<kind> <reason>": forks}`, keys in name order, and `directed_fork_tally`: `{rule: {matched, drawn, budget_blocked, taken, kept, precondition_threw}}`, rules in name order. Refusals count toward no failure kind, no failure threshold and no exit code.
 
 ## `python -m effects collect-variants` (existing)
 

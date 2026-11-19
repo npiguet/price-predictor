@@ -232,3 +232,23 @@ def test_run_json_records_the_runs_settings_and_counts(coverage_run) -> None:
     assert isinstance(entry["fork_refusals"], dict)
     assert isinstance(entry["worker_failures"], dict)
     assert_no_lost_output(entry)
+
+
+def test_each_worker_s_status_line_reads_back_with_the_engine_s_state(coverage_run) -> None:
+    """The real workers' status lines parse (``contracts/cli.md`` § Match worker
+    stop protocol): the sibling Forge is the patched one, whole, and the four
+    preferences are the pinned ones as the engine holds them."""
+    from price_predictor.domain.worker_status import parse_status_line
+    from tests.unit.worker_status_line import PINNED_PREFERENCES
+
+    run_dir, _, _, _ = coverage_run
+    statuses = [
+        status
+        for log in sorted((run_dir / "logs").glob("*.log"))
+        for line in log.read_text(encoding="utf-8", errors="replace").splitlines()
+        if (status := parse_status_line(line)) is not None
+    ]
+    assert statuses, "a worker that played a game printed its status line"
+    for status in statuses:
+        assert (status.mode, status.gaps) == ("patched", ()), status
+        assert status.pinned_preferences == PINNED_PREFERENCES, status

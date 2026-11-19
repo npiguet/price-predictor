@@ -54,9 +54,9 @@ _ALLOWED: dict[str, set[str] | None] = {
     # failures into the running command's run.json entry (V4 #3, #4).
     "price_predictor.infrastructure.run_manifest": {"annotate_run"},
     # The worker-log scan, shared with sealed match-outcomes (V4 #3).
-    "price_predictor.domain.worker_failures": {
-        "WorkerFailures", "render_fork_refusals", "render_hook_failures",
-    },
+    "price_predictor.domain.worker_failures": {"WorkerFailures"},
+    # The worker status line's run totals, rendered for the round report (K01b).
+    "price_predictor.domain.worker_status": {"render_fork_refusals", "render_hook_failures"},
     "price_predictor.infrastructure.worker_log_scan": {"WorkerLogReport"},
     # A directed rule's fork probability, one formula for collect-variants and
     # sealed match-outcomes, which never imports effects (DR1).

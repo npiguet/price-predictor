@@ -94,16 +94,17 @@ def test_the_real_list_s_file_is_accepted_by_match_outcomes_at_its_counts_probab
 def test_a_rule_at_1_filled_by_this_run_s_kept_forks_is_written_at_0_for_the_next_spawn(
     tmp_path,
 ):
-    """DR1: 118.12b (fires 0 in the counts) once the workers' tally lines report
+    """DR1: 118.12b (fires 0 in the counts) once the workers' status lines report
     100 kept forks."""
-    from price_predictor.domain.directed_fork_tally import DirectedForkTallyCounts
+    from price_predictor.domain.worker_status import SlotStatuses, directed_fork_tally_document
+    from tests.unit.worker_status_line import directed_counts, status_line
 
     _, chosen = _real_chosen()
-    tally = DirectedForkTallyCounts()
-    tally.add_line('Effect records: directed fork tally so far: {"118.12b":{"matched":130,'
-                   '"drawn":110,"budget_blocked":10,"taken":100,"kept":100,'
-                   '"precondition_threw":0}}')
-    assert _real_needs(tmp_path, chosen).probabilities(tally.totals())["118.12b"] == 0.0
+    slot = SlotStatuses()
+    slot.add_line(status_line("a", directed={"118.12b": directed_counts(
+        matched=130, drawn=110, budget_blocked=10, taken=100, kept=100)}))
+    tally = directed_fork_tally_document([slot])
+    assert _real_needs(tmp_path, chosen).probabilities(tally)["118.12b"] == 0.0
 
 
 def test_704_5b_reaches_zero_once_its_fires_side_is_full(tmp_path):
