@@ -105,6 +105,13 @@ marked damage, deathtouch damage, counters, boosts and resolved effects
 keyword the variant takes away is of its own text (none granted by an attachment, a static or a
 resolved effect); a `counters` variant adding a +1/+1 counter binds no permanent with a -1/-1
 counter, and one taking +1/+1 counters away binds a creature that survives without them. A
+precondition binds only a board where the variant's forced play can be made: a cost is asked as
+the collector's playability asks it (`PlayabilityVerdict.affordable`: the mana the player's sources
+make, colours included), not as a count of untapped lands; mana a precondition counts itself is
+counted per source (a bounce land makes two, a mana creature one); a bound target is one the spell
+can target; a forced cast plays the line the precondition matched (`ForcedPlay.Line.spell`), so a
+split card's matching half is cast; and a meld host is bound only while its meld trigger's phase is
+still to begin this turn and its SVar check holds. A
 `replace_card` edit refuses (`replace_card replacement dies at the first state-based check`) a
 replacing creature that what it carried leaves at toughness 0 or less, with lethal damage, or with
 deathtouch damage. 702.63c's `keyword` edit refuses (`keyword vanishing not left at one instance`)
