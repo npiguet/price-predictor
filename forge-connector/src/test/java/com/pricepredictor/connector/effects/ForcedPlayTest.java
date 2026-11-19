@@ -112,7 +112,7 @@ class ForcedPlayTest {
      */
     private List<String> played(Game game, PhaseType step, DirectedRule rule) throws Throwable {
         CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(0).probes(0)
-                .directed(1, 1.0, rule.rule()).build();
+                .directed(1, 1.0, rule.name()).build();
         RecordShardWriter shard = ShardRun.writer(Files.createDirectories(tempDir.resolve("game-" + ++games)));
         try (GameRecording recording = new GameRecording(game, shard, ShardRun.GAME_ID, caps, 7L, null,
                 ForkSeats.NONE, DirectedRules.of(rule), new DirectedForkTally())) {
@@ -367,23 +367,23 @@ class ForcedPlayTest {
                         ? Binding.empty().with("spell", disfigure).with("victim", bears)
                         : Binding.empty().with("spell", disfigure).with("victim", opponent(live)),
                 ForcedPlay.cast("player", "spell").targeting("victim"));
-        CollectionCaps caps = TestCaps.caps().interventions(0).probes(0).directed(1, 1.0, rule.rule()).build();
+        CollectionCaps caps = TestCaps.caps().interventions(0).probes(0).directed(1, 1.0, rule.name()).build();
         ForkBudget budget = new ForkBudget(caps);
         DirectedForkTally tally = new DirectedForkTally();
         List<String> forked = new ArrayList<>();
         DirectedForkScheduler scheduler = new DirectedForkScheduler(game, caps, DirectedRules.of(rule), budget,
-                tally, 7L, (taken, variant, application, binding) -> forked.add(taken.rule()));
+                tally, 7L, (taken, variant, application, binding) -> forked.add(taken.name()));
         long before = refusals(ForkRefusal.FORCED_NO_LINE);
 
         assertEquals(0, scheduler.collect(PhaseType.MAIN1), "no fork where Disfigure cannot take its target");
         assertEquals(before + 1, refusals(ForkRefusal.FORCED_NO_LINE), "counted as a refusal");
         assertTrue(budget.mayDirect(), "the budget is untouched");
-        assertEquals(0, tally.get(rule.rule(), DirectedForkTally.Count.TAKEN), "no fork in the lifetime tally");
+        assertEquals(0, tally.get(rule.name(), DirectedForkTally.Count.TAKEN), "no fork in the lifetime tally");
         assertEquals(List.of(), forked);
 
         aimable[0] = true;
         assertEquals(1, scheduler.collect(PhaseType.MAIN1), "the rule's one fork is taken later");
-        assertEquals(List.of(rule.rule()), forked);
+        assertEquals(List.of(rule.name()), forked);
     }
 
     /**

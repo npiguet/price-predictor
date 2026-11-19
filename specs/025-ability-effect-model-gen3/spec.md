@@ -686,7 +686,7 @@ and that the reporting half never enters the control score.
   `collect-variants` run, and every directed-fork record. A `collect-coverage` or
   `collect-variants` record MUST carry `aimed_at`, listing the rules its run names through
   `--directed-fork-rules` and empty where it names none. A directed-fork record MUST carry
-  `aimed_at` set to its rule, `fork = true`, `interventional = false`, `directed =
+  `aimed_at` set to the rules of its registration (FR-010a), `fork = true`, `interventional = false`, `directed =
   {variant, operation}` (the scenario variant label and the fork operation applied); its
   `mirror_of` is `null`, since a phase boundary leaves no live record open. A
   `match-outcomes` record outside a directed fork MUST NOT carry `aimed_at`. `aimed_at` and
@@ -714,9 +714,12 @@ and that the reporting half never enters the control score.
   game. The rules MUST be considered in descending order of probability, ties broken by their
   order in `--directed-fork-rules`, so the per-game budget goes first to the rule that needs it
   most; each fork taken, kept or discarded, counts against `--directed-forks-per-game`, and no fork
-  is taken once the budget is spent. Each worker MUST keep and print a per-rule tally (matched,
-  drawn, budget-blocked, taken, kept, precondition throws; `contracts/cli.md` § Match worker stop
-  protocol).
+  is taken once the budget is spent. Rules sharing a board, a binding and an edit MUST be one
+  registration, drawn, budgeted and forked once a game: it is considered at the place of its first
+  listed rule, at the largest probability among its listed rules, and its fork's records name all
+  its rules. Each worker MUST keep and print a per-rule tally (matched, drawn, budget-blocked,
+  taken, kept, precondition throws; `contracts/cli.md` § Match worker stop protocol), a
+  registration's counts under each of its rules.
 - **FR-010b**: A directed rule's variant MAY name one play its fork forces, made by a seat the
   binding names: a cast or activation of a line of a bound source (chosen by API type, keyword or a
   test of the rule's own: the card's spell, its bestow cast, an activated ability whose cost

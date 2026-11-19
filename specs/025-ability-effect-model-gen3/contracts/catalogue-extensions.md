@@ -76,17 +76,23 @@ for.
 
 ## Directed-rule registry (Java)
 
-`FE/directed/DirectedRules.java` lists the registered rules (`DirectedRules.REGISTERED`), one class
-per rule in `FE/directed/rules/`. A `DirectedRule` names its rule id, the scenario whose base variant
-its precondition waits for (two scenarios of a rule may share a variant label), a `BoardPrecondition`
-(`bind(Game)`, returning the `Binding` of live objects by role, one that throws read as not met) and
-`Map<String variantLabel, Application>`, each `Application` naming its `ForkOperation` and building the
-`BoardEdit` from the fork's binding (an edit of another operation is refused). A JUnit contract test
-reads `rules/scenarios/*.json` and fails when a registered scenario does not exist or does not list the
-rule, a registered variant is missing, is the base variant, or its operation differs, when a card a
-rule class names (a `static final String` the card database knows) is not one of its scenario's
-`cards`, and when a rule `rules/directed-fork-rules.txt` lists has no registration.
-`DirectedRulesMain` prints the registered rule ids, one per line.
+`FE/directed/DirectedRules.java` lists the registrations (`DirectedRules.REGISTERED`), one class
+per registration in `FE/directed/rules/` (`ManaValueSearch` is one class parameterised for two:
+702.53a, transmute, and 702.71a, transfigure). A `DirectedRule` names its rule ids, each with the
+scenario whose base variant its precondition waits for (two scenarios of a rule may share a variant
+label), a `BoardPrecondition` (`bind(Game)`, returning the `Binding` of live objects by role, one
+that throws read as not met) and `Map<String variantLabel, Application>`, each `Application` naming
+its `ForkOperation` and building the `BoardEdit` from the fork's binding (an edit of another
+operation is refused). Rules that share a board, a binding and an edit are one registration of
+several rule ids (`DirectedRule.alsoFor`): the three meld rules 701.42a, 712.4a and 712.14c
+(`Meld`), and Aura swap's 701.12e and 702.65a (`AuraSwap`). `DirectedRules.find` finds a
+registration under any of its rules, and no rule id is in two registrations. A JUnit contract test
+reads `rules/scenarios/*.json` and fails, for each rule of a registration, when its scenario does
+not exist or does not list the rule, a registered variant is missing from it, is its base variant,
+or its operation differs; when a card a rule class names (a `static final String` the card database
+knows) is not one of the cards of its registrations' scenarios; and when a rule
+`rules/directed-fork-rules.txt` lists has no registration. `DirectedRulesMain` prints every
+registered rule id, one per line, a registration of several rules printing each.
 
 A precondition binds only a board where its variant's edit makes the variant true for the turn the
 fork plays: a `remove_permanent` variant binds the one permanent doing what it removes (no second

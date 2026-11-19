@@ -121,7 +121,7 @@ declaration speaks for it; absent from both is not "not countable".
 | Field | Type | Kinds | Rule |
 |---|---|---|---|
 | `generation` | int, `3` | all | absent: gen-1 or gen-2 (feature 024's rule); any other value is refused |
-| `aimed_at` | list of rule ids | all, aimed records only | directed fork: `[rule]`; `collect-coverage` / `collect-variants`: the run's `--directed-fork-rules`, possibly `[]`; absent on every other record |
+| `aimed_at` | list of rule ids | all, aimed records only | directed fork: its registration's rules, `[rule]` or several sharing a board, a binding and an edit; `collect-coverage` / `collect-variants`: the run's `--directed-fork-rules`, possibly `[]`; absent on every other record |
 | `directed` | `{variant, operation}` | all, directed-fork records only | `operation` a `ForkOperation` |
 | `copy_dropped` | `{kind: count}` | all, fork records only | what the copier left out of the fork's copy for want of a counterpart, by `GameCopier.NoCounterpart` kind lower-cased (`command`, `delayed_trigger`, `remembered`, `link`, `attack`, `ability`, `activation`), each count at least 1; absent on live records and on a fork whose copy left nothing out |
 | `kind` | adds `turn_action` | | subkinds `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`, `lore_counter`, `game_end` (the game-end marker: one per game that ended, its last record, never withheld) |

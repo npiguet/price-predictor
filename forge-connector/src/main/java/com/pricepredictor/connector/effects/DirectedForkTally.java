@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.json.Json;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -73,13 +74,19 @@ public final class DirectedForkTally {
     }
 
     /**
-     * Count a throw of {@code rule}'s precondition, which read as not met.
-     * The first of each rule is printed with its stack; later ones are
-     * counted only.
+     * Count a throw of a registration's precondition, which read as not met,
+     * under each of its {@code rules}. The first of each registration is
+     * printed with its stack, naming its rules joined by {@code +}; later
+     * ones are counted only.
      */
-    void preconditionThrew(String rule, RuntimeException failure) {
-        if (add(rule, Count.PRECONDITION_THREW) == 1) {
-            System.err.println("Effect records: directed rule " + rule + "'s precondition threw and"
+    void preconditionThrew(List<String> rules, RuntimeException failure) {
+        boolean first = false;
+        for (String rule : rules) {
+            first |= add(rule, Count.PRECONDITION_THREW) == 1;
+        }
+        if (first) {
+            System.err.println("Effect records: directed rule " + String.join("+", rules)
+                    + "'s precondition threw and"
                     + " reads as not met (later throws are counted in the directed fork tally,"
                     + " not printed): " + HookFailures.withStack(failure));
         }

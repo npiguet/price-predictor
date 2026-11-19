@@ -74,7 +74,7 @@ The envelope is frozen within a generation: a later capability makes new `kind` 
 | Interventional resolution | true | `intervention` | true | effect half alone, no `link_id` |
 | Damage-step probe | true | `probe` | false | `mirror_of`; payload `probed_keyword`, `probed_entity`; a probe of `first_strike` or `double_strike` at `combat_substep` `first_strike` spans two steps: its counterpart is the real first-strike record, which `mirror_of` names, and the regular-step record after it |
 | Protection fork | true | `protection` | true | any kind; cost halves linked as live ones |
-| Directed fork | true | `directed` | false | `directed` set, `aimed_at = [rule]`; `mirror_of` null, since a phase boundary leaves no live record open; its records may hold the one play its variant forced (FR-010b), unmarked |
+| Directed fork | true | `directed` | false | `directed` set, `aimed_at` its registration's rules (`forks.md` § Directed forks); `mirror_of` null, since a phase boundary leaves no live record open; its records may hold the one play its variant forced (FR-010b), unmarked |
 
 A fork's record may hold `player_lost` and `player_won`, the outcome of the fork's own game, never the live game's: `forks.md` § Rules for every fork.
 

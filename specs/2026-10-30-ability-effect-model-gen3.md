@@ -335,7 +335,7 @@ from a real game.
   0 for a rule whose two sides have both reached their count, 1 for a rule with a side still at
   zero, and in between the larger of 0.05 and the share of the count its shorter side misses.
 - `collect-variants` recomputes the probabilities before its first round and after each round,
-  from the directed forks (the games holding a record with `directed` set and `aimed_at` the rule,
+  from the directed forks (the games holding a record with `directed` set and `aimed_at` naming the rule,
   cut games left out) its own and its continued runs' shards hold, each shard counted once. A rule's
   sides are the polarities of its catalogue variants classified into an operation, a fork's side is
   its variant's polarity, and each side needs `--steer-floor` forks. A rule with no fork yet is at 1.
@@ -343,11 +343,15 @@ from a real game.
 - When several rules match at one boundary, they are drawn in descending order of probability,
   ties broken by their order in `--directed-fork-rules`, so the per-game budget goes first to
   the rule that needs it most. A fork is taken only while the budget allows.
+- Rules sharing a board, a binding and an edit are one registration (the three meld rules
+  701.42a, 712.4a and 712.14c; Aura swap's 701.12e and 702.65a). It is drawn, budgeted and forked
+  once a game, at the place of its first listed rule and at the largest probability among its
+  listed rules, and is tallied under each of its rules.
 - Each worker prints, per rule, the boundaries matched, the draws that came up a fork, the
   forks the budget blocked, the forks taken and kept, and the precondition throws; the
   supervisor sums them into `run.json` as `directed_fork_tally`. A throwing precondition reads
   as not met and is a worker-failure kind.
-- A directed-fork record carries `aimed_at` set to its rule, `fork = true`,
+- A directed-fork record carries `aimed_at` set to the rules of its registration, `fork = true`,
   `interventional = false`, `directed` naming the variant and the operation applied, and
   `mirror_of` null: a phase boundary leaves no live record open (§ 8.1).
 - The base spec's score check against the live game before any change applies.

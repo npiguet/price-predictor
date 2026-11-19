@@ -60,7 +60,7 @@ final class DirectedFork {
      */
     boolean take(DirectedRule rule, String variant, Application application, Binding binding) {
         Consumer<EffectRecord> flags = flags(
-                rule.rule(), new DirectedTag(variant, application.operation()));
+                rule.rules(), new DirectedTag(variant, application.operation()));
         Forks.ForkRun run = new Forks.ForkRun(KIND, game, () -> { }, perspective);
         ForkPlayForward.Played played = run.take((verified, snapshots) -> {
             Game fork = verified.fork();
@@ -77,14 +77,15 @@ final class DirectedFork {
     }
 
     /**
-     * The flags every record of a directed fork carries (FR-009a, D5): the one
-     * rule it was taken for as {@code aimed_at}, narrower than a run's list; a
+     * The flags every record of a directed fork carries (FR-009a, D5): the
+     * rules its registration names as {@code aimed_at}, one unless rules
+     * share a board, a binding and an edit, narrower than a run's list; a
      * non-interventional fork; and the variant and operation applied. No
      * {@code mirror_of}: a fork is taken at a phase boundary, which closes
      * every live record first, so none is open to mirror; the records are
      * paired with the live turn by {@code game_id}, turn and {@code directed}.
      */
-    static Consumer<EffectRecord> flags(String rule, DirectedTag tag) {
-        return record -> record.fork(ForkKind.DIRECTED).interventional(false).aimedAt(List.of(rule)).directed(tag);
+    static Consumer<EffectRecord> flags(List<String> rules, DirectedTag tag) {
+        return record -> record.fork(ForkKind.DIRECTED).interventional(false).aimedAt(rules).directed(tag);
     }
 }

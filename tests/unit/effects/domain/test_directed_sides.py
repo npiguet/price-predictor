@@ -2,8 +2,9 @@
 that follow (D8, task DF01b2).
 
 The records are the played gone-planeswalker forks of ``DirectedForkPlayedForwardTest``
-(``directed-702.19ef-combats.jsonl``), re-gamed; the sides come from the real
-catalogue under ``rules/``.
+(``directed-702.19ef-combats.jsonl``) and one record of its meld fork, a
+registration of three rules (``directed-meld-fork.jsonl``, task DF04), re-gamed;
+the sides come from the real catalogue under ``rules/``.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from effects.domain.directed_fork_probabilities import directed_fork_probability
 from effects.domain.directed_sides import (
     DirectedForkGames,
     directed_rule_probabilities,
+    directed_side_counts,
     forkable_sides,
 )
 from effects.domain.rule_catalogue import Polarity
@@ -25,7 +27,11 @@ from effects.infrastructure.record_codec import record_from_dict
 from effects.infrastructure.rules_catalogue_io import load_registered_variants, load_scenarios
 
 _PLAYED = Path(__file__).parents[3] / "fixtures" / "effects" / "directed-702.19ef-combats.jsonl"
+_MELD = Path(__file__).parents[3] / "fixtures" / "effects" / "directed-meld-fork.jsonl"
 RULES = Path(__file__).parents[4] / "rules"
+
+#: The meld registration's rules: one fork, all three in ``aimed_at``.
+MELD_RULES = ("701.42a", "712.4a", "712.14c")
 
 
 def fork_record(rule: str, game: str):
@@ -35,6 +41,13 @@ def fork_record(rule: str, game: str):
         if data.get("aimed_at") == [rule]:
             return replace(record_from_dict(data), game_id=game)
     raise AssertionError(f"no directed record of {rule} in {_PLAYED}")
+
+
+def meld_fork_record(game: str):
+    """The real fork record of the meld registration, moved into ``game``."""
+    data = json.loads(_MELD.read_text(encoding="utf-8").splitlines()[0])
+    assert data["aimed_at"] == list(MELD_RULES)
+    return replace(record_from_dict(data), game_id=game)
 
 
 def live_record(game: str):
@@ -118,6 +131,18 @@ class TestDirectedForkGames:
         found.add(fork_record("702.19e", "g2"))
         found.drop_games(frozenset({"g2"}))
         assert found.games == {}
+
+    def test_a_fork_of_several_rules_credits_its_game_once_to_each(self):
+        found = DirectedForkGames()
+        for _ in range(2):
+            found.add(meld_fork_record("g1"))
+        assert found.games == {(rule, "meld_pair"): {"g1"} for rule in MELD_RULES}
+
+    def test_a_fork_of_several_rules_fills_each_rules_side(self, catalogue):
+        found = DirectedForkGames()
+        found.add(meld_fork_record("g1"))
+        sides = forkable_sides(catalogue, MELD_RULES, load_registered_variants(RULES))
+        assert directed_side_counts(sides, found) == dict.fromkeys(MELD_RULES, [1])
 
     def test_merging_shards_unions_their_games(self):
         first, second = DirectedForkGames(), DirectedForkGames()

@@ -1189,7 +1189,7 @@ class RegisteredRulesTest {
         assertOnlyAdded(twin, twin.fork().player("player"), Bolster.BEARS);
     }
 
-    // ── 701.42a, meld: replace_card ─────────────────────────────────────
+    // ── 701.42a, 712.4a and 712.14c, meld: replace_card ─────────────────
 
     /**
      * A's {@code host} beside A's {@code partner}, a card or a token copy of
@@ -1496,47 +1496,48 @@ class RegisteredRulesTest {
     @Test
     void transmuteBindsTheTransmuterAndTheOneCardOfItsManaValue() {
         Board board = infiltratorBoard("Forest", "Shock", "Grizzly Bears", "Island");
-        Binding binding = Transmute.bind(board.game).orElseThrow();
-        assertEquals(board.other, binding.card("transmuter"));
+        Binding binding = ManaValueSearch.transmute().precondition(board.game).orElseThrow();
+        assertEquals(board.other, binding.card("source"));
         assertEquals(board.subject, binding.card("card"));
     }
 
     @Test
     void transmuteBindsNothingWithTwoCardsOfItsManaValue() {
-        assertTrue(Transmute.bind(infiltratorBoard("Grizzly Bears", "Grizzly Bears").game).isEmpty());
+        assertTrue(ManaValueSearch.transmute().precondition(infiltratorBoard("Grizzly Bears", "Grizzly Bears").game).isEmpty());
     }
 
     @Test
     void transmuteForksACentaurCourserInTheCardsPlace() {
         Board board = infiltratorBoard("Forest", "Shock", "Grizzly Bears", "Island");
-        Twin twin = board.twin(Transmute.rule());
+        Twin twin = board.twin(ManaValueSearch.transmute());
         List<Card> library = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library));
-        assertEquals(List.of("Forest", "Shock", Transmute.COURSER, "Island"),
+        assertEquals(List.of("Forest", "Shock", ManaValueSearch.COURSER, "Island"),
                 library.stream().map(Card::getName).toList());
         // A library card the board shows by count alone: the swap the list
         // above shows changes no visible member.
         assertTrue(twin.changes().isEmpty(), "visible changes: " + twin.changes());
     }
 
-    // ── 702.65a, Aura swap's exchange: move_card ────────────────────────
+    // ── 702.65a, Aura swap's exchange, registered with 701.12e: move_card ─
 
+    /** 702.65a-1's base, Grizzly Bears in hand, is 701.12e's registration's board too. */
     @Test
-    void auraSwapExchangeBindsTheHandsCardAndTheAttachedAura() {
+    void auraSwapBindsTheExchangeScenariosHandCard() {
         Board board = auraSwapBoard("Grizzly Bears");
-        Binding binding = AuraSwapExchange.rule().precondition(board.game).orElseThrow();
+        Binding binding = AuraSwap.rule().precondition(board.game).orElseThrow();
         assertEquals(board.subject, binding.card("card"));
         assertEquals(board.other, binding.card("aura"));
     }
 
     @Test
-    void auraSwapExchangeBindsNothingWithAnAuraInHand() {
-        assertTrue(AuraSwapExchange.rule().precondition(auraSwapBoard("Holy Strength").game).isEmpty());
+    void auraSwapBindsNothingWithTheAuraTheExchangeWaitsFor() {
+        assertTrue(AuraSwap.rule().precondition(auraSwapBoard("Holy Strength").game).isEmpty());
     }
 
     @Test
-    void auraSwapExchangeForksAHolyStrengthInTheCardsPlace() {
+    void auraSwapForksAHolyStrengthInTheExchangeScenariosCardsPlace() {
         Board board = auraSwapBoard("Grizzly Bears");
-        Twin twin = board.twin(AuraSwapExchange.rule());
+        Twin twin = board.twin(AuraSwap.rule());
         List<Card> hand = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Hand));
         assertEquals(List.of(AuraSwap.HOLY_STRENGTH), hand.stream().map(Card::getName).toList());
         assertOnlySwapped(twin, board.subject, hand.get(0));
@@ -1582,22 +1583,22 @@ class RegisteredRulesTest {
     @Test
     void transfigureBindsTheCreatureAndTheOneCreatureCardOfItsManaValue() {
         Board board = fleshwritherBoard("Hill Giant", "Grizzly Bears");
-        Binding binding = Transfigure.bind(board.game).orElseThrow();
-        assertEquals(board.other, binding.card("creature"));
+        Binding binding = ManaValueSearch.transfigure().precondition(board.game).orElseThrow();
+        assertEquals(board.other, binding.card("source"));
         assertEquals(board.subject, binding.card("card"));
     }
 
     @Test
     void transfigureBindsNothingWithTwoCreatureCardsOfItsManaValue() {
-        assertTrue(Transfigure.bind(fleshwritherBoard("Hill Giant", "Hill Giant").game).isEmpty());
+        assertTrue(ManaValueSearch.transfigure().precondition(fleshwritherBoard("Hill Giant", "Hill Giant").game).isEmpty());
     }
 
     @Test
     void transfigureForksACrawWurmInTheCardsPlace() {
         Board board = fleshwritherBoard("Hill Giant", "Grizzly Bears");
-        Twin twin = board.twin(Transfigure.rule());
+        Twin twin = board.twin(ManaValueSearch.transfigure());
         List<Card> library = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library));
-        assertEquals(List.of(Transfigure.WURM, "Grizzly Bears"), library.stream().map(Card::getName).toList());
+        assertEquals(List.of(ManaValueSearch.WURM, "Grizzly Bears"), library.stream().map(Card::getName).toList());
         assertOnlyChanged(twin, board.subject, library.get(0));
     }
 
@@ -1844,30 +1845,6 @@ class RegisteredRulesTest {
         Twin twin = board.twin(WebSlinging.rule());
         assertEquals(Set.of(id(board.subject) + ".tapped"), twin.changes());
         assertFalse(twin.fork().card("creature").isTapped());
-    }
-
-    // ── 712.4a and 712.14c, melding onto the back faces: replace_card ───
-
-    @Test
-    void meldPairAndMeldedEntryBindTheHostAndAStandIn() {
-        Board board = meldBoard("Graf Rats", "Hill Giant", false, 0);
-        assertEquals(board.subject, MeldPair.rule().precondition(board.game).orElseThrow().card("stand-in"));
-        assertEquals(board.subject, MeldedEntry.rule().precondition(board.game).orElseThrow().card("stand-in"));
-    }
-
-    @Test
-    void meldPairAndMeldedEntryBindNothingBesideThePartner() {
-        Game game = meldBoard("Graf Rats", "Midnight Scavengers", false, 0).game;
-        assertTrue(MeldPair.rule().precondition(game).isEmpty());
-        assertTrue(MeldedEntry.rule().precondition(game).isEmpty());
-    }
-
-    @Test
-    void meldPairAndMeldedEntryForkThePartnerInTheStandInsPlace() {
-        for (DirectedRule rule : List.of(MeldPair.rule(), MeldedEntry.rule())) {
-            Board board = meldBoard("Graf Rats", "Hill Giant", false, 0);
-            assertOnlyReplaced(board.twin(rule), board.subject, "Midnight Scavengers");
-        }
     }
 
     // ── 718.3a, a prototype's cost alone: remove_permanent ──────────────
@@ -2504,11 +2481,11 @@ class RegisteredRulesTest {
      * does not bind; with the turn's land drop used it binds again.
      */
     private static void assertALandToPlayStopsTheBinding(Board board, DirectedRule rule) {
-        assertTrue(rule.precondition(board.game).isPresent(), rule.rule() + ": the base binds");
+        assertTrue(rule.precondition(board.game).isPresent(), rule.name() + ": the base binds");
         TestBoard.inHand(board.game, board.you, "Forest");
-        assertTrue(rule.precondition(board.game).isEmpty(), rule.rule() + ": binds with a land to play");
+        assertTrue(rule.precondition(board.game).isEmpty(), rule.name() + ": binds with a land to play");
         board.you.setLandsPlayedThisTurn(1);
-        assertTrue(rule.precondition(board.game).isPresent(), rule.rule() + ": the land drop is used");
+        assertTrue(rule.precondition(board.game).isPresent(), rule.name() + ": the land drop is used");
     }
 
     @Test
@@ -2897,19 +2874,19 @@ class RegisteredRulesTest {
          * variant does not describe.
          */
         Twin twin(DirectedRule rule) {
-            assertEquals(1, rule.variants().size(), rule.rule() + " registers one variant");
+            assertEquals(1, rule.variants().size(), rule.name() + " registers one variant");
             Binding binding = rule.precondition(game).orElseThrow(
-                    () -> new AssertionError(rule.rule() + ": the precondition does not hold"));
+                    () -> new AssertionError(rule.name() + ": the precondition does not hold"));
             Map<String, Object> real = BoardStates.of(game);
             GameCopier copier = new GameCopier(game);
             Game fork = copier.makeCopy();
             assertEquals(Set.of(), changes(real, BoardStates.of(fork)), "the unedited copy differs");
-            assertTrue(TestForks.scoreChecks(game, copier, fork), rule.rule() + ": the copy fails its score check");
+            assertTrue(TestForks.scoreChecks(game, copier, fork), rule.name() + ": the copy fails its score check");
 
             Binding forked = binding.inFork(copier);
             Application application = rule.variants().values().iterator().next();
             assertEquals(Optional.empty(), ForcedPlayRun.dryRun(application, binding, game),
-                    rule.rule() + ": the forced play's dry run on the live board");
+                    rule.name() + ": the forced play's dry run on the live board");
             application.edit(forked).apply(fork);
 
             Map<String, Object> edited = BoardStates.of(fork);
@@ -2918,13 +2895,13 @@ class RegisteredRulesTest {
             Set<String> tidied = keywordEffectCards(fork);
             fork.getAction().checkStateEffects(true);
             assertEquals(placed, placed(fork),
-                    rule.rule() + ": the first state-based check moved a card of the edited board");
+                    rule.name() + ": the first state-based check moved a card of the edited board");
             Map<String, Object> checked = BoardStates.of(fork);
             assertEquals(Set.of(), withoutTidied(changes(edited, checked), tidied, edited, checked),
-                    rule.rule() + ": the first state-based check changed the edited board");
-            assertFalse(fork.isGameOver(), rule.rule() + ": the first state-based check ended the fork's game");
+                    rule.name() + ": the first state-based check changed the edited board");
+            assertFalse(fork.isGameOver(), rule.name() + ": the first state-based check ended the fork's game");
             for (Player player : fork.getRegisteredPlayers()) {
-                assertFalse(player.hasLost(), rule.rule() + ": the first state-based check lost " + player);
+                assertFalse(player.hasLost(), rule.name() + ": the first state-based check lost " + player);
             }
             assertEquals(real, BoardStates.of(game), "the check reached the live game");
             assertForcedPlayMayBeMade(rule, application, application.afterEdit(forked, fork), fork);
@@ -2945,7 +2922,7 @@ class RegisteredRulesTest {
             ForcedPlayRun run = ForcedPlayRun.start(application, forked, fork);
             if (run.play().playsALine()) {
                 assertTrue(run.choose(run.actor()) != null,
-                        rule.rule() + ": the forced line is playable on the edited copy");
+                        rule.name() + ": the forced line is playable on the edited copy");
             }
         }
 

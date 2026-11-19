@@ -4,7 +4,6 @@ import com.pricepredictor.connector.effects.directed.rules.Aftermath;
 import com.pricepredictor.connector.effects.directed.rules.AscendBlessing;
 import com.pricepredictor.connector.effects.directed.rules.AuraSwap;
 import com.pricepredictor.connector.effects.directed.rules.AuraSwapCantEnchant;
-import com.pricepredictor.connector.effects.directed.rules.AuraSwapExchange;
 import com.pricepredictor.connector.effects.directed.rules.BestowIllegalTarget;
 import com.pricepredictor.connector.effects.directed.rules.Bolster;
 import com.pricepredictor.connector.effects.directed.rules.CantEnterBattlefield;
@@ -22,10 +21,9 @@ import com.pricepredictor.connector.effects.directed.rules.Intimidate;
 import com.pricepredictor.connector.effects.directed.rules.JumpStartFromHand;
 import com.pricepredictor.connector.effects.directed.rules.LifeExchange;
 import com.pricepredictor.connector.effects.directed.rules.LifeTotalWin;
+import com.pricepredictor.connector.effects.directed.rules.ManaValueSearch;
 import com.pricepredictor.connector.effects.directed.rules.Mayhem;
 import com.pricepredictor.connector.effects.directed.rules.Meld;
-import com.pricepredictor.connector.effects.directed.rules.MeldPair;
-import com.pricepredictor.connector.effects.directed.rules.MeldedEntry;
 import com.pricepredictor.connector.effects.directed.rules.MorphFaceUp;
 import com.pricepredictor.connector.effects.directed.rules.MutagenToken;
 import com.pricepredictor.connector.effects.directed.rules.NoDamageToAGonePlaneswalker;
@@ -43,8 +41,6 @@ import com.pricepredictor.connector.effects.directed.rules.SkulkBlocker;
 import com.pricepredictor.connector.effects.directed.rules.SmallLibraryShuffle;
 import com.pricepredictor.connector.effects.directed.rules.ToughnessZero;
 import com.pricepredictor.connector.effects.directed.rules.TrampleOverPlaneswalkers;
-import com.pricepredictor.connector.effects.directed.rules.Transfigure;
-import com.pricepredictor.connector.effects.directed.rules.Transmute;
 import com.pricepredictor.connector.effects.directed.rules.TypeSettingAura;
 import com.pricepredictor.connector.effects.directed.rules.Unearth;
 import com.pricepredictor.connector.effects.directed.rules.UnleashCantBlock;
@@ -74,10 +70,13 @@ import java.util.Optional;
 public final class DirectedRules {
 
     /**
-     * Every registered rule, in the catalogue's rule order: one class per
-     * rule in {@code directed/rules/}, each naming its scenario, its board
-     * precondition and its variants. Together they cover the ten operations
-     * (story 3, acceptance 3).
+     * Every registration, in the catalogue's order of its first rule: one
+     * class per registration in {@code directed/rules/}, or one class
+     * parameterised for two ({@link ManaValueSearch}), each naming its rules'
+     * scenarios, its board precondition and its variants. Rules sharing a
+     * board, a binding and an edit are one registration: the three meld
+     * rules ({@link Meld}), Aura swap's two ({@link AuraSwap}). Together they
+     * cover the ten operations (story 3, acceptance 3).
      */
     private static final DirectedRules REGISTERED = of(
             LifeTotalWin.rule(),
@@ -108,11 +107,10 @@ public final class DirectedRules {
             Intimidate.rule(),
             TrampleOverPlaneswalkers.rule(),
             NoDamageToAGonePlaneswalker.rule(),
-            Transmute.rule(),
+            ManaValueSearch.transmute(),
             VanishingInstances.rule(),
-            AuraSwapExchange.rule(),
             AuraSwapCantEnchant.rule(),
-            Transfigure.rule(),
+            ManaValueSearch.transfigure(),
             Unearth.rule(),
             UnleashCantBlock.rule(),
             BestowIllegalTarget.rule(),
@@ -128,14 +126,15 @@ public final class DirectedRules {
             WebSlinging.rule(),
             DrawFromEmptyLibrary.rule(),
             ToughnessZero.rule(),
-            MeldPair.rule(),
-            MeldedEntry.rule(),
             Prototype.rule());
 
+    /** Each rule id to its registration: a registration of several rules under each. */
     private final Map<String, DirectedRule> rules;
+    private final List<DirectedRule> registrations;
 
-    private DirectedRules(Map<String, DirectedRule> rules) {
+    private DirectedRules(Map<String, DirectedRule> rules, List<DirectedRule> registrations) {
         this.rules = Collections.unmodifiableMap(rules);
+        this.registrations = List.copyOf(registrations);
     }
 
     /** The rules the worker forks for. */
@@ -146,30 +145,32 @@ public final class DirectedRules {
     /**
      * A registry of {@code rules}, for the registered set and for a test.
      *
-     * @throws IllegalArgumentException when two share a rule id
+     * @throws IllegalArgumentException when two registrations name one rule id
      */
     public static DirectedRules of(DirectedRule... rules) {
         Map<String, DirectedRule> byId = new LinkedHashMap<>();
         for (DirectedRule rule : rules) {
-            if (byId.putIfAbsent(rule.rule(), rule) != null) {
-                throw new IllegalArgumentException(rule.rule() + " is registered twice");
+            for (String id : rule.rules()) {
+                if (byId.putIfAbsent(id, rule) != null) {
+                    throw new IllegalArgumentException(id + " is registered twice");
+                }
             }
         }
-        return new DirectedRules(byId);
+        return new DirectedRules(byId, List.of(rules));
     }
 
-    /** The rule registered under {@code id}, if any. */
+    /** The registration naming the rule {@code id}, if any. */
     public Optional<DirectedRule> find(String id) {
         return Optional.ofNullable(rules.get(id));
     }
 
-    /** The registered rule ids, in registration order. */
+    /** Every registered rule id, a registration of several rules giving each, in registration order. */
     public List<String> ids() {
         return List.copyOf(rules.keySet());
     }
 
-    /** The registered rules, in registration order. */
+    /** The registrations, in registration order, each once however many rules it names. */
     public Collection<DirectedRule> rules() {
-        return rules.values();
+        return registrations;
     }
 }

@@ -246,26 +246,28 @@ _DIRECTED = Path("forge-connector/src/main/java/com/pricepredictor/connector/eff
 
 def _registered_classes(registry: str) -> list[str]:
     """The rule classes ``DirectedRules.REGISTERED`` lists in ``registry``, the
-    registry's source: each ``X.rule()`` of the list, comments left out."""
+    registry's source: the class of each ``X.rule()`` (or ``X.transmute()``, a
+    class building several registrations) of the list, comments left out."""
     import re
 
     code = re.sub(r"/\*.*?\*/|//[^\n]*", "", registry, flags=re.S)
     body = code[code.index("REGISTERED = of("):]
     body = body[:body.index(");")]
-    return re.findall(r"(\w+)\.rule\(\)", body)
+    return re.findall(r"(\w+)\.\w+\(\)", body)
 
 
 def _registered_in_source() -> frozenset[str]:
     """The rule ids ``DirectedRules.REGISTERED`` lists, read off the connector's
-    source: each listed class's ``RULE`` constant. The integration test below
-    asks the JVM itself."""
+    source: each listed class's rule-id constants (``RULE``, and ``PAIR_RULE``
+    or ``TRANSMUTE_RULE`` for a class registering several rules). The
+    integration test below asks the JVM itself."""
     import re
 
     registry = (_DIRECTED / "DirectedRules.java").read_text(encoding="utf-8")
     rules = set()
     for name in _registered_classes(registry):
         source = (_DIRECTED / "rules" / f"{name}.java").read_text(encoding="utf-8")
-        rules.add(re.search(r'public static final String RULE = "([^"]+)";', source).group(1))
+        rules.update(re.findall(r'public static final String \w*RULE = "([^"]+)";', source))
     return frozenset(rules)
 
 

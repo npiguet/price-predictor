@@ -1,9 +1,12 @@
 """What a collection run counts of its directed forks, and the probabilities
 that follow (D8).
 
-A directed fork's records carry ``aimed_at = [rule]`` and ``directed =
-{variant, operation}``, and a rule forks at most once per game, so a rule's
-kept forks are the distinct games holding such a record. A fork's side is the
+A directed fork's records carry ``aimed_at`` and ``directed = {variant,
+operation}``. ``aimed_at`` names every rule of the fork's registration: one,
+or several rules sharing a board, a binding and an edit (the three meld rules,
+Aura swap's two), whose one fork counts under each. A registration forks at
+most once per game, so a rule's kept forks are the distinct games holding a
+record naming it. A fork's side is the
 polarity its variant has in the catalogue. The sides of a rule are the
 polarities of its registered variants that the catalogue classifies into an
 operation: a catalogue variant the Java registry does not register is never
@@ -46,7 +49,8 @@ def forkable_sides(
 
 @dataclass
 class DirectedForkGames:
-    """The games holding a directed fork's record, per (rule, variant label)."""
+    """The games holding a directed fork's record, per (rule, variant label):
+    a record naming several rules credits its game to each."""
 
     games: dict[tuple[str, str], set[str]] = field(default_factory=dict)
 

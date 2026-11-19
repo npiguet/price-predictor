@@ -18,26 +18,36 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 701.12e, Aura swap exchanges an attached Aura with an Aura card in hand,
- * the new one attached where the old one was, on scenario {@code 701.12e-1}:
- * A activates Aura swap on Arcanum Wings on Grizzly Bears and Holy Strength
- * from its hand enters attached to the Bears.
+ * Aura swap's two rules, one registration: they share this board, its
+ * binding and its edit, so the board is forked once and its records name
+ * both.
+ * <ul>
+ * <li>701.12e, Aura swap exchanges an attached Aura with an Aura card in
+ * hand, the new one attached where the old one was, on scenario
+ * {@code 701.12e-1}: A activates Aura swap on Arcanum Wings on Grizzly Bears
+ * and Holy Strength from its hand enters attached to the Bears.
+ * <li>702.65a, Aura swap exchanges the Aura with an Aura card in its
+ * controller's hand, on scenario {@code 702.65a-1}: the keyword's own rule
+ * for the exchange 701.12e defines.
+ * </ul>
  *
  * <p>The base board, read at a boundary: a main phase of the active player
  * begins, it controls an Aura with Aura swap whose cost it has the lands for,
  * attached to a creature without protection, and its hand holds cards but no
- * Aura card, so the swap has nothing to exchange with ({@link #withoutAura}).
+ * Aura card, so the swap has nothing to exchange with ({@link #bind}).
  * It binds the active player, the hand's first card and the attached Aura.
  *
  * <p>Variant {@code aura_in_hand} ({@code move_card}): a Holy Strength (enchant
  * creature) is in that card's place in the hand, so the swap exchanges it for
- * the attached Aura and attaches it where that one was: the side of the rule
+ * the attached Aura and attaches it where that one was: the side of the rules
  * the counts lack. The fork forces the swap ({@link #swap}).
  */
 public final class AuraSwap {
 
     public static final String RULE = "701.12e";
+    public static final String EXCHANGE_RULE = "702.65a";
     static final String SCENARIO = "701.12e-1";
+    static final String EXCHANGE_SCENARIO = "702.65a-1";
     static final String AURA_IN_HAND = "aura_in_hand";
     static final String HOLY_STRENGTH = "Holy Strength";
 
@@ -45,31 +55,25 @@ public final class AuraSwap {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, AuraSwap::bind, AURA_IN_HAND, auraInHand());
+        return DirectedRule.of(RULE, SCENARIO, AuraSwap::bind, AURA_IN_HAND, auraInHand())
+                .alsoFor(EXCHANGE_RULE, EXCHANGE_SCENARIO);
     }
 
-    static Optional<Binding> bind(Game live) {
-        return withoutAura(live);
-    }
-
-    /**
-     * Holy Strength in the place of the hand's card the board binds, the swap
-     * forced: the variant 701.12e and 702.65a share.
-     */
-    static Application auraInHand() {
+    /** Holy Strength in the place of the hand's card the board binds, the swap forced. */
+    private static Application auraInHand() {
         return new Application(ForkOperation.MOVE_CARD,
                 fork -> MoveCardOperation.replace(fork.card("card"), HOLY_STRENGTH))
                 .forcing(swap());
     }
 
     /**
-     * The board 701.12e and 702.65a share, read at the start of the active
-     * player's main phase: an Aura with Aura swap whose cost it has the lands
-     * for, attached to a creature without protection (which Holy Strength,
-     * enchant creature, can then enchant), and a hand of cards none of which
-     * is an Aura. It binds the player, the hand's first card and the Aura.
+     * The registration's board, read at the start of the active player's main
+     * phase: an Aura with Aura swap whose cost it has the lands for, attached
+     * to a creature without protection (which Holy Strength, enchant
+     * creature, can then enchant), and a hand of cards none of which is an
+     * Aura. It binds the player, the hand's first card and the Aura.
      */
-    static Optional<Binding> withoutAura(Game live) {
+    static Optional<Binding> bind(Game live) {
         if (!Boards.atMainPhase(live)) {
             return Optional.empty();
         }

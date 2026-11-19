@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import com.pricepredictor.connector.effects.directed.DirectedRules;
 import com.pricepredictor.connector.effects.directed.KeywordEdit;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -81,7 +82,7 @@ class DirectedForkPlayedForwardTest {
     /**
      * Record the game from the boundary beginning {@code step}, taking
      * {@code rule}'s directed fork there, and play the live turn out; the
-     * fork's records, each checked to name the rule.
+     * fork's records, each checked to name the rule's registration.
      */
     private List<String> forkOf(Game game, PhaseType step, String rule, String variant) throws Throwable {
         return forkOf(game, step, rule, variant, Decisions.SAMPLED);
@@ -90,17 +91,7 @@ class DirectedForkPlayedForwardTest {
     /** {@link #forkOf(Game, PhaseType, String, String)}, decision candidates sampled as {@code decisions} says. */
     private List<String> forkOf(Game game, PhaseType step, String rule, String variant, Decisions decisions)
             throws Throwable {
-        List<String> forked = new ArrayList<>();
-        for (String record : played(game, step, rule, decisions)) {
-            Map<String, Object> parsed = parse(record);
-            if (Boolean.TRUE.equals(parsed.get("fork"))) {
-                assertEquals(List.of(rule), parsed.get("aimed_at"), record);
-                assertEquals(variant, RecordLines.asMap(parsed.get("directed")).get("variant"), record);
-                forked.add(record);
-            }
-        }
-        assertFalse(forked.isEmpty(), rule + ": the fork was kept and recorded");
-        return forked;
+        return forkOf(played(game, step, rule, decisions), rule, variant);
     }
 
     /**
@@ -194,13 +185,17 @@ class DirectedForkPlayedForwardTest {
         return forkOf(all, rule, variant);
     }
 
-    /** The fork's records among {@code all}, each checked to name the rule and the variant. */
+    /**
+     * The fork's records among {@code all}, each checked to name the variant
+     * and, in {@code aimed_at}, every rule of the rule's registration.
+     */
     private static List<String> forkOf(List<String> all, String rule, String variant) {
         List<String> forked = new ArrayList<>();
         for (String record : all) {
             Map<String, Object> parsed = parse(record);
             if (Boolean.TRUE.equals(parsed.get("fork"))) {
-                assertEquals(List.of(rule), parsed.get("aimed_at"), record);
+                assertEquals(DirectedRules.registered().find(rule).orElseThrow().rules(), parsed.get("aimed_at"),
+                        record);
                 assertEquals(variant, RecordLines.asMap(parsed.get("directed")).get("variant"), record);
                 forked.add(record);
             }
@@ -962,8 +957,9 @@ class DirectedForkPlayedForwardTest {
     }
 
     /**
-     * {@code replace_card}, 701.42a, 712.4a and 712.14c, inverted: Graf Rats
-     * beside Hill Giant as the first main phase begins. The fork's Giant is
+     * {@code replace_card}, 701.42a, 712.4a and 712.14c, inverted, one
+     * registration whichever of the three is listed: Graf Rats beside Hill
+     * Giant as the first main phase begins. The fork's Giant is
      * Midnight Scavengers, so at the beginning of combat Graf Rats' trigger
      * melds the two into Chittering Host, with no seat's choice.
      */

@@ -44,7 +44,7 @@ A gen-3 key is `(script_file, face, trait_kind, index_within_kind[, option][, bu
 |---|---|---|
 | `generation` | `3` | every record |
 | `fork_kind` | `"probe"` | fork records only, right after `fork`: the kind of fork that wrote the record, one of `intervention` (an interventional resolution), `probe` (a damage-step probe), `protection` (a protection fork) and `directed` (a directed fork); absent on every live record |
-| `aimed_at` | `["704.5f", …]` | aimed records only: every `collect-coverage` and `collect-variants` record (the run's `--directed-fork-rules`, `[]` when it names none) and every directed fork (`[rule]`); never another `match-outcomes` record |
+| `aimed_at` | `["704.5f", …]` | aimed records only: every `collect-coverage` and `collect-variants` record (the run's `--directed-fork-rules`, `[]` when it names none) and every directed fork (the rules of its registration: `[rule]`, or several rules sharing a board, a binding and an edit, `["701.42a", "712.4a", "712.14c"]`); never another `match-outcomes` record |
 | `directed` | `{"variant": "tougher", "operation": "pt"}` | directed-fork records only |
 | `copy_dropped` | `{"remembered": 1, "command": 2}` | fork records only (interventional resolution, damage-step probe, directed fork, protection fork), after `directed`: what the copier left out of the fork's copy for want of a counterpart in it, kind to count, kinds in name order, each count at least 1; absent on every live record and on a fork whose copy left nothing out |
 
@@ -55,7 +55,7 @@ Flag signatures, added rows and the `fork_kind` column:
 | observed | `false` | `false` | absent | absent | the run's on `collect-coverage` and `collect-variants`, else absent |
 | interventional resolution | `true` | `true` | `intervention` | absent | the run's, as a live record's |
 | damage-step probe | `false` | `true` | `probe` | absent | the run's, as a live record's |
-| directed fork | `false` | `true` | `directed` | set | `[rule]` |
+| directed fork | `false` | `true` | `directed` | set | its registration's rules |
 | protection fork (FR-058) | `true` | `true` | `protection` | absent | the run's, as a live record's |
 
 A protection fork's records and an interventional resolution's half share `interventional: true`
@@ -82,8 +82,8 @@ which no live record stays open across. Directed-fork records are paired with th
 A directed fork's records may hold the one play its variant forced its seat to make (FR-010b): a
 cast or activation paid for through the engine's own payment, an answer to a "you may", or an
 attack. No member marks it, and the stamps stay `fork: true`, `interventional: false`,
-`aimed_at: [rule]`, `directed: {variant, operation}`; which variants force what is fixed per rule
-in the directed-rule registry. A reader that must tell a seat's own decision from a forced one
+`aimed_at` its registration's rules, `directed: {variant, operation}`; which variants force what
+is fixed per rule in the directed-rule registry. A reader that must tell a seat's own decision from a forced one
 reads the variant there.
 
 `copy_dropped` kinds, the values of Forge's `GameCopier.NoCounterpart` lower-cased:

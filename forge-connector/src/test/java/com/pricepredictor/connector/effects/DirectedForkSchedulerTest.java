@@ -22,8 +22,10 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import static com.pricepredictor.connector.effects.RecordLines.parse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -58,7 +60,7 @@ class DirectedForkSchedulerTest {
             CollectionCaps caps, DirectedForkTally tally, DirectedRule... rules) {
         return new DirectedForkScheduler(TestCards.game(), caps, DirectedRules.of(rules),
                 new ForkBudget(caps), tally, 7L,
-                (rule, variant, application, binding) -> forked.add(rule.rule()));
+                (rule, variant, application, binding) -> forked.add(rule.name()));
     }
 
     private DirectedForkScheduler scheduler(CollectionCaps caps, DirectedRule... rules) {
@@ -254,6 +256,102 @@ class DirectedForkSchedulerTest {
         scheduler.collect(PhaseType.MAIN1);
 
         assertEquals(List.of("A"), forked);
+    }
+
+    // ── one registration of several rules (finding 6.4) ─────────────────
+
+    /**
+     * A registration of two listed rules, one at 0 and one at 1, draws at
+     * the larger: its one fork serves the rule that still needs it. It forks
+     * once and is counted under both.
+     */
+    @Test
+    void aRegistrationDrawsAtTheLargestProbabilityOfItsListedRules() {
+        DirectedForkTally tally = new DirectedForkTally();
+        DirectedForkScheduler scheduler = scheduler(
+                TestCaps.caps().directed(2, 0.5, "A", "B")
+                        .directedProbability("A", 0.0).directedProbability("B", 1.0).build(),
+                tally, rule("A", ALWAYS).alsoFor("B", "B-1"));
+
+        assertEquals(1, scheduler.collect(PhaseType.MAIN1));
+        assertEquals(0, scheduler.collect(PhaseType.MAIN2));
+
+        assertEquals(List.of("A+B"), forked);
+        assertEquals(counts(tally, "A"), counts(tally, "B"));
+        assertEquals(List.of(1L, 1L, 0L, 1L, 1L, 0L), counts(tally, "A"));
+    }
+
+    /** A rule of the registration the run does not list lends it no probability. */
+    @Test
+    void anUnlistedRulesProbabilityIsNotTheRegistrations() {
+        DirectedForkScheduler scheduler = scheduler(
+                TestCaps.caps().directed(2, 0.0, "A").directedProbability("B", 1.0).build(),
+                rule("A", ALWAYS).alsoFor("B", "B-1"));
+
+        scheduler.collect(PhaseType.MAIN1);
+
+        assertTrue(forked.isEmpty(), forked.toString());
+    }
+
+    /** A registration is considered at the place of its first listed rule, whichever rule that is. */
+    @Test
+    void aRegistrationTakesThePlaceOfItsFirstListedRule() {
+        DirectedForkScheduler scheduler = scheduler(
+                TestCaps.caps().directed(1, 1.0, "C", "B", "A").build(),
+                rule("A", ALWAYS).alsoFor("C", "C-1"), rule("B", ALWAYS));
+
+        scheduler.collect(PhaseType.MAIN1);
+
+        assertEquals(List.of("A+C"), forked);
+    }
+
+    /** The three meld rules, one registration ({@code Meld}). */
+    private static final List<String> MELD = List.of("701.42a", "712.4a", "712.14c");
+
+    /**
+     * 701.42a, 712.4a and 712.14c share Graf Rats' board beside Hill Giant at
+     * the first main phase, its binding and the edit putting Midnight
+     * Scavengers in the Giant's place. Listed together, with budget for three,
+     * they take one fork, whose records name all three in {@code aimed_at},
+     * counted under each.
+     */
+    @Test
+    void rulesSharingABoardABindingAndAnEditForkOnce() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player active = game.getPlayers().get(0);
+        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, active, 3);
+        for (Player player : game.getPlayers()) {
+            for (int i = 0; i < 10; i++) {
+                game.getAction().moveToLibrary(TestBoard.card(game, player, "Forest"), null, null);
+            }
+        }
+        for (String name : List.of("Graf Rats", "Hill Giant")) {
+            Card card = TestBoard.inPlay(game, active, name);
+            card.setGameTimestamp(game.getNextTimestamp());
+            card.setSickness(false);
+        }
+        CollectionCaps caps = TestCaps.caps().interventions(0).probes(0)
+                .directed(3, 1.0, MELD.toArray(String[]::new)).build();
+        RecordShardWriter writer = ShardRun.writer(tempDir);
+        DirectedForkTally tally = new DirectedForkTally();
+        int taken;
+        try (GameRecording recording = new GameRecording(game, writer, ShardRun.GAME_ID, caps, 7L, null)) {
+            recording.open();
+            DirectedFork fork = new DirectedFork(game, recording.playForward(), () -> active);
+            taken = new DirectedForkScheduler(game, caps, DirectedRules.registered(), new ForkBudget(caps),
+                    tally, 7L, fork::take).collect(PhaseType.MAIN1);
+        } finally {
+            writer.close();
+        }
+        Set<Object> aimedAt = ShardRun.readShard(writer.path()).stream().map(RecordLines::parse)
+                .filter(record -> Boolean.TRUE.equals(record.get("fork")))
+                .map(record -> record.get("aimed_at")).collect(Collectors.toSet());
+
+        assertEquals(1, taken, "one fork for the three rules");
+        assertEquals(Set.of(MELD), aimedAt, "the fork's records name the three rules");
+        for (String rule : MELD) {
+            assertEquals(1L, tally.get(rule, DirectedForkTally.Count.TAKEN), rule + " counts the fork");
+        }
     }
 
     // ── the score check (FR-013, acceptance 4) ──────────────────────────

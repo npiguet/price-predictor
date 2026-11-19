@@ -30,6 +30,12 @@ import java.util.Set;
  * kept or discarded: otherwise a copy that systematically fails its score
  * check would retry at every boundary until the game ended.
  *
+ * <p>Rules that share a board, a binding and an edit are one registration
+ * ({@link DirectedRule#alsoFor}), considered as one: listed once or several
+ * times, it draws at the largest probability among its listed rules, at the
+ * place of the first listed, forks at most once a game, spends one slot of
+ * the budget, and is counted in the tally under each of its rules.
+ *
  * <p>The rules are still considered once the game's budget is spent, each
  * drawing as before, so the tally ({@link DirectedForkTally}) counts how
  * often a rule's board appeared and drew a fork the budget no longer
@@ -52,21 +58,18 @@ final class DirectedForkScheduler {
         boolean take(DirectedRule rule, String variant, Application application, Binding binding);
     }
 
-    /** An enabled rule and the probability it forks with. */
+    /** An enabled registration and the probability it forks with. */
     private record Candidate(DirectedRule rule, double probability) {
-        String id() {
-            return rule.rule();
-        }
     }
 
     private final Game game;
-    /** The run's rules that are registered, in descending probability, ties in list order. */
+    /** The registrations of the run's rules, in descending probability, ties in list order. */
     private final List<Candidate> enabled;
     private final ForkBudget budget;
     private final DirectedForkTally tally;
     private final Random random;
     private final Fork fork;
-    private final Set<String> forkedThisGame = new HashSet<>();
+    private final Set<DirectedRule> forkedThisGame = new HashSet<>();
 
     /**
      * @param registry the registered rules; a rule the run names and the
@@ -78,18 +81,38 @@ final class DirectedForkScheduler {
             Game game, CollectionCaps caps, DirectedRules registry, ForkBudget budget,
             DirectedForkTally tally, long seed, Fork fork) {
         this.game = game;
-        // A stable sort: ties keep their --directed-fork-rules order.
-        this.enabled = caps.directedForkRules().stream()
-                .distinct()
-                .map(registry::find)
-                .flatMap(Optional::stream)
-                .map(rule -> new Candidate(rule, caps.directedForkProbability(rule.rule())))
-                .sorted(Comparator.comparingDouble(Candidate::probability).reversed())
-                .toList();
+        this.enabled = enabled(caps, registry);
         this.budget = budget;
         this.tally = tally;
         this.random = SeedStreams.random(seed, SeedStreams.Consumer.DIRECTED_FORKS);
         this.fork = fork;
+    }
+
+    /**
+     * The registrations of the run's rules, each once, at its first listed
+     * rule's place, in descending probability; a stable sort, so ties keep
+     * their {@code --directed-fork-rules} order.
+     */
+    private static List<Candidate> enabled(CollectionCaps caps, DirectedRules registry) {
+        return caps.directedForkRules().stream()
+                .map(registry::find)
+                .flatMap(Optional::stream)
+                .distinct()
+                .map(rule -> new Candidate(rule, probability(caps, rule)))
+                .sorted(Comparator.comparingDouble(Candidate::probability).reversed())
+                .toList();
+    }
+
+    /**
+     * The largest probability among the registration's listed rules: its one
+     * fork serves each of them, so a rule whose side is short is not held
+     * back by another already full.
+     */
+    private static double probability(CollectionCaps caps, DirectedRule rule) {
+        return rule.rules().stream()
+                .filter(caps.directedForkRules()::contains)
+                .mapToDouble(caps::directedForkProbability)
+                .max().orElseThrow();
     }
 
     /**
@@ -118,38 +141,44 @@ final class DirectedForkScheduler {
     }
 
     /**
-     * The rule's binding when it has not forked this game, its precondition
-     * holds and its draw forks, else empty; counted in the tally.
+     * The registration's binding when it has not forked this game, its
+     * precondition holds and its draw forks, else empty; counted in the
+     * tally under each of its rules.
      */
     private Optional<Binding> draw(Candidate candidate) {
-        String rule = candidate.id();
+        DirectedRule rule = candidate.rule();
         if (forkedThisGame.contains(rule)) {
             return Optional.empty();
         }
-        Optional<Binding> binding = candidate.rule().precondition(
-                game, failure -> tally.preconditionThrew(rule, failure));
+        Optional<Binding> binding = rule.precondition(
+                game, failure -> tally.preconditionThrew(rule.rules(), failure));
         if (binding.isEmpty()) {
             return binding;
         }
-        tally.add(rule, DirectedForkTally.Count.MATCHED);
+        count(rule, DirectedForkTally.Count.MATCHED);
         // Drawn only where the precondition holds, so a game's draws depend
         // on its own boards and nothing else.
         if (random.nextDouble() >= candidate.probability()) {
             return Optional.empty();
         }
-        tally.add(rule, DirectedForkTally.Count.DRAWN);
+        count(rule, DirectedForkTally.Count.DRAWN);
         return binding;
     }
 
+    /** One more {@code count} under each of the registration's rules. */
+    private void count(DirectedRule rule, DirectedForkTally.Count count) {
+        rule.rules().forEach(id -> tally.add(id, count));
+    }
+
     /**
-     * Take the rule's fork when the game's budget allows and its forced
+     * Take the registration's fork when the game's budget allows and its forced
      * play, if any, can be made on the live board.
      *
      * @return whether the fork was taken, kept or discarded
      */
     private boolean take(DirectedRule rule, Binding binding) {
         if (!budget.mayDirect()) {
-            tally.add(rule.rule(), DirectedForkTally.Count.BUDGET_BLOCKED);
+            count(rule, DirectedForkTally.Count.BUDGET_BLOCKED);
             return false;
         }
         String variant = variantOf(rule);
@@ -162,10 +191,10 @@ final class DirectedForkScheduler {
             return false;
         }
         budget.spendDirected();
-        forkedThisGame.add(rule.rule());
-        tally.add(rule.rule(), DirectedForkTally.Count.TAKEN);
+        forkedThisGame.add(rule);
+        count(rule, DirectedForkTally.Count.TAKEN);
         if (fork.take(rule, variant, application, binding)) {
-            tally.add(rule.rule(), DirectedForkTally.Count.KEPT);
+            count(rule, DirectedForkTally.Count.KEPT);
         }
         return true;
     }

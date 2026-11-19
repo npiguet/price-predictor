@@ -15,12 +15,16 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -84,35 +88,47 @@ class DirectedRulesContractTest {
     static List<String> disagreements(DirectedRules registry, Map<String, Scenario> scenarios) {
         List<String> wrong = new ArrayList<>();
         for (DirectedRule rule : registry.rules()) {
-            Scenario scenario = scenarios.get(rule.scenario());
-            if (scenario == null) {
-                wrong.add(rule.rule() + ": no scenario " + rule.scenario());
-                continue;
+            for (String id : rule.rules()) {
+                wrong.addAll(disagreements(id, rule, scenarios.get(rule.scenario(id))));
             }
-            if (!scenario.rules().contains(rule.rule())) {
-                wrong.add(rule.rule() + ": scenario " + rule.scenario() + " does not list the rule");
-            }
-            rule.variants().forEach((label, application) -> {
-                Optional<String> classified = scenario.operations().get(label);
-                if (classified == null) {
-                    wrong.add(rule.rule() + ": scenario " + rule.scenario() + " has no variant " + label);
-                } else if (!Objects.equals(classified, Optional.of(application.operation().wireName()))) {
-                    wrong.add(rule.rule() + ": variant " + label + " is classified "
-                            + classified.orElse("as no operation") + ", registered "
-                            + application.operation().wireName());
-                }
-            });
         }
+        return wrong;
+    }
+
+    /** What is wrong with the registration {@code rule} for its rule {@code id} on {@code scenario}. */
+    private static List<String> disagreements(String id, DirectedRule rule, Scenario scenario) {
+        String named = rule.scenario(id);
+        if (scenario == null) {
+            return List.of(id + ": no scenario " + named);
+        }
+        List<String> wrong = new ArrayList<>();
+        if (!scenario.rules().contains(id)) {
+            wrong.add(id + ": scenario " + named + " does not list the rule");
+        }
+        rule.variants().forEach((label, application) -> {
+            Optional<String> classified = scenario.operations().get(label);
+            if (classified == null) {
+                wrong.add(id + ": scenario " + named + " has no variant " + label);
+            } else if (!Objects.equals(classified, Optional.of(application.operation().wireName()))) {
+                wrong.add(id + ": variant " + label + " is classified "
+                        + classified.orElse("as no operation") + ", registered "
+                        + application.operation().wireName());
+            }
+        });
         return wrong;
     }
 
     /** The list the registry's pairs are committed in, which the Python collector reads for each rule's sides. */
     private static final Path VARIANTS = Path.of("..", "rules", "directed-fork-variants.tsv");
 
-    /** Every registered (rule id, variant label) pair as a list line, sorted. */
+    /**
+     * Every registered (rule id, variant label) pair as a list line, sorted:
+     * a registration of several rules lists its variants under each.
+     */
     static List<String> registeredPairs(DirectedRules registry) {
         return registry.rules().stream()
-                .flatMap(rule -> rule.variants().keySet().stream().map(label -> rule.rule() + "	" + label))
+                .flatMap(rule -> rule.rules().stream().flatMap(id ->
+                        rule.variants().keySet().stream().map(label -> id + "	" + label)))
                 .sorted().toList();
     }
 
@@ -218,9 +234,11 @@ class DirectedRulesContractTest {
     /**
      * TC3: the registry is tied to its scenarios by more than ids and labels.
      * A card a rule class names (the Hill Giant a variant puts in a
-     * creature's place, the Lightning Bolt it puts in a library) is one of its
-     * scenario's {@code cards}: a rule that drifted to another card would
-     * fork a board the scenario does not describe.
+     * creature's place, the Lightning Bolt it puts in a library) is one of
+     * the cards of the scenarios its registrations name: a rule that drifted
+     * to another card would fork a board the scenario does not describe. A
+     * class's registrations are those of the rule ids its static strings
+     * hold, several for a class registering several rules.
      */
     @Nested
     @ExtendWith(ForgeExtension.class)
@@ -236,31 +254,17 @@ class DirectedRulesContractTest {
             try (Stream<Path> files = Files.list(sources)) {
                 for (Path file : files.sorted().toList()) {
                     String simple = file.getFileName().toString().replace(".java", "");
-                    Class<?> type = Class.forName("com.pricepredictor.connector.effects.directed.rules." + simple);
-                    Field ruleField;
-                    try {
-                        ruleField = type.getField("RULE");
-                    } catch (NoSuchFieldException e) {
-                        continue;  // Boards, Melds: shared reads, no rule
-                    }
-                    DirectedRule rule = DirectedRules.registered().find((String) ruleField.get(null)).orElseThrow();
-                    List<String> cards = scenarios.get(rule.scenario()).cards().stream()
-                            .map(name -> name.toLowerCase(Locale.ROOT)).toList();
-                    for (Field field : type.getDeclaredFields()) {
-                        if (field.getType() != String.class || !Modifier.isStatic(field.getModifiers())) {
-                            continue;
+                    Map<String, String> strings = strings(
+                            Class.forName("com.pricepredictor.connector.effects.directed.rules." + simple));
+                    Set<String> cards = scenarioCards(strings.values(), scenarios);
+                    // Boards, Melds: shared reads, no rule
+                    Map<String, String> namedCards = cards.isEmpty() ? Map.of() : cardsOf(strings);
+                    named += namedCards.size();
+                    namedCards.forEach((field, card) -> {
+                        if (!cards.contains(card.toLowerCase(Locale.ROOT))) {
+                            wrong.add(simple + "." + field + " names " + card + ", not a card of its scenarios");
                         }
-                        field.setAccessible(true);
-                        String value = (String) field.get(null);
-                        if (FModel.getMagicDb().getCommonCards().getCard(value) == null) {
-                            continue;
-                        }
-                        named++;
-                        if (!cards.contains(value.toLowerCase(Locale.ROOT))) {
-                            wrong.add(simple + "." + field.getName() + " names " + value
-                                    + ", not a card of " + rule.scenario());
-                        }
-                    }
+                    });
                 }
             }
             assertEquals(List.of(), wrong);
@@ -268,9 +272,79 @@ class DirectedRulesContractTest {
         }
     }
 
+    /** Each static string field of {@code type}, by name. */
+    private static Map<String, String> strings(Class<?> type) throws IllegalAccessException {
+        Map<String, String> found = new LinkedHashMap<>();
+        for (Field field : type.getDeclaredFields()) {
+            if (field.getType() == String.class && Modifier.isStatic(field.getModifiers())) {
+                field.setAccessible(true);
+                found.put(field.getName(), (String) field.get(null));
+            }
+        }
+        return found;
+    }
+
+    /** Those of {@code strings} the card database knows. */
+    private static Map<String, String> cardsOf(Map<String, String> strings) {
+        Map<String, String> cards = new LinkedHashMap<>(strings);
+        cards.values().removeIf(value -> FModel.getMagicDb().getCommonCards().getCard(value) == null);
+        return cards;
+    }
+
+    /** The cards, lower-cased, of every scenario of the registrations of the rule ids among {@code strings}. */
+    private static Set<String> scenarioCards(Collection<String> strings, Map<String, Scenario> scenarios) {
+        return strings.stream()
+                .map(DirectedRules.registered()::find)
+                .flatMap(Optional::stream)
+                .flatMap(rule -> rule.rules().stream().map(rule::scenario))
+                .flatMap(scenario -> scenarios.get(scenario).cards().stream())
+                .map(name -> name.toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+    }
+
     @Test
     void aRuleIdIsRegisteredOnce() {
         DirectedRule once = rule("704.5f", "704.5f-1", "counters", ForkOperation.COUNTERS);
         assertThrows(IllegalArgumentException.class, () -> DirectedRules.of(once, once));
+        assertThrows(IllegalArgumentException.class, () -> DirectedRules.of(
+                once, rule("704.5g", "704.5g-1", "counters", ForkOperation.COUNTERS).alsoFor("704.5f", "704.5f-1")));
+        assertThrows(IllegalArgumentException.class, () -> once.alsoFor("704.5f", "704.5f-2"));
+    }
+
+    // ── one registration of several rules (finding 6.4) ─────────────────
+
+    /** Each rule of a registration is checked against its own scenario. */
+    @Test
+    void eachRuleOfARegistrationAgreesWithItsOwnScenario() throws IOException {
+        DirectedRule shared = rule("704.5f", "704.5f-1", "counters", ForkOperation.COUNTERS)
+                .alsoFor("702.19b", "704.5f-1");
+        assertEquals(List.of("702.19b: scenario 704.5f-1 does not list the rule"),
+                disagreements(DirectedRules.of(shared), scenarios()));
+    }
+
+    /** A registration of several rules lists its variants under each, so Python counts each rule's sides. */
+    @Test
+    void aRegistrationOfSeveralRulesListsEachRulesPairs() {
+        DirectedRule shared = rule("704.5f", "704.5f-1", "counters", ForkOperation.COUNTERS)
+                .alsoFor("702.19b", "702.19b-1");
+        assertEquals(List.of("702.19b	counters", "704.5f	counters"), registeredPairs(DirectedRules.of(shared)));
+    }
+
+    /**
+     * The three meld rules and Aura swap's two are one registration each:
+     * found under any of their rules, every rule printed by
+     * {@code DirectedRulesMain}.
+     */
+    @Test
+    void theMeldAndAuraSwapRulesAreOneRegistrationEach() {
+        DirectedRules registry = DirectedRules.registered();
+        DirectedRule meld = registry.find("712.14c").orElseThrow();
+        DirectedRule auraSwap = registry.find("702.65a").orElseThrow();
+
+        assertEquals(List.of("701.42a", "712.4a", "712.14c"), meld.rules());
+        assertEquals(meld, registry.find("701.42a").orElseThrow());
+        assertEquals(List.of("701.12e", "702.65a"), auraSwap.rules());
+        assertTrue(registry.ids().containsAll(List.of("701.42a", "712.4a", "712.14c", "701.12e", "702.65a")));
+        assertEquals(registry.ids().size() - 3, registry.rules().size());
     }
 }
