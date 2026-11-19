@@ -11,6 +11,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -80,6 +81,19 @@ class LibraryMovementTest {
 
     /** A card that a resolution must leave in a zone of its caster, and what to say if it does not. */
     private record Reached(ZoneType zone, String card, String message) {
+    }
+
+    /** The {@code from_zone>to_zone} of each {@code zone_change} event in {@code all}, in order. */
+    private static List<String> zoneChanges(List<String> all) {
+        List<String> moves = new ArrayList<>();
+        for (String record : all) {
+            for (Map<String, Object> event : events(record)) {
+                if ("zone_change".equals(event.get("type"))) {
+                    moves.add(params(event).get("from_zone") + ">" + params(event).get("to_zone"));
+                }
+            }
+        }
+        return moves;
     }
 
     /** Resolve {@code name}, check the caster ended with the card {@code reached} names, return the records. */
@@ -175,6 +189,28 @@ class LibraryMovementTest {
                 new Reached(ZoneType.Graveyard, "Hill Giant", "a pile reached the graveyard"));
 
         assertEquals(0, total(all, "card_milled"), all.toString());
+    }
+
+    /**
+     * Grapple with the Past mills three, then returns the one creature among
+     * them to the hand: the returned card was milled all the same, so three
+     * cards are milled and the return follows.
+     */
+    @Test
+    void aMilledCardTheSameResolutionReturnsWasStillMilled() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        // Top of the library last: Divination, Divination, then the Bears third.
+        library(game, caster, "Grizzly Bears", 1);
+        library(game, caster, "Divination", 2);
+
+        List<String> all = resolvedReaching(caster, "Grapple with the Past",
+                new Reached(ZoneType.Hand, "Grizzly Bears", "the Bears were returned"));
+
+        assertEquals(3, total(all, "card_milled"), all.toString());
+        List<String> moves = zoneChanges(all);
+        assertEquals(3, moves.stream().filter("library>graveyard"::equals).count(), moves.toString());
+        assertTrue(moves.contains("graveyard>hand"), "the Bears' return follows: " + moves);
     }
 
     /** Entomb puts a chosen card from the library into the graveyard: a move, no mill. */

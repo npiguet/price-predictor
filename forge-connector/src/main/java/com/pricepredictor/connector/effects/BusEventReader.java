@@ -297,6 +297,18 @@ abstract class BusEventReader {
             controlMoved(event);
         } else if (event.zoneType() == ZoneType.Command) {
             commandZoneChanged(event);
+        } else if (event.zoneType() == ZoneType.Graveyard) {
+            graveyardChanged(event);
+        }
+    }
+
+    /**
+     * A card removed from a graveyard settles its mill check, before the move
+     * is published: the card that moved on has lost the flag the check reads.
+     */
+    private void graveyardChanged(GameEventZone event) {
+        if (event.mode() == EventValueChangeType.Removed && event.card() != null) {
+            mills.settleCard(event.card().getId());
         }
     }
 

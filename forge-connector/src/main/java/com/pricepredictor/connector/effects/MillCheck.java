@@ -17,9 +17,10 @@ import java.util.List;
  * move it publishes. So the move is filed as a mill provisionally, and the
  * flag is read once it can have been set: on the card now in the owner's
  * graveyard, live until the check is settled, and settled at the next move
- * out of the same library and at every step boundary, as a {@link DrawCheck}
- * is. A card no longer in the graveyard when the flag is read was not milled
- * as far as this can tell.
+ * out of the same library, when the card itself is removed from the graveyard
+ * (the moved card has lost the flag, so the check reads it off the card object
+ * it kept) and at every step boundary. A card no longer in the graveyard when
+ * the flag is read was not milled as far as this can tell.
  *
  * <p>A surveil's bin counts too: {@code Player.surveil} flags its cards
  * surveilled rather than milled, and the record schema tells it as a mill
@@ -30,10 +31,13 @@ final class MillCheck {
     private final Player player;
     private final int cardId;
     private Boolean milled;
+    /** The card object in the owner's graveyard when the move was filed, or null; it keeps its flags once the card has moved on. */
+    private final Card binned;
 
     private MillCheck(Player player, int cardId) {
         this.player = player;
         this.cardId = cardId;
+        this.binned = inGraveyard();
     }
 
     /** Whether the move was a mill, as far as the card's flag says now or said when settled. */
@@ -42,17 +46,33 @@ final class MillCheck {
     }
 
     private boolean flagged() {
+        Card card = inGraveyard();
+        return card != null && flagOf(card);
+    }
+
+    private Card inGraveyard() {
         for (Card card : player.getCardsIn(ZoneType.Graveyard)) {
             if (card.getId() == cardId) {
-                return card.wasMilled() || card.wasSurveilled();
+                return card;
             }
         }
-        return false;
+        return null;
+    }
+
+    private static boolean flagOf(Card card) {
+        return card.wasMilled() || card.wasSurveilled();
     }
 
     private void settle() {
         if (milled == null) {
             milled = flagged();
+        }
+    }
+
+    /** Settle on the flag of the card object that sat in the graveyard: it is leaving. */
+    private void settleLeaving() {
+        if (milled == null) {
+            milled = binned != null && flagOf(binned);
         }
     }
 
@@ -75,6 +95,17 @@ final class MillCheck {
                     return false;
                 }
                 check.settle();
+                return true;
+            });
+        }
+
+        /** Settle card {@code cardId}'s check: the card is being removed from its owner's graveyard. */
+        void settleCard(int cardId) {
+            unsettled.removeIf(check -> {
+                if (check.cardId != cardId) {
+                    return false;
+                }
+                check.settleLeaving();
                 return true;
             });
         }
