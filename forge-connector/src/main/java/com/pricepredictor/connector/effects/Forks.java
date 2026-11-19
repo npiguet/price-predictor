@@ -180,8 +180,10 @@ final class Forks {
     // ── the score check ─────────────────────────────────────────────────
 
     /**
-     * Whether a fork taken at the boundary beginning {@code phase} can pass
-     * its score check. Not at the beginning of combat: the evaluator plays
+     * Whether a fork taken at the phase event beginning {@code phase} can pass
+     * its score check (the protection fork, a probe, a directed fork; an
+     * intervention is taken at the step's first priority, where Forge has
+     * built the combat, and asks nothing). Not at the beginning of combat: the evaluator plays
      * its own copy on to combat damage, and the phase event comes before
      * Forge builds the turn's combat, so declaring attackers on that copy
      * reads a combat that does not exist and the check always fails. A

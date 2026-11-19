@@ -117,14 +117,16 @@ final class InterventionScheduler {
 
     /**
      * The steps an intervention drawn for a turn may open at, in turn order:
-     * those that give priority and where a fork's score check can pass. One
+     * those that give priority (the beginning of combat, step 507, included:
+     * Forge has built the turn's combat by its first priority, and it is the
+     * classic window for an instant that taps or removes a creature). One
      * is drawn with the intervention, and the gate opens from that step on,
      * so instant-speed lines are forced across the turn rather than all at
      * its first step.
      */
     static final List<PhaseType> OPENING_STEPS = List.of(
             PhaseType.UPKEEP, PhaseType.DRAW, PhaseType.MAIN1,
-            PhaseType.COMBAT_DECLARE_ATTACKERS, PhaseType.COMBAT_DECLARE_BLOCKERS,
+            PhaseType.COMBAT_BEGIN, PhaseType.COMBAT_DECLARE_ATTACKERS, PhaseType.COMBAT_DECLARE_BLOCKERS,
             PhaseType.COMBAT_DAMAGE, PhaseType.COMBAT_END, PhaseType.MAIN2, PhaseType.END_OF_TURN);
 
     /**
@@ -287,19 +289,7 @@ final class InterventionScheduler {
             return;
         }
         stepAwaitsPriority = false;
-        collect(game.getPhaseHandler().getPhase());
-    }
-
-    /**
-     * The forced resolution of a step's first priority in {@code phase}.
-     * None where the score check cannot pass ({@link Forks#scoreCheckable}),
-     * which would spend the game's budget, and mark the line forced, for no
-     * record.
-     */
-    void collect(PhaseType phase) {
-        if (Forks.scoreCheckable(phase)) {
-            collect();
-        }
+        collect();
     }
 
     /**

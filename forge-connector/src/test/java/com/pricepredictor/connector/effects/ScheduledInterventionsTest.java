@@ -216,6 +216,33 @@ class ScheduledInterventionsTest {
     }
 
     /**
+     * The beginning-of-combat step (507) gives priority and Forge has built
+     * the turn's combat by then, so its score check passes: a line is forced
+     * and written at its first priority, on a board with creatures.
+     */
+    @Test
+    void aLineIsForcedAtTheBeginningOfCombatsFirstPriority() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        TestBoard.inPlay(game, you, "Grizzly Bears");
+        TestBoard.inPlay(game, opponent, "Hill Giant");
+        TestBoard.inHand(game, you, "Lightning Bolt");
+
+        List<String> records = forced(game, 1, () -> {
+            // Past every turn the gate drew for, so the carried intervention opens at once.
+            game.getPhaseHandler().devModeSet(PhaseType.MAIN1, you, 4 * BOUNDARIES);
+            game.getPhaseHandler().devAdvanceToPhase(PhaseType.COMBAT_BEGIN);
+            TestPriority.settle(game);
+        });
+
+        assertEquals(1, records.size(), records.toString());
+        Map<String, Object> global = RecordLines.asMap(
+                RecordLines.asMap(parse(records.get(0)).get("state")).get("global"));
+        assertEquals("combat_begin", global.get("phase"), records.get(0));
+    }
+
+    /**
      * Spirit en-Dal's forecast is activated only during its holder's upkeep
      * and once a turn: held through its holder's end step and another
      * player's upkeep it is not forced, and its forced record's board is in
