@@ -285,4 +285,22 @@ class PatchHooksTest {
 
         assertEquals(before + 3, HookFailures.counts().get(hook.toString()));
     }
+
+    /** A collection holds the proxy: Forge may keep its listener in one, and a null hash would throw. */
+    @Test
+    void theListenerProxyAnswersTheObjectMethods() {
+        PatchHooks.Listener listener = PatchHooks.PRIORITY_SETTLED_LISTENER.listener(
+                (callback, args) -> { });
+        Object proxy = java.lang.reflect.Proxy.newProxyInstance(
+                HookShapes.PrioritySettled.class.getClassLoader(),
+                new Class<?>[]{HookShapes.PrioritySettled.class}, listener);
+
+        Set<Object> held = new java.util.HashSet<>();
+        held.add(proxy);
+
+        assertTrue(held.contains(proxy));
+        assertEquals(proxy, proxy);
+        assertFalse(proxy.equals(new Object()));
+        assertTrue(proxy.toString().contains("listener"), proxy.toString());
+    }
 }

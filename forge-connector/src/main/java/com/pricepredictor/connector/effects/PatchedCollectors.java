@@ -170,18 +170,33 @@ final class PatchedCollectors implements AutoCloseable {
     private int install(List<PatchHooks.Listener> listeners) {
         int installed = 0;
         for (PatchHooks.Listener listener : listeners) {
-            PatchHooks.Listener routing = listener.hook().listener((callback, args) -> {
-                listener.body().on(callback, args);
-                PatchedCollectors fork = routedFork;
-                if (fork != null) {
-                    fork.dispatch(listener.hook(), callback, args);
-                }
-            });
+            PatchHooks.Listener routing = listener.hook().listener(routing(
+                    listener.body(), (callback, args) -> {
+                        PatchedCollectors fork = routedFork;
+                        if (fork != null) {
+                            fork.dispatch(listener.hook(), callback, args);
+                        }
+                    }));
             if (routing.install()) {
                 installed++;
             }
         }
         return installed;
+    }
+
+    /**
+     * {@code live}'s body and then {@code fork}, whether or not the body
+     * threw: the fork's collectors must see the callback the live game's
+     * handler failed on. What the body threw still reaches the caller.
+     */
+    static PatchHooks.ListenerBody routing(PatchHooks.ListenerBody live, PatchHooks.ListenerBody fork) {
+        return (callback, args) -> {
+            try {
+                live.on(callback, args);
+            } finally {
+                fork.on(callback, args);
+            }
+        };
     }
 
     /** Hand one callback of {@code hook} to this fork's own listener for it, if it has one. */

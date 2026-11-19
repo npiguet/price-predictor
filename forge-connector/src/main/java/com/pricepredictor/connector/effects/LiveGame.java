@@ -7,6 +7,8 @@ import forge.game.card.Card;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 
+import java.util.Map;
+
 /**
  * The game a recording is for, and what every patched hook asks of it.
  *
@@ -100,8 +102,43 @@ final class LiveGame {
         return entity != null && entity.getGame() == game;
     }
 
+    /** Whether an outcome belongs to this game: by its ability, or by its params where it has none. */
+    boolean ownsOutcome(SpellAbility ability, Map<?, ?> params) {
+        return ability != null ? owns(ability) : ownsNullAbilityOutcome(params);
+    }
+
+    /**
+     * The game the objects an outcome's params name belong to, or null when
+     * they name none: the {@code "source"} card, else the first of the
+     * {@code "subjects"} with a game. The objects decide first because they
+     * are the evidence; the thread's signals are a guess for an outcome that
+     * names no object ({@code card_revealed} from a library, a bare amount).
+     */
+    private static Game gameNamedBy(Map<?, ?> params) {
+        Game ofSource = gameOf(params.get("source"));
+        if (ofSource != null) {
+            return ofSource;
+        }
+        if (params.get("subjects") instanceof Iterable<?> subjects) {
+            for (Object subject : subjects) {
+                Game ofSubject = gameOf(subject);
+                if (ofSubject != null) {
+                    return ofSubject;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static Game gameOf(Object named) {
+        return named instanceof GameEntity entity ? entity.getGame() : null;
+    }
+
     /**
      * Whether a null-ability outcome belongs to this game.
+     *
+     * <p>When a {@code source} or {@code subjects} entry names a game, that
+     * decides. Otherwise:
      *
      * <p>The outcome hook's null-ability sources — {@code GameAction.reveal}'s
      * six-argument funnel and
@@ -135,7 +172,11 @@ final class LiveGame {
      * flag leaves no fork for it to catch, and {@code card_revealed} carries no
      * card to key on.
      */
-    boolean ownsNullAbilityOutcome() {
+    boolean ownsNullAbilityOutcome(Map<?, ?> params) {
+        Game named = gameNamedBy(params);
+        if (named != null) {
+            return named == game;
+        }
         // A fork played on to the end of the turn is a game of its own for
         // the span: its collectors own its turn-based outcomes, the live
         // game's own none.

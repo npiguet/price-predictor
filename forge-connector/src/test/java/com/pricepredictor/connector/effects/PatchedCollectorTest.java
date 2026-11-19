@@ -24,6 +24,7 @@ import static com.pricepredictor.connector.effects.TestCollectors.triggerOfMode;
 import static com.pricepredictor.connector.effects.TestCollectors.unwired;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -322,5 +323,75 @@ class PatchedCollectorTest {
                 new Object[]{TestCards.game(), new Player("live-seat", TestCards.game(), 93103)});
 
         assertEquals(List.of("settled live-seat"), sink.seen);
+    }
+
+    @Test
+    void aLoopBegunInsideALoopLeavesTheOuterLoopOpenAtItsEnd() throws Throwable {
+        Delivered sink = new Delivered();
+        PhaseSignals signals = new PhaseSignals(new LiveGame(TestCards.game()), sink);
+        PatchHooks.Listener handler = signals.stateBasedLoopHandler();
+        Object[] live = {TestCards.game()};
+
+        handler.invoke(null, ON_STATE_BASED_LOOP_BEGIN, live);
+        handler.invoke(null, ON_STATE_BASED_LOOP_BEGIN, live);
+        handler.invoke(null, ON_STATE_BASED_LOOP_END, live);
+        boolean outerOpen = signals.inStateBasedLoop();
+        List<String> afterInner = List.copyOf(sink.seen);
+        handler.invoke(null, ON_STATE_BASED_LOOP_END, live);
+
+        assertTrue(outerOpen, "the outer loop is still open after the inner one's end");
+        assertEquals(List.of("begin"), afterInner);
+        assertFalse(signals.inStateBasedLoop());
+        assertEquals(List.of("begin", "end"), sink.seen);
+    }
+
+    @Test
+    void aSinkThatThrowsStillLetsTheSecondSinkHearTheSignal() {
+        Delivered second = new Delivered();
+        PhaseSignals.Sink first = new PhaseSignals.Sink() {
+            @Override
+            public void stateBasedLoopBegan() {
+                throw new IllegalStateException("the first sink fails");
+            }
+        };
+
+        assertThrows(IllegalStateException.class,
+                () -> PhaseSignals.Sink.both(first, second).stateBasedLoopBegan());
+
+        assertEquals(List.of("begin"), second.seen);
+    }
+
+    // ── which game a null-ability outcome is assigned to ────────────────
+
+    /** The objects an outcome names decide, with no fork flag and no resolution to guess from. */
+    @Test
+    void aNullAbilityOutcomeIsAssignedToTheGameOfItsSubjectsOrSource() {
+        LiveGame live = new LiveGame(TestCards.game());
+        Card forkCard = TestBoard.cardInAnotherGame("Grizzly Bears");
+        Player livePlayer = new Player("live-seat", TestCards.game(), 93201);
+
+        assertFalse(live.ownsNullAbilityOutcome(Map.of("subjects", List.of(forkCard))));
+        assertFalse(live.ownsNullAbilityOutcome(Map.of("source", forkCard)));
+        assertTrue(live.ownsNullAbilityOutcome(Map.of("subjects", List.of(livePlayer))));
+        assertTrue(live.ownsNullAbilityOutcome(Map.of("amount", 3)),
+                "an outcome naming no object falls back on the thread's signals");
+    }
+
+    // ── a throwing live handler ─────────────────────────────────────────
+
+    @Test
+    void aThrowingLiveHandlerStillLetsTheForkSeeTheCallback() throws Throwable {
+        List<String> forkSaw = new ArrayList<>();
+        PatchHooks.Listener routing = PatchHooks.STATE_BASED_LOOP_LISTENER.listener(
+                PatchedCollectors.routing(
+                (callback, args) -> {
+                    throw new IllegalStateException("the live handler fails");
+                },
+                (callback, args) -> forkSaw.add(callback.methodName())));
+
+        assertThrows(IllegalStateException.class, () -> routing.invoke(
+                null, ON_STATE_BASED_LOOP_BEGIN, new Object[]{null}));
+
+        assertEquals(List.of("onStateBasedLoopBegin"), forkSaw);
     }
 }

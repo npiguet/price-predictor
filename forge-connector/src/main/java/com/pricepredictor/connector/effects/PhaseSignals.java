@@ -12,6 +12,10 @@ import forge.game.player.Player;
  * bus's priority event fires before the loop has run, so the board it
  * describes may still hold a creature about to die.
  *
+ * <p>The depth of the loop is kept here and nowhere else: the sink hears
+ * the outermost begin and the matching end only, so a loop begun inside a
+ * loop leaves the outer one open.
+ *
  * <p>Both hooks are JVM statics, and a fork's own phase handler fires them
  * too, so each handler keeps to its game by the {@code Game} the engine hands
  * it, compared by reference as {@link LiveGame} compares every hook's
@@ -35,20 +39,29 @@ final class PhaseSignals {
             return new Sink() {
                 @Override
                 public void stateBasedLoopBegan() {
-                    first.stateBasedLoopBegan();
-                    second.stateBasedLoopBegan();
+                    try {
+                        first.stateBasedLoopBegan();
+                    } finally {
+                        second.stateBasedLoopBegan();
+                    }
                 }
 
                 @Override
                 public void stateBasedLoopEnded() {
-                    first.stateBasedLoopEnded();
-                    second.stateBasedLoopEnded();
+                    try {
+                        first.stateBasedLoopEnded();
+                    } finally {
+                        second.stateBasedLoopEnded();
+                    }
                 }
 
                 @Override
                 public void prioritySettled(Player priorityPlayer) {
-                    first.prioritySettled(priorityPlayer);
-                    second.prioritySettled(priorityPlayer);
+                    try {
+                        first.prioritySettled(priorityPlayer);
+                    } finally {
+                        second.prioritySettled(priorityPlayer);
+                    }
                 }
             };
         }
@@ -56,7 +69,9 @@ final class PhaseSignals {
 
     private final LiveGame live;
     private final Sink sink;
-    private boolean inStateBasedLoop;
+
+    /** How many begins are open: a loop begun inside a loop leaves the outer one open at its end. */
+    private int loopDepth;
 
     PhaseSignals(LiveGame live, Sink sink) {
         this.live = live;
@@ -65,7 +80,7 @@ final class PhaseSignals {
 
     /** Whether this game is between a state-based loop's begin and its end. */
     boolean inStateBasedLoop() {
-        return inStateBasedLoop;
+        return loopDepth > 0;
     }
 
     /**
@@ -81,13 +96,25 @@ final class PhaseSignals {
                 return;
             }
             if (callback == PatchHooks.Callback.ON_STATE_BASED_LOOP_BEGIN) {
-                inStateBasedLoop = true;
-                sink.stateBasedLoopBegan();
+                begin();
             } else {
-                inStateBasedLoop = false;
-                sink.stateBasedLoopEnded();
+                end();
             }
         });
+    }
+
+    private void begin() {
+        loopDepth++;
+        if (loopDepth == 1) {
+            sink.stateBasedLoopBegan();
+        }
+    }
+
+    private void end() {
+        loopDepth = Math.max(0, loopDepth - 1);
+        if (loopDepth == 0) {
+            sink.stateBasedLoopEnded();
+        }
     }
 
     /** The priority-settled hook's listener. */

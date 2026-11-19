@@ -267,16 +267,13 @@ final class ClauseOutcomeRouter {
                 reportUnknownOutcomeType(wireName);
                 return;
             }
-            EffectEvent event = outcomeEvent(
-                    type.get(), args.get(2) instanceof Map<?, ?> params ? params : Map.of());
+            Map<?, ?> params = paramsOf(args);
+            EffectEvent event = outcomeEvent(type.get(), params);
             if (RunParamNormalizer.preventedNothing(event)) {
                 return;
             }
             SpellAbility ability = args.get(0, SpellAbility.class);
-            boolean liveGame = ability != null
-                    ? live.owns(ability)
-                    : live.ownsNullAbilityOutcome();
-            if (liveGame) {
+            if (live.ownsOutcome(ability, params)) {
                 bracket.recordClauseEvent(event);
             } else {
                 // A forced resolution's or a probe's, which hears it through
@@ -284,6 +281,11 @@ final class ClauseOutcomeRouter {
                 Forks.forkHooks().outcome(ability, event);
             }
         });
+    }
+
+    /** The outcome's params, empty where the hook passed none. */
+    private static Map<?, ?> paramsOf(PatchHooks.Args args) {
+        return args.get(2) instanceof Map<?, ?> given ? given : Map.of();
     }
 
     /**

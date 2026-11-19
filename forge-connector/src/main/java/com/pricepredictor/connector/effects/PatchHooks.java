@@ -202,6 +202,9 @@ public final class PatchHooks {
 
         @Override
         public Object invoke(Object proxy, Method invoked, Object[] args) {
+            if (invoked.getDeclaringClass() == Object.class) {
+                return answerObjectMethod(proxy, invoked, args);
+            }
             for (Callback callback : hook.callbacks()) {
                 if (callback.methodName().equals(invoked.getName())) {
                     int given = args == null ? 0 : args.length;
@@ -220,6 +223,15 @@ public final class PatchHooks {
                 }
             }
             return null;
+        }
+
+        /** The proxy's own identity, as any object answers it: a collection can hold the proxy. */
+        private Object answerObjectMethod(Object proxy, Method invoked, Object[] args) {
+            return switch (invoked.getName()) {
+                case "hashCode" -> System.identityHashCode(proxy);
+                case "equals" -> proxy == args[0];
+                default -> "listener on " + hook;
+            };
         }
 
         /** Install this handler on its own hook, or do nothing; see {@link PatchHooks#install}. */
