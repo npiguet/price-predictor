@@ -333,6 +333,12 @@ from a real game.
   `scripts/rules_catalogue.py directed-rules --probabilities-output` writes from the counts file:
   0 for a rule whose two sides have both reached their count, 1 for a rule with a side still at
   zero, and in between the larger of 0.05 and the share of the count its shorter side misses.
+- `collect-variants` recomputes the probabilities before its first round and after each round,
+  from the directed forks (the games holding a record with `directed` set and `aimed_at` the rule,
+  cut games left out) its own and its continued runs' shards hold, each shard counted once. A rule's
+  sides are the polarities of its catalogue variants classified into an operation, a fork's side is
+  its variant's polarity, and each side needs `--steer-floor` forks. A rule with no fork yet is at 1.
+  `collect-coverage` runs no directed fork and sets none.
 - When several rules match at one boundary, they are drawn in descending order of probability,
   ties broken by their order in `--directed-fork-rules`, so the per-game budget goes first to
   the rule that needs it most. A fork is taken only while the budget allows.

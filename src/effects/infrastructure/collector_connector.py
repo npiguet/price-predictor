@@ -254,6 +254,22 @@ class CollectorSupervisor:
             worker_stops=self.stops.as_dict(survived=len(self.survivors)),
         )
 
+    @property
+    def caps(self) -> CollectionCaps:
+        """The caps the next worker starts with."""
+        return self._caps
+
+    def set_directed_rule_probabilities(self, probabilities: dict[str, float]) -> None:
+        """Start the workers of the rounds that follow with ``probabilities``
+        as each listed rule's own directed-fork probability, and record them
+        in ``run.json`` (the last set stays)."""
+        self._caps = dataclasses.replace(
+            self._caps, directed_rule_probabilities=dict(probabilities))
+        annotate_run(
+            self._effect_records, caps=caps_document(self._caps),
+            directed_rule_probabilities=dict(probabilities),
+        )
+
     def count_cut_games(self, cut: int) -> None:
         """Note the gen-3 games the last count of shards left out for want of
         a game-end marker (cut by a kill, a crash or Ctrl-C; their records

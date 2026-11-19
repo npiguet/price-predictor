@@ -31,10 +31,12 @@ from effects.application.collector_common import (
     positive_int,
     record_damaged_shards,
 )
+from effects.application.directed_steering import DirectedSteering
 from effects.application.parallel_map import run_parallel
 from effects.domain import default_paths
 from effects.domain.card_names import fold_card_name
 from effects.domain.coverage import DeckCandidate, is_complete, retire_stalled
+from effects.domain.directed_sides import DirectedForkGames
 from effects.domain.game_ends import GameEnds
 from effects.domain.rule_outcomes import (
     CARD_TYPES,
@@ -622,6 +624,8 @@ class VariantGameCounter:
         #: Every damaged shard read so far, as its read's message: counted up
         #: to the damage, once, like any other shard.
         self.damaged: list[str] = []
+        #: The directed forks of every shard counted so far, each once.
+        self.directed = DirectedForkGames()
         #: Cut games left out: over every count so far, and in the last one.
         self.cut_games = 0
         self.last_cut = 0
@@ -646,6 +650,7 @@ class VariantGameCounter:
         ):
             found.merge(part)
         self._counted.update(shards)
+        self.directed.merge(found.directed)
         self.last_cut = found.cut_games
         self.cut_games += found.cut_games
         for message in found.damaged:
@@ -723,6 +728,8 @@ def play_variant_rounds(
     rng = rng if rng is not None else random.Random(config.seed)
     target = config.variant_games
     round_number = 0
+    steering = DirectedSteering.of(config)
+    steering.steer(supervisor, counter.directed)
     while not is_complete(units, target):
         round_number += 1
         weights = missing_games(units, target)
@@ -740,6 +747,7 @@ def play_variant_rounds(
         shown = counter.update(units)
         record_damaged_shards(supervisor, counter.damaged)
         supervisor.count_cut_games(counter.last_cut)
+        steering.steer(supervisor, counter.directed)
         retired = retire_stalled(
             units, previous, no_progress_rounds=config.no_progress_rounds,
             decked=written & shown, written=written,

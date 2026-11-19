@@ -437,7 +437,14 @@ toward no failure kind, no failure threshold and no exit code.
 Takes `--count-dropped-events`, `--max-records-per-game`, `--directed-fork-rules`,
 `--directed-forks-per-game` and `--directed-fork-probability` as `match-outcomes` does, with the same startup checks and exits.
 Every record carries `aimed_at` (the listed rules, or `[]`; in a steered game, the rules of its
-two decks). A protection keyword line of a source script swaps its quality for another of
+two decks). Before its first round and after each one it sets every listed rule's own fork probability
+from the directed forks its shards hold, counting `--steer-floor` forks per side (the `count` of
+`effects.domain.directed_fork_probabilities.directed_fork_probability`): a rule's forks are the games holding a record
+with `directed` set and `aimed_at` the rule (no cut game), its sides are the `fires` and `does_not_fire`
+polarities of the variants the catalogue classifies into an operation, and a fork's side is its variant's polarity
+(`other` counts for no side; a rule with no such variant keeps `--directed-fork-probability`). A fresh run starts every rule at 1; the
+round's line is preceded by `directed fork probabilities: <rule> <p> (<shorter side>/<count>)`, the workers of the next round receive
+`effect.directed.probability.<rule>`, and `run.json` keeps the last as `directed_rule_probabilities`. A protection keyword line of a source script swaps its quality for another of
 `PROTECTION_QUALITY_WHITELIST` (FR-058) before any other perturbation of that line is tried.
 
 | Flag | Default | Meaning |

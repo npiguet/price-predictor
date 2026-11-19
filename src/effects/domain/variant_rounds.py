@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from effects.domain.coverage import CoverageUnit
+from effects.domain.directed_sides import DirectedForkGames
 from effects.domain.provenance import ProvenanceKey, SourceTree
 from effects.domain.records import EffectRecord, acting_keys
 from effects.domain.rule_catalogue import (
@@ -93,12 +94,15 @@ class VariantShardGames:
     damaged: list[str] = field(default_factory=list)
     #: Gen-3 games without a game-end marker, left out of ``games``.
     cut_games: int = 0
+    #: The directed forks the shard's records show, by rule and variant.
+    directed: DirectedForkGames = field(default_factory=DirectedForkGames)
 
     def add(self, record: EffectRecord) -> None:
         """Count one record: its acting key, or its decision candidate's key,
         names the variant's file (FR-058a); every entity's lines name the
         variants it shows."""
         self.records += 1
+        self.directed.add(record)
         for key in acting_keys(record):
             if key.tree == SourceTree.VARIANT_SCRIPTS:
                 self.games.setdefault(key.script_file, set()).add(record.game_id)
@@ -115,6 +119,7 @@ class VariantShardGames:
         self.records += other.records
         self.damaged += other.damaged
         self.cut_games += other.cut_games
+        self.directed.merge(other.directed)
 
     def drop_games(self, cut: frozenset[str]) -> None:
         """Leave the cut games out of every variant's games: build-corpus
@@ -123,6 +128,7 @@ class VariantShardGames:
         for games in self.games.values():
             games -= cut
         self.games = {script: games for script, games in self.games.items() if games}
+        self.directed.drop_games(cut)
         self.cut_games += len(cut)
 
 
