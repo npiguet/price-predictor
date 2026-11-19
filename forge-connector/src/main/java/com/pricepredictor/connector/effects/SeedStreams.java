@@ -58,7 +58,26 @@ public final class SeedStreams {
     private static final Map<Game, GameStreams> BY_GAME =
             Collections.synchronizedMap(new WeakHashMap<>());
 
+    private static final long TOKEN_BITS = (1L << 40) - 1;
+
     private SeedStreams() {
+    }
+
+    /**
+     * The seed of a match's first game: its start time, mixed with the token of
+     * the worker lifetime that plays it ({@code {worker}-{lifetime}}, as the
+     * shard file is named; empty for a player collecting no records).
+     *
+     * <p>Two workers whose matches start in the same millisecond would share
+     * the start time, and so every stream of the game. The token is hashed to
+     * 40 bits and XORed into the low bits, so two games' seeds still differ by
+     * under 2^42, which keeps the consumers' salts apart (their pairwise XORs
+     * have bit length 59 or more). The match's later games add their index to
+     * this seed.
+     */
+    public static long matchSeed(long startMillis, String workerToken) {
+        return startMillis ^ (new SplittableRandom(workerToken.hashCode()).split().nextLong()
+                & TOKEN_BITS);
     }
 
     /** The seed of {@code consumer}'s stream in the game seeded {@code gameSeed}. */

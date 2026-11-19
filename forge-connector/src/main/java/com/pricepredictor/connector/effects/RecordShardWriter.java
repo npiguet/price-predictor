@@ -130,6 +130,11 @@ public final class RecordShardWriter implements AutoCloseable {
         }
     }
 
+    /** {@code {worker}-{lifetime}}: the token that names this writer's worker lifetime. */
+    public String token() {
+        return shard;
+    }
+
     /** Append through {@code channel}: a test's, which fails. */
     void appendThrough(ShardAppender.Channel channel) {
         appender.through(channel);

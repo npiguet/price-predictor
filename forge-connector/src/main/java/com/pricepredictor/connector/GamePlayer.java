@@ -228,6 +228,11 @@ public class GamePlayer {
         return playMatch(deckA, deckB, DeckRules.NONE);
     }
 
+    /** The seed of a match started at {@code startMillis}: the start mixed with this worker lifetime's token. */
+    private long matchSeed(long startMillis) {
+        return SeedStreams.matchSeed(startMillis, effectRecords == null ? "" : effectRecords.token());
+    }
+
     /** The games played to their end so far, in matches finished or not. */
     public long gamesPlayed() {
         return gamesPlayed;
@@ -243,12 +248,14 @@ public class GamePlayer {
         long startMillis = clock.getAsLong();
         // The match's own seeded source: the seat consumer's stream of the
         // match's first game's seed, which no other consumer shares.
-        java.util.Random matchRandom = SeedStreams.random(startMillis, SeedStreams.Consumer.SEAT);
+        long matchSeed = matchSeed(startMillis);
+        java.util.Random matchRandom = SeedStreams.random(matchSeed, SeedStreams.Consumer.SEAT);
         Optional<Side> randomSeat = drawRandomSeat(caps, matchRandom);
         List<GameOutcome> outcomes = new ArrayList<>();
         // Seeds each game's recording, so a worker's games sample
-        // independently of one another rather than all alike.
-        long gameSeed = startMillis;
+        // independently of one another rather than all alike, and two
+        // workers' games never replay one another's streams.
+        long gameSeed = matchSeed;
 
         // From the seat's draw on, whatever fails is a random-seat match's
         // failure when the match has one: setting the match up, playing a

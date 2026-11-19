@@ -48,6 +48,21 @@ class SeedStreamsTest {
     }
 
     @Test
+    void twoWorkersMatchesStartingInTheSameMillisecondDrawDifferentStreams() {
+        long a = SeedStreams.matchSeed(FIRST_GAME, "3-k9x2abcd");
+        long b = SeedStreams.matchSeed(FIRST_GAME, "4-k9x2wxyz");
+        assertNotEquals(a, b);
+        for (Consumer consumer : Consumer.values()) {
+            assertNotEquals(SeedStreams.random(a, consumer).nextLong(),
+                    SeedStreams.random(b, consumer).nextLong(), consumer.name());
+        }
+        SeedStreams.GameStreams first = new SeedStreams.GameStreams(a);
+        SeedStreams.GameStreams second = new SeedStreams.GameStreams(b);
+        assertNotEquals(first.nextFork().nextLong(), second.nextFork().nextLong());
+        assertEquals(a, SeedStreams.matchSeed(FIRST_GAME, "3-k9x2abcd"), "a token seeds one way");
+    }
+
+    @Test
     void theSameSeedYieldsTheSameStreams() {
         for (Consumer consumer : Consumer.values()) {
             assertEquals(
