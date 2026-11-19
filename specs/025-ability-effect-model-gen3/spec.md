@@ -817,7 +817,8 @@ and that the reporting half never enters the control score.
   detectors tag its records, not its variant's polarity label: 205.1a and 111.10p register a
   variant of polarity `other` whose forced cast makes the `fires` side.
 - **FR-014b**: Board preconditions MUST be registered for 704.5f and 702.98a, listed whatever their
-  counts (702.98a's few `does_not_fire` records being one creature in one game), and for every rule that gen-2's
+  counts (702.98a's few `does_not_fire` records being one creature in one game; the listing does not set a
+  rule's probability, which follows its counts under the directed-fork probability rule), and for every rule that gen-2's
   per-rule counts (`rule-counts` over the gen-2 shards; the part the list is decided from is checked
   in as `rules/directed-fork-counts.json`) show with fewer than 100 `fires` records
   over all sources, or with no `does_not_fire` record, and that has a non-base variant classified

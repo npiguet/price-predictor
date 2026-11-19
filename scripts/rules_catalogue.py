@@ -913,7 +913,8 @@ def cmd_status(_args):
 RARE_FIRES = 100
 #: Enabled for directed forks whatever their counts, each for its reason (FR-014b).
 ALWAYS_DIRECTED = {
-    "704.5f": "the user's T038 decision of 2026-11-02, whatever its counts",
+    "704.5f": "the directed forks' reference rule, which the first pilot checks (the user's T038 "
+              "decision of 2026-11-02); its probability follows its counts like any listed rule's",
     "702.98a": "its 8 does_not_fire records on gen-2 are one Dead Reveler in one game, far "
                "below the 68 per polarity a rule test needs (the user's decision of 2026-11-06)",
 }

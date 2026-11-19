@@ -40,7 +40,7 @@ records the baseline.
 | `--cards-folder DIR` | `output/cardsfolder` | the converted tree whose card names the wording list uses |
 
 Writes `rules/directed-fork-rules.txt` (FR-014b: the rules of `ALWAYS_DIRECTED`, 704.5f and 702.98a,
-each printed with its reason, and every rule with fewer than 100 `fires`
+each printed with its reason; the listing does not set a rule's probability, which follows its counts, and every rule with fewer than 100 `fires`
 records or no `does_not_fire` record that has a forkable variant; a rule the counts omit counts as
 zero when one of its scenarios declares a detector that tags gen-2 records; never a rule of
 `NOT_DIRECTED`, which FR-014b lists, each printed with its reason) and
