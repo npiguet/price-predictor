@@ -1,13 +1,17 @@
 package com.pricepredictor.connector;
 
+import com.pricepredictor.connector.effects.DirectedForkTally;
 import com.pricepredictor.connector.effects.HookFailures;
 import com.pricepredictor.connector.effects.PatchHooks;
 import com.pricepredictor.connector.effects.TestHookFailures;
+import com.pricepredictor.connector.json.FlatJson;
+import com.pricepredictor.connector.json.JsonParts;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -76,5 +80,34 @@ class HookFailureReportTest {
         assertTrue(printed.contains("report-test no choices=1"), printed);
         assertTrue(!HookFailures.counts().containsKey("report-test no choices"));
         assertEquals("", stderrOf(report::afterMatch));
+    }
+
+    /**
+     * The directed fork tally is a line of its own, printed when it changed:
+     * {@code DirectedForkTally.LINE} and a JSON object from each rule to its
+     * six counts, which parses back to the tally whatever the rule id holds
+     * (here a comma, a space and an equals sign, which a map's toString
+     * would let a reader split on).
+     */
+    @Test
+    void theDirectedForkTallyLineParsesBackToTheTally() {
+        MatchWorkerMain.HookFailureReport report = new MatchWorkerMain.HookFailureReport();
+        stderrOf(report::afterMatch);
+        String rule = "704.5f, report=test";
+
+        TestHookFailures.tallyDirected(rule, "MATCHED");
+        TestHookFailures.tallyDirected(rule, "MATCHED");
+        TestHookFailures.tallyDirected(rule, "DRAWN");
+        TestHookFailures.tallyDirected(rule, "TAKEN");
+        TestHookFailures.tallyDirected(rule, "PRECONDITION_THREW");
+        String printed = stderrOf(report::afterMatch).trim();
+
+        assertTrue(printed.startsWith(DirectedForkTally.LINE), printed);
+        Map<String, String> rules = JsonParts.fields(printed.substring(DirectedForkTally.LINE.length()));
+        Map<String, Object> parsed = FlatJson.parse(rules.get(rule));
+        assertEquals(Map.of("matched", 2L, "drawn", 1L, "budget_blocked", 0L, "taken", 1L,
+                "kept", 0L, "precondition_threw", 1L), parsed);
+        assertEquals(TestHookFailures.directedCounts(rule), parsed);
+        assertEquals("", stderrOf(report::afterMatch), "an unchanged tally prints nothing");
     }
 }

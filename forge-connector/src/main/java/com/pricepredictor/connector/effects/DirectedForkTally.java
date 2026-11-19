@@ -1,36 +1,110 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.json.Json;
+
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLongArray;
 
 /**
- * How many directed forks each rule has taken in this worker JVM's lifetime,
- * kept or discarded (FR-010a).
+ * What each directed rule did in this worker JVM's lifetime (FR-010a): how
+ * often its board appeared, drew a fork, found the game's budget spent, took
+ * a fork, kept it, and how often its precondition threw.
  *
- * <p>When several rules match one boundary, the one with the fewest goes
- * first, so a rule whose precondition is common does not take every game's
- * budget from a rare one. A JVM lifetime, not a run: the supervisor recycles
- * workers, and a worker can count only what it saw. One {@link #lifetime()}
- * per JVM; a test builds its own.
+ * <p>A JVM lifetime, not a run: the supervisor recycles workers, and a worker
+ * can count only what it saw. The worker prints the tally as one line of
+ * running totals ({@link #LINE}) whenever it changed, at each match end and
+ * as it stops, and the supervisor sums each lifetime's last line. One
+ * {@link #lifetime()} per JVM; a test builds its own.
  */
-final class DirectedForkTally {
+public final class DirectedForkTally {
+
+    /** How the tally's line starts; a JSON object follows, rule id to its counts. */
+    public static final String LINE = "Effect records: directed fork tally so far: ";
+
+    /** What is counted per rule, in the order the line writes the counts. */
+    enum Count {
+        /** A boundary where the rule had not yet forked this game and its precondition held. */
+        MATCHED,
+        /** Of those, the draws against the rule's probability that came up a fork. */
+        DRAWN,
+        /** Of those, the ones the game's directed-fork budget was already spent for. */
+        BUDGET_BLOCKED,
+        /** Forks taken, the budget spent, kept or discarded. */
+        TAKEN,
+        /** Of those, the forks kept. */
+        KEPT,
+        /** Precondition calls that threw, each read as not met. */
+        PRECONDITION_THREW;
+
+        /** The count's name on the line. */
+        String wireName() {
+            return name().toLowerCase(Locale.ROOT);
+        }
+    }
 
     private static final DirectedForkTally LIFETIME = new DirectedForkTally();
 
-    private final Map<String, Integer> taken = new ConcurrentHashMap<>();
+    private final Map<String, AtomicLongArray> counts = new ConcurrentHashMap<>();
 
     /** The tally of this JVM's lifetime. */
     static DirectedForkTally lifetime() {
         return LIFETIME;
     }
 
-    /** The directed forks {@code rule} has taken so far. */
-    int taken(String rule) {
-        return taken.getOrDefault(rule, 0);
+    /** The lifetime tally's line, empty while no rule has counted anything. */
+    public static Optional<String> lifetimeLine() {
+        return LIFETIME.line();
     }
 
-    /** Count one more fork taken for {@code rule}. */
-    void count(String rule) {
-        taken.merge(rule, 1, Integer::sum);
+    /** {@code rule}'s count of {@code count} so far. */
+    long get(String rule, Count count) {
+        AtomicLongArray counted = counts.get(rule);
+        return counted == null ? 0 : counted.get(count.ordinal());
+    }
+
+    /** Count one more {@code count} for {@code rule}; @return the new count. */
+    long add(String rule, Count count) {
+        return counts.computeIfAbsent(rule, name -> new AtomicLongArray(Count.values().length))
+                .incrementAndGet(count.ordinal());
+    }
+
+    /**
+     * Count a throw of {@code rule}'s precondition, which read as not met.
+     * The first of each rule is printed with its stack; later ones are
+     * counted only.
+     */
+    void preconditionThrew(String rule, RuntimeException failure) {
+        if (add(rule, Count.PRECONDITION_THREW) == 1) {
+            System.err.println("Effect records: directed rule " + rule + "'s precondition threw and"
+                    + " reads as not met (later throws are counted in the directed fork tally,"
+                    + " not printed): " + HookFailures.withStack(failure));
+        }
+    }
+
+    /**
+     * The line: {@link #LINE}, then a JSON object from each rule that has
+     * counted anything, in name order, to its counts by {@link
+     * Count#wireName()}, every count present. A rule whose counts are all
+     * zero is left out. Empty while no rule has counted anything.
+     */
+    Optional<String> line() {
+        if (counts.isEmpty()) {
+            return Optional.empty();
+        }
+        Json.ObjectWriter rules = Json.object();
+        new TreeMap<>(counts).forEach((rule, counted) -> rules.raw(rule, countsOf(counted)));
+        return Optional.of(LINE + rules.render());
+    }
+
+    private static String countsOf(AtomicLongArray counted) {
+        Json.ObjectWriter object = Json.object();
+        for (Count count : Count.values()) {
+            object.value(count.wireName(), counted.get(count.ordinal()));
+        }
+        return object.render();
     }
 }

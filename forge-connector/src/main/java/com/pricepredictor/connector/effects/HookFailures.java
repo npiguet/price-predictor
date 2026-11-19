@@ -62,8 +62,7 @@ public final class HookFailures {
         if (failures.incrementAndGet() == 1) {
             System.err.println("effect-record hook " + hook + ": its listener threw, which loses what"
                     + " that call would have recorded (later failures are counted, not printed): "
-                    + failure + Arrays.stream(failure.getStackTrace()).limit(FRAMES_SHOWN)
-                    .map(frame -> "\n\tat " + frame).collect(Collectors.joining()));
+                    + withStack(failure));
         }
     }
 
@@ -146,10 +145,14 @@ public final class HookFailures {
     static void countContained(String key, Throwable failure) {
         if (COUNTS.computeIfAbsent(key, name -> new AtomicLong()).incrementAndGet() == 1) {
             System.err.println("Effect records: " + key + " threw, and is discarded (later failures"
-                    + " are counted, not printed): " + failure
-                    + Arrays.stream(failure.getStackTrace()).limit(FRAMES_SHOWN)
-                    .map(frame -> "\n\tat " + frame).collect(Collectors.joining()));
+                    + " are counted, not printed): " + withStack(failure));
         }
+    }
+
+    /** {@code failure} and its first {@value #FRAMES_SHOWN} stack frames, a line each. */
+    static String withStack(Throwable failure) {
+        return failure + Arrays.stream(failure.getStackTrace()).limit(FRAMES_SHOWN)
+                .map(frame -> "\n\tat " + frame).collect(Collectors.joining());
     }
 
     /**

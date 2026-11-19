@@ -3,7 +3,9 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.WorkerProperties;
 import com.pricepredictor.connector.WorkerProperties.OnMalformed;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -23,13 +25,17 @@ import java.util.Optional;
  *                are written beside the shard for the supervisor to sum
  *                (FR-041, {@link DroppedEvents})
  * @param directedForkRules the rules directed forks are taken for, in the
- *                order that breaks a tie between two rules matching one
- *                boundary (FR-010a); empty takes none
+ *                order that breaks a tie between two rules of one probability
+ *                (FR-010a); empty takes none
  * @param directedForksPerGame the directed forks one game may take, kept or
  *                discarded, beside the other fork budgets (FR-012)
  * @param directedForkProbability the chance a boundary where an enabled
- *                rule's precondition holds forks, in (0, 1]; the supervisor
- *                refuses any other value before a worker starts (FR-014)
+ *                rule's precondition holds forks, for a rule with no
+ *                probability of its own, in (0, 1]; the supervisor refuses
+ *                any other value before a worker starts (FR-014)
+ * @param directedRuleProbabilities a listed rule's own probability, in
+ *                [0, 1], by rule id, from {@code
+ *                effect.directed.probability.<rule>}; a rule at 0 never forks
  * @param maxRecordsPerGame the records one game may write, its forks'
  *                included; the shard writer withholds the rest and names the
  *                game (FR-041a, {@link RecordShardWriter})
@@ -49,6 +55,7 @@ public record CollectionCaps(
         List<String> directedForkRules,
         int directedForksPerGame,
         double directedForkProbability,
+        Map<String, Double> directedRuleProbabilities,
         int maxRecordsPerGame) {
 
     /**
@@ -68,12 +75,13 @@ public record CollectionCaps(
     public CollectionCaps {
         probeKeywords = List.copyOf(probeKeywords);
         directedForkRules = List.copyOf(directedForkRules);
+        directedRuleProbabilities = Map.copyOf(directedRuleProbabilities);
     }
 
     public static CollectionCaps defaults() {
         return new CollectionCaps(
                 1, 0.01, 0.0001, 0.001, 2, 2, DEFAULT_PROBE_KEYWORDS, 0.0, 0.0, Optional.empty(), false,
-                List.of(), 2, 0.25, DEFAULT_MAX_RECORDS_PER_GAME);
+                List.of(), 2, 0.25, Map.of(), DEFAULT_MAX_RECORDS_PER_GAME);
     }
 
     public static final String MANA_CAP = "effect.mana.cap";
@@ -90,6 +98,8 @@ public record CollectionCaps(
     public static final String DIRECTED_FORK_RULES = "effect.directed.fork.rules";
     public static final String DIRECTED_FORKS_PER_GAME = "effect.directed.forks.per.game";
     public static final String DIRECTED_FORK_PROBABILITY = "effect.directed.fork.probability";
+    /** A listed rule's own probability: this prefix and the rule id, {@code effect.directed.probability.704.5f}. */
+    public static final String DIRECTED_RULE_PROBABILITY = "effect.directed.probability.";
     public static final String MAX_RECORDS_PER_GAME = "effect.max.records.per.game";
 
     /**
@@ -98,11 +108,17 @@ public record CollectionCaps(
      * <p>Each falls back to its default rather than failing, because a
      * worker started without instrumentation sets none of them and one
      * started by an older supervisor may set only some. A malformed value
-     * keeps the default too, and says so once on stderr.
+     * keeps the default too, and says so once on stderr. The exception is a
+     * listed rule's own probability: a run sets it only to steer what the
+     * rule collects, so a malformed one is refused ({@link
+     * #directedRuleProbabilities}).
      */
     public static CollectionCaps fromSystemProperties() {
         CollectionCaps defaults = defaults();
         OnMalformed policy = OnMalformed.WARN_AND_DEFAULT;
+        // The directed forks (FR-012). Unset, as on a worker an older
+        // supervisor started, no rule is named and none is taken.
+        List<String> directedRules = WorkerProperties.listProperty(DIRECTED_FORK_RULES);
         return new CollectionCaps(
                 WorkerProperties.intProperty(MANA_CAP, defaults.manaCap(), policy),
                 WorkerProperties.doubleProperty(
@@ -133,17 +149,38 @@ public record CollectionCaps(
                 // aimed (FR-009a), its value the rules they were aimed at.
                 WorkerProperties.presentListProperty(AIMED_AT),
                 WorkerProperties.flag(COUNT_DROPPED_EVENTS),
-                // The directed forks (FR-012). Unset, as on a worker an older
-                // supervisor started, no rule is named and none is taken.
-                WorkerProperties.listProperty(DIRECTED_FORK_RULES),
+                directedRules,
                 WorkerProperties.intProperty(
                         DIRECTED_FORKS_PER_GAME, defaults.directedForksPerGame(), policy),
                 WorkerProperties.doubleProperty(
                         DIRECTED_FORK_PROBABILITY, defaults.directedForkProbability(), policy),
+                directedRuleProbabilities(directedRules),
                 // A game whose AIs loop (Chain of Smog's copies, a free
                 // ability re-activated forever) is cut off at the cap.
                 WorkerProperties.intProperty(
                         MAX_RECORDS_PER_GAME, defaults.maxRecordsPerGame(), policy));
+    }
+
+    /**
+     * Each listed rule's own probability, read from {@code
+     * effect.directed.probability.<rule>}; a rule without the property is
+     * left out and takes {@code --directed-fork-probability}. A value outside
+     * [0, 1], or one that is not a number, ends the worker with {@code
+     * BAD_CONFIG} naming the property. A property naming a rule the run does
+     * not list is not read.
+     */
+    static Map<String, Double> directedRuleProbabilities(List<String> rules) {
+        Map<String, Double> probabilities = new HashMap<>();
+        for (String rule : rules) {
+            WorkerProperties.probability(DIRECTED_RULE_PROBABILITY + rule)
+                    .ifPresent(probability -> probabilities.put(rule, probability));
+        }
+        return probabilities;
+    }
+
+    /** The probability {@code rule} forks with at a boundary its precondition holds at. */
+    public double directedForkProbability(String rule) {
+        return directedRuleProbabilities.getOrDefault(rule, directedForkProbability);
     }
 
     /**

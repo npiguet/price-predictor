@@ -1,6 +1,8 @@
 package com.pricepredictor.connector.effects;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -24,6 +26,7 @@ public final class TestCaps {
     private List<String> directedForkRules;
     private int directedForksPerGame;
     private double directedForkProbability;
+    private Map<String, Double> directedRuleProbabilities;
     private int maxRecordsPerGame;
 
     private TestCaps(CollectionCaps from) {
@@ -41,6 +44,7 @@ public final class TestCaps {
         directedForkRules = from.directedForkRules();
         directedForksPerGame = from.directedForksPerGame();
         directedForkProbability = from.directedForkProbability();
+        directedRuleProbabilities = new HashMap<>(from.directedRuleProbabilities());
         maxRecordsPerGame = from.maxRecordsPerGame();
     }
 
@@ -127,6 +131,12 @@ public final class TestCaps {
         return this;
     }
 
+    /** {@code rule}'s own probability, beside the run's (D8). */
+    public TestCaps directedProbability(String rule, double probability) {
+        directedRuleProbabilities.put(rule, probability);
+        return this;
+    }
+
     /** At most {@code max} records a game (FR-041a). */
     public TestCaps maxRecordsPerGame(int max) {
         maxRecordsPerGame = max;
@@ -138,6 +148,6 @@ public final class TestCaps {
                 plainCandidateRate, interventions, probes,
                 probeKeywords, randomSeatShare, randomSeatProbability, aimedAt,
                 countDroppedEvents, directedForkRules, directedForksPerGame,
-                directedForkProbability, maxRecordsPerGame);
+                directedForkProbability, directedRuleProbabilities, maxRecordsPerGame);
     }
 }

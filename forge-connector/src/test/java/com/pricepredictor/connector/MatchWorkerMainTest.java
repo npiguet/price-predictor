@@ -1,14 +1,21 @@
 package com.pricepredictor.connector;
 
+import com.pricepredictor.connector.effects.CollectionCaps;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 
@@ -77,6 +84,49 @@ class MatchWorkerMainTest {
 
         assertEquals(ExitCode.BAD_CONFIG,
                 assertThrows(ToolMain.Exit.class, MatchWorkerMain::parseConfig).code());
+    }
+
+    /**
+     * A listed rule's own directed-fork probability that is not a number in
+     * [0, 1] is refused before Forge starts, the property named, rather than
+     * defaulted: a run sets it to steer what the rule collects.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"1.5", "-0.1", "NaN", "often"})
+    void aMalformedRuleProbabilityIsRefusedBeforeForgeStarts(String value) {
+        recordsOnly();
+        System.setProperty("effect.directed.fork.rules", "118.12b,704.5f");
+        System.setProperty("effect.directed.probability.704.5f", value);
+        PrintStream err = System.err;
+        ByteArrayOutputStream printed = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(printed, true, StandardCharsets.UTF_8));
+        ToolMain.Exit exit;
+        try {
+            exit = assertThrows(ToolMain.Exit.class, MatchWorkerMain::parseConfig);
+        } finally {
+            System.setErr(err);
+        }
+
+        assertEquals(ExitCode.BAD_CONFIG, exit.code());
+        assertTrue(printed.toString(StandardCharsets.UTF_8)
+                .contains("-Deffect.directed.probability.704.5f "), printed.toString(StandardCharsets.UTF_8));
+    }
+
+    /** A rule's own probability is read for the rules listed; the others take the run's. */
+    @Test
+    void aListedRuleTakesItsOwnProbabilityAndTheOthersTheRuns() {
+        recordsOnly();
+        System.setProperty("effect.directed.fork.rules", "118.12b,704.5f");
+        System.setProperty("effect.directed.fork.probability", "0.25");
+        System.setProperty("effect.directed.probability.704.5f", "1");
+        System.setProperty("effect.directed.probability.510.2", "0");
+
+        CollectionCaps caps = MatchWorkerMain.parseConfig().caps();
+
+        assertEquals(1.0, caps.directedForkProbability("704.5f"));
+        assertEquals(0.25, caps.directedForkProbability("118.12b"));
+        assertEquals(Map.of("704.5f", 1.0), caps.directedRuleProbabilities(),
+                "a rule the run does not list is not read");
     }
 
     /** The recycle time counts from the worker's start, not from the end of Forge's. */

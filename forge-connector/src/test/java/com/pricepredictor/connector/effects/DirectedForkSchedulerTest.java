@@ -128,24 +128,87 @@ class DirectedForkSchedulerTest {
         assertTrue(forked.isEmpty());
     }
 
-    /** The fewest forks so far in the JVM's lifetime goes first, whatever the list order. */
+    /**
+     * A rule whose board appears at every boundary, at probability 0, never
+     * forks, and a rule whose board appears once, at probability 1, takes
+     * the game's one fork there (D8): the budget no longer goes to the
+     * first board that holds.
+     */
     @Test
-    void theRuleWithTheFewestLifetimeForksGoesFirst() {
+    void aRareRuleAtOneTakesTheForkABroadRuleAtZeroNeverDoes() {
+        AtomicBoolean rareBoard = new AtomicBoolean(false);
         DirectedForkTally tally = new DirectedForkTally();
-        tally.count("A");
-        tally.count("A");
-        tally.count("B");
         DirectedForkScheduler scheduler = scheduler(
-                TestCaps.caps().directed(3, 1.0, "A", "B", "C").build(), tally,
-                rule("A", ALWAYS), rule("B", ALWAYS), rule("C", ALWAYS));
+                TestCaps.caps().directed(1, 0.25, "broad", "rare")
+                        .directedProbability("broad", 0.0).directedProbability("rare", 1.0).build(),
+                tally, rule("broad", ALWAYS),
+                rule("rare", live -> rareBoard.get() ? Optional.of(Binding.empty()) : Optional.empty()));
+
+        for (int boundary = 0; boundary < 10; boundary++) {
+            rareBoard.set(boundary == 6);
+            scheduler.collect(PhaseType.MAIN1);
+        }
+
+        assertEquals(List.of("rare"), forked);
+        assertEquals(List.of(10L, 0L, 0L, 0L, 0L, 0L), counts(tally, "broad"),
+                "matched at every boundary, never drawn");
+        assertEquals(List.of(1L, 1L, 0L, 1L, 1L, 0L), counts(tally, "rare"),
+                "matched, drawn, taken and kept once");
+    }
+
+    /**
+     * Two rules matching one boundary are drawn in descending order of
+     * probability, whatever their order in --directed-fork-rules, so the
+     * budget goes first to the rule that needs it most; the other, drawn
+     * after it, finds the budget spent.
+     */
+    @Test
+    void twoRulesMatchingOneBoundaryAreDrawnInDescendingProbability() {
+        DirectedForkTally tally = new DirectedForkTally();
+        DirectedForkScheduler scheduler = scheduler(
+                TestCaps.caps().directed(1, 1.0, "lower", "higher")
+                        .directedProbability("lower", 0.999_999).build(),
+                tally, rule("lower", ALWAYS), rule("higher", ALWAYS));
 
         scheduler.collect(PhaseType.MAIN1);
 
-        assertEquals(List.of("C", "B", "A"), forked);
-        assertEquals(3, tally.taken("A"), "a fork taken counts in the lifetime tally");
+        assertEquals(List.of("higher"), forked);
+        assertEquals(List.of(1L, 1L, 1L, 0L, 0L, 0L), counts(tally, "lower"),
+                "drawn after the other, its budget spent");
     }
 
-    /** A tie goes to the rule listed first in --directed-fork-rules, not registered first. */
+    /**
+     * A precondition that throws reads as not met, the other rules still
+     * fork, and the throw is counted under its rule at every boundary.
+     */
+    @Test
+    void aThrowingPreconditionIsCountedUnderItsRule() {
+        DirectedForkTally tally = new DirectedForkTally();
+        DirectedForkScheduler scheduler = scheduler(
+                TestCaps.caps().directed(2, 1.0, "throws", "A").build(), tally,
+                rule("throws", live -> {
+                    throw new IllegalStateException("a board the precondition did not foresee");
+                }),
+                rule("A", ALWAYS));
+
+        scheduler.collect(PhaseType.MAIN1);
+        scheduler.collect(PhaseType.MAIN2);
+
+        assertEquals(List.of("A"), forked);
+        assertEquals(List.of(0L, 0L, 0L, 0L, 0L, 2L), counts(tally, "throws"));
+        assertEquals(0L, tally.get("A", DirectedForkTally.Count.PRECONDITION_THREW));
+    }
+
+    /** {@code rule}'s counts, in {@link DirectedForkTally.Count} order. */
+    private static List<Long> counts(DirectedForkTally tally, String rule) {
+        return java.util.Arrays.stream(DirectedForkTally.Count.values())
+                .map(count -> tally.get(rule, count)).toList();
+    }
+
+    /**
+     * A tie of probability goes to the rule listed first in
+     * --directed-fork-rules, not registered first.
+     */
     @Test
     void aTieGoesToTheRuleListedFirst() {
         DirectedForkScheduler scheduler = scheduler(
@@ -227,7 +290,7 @@ class DirectedForkSchedulerTest {
      *                   fork was spent beside this one
      * @param retried    the forks the same rule took at the next boundary
      */
-    private record Taken(boolean kept, List<String> forkRecords, boolean budgetLeft, int tally, int retried) {
+    private record Taken(boolean kept, List<String> forkRecords, boolean budgetLeft, long tally, int retried) {
     }
 
     private Taken takeOneFork(boolean disturb) throws Throwable {
@@ -271,6 +334,6 @@ class DirectedForkSchedulerTest {
         List<String> written = Files.exists(writer.path()) ? ShardRun.readShard(writer.path()) : List.of();
         List<String> forkRecords = written.stream()
                 .filter(record -> Boolean.TRUE.equals(parse(record).get("fork"))).toList();
-        return new Taken(kept[0], forkRecords, budgetLeft, tally.taken("A"), retried);
+        return new Taken(kept[0], forkRecords, budgetLeft, tally.get("A", DirectedForkTally.Count.TAKEN), retried);
     }
 }

@@ -272,7 +272,7 @@ class GameRecordingTest {
                 phases.devModeSet(forge.game.phase.PhaseType.UNTAP, active, phases.getTurn() + 1);
                 TestPriority.settle(game);
             }
-            assertEquals(1, tally.taken("A"), "the directed rule bound at UNTAP forked there");
+            assertEquals(1, tally.get("A", DirectedForkTally.Count.TAKEN), "the directed rule bound at UNTAP forked there");
 
             for (int boundary = 0; boundary < 40; boundary++) {
                 phases.devModeSet(forge.game.phase.PhaseType.UPKEEP, active, phases.getTurn() + 1);

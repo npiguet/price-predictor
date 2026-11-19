@@ -2,6 +2,7 @@ package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.AttributionMode;
+import com.pricepredictor.connector.effects.DirectedForkTally;
 import com.pricepredictor.connector.effects.GameRecording;
 import com.pricepredictor.connector.effects.HookFailures;
 import com.pricepredictor.connector.effects.PatchHooks;
@@ -12,6 +13,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 
 /**
  * Match worker entry point.
@@ -112,7 +114,8 @@ public class MatchWorkerMain {
             String workerLifetime,
             boolean decksOnly,
             Optional<Path> progressFile,
-            WorkerStop stop) {
+            WorkerStop stop,
+            CollectionCaps caps) {
 
         /**
          * Records-only: no sealed corpus is written at all.
@@ -217,10 +220,14 @@ public class MatchWorkerMain {
         // Read with the rest, before Forge is initialised, so a malformed
         // value exits at once.
         WorkerStop stop = WorkerStop.fromSystemProperties(startedNanos);
+        // The caps too: a listed rule's own directed-fork probability is the
+        // one cap whose malformed value is refused (CollectionCaps).
+        CollectionCaps caps = CollectionCaps.fromSystemProperties();
 
         return new WorkerConfig(
                 outputFile, runId, bestOf, sideADecks, sideBDecks, sideBWeight,
-                effectRecordsDir, workerIndex, workerLifetime, decksOnly, progressFile, stop);
+                effectRecordsDir, workerIndex, workerLifetime, decksOnly, progressFile, stop,
+                caps);
     }
 
     private static void initializeForge(WorkerConfig config) {
@@ -254,7 +261,7 @@ public class MatchWorkerMain {
         // growing.
         Optional<ProgressWriter> progress = config.progressFile().map(ProgressWriter::new);
 
-        CollectionCaps caps = CollectionCaps.fromSystemProperties();
+        CollectionCaps caps = config.caps();
         RecordShardWriter effectRecords = openEffectRecords(config, caps);
 
         HookFailureReport hookFailureReport = new HookFailureReport();
@@ -329,13 +336,19 @@ public class MatchWorkerMain {
     private static void announceDirectedForks(CollectionCaps caps) {
         System.out.println("Directed forks: " + String.join(",", caps.directedForkRules())
                 + ", up to " + caps.directedForksPerGame() + " per game, probability "
-                + caps.directedForkProbability());
+                + caps.directedForkProbability() + ownProbabilities(caps));
         for (String rule : caps.directedForkRules()) {
             if (DirectedRules.registered().find(rule).isEmpty()) {
                 System.err.println("Directed forks: " + rule
                         + " is not registered in forge-connector; it takes no fork");
             }
         }
+    }
+
+    /** The rules' own probabilities, by rule id in name order, or nothing when none has one. */
+    private static String ownProbabilities(CollectionCaps caps) {
+        return caps.directedRuleProbabilities().isEmpty() ? ""
+                : ", by rule " + new TreeMap<>(caps.directedRuleProbabilities());
     }
 
     /**
@@ -400,6 +413,7 @@ public class MatchWorkerMain {
         private Map<String, Long> reported = Map.of();
         private Map<String, Long> reportedByForge = Map.of();
         private Map<String, Long> reportedRefusals = Map.of();
+        private Optional<String> reportedTally = Optional.empty();
 
         /**
          * Print the counts when they changed: the connector's
@@ -409,7 +423,8 @@ public class MatchWorkerMain {
          * holds the argument builds Forge made inside a hook's call; a
          * listener's failure is in both. Then, on a line of its own and only
          * when it changed, the forks that refused, by kind and reason
-         * ({@code ForkRefusals}), which are no failures.
+         * ({@code ForkRefusals}), which are no failures, and the directed
+         * fork tally ({@link DirectedForkTally}).
          */
         void afterMatch() {
             Map<String, Long> counts = HookFailures.counts();
@@ -427,6 +442,20 @@ public class MatchWorkerMain {
             if (!refusals.equals(reportedRefusals)) {
                 System.err.println(REFUSALS_LINE + refusals);
                 reportedRefusals = refusals;
+            }
+            reportTally();
+        }
+
+        /**
+         * The directed fork tally's line when it changed: running totals of
+         * the JVM, so the last one a worker printed holds its lifetime's
+         * counts, a worker stopping gracefully printing it last.
+         */
+        private void reportTally() {
+            Optional<String> tally = DirectedForkTally.lifetimeLine();
+            if (!tally.equals(reportedTally)) {
+                tally.ifPresent(System.err::println);
+                reportedTally = tally;
             }
         }
 

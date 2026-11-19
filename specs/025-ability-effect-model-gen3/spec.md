@@ -709,11 +709,14 @@ and that the reporting half never enters the control score.
   interventional forks of FR-058 are played on to the end of the turn.
 - **FR-010a**: Each enabled rule MUST take at most one directed fork per game. At a phase boundary
   where a rule's board precondition holds and the rule has not forked in this game, the fork MUST
-  be taken with probability `--directed-fork-probability`, drawn from a generator seeded per game.
-  When several such rules match at one boundary, they MUST be tried in ascending order of the
-  directed forks each has taken so far in the worker JVM's lifetime, ties broken by their order in
-  `--directed-fork-rules`; each fork taken, kept or discarded, counts against
-  `--directed-forks-per-game`, and no rule is tried once the budget is spent.
+  be taken with the rule's own probability (the worker property `effect.directed.probability.<rule>`,
+  else `--directed-fork-probability`; a rule at 0 never forks), drawn from a generator seeded per
+  game. The rules MUST be considered in descending order of probability, ties broken by their
+  order in `--directed-fork-rules`, so the per-game budget goes first to the rule that needs it
+  most; each fork taken, kept or discarded, counts against `--directed-forks-per-game`, and no fork
+  is taken once the budget is spent. Each worker MUST keep and print a per-rule tally (matched,
+  drawn, budget-blocked, taken, kept, precondition throws; `contracts/cli.md` § Match worker stop
+  protocol).
 - **FR-010b**: A directed rule's variant MAY name one play its fork forces, made by a seat the
   binding names: a cast or activation of a line of a bound source (chosen by API type, keyword or a
   test of the rule's own: the card's spell, its bestow cast, an activated ability whose cost

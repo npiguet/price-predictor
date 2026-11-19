@@ -81,6 +81,16 @@ public final class WorkerProperties {
     }
 
     /**
+     * A probability, in [0, 1]; empty when unset or blank. Anything else,
+     * a value that does not parse included, is refused as
+     * {@link OnMalformed#EXIT} refuses: there is no default to fall back on.
+     */
+    public static Optional<Double> probability(String name) {
+        return Optional.ofNullable(read(name, (Double) null, OnMalformed.EXIT, Double::valueOf,
+                "a number", value -> value >= 0.0 && value <= 1.0, "must be in [0, 1]"));
+    }
+
+    /**
      * Games per match. Odd because Forge plays first to {@code N/2 + 1} wins:
      * an even {@code N} can run past {@code N} games, and a match row's
      * winner sequence is promised to be at most {@code N} long.

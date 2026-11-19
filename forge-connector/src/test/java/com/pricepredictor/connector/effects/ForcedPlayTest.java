@@ -378,7 +378,7 @@ class ForcedPlayTest {
         assertEquals(0, scheduler.collect(PhaseType.MAIN1), "no fork where Disfigure cannot take its target");
         assertEquals(before + 1, refusals(ForkRefusal.FORCED_NO_LINE), "counted as a refusal");
         assertTrue(budget.mayDirect(), "the budget is untouched");
-        assertEquals(0, tally.taken(rule.rule()), "no fork in the lifetime tally");
+        assertEquals(0, tally.get(rule.rule(), DirectedForkTally.Count.TAKEN), "no fork in the lifetime tally");
         assertEquals(List.of(), forked);
 
         aimable[0] = true;

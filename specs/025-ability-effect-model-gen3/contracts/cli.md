@@ -144,6 +144,17 @@ Startup, exit 1 naming the rule when a listed rule:
 `effect.directed.fork.rules`, `effect.directed.forks.per.game`, `effect.directed.fork.probability`,
 `effect.count.dropped.events`, `effect.max.records.per.game`.
 
+A listed rule's own probability rides `effect.directed.probability.<rule>`, the rule id as
+`effect.directed.fork.rules` lists it (`-Deffect.directed.probability.704.5f=1`): a number in
+[0, 1]; a rule at 0 never forks; a rule without the property forks with
+`effect.directed.fork.probability`; a property naming a rule the list does not hold is not read.
+A value that is not a number in [0, 1] (`NaN` and `Infinity` included) ends the worker before
+Forge is initialised with exit 2 and `Error: -Deffect.directed.probability.<rule> must be in [0, 1], got: <value>`
+(`must be a number, got: <value>` when it does not parse). The worker's startup line names them:
+`Directed forks: <rules>, up to <n> per game, probability <p>[, by rule {<rule>=<p>, …}]`.
+At a boundary the rules are considered in descending order of probability, ties in list order
+(`src/effects/docs/forks.md` § Directed forks).
+
 The three sampling rates ride `effect.playability.rate`, `effect.zone.candidate.rate` and
 `effect.plain.candidate.rate`, and are shared with `collect-coverage` and `collect-variants` through
 the common cap flags (`add_cap_flags`; Python `CollectionCaps.zone_candidate_rate`,
@@ -378,6 +389,25 @@ A fork that declines for an expected reason is no failure: it is counted in a ta
 which the worker prints at a match end whenever it changed, on a line of its own:
 `Effect records: fork refusals so far, expected and no failure: {<kind> <reason>=<forks>, …}`
 (a Java map, running totals of the JVM, keys in name order).
+
+Each worker also keeps a per-rule directed fork tally, running totals of the JVM, printed on stderr
+at each match end and as the worker ends (a graceful stop, giving up, an `Error`), each time only
+when it changed since the worker's last such line, so the last one holds the JVM's totals, as one line:
+`Effect records: directed fork tally so far: <JSON object>`. The object maps each rule id that has
+counted anything, in name order, to an object holding all six counts, in this order: `matched` (a
+boundary where the rule had not forked in its game and its precondition held), `drawn` (of
+those, draws that came up a fork), `budget_blocked` (of those drawn, the game's
+`--directed-forks-per-game` already spent), `taken` (forks taken, the budget spent, kept or
+discarded), `kept`, and `precondition_threw` (precondition calls that threw, each read as not
+met). `drawn - budget_blocked - taken` is the forks the forced play's dry run refused (counted
+also in the refusal tally). A listed rule absent from the object has every count 0, and no line
+is printed while no rule has counted anything. Example:
+`Effect records: directed fork tally so far: {"118.12b":{"matched":31,"drawn":9,"budget_blocked":2,"taken":7,"kept":7,"precondition_threw":0},"704.5f":{"matched":0,"drawn":0,"budget_blocked":0,"taken":0,"kept":0,"precondition_threw":3}}`.
+The object is JSON (rule ids escaped as JSON strings), so a reader parses everything after the
+prefix with a JSON parser and never splits on `, ` or `=`. A killed worker's tally is its last
+printed line. The first throw of each rule's precondition prints
+`Effect records: directed rule <rule>'s precondition threw and reads as not met (later throws are counted in the directed fork tally, not printed): <exception>`
+with its stack; the line matches no worker-failure pattern.
 
 The supervisor's log scan reads these: `Error generating match: [random-seat match] ` is the
 failure kind `random_seat_match_error`, counted apart from `match_error`; the marker line is

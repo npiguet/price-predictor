@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * A rule enabled for directed forks (D1): its board precondition and, per
@@ -55,9 +56,19 @@ public record DirectedRule(
      * stop the live game.
      */
     public Optional<Binding> precondition(Game live) {
+        return precondition(live, failure -> { });
+    }
+
+    /**
+     * {@link #precondition(Game)}, {@code threw} told of each exception the
+     * precondition throws before it reads as not met, so the throw is
+     * counted under the rule rather than lost.
+     */
+    public Optional<Binding> precondition(Game live, Consumer<RuntimeException> threw) {
         try {
             return Objects.requireNonNullElse(boardPrecondition.bind(live), Optional.empty());
         } catch (RuntimeException e) {
+            threw.accept(e);
             return Optional.empty();
         }
     }
