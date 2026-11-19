@@ -76,6 +76,71 @@ class ResolvesAsACreatureTest {
         assertEquals("root", arrivals.get(0).get("attributed_to"), half);
     }
 
+    /**
+     * A creature spell entering beside a Coat of Arms and a creature of its type: the +1/+1 the
+     * static check after its resolution applies is its one clause's,
+     * {@code root} (finding 2.1).
+     */
+    @Test
+    void aPlainCreatureSpellsPostCheckChangeIsItsRootClauses() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        TestBoard.inPlay(game, caster, "Coat of Arms");
+        TestBoard.inPlay(game, caster, "Grizzly Bears");
+        Card bears = TestBoard.inHand(game, caster, "Grizzly Bears");
+
+        List<String> records = ShardRun.recordsWithClauseHook(
+                tempDir, game, "for the clause hook", () -> {
+                    EffectEndingTheTurnTest.castWithoutTarget(game, bears, caster);
+                    game.getStack().resolveStack();
+                    game.getAction().checkStateEffects(false);
+                    TestBoard.nextStep(game);
+                });
+
+        assertPostCheckIsRoots(only(records, "resolution", "cardsfolder/g/grizzly_bears.txt"));
+    }
+
+    /**
+     * Boon Satyr cast for bestow at a creature that is gone by resolution,
+     * entering beside a Coat of Arms and a Boon Satyr: it resolves as its creature spell,
+     * and the +1/+1 the static check after it applies to the other Satyr is the spell's,
+     * {@code root}, as a plain creature spell's is (finding 2.1).
+     */
+    @Test
+    void aBestowSpellsPostCheckChangeIsItsRootClauses() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        TestBoard.inPlay(game, caster, "Coat of Arms");
+        TestBoard.inPlay(game, caster, "Boon Satyr");
+        Card target = TestBoard.inPlay(game, caster, "Grizzly Bears");
+        Card card = TestBoard.inHand(game, caster, "Boon Satyr");
+
+        List<String> records = ShardRun.recordsWithClauseHook(
+                tempDir, game, "for the resolution hook", () -> {
+                    SpellAbility chosen = spellOfKind(card, SpellAbility::isBestow);
+                    card.setSplitStateToPlayAbility(chosen);
+                    Card onStack = game.getAction().moveToStack(card, chosen);
+                    SpellAbility spell = spellOfKind(onStack, SpellAbility::isBestow);
+                    spell.setActivatingPlayer(caster);
+                    spell.resetTargets();
+                    spell.getTargets().add(target);
+                    game.getStack().add(spell);
+                    game.getAction().exile(target, null, null);
+                    game.getStack().resolveStack();
+                    game.getAction().checkStateEffects(false);
+                    TestBoard.nextStep(game);
+                });
+
+        assertPostCheckIsRoots(only(records, "resolution", "cardsfolder/b/boon_satyr.txt"));
+    }
+
+    private static void assertPostCheckIsRoots(String half) {
+        List<java.util.Map<String, Object>> changes = events(half).stream()
+                .filter(event -> "pt_change".equals(event.get("type"))).toList();
+        assertEquals(1, changes.size(), half);
+        assertEquals("root", changes.get(0).get("attributed_to"), half);
+    }
+
     private void assertEntersAsACreature(String name, String script, Predicate<SpellAbility> kind)
             throws Throwable {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
