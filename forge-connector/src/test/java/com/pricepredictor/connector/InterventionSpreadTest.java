@@ -53,7 +53,9 @@ class InterventionSpreadTest {
 
     /**
      * The steps a turn with no attacker skips (508.8). Its declare-attackers
-     * and end-of-combat steps still give priority.
+     * and end-of-combat steps still give priority. The seeded games force at
+     * none of them, so the check on these steps is made by {@code
+     * ScheduledInterventionsTest} on a real declared attack.
      */
     private static final Set<String> NEEDS_AN_ATTACKER = Set.of(
             "combat_declare_blockers", "combat_first_strike_damage", "combat_damage");

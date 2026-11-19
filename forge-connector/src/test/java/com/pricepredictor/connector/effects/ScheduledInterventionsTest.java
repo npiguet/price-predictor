@@ -243,6 +243,45 @@ class ScheduledInterventionsTest {
     }
 
     /**
+     * A declared attack that is blocked: a line forced at the declare-blockers
+     * step's and at the combat-damage step's first priority is written, each
+     * record's board holding the attacker. {@code InterventionSpreadTest}'s
+     * seeded games force at no combat step that needs an attacker, so this
+     * is the case that checks one.
+     */
+    @Test
+    void aLineForcedInACombatStepIsWrittenWithTheAttackerOnTheBoard() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        forge.game.card.Card attacker = TestBoard.inPlay(game, you, "Grizzly Bears");
+        forge.game.card.Card blocker = TestBoard.inPlay(game, opponent, "Hill Giant");
+        TestBoard.inHand(game, you, "Lightning Bolt");
+        TestBoard.inHand(game, you, "Shock");
+
+        List<String> records = forced(game, 2, () -> {
+            game.getPhaseHandler().devModeSet(PhaseType.COMBAT_DECLARE_BLOCKERS, you, 4 * BOUNDARIES);
+            TestBoard.blockedCombat(game, you, opponent, attacker, blocker);
+            TestPriority.settle(game);
+            game.getPhaseHandler().devModeSet(PhaseType.COMBAT_DAMAGE, you, 4 * BOUNDARIES);
+            TestBoard.blockedCombat(game, you, opponent, attacker, blocker);
+            TestPriority.settle(game);
+        });
+
+        assertEquals(List.of("combat_declare_blockers", "combat_damage"), records.stream()
+                .map(record -> RecordLines.asMap(RecordLines.asMap(parse(record).get("state")).get("global"))
+                        .get("phase"))
+                .toList(), records.toString());
+        for (String record : records) {
+            assertTrue(RecordLines.asMap(parse(record).get("state")).get("entities") instanceof List<?> entities
+                            && entities.stream().map(RecordLines::asMap).anyMatch(entity ->
+                                    entity.get("combat") != null
+                                            && RecordLines.asMap(entity.get("combat")).get("attacking") != null),
+                    "a combat step's forced record with no attacker: " + record);
+        }
+    }
+
+    /**
      * Spirit en-Dal's forecast is activated only during its holder's upkeep
      * and once a turn: held through its holder's end step and another
      * player's upkeep it is not forced, and its forced record's board is in
