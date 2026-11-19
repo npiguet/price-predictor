@@ -4,12 +4,9 @@ import forge.ImageKeys;
 import forge.StaticData;
 import forge.card.CardRules;
 import forge.game.card.Card;
-import forge.game.card.CardCloneStates;
 import forge.item.IPaperCard;
 import forge.item.PaperToken;
 
-import java.util.Map;
-import java.util.NavigableMap;
 import java.util.Optional;
 
 /**
@@ -76,15 +73,15 @@ final class ScriptLocator {
                 .key();
     }
 
-    /** How many copies of copies {@link #printedScriptOf} follows before giving up. */
-    private static final int MAX_COPY_DEPTH = 8;
-
     /**
      * The script whose lines a card prints. A copy (a Clone's, a Phantasmal
      * Image's) prints what it copies, through a copy of a copy to the
-     * original: its latest copy effect's origin's script, not its own paper
-     * card's, which {@link #scriptFileOf} answers. A token copy prints what
-     * the permanent it copied printed when the token was made
+     * original, as each was when it was copied
+     * ({@link CopyHistory#printerOf}): its copy effect's origin's script,
+     * not its own paper card's, which {@link #scriptFileOf} answers, and not
+     * that of what a later copy effect made the origin a copy of (Cytoshape
+     * on the Clone's Moldering Karok). A token copy prints what the
+     * permanent it copied printed when the token was made
      * ({@link KeywordPrinters#printingSourceOf}): Forge builds it from that
      * permanent's paper card, so {@link #scriptFileOf} names the copied
      * card's script, which is not the one printed when the copied card is
@@ -93,31 +90,9 @@ final class ScriptLocator {
      * later). Any other card prints its own.
      */
     static String printedScriptOf(Card host) {
-        Card printer = host;
-        for (int depth = 0; depth < MAX_COPY_DEPTH; depth++) {
-            Card origin = copiedFrom(printer);
-            if (origin == null) {
-                break;
-            }
-            printer = origin;
-        }
+        Card printer = CopyHistory.printerOf(host);
         Card source = KeywordPrinters.printingSourceOf(printer);
         return scriptFileOf(source != null ? source : printer);
-    }
-
-    /**
-     * What a copy copies: its latest clone states' origin; null for a card
-     * that is no copy ({@code Card.isCloned}, which a mutation or a
-     * prototype is not).
-     */
-    private static Card copiedFrom(Card card) {
-        return card.isCloned() ? latestOrigin(card.getCloneStates()) : null;
-    }
-
-    /** The latest clone states' origin; null for none. */
-    private static Card latestOrigin(Map<Long, CardCloneStates> states) {
-        return states instanceof NavigableMap<Long, CardCloneStates> ordered && !ordered.isEmpty()
-                ? ordered.lastEntry().getValue().getOrigin() : null;
     }
 
     /** Whether {@code host} is a staged variant card, face down or not. */

@@ -59,15 +59,17 @@ final class LineGrant {
     }
 
     /**
-     * The scripts a card prints the lines of: the one it prints and its own,
-     * and for a mutated permanent each merged card's.
+     * The scripts a card prints the lines of: the one it prints, its own and
+     * that of each copy it copies through ({@link CopyHistory#chainOf}: a
+     * Clone of Dack's Duplicate prints the haste the Duplicate's copy effect
+     * added), and for a mutated permanent each merged card's.
      */
     private static Set<String> printedScriptsOf(Card card) {
         Set<String> scripts = new HashSet<>();
         Iterable<Card> printers = card.hasMergedCard() ? card.getMergedCards() : List.of(card);
         for (Card printer : printers) {
             scripts.add(ScriptLocator.printedScriptOf(printer));
-            scripts.add(ScriptLocator.scriptFileOf(printer));
+            CopyHistory.chainOf(printer).forEach(link -> scripts.add(ScriptLocator.scriptFileOf(link)));
         }
         return scripts;
     }

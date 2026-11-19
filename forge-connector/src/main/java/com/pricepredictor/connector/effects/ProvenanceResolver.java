@@ -440,31 +440,54 @@ public final class ProvenanceResolver {
      * what it copies: its keywords are the original's, keyed into the
      * original's script file; one the copy effect added has the line that
      * made the copy, and is no keyword line of the copier's own file, so
-     * that line's key is returned as it is, without {@code built}.
+     * that line's key is returned as it is, without {@code built}. The
+     * original is read as it was when the copy was made
+     * ({@link CopyHistory#stateAsOf}), not as it is now: a later copy effect
+     * on it (Cytoshape on Moldering Karok) changes the original, not the
+     * copy's values (707.2).
      *
      * <p>A mutated permanent's and a token or spell copy's state are no such
      * copy: they are read by {@link #keyOfUncloned}.
      */
     private static ProvenanceKey keyOfPrinted(CardState state, KeywordInterface keyword,
                                               ProvenanceKey.Built built, int depth) {
-        forge.game.card.CardCloneStates cloned = copyStatesOf(state);
-        if (cloned == null) {
+        Map.Entry<Long, forge.game.card.CardCloneStates> copy = CopyHistory.copyHolding(state);
+        if (copy == null) {
             return keyOfUncloned(state, keyword, built, depth);
         }
-        Card origin = cloned.getOrigin();
-        if (origin != null && depth < MAX_COPY_DEPTH) {
-            // The original's state of the copy's name, else the face it
-            // showed: a copy of a transformed card copies its back face
-            // into its own front.
-            for (CardState original : java.util.Arrays.asList(
-                    origin.getState(state.getStateName()), origin.getCurrentState())) {
-                if (original != null && original != state
-                        && FaceOrder.keywordIndex(original, keyword) >= 0) {
-                    return keyOfPrinted(original, keyword, built, depth + 1);
-                }
+        CardState original = depth < MAX_COPY_DEPTH ? copiedStateHolding(copy, state, keyword) : null;
+        if (original != null) {
+            return keyOfPrinted(original, keyword, built, depth + 1);
+        }
+        CardTraitBase source = copy.getValue().getSource();
+        return source == null ? null : of(source);
+    }
+
+    /**
+     * The state of what a copy copied, as it showed it when the copy was
+     * made, that holds {@code keyword} of the copy's {@code state}: its
+     * state of the copy's name, else of the face it shows (a copy of a
+     * transformed card copies its back face into its own front). Null for
+     * none: a keyword the copy effect added.
+     */
+    private static CardState copiedStateHolding(Map.Entry<Long, forge.game.card.CardCloneStates> copy,
+                                                CardState state, KeywordInterface keyword) {
+        Card origin = copy.getValue().getOrigin();
+        if (origin == null) {
+            return null;
+        }
+        for (forge.card.CardStateName name : List.of(state.getStateName(), origin.getCurrentStateName())) {
+            CardState original = CopyHistory.stateAsOf(origin, name, copy.getKey());
+            if (holdsKeyword(original, state, keyword)) {
+                return original;
             }
         }
-        return cloned.getSource() == null ? null : of(cloned.getSource());
+        return null;
+    }
+
+    /** Whether {@code original}, a state other than the copy's {@code state}, holds {@code keyword}. */
+    private static boolean holdsKeyword(CardState original, CardState state, KeywordInterface keyword) {
+        return original != null && original != state && FaceOrder.keywordIndex(original, keyword) >= 0;
     }
 
     /**
@@ -527,24 +550,14 @@ public final class ProvenanceResolver {
     }
 
     /**
-     * The copy effect's states {@code state} is one of: its card's latest
-     * clone states when the card is a copy ({@code Card.isCloned}, which a
-     * mutation or a prototype is not), else null.
+     * The copy effect's states {@code state} is one of: its card's clone
+     * states that hold it, when they are a copy effect's
+     * ({@link CopyHistory#copyHolding}, which a mutation's or a prototype's
+     * are not), else null.
      */
     static forge.game.card.CardCloneStates copyStatesOf(CardState state) {
-        Card host = state == null ? null : state.getCard();
-        if (host == null || !host.isCloned()
-                || !(host.getCloneStates() instanceof java.util.NavigableMap<Long,
-                        forge.game.card.CardCloneStates> states) || states.isEmpty()) {
-            return null;
-        }
-        forge.game.card.CardCloneStates latest = states.lastEntry().getValue();
-        for (CardState each : latest.values()) {
-            if (each == state) {
-                return latest;
-            }
-        }
-        return null;
+        Map.Entry<Long, forge.game.card.CardCloneStates> copy = CopyHistory.copyHolding(state);
+        return copy == null ? null : copy.getValue();
     }
 
     /**

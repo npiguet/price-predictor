@@ -224,12 +224,14 @@ final class KeywordPrinters {
     }
 
     /**
-     * A merged card's printed state as {@code CardFactory.getMutatedCloneStates}
-     * read it: the host's own state of that name, any other card's current
-     * one.
+     * A merged card's state as {@code CardFactory.getMutatedCloneStates}
+     * read it: the host's state of that name as it showed it before the
+     * mutation (a Clone's copy of what it copied, read through that further
+     * on, else its printed state), any other card's current one.
      */
     private static CardState printedStateOf(Card component, Card host, CardStateName name) {
-        return component == host ? host.getOriginalState(name) : component.getCurrentState();
+        return component == host
+                ? CopyHistory.stateAsOf(host, name, host.getMutatedTimestamp()) : component.getCurrentState();
     }
 
     /**
