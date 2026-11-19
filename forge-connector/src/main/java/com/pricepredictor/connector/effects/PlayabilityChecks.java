@@ -7,6 +7,7 @@ import forge.game.ability.AbilityUtils;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
 import forge.game.card.CardCopyService;
+import forge.game.cost.Cost;
 import forge.game.cost.CostPayment;
 import forge.game.phase.PhaseHandler;
 import forge.game.phase.PhaseType;
@@ -117,11 +118,23 @@ final class PlayabilityChecks {
         if (!affordable) {
             failed.add(PlayabilityCheck.COST);
         }
-        if (!canPlay && failed.stream().noneMatch(IN_CAN_PLAY::contains)
-                && holds(() -> CostPayment.canPayAdditionalCosts(sa.getPayCosts(), sa, false))) {
+        if (!canPlay && unexplained(sa, failed)) {
             failed.add(PlayabilityCheck.SCRIPT_RESTRICTION);
         }
         return named(failed, prohibiting);
+    }
+
+    /**
+     * Whether a false {@code canPlay} is left unexplained by {@code failed}:
+     * none of {@link #IN_CAN_PLAY} failed, the additional costs can be paid,
+     * and the cost is not one no one can pay (118.6), which {@code cost}
+     * already names.
+     */
+    private static boolean unexplained(SpellAbility sa, Set<PlayabilityCheck> failed) {
+        Cost cost = sa.getPayCosts();
+        return failed.stream().noneMatch(IN_CAN_PLAY::contains)
+                && !(cost != null && PlayabilityVerdict.unpayable(sa, cost))
+                && holds(() -> CostPayment.canPayAdditionalCosts(cost, sa, false));
     }
 
     /**

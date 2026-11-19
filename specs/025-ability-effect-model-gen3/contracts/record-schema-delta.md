@@ -747,6 +747,7 @@ position a card left a library from, and a search of another player's library.
 - `whose_turn`, `phase` and `combat` name the parts of Forge's timing restrictions,
   `activation_limit` and `script_condition` the parts of its other restrictions that fail;
   `script_restriction` is a failed activator check, or a failed restriction none of those names.
+  A candidate whose cost no one can pay (a spell or activated ability whose mana part is "no cost", rule 118.6) fails `cost` alone: the catch-all `script_restriction` is not added beside it.
 
 ## Removed
 

@@ -4,6 +4,7 @@ import forge.game.card.Card;
 import forge.game.cost.Cost;
 import forge.game.cost.CostPayment;
 import forge.game.player.Player;
+import forge.game.spellability.AbilityActivated;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
 
@@ -169,14 +170,21 @@ public record PlayabilityVerdict(
     }
 
     /**
-     * Whether the cost cannot be paid at all: a spell whose mana cost is
-     * "no cost" (Ancestral Vision), cast other than through an effect that
-     * lets it be cast without paying it (118.6), as Forge's own
-     * {@code Spell.canPlay} reads it.
+     * Whether the cost cannot be paid at all (118.6): a spell whose mana cost
+     * is "no cost" (Ancestral Vision), cast other than through an effect that
+     * lets it be cast without paying it, as Forge's own {@code Spell.canPlay}
+     * reads it; or an activated ability whose mana part resolves to no cost,
+     * as {@code AbilityActivated.canPlay} reads it.
      */
     static boolean unpayable(SpellAbility candidate, Cost cost) {
-        return candidate.isSpell() && !candidate.isCastFromPlayEffect() && cost.hasManaCost()
-                && cost.getCostMana().getMana().isNoCost();
+        if (!cost.hasManaCost()) {
+            return false;
+        }
+        if (candidate.isSpell()) {
+            return !candidate.isCastFromPlayEffect() && cost.getCostMana().getMana().isNoCost();
+        }
+        return candidate instanceof AbilityActivated
+                && cost.getCostMana().getManaCostFor(candidate).isNoCost();
     }
 
     /**
