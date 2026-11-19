@@ -72,7 +72,7 @@ The envelope is frozen within a generation: a later capability makes new `kind` 
 |---|---|---|---|---|
 | Observed | false | absent | false | `aimed_at` absent, or the run's rules on `collect-coverage` and `collect-variants` (`[]` when none) |
 | Interventional resolution | true | `intervention` | true | effect half alone, no `link_id` |
-| Damage-step probe | true | `probe` | false | `mirror_of`; payload `probed_keyword`, `probed_entity` |
+| Damage-step probe | true | `probe` | false | `mirror_of`; payload `probed_keyword`, `probed_entity`; a probe of `first_strike` or `double_strike` at `combat_substep` `first_strike` spans two steps: its counterpart is the real first-strike record, which `mirror_of` names, and the regular-step record after it |
 | Protection fork | true | `protection` | true | any kind; cost halves linked as live ones |
 | Directed fork | true | `directed` | false | `directed` set, `aimed_at = [rule]`; `mirror_of` null, since a phase boundary leaves no live record open; its records may hold the one play its variant forced (FR-010b), unmarked |
 
@@ -105,6 +105,6 @@ A protection copy written by `build-corpus` is a synthetic record `<record_id>~p
 ## Dropped-event counts
 
 - `{run_id}.{worker}-{lifetime}.dropped-events.tsv` beside the shard, written only under `--count-dropped-events`: one `event_type<TAB>phase<TAB>count` line per pair per game, appended as each game ends, because a worker that is killed runs no shutdown hook.
-- `phase` is the engine phase in lower case (`main1`), or `none` before the game has one; a kept protection or directed fork's count carries the fork's kind before it (`protection:main1`).
+- `phase` is the engine phase in lower case (`main1`), or `none` before the game has one; a kept protection or directed fork's, or a written forced resolution's, count carries the fork's kind before it (`protection:main1`, `intervention:main1`).
 - Lines repeat across games and are summed by the supervisor, which skips a line cut short by a kill.
 - The suffix is not a shard suffix, so no shard reader takes the file for one.

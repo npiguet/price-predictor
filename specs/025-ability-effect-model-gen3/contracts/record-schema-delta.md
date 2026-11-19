@@ -67,6 +67,14 @@ partner, and neither has a protection fork's mana record (every event `mana_prod
 one has none; only `fork_kind` tells the two apart. Readers accept an interventional record of every kind, with
 or without `link_id`.
 
+A damage-step probe's `mirror_of` names the real combat record of the step it forked ahead of. A
+probe whose keyword is `first_strike` or `double_strike` at `combat_substep` `first_strike` spans
+two steps: its branch holds the first-strike step and the regular step after it, since the creature
+that lost the keyword deals its damage in the regular step. Its counterpart is the real first-strike
+record, which `mirror_of` names, and the regular-step record after it. Every other probe's branch
+spans the one step its record mirrors. First strike is not probed on a carrier that keeps double
+strike, which deals in both steps with or without it.
+
 `mirror_of` is `null` on a directed-fork record: a directed fork is taken at a phase boundary,
 which no live record stays open across. Directed-fork records are paired with the live turn by
 `game_id`, turn and `directed`.

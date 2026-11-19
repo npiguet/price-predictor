@@ -134,7 +134,7 @@ class ProbeSchedulerTest {
             probes.collect();
             probes.writeHeldProbes("run.0-l1.9", step);
         }
-        return Files.exists(tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX));
+        return Files.exists(writer.path());
     }
 
     /**
@@ -208,5 +208,31 @@ class ProbeSchedulerTest {
         RecordShardWriter writer = ShardRun.writer(tempDir);
 
         assertFalse(wroteABranch(over(game, writer, "trample"), writer, DamageStep.FIRST_STRIKE));
+    }
+
+    /**
+     * First strike on a carrier that keeps double strike (702.4b) is not
+     * probed: stripping it changes nothing, so the branch would differ from
+     * the real step by the regular step it deals alone. Without double
+     * strike the same creature is probed, and its double strike is probed
+     * with or without the first strike.
+     */
+    @Test
+    void firstStrikeIsNotProbedOnACarrierThatKeepsDoubleStrike() throws Exception {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.COMBAT_FIRST_STRIKE_DAMAGE);
+        Card knight = blockedBears(game, "Youthful Knight");
+        RecordShardWriter plain = ShardRun.writer(tempDir.resolve("plain"));
+        assertTrue(wroteABranch(over(game, plain, "first_strike"), plain, DamageStep.FIRST_STRIKE),
+                "a plain first striker is probed");
+
+        knight.addChangedCardKeywords(
+                List.of("Double Strike"), null, false, game.getNextTimestamp(), null);
+        assertTrue(knight.hasDoubleStrike() && knight.hasFirstStrike(), "carries both");
+        RecordShardWriter both = ShardRun.writer(tempDir.resolve("both"));
+        assertFalse(wroteABranch(over(game, both, "first_strike"), both, DamageStep.FIRST_STRIKE),
+                "first strike on a double striker takes no branch");
+        RecordShardWriter doubled = ShardRun.writer(tempDir.resolve("doubled"));
+        assertTrue(wroteABranch(over(game, doubled, "double_strike"), doubled, DamageStep.FIRST_STRIKE),
+                "its double strike is probed");
     }
 }

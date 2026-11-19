@@ -116,10 +116,20 @@ final class ProbeScheduler {
             if (focus != null && !focus.equals(normalized)) {
                 return false;
             }
-            if (step == DamageStep.REGULAR && FIRST_STRIKE.equals(normalized)) {
+            if (FIRST_STRIKE.equals(normalized) && firstStrikeChangesNothing(card, step)) {
                 return false;
             }
             return !tried.contains(triedKey(card, normalized));
+        }
+
+        /**
+         * Whether stripping first strike from {@code card} at {@code step}
+         * changes nothing: at the regular step, where a first striker deals
+         * none either way (702.7b-c), and from a carrier that keeps double
+         * strike, which still deals in both steps (702.4b).
+         */
+        private static boolean firstStrikeChangesNothing(Card card, DamageStep step) {
+            return step == DamageStep.REGULAR || card.hasDoubleStrike();
         }
 
         /** Mark {@code card} and {@code normalized} forked at this step. */
