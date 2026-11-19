@@ -239,6 +239,11 @@ public final class GameRecording implements AutoCloseable {
     void settlePremise() {
         ForkPremise premise = new ForkPremise(game, envelope);
         bracket.addTap(premise);
+        // The premise's snapshot is its stats baseline, as any record's: the
+        // fork's reader has seen no card yet, and the first change of a card
+        // it has not seen is read as its baseline, so a creature whose Aura
+        // the check drops would show no pt_change.
+        bracket.rebaselineAtSnapshot();
         premise.settle();
     }
 

@@ -4,13 +4,10 @@ import com.pricepredictor.connector.effects.directed.KeywordEdit;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.combat.Combat;
-import forge.game.event.GameEventCardStatsChanged;
 import forge.game.spellability.SpellAbility;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * A <b>damage-step probe</b>: a fork that re-runs one combat with a keyword
@@ -195,29 +192,7 @@ final class DamageStepProbe {
         if (combat.assignCombatDamage(step == DamageStep.FIRST_STRIKE)) {
             shape.addAssignment(combat);
             combat.dealAssignedDamage();
-            checkStateEffects(fork);
-        }
-    }
-
-    /**
-     * Let the deaths happen, and publish the stat changes they made, as the
-     * live step's state-based check does ({@code
-     * PhaseHandler.checkStateBasedEffectsUnobserved}).
-     *
-     * <p>Damage alone kills nothing; a creature with lethal damage on it
-     * leaves the battlefield during state-based actions, and stopping before
-     * them would make the branch systematically miss every death the real
-     * step had, biasing the difference gate 2 computes towards "the keyword
-     * changed nothing". The stat changes those deaths cause (a lord dying,
-     * the creatures it pumped shrinking) reach the real combat record through
-     * the stats event the live check publishes after its loop; a branch that
-     * did not publish it would read them as the stripped keyword's doing.
-     */
-    private static void checkStateEffects(Game fork) {
-        Set<Card> affected = new HashSet<>();
-        fork.getAction().checkStateEffects(false, affected);
-        if (!affected.isEmpty()) {
-            fork.fireEvent(new GameEventCardStatsChanged(affected));
+            StateBasedCheck.run(fork);
         }
     }
 

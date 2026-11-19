@@ -2,7 +2,6 @@ package com.pricepredictor.connector.effects;
 
 import forge.game.Game;
 
-import java.util.HashSet;
 import java.util.List;
 
 /**
@@ -54,7 +53,7 @@ final class ForkPremise implements BusBracketCollector.EventTap {
         events = new EventBuffer();
         List<EffectEvent> taken;
         try {
-            fork.getAction().checkStateEffects(false, new HashSet<>());
+            StateBasedCheck.run(fork);
         } finally {
             taken = events.drain();
             events = null;

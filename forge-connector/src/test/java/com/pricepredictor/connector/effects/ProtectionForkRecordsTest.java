@@ -65,6 +65,31 @@ class ProtectionForkRecordsTest {
     }
 
     /**
+     * Protection from enchantments granted to a creature wearing Holy Strength:
+     * the Aura falls off in the premise's state-based check, and the stats the
+     * Aura gave go with it as a {@code pt_change} on the creature, in the
+     * premise record as the live priority check publishes it.
+     */
+    @Test
+    void theStatsAnAuraTheGrantMakesFallOffGaveAreInTheForkRecord() throws Throwable {
+        Game game = ForkPlayForwardTest.board();
+        Player active = game.getPlayers().get(0);
+        Card bears = game.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(card -> card.getName().equals("Grizzly Bears")).findFirst().orElseThrow();
+        TestBoard.inPlay(game, active, "Holy Strength").attachToEntity(bears, null);
+        game.getAction().checkStateEffects(true);
+
+        List<String> forked = protectionFork(game, new ProtectionFork.Grant(bears, "Protection:Enchantment"));
+
+        List<Map<String, Object>> changes = eventsNaming(forked.get(0), Refs.of(bears)).stream()
+                .filter(event -> "pt_change".equals(event.get("type"))).toList();
+        assertEquals(1, changes.size(),
+                () -> "the premise record holds no pt_change on the Bears: " + forked.get(0));
+        assertEquals(-1, ((Number) params(changes.get(0)).get("power_delta")).intValue());
+        assertEquals(-2, ((Number) params(changes.get(0)).get("toughness_delta")).intValue());
+    }
+
+    /**
      * What the fork dropped (an attack's taps, its turn played on) is in the
      * live game's counts, under the fork's kind: the live game, which plays
      * nothing here, counts nothing of its own.
