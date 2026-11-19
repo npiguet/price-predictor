@@ -132,21 +132,10 @@ final class PaidReads {
             if (part instanceof CostRemoveCounter || part instanceof CostRemoveAnyCounter) {
                 names.add("CostCountersRemoved");
             } else if (part instanceof CostRollDice roll) {
-                names.add(dieResultSVar(roll));
+                names.add(roll.getResultSVar());
             }
         }
         return names;
-    }
-
-    /** The SVar a die-roll cost sets its result in; Forge offers no accessor for it. */
-    private static String dieResultSVar(CostRollDice roll) {
-        try {
-            java.lang.reflect.Field field = CostRollDice.class.getDeclaredField("resultSVar");
-            field.setAccessible(true);
-            return (String) field.get(roll);
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            throw new IllegalStateException("Forge's CostRollDice no longer holds its resultSVar", e);
-        }
     }
 
     /** Whether the line casts a sunburst permanent, whose counters are the colors spent on it. */
