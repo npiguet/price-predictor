@@ -48,6 +48,11 @@ record PaidCosts(ManaCounts mana, PaymentTally moved, Map<CostChannel, List<Stri
     /** What a cost payload says when there is no ability to read: every channel, empty. */
     static final PaidCosts EMPTY = new PaidCosts(ManaCounts.NONE, PaymentTally.NONE, Map.of());
 
+    /** The channels whose entities left where they were: what the game keeps of a payment. */
+    private static final List<CostChannel> CARD_MOVING = List.of(
+            CostChannel.SACRIFICED, CostChannel.DISCARDED, CostChannel.EXILED,
+            CostChannel.RETURNED, CostChannel.DELVED);
+
     PaidCosts {
         EnumMap<CostChannel, List<String>> all = new EnumMap<>(CostChannel.class);
         for (CostChannel channel : CostChannel.values()) {
@@ -67,14 +72,22 @@ record PaidCosts(ManaCounts mana, PaymentTally moved, Map<CostChannel, List<Stri
     }
 
     /**
-     * Whether the payment spent no mana and moved no card (nothing
-     * sacrificed, discarded or exiled), so that paying it again costs nothing
-     * the game keeps (research C9).
+     * Whether the payment paid nothing the game keeps, so that paying it again
+     * costs nothing (research C9): no mana, no card moved (sacrificed,
+     * discarded, exiled, returned to hand, delved), no life and no counter
+     * moved. A tap, an untap symbol, a reveal, an exert and a convoke tap
+     * leave nothing a seat that repeats the activation at will loses.
      */
-    boolean spentNoManaAndMovedNoCard() {
-        return mana.isZero() && entities.get(CostChannel.SACRIFICED).isEmpty()
-                && entities.get(CostChannel.DISCARDED).isEmpty()
-                && entities.get(CostChannel.EXILED).isEmpty();
+    boolean paidNothingKept() {
+        return mana.isZero() && life() == 0 && !movedACounter() && !movedACard();
+    }
+
+    private boolean movedACounter() {
+        return moved.counters().values().stream().anyMatch(net -> net != 0);
+    }
+
+    private boolean movedACard() {
+        return CARD_MOVING.stream().anyMatch(channel -> !entities.get(channel).isEmpty());
     }
 
     /** What {@code ability} paid, read now, with no counters or life; {@link #EMPTY} for no ability. */

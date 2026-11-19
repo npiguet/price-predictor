@@ -89,8 +89,8 @@ final class HeldResolutionWindow {
     /**
      * @param root the resolved ability, which the deaths are stamped against
      * @param key  its line, for {@link FruitlessActivations}
-     * @param free whether it is an activation whose cost spent no mana and
-     *             moved no card
+     * @param free whether it is an activation that paid nothing the game keeps
+     *             ({@link PaidCosts#paidNothingKept})
      */
     private static final class HeldResolution {
         final SpellAbility root;
@@ -129,8 +129,9 @@ final class HeldResolutionWindow {
      * yet, and the deaths this resolution causes have not happened.
      *
      * @param outcome what became of the item: resolved, or partially fizzled
-     * @param free    whether it is an activation whose cost spent no mana and
-     *                moved no card, which is reported when it changed nothing
+     * @param free    whether it is an activation that paid nothing the game keeps
+     *                ({@link PaidCosts#paidNothingKept}), which is reported when it
+     *                changed nothing
      */
     void hold(OpenResolution resolved, ActivationOutcome outcome, boolean free) {
         // Modes, X and the named card are set while the ability resolves, so

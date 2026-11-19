@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.ForgeExtension;
 import forge.ai.ComputerUtil;
 import forge.game.Game;
+import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CounterEnumType;
 import forge.game.phase.PhaseType;
@@ -20,12 +21,14 @@ import static com.pricepredictor.connector.effects.RecordLines.asMap;
 import static com.pricepredictor.connector.effects.RecordLines.payload;
 import static com.pricepredictor.connector.effects.RecordLines.records;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A cost half's {@code costs} holds the counters and life its payment moved,
  * from a real payment on a real board: neither survives on the ability, so
- * the bus's events are what say it (finding 9.13, task B14).
+ * the bus's events are what say it (finding 9.13, task B14), and an activation
+ * that paid either, or any card, is not a free one (task B33).
  */
 @ExtendWith(ForgeExtension.class)
 class PaidCountersAndLifeTest {
@@ -115,5 +118,57 @@ class PaidCountersAndLifeTest {
 
         assertEquals(4, ((Number) costs.get("life")).intValue(), costs.toString());
         assertEquals(16, caster.getLife());
+    }
+
+    /**
+     * Whether the random seat reads {@code ability}, activated and still on
+     * the stack, as a free activation it must not stack again: the game kept
+     * nothing of what it paid.
+     */
+    private static boolean readsAsFree(Player activator, SpellAbility ability, Game game,
+            BusBracketCollector collector) {
+        ability.setActivatingPlayer(activator);
+        assertTrue(ComputerUtil.handlePlayingSpellAbility(activator, ability, null),
+                "the AI activated " + ability);
+        assertEquals(1, game.getStack().size(), "the activation waits on the stack");
+        return collector.fruitlessActivations().isFruitless(ability);
+    }
+
+    /** A loyalty ability's counters are paid, and the game keeps them: not free. */
+    @Test
+    void aLoyaltyActivationIsNotFree() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card liliana = withLoyalty(TestBoard.inPlay(game, caster, "Liliana of the Veil"), caster);
+        SpellAbility plusOne = loyaltyAbility(liliana, 0);
+
+        ShardRun.observed(tempDir, game, collector ->
+                assertFalse(readsAsFree(caster, plusOne, game, collector), "the +1 paid a counter"));
+    }
+
+    /** Mischievous Poltergeist's "Pay 1 life" paid life the game keeps: not free. */
+    @Test
+    void aPayLifeActivationIsNotFree() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player payer = game.getPlayers().get(0);
+        Card poltergeist = TestBoard.inPlay(game, payer, "Mischievous Poltergeist");
+        SpellAbility regenerate = TestBoard.ability(poltergeist, ApiType.Regenerate);
+
+        ShardRun.observed(tempDir, game, collector ->
+                assertFalse(readsAsFree(payer, regenerate, game, collector), "it paid 1 life"));
+    }
+
+    /** A tap-only ability with no other cost pays nothing the game keeps: still free. */
+    @Test
+    void aTapOnlyActivationIsStillFree() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player owner = game.getPlayers().get(0);
+        Card sorcerer = TestBoard.inPlay(game, owner, "Prodigal Sorcerer");
+        SpellAbility ping = TestBoard.ability(sorcerer, ApiType.DealDamage);
+        ping.resetTargets();
+        ping.getTargets().add(game.getPlayers().get(1));
+
+        ShardRun.observed(tempDir, game, collector ->
+                assertTrue(readsAsFree(owner, ping, game, collector), "it only tapped"));
     }
 }

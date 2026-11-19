@@ -394,7 +394,7 @@ public final class BusBracketCollector extends BusEventReader {
             return;
         }
         writeCostHalf(cast, started);
-        if (ability.isActivatedAbility() && cast.costs.spentNoManaAndMovedNoCard()) {
+        if (ability.isActivatedAbility() && cast.costs.paidNothingKept()) {
             // Until it resolves, nobody knows whether it changes anything, and
             // the random seat, which keeps priority, would stack another.
             fruitless.pending(ability, cast.keys.key());
@@ -566,7 +566,7 @@ public final class BusBracketCollector extends BusEventReader {
         // its card's move off the stack is still to come, and the game's end
         // writes the half (finishGame).
         boolean free = resolved.costs != null && resolved.ability.isActivatedAbility()
-                && resolved.costs.spentNoManaAndMovedNoCard();
+                && resolved.costs.paidNothingKept();
         heldResolution.hold(resolved, outcome, free);
     }
 
