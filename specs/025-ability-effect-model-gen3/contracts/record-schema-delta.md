@@ -478,7 +478,7 @@ position a card left a library from, and a search of another player's library.
   resolves as a creature spell (702.103e, 702.140b): its effect half reads `resolved` and holds its
   events, the permanent's arrival included.
 - An effect that ends the turn or the combat phase (`EndTurn`, `EndCombatPhase`) writes its effect
-  half: its `turn_ended` or `combat_ended` (subject: the attacking player; told at the clause's end,
+  half, live or forced: its `turn_ended` or `combat_ended` (subject: the attacking player; told at the clause's end,
   after the step it skips to has begun, and still the effect's), the exile of every card on the stack
   (its own included), and what its own state-based check does (a death there). What follows its own
   check while it still resolves is the step's it skips to, recorded as in an ordinary step: the cleanup's discard to hand size is a
@@ -516,16 +516,22 @@ position a card left a library from, and a search of another player's library.
 - A line is forced only at a boundary where its own timing lets its holder play it: a sorcery-speed
   line in a main phase of its holder's turn with the stack empty, an instant-speed line at any
   step that gives priority. Each printed line is forced once a game per pass, whoever holds it.
-- A forced (interventional) resolution reads its board when its resolution starts, as a live one.
-- A forced resolution's effect half and a damage-step probe's combat record hold the events a live
-  record takes from the engine hooks rather than the bus, filed by the same rules: the events a
-  clause's effect API promises (`turn_added`, `choice_made`, `continuous_effect_created`, …) and
-  the outcomes an effect reports (`token_created`, `coin_flipped`, `dice_rolled`,
-  `damage_prevented`, `spell_countered`, …). A forced resolution whose only events are these is
-  written.
+- A forced (interventional) resolution's effect halves are filed by the live collector's own rules,
+  in a recording bound to the fork: the board read when its resolution starts, one half per chosen
+  mode, the events the engine hooks report, the deaths of the state-based check after it and what
+  they take off (`unattached`). What a live half leaves to another record is left out of a forced
+  one too: the events of the step an effect ending the turn skips to, and the mana abilities an
+  unless cost was paid with. The forced item's effect halves are the only records the fork writes,
+  without `link_id`: not its cost half, nor the records of what its cast triggered and what its
+  resolution caused.
+- A damage-step probe's combat record holds the events a live record takes from the engine hooks
+  rather than the bus: the events a clause's effect API promises (`turn_added`, `choice_made`,
+  `continuous_effect_created`, …) and the outcomes an effect reports (`token_created`,
+  `coin_flipped`, `dice_rolled`, `damage_prevented`, `spell_countered`, …).
 - A forced resolution that began to resolve is written whatever it did, as a live one is: one that
-  did nothing has empty halves (`events: []`, `outcome: resolved`); a fizzled spell's half holds its
-  card's move off the stack, a fizzled ability's half nothing, both `outcome: fizzled`. One that
+  did nothing has empty halves (`events: []`, `outcome: resolved`); a fizzled spell's halves hold
+  nothing but its card's move off the stack, in the last half, a fizzled ability's halves nothing,
+  all `outcome: fizzled`, one half per chosen mode of a modal item. One that
   never began to resolve writes nothing. One whose controller turned down a "you may" while it
   resolved and that did nothing else reads `outcome: declined`, as a live one does.
 - A forced spell's X is announced before its targets are drawn, so a clause dividing X among its
