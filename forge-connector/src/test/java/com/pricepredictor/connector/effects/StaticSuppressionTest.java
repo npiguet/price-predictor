@@ -335,9 +335,11 @@ class StaticSuppressionTest {
         CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
         board.battlefield("Grizzly Bears", board.you);
         board.battlefield("Hill Giant", board.opponent);
-        Card magic = enchant(board, "Control Magic", board.battlefield("Bloom Tender", board.opponent));
+        Card owned = board.battlefield("Bloom Tender", board.opponent);
+        owned.setSickness(false); // the opponent's since an earlier turn
+        Card magic = enchant(board, "Control Magic", owned);
         Card tender = magic.getAttachedTo();
-        tender.setSickness(false); // Control Magic resolved on an earlier turn
+        tender.setSickness(false); // and yours since a turn of yours began
         forge.game.spellability.SpellAbility mana = tender.getManaAbilities().get(0);
         forge.game.player.Player activator = mana.getActivatingPlayer();
 

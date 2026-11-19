@@ -234,13 +234,14 @@ final class StaticSuppression {
 
     /**
      * Summoning sickness as Forge reads it — controlled since the turn
-     * began, no haste, a creature — from this board's keywords and type.
+     * began, no haste, a creature — from this board's controller, keywords
+     * and type.
      */
     boolean sick(Card card) {
         if (staticId == null) {
             return card.isSick();
         }
-        if (!card.isFirstTurnControlled() || !type(card).isCreature()) {
+        if (!firstTurnControlled(card) || !type(card).isCreature()) {
             return false;
         }
         for (KeywordInterface keyword : keywords(card)) {
@@ -249,6 +250,35 @@ final class StaticSuppression {
             }
         }
         return true;
+    }
+
+    /**
+     * Whether the card's controller on this board has not controlled it
+     * continuously since their most recent turn began (302.6). Forge keeps
+     * one flag, which the zone correction of a control change sets for the
+     * new controller: for a permanent the suppressed static took from its
+     * controller here, the flag the patch kept for that player at the change
+     * ({@code Card.isEffectRecordSickForPriorController}), cleared once a
+     * turn of theirs has begun since.
+     */
+    private boolean firstTurnControlled(Card card) {
+        Player board = controller(card);
+        if (!movedAwayFrom(card, board)) {
+            return card.isFirstTurnControlled();
+        }
+        return Boolean.TRUE.equals(PatchHooks.PRIOR_SICKNESS.read(card));
+    }
+
+    /**
+     * Whether the card's most recent control change moved it from
+     * {@code board}'s battlefield to another player's, where it sits: the
+     * zone is never lent, so this reads the same inside a lend.
+     */
+    private static boolean movedAwayFrom(Card card, Player board) {
+        if (card.getZone() == null || board.equals(card.getZone().getPlayer())) {
+            return false;
+        }
+        return board.equals(PatchHooks.PRIOR_CONTROLLER.read(card));
     }
 
     // ── lines ───────────────────────────────────────────────────────────

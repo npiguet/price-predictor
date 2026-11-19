@@ -223,7 +223,9 @@ A `continuous` record's board (the board without the record's static) lists no l
 static granted, including a trait built by a keyword instance it granted, and lists every line it
 removed, keyed to its printed line. Every other entity member reads that board too: `name`,
 `mana_value` and `mana_cost` (the static's layer-3 name or mana cost change left out), `types`,
-`subtypes`, `supertypes`, `colors`, `controller`, `sick`, `base_pt` and `pt_boosts` (its set
+`subtypes`, `supertypes`, `colors`, `controller`, `sick` (a permanent the static took control
+of is summoning sick only if its controller without the static had not controlled it since their
+most recent turn began), `base_pt` and `pt_boosts` (its set
 base, layer 7a and 7b, and its boost left out; `null` when the permanent is no creature without
 it), `granted_temporary`. Forge's `...Without` reads (`Card.getTypeWithout`, `getColorWithout`,
 `getKeywordsWithout`, `getNetPowerBreakdownWithout`, `getControllerWithout`;
@@ -251,7 +253,7 @@ it), `granted_temporary`. Forge's `...Without` reads (`Card.getTypeWithout`, `ge
 |---|---|
 | `max_land_plays` | int: the land plays this player's turn allows, Forge's `Player.getMaxLandPlays()` (1 plus every `AdjustLandPlays$` raise in force); `null` when `getMaxLandPlaysInfinite()` holds. Written right after `this_turn`, whose `lands_played` it bounds |
 | `speed`, `rad` | int |
-| `untapped_production` | changed meaning: per mana symbol, what the player's untapped permanents' mana abilities that can be activated now produce, each ability read with its permanent's controller as its activator and with no X announced (X = 0), whatever an earlier activation or AI evaluation left on it; a summoning-sick creature's {T} ability and an ability whose restrictions forbid activation count for nothing. On a `continuous` record's board, the board without its static: the permanents the player controls there, their mana abilities there (none the static granted, every one it removed), each ability read with its permanent's controller there as its activator, so "permanents you control" means the permanents that player controls there; a creature that came under its controller's control this turn counts nothing when its haste is the static's, and a {T} ability of a permanent that is a creature only by the static is never held back by summoning sickness |
+| `untapped_production` | changed meaning: per mana symbol, what the player's untapped permanents' mana abilities that can be activated now produce, each ability read with its permanent's controller as its activator and with no X announced (X = 0), whatever an earlier activation or AI evaluation left on it; a summoning-sick creature's {T} ability and an ability whose restrictions forbid activation count for nothing. On a `continuous` record's board, the board without its static: the permanents the player controls there, their mana abilities there (none the static granted, every one it removed), each ability read with its permanent's controller there as its activator, so "permanents you control" means the permanents that player controls there; a creature the static took control of is as summoning sick as it was for its controller there, a creature that came under its controller's control this turn counts nothing when its haste is the static's, and a {T} ability of a permanent that is a creature only by the static is never held back by summoning sickness |
 | `city_blessing`, `monarch`, `initiative` | bool |
 | `turn_counts` | `{cards_drawn, life_gained, life_lost, damage_taken, permanents_to_graveyard, spells_cast_last_turn, dungeons_completed, descended}`, ints. `permanents_to_graveyard` counts cards put into this player's graveyard from the battlefield this turn; `descended` and `dungeons_completed` are whole-game counts, as Forge keeps them |
 
