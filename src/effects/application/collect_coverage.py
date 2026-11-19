@@ -715,14 +715,14 @@ def unresolvable(units: Iterable[str], verdicts: Mapping[str, ConsultVerdict]) -
 
 
 def wording_cards_of[C](converted: Mapping[str, C], path: Path) -> dict[str, C]:
-    """The converted cards ``path`` lists, matched by folded name; the listed
+    """The converted cards ``path`` lists, matched by name (folded when loaded); the listed
     names with no converted card are logged, since a typo would otherwise
     shrink the round without a word."""
     listed = read_name_list(path)
     kept = {
-        name: card for name, card in converted.items() if fold_card_name(name) in listed
+        name: card for name, card in converted.items() if name in listed
     }
-    missing = listed - {fold_card_name(name) for name in kept}
+    missing = listed - kept.keys()
     logger.info(
         "Wording round: %d of %d listed card(s) have converted text", len(kept), len(listed),
     )
@@ -965,7 +965,7 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
     listed = read_name_list(only_cards)
     listed_files = {
         name: script for name, script in trees.card_files.items()
-        if fold_card_name(name) in listed
+        if name in listed
     }
     texts = {name: converted[name].text for name in listed_files}
     non_deck = non_deck_names(texts)

@@ -322,7 +322,7 @@ def collect_steered(config: CollectVariantsConfig, sources: list[Path]) -> int:
     generation = SteeredGeneration(
         catalogue=catalogue, index=script_index(sources),
         forge_cards_path=config.forge_cards_path,
-        held_out=frozenset(fold_card_name(n) for n in config.deck_holdout.exclusions()),
+        held_out=config.deck_holdout.exclusions(),
         script_text_of=script_text_of, output_path=config.variant_scripts,
         rng=random.Random(config.seed),
     )

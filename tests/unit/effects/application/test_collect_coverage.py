@@ -189,9 +189,9 @@ class TestHeldOutExclusion:
                 f"name: {name}\ntypes: creature\n", encoding="utf-8",
             )
         units = build_coverage_units(
-            ConvertedTrees({"cardsfolder": tmp_path}).card_files, frozenset({"Shock"}),
+            ConvertedTrees({"cardsfolder": tmp_path}).card_files, frozenset({"shock"}),
         )
-        assert set(units) == {"Serra Angel"}
+        assert set(units) == {"serra angel"}
 
 
 class TestExclusionsWithoutACheckpoint:

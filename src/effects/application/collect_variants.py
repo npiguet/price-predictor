@@ -336,8 +336,8 @@ def generate_variants(
 
     No variant is generated from a held-out card (FR-057): its changed text
     would not be held out, and generation is the only point where the rule
-    can be enforced. Names are folded first, since a script's ``Name:`` is
-    printed case and the holdout is lowercase. ``sources`` is
+    can be enforced. ``held_out`` is folded (``DeckHoldout.exclusions``) and
+    a script's ``Name:`` is printed case, so it is folded here. ``sources`` is
     :func:`source_scripts` of ``forge_cards_path`` when the caller already
     listed them: the walk is over all of Forge.
 
@@ -345,7 +345,6 @@ def generate_variants(
     already under its name is the same script: it is reused as it stands,
     never written over, because an earlier run's records join it by key.
     """
-    held_out = frozenset(fold_card_name(name) for name in held_out)
     rng = random.Random(seed)
     output_path = Path(output_path)
     output_path.mkdir(parents=True, exist_ok=True)

@@ -61,8 +61,8 @@ def test_cards_texts_and_tokens_are_read_through_one_sidecar_cache(tmp_path) -> 
     _convert(tmp_path, "tokenscripts/goblin.txt", "Goblin", "SP$ Bespoke")
     trees = SourceTrees.of((tmp_path / "cardsfolder", tmp_path / "tokenscripts")).converted()
 
-    assert trees.card_files == {"Shock": "cardsfolder/s/shock.txt"}
-    assert trees.card_texts() == {"Shock": ["SP$ DealDamage | NumDmg$ 2"]}
+    assert trees.card_files == {"shock": "cardsfolder/s/shock.txt"}
+    assert trees.card_texts() == {"shock": ["SP$ DealDamage | NumDmg$ 2"]}
     assert trees.sidecars.get("tokenscripts/goblin.txt").card == "Goblin"
 
 

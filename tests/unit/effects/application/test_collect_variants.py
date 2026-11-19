@@ -86,7 +86,7 @@ class TestVariantGeneration:
         self._write_source(source, "bolt", "Lightning Bolt", _BOLT_SCRIPT)
         variants = generate_variants(
             source, tmp_path / "variants",
-            held_out=frozenset({"Lightning Bolt"}),
+            held_out=frozenset({"lightning bolt"}),
         )
         assert variants == []
 

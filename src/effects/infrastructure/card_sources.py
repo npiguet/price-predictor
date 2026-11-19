@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from effects.domain.card_names import fold_card_name
 from effects.domain.provenance import SourceTree
 from effects.infrastructure.sidecar_io import SidecarCache, UnconvertedScript
 
@@ -41,10 +42,13 @@ class ConvertedCard:
 
 
 def load_converted_cards(cards_folder: Path) -> dict[str, ConvertedCard]:
-    """``card name -> its converted file`` for one converted tree.
+    """``folded card name -> its converted file`` for one converted tree.
 
     Names come from each file's ``name:`` line: several cards share a
-    filename stem.
+    filename stem. They are folded here, once (:func:`fold_card_name`): the
+    holdout lists, the credits and the castability consult all read the
+    folded spelling, and Forge looks a deck line up without regard to case.
+    The original case stays in the file's text.
     """
     from price_predictor.domain.tokenizer import extract_card_name
 
@@ -59,7 +63,7 @@ def load_converted_cards(cards_folder: Path) -> dict[str, ConvertedCard]:
         if not name:
             continue
         relative = path.relative_to(cards_folder).as_posix()
-        out[name] = ConvertedCard(f"{SourceTree.CARDSFOLDER}/{relative}", text)
+        out[fold_card_name(name)] = ConvertedCard(f"{SourceTree.CARDSFOLDER}/{relative}", text)
     return out
 
 
