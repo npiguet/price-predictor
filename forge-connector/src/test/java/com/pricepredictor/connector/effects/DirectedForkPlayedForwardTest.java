@@ -559,7 +559,12 @@ class DirectedForkPlayedForwardTest {
         assertTrue(playable.contains(false), playable.toString());
     }
 
-    /** 702.84a: Dregscape Zombie in A's graveyard over a Swamp; the fork has it in hand, where unearth fails its zone check. */
+    /**
+     * 702.84a: Dregscape Zombie in A's graveyard over a Swamp; the fork has it
+     * in hand, where unearth fails its zone check. The fork keeps the Zombie's
+     * candidates at every priority stop, but writes each (candidate, failed
+     * checks) pair once: one record of unearth failing its zone check alone.
+     */
     @Test
     void unearthFromHandFailsItsZoneCheck() throws Throwable {
         Card[] zombie = new Card[1];
@@ -571,8 +576,14 @@ class DirectedForkPlayedForwardTest {
             return new Setup(game, zombie[0]);
         }, PhaseType.MAIN1, "702.84a", "card_in_hand");
 
-        List<List<Object>> checks = failedChecks(candidatesOf(fork, zombie[0]));
-        assertTrue(checks.stream().anyMatch(failed -> failed.contains("zone")), checks.toString());
+        List<Map<String, Object>> candidates = candidatesOf(fork, zombie[0]);
+        List<List<Object>> checks = failedChecks(candidates);
+        assertEquals(1, checks.stream().filter(List.of("zone")::equals).count(), checks.toString());
+        List<List<Object>> pairs = new ArrayList<>();
+        for (int i = 0; i < candidates.size(); i++) {
+            pairs.add(List.of(candidates.get(i).get("ability"), checks.get(i)));
+        }
+        assertEquals(pairs.stream().distinct().toList(), pairs, "each (candidate, failed checks) pair is written once");
     }
 
     /** The not-fired trigger records among {@code records} whose trigger's host is {@code host}. */

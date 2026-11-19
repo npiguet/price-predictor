@@ -755,7 +755,9 @@ and that the reporting half never enters the control score.
 - **FR-010c**: A directed rule's variant MAY ask that the records of its bound cards be kept. In
   its fork, every decision candidate of a card the variant names (a spell, an activated ability,
   a special action or a land play it hosts) is written whatever `--playability-rate`,
-  `--zone-candidate-rate` and `--plain-candidate-rate` draw, and drawn from neither; and every
+  `--zone-candidate-rate` and `--plain-candidate-rate` draw, and drawn from neither, once per
+  (candidate key, failed checks) pair: the first priority stop that reads a pair writes it, and
+  later stops reading the same pair write nothing; and every
   not-fired evaluation of a trigger a card the variant names hosts is offered for writing whatever
   the trigger-negative sampler's balance says, and counts toward no mode's balance. Deduplication
   and the per-line cap of not-fired trigger records still apply. Kept records are ordinary records

@@ -11,8 +11,10 @@ import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -48,6 +50,12 @@ public final class PlayabilityChannel {
     private final double plainCandidateRate;
     /** The declaration of attackers being asked about, held until it is made. */
     private final AttackDeclaration declaration;
+    /** The (candidate key, failed checks) pairs this recording's kept candidates have written. */
+    private final Set<KeptPair> keptWritten = new HashSet<>();
+
+    /** What a kept candidate is written once per recording for: its printed line and the checks it fails. */
+    private record KeptPair(List<ProvenanceKey> keys, List<PlayabilityVerdict.FailedCheck> failedChecks) {
+    }
 
     PlayabilityChannel(
             LiveGame live, CollectorContext context, RecordDedup dedup, Random sampler,
@@ -98,6 +106,17 @@ public final class PlayabilityChannel {
      */
     boolean kept(SpellAbility candidate) {
         return context.kept().keepsCandidate(candidate);
+    }
+
+    /**
+     * Whether a kept candidate's read is written: only the first of its
+     * (candidate key, failed checks) pair in this recording, a fork's own
+     * (FR-010c). A kept candidate is read at every priority stop, and most
+     * stops find it failing the same checks: written each time, one game's
+     * near-identical records would fill the side its rule lacks.
+     */
+    boolean firstKept(DecisionCandidate read) {
+        return keptWritten.add(new KeptPair(read.keys(), read.verdict().failedChecks()));
     }
 
     /**

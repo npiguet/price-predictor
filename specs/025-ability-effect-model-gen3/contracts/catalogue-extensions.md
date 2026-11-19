@@ -114,8 +114,9 @@ An `Application` may also name the records its fork keeps (`KeptRecords`, FR-010
 fork's binding before the edit: the decision candidates of the cards it names
 (`Application.keepingCandidatesOf(role)`) and the not-fired evaluations of the triggers those cards
 host (`keepingNegativesOf(role)`). A card is named by id, which it keeps through the fork's zone
-changes. In the fork's recording, `PriorityCandidates` writes a kept candidate at every priority stop
-without drawing either sampling stage, and `TriggerChannel` offers a kept not-fired evaluation
+changes. In the fork's recording, `PriorityCandidates` reads a kept candidate at every priority stop
+without drawing either sampling stage and writes each (candidate key, failed checks) pair once, at
+the first stop that reads it (`PlayabilityChannel.firstKept`), and `TriggerChannel` offers a kept not-fired evaluation
 without asking `TriggerNegativeSampler.offer` and counts it toward its line's cap of 24 not-fired
 records only, never toward its mode's balance; deduplication applies to both. Kept records are fork
 records like any other: the fork's lines count toward `--max-records-per-game` when they are written

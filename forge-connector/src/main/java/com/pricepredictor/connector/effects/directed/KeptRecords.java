@@ -22,6 +22,12 @@ import java.util.stream.Stream;
  * recording (a fork's recording is fresh). A fork of such a rule would
  * otherwise come back with nothing its detector can tag.
  *
+ * <p>A kept candidate is read at every priority stop, but the fork writes
+ * each (candidate key, failed checks) pair once, at the first stop that
+ * reads it ({@code PlayabilityChannel.firstKept}): the stops after it mostly
+ * ask the same question of the same card, and their records would fill the
+ * rule's lacking side with one game's near-identical records.
+ *
  * <p>Cards are named by id, which a card keeps through the fork's zone
  * changes; a card a variant puts in another's place has a new id, and is
  * named by the variant after the edit if at all.
@@ -57,7 +63,10 @@ public record KeptRecords(Set<Integer> candidateHosts, Set<Integer> triggerHosts
                 Stream.concat(triggerHosts.stream(), more.triggerHosts.stream()).collect(Collectors.toSet()));
     }
 
-    /** Whether {@code candidate}'s decision record is written whatever the decision sample draws. */
+    /**
+     * Whether {@code candidate}'s decision record is written whatever the
+     * decision sample draws, once per (candidate key, failed checks) pair.
+     */
     public boolean keepsCandidate(SpellAbility candidate) {
         return !candidateHosts.isEmpty() && candidate != null && hostedBy(candidate.getHostCard(), candidateHosts);
     }
