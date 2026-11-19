@@ -27,9 +27,11 @@ import java.util.Optional;
  * step, the blocker carries nothing the Youthful Knight put in its place
  * would die of ({@link Boards#replacementSurvives}), and the Knight's power,
  * with the boosts and counters it carries, is at least the attacker's
- * toughness less its marked damage, so the attacker dies in the first-strike
- * step having dealt no damage: the scenario's {@code does_not_fire} side, the
- * near miss. An attacker the Knight leaves alive shows neither side. It
+ * toughness less its marked damage and the attacker can be destroyed and takes
+ * that damage (not indestructible, not protected from white), so the attacker
+ * dies in the first-strike step having dealt no damage: the scenario's
+ * {@code does_not_fire} side, the near miss. An attacker the Knight leaves
+ * alive shows neither side. It
  * binds the attacker and the blocker.
  *
  * <p>Variant {@code knight_in_the_bears_place} ({@code replace_card}): the blocker
@@ -63,7 +65,7 @@ public final class SimultaneousDamage {
                 continue;
             }
             Card blocker = blockers.get(0);
-            if (trade(combat, attacker, blocker) && knightKills(attacker, blocker)) {
+            if (trade(combat, attacker, blocker) && knightKills(live, attacker, blocker)) {
                 return Optional.of(Binding.empty()
                         .with("attacker", attacker)
                         .with("blocker", blocker));
@@ -83,14 +85,11 @@ public final class SimultaneousDamage {
 
     /**
      * Whether Youthful Knight in the blocker's place survives the edit and
-     * deals the attacker lethal damage in the first-strike step: its power,
-     * with what it carries ({@link ReplaceCardOperation#replacementPower}),
-     * is at least the attacker's toughness less the damage marked on it.
+     * destroys the attacker in the first-strike step ({@link KnightDamage}).
      */
-    private static boolean knightKills(Card attacker, Card blocker) {
+    private static boolean knightKills(Game live, Card attacker, Card blocker) {
         return Boards.replacementSurvives(blocker, KNIGHT)
-                && ReplaceCardOperation.replacementPower(blocker, KNIGHT)
-                >= attacker.getNetToughness() - attacker.getDamage();
+                && KnightDamage.destroys(live, blocker, KNIGHT, attacker);
     }
 
     /** Whether the creature deals combat damage, and only in the regular damage step. */

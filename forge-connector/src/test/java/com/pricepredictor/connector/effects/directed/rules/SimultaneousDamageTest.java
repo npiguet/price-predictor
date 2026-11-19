@@ -72,6 +72,32 @@ class SimultaneousDamageTest {
     }
 
     /**
+     * Darksteel Gargoyle (indestructible) has 1 toughness left, which the
+     * Knight's 2 damage reaches, yet it is not destroyed (702.12b): the fork
+     * would show neither side.
+     */
+    @Test
+    void anIndestructibleAttackerDoesNotBind() {
+        Blocked board = Blocked.of("Darksteel Gargoyle", "Grizzly Bears");
+        board.attacker().setDamage(3);
+        assertFalse(board.binds());
+    }
+
+    /** Knight of Infamy (2/1, protection from white) takes none of the white Knight's damage (702.16e). */
+    @Test
+    void anAttackerWithProtectionFromWhiteDoesNotBind() {
+        assertFalse(Blocked.of("Knight of Infamy", "Grizzly Bears").binds());
+    }
+
+    /** A plain attacker with 1 toughness left (no indestructible, no protection) still binds. */
+    @Test
+    void aPlainAttackerTheKnightKillsStillBinds() {
+        Blocked board = Blocked.of("Hill Giant", "Grizzly Bears");
+        board.attacker().setDamage(2);
+        assertTrue(board.binds());
+    }
+
+    /**
      * A Grizzly Bears token blocks the damaged Giant: {@code replace_card}
      * refuses a token, since a card in its place would be a real card, so the
      * board binds nothing where the nontoken Bears binds.
