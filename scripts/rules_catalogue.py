@@ -12,11 +12,13 @@ Subcommands:
             print the rules newly learnable against the list rules/gen3-fields.json recorded at
             the last run, and record the new list there; refuses a turn_action-only rule whose
             verdict is not `recorded`
-  directed-rules --counts FILE
+  directed-rules --counts FILE [--probabilities-output FILE]
             write rules/directed-fork-rules.txt (the rules enabled for directed forks) and
             rules/coverage-wording-cards.txt (the cards of their scenarios) from gen-3's
             per-rule counts, and rules/directed-fork-counts.json (the part of the counts
-            the list is decided from)
+            the list is decided from); with --probabilities-output, also each listed rule's
+            own directed-fork probability as a JSON map, the file `sealed match-outcomes
+            --directed-fork-probabilities` reads
 
 A unit is a three-digit section (704), except sections 701 and 702, whose units are their
 second-level rules (702.2, one keyword each), because those two sections hold a third of all rules.
@@ -32,6 +34,8 @@ from pathlib import Path
 from _lib.paths import FORGE_RES, OUTPUT, REPO
 
 from effects.domain import rule_catalogue
+from effects.domain.directed_fork_probabilities import directed_fork_probability
+from effects.domain.variant_rounds import DEFAULT_STEER_FLOOR
 
 RULES = REPO / "rules"
 CARDSFOLDER = FORGE_RES / "cardsfolder"
@@ -1193,6 +1197,13 @@ def write_decided_from(path, counts):
                     "}\n", encoding="utf-8", newline="\n")
 
 
+def directed_probabilities(chosen, count):
+    """``rule -> probability`` of each listed rule, from its counts of the two
+    sides against ``count`` records a side; 1 for a rule the counts cannot speak for."""
+    return {rule: 1.0 if row["counts"] is None else directed_fork_probability(row["counts"], count)
+            for rule, row in chosen.items()}
+
+
 def cmd_directed_rules(args):
     rules_dir = args.rules_dir
     counts = json.loads(args.counts.read_text(encoding="utf-8"))
@@ -1202,6 +1213,12 @@ def cmd_directed_rules(args):
     (rules_dir / "directed-fork-rules.txt").write_text(
         "".join(f"{rule}\n" for rule in chosen), encoding="utf-8", newline="\n")
     write_decided_from(rules_dir / DIRECTED_COUNTS, counts)
+    output = getattr(args, "probabilities_output", None)
+    if output is not None:
+        probabilities = directed_probabilities(
+            chosen, getattr(args, "count_per_side", DEFAULT_STEER_FLOOR))
+        output.write_text(json.dumps(probabilities, indent=1) + "\n",
+                          encoding="utf-8", newline="\n")
     (rules_dir / "coverage-wording-cards.txt").write_text(
         "".join(f"{card}\n" for card in cards), encoding="utf-8", newline="\n")
     for rule, row in chosen.items():
@@ -1250,6 +1267,13 @@ def main():
     p.add_argument("--cards-folder", type=Path, default=OUTPUT / "cardsfolder",
                    help="the converted card tree whose names the wording list uses "
                    "(default: %(default)s)")
+    p.add_argument("--probabilities-output", type=Path, default=None,
+                   help="also write each listed rule's directed-fork probability here, a JSON "
+                   "map for `sealed match-outcomes --directed-fork-probabilities` (none by "
+                   "default: nothing is written)")
+    p.add_argument("--count-per-side", type=int, default=DEFAULT_STEER_FLOOR,
+                   help="records each side of a rule needs; its probability is 0 once both "
+                   "have them (default: %(default)s)")
     p.add_argument("--rules-dir", type=Path, default=RULES, help=argparse.SUPPRESS)
     args = ap.parse_args()
     {"split": cmd_split, "packets": cmd_packets, "validate": cmd_validate, "status": cmd_status,

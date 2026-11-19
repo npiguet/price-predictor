@@ -47,6 +47,8 @@ EFFECT_DIRECTED_FORK_PROBABILITY = 0.25
 DIRECTED_FORK_RULES_PROPERTY = "effect.directed.fork.rules"
 DIRECTED_FORKS_PER_GAME_PROPERTY = "effect.directed.forks.per.game"
 DIRECTED_FORK_PROBABILITY_PROPERTY = "effect.directed.fork.probability"
+#: A listed rule's own probability: this prefix and the rule id.
+DIRECTED_RULE_PROBABILITY_PREFIX = "effect.directed.probability."
 #: The records one game may write, its forks' included (FR-041a).
 EFFECT_MAX_RECORDS_PER_GAME = 5000
 MAX_RECORDS_PER_GAME_PROPERTY = "effect.max.records.per.game"
@@ -223,7 +225,9 @@ def directed_fork_properties(args: argparse.Namespace) -> dict[str, str]:
     """The directed-fork flags as the ``-D`` properties the worker reads; a
     command without them sends the defaults, which name no rule."""
     rules = getattr(args, "directed_fork_rules", EFFECT_DIRECTED_FORK_RULES)
+    own = getattr(args, "directed_rule_probabilities", {})
     return {
+        **{DIRECTED_RULE_PROBABILITY_PREFIX + rule: str(p) for rule, p in own.items()},
         DIRECTED_FORK_RULES_PROPERTY: ",".join(rules),
         DIRECTED_FORKS_PER_GAME_PROPERTY: str(
             getattr(args, "directed_forks_per_game", EFFECT_DIRECTED_FORKS_PER_GAME)

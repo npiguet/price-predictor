@@ -146,3 +146,29 @@ def test_the_fork_refusals_reach_the_manifest_fields(tmp_path):
     fields = report.manifest_fields()
     assert fields["fork_refusals"] == {"directed dies": 2}
     assert fields["worker_failures"] == {}
+
+
+_DIRECTED = (
+    'Effect records: directed fork tally so far: {{"704.5f":{{"matched":{n},"drawn":1,'
+    '"budget_blocked":0,"taken":1,"kept":1,"precondition_threw":0}}}}\n'
+)
+
+
+def test_the_directed_fork_tally_is_summed_and_reaches_the_manifest_fields(tmp_path):
+    """Each lifetime's latest line, summed over lifetimes and slots, no failure line."""
+    from price_predictor.infrastructure.forge_jvm import WorkerLogFiles
+    from price_predictor.infrastructure.worker_log_scan import WorkerLogReport
+
+    logs = WorkerLogFiles(tmp_path, "run")
+    _append(logs.path_for(0), "Effect records: x/run.0-a.jsonl.gz [mode=patched]\n"
+            + _DIRECTED.format(n=1) + _DIRECTED.format(n=2)
+            + "Effect records: x/run.0-b.jsonl.gz [mode=patched]\n" + _DIRECTED.format(n=3))
+    _append(logs.path_for(1), _DIRECTED.format(n=4))
+    report = WorkerLogReport(logs, 2)
+    report.scan()
+
+    fields = report.manifest_fields()
+    assert fields["directed_fork_tally"] == {"704.5f": {
+        "matched": 9, "drawn": 3, "budget_blocked": 0, "taken": 3, "kept": 3,
+        "precondition_threw": 0}}
+    assert fields["worker_failures"] == {}

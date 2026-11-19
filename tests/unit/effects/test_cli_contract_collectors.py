@@ -141,7 +141,8 @@ class TestSharedCapFlags:
     }
 
     @pytest.mark.parametrize(("command", "name"), [
-        (command, f.name) for f in fields(CollectionCaps) if f.name != "aimed_at"
+        (command, f.name) for f in fields(CollectionCaps)
+        if f.name not in ("aimed_at", "directed_rule_probabilities")
         for command in ("collect-coverage", "collect-variants")
         if command == "collect-variants" or f.name not in DIRECTED_CAPS
     ])

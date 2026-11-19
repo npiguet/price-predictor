@@ -35,6 +35,8 @@ records the baseline.
 | Flag | Default | Meaning |
 |---|---|---|
 | `--counts PATH` | required | gen-2's per-rule counts, as `rule-counts` writes them |
+| `--probabilities-output FILE` | none | also write each listed rule's directed-fork probability here (below); nothing is written without it |
+| `--count-per-side N` | 100 | the records each side (`fires`, `does_not_fire`) of a rule needs; sets the probabilities |
 | `--cards-folder DIR` | `output/cardsfolder` | the converted tree whose card names the wording list uses |
 
 Writes `rules/directed-fork-rules.txt` (FR-014b: the rules of `ALWAYS_DIRECTED`, 704.5f and 702.98a,
@@ -47,6 +49,14 @@ meld result under its front card's converted name), and `rules/directed-fork-cou
 members of `--counts` the list is decided from (`rules`, and the rule ids of `not_countable` and
 `none`), one rule a line, so the list regenerates from checked-in files alone. Prints, per rule, its
 forkable variants, those of the polarity its counts lack first and starred.
+
+`--probabilities-output FILE` writes a JSON object from each listed rule to its directed-fork
+probability, in list order, for `match-outcomes --directed-fork-probabilities`:
+`{"121.2": 1.0, "702.9a": 0.6, "704.5f": 0.0}`. A rule's probability is
+`effects.domain.directed_fork_probabilities.directed_fork_probability` over its `fires` and
+`does_not_fire` totals and `--count-per-side`: 0 when both sides have reached the count, 1 when a
+side has none, else the larger of 0.05 and the share of the count the shorter side still misses. A
+rule the counts cannot speak for gets 1.
 
 ## `python -m effects rule-counts` (new)
 
@@ -132,6 +142,7 @@ Every invariant prints the number it measured, passed or not.
 | `--directed-fork-rules LIST` | none | comma-separated rule ids |
 | `--directed-forks-per-game N` | 2 | directed-fork budget per game, beside the existing fork budgets |
 | `--directed-fork-probability P` | 0.25 | chance a matching boundary forks; must be in (0, 1] |
+| `--directed-fork-probabilities FILE` | none | JSON object from rule id to its own probability in [0, 1] (`rules_catalogue.py directed-rules --probabilities-output` writes it); a listed rule without an entry takes `--directed-fork-probability`, one at 0 is never forked |
 | `--outcomes-dir DIR` | `--effect-records DIR` when given, else `output/sealed/` | the directory `match-outcomes.txt` and `cards-played.txt` are appended to |
 
 Startup, exit 1 naming the rule when a listed rule:
@@ -140,8 +151,8 @@ Startup, exit 1 naming the rule when a listed rule:
 - has no non-base variant classified into an operation;
 - is not registered in `forge-connector` (checked by one run of `DirectedRulesMain`).
 
-`--directed-fork-probability` outside (0, 1] exits 1. The flags ride the cap properties
-`effect.directed.fork.rules`, `effect.directed.forks.per.game`, `effect.directed.fork.probability`,
+`--directed-fork-probability` outside (0, 1] exits 1. A `--directed-fork-probabilities` file that is missing, not a JSON object, holds a value that is no number in [0, 1], or names a rule not in `--directed-fork-rules` exits 1 naming the file and the rule. The flags ride the cap properties
+`effect.directed.fork.rules`, `effect.directed.forks.per.game`, `effect.directed.fork.probability`, `effect.directed.probability.<rule>` (one per file entry),
 `effect.count.dropped.events`, `effect.max.records.per.game`.
 
 A listed rule's own probability rides `effect.directed.probability.<rule>`, the rule id as
@@ -175,7 +186,7 @@ every status line and at the end the supervisor scans what the logs gained for f
 end it prints the run's totals, the hook-failure counts, the fork refusals and how the workers
 ended, and records in
 its `run.json` entry `run_id`, `matches` (outcome rows), `matches_played` (progress lines),
-`worker_failures`, `worker_failure_examples`, `hook_failures`, `fork_refusals`, `worker_survivors`,
+`worker_failures`, `worker_failure_examples`, `hook_failures`, `fork_refusals`, `directed_fork_tally`, `worker_survivors`,
 `worker_stops`, `stop_timeout`, `recycle_seconds` and `match_outcomes` (the outcome file's path). A run that played matches (outcome rows, progress lines or
 random-seat match errors, so a run of random-seat matches alone counts) and wrote no effect
 record exits 1. `match-outcomes.txt` and `cards-played.txt` go to `--outcomes-dir`, which defaults
@@ -407,7 +418,7 @@ The object is JSON (rule ids escaped as JSON strings), so a reader parses everyt
 prefix with a JSON parser and never splits on `, ` or `=`. A killed worker's tally is its last
 printed line. The first throw of each rule's precondition prints
 `Effect records: directed rule <rule>'s precondition threw and reads as not met (later throws are counted in the directed fork tally, not printed): <exception>`
-with its stack; the line matches no worker-failure pattern.
+with its stack; the line is the failure kind `directed_precondition_threw`.
 
 The supervisor's log scan reads these: `Error generating match: [random-seat match] ` is the
 failure kind `random_seat_match_error`, counted apart from `match_error`; the marker line is
@@ -418,7 +429,7 @@ starts at its `Effect records: <shard> [mode=…]` line), sums them over lifetim
 them in the round report (collectors) or at the run's end (`match-outcomes`) — the refusals as
 `Fork refusals over the run (expected, no failure): <n> <kind> <reason>, …`, at info level — and
 records them in `run.json` as `hook_failures`: `{"connector": {hook: calls}, "forge": {slot:
-calls}}` and `fork_refusals`: `{"<kind> <reason>": forks}`, keys in name order. Refusals count
+calls}}`, `fork_refusals`: `{"<kind> <reason>": forks}`, keys in name order, and `directed_fork_tally`: `{rule: {matched, drawn, budget_blocked, taken, kept, precondition_threw}}`, each JVM lifetime's last tally line summed over lifetimes and slots, rules in name order. Refusals count
 toward no failure kind, no failure threshold and no exit code.
 
 ## `python -m effects collect-variants` (existing)

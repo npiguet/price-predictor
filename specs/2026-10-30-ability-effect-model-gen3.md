@@ -324,11 +324,22 @@ from a real game.
   per-game budget, `--directed-forks-per-game`. A fork taken counts against the budget
   whether it is kept or discarded.
 - Each enabled rule forks at most once per game. At a boundary where its precondition
-  holds and it has not forked in this game, it forks with probability
-  `--directed-fork-probability`, drawn from a generator seeded per game.
-- When several such rules match at one boundary, they are tried in ascending order of the
-  directed forks each has taken so far in the worker JVM's lifetime, ties broken by their
-  order in `--directed-fork-rules`. No rule is tried once the budget is spent.
+  holds and it has not forked in this game, it forks with its own probability, drawn from a
+  generator seeded per game. A rule's own probability is the property
+  `effect.directed.probability.<rule>`; a rule without one takes
+  `--directed-fork-probability`, and a rule at 0 is never forked.
+- A command that counts no shard (`match-outcomes`) takes the probabilities as
+  `--directed-fork-probabilities FILE`, a JSON map from rule to probability that
+  `scripts/rules_catalogue.py directed-rules --probabilities-output` writes from the counts file:
+  0 for a rule whose two sides have both reached their count, 1 for a rule with a side still at
+  zero, and in between the larger of 0.05 and the share of the count its shorter side misses.
+- When several rules match at one boundary, they are drawn in descending order of probability,
+  ties broken by their order in `--directed-fork-rules`, so the per-game budget goes first to
+  the rule that needs it most. A fork is taken only while the budget allows.
+- Each worker prints, per rule, the boundaries matched, the draws that came up a fork, the
+  forks the budget blocked, the forks taken and kept, and the precondition throws; the
+  supervisor sums them into `run.json` as `directed_fork_tally`. A throwing precondition reads
+  as not met and is a worker-failure kind.
 - A directed-fork record carries `aimed_at` set to its rule, `fork = true`,
   `interventional = false`, `directed` naming the variant and the operation applied, and
   `mirror_of` null: a phase boundary leaves no live record open (§ 8.1).

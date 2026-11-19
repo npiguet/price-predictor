@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields
+import math
+from dataclasses import dataclass, field, fields
 
 from effects.domain.damage_step_keywords import DAMAGE_STEP_KEYWORDS
 
@@ -26,6 +27,9 @@ DEFAULT_DIRECTED_FORK_PROBABILITY = 0.25
 #: The records one game may write, its forks' included (FR-041a); past it the
 #: worker withholds the rest and names the game.
 DEFAULT_MAX_RECORDS_PER_GAME = 5000
+#: A listed rule's own directed-fork probability travels as this prefix and
+#: the rule id (``effect.directed.probability.704.5f``).
+DIRECTED_RULE_PROBABILITY_PREFIX = "effect.directed.probability."
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,16 +71,30 @@ class CollectionCaps:
     directed_forks_per_game: int = DEFAULT_DIRECTED_FORKS_PER_GAME
     #: The chance a boundary where an enabled rule's precondition holds forks.
     directed_fork_probability: float = DEFAULT_DIRECTED_FORK_PROBABILITY
+    #: A listed rule's own probability, in [0, 1]; a rule without one takes
+    #: ``directed_fork_probability``, and one at 0 is never forked.
+    directed_rule_probabilities: dict[str, float] = field(default_factory=dict)
     #: The records one game may write (FR-041a): a game whose AIs loop is cut
     #: off there, its withheld records counted and the game named.
     max_records_per_game: int = DEFAULT_MAX_RECORDS_PER_GAME
+
+    def __post_init__(self) -> None:
+        for rule, probability in self.directed_rule_probabilities.items():
+            if not 0.0 <= probability <= 1.0 or math.isnan(probability):
+                raise ValueError(
+                    f"the directed-fork probability of rule {rule} must be in [0, 1], "
+                    f"got {probability}"
+                )
 
     def as_system_properties(self) -> dict[str, str]:
         """The `-D effect.*` properties the worker reads them back from."""
         properties = {
             _property_name(field.name): _property_value(getattr(self, field.name))
-            for field in fields(self) if field.name != "aimed_at"
+            for field in fields(self)
+            if field.name not in ("aimed_at", "directed_rule_probabilities")
         }
+        for rule, probability in self.directed_rule_probabilities.items():
+            properties[DIRECTED_RULE_PROBABILITY_PREFIX + rule] = str(probability)
         if self.aimed_at is not None:
             properties[_property_name("aimed_at")] = ",".join(self.aimed_at)
         return properties

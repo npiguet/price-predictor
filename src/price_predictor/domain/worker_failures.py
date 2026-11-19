@@ -67,6 +67,10 @@ class WorkerFailure(StrEnum):
     #: A fork changed the live game it was taken from (printed once per
     #: kind; counted under ``fork <kind> moved the live game``).
     FORK_MOVED_LIVE_GAME = "fork_moved_live_game"
+    #: A directed rule's board precondition threw and read as not met: the
+    #: rule's forks are lost wherever it throws (the first throw of each rule
+    #: is printed; later ones are counted in the directed fork tally).
+    DIRECTED_PRECONDITION_THREW = "directed_precondition_threw"
     #: Variant scripts could not be staged; variant cards will not load.
     STAGING_FAILED = "staging_failed"
     #: Variant names could not be read; variant records keyed as card scripts.
@@ -131,6 +135,9 @@ FAILURE_PATTERNS: tuple[FailurePattern, ...] = (
              " threw, and is discarded (later failures"),
     _pattern(WorkerFailure.FORK_MOVED_LIVE_GAME, r"Effect records: fork \S+ moved the live game",
              " moved the live game"),
+    _pattern(WorkerFailure.DIRECTED_PRECONDITION_THREW,
+             r"Effect records: directed rule \S+'s precondition threw",
+             "'s precondition threw and"),
     _pattern(WorkerFailure.STAGING_FAILED, r"Could not stage custom cards ",
              "Could not stage custom cards from "),
     _pattern(WorkerFailure.VARIANT_NAMES_UNREADABLE, r"Could not read variant names ",

@@ -9,8 +9,9 @@ the new one. Rotated twice between scans, the generation read so far is gone
 ``log_unread``, and the ``.1`` there now, never read, is read whole.
 
 The same reading follows each slot's hook-failure report and fork refusal
-tally, counts each worker JVM prints and no failure lines
-(``HookFailureCounts``, ``ForkRefusalCounts``).
+tally and directed fork tally, counts each worker JVM prints and no failure
+lines (``HookFailureCounts``, ``ForkRefusalCounts``,
+``DirectedForkTallyCounts``).
 """
 
 from __future__ import annotations
@@ -20,6 +21,10 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from price_predictor.domain.directed_fork_tally import (
+    DirectedForkTallyCounts,
+    directed_fork_tally_document,
+)
 from price_predictor.domain.worker_failures import (
     ForkRefusalCounts,
     HookFailureCounts,
@@ -43,6 +48,8 @@ class WorkerLogScan:
         self._hooks: dict[Path, HookFailureCounts] = {}
         #: Per log path: the fork refusal tallies its worker JVMs printed.
         self._refusals: dict[Path, ForkRefusalCounts] = {}
+        #: Per log path: the directed fork tallies its worker JVMs printed.
+        self._directed: dict[Path, DirectedForkTallyCounts] = {}
 
     def scan(self, paths: Iterable[Path]) -> WorkerFailures:
         """The failure lines ``paths`` gained since the last scan."""
@@ -61,10 +68,16 @@ class WorkerLogScan:
         (``worker_failures.fork_refusal_document``)."""
         return fork_refusal_document(list(self._refusals.values()))
 
+    def directed_fork_tally(self) -> dict[str, dict[str, int]]:
+        """The directed fork tallies every log read so far reports, summed
+        (``directed_fork_tally.directed_fork_tally_document``)."""
+        return directed_fork_tally_document(list(self._directed.values()))
+
     def _scan_one(self, path: Path, failures: WorkerFailures) -> None:
         hooks = _Tallies(
             self._hooks.setdefault(path, HookFailureCounts()),
             self._refusals.setdefault(path, ForkRefusalCounts()),
+            self._directed.setdefault(path, DirectedForkTallyCounts()),
         )
         try:
             identity = os.stat(path).st_ino
@@ -123,6 +136,11 @@ class WorkerLogReport:
         every worker JVM of the run: expected, never a failure."""
         return self._scan.fork_refusals()
 
+    def directed_fork_tally(self) -> dict[str, dict[str, int]]:
+        """The latest directed fork tallies the workers printed, per rule,
+        summed over every worker JVM of the run."""
+        return self._scan.directed_fork_tally()
+
     def manifest_fields(self) -> dict:
         """The totals as ``run.json`` records them."""
         return {
@@ -130,20 +148,27 @@ class WorkerLogReport:
             "worker_failure_examples": dict(self.totals.examples),
             "hook_failures": self.hook_failures(),
             "fork_refusals": self.fork_refusals(),
+            "directed_fork_tally": self.directed_fork_tally(),
         }
 
 
 class _Tallies:
     """The counts a worker JVM prints beside its failure lines, followed
-    line by line: the hook-failure report and the fork refusal tally."""
+    line by line: the hook-failure report, the fork refusal tally and the
+    directed fork tally."""
 
-    def __init__(self, hooks: HookFailureCounts, refusals: ForkRefusalCounts) -> None:
+    def __init__(
+        self, hooks: HookFailureCounts, refusals: ForkRefusalCounts,
+        directed: DirectedForkTallyCounts,
+    ) -> None:
         self._hooks = hooks
         self._refusals = refusals
+        self._directed = directed
 
     def add_line(self, line: str) -> None:
         self._hooks.add_line(line)
         self._refusals.add_line(line)
+        self._directed.add_line(line)
 
 
 def _read_lines(

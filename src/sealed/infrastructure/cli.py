@@ -25,6 +25,10 @@ from sealed.infrastructure.cli_resume import (
     dataclass_default,
     resolve_resumable_args,
 )
+from sealed.infrastructure.directed_fork_probabilities_file import (
+    add_directed_fork_probabilities_flag,
+    read_directed_fork_probabilities,
+)
 from sealed.infrastructure.effect_collection_flags import (
     COUNT_DROPPED_EVENTS_PROPERTY,
     EFFECT_COUNT_DROPPED_EVENTS,
@@ -1140,6 +1144,7 @@ def _add_effect_record_flags(parser: argparse.ArgumentParser) -> None:
     )
     add_cap_flags(parser)
     add_directed_fork_flags(parser)
+    add_directed_fork_probabilities_flag(parser)
     # The stop protocol needs the worker logs, which only a run collecting
     # effect records keeps; without them the pool kills as it always did.
     add_worker_stop_flags(parser, only_with="--effect-records")
@@ -1901,6 +1906,22 @@ def run_train_encoder(args: argparse.Namespace) -> int:
     return 0
 
 
+def _directed_startup_error(args: argparse.Namespace) -> str | None:
+    """Why the directed-fork flags cannot run, or None (FR-014): the
+    ``--directed-fork-probabilities`` file, read into
+    ``args.directed_rule_probabilities``, then the rules' startup check."""
+    rules = getattr(args, "directed_fork_rules", EFFECT_DIRECTED_FORK_RULES)
+    path = getattr(args, "directed_fork_probabilities", None)
+    if path is not None:
+        try:
+            args.directed_rule_probabilities = read_directed_fork_probabilities(path, rules)
+        except ValueError as exc:
+            return str(exc)
+    return directed_fork_error(
+        rules, getattr(args, "directed_fork_probability", EFFECT_DIRECTED_FORK_PROBABILITY),
+    )
+
+
 def run_match_outcomes(args: argparse.Namespace) -> int:
     """Execute the match-outcomes command."""
     from sealed.application.match_outcomes import MatchOutcomeSupervisor
@@ -1941,10 +1962,7 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
 
     # FR-014: exit 1 naming the rule, before any game. One JVM query, and
     # only when a rule is listed.
-    directed_error = directed_fork_error(
-        getattr(args, "directed_fork_rules", EFFECT_DIRECTED_FORK_RULES),
-        getattr(args, "directed_fork_probability", EFFECT_DIRECTED_FORK_PROBABILITY),
-    )
+    directed_error = _directed_startup_error(args)
     if directed_error is not None:
         print(f"Error: {directed_error}", file=sys.stderr)
         return 1

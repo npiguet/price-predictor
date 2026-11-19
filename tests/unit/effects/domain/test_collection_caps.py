@@ -30,6 +30,7 @@ from effects.domain.collection_caps import (
     DEFAULT_RANDOM_SEAT_PROBABILITY,
     DEFAULT_RANDOM_SEAT_SHARE,
     DEFAULT_ZONE_CANDIDATE_RATE,
+    DIRECTED_RULE_PROBABILITY_PREFIX,
     CollectionCaps,
 )
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME
@@ -163,9 +164,17 @@ class TestTheJvmReadsExactlyWhatThePythonSideWrites:
     def test_neither_side_names_a_property_the_other_does_not(self):
         """Every property, ``effect.aimed.at`` included, which only an aimed
         run sends."""
-        assert self._java_property_names() == set(
-            CollectionCaps(aimed_at=()).as_system_properties()
-        )
+        family = {name for name in self._java_property_names() if name.endswith(".")}
+        assert family == {DIRECTED_RULE_PROBABILITY_PREFIX}
+        python = CollectionCaps(
+            aimed_at=(), directed_rule_probabilities={"704.5f": 0.5}
+        ).as_system_properties()
+        assert self._java_property_names() - family == {
+            name for name in python if not name.startswith(DIRECTED_RULE_PROBABILITY_PREFIX)
+        }
+        assert {name for name in python if name.startswith(DIRECTED_RULE_PROBABILITY_PREFIX)} == {
+            DIRECTED_RULE_PROBABILITY_PREFIX + "704.5f"
+        }
 
 
 class TestTheAimedAtRules:
@@ -357,11 +366,36 @@ class TestTheDirectedForks:
         source = _JAVA_CAPS.read_text(encoding="utf-8")
         defaults = re.search(
             r"Optional\.empty\(\), false,\s*List\.of\(\), (\d+), ([0-9.]+),"
-            r" DEFAULT_MAX_RECORDS_PER_GAME\);", source
+            r" Map\.of\(\), DEFAULT_MAX_RECORDS_PER_GAME\);", source
         )
         assert defaults is not None
         assert int(defaults.group(1)) == DEFAULT_DIRECTED_FORKS_PER_GAME
         assert float(defaults.group(2)) == DEFAULT_DIRECTED_FORK_PROBABILITY
+
+
+class TestThePerRuleDirectedProbabilities:
+    """DF01: a rule's own probability travels as ``effect.directed.probability.<rule>``
+    beside the run's; a rule without one takes the run's."""
+
+    def test_none_travel_by_default(self):
+        assert CollectionCaps().directed_rule_probabilities == {}
+        assert not [
+            name for name in CollectionCaps().as_system_properties()
+            if name.startswith("effect.directed.probability.")
+        ]
+
+    def test_each_rule_travels_under_its_own_property(self):
+        properties = CollectionCaps(
+            directed_rule_probabilities={"704.5f": 1.0, "118.12b": 0.05, "x": 0.0},
+        ).as_system_properties()
+        assert properties["effect.directed.probability.704.5f"] == "1.0"
+        assert properties["effect.directed.probability.118.12b"] == "0.05"
+        assert properties["effect.directed.probability.x"] == "0.0"
+
+    @pytest.mark.parametrize("value", [1.5, -0.1, float("nan")])
+    def test_a_probability_outside_0_to_1_is_refused_naming_the_rule(self, value):
+        with pytest.raises(ValueError, match="704.5f"):
+            CollectionCaps(directed_rule_probabilities={"704.5f": value})
 
 
 class TestTheJvmDefaultsAreThePythonDefaultsArgumentByArgument:
@@ -406,6 +440,8 @@ class TestTheJvmDefaultsAreThePythonDefaultsArgumentByArgument:
             assert java == str(python).lower()
         elif isinstance(python, tuple):
             assert java == "List.of()" and python == ()
+        elif isinstance(python, dict):
+            assert java == "Map.of()" and python == {}
         else:
             assert type(python)(java) == python
 

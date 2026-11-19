@@ -45,6 +45,11 @@ LINES = {
     WorkerFailure.HOOK_FAILURE: (
         "effect-record hook RESOLVE: its listener threw, which loses what that call"
     ),
+    WorkerFailure.DIRECTED_PRECONDITION_THREW: (
+        "Effect records: directed rule 704.5f's precondition threw and reads as not met "
+        "(later throws are counted in the directed fork tally, not printed): "
+        "java.lang.NullPointerException"
+    ),
     WorkerFailure.EMITTER_FAILURE: 'ApiEvents: the memo for "damage_dealt" threw and was ignored',
     WorkerFailure.UNKNOWN_OUTCOME_TYPE: (
         "ClauseOutcomeRouter: outcomeHandler() received an outcome type not in"
