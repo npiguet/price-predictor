@@ -31,6 +31,13 @@ final class InterventionFork implements InterventionScheduler.Forcing {
     static final String NEVER_RESOLVED = "never resolved";
 
     /**
+     * A refusal's reason: a forced Aura spell resolved and stayed in the
+     * stack zone, its attachment having chosen nothing
+     * ({@link ForcedResolution#strandedAura}).
+     */
+    static final String AURA_LEFT_ON_THE_STACK = "Aura left in the stack zone";
+
+    /**
      * A refusal's reason: the line's resolution reads, unguarded, a cost the
      * fork does not pay ({@link #readsAnUnpaidCost}).
      */

@@ -8,8 +8,10 @@ import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.event.GameEventSpellAbilityCast;
 import forge.game.player.Player;
+import forge.game.player.PlayerController;
 import forge.game.spellability.SpellAbility;
 import forge.game.spellability.SpellAbilityStackInstance;
+import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -109,7 +111,12 @@ final class ForcedResolution {
     /**
      * Push the forced item and resolve the fork's stack until it has left,
      * the opponent deciding as the simulator's AI, as {@code
-     * GameSimulator.resolveStack} has it decide.
+     * GameSimulator.resolveStack} has it decide, and the actor as its own
+     * seat, the plain AI with its mandatory choices made
+     * ({@link MandatoryChoiceAi#deciding}).
+     *
+     * @throws ForkRefusal when nothing reached the stack, or a forced Aura
+     *         spell resolved and stayed in the stack zone
      */
     private void resolve(Game fork, SpellAbility ability, Player actor) {
         SpellAbility onStack = FirstCast.push(fork, ability);
@@ -125,7 +132,12 @@ final class ForcedResolution {
         Player opponent = actor.getWeakestOpponent();
         PlayerControllerAi simulated = new PlayerControllerAi(fork, opponent, opponent.getLobbyPlayer());
         simulated.getAi().setUseSimulation(AIOption.USE_FULL_SIMULATION);
-        opponent.runWithController(() -> untilItHasLeft(fork, onStack.getId()), simulated);
+        PlayerController deciding = MandatoryChoiceAi.deciding(actor);
+        actor.runWithController(() -> opponent.runWithController(
+                () -> untilItHasLeft(fork, onStack.getId()), simulated), deciding);
+        if (!fork.isGameOver() && strandedAura(fork, onStack)) {
+            throw new ForkRefusal(InterventionFork.AURA_LEFT_ON_THE_STACK);
+        }
     }
 
     /**
@@ -146,6 +158,16 @@ final class ForcedResolution {
             fork.getAction().checkStateEffects(false, affected);
             fork.getStack().addAllTriggeredAbilitiesToStack();
         }
+    }
+
+    /**
+     * Whether {@code forced} is an Aura spell whose card is still in the
+     * stack zone: its attachment chose nothing, so it neither entered the
+     * battlefield nor fizzled into the graveyard.
+     */
+    static boolean strandedAura(Game fork, SpellAbility forced) {
+        Card card = fork.getCardState(forced.getHostCard());
+        return forced.isSpell() && card.isAura() && card.isInZone(ZoneType.Stack);
     }
 
     private static boolean holds(Game fork, int abilityId) {

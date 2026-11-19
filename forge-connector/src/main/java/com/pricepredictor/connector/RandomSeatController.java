@@ -4,12 +4,12 @@ import com.pricepredictor.connector.effects.ForcedPlayRun;
 import com.pricepredictor.connector.effects.ForcedPlaySeat;
 import com.pricepredictor.connector.effects.FruitlessActivations;
 import com.pricepredictor.connector.effects.PriorityCandidates;
+import com.pricepredictor.connector.effects.MandatoryChoiceAi;
 import com.pricepredictor.connector.effects.RandomChoices;
 import com.pricepredictor.connector.effects.TargetingClauses;
 import forge.LobbyPlayer;
 import forge.ai.ComputerUtilAbility;
 import forge.ai.ComputerUtilCost;
-import forge.ai.PlayerControllerAi;
 import forge.game.Game;
 import forge.game.GameEntity;
 import forge.game.ability.ApiType;
@@ -52,7 +52,9 @@ import java.util.function.Supplier;
  * {@link #playChosenSpellAbility}, {@link #declareAttackers} and
  * {@link #declareBlockers}, plus {@link #chooseTargetsFor} for the clauses
  * whose targeting the engine asks for on its own. Everything else — land drops, mana payment, mulligans, what a
- * resolving effect asks its controller — is the AI's (FR-023). The nearest
+ * resolving effect asks its controller — is the AI's (FR-023), but for a
+ * mandatory single choice the AI declines, which the seat draws among the
+ * options offered ({@link MandatoryChoiceAi}, finding 5.5). The nearest
  * relative is {@code InterventionFork}, which draws the same choices for an
  * ability it forces on a fork; it acts only <em>inside</em> a fork and this
  * acts only outside one, through the same test inverted: a controller is
@@ -76,7 +78,7 @@ import java.util.function.Supplier;
  * decisions the play is made in it answers as the play says, attached or
  * not, and everywhere else it is the random seat it would be.
  */
-public final class RandomSeatController extends PlayerControllerAi implements ForcedPlaySeat {
+public final class RandomSeatController extends MandatoryChoiceAi implements ForcedPlaySeat {
 
     private final double probability;
     /**
@@ -163,6 +165,16 @@ public final class RandomSeatController extends PlayerControllerAi implements Fo
 
     private boolean draw() {
         return random.nextDouble() < probability;
+    }
+
+    /**
+     * A mandatory choice the AI declined, drawn uniformly from the offered
+     * options when live; a fork's unattached copy takes the first, as the AI
+     * it is there.
+     */
+    @Override
+    protected int optionIndex(int size) {
+        return isLive() ? random.nextInt(size) : super.optionIndex(size);
     }
 
     /**

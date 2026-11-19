@@ -3,7 +3,7 @@
 Rules to respect when changing or diagnosing interventions, damage-step probes, protection forks or directed forks, and when registering a directed rule.
 
 - What is specified: `specs/2026-10-30-ability-effect-model-gen3.md` § 6 (directed forks) and § 8.
-- Code: `forge-connector/src/main/java/com/pricepredictor/connector/effects/` (`Forks`, `ForkFidelity`, `ForkBudget`, `InterventionScheduler`, `InterventionFork`, `ForcedResolution`, `DamageStepProbe`, `ProtectionFork`, `ForkPlayForward`) and its `directed/` package.
+- Code: `forge-connector/src/main/java/com/pricepredictor/connector/effects/` (`Forks`, `ForkFidelity`, `ForkBudget`, `InterventionScheduler`, `InterventionFork`, `ForcedResolution`, `MandatoryChoiceAi`, `DamageStepProbe`, `ProtectionFork`, `ForkPlayForward`) and its `directed/` package.
 - Flag signatures of fork records: `record-format.md`.
 
 ## Rules for every fork
@@ -41,6 +41,7 @@ Rules to respect when changing or diagnosing interventions, damage-step probes, 
 - The fork's stack is resolved only until the forced item has left it, then the state-based check after it and the triggers it left: nothing after that is the forced item's. Closing the fork's recording writes the half the next action would have closed.
 - `ForcedAndLiveHalvesTest` checks that a play resolved live and forced on the same board gives effect halves that agree member for member apart from the fork members, among them an enchanted creature killed in the state-based check, a fizzled charm, an effect ending the turn, a self-copying spell and an unless cost paid with mana.
 - A forced resolution that began to resolve is written whatever it did, as a live one is. One that never began to resolve writes nothing and is the refusal `intervention never resolved`.
+- The forced actor decides the resolution as its own seat, except that a plain AI seat is replaced by `MandatoryChoiceAi` for the stack loop (`MandatoryChoiceAi.deciding`): where the AI answers a mandatory single choice (`chooseSingleEntityForEffect`, not optional) with nothing although options are offered, it takes the first option, and every other answer stays the AI's, so the forced half matches a live one. Forge's `AttachAi` declines an attachment it finds useless whether or not the choice is optional (Phantasmal Terrain on an Island, Equipment on a creature that cannot attack or block), and the effect then does nothing. A forced Aura spell still in the stack zone after it resolved (`ForcedResolution.strandedAura`) writes nothing and is the refusal `intervention Aura left in the stack zone`.
 
 ## Damage-step probes
 
