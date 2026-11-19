@@ -127,8 +127,27 @@ public final class TargetingClauses {
      * and needs the earlier clauses' picks.
      */
     public static <T> T withNoneChosen(SpellAbility ability, Supplier<T> body) {
+        return withNoneChosenOn(offered(ability), body);
+    }
+
+    /**
+     * {@link #withNoneChosen} over a charm's modes: each mode's whole chain has
+     * its choices set aside, for the reachability count of the modes a draw
+     * may pick from. Never around the draw of targets.
+     */
+    public static <T> T withNoneChosenOnModes(List<AbilitySub> modes, Supplier<T> body) {
+        List<SpellAbility> clauses = new ArrayList<>();
+        for (AbilitySub mode : modes) {
+            for (SpellAbility link = mode; link != null; link = link.getSubAbility()) {
+                clauses.add(link);
+            }
+        }
+        return withNoneChosenOn(clauses, body);
+    }
+
+    private static <T> T withNoneChosenOn(List<SpellAbility> clauses, Supplier<T> body) {
         Map<SpellAbility, TargetChoices> chosen = new IdentityHashMap<>();
-        for (SpellAbility clause : offered(ability)) {
+        for (SpellAbility clause : clauses) {
             if (clause.usesTargeting()) {
                 chosen.putIfAbsent(clause, clause.getTargets());
                 clause.resetTargets();

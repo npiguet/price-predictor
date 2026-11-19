@@ -81,12 +81,7 @@ public final class RandomChoices {
         if (printed == null || printed.isEmpty()) {
             return null;
         }
-        List<AbilitySub> options = new ArrayList<>();
-        for (AbilitySub option : printed) {
-            if (TargetingClauses.chainReachesMinimum(option)) {
-                options.add(option);
-            }
-        }
+        List<AbilitySub> options = reachableModes(printed);
         if (charm.isEntwine()) {
             return options.size() == printed.size() ? new ArrayList<>(options) : null;
         }
@@ -121,6 +116,22 @@ public final class RandomChoices {
             chosen.add(options.get(random.nextInt(options.size())));
         }
         return chosen;
+    }
+
+    /**
+     * The modes whose chains reach their minimums, counted with the leftover
+     * targets of the AI's evaluation set aside and given back.
+     */
+    private static List<AbilitySub> reachableModes(List<AbilitySub> printed) {
+        return TargetingClauses.withNoneChosenOnModes(printed, () -> {
+            List<AbilitySub> reachable = new ArrayList<>();
+            for (AbilitySub option : printed) {
+                if (TargetingClauses.chainReachesMinimum(option)) {
+                    reachable.add(option);
+                }
+            }
+            return reachable;
+        });
     }
 
     /**

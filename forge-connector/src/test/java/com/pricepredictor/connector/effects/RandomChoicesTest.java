@@ -8,6 +8,7 @@ import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
+import forge.game.spellability.TargetChoices;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -21,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -171,6 +173,40 @@ class RandomChoicesTest {
         }
         assertEquals(Set.of(1), seen);
         assertTrue(new InterventionFork(null, null, null, 0L).hasChoices(charm, caster));
+    }
+
+    /**
+     * Targets the AI's evaluation left on a mode do not narrow the count of
+     * what the mode can reach (finding 8.3): "two target creatures controlled
+     * by different players" over two creatures of one player has two
+     * candidates counted alone, but with one of them left chosen the other is
+     * barred by the different-controllers rule. The mode is drawable, and its
+     * leftover choices come back as the same object.
+     */
+    @Test
+    void aModeWithLeftoverTargetsIsJudgedWithNoneChosen() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card first = TestBoard.inPlay(game, game.getPlayers().get(1), "Hill Giant");
+        TestBoard.inPlay(game, game.getPlayers().get(1), "Hill Giant");
+        Card host = TestBoard.inHand(game, caster, "Grizzly Bears");
+        host.setSVar("A", "DB$ Pump | ValidTgts$ Creature | TargetMin$ 2 | TargetMax$ 2"
+                + " | TargetsWithDifferentControllers$ True | NumAtt$ +1 | SpellDescription$ a");
+        host.setSVar("B", "DB$ GainLife | Defined$ You | LifeAmount$ 2 | SpellDescription$ b");
+        SpellAbility charm = AbilityFactory.getAbility("SP$ Charm | Choices$ A,B", host);
+        charm.setActivatingPlayer(caster);
+        List<AbilitySub> choices = charm.getAdditionalAbilityList("Choices");
+        AbilitySub mode = choices.get(0);
+        mode.getTargets().add(first);
+        TargetChoices leftover = mode.getTargets();
+
+        boolean drawn = false;
+        for (int seed = 0; seed < SEEDS && !drawn; seed++) {
+            drawn = drawsFor(seed).drawModes(charm).contains(mode);
+        }
+        assertTrue(drawn, "the mode is a legal choice");
+        assertSame(leftover, mode.getTargets());
+        assertEquals(List.of(first), List.copyOf(mode.getTargets()));
     }
 
     /**
