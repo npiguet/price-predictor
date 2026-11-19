@@ -98,8 +98,7 @@ class ForcedAndLiveHalvesTest {
             game.getStack().addAllTriggeredAbilitiesToStack();
             for (int items = 0; items < MAX_ITEMS && !game.getStack().isEmpty(); items++) {
                 game.getStack().resolveStack();
-                game.getAction().checkStateEffects(false);
-                game.getStack().addAllTriggeredAbilitiesToStack();
+                observedStateBasedLoop(game);
             }
             TestBoard.nextStep(game);
         });
@@ -110,6 +109,18 @@ class ForcedAndLiveHalvesTest {
                 .toList();
         assertTrue(!halves.isEmpty(), records.toString());
         return halves;
+    }
+
+    /**
+     * The state-based loop a real game runs before a player gets priority:
+     * Forge's private {@code PhaseHandler.checkStateBasedEffects}, which
+     * signals the loop's begin and end to the hook and repeats the check
+     * while triggers go on the stack. Reflection, as no public entry runs it.
+     */
+    private static void observedStateBasedLoop(Game game) throws Exception {
+        java.lang.reflect.Method loop = forge.game.phase.PhaseHandler.class.getDeclaredMethod("checkStateBasedEffects");
+        loop.setAccessible(true);
+        loop.invoke(game.getPhaseHandler());
     }
 
     /** The effect halves of the same play forced in a fork of the same board. */
