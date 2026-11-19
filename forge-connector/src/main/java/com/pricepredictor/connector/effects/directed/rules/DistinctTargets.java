@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
 import forge.game.Game;
@@ -64,7 +65,8 @@ public final class DistinctTargets {
         if (opponent.isEmpty()) {
             return Optional.empty();
         }
-        return Boards.castableInHand(active, spell -> soleTarget(spell, active)).stream()
+        return Boards.castableInHand(active,
+                        ForcedPlay.Line.spell("sole target", spell -> soleTarget(spell, active))).stream()
                 .findFirst()
                 .map(card -> Binding.empty().with("spell", card).with("opponent", opponent.get()));
     }

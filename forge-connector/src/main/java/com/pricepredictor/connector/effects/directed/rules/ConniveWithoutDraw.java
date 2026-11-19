@@ -7,7 +7,6 @@ import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
 import forge.game.Game;
-import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.player.Player;
 import forge.game.trigger.TriggerType;
@@ -42,6 +41,12 @@ public final class ConniveWithoutDraw {
     static final String SPIRIT_ADDED = "spirit_added";
     static final String SPIRIT = "Spirit of the Labyrinth";
 
+    /**
+     * A spell of the card that connives as it resolves or as its permanent
+     * enters: what the precondition finds and the fork casts.
+     */
+    static final ForcedPlay.Line CONNIVING = Boards.acting("Connive");
+
     private ConniveWithoutDraw() {
     }
 
@@ -49,7 +54,7 @@ public final class ConniveWithoutDraw {
         return DirectedRule.of(RULE, SCENARIO, ConniveWithoutDraw::bind, SPIRIT_ADDED,
                 new Application(ForkOperation.ADD_PERMANENT,
                         fork -> AddPermanentOperation.of(SPIRIT, fork.player("opponent"), false))
-                        .forcing(ForcedPlay.cast("player", "conniver")));
+                        .forcing(ForcedPlay.cast("player", "conniver").playing(CONNIVING)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -57,7 +62,7 @@ public final class ConniveWithoutDraw {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        Optional<Card> conniver = Boards.acting(active, ApiType.Connive);
+        Optional<Card> conniver = Boards.acting(active, CONNIVING);
         if (!spiritWouldStopTheDraw(active) || conniver.isEmpty()) {
             return Optional.empty();
         }

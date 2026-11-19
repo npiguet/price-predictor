@@ -21,10 +21,12 @@ import java.util.Optional;
  * paying its morph cost {2}{W}{W} with four Plains.
  *
  * <p>The base board, read at a boundary: a main phase of the active player
- * begins, it controls a face-down permanent whose morph cost is mana alone,
- * and its untapped lands number exactly that cost's mana value with no other
- * permanent of its able to make mana, so the cost takes every land it has
- * untapped. It binds the face-down permanent and one of those lands.
+ * begins, it controls a face-down permanent whose morph cost is mana alone and
+ * that it can pay now, colours included, and the mana its sources make now
+ * ({@link Boards#manaSources}, each one activation of its most productive
+ * mana ability: a bounce land counts two) is exactly that cost's mana value,
+ * so the cost takes every mana it can make. It binds the face-down permanent
+ * and one of its untapped lands.
  *
  * <p>The active player cannot add a land to its mana this turn
  * ({@link Boards#noLandToPlay}): it holds no land, or its land drop is
@@ -62,31 +64,36 @@ public final class MorphFaceUp {
             return Optional.empty();
         }
         List<Card> sources = Boards.manaSources(active);
-        if (sources.isEmpty() || !sources.stream().allMatch(Card::isLand)) {
+        Optional<Card> land = sources.stream().filter(Card::isLand).findFirst();
+        if (land.isEmpty()) {
             return Optional.empty();
         }
+        int mana = sources.stream().mapToInt(Boards::manaUnits).sum();
         for (Card permanent : active.getCardsIn(ZoneType.Battlefield)) {
-            Optional<Integer> cost = morphCost(permanent);
-            if (cost.isPresent() && cost.get() == sources.size()) {
-                return Optional.of(Binding.empty().with("permanent", permanent).with("land", sources.get(0)));
+            Optional<SpellAbility> faceUp = morphUp(permanent)
+                    .filter(ability -> Boards.manaValue(ability.getPayCosts()) == mana)
+                    .filter(ability -> Boards.affordable(active, ability));
+            if (faceUp.isPresent()) {
+                return Optional.of(Binding.empty().with("permanent", permanent).with("land", land.get()));
             }
         }
         return Optional.empty();
     }
 
-    /** The mana value of a face-down permanent's morph cost, when that cost is mana alone. */
-    static Optional<Integer> morphCost(Card permanent) {
+    /** A face-down permanent's turning face up for its morph cost, when that cost is mana alone and not zero. */
+    private static Optional<SpellAbility> morphUp(Card permanent) {
         if (!permanent.isFaceDown()) {
             return Optional.empty();
         }
-        for (SpellAbility ability : permanent.getState(CardStateName.Original).getNonManaAbilities()) {
-            if (ability.isTurnFaceUp() && ability.hasParam("MorphUp")
-                    && "Morph".equals(ability.getParam("PrecostDesc"))
-                    && ability.getPayCosts() != null && ability.getPayCosts().isOnlyManaCost()) {
-                int value = Boards.manaValue(ability.getPayCosts());
-                return value > 0 ? Optional.of(value) : Optional.empty();
-            }
-        }
-        return Optional.empty();
+        return permanent.getState(CardStateName.Original).getNonManaAbilities().stream()
+                .filter(MorphFaceUp::isMorphUp)
+                .filter(ability -> Boards.manaValue(ability.getPayCosts()) > 0)
+                .findFirst();
+    }
+
+    private static boolean isMorphUp(SpellAbility ability) {
+        return ability.isTurnFaceUp() && ability.hasParam("MorphUp")
+                && "Morph".equals(ability.getParam("PrecostDesc"))
+                && ability.getPayCosts() != null && ability.getPayCosts().isOnlyManaCost();
     }
 }

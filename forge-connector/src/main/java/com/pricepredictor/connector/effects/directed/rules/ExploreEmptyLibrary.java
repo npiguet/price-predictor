@@ -7,7 +7,6 @@ import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.EmptyLibraryOperation;
 import forge.game.Game;
-import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.player.Player;
 import forge.game.trigger.TriggerType;
@@ -39,6 +38,12 @@ public final class ExploreEmptyLibrary {
     static final String SCENARIO = "701.44b-2";
     static final String EMPTY_LIBRARY = "empty_library";
 
+    /**
+     * A spell of the card that explores as it resolves or as its permanent
+     * enters: what the precondition finds and the fork casts.
+     */
+    static final ForcedPlay.Line EXPLORING = Boards.acting("Explore");
+
     private ExploreEmptyLibrary() {
     }
 
@@ -46,7 +51,7 @@ public final class ExploreEmptyLibrary {
         return DirectedRule.of(RULE, SCENARIO, ExploreEmptyLibrary::bind, EMPTY_LIBRARY,
                 new Application(ForkOperation.MOVE_CARD,
                         fork -> new EmptyLibraryOperation(fork.player("player")))
-                        .forcing(ForcedPlay.cast("player", "card")));
+                        .forcing(ForcedPlay.cast("player", "card").playing(EXPLORING)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -54,7 +59,7 @@ public final class ExploreEmptyLibrary {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        Optional<Card> explorer = Boards.acting(active, ApiType.Explore);
+        Optional<Card> explorer = Boards.acting(active, EXPLORING);
         if (active.getCardsIn(ZoneType.Library).isEmpty()) {
             return Optional.empty();
         }

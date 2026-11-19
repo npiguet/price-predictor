@@ -15,7 +15,6 @@ import forge.game.replacement.ReplacementType;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 
-import java.util.List;
 import java.util.Optional;
 
 /**
@@ -25,11 +24,13 @@ import java.util.Optional;
  * enters; with the Cage it would stay in the graveyard.
  *
  * <p>The base board, read at a boundary: a main phase of the active player
- * begins, a creature card is in the active player's graveyard, the active
- * player holds a spell it has the mana for that returns a card from a
- * graveyard to the battlefield, and no permanent on the battlefield has a
- * replacement effect that stops a card entering the battlefield from a
- * graveyard. It binds the active player and that spell. The live game, where the creature
+ * begins, the active player holds a spell it has the mana for that returns a
+ * card from a graveyard to the battlefield ({@link #REANIMATION}), a creature
+ * card in a graveyard is one that spell can return ({@link #returnsACreature}),
+ * and no permanent on the battlefield has a replacement effect that stops a
+ * card entering the battlefield from a graveyard. It binds the active player
+ * and that spell's card; the fork casts that spell, the half of a split card
+ * that reanimates. The live game, where the creature
  * would enter, is the common side; the fork adds the rare fact.
  *
  * <p>Variant {@code cage} ({@code add_permanent}): Grafdigger's Cage is on
@@ -45,6 +46,8 @@ public final class CantEnterBattlefield {
     static final String SCENARIO = "614.17d-1";
     static final String CAGE = "cage";
     static final String GRAFDIGGERS_CAGE = "Grafdigger's Cage";
+    /** A spell of the card that reanimates ({@link #reanimates}): what the precondition finds and the fork casts. */
+    static final ForcedPlay.Line REANIMATION = ForcedPlay.Line.spell("reanimation", CantEnterBattlefield::reanimates);
 
     private CantEnterBattlefield() {
     }
@@ -53,20 +56,39 @@ public final class CantEnterBattlefield {
         return DirectedRule.of(RULE, SCENARIO, CantEnterBattlefield::bind, CAGE,
                 new Application(ForkOperation.ADD_PERMANENT,
                         fork -> AddPermanentOperation.of(GRAFDIGGERS_CAGE, fork.player("player"), false))
-                        .forcing(ForcedPlay.cast("player", "card")));
+                        .forcing(ForcedPlay.cast("player", "card").playing(REANIMATION)));
     }
 
     static Optional<Binding> bind(Game live) {
         if (!Boards.atMainPhase(live)) {
             return Optional.empty();
         }
-        Player active = Boards.active(live);
-        List<Card> spells = Boards.castableInHand(active, CantEnterBattlefield::reanimates);
-        if (active.getCardsIn(ZoneType.Graveyard).stream().noneMatch(Card::isCreature) || spells.isEmpty()
-                || live.getCardsIn(ZoneType.Battlefield).stream().anyMatch(CantEnterBattlefield::stopsEntering)) {
+        if (live.getCardsIn(ZoneType.Battlefield).stream().anyMatch(CantEnterBattlefield::stopsEntering)) {
             return Optional.empty();
         }
-        return Optional.of(Binding.empty().with("player", active).with("card", spells.get(0)));
+        Player active = Boards.active(live);
+        return Boards.castableSpellsInHand(active, REANIMATION).stream()
+                .filter(spell -> returnsACreature(spell, active))
+                .findFirst()
+                .map(spell -> Binding.empty().with("player", active).with("card", spell.getHostCard()));
+    }
+
+    /**
+     * Whether {@code spell}, cast by {@code caster}, can return a creature
+     * card now in a graveyard: one it can target, or for a spell that does
+     * not target, one of the caster's whose type it names
+     * ({@code ChangeType}). A spell returning a card it defines otherwise
+     * (itself, a remembered card) returns none this board can tell.
+     */
+    static boolean returnsACreature(SpellAbility spell, Player caster) {
+        SpellAbility cast = Boards.asPlayedBy(spell, caster);
+        if (cast.usesTargeting()) {
+            return caster.getGame().getCardsIn(ZoneType.Graveyard).stream()
+                    .anyMatch(card -> card.isCreature() && cast.canTarget(card));
+        }
+        String types = cast.getParam("ChangeType");
+        return types != null && caster.getCardsIn(ZoneType.Graveyard).stream().anyMatch(card ->
+                card.isCreature() && card.isValid(types.split(","), caster, cast.getHostCard(), cast));
     }
 
     /** Whether one of the permanent's replacement effects stops a card entering the battlefield from a graveyard. */

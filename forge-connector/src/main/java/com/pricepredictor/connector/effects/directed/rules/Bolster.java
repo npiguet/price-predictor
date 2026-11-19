@@ -36,6 +36,8 @@ public final class Bolster {
     static final String SCENARIO = "701.39a-2";
     static final String HAS_CREATURE = "has_creature";
     static final String BEARS = "Grizzly Bears";
+    /** A spell of the card that bolsters ({@link #bolsters}): what the precondition finds and the fork casts. */
+    static final ForcedPlay.Line BOLSTERING = ForcedPlay.Line.spell("bolster", Bolster::bolsters);
 
     private Bolster() {
     }
@@ -44,7 +46,7 @@ public final class Bolster {
         return DirectedRule.of(RULE, SCENARIO, Bolster::bind, HAS_CREATURE,
                 new Application(ForkOperation.ADD_PERMANENT,
                         fork -> AddPermanentOperation.of(BEARS, fork.player("player"), true))
-                        .forcing(ForcedPlay.cast("player", "card")));
+                        .forcing(ForcedPlay.cast("player", "card").playing(BOLSTERING)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -52,7 +54,7 @@ public final class Bolster {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        List<Card> spells = Boards.castableInHand(active, Bolster::bolsters);
+        List<Card> spells = Boards.castableInHand(active, BOLSTERING);
         if (!active.getCreaturesInPlay().isEmpty() || spells.isEmpty()) {
             return Optional.empty();
         }

@@ -20,10 +20,14 @@ import java.util.Optional;
  * Islands and three Ornithopters tapped for the {3}.
  *
  * <p>The base board, read at a boundary: a main phase of the active player
- * begins, and it holds a card with improvise that its untapped lands alone
- * cannot pay for but its untapped lands and its untapped nonland artifacts
- * together pay exactly, the artifacts no more than the card's generic mana. It
- * binds one of those artifacts and the card.
+ * begins, and it holds a card with improvise whose mana value the mana its
+ * other sources make ({@link #otherMana}) and its untapped nonland artifacts,
+ * none of which makes mana itself, pay exactly, the artifacts no more than
+ * the card's generic mana. It binds one of those artifacts and the card.
+ * Colours are not asked: the cost Forge would charge
+ * ({@code PlayabilityVerdict.affordable}) improvises with the artifacts the
+ * AI would tap, and before combat on its own turn the AI taps no artifact
+ * creature (Ornithopter) for improvise.
  *
  * <p>The active player cannot add a land to its mana this turn
  * ({@link Boards#noLandToPlay}): it holds no land, or its land drop is
@@ -64,17 +68,27 @@ public final class Improvise {
         List<Card> artifacts = active.getCardsIn(ZoneType.Battlefield).stream()
                 .filter(card -> card.isArtifact() && !card.isLand() && !card.isTapped())
                 .toList();
-        int lands = Boards.untappedLands(active);
-        if (artifacts.isEmpty()) {
+        if (artifacts.isEmpty() || artifacts.stream().anyMatch(artifact -> Boards.manaUnits(artifact) > 0)) {
             return Optional.empty();
         }
-        for (Card card : active.getCardsIn(ZoneType.Hand)) {
-            int value = card.getCMC();
-            if (card.hasKeyword(Keyword.IMPROVISE) && lands < value && lands + artifacts.size() == value
-                    && card.getManaCost().getGenericCost() >= artifacts.size()) {
-                return Optional.of(Binding.empty().with("artifact", artifacts.get(0)).with("card", card));
-            }
-        }
-        return Optional.empty();
+        int mana = otherMana(active, artifacts);
+        return active.getCardsIn(ZoneType.Hand).stream()
+                .filter(card -> card.hasKeyword(Keyword.IMPROVISE) && card.getCMC() == mana + artifacts.size())
+                .filter(card -> card.getManaCost().getGenericCost() >= artifacts.size())
+                .findFirst()
+                .map(card -> Binding.empty().with("artifact", artifacts.get(0)).with("card", card));
+    }
+
+    /**
+     * The mana {@code player}'s sources other than {@code artifacts} make now
+     * ({@link Boards#manaSources}), each one activation of its most
+     * productive mana ability ({@link Boards#manaUnits}): a bounce land
+     * counts two, a mana creature one.
+     */
+    static int otherMana(Player player, List<Card> artifacts) {
+        return Boards.manaSources(player).stream()
+                .filter(source -> !artifacts.contains(source))
+                .mapToInt(Boards::manaUnits)
+                .sum();
     }
 }

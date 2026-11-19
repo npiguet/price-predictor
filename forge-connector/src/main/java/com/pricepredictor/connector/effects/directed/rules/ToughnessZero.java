@@ -13,7 +13,6 @@ import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
-import forge.game.zone.ZoneType;
 
 import java.util.List;
 import java.util.Optional;
@@ -26,10 +25,10 @@ import java.util.Optional;
  *
  * <p>The base board, read at a boundary: a main phase begins, a player holds
  * a spell that gives a target creature -N/-N (a pump with a negative
- * toughness number), can cast it now ({@link Boards#castableAtItsSpeed}: a
- * sorcery only as the active player) and has as many untapped lands as its
- * mana value, and an
- * opponent of that player controls a creature of toughness 1 to N, which the
+ * toughness number, the card's largest: {@link #SHRINKING}), can cast it now
+ * ({@link Boards#castableAtItsSpeed}: a sorcery only as the active player)
+ * and has the mana for it, colours included, and an opponent of that player
+ * controls a creature of toughness 1 to N the spell can target, which the
  * spell would take to 0 or less. It binds the creature Forge's AI rates best
  * among those, the one its removal would most likely aim at, the spell's
  * card and its holder. Whether the live game casts the spell is its own
@@ -45,6 +44,15 @@ public final class ToughnessZero {
     public static final String RULE = "704.5f";
     static final String SCENARIO = "704.5f-1";
     static final String TOUGHER = "tougher";
+    /**
+     * A spell of the card that gives a target creature the card's largest
+     * fixed -N/-N ({@link #toughnessLoss}): what the precondition finds and
+     * the fork casts, the half of a split card that shrinks.
+     */
+    static final ForcedPlay.Line SHRINKING = ForcedPlay.Line.spell("toughness loss", spell -> {
+        int loss = toughnessLoss(spell);
+        return loss > 0 && loss == toughnessLoss(spell.getHostCard());
+    });
 
     private ToughnessZero() {
     }
@@ -52,7 +60,7 @@ public final class ToughnessZero {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, ToughnessZero::bind, TOUGHER,
                 new Application(ForkOperation.PT, ToughnessZero::tougher)
-                        .forcing(ForcedPlay.cast("holder", "spell").targeting("creature")));
+                        .forcing(ForcedPlay.cast("holder", "spell").playing(SHRINKING).targeting("creature")));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -60,22 +68,11 @@ public final class ToughnessZero {
             return Optional.empty();
         }
         for (Player holder : live.getPlayers()) {
-            int lands = Boards.untappedLands(holder);
-            for (Card spell : holder.getCardsIn(ZoneType.Hand)) {
-                int loss = toughnessLoss(spell);
-                if (loss == 0 || spell.getCMC() > lands || !Boards.castableAtItsSpeed(holder, spell)) {
-                    continue;
-                }
-                List<Card> killed = holder.getOpponents().stream()
-                        .flatMap(opponent -> opponent.getCreaturesInPlay().stream())
-                        .filter(creature -> creature.getNetToughness() >= 1
-                                && creature.getNetToughness() <= loss)
-                        .toList();
-                if (!killed.isEmpty()) {
-                    return Optional.of(Binding.empty()
-                            .with("holder", holder)
-                            .with("creature", ComputerUtilCard.getBestCreatureAI(killed))
-                            .with("spell", spell));
+            for (SpellAbility spell : Boards.castableSpellsInHand(holder, SHRINKING)) {
+                Optional<Binding> binding = Boards.castableAtItsSpeed(holder, spell.getHostCard())
+                        ? killing(holder, spell) : Optional.empty();
+                if (binding.isPresent()) {
+                    return binding;
                 }
             }
         }
@@ -83,23 +80,45 @@ public final class ToughnessZero {
     }
 
     /**
-     * The toughness a card's targeted -N/-N spell takes away, 0 when it has
-     * none: only a number written into the script counts, since an X is
-     * chosen on casting.
+     * The binding of {@code holder}'s {@code spell} and the opposing creature
+     * it would kill that Forge's AI rates best, among those of toughness 1 to
+     * the spell's N it can target; empty when there is none.
+     */
+    private static Optional<Binding> killing(Player holder, SpellAbility spell) {
+        int loss = toughnessLoss(spell);
+        SpellAbility cast = Boards.asPlayedBy(spell, holder);
+        List<Card> killed = holder.getOpponents().stream()
+                .flatMap(opponent -> opponent.getCreaturesInPlay().stream())
+                .filter(creature -> creature.getNetToughness() >= 1 && creature.getNetToughness() <= loss)
+                .filter(cast::canTarget)
+                .toList();
+        if (killed.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(Binding.empty()
+                .with("holder", holder)
+                .with("creature", ComputerUtilCard.getBestCreatureAI(killed))
+                .with("spell", spell.getHostCard()));
+    }
+
+    /**
+     * The largest toughness one of the card's targeted -N/-N spells takes
+     * away ({@link #toughnessLoss(SpellAbility)}).
      */
     static int toughnessLoss(Card card) {
-        int loss = 0;
-        for (SpellAbility spell : card.getSpells()) {
-            if (spell.getApi() != ApiType.Pump || !spell.usesTargeting() || !spell.hasParam("NumDef")) {
-                continue;
-            }
-            try {
-                loss = Math.max(loss, -Integer.parseInt(spell.getParam("NumDef").trim()));
-            } catch (NumberFormatException e) {
-                // An X or a count: not a fixed -N.
-            }
+        return card.getSpells().stream().mapToInt(ToughnessZero::toughnessLoss).max().orElse(0);
+    }
+
+    /**
+     * The toughness a targeted -N/-N spell takes away, 0 for any other spell:
+     * only a number written into the script counts, since an X is chosen on
+     * casting.
+     */
+    static int toughnessLoss(SpellAbility spell) {
+        if (spell.getApi() != ApiType.Pump || !spell.usesTargeting()) {
+            return 0;
         }
-        return loss;
+        return Boards.number(spell.getParam("NumDef")).map(def -> Math.max(0, -def)).orElse(0);
     }
 
     private static BoardEdit tougher(Binding fork) {

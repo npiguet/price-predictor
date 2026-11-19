@@ -7,7 +7,6 @@ import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
-import forge.game.card.Card;
 
 import java.util.Optional;
 
@@ -18,9 +17,9 @@ import java.util.Optional;
  *
  * <p>The base board, read at a boundary: a main phase of the active player
  * begins, it controls an Aura with Aura swap whose cost it has the lands for,
- * attached to a creature, and its hand holds exactly one Aura card, which
- * cannot enchant that creature ({@link AuraSwap#find}). It binds that card and
- * the attached Aura.
+ * attached to a creature without protection, and its hand holds exactly one
+ * Aura card, which cannot enchant that creature ({@link AuraSwap#find}). It
+ * binds that card and the attached Aura.
  *
  * <p>Variant {@code can_enchant} ({@code move_card}): a Holy Strength (enchant
  * creature) is in that card's place in the hand, so the exchange succeeds.
@@ -44,7 +43,6 @@ public final class AuraSwapCantEnchant {
     }
 
     static Optional<Binding> bind(Game live) {
-        return AuraSwap.find(live, false).filter(binding ->
-                binding.card("aura").getEntityAttachedTo() instanceof Card host && host.isCreature());
+        return AuraSwap.find(live, false);
     }
 }

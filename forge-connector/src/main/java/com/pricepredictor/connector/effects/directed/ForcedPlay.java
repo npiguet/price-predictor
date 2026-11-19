@@ -78,6 +78,17 @@ public record ForcedPlay(
                 ability.isSpell() && ability.getAlternativeCost() == null && ability.getKeyword() == null);
 
         /**
+         * The card's own cast ({@link #SPELL}) of a spell {@code test}
+         * accepts: the half of a split card, or the side of an adventurer,
+         * that a precondition matched with the same test. {@link #SPELL}
+         * alone casts whichever spell of the card is playable first.
+         */
+        public static Line spell(String name, Predicate<SpellAbility> test) {
+            Objects.requireNonNull(test, "test");
+            return new Line(name, ability -> SPELL.matches(ability) && test.test(ability));
+        }
+
+        /**
          * The source's triggered abilities, any clause of their chains: the
          * lines an answer answers by default.
          */

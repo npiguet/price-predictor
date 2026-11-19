@@ -7,7 +7,6 @@ import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.EmptyLibraryOperation;
 import forge.game.Game;
-import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.player.Player;
 import forge.game.trigger.TriggerType;
@@ -40,6 +39,12 @@ public final class DiscoverNothingFound {
     static final String SCENARIO = "701.57b-2";
     static final String EMPTY_LIBRARY = "empty_library";
 
+    /**
+     * A spell of the card that discovers as it resolves or as its permanent
+     * enters: what the precondition finds and the fork casts.
+     */
+    static final ForcedPlay.Line DISCOVERING = Boards.acting("Discover");
+
     private DiscoverNothingFound() {
     }
 
@@ -47,7 +52,7 @@ public final class DiscoverNothingFound {
         return DirectedRule.of(RULE, SCENARIO, DiscoverNothingFound::bind, EMPTY_LIBRARY,
                 new Application(ForkOperation.MOVE_CARD,
                         fork -> new EmptyLibraryOperation(fork.player("player")))
-                        .forcing(ForcedPlay.cast("player", "discoverer")));
+                        .forcing(ForcedPlay.cast("player", "discoverer").playing(DISCOVERING)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -55,7 +60,7 @@ public final class DiscoverNothingFound {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        Optional<Card> discoverer = Boards.acting(active, ApiType.Discover);
+        Optional<Card> discoverer = Boards.acting(active, DISCOVERING);
         if (active.getCardsIn(ZoneType.Library).isEmpty()) {
             return Optional.empty();
         }

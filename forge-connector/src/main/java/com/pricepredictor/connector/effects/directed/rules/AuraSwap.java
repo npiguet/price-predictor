@@ -83,11 +83,19 @@ public final class AuraSwap {
             return Optional.empty();
         }
         return active.getCardsIn(ZoneType.Battlefield).stream()
-                .filter(aura -> aura.isAura() && swappable(aura, active)
-                        && aura.getEntityAttachedTo() instanceof Card host && host.isCreature()
-                        && !host.hasKeyword(Keyword.PROTECTION))
+                .filter(aura -> aura.isAura() && swappable(aura, active) && onUnprotectedCreature(aura))
                 .findFirst()
                 .map(aura -> Binding.empty().with("player", active).with("card", hand.get(0)).with("aura", aura));
+    }
+
+    /**
+     * Whether the Aura is attached to a creature without protection: Holy
+     * Strength (enchant creature, white), which the variant puts in hand,
+     * can then enchant it, whatever the protection's quality would say.
+     */
+    private static boolean onUnprotectedCreature(Card aura) {
+        return aura.getEntityAttachedTo() instanceof Card host && host.isCreature()
+                && !host.hasKeyword(Keyword.PROTECTION);
     }
 
     /**
@@ -102,9 +110,11 @@ public final class AuraSwap {
     /**
      * The one Aura card in the active player's hand and an attached Aura it
      * could exchange with, read at the start of its main phase: an Aura with
-     * Aura swap whose cost it has the lands for, whose host the hand's Aura
-     * can enchant ({@code fits}) or cannot. 702.65b's board, with
-     * {@code fits} false.
+     * Aura swap whose cost it has the lands for, on a creature without
+     * protection ({@link #onUnprotectedCreature}, so a failed exchange is the
+     * hand's Aura's enchant restriction and Holy Strength put in its place
+     * fits), whose host the hand's Aura can enchant ({@code fits}) or cannot.
+     * 702.65b's board, with {@code fits} false.
      */
     static Optional<Binding> find(Game live, boolean fits) {
         if (!Boards.atMainPhase(live)) {
@@ -117,8 +127,8 @@ public final class AuraSwap {
         }
         Card card = aurasInHand.get(0);
         return active.getCardsIn(ZoneType.Battlefield).stream()
-                .filter(aura -> aura.isAura() && aura.isAttachedToEntity() && swappable(aura, active)
-                        && aura.getEntityAttachedTo().canBeAttached(card, null) == fits)
+                .filter(aura -> aura.isAura() && swappable(aura, active) && onUnprotectedCreature(aura))
+                .filter(aura -> aura.getEntityAttachedTo().canBeAttached(card, null) == fits)
                 .findFirst()
                 .map(aura -> Binding.empty().with("player", active).with("card", card).with("aura", aura));
     }

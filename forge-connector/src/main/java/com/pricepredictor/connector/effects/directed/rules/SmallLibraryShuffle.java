@@ -56,7 +56,7 @@ public final class SmallLibraryShuffle {
         return DirectedRule.of(RULE, SCENARIO, SmallLibraryShuffle::bind, ZERO_CARDS,
                 new Application(ForkOperation.MOVE_CARD,
                         fork -> MoveCardOperation.move(fork.card("card"), ZoneType.Graveyard, null))
-                        .forcing(ForcedPlay.cast("searcher", "spell")));
+                        .forcing(ForcedPlay.cast("searcher", "spell").playing(Boards.LIBRARY_SEARCH_SPELL)));
     }
 
     static Optional<Binding> bind(Game live) {

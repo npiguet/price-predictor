@@ -1,10 +1,13 @@
 package com.pricepredictor.connector.effects.directed.rules;
 
+import com.pricepredictor.connector.effects.PlayabilityVerdict;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.operations.ReplaceCardOperation;
 import forge.game.Game;
 import forge.game.ability.AbilityFactory;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
+import forge.game.card.CardState;
 import forge.game.combat.Combat;
 import forge.game.cost.Cost;
 import forge.game.keyword.Keyword;
@@ -24,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Predicate;
 
 /**
  * What the board preconditions read off a live game, in the words the
@@ -189,9 +191,45 @@ final class Boards {
                 .orElseThrow(() -> new IllegalStateException("no other player"));
     }
 
-    /** Whether {@code player} has as many untapped lands as {@code card}'s mana value: a cheap bound on casting it. */
+    /**
+     * Whether {@code player} can pay one of {@code card}'s own casts
+     * ({@link ForcedPlay.Line#SPELL}) now, colours included
+     * ({@link #affordable(Player, SpellAbility)}).
+     */
     static boolean affordable(Player player, Card card) {
-        return card.getCMC() <= untappedLands(player);
+        return card.getSpells().stream().anyMatch(spell -> ForcedPlay.Line.SPELL.matches(spell)
+                && affordable(player, spell));
+    }
+
+    /**
+     * Whether {@code player} can pay {@code ability}'s cost now, by the rules
+     * the collector's playability reads ({@link PlayabilityVerdict#affordable}):
+     * the mana its sources make, colours included, and the additional costs.
+     * Asked of a copy activated by {@code player}, so the live ability stays
+     * as it is; a cost that cannot be read on this board is not affordable.
+     */
+    static boolean affordable(Player player, SpellAbility ability) {
+        try {
+            return PlayabilityVerdict.affordable(asPlayedBy(ability, player), player);
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /** A copy of {@code ability} as {@code player} would play it: what a precondition asks questions of. */
+    static SpellAbility asPlayedBy(SpellAbility ability, Player player) {
+        return ability.copy(ability.getHostCard(), player, true);
+    }
+
+    /**
+     * How much mana one activation of the permanent's most productive mana
+     * ability makes: two for a bounce land, two for Sol Ring, one for a basic
+     * land.
+     */
+    static int manaUnits(Card source) {
+        return source.getManaAbilities().stream()
+                .mapToInt(ability -> ability.amountOfManaGenerated(true))
+                .max().orElse(0);
     }
 
     /**
@@ -234,13 +272,17 @@ final class Boards {
         return cost == null || cost.getTotalMana() == null ? 0 : cost.getTotalMana().getCMC();
     }
 
+    /** A spell of the card that searches a library ({@link #searches}), the line its forced cast plays. */
+    static final ForcedPlay.Line LIBRARY_SEARCH_SPELL = ForcedPlay.Line.spell("library search", Boards::searches);
+
     /**
      * The cards in {@code player}'s hand it has the mana for whose spell
-     * searches its library and that it can cast at this boundary
-     * ({@link #castableAtItsSpeed}: a sorcery only as the active player).
+     * searches its library ({@link #LIBRARY_SEARCH_SPELL}) and that it can
+     * cast at this boundary ({@link #castableAtItsSpeed}: a sorcery only as
+     * the active player).
      */
     static List<Card> searchersInHand(Player player) {
-        return castableInHand(player, Boards::searches).stream()
+        return castableInHand(player, LIBRARY_SEARCH_SPELL).stream()
                 .filter(card -> castableAtItsSpeed(player, card))
                 .toList();
     }
@@ -252,14 +294,21 @@ final class Boards {
     }
 
     /**
-     * The cards in {@code player}'s hand it has the mana to cast
-     * ({@link #affordable}) with a spell {@code spell} accepts.
+     * The spells of the cards in {@code player}'s hand that are {@code line}
+     * and that it has the mana for ({@link #affordable(Player, SpellAbility)}),
+     * in hand order. A variant forcing the cast forces the same line, so a
+     * split card's matching half is the one cast.
      */
-    static List<Card> castableInHand(Player player, Predicate<SpellAbility> spell) {
+    static List<SpellAbility> castableSpellsInHand(Player player, ForcedPlay.Line line) {
         return player.getCardsIn(ZoneType.Hand).stream()
-                .filter(card -> affordable(player, card))
-                .filter(card -> card.getSpells().stream().anyMatch(spell))
+                .flatMap(card -> card.getSpells().stream())
+                .filter(spell -> line.matches(spell) && affordable(player, spell))
                 .toList();
+    }
+
+    /** The cards of {@link #castableSpellsInHand}, each once, in hand order. */
+    static List<Card> castableInHand(Player player, ForcedPlay.Line line) {
+        return castableSpellsInHand(player, line).stream().map(SpellAbility::getHostCard).distinct().toList();
     }
 
     /** The costs of the card's instances of {@code keyword} (Transmute, Unearth, Suspend), in the card's order. */
@@ -284,20 +333,27 @@ final class Boards {
     }
 
     /**
-     * Whether one of the card's spells, or the ability one of its triggers
-     * executes, has {@code api} at its root: a card that explores, connives or
-     * discovers as it resolves or as it enters.
+     * The card's own cast of a spell that acts with {@code api}, an
+     * {@code ApiType} name: the spell has it at its root, or the permanent it
+     * makes has a trigger executing it (a creature that explores, connives or
+     * discovers as it enters). Named by string: the registry builds it where
+     * Forge is not initialised.
      */
-    static boolean acts(Card card, ApiType api) {
-        return card.getSpells().stream().anyMatch(spell -> spell.getApi() == api)
-                || card.getTriggers().stream().anyMatch(trigger -> api.name().equals(api(executed(trigger))));
+    static ForcedPlay.Line acting(String api) {
+        return ForcedPlay.Line.spell(api, spell -> acts(spell, api));
     }
 
-    /** The first card {@code player} holds and has the lands for ({@link #affordable}) that {@link #acts} with {@code api}. */
-    static Optional<Card> acting(Player player, ApiType api) {
-        return player.getCardsIn(ZoneType.Hand).stream()
-                .filter(card -> affordable(player, card) && acts(card, api))
-                .findFirst();
+    private static boolean acts(SpellAbility spell, String api) {
+        if (spell.getApi() != null && spell.getApi().name().equals(api)) {
+            return true;
+        }
+        CardState state = spell.getCardState();
+        return state != null && state.getTriggers().stream().anyMatch(trigger -> api.equals(api(executed(trigger))));
+    }
+
+    /** The first card {@code player} holds with a castable spell of {@code line} ({@link #castableInHand}). */
+    static Optional<Card> acting(Player player, ForcedPlay.Line line) {
+        return castableInHand(player, line).stream().findFirst();
     }
 
     /** Whether a permanent on the battlefield has a trigger of {@code mode} (Explores, Connives, Discover). */
