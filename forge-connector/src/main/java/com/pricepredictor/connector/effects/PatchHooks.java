@@ -387,6 +387,10 @@ public final class PatchHooks {
             TRIGGER_HANDLER, "getPendingDelayedTriggers",
             "a snapshot's delayed_triggers and the links naming what each "
             + "is pending on; a fork copy's delayed triggers");
+    static final Hook SIMULTANEOUS_STACK_ENTRIES = new Hook(
+            MAGIC_STACK, "getSimultaneousStackEntries",
+            "the collector's own enumeration at a priority stop taking off the triggers it "
+            + "queued, and none the game had queued before it");
     static final Hook STATE_BASED_LOOP_LISTENER = new Hook(
             PHASE_HANDLER, "setEffectRecordStateBasedLoopListener",
             "the state-based loop's extent: a resolution's held effect half "
@@ -449,7 +453,8 @@ public final class PatchHooks {
             PT_WITHOUT, CONTROLLER_WITHOUT, TRAITS_WITHOUT,
             CHANGED_NAMES, COPY_SOURCE, COPIED_PERMANENT, CLONE_PRINTER, PRIOR_CONTROLLER, PRIOR_SICKNESS,
             LEND_TYPE, SET_ASIDE_COLORS, ASSIGNED_DAMAGE, CONFIRM_LISTENER, OUTCOME_LISTENER,
-            PENDING_DELAYED_TRIGGERS, STATE_BASED_LOOP_LISTENER, PRIORITY_SETTLED_LISTENER,
+            PENDING_DELAYED_TRIGGERS, SIMULTANEOUS_STACK_ENTRIES, STATE_BASED_LOOP_LISTENER,
+            PRIORITY_SETTLED_LISTENER,
             CAST_LISTENER, RESOLUTION_LISTENER, PAYMENT_LISTENER);
 
     /**

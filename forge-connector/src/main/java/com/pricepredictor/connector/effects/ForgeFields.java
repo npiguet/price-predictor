@@ -10,7 +10,6 @@ import forge.game.card.CardState;
 import forge.game.card.ICardTraitChanges;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
-import forge.game.zone.MagicStack;
 import forge.util.collect.FCollection;
 
 import java.lang.reflect.Field;
@@ -22,9 +21,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The few engine fields a snapshot, or the enumeration's scope, reads that
- * Forge declares private and offers no side-effect-free getter for. It
- * writes none: what a continuous
+ * The few engine fields a snapshot reads that Forge declares private and
+ * offers no side-effect-free getter for. It writes none: what a continuous
  * record lends the live board for a read goes through the branch's own
  * methods ({@link PatchHooks#LEND_TYPE}, {@link PatchHooks#SET_ASIDE_COLORS}).
  *
@@ -49,11 +47,6 @@ import java.util.concurrent.ConcurrentHashMap;
  *       keyed (timestamp, static id), from which Forge computes every
  *       colour read and caches none; read by the tests that check a lend
  *       of a continuous record's board put every change back.</li>
- *   <li>{@code MagicStack.simultaneousStackEntryList}: the triggered
- *       abilities waiting for the stack, which stock Forge offers no getter
- *       for; read, never written, so the collector's own enumeration can
- *       take off what it queued ({@link QueuedTriggers}) through Forge's
- *       public methods.</li>
  * </ul>
  */
 final class ForgeFields {
@@ -81,16 +74,6 @@ final class ForgeFields {
             return effect;
         }
         return null;
-    }
-
-    /**
-     * A copy of the triggered abilities waiting to be put on {@code stack},
-     * in order, or null: {@code MagicStack.simultaneousStackEntryList}, which
-     * stock Forge hands out to no one.
-     */
-    static List<SpellAbility> simultaneousStackEntries(MagicStack stack) {
-        return read(MagicStack.class, "simultaneousStackEntryList", stack) instanceof List<?> queued
-                ? queued.stream().map(SpellAbility.class::cast).toList() : null;
     }
 
     /** The card's layer-4 type changes keyed (timestamp, static id), or null. */
