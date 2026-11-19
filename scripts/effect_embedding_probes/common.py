@@ -40,9 +40,8 @@ from _lib.paths import REPO
 
 from effects.domain import default_paths
 
-# These probe scripts predate the artifact layout: the paths below are theirs
-# alone now (the effects package keeps no default for them) and are the next
-# thing to become required flags.
+# The converted trees are sources, the one default these scripts keep; every
+# path they write or read from a run (checkpoint, cache, reports) is a flag.
 DEFAULT_CARDS_FOLDERS = tuple(REPO / folder for folder in default_paths.DEFAULT_CARDS_FOLDERS)
 SEED = 42
 
