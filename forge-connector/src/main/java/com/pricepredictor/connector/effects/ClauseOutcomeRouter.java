@@ -33,10 +33,13 @@ final class ClauseOutcomeRouter {
     private final LiveGame live;
     /** The bracket this game's clause events are filed into. */
     private final BusBracketCollector bracket;
+    /** Told each clause's end, to close a mana activation whose effect never reported its mana. */
+    private final ManaChannel mana;
 
-    ClauseOutcomeRouter(LiveGame live, BusBracketCollector bracket) {
+    ClauseOutcomeRouter(LiveGame live, BusBracketCollector bracket, ManaChannel mana) {
         this.live = live;
         this.bracket = bracket;
+        this.mana = mana;
     }
 
     // ── clause events (an API's own parameters) ─────────────────────────
@@ -140,6 +143,7 @@ final class ClauseOutcomeRouter {
             return;
         }
         FloatingEffects.of(live.game()).clauseResolved(live.game(), clause);
+        mana.clauseResolved(clause);
         // Filed into the half the clause resolved in: a later mode's first
         // clause has not begun yet (A1).
         bracket.recordClauseCondition(clause, ConditionsMet.of(clause, run));

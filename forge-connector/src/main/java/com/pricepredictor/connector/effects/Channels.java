@@ -60,7 +60,7 @@ record Channels(
                 playability,
                 candidates,
                 mana,
-                new ClauseOutcomeRouter(live, bracket),
+                new ClauseOutcomeRouter(live, bracket, mana),
                 new ContinuousChannel(live, context, dedup),
                 new PhaseSignals(live, PhaseSignals.Sink.both(
                         PhaseSignals.Sink.both(bracket.phaseSink(), candidates.sink()),

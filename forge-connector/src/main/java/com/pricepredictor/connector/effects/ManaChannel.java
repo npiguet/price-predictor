@@ -224,6 +224,20 @@ final class ManaChannel implements BusBracketCollector.EventTap {
                 .param("mana_by_color", byColor);
     }
 
+    /**
+     * A clause's own effect is over. A mana ability's root clause ending with
+     * its activation still pending is one whose effect never reported its mana:
+     * Forge skips the mana hook when the mana string is empty (a noted type
+     * nothing noted) and when a {@code ProduceMana} replacement prevents the
+     * mana. The activation is over all the same, and writes its taps and
+     * payments as the zero-mana case does.
+     */
+    void clauseResolved(SpellAbility clause) {
+        if (pending.containsKey(clause) && clause.getRootAbility() == clause) {
+            produced(clause, live.playerIdOrActive(clause.getActivatingPlayer()), "", null);
+        }
+    }
+
     /** Route the mana the engine reported; {@code event} is null for zero mana. */
     private void made(SpellAbility ability, String player, String produced, EffectEvent event) {
         // A fork's own mana abilities can resolve through the inline path

@@ -19,6 +19,7 @@ import java.util.List;
 import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
 import static com.pricepredictor.connector.effects.RecordLines.events;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -155,5 +156,29 @@ class ManaRecordEffectsTest {
         assertEquals(List.of("tapped", "mana_produced"), eventTypes(cradleRecords.get(1)),
                 cradleRecords.toString());
         assertStamped(events(cradleRecords.get(1)).get(1), "root", cradleRecords.get(1));
+    }
+
+    /**
+     * Jeweled Amulet with a charge counter and nothing noted: its mana string
+     * is empty, so Forge's mana effect skips the mana hook. No real card has a
+     * {@code ProduceMana} replacement that prevents the mana (every one in the
+     * card scripts updates it with {@code ReplaceMana}), so that skip is not
+     * played here; both skips end at the same clause signal.
+     */
+    @Test
+    void aManaAbilityWhoseManaStringIsEmptyStillWritesItsRecordOnce() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player you = game.getPlayers().get(0);
+        Card amulet = TestBoard.inPlay(game, you, "Jeweled Amulet");
+        amulet.addCounterInternal(forge.game.card.CounterEnumType.CHARGE, 1, you, false, null, java.util.Map.of());
+        SpellAbility mana = amulet.getManaAbilities().get(0);
+        mana.setActivatingPlayer(you);
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () ->
+                assertTrue(ComputerUtil.playNoStack(you, mana, game, false), "the AI paid it"));
+
+        String record = manaRecordOf(records, "cardsfolder/j/jeweled_amulet.txt");
+        assertTrue(eventTypes(record).contains("tapped"), record);
+        assertFalse(eventTypes(record).contains("mana_produced"), record);
     }
 }
