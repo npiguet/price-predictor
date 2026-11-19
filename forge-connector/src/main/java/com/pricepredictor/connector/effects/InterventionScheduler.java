@@ -4,6 +4,7 @@ import forge.game.Game;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.cost.Cost;
+import forge.game.cost.CostUntap;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.AbilityStatic;
@@ -477,7 +478,7 @@ final class InterventionScheduler {
      * is not forced.
      */
     static boolean playableNow(SpellAbility candidate, Player holder) {
-        if (!givesPriority(phaseOf(holder)) || unpayable(candidate)) {
+        if (!givesPriority(phaseOf(holder)) || cannotBePlayedAtAll(candidate)) {
             return false;
         }
         try {
@@ -486,6 +487,29 @@ final class InterventionScheduler {
         } catch (RuntimeException e) {
             return false;
         }
+    }
+
+    /** Whether no cost accounts for what bars the line: a spell with no mana cost, or its source ({@link #barredBySource}). */
+    private static boolean cannotBePlayedAtAll(SpellAbility candidate) {
+        return unpayable(candidate) || barredBySource(candidate);
+    }
+
+    /**
+     * Whether its source bars the line, which no cost accounts for: Forge
+     * models summoning sickness (302.6) inside the {@code {T}} and {@code {Q}}
+     * costs' {@code canPay}, so the verdict fails only {@code cost} for a
+     * sick creature, and a detained or suppressed source fails only {@code
+     * cost} when an additional cost cannot be paid either.
+     */
+    private static boolean barredBySource(SpellAbility candidate) {
+        Card host = candidate.getHostCard();
+        Cost cost = candidate.getPayCosts();
+        if (host == null || !candidate.isActivatedAbility()) {
+            return false;
+        }
+        boolean sickAndTaps = cost != null && host.isAbilitySick()
+                && (cost.hasTapCost() || cost.hasSpecificCostType(CostUntap.class));
+        return sickAndTaps || host.isDetained() || candidate.isSuppressed();
     }
 
     /** The step {@code holder}'s game is in, or null where it has none. */

@@ -330,6 +330,41 @@ class InterventionSchedulerTest {
     }
 
     /**
+     * Summoning sickness (302.6) restricts activation: Forge models it in the
+     * tap cost's {@code canPay}, so the verdict fails only {@code cost} for a
+     * creature cast this turn, which is no cost. Forced the next turn.
+     */
+    @Test
+    void aSummoningSickCreaturesTapAbilityIsNotForcedUntilItIsNotSick() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN2);
+        Player you = game.getPlayers().get(0);
+        Card sorcerer = TestBoard.onBattlefield(game, you, "Prodigal Sorcerer");
+        SpellAbility ping = InterventionScheduler.forcedFrom(sorcerer, ZoneType.Battlefield).get(0);
+
+        assertTrue(sorcerer.isAbilitySick(), "cast this turn");
+        assertFalse(InterventionScheduler.playableNow(ping, you), "its {T} ability the turn it entered");
+        sorcerer.setSickness(false);
+        assertTrue(InterventionScheduler.playableNow(ping, you), "the next turn");
+    }
+
+    /** A detained source's ability is refused whatever its additional costs. */
+    @Test
+    void aDetainedSourcesAbilityIsNotForcedWhateverItsAdditionalCosts() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN2);
+        Player you = game.getPlayers().get(0);
+        Player other = game.getPlayers().get(1);
+        you.getZone(ZoneType.Hand).removeAllCards(true);
+        Card goblin = TestBoard.inPlay(game, you, "Rummaging Goblin");
+        SpellAbility loot = InterventionScheduler.forcedFrom(goblin, ZoneType.Battlefield).get(0);
+
+        assertTrue(InterventionScheduler.playableNow(loot, you), "undetained, the empty hand costs only");
+        goblin.detain(other);
+        assertFalse(InterventionScheduler.playableNow(loot, you), "detained, discard unpayable");
+        TestBoard.inHand(game, you, "Forest");
+        assertFalse(InterventionScheduler.playableNow(loot, you), "detained, discard payable");
+    }
+
+    /**
      * Karn Liberated's restart resets the JVM-wide trigger id counter
      * ({@code RestartGameEffect} calls {@code Trigger.resetIDs()}), which a
      * fork would do under the live game: the line is never forced.

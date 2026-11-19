@@ -542,7 +542,7 @@ position a card left a library from, and a search of another player's library.
   board holds an attacker. It is forced only where its own restrictions let its holder play it,
   its cost aside: its timing (a sorcery-speed line in a main phase of its holder's turn), the
   steps and turns its script names (`ActivationPhases$`, `PlayerTurn$`), its script's conditions
-  (`IsPresent$`), its activation limits and a static forbidding it. A spell whose mana cost is no
+  (`IsPresent$`), its activation limits, a static forbidding it, and its source (not a creature's `{T}` or `{Q}` ability the turn it entered, not a detained or suppressed source's). A spell whose mana cost is no
   cost and a special action are never forced, nor a line whose resolution reads what its cost
   paid (a sacrificed or discarded card, the mana spent, converge), which no forced resolution
   pays. Among the lines a step can force, the one forced is
