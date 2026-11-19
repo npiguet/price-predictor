@@ -6,6 +6,7 @@ import com.pricepredictor.connector.effects.directed.KeptRecords;
 import forge.game.Game;
 import forge.game.event.GameEventTurnPhase;
 import forge.game.phase.PhaseType;
+import forge.game.spellability.SpellAbility;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -147,7 +148,7 @@ public final class GameRecording implements AutoCloseable {
         // taken on a run taking interventions, and only there.
         this.interventions = forking
                 ? Optional.of(new InterventionScheduler(
-                        game, new InterventionFork(game, forkContext, budget, seed),
+                        game, new InterventionFork(game, this, budget, seed),
                         caps.interventionsPerGame() > 0
                                 ? new ProtectionFork(game, budget, playForward, seed) : null,
                         decks.steered(),
@@ -211,6 +212,11 @@ public final class GameRecording implements AutoCloseable {
     GameRecording forkRecording(
             Game fork, Consumer<EffectRecord> flags, Consumer<String> held, long seed, KeptRecords kept) {
         return new GameRecording(fork, envelope.forFork(flags, held, kept), caps, seed);
+    }
+
+    /** The link a cast or activated item's halves carry in this game's records. */
+    String linkOf(SpellAbility item) {
+        return BusBracketCollector.linkOf(envelope.gameId(), item);
     }
 
     /** Plays forks of this game on to the end of the turn (D4). */

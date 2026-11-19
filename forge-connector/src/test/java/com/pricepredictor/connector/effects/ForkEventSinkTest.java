@@ -3,7 +3,6 @@ package com.pricepredictor.connector.effects;
 import com.google.common.eventbus.Subscribe;
 import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
-import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.event.EventValueChangeType;
 import forge.game.event.GameEvent;
@@ -20,7 +19,6 @@ import forge.game.event.GameEventTurnPhase;
 import forge.game.event.GameEventZone;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
-import forge.game.spellability.SpellAbility;
 import forge.game.zone.Zone;
 import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
@@ -37,11 +35,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What a fork hears, and how a move is read.
+ * What a damage-step probe's fork hears, and how a move is read.
  *
- * <p>Two properties meet here. A fork hears every bus event the observed
- * records use, so a forked draw or pump records what it did rather than an
- * empty event list that reads as "the ability did nothing". And a move is read
+ * <p>Two properties meet here. A probe hears every bus event the observed
+ * records use, so its damage step records what it did rather than an empty
+ * event list that reads as "nothing happened". And a move is read
  * once, from the event that carries both ends, rather than as three per-zone
  * events, one of them naming a destination the card never reached.
  */
@@ -68,10 +66,10 @@ class ForkEventSinkTest {
     /**
      * Events that describe the shape of a game rather than an outcome.
      *
-     * <p>A fork has no cast, no resolution it did not force, no phase, no
-     * combat end, no land played, no priority, no player action at priority
-     * and no end of the game: it is created, one ability is made to resolve,
-     * and it is thrown away. The observed side hears a land played only as
+     * <p>A probe's fork has no cast, no resolution, no phase, no combat
+     * end, no land played, no priority, no player action at priority and no
+     * end of the game: it is created, one damage step is dealt, and it is
+     * thrown away. The observed side hears a land played only as
      * the boundary that writes a held resolution, a priority only as a
      * boundary no cast is under way across, and any event at all only to
      * notice that a player's action has begun ({@link GameEvent}).
@@ -124,7 +122,7 @@ class ForkEventSinkTest {
         Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player you = game.getPlayers().get(0);
         Card bears = TestBoard.inPlay(game, you, "Grizzly Bears");
-        ForkEventSink sink = ForkEventSink.forCast(game, TestBoard.spellOf(bears, you));
+        ForkEventSink sink = ForkEventSink.forProbe(game);
 
         sink.onZone(new GameEventZone(ZoneType.Battlefield, you, EventValueChangeType.Added, bears));
         sink.onZone(new GameEventZone(ZoneType.Hand, you, EventValueChangeType.Removed, bears));
@@ -139,8 +137,8 @@ class ForkEventSinkTest {
     }
 
     /** Push one completed move through a sink and read back what it filed. */
-    private static EffectEvent filedMove(SpellAbility acting) {
-        ForkEventSink sink = ForkEventSink.forCast(null, acting);
+    private static EffectEvent filedMove() {
+        ForkEventSink sink = ForkEventSink.forProbe(null);
         sink.onCardChangeZone(new GameEventCardChangeZone(
                 TestCards.build("Mountain"),
                 zone(ZoneType.Hand), zone(ZoneType.Battlefield)));
@@ -162,31 +160,11 @@ class ForkEventSinkTest {
      */
     @Test
     void aForkEventNamesWhereItCameFrom() {
-        String json = filedMove(null).toJson();
+        String json = filedMove().toJson();
 
         assertFalse(json.contains("\"attributed_to\":null"), json);
         assertTrue(json.contains("\"attributed_to\":\"unresolved\""), json);
         assertTrue(json.contains("\"duration\":\"instant\""), json);
-    }
-
-    /**
-     * And the acting line the fork forced is the line it reads against.
-     *
-     * <p>Duration is the half of the stamp a unit test can steer without a
-     * resolving thread: it falls back to the root line's own {@code Duration$},
-     * so a permanent-duration line reaching the sink is visible in the event it
-     * files. A sink that ignored its acting line would say {@code instant}.
-     */
-    @Test
-    void theForcedLineIsTheOneAForkEventIsReadAgainst() {
-        SpellAbility pump = AbilityFactory.getAbility(
-                "AB$ Pump | Cost$ 1 | Defined$ Self | NumAtt$ 2 | NumDef$ 2"
-                        + " | Duration$ Permanent",
-                TestCards.build("Fountain of Youth"));
-
-        String json = filedMove(pump).toJson();
-
-        assertTrue(json.contains("\"duration\":\"permanent\""), json);
     }
 
     // ── damage reads as the observed side reads it ──────────────────────
@@ -197,20 +175,6 @@ class ForkEventSinkTest {
                 TestCards.build("Grizzly Bears").getView(), source.getView(), 2,
                 GameEventCardDamaged.DamageType.Normal));
         return sink.events().get(0).toJson();
-    }
-
-    /**
-     * A forced resolution's damage is not combat damage, and names the
-     * permanent the bus says dealt it, as the observed record does.
-     */
-    @Test
-    void anInterventionsDamageIsNotCombatAndNamesItsSource() {
-        Card source = TestCards.build("Prodigal Pyromancer");
-
-        String json = filedDamage(ForkEventSink.forCast(null, null), source);
-
-        assertTrue(json.contains("\"combat\":false"), json);
-        assertTrue(json.contains("\"cause\":\"E" + source.getId() + "\""), json);
     }
 
     /** A damage-step probe deals combat damage, and says so. */
@@ -234,32 +198,22 @@ class ForkEventSinkTest {
         return types;
     }
 
-    /**
-     * Repeats are recognised within one chosen mode, as the live bracket
-     * recognises them within one mode's half: a transition repeated by the
-     * next mode is that mode's own event and is kept. What is filed before
-     * the first mode's clause shares the first mode's half, as it does live.
-     */
+    /** A transition repeated within the probe's damage step is filed once, as the observed combat bracket files it. */
     @Test
-    void aRepeatIsRecognisedWithinOneModeOnly() {
-        ForkEventSink sink = ForkEventSink.forCast(null, null);
-        Card bears = TestCards.build("Grizzly Bears");
-        GameEventCardTapped tap = new GameEventCardTapped(bears, true);
+    void aRepeatIsRecognisedWithinTheStep() {
+        ForkEventSink sink = ForkEventSink.forProbe(null);
+        GameEventCardTapped tap = new GameEventCardTapped(TestCards.build("Grizzly Bears"), true);
 
-        sink.onTapped(tap);
-        sink.beginMode(null, null);
-        sink.onTapped(tap);
-        sink.beginMode(null, null);
         sink.onTapped(tap);
         sink.onTapped(tap);
 
-        assertEquals(List.of(EventType.TAPPED, EventType.TAPPED), types(sink));
+        assertEquals(List.of(EventType.TAPPED), types(sink));
     }
 
     /** A quantitative repeat is two occurrences, and both are kept. */
     @Test
     void aRepeatedDamageIsKept() {
-        ForkEventSink sink = ForkEventSink.forCast(null, null);
+        ForkEventSink sink = ForkEventSink.forProbe(null);
         Card bears = TestCards.build("Grizzly Bears");
         Card source = TestCards.build("Prodigal Pyromancer");
 
@@ -298,158 +252,5 @@ class ForkEventSinkTest {
 
         assertEquals(List.of(EventType.TAPPED, EventType.ZONE_CHANGE, EventType.TAPPED),
                 types(sink));
-    }
-
-    // ── a forced death joins its half, and is checked there ─────────────
-
-    /** The Pyroclasm a fork forces in these tests, in its caster's hand. */
-    private static SpellAbility pyroclasm(Game game) {
-        forge.game.player.Player caster = game.getPlayers().get(0);
-        SpellAbility forced = TestBoard.inHand(game, caster, "Pyroclasm").getFirstSpellAbility();
-        forced.setActivatingPlayer(caster);
-        return forced;
-    }
-
-    /**
-     * A sink for {@code forced}, set up as InterventionFork forces it: listening
-     * before the cast, whose cast event ends the pre-push window, and with
-     * the stack resolving, so what it hears next is the forced resolution's.
-     */
-    private static ForkEventSink resolving(Game game, SpellAbility forced) {
-        ForkEventSink sink = ForkEventSink.forCast(game, forced);
-        game.subscribeToEvents(sink);
-        game.getStack().add(forced);
-        sink.castAs(forced, null);
-        game.getStack().setResolving(true);
-        return sink;
-    }
-
-    /** Each held half's event types, in order. */
-    private static List<List<EventType>> halfTypes(ForkEventSink sink) {
-        List<List<EventType>> halves = new ArrayList<>();
-        for (HeldHalves.Half<ModeSplit.ModeHalf> half : sink.halves()) {
-            halves.add(types(half.events()));
-        }
-        return halves;
-    }
-
-    /**
-     * A forced death is refused by the half it joins when that half already
-     * carries its line, as live. Mode 0 publishes the bears' move and mode 1
-     * only taps the elves, so {@code halfForDeath} files the death into mode
-     * 0's half, where the live collector refuses the repeat. The open span
-     * when the death arrives is mode 1's, which has no such line.
-     */
-    @Test
-    void aForcedDeathRepeatingItsOwnHalfsLineIsDropped() {
-        Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
-        Card bears = TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
-        Card elves = TestBoard.inPlay(game, game.getPlayers().get(1), "Llanowar Elves");
-        SpellAbility forced = pyroclasm(game);
-        ForkEventSink sink = resolving(game, forced);
-        GameEventCardChangeZone dies = new GameEventCardChangeZone(
-                bears, zone(ZoneType.Battlefield), zone(ZoneType.Graveyard));
-
-        sink.beginMode(0, null);
-        sink.onCardChangeZone(dies);
-        sink.beginMode(1, null);
-        sink.onTapped(new GameEventCardTapped(elves, true));
-        sink.onResolved(new GameEventSpellResolved(forced, false));
-        duringStateBasedCheck(game, () -> sink.onCardChangeZone(dies));
-
-        assertEquals(List.of(List.of(EventType.ZONE_CHANGE), List.of(EventType.TAPPED)),
-                halfTypes(sink));
-    }
-
-    /**
-     * A forced death repeating another half's line is kept, as live. Mode 0
-     * publishes the bears' move and mode 1 damages them, so the death joins
-     * mode 1's half, the last to name the bears, which has no such line.
-     */
-    @Test
-    void aForcedDeathRepeatingAnotherHalfsLineIsKept() {
-        Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
-        Card bears = TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
-        Card source = TestCards.build("Prodigal Pyromancer");
-        SpellAbility forced = pyroclasm(game);
-        ForkEventSink sink = resolving(game, forced);
-        GameEventCardChangeZone dies = new GameEventCardChangeZone(
-                bears, zone(ZoneType.Battlefield), zone(ZoneType.Graveyard));
-
-        sink.beginMode(0, null);
-        sink.onCardChangeZone(dies);
-        sink.beginMode(1, null);
-        sink.onCardDamaged(new GameEventCardDamaged(bears.getView(), source.getView(), 1,
-                GameEventCardDamaged.DamageType.Normal));
-        sink.onResolved(new GameEventSpellResolved(forced, false));
-        duringStateBasedCheck(game, () -> sink.onCardChangeZone(dies));
-
-        assertEquals(List.of(
-                        List.of(EventType.ZONE_CHANGE),
-                        List.of(EventType.DAMAGE_DEALT, EventType.ZONE_CHANGE)),
-                halfTypes(sink));
-    }
-
-    /**
-     * A permanent leaving the battlefield while the tracker is frozen in the
-     * middle of the forced resolution — an end-the-turn effect's own
-     * state-based check, a token or counter batch — is filed as an ordinary
-     * event of the resolution, as live files it into the open bracket: a
-     * repeat in its span is refused, and it is no death for {@code
-     * halfForDeath} to place.
-     */
-    @Test
-    void aLeaveWhileTheForcedAbilityResolvesIsAnOrdinaryEvent() {
-        Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
-        Card bears = TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
-        ForkEventSink sink = resolving(game, pyroclasm(game));
-        GameEventCardChangeZone dies = new GameEventCardChangeZone(
-                bears, zone(ZoneType.Battlefield), zone(ZoneType.Graveyard));
-
-        duringStateBasedCheck(game, () -> {
-            sink.onCardChangeZone(dies);
-            sink.onCardChangeZone(dies);
-        });
-
-        assertEquals(List.of(EventType.ZONE_CHANGE), types(sink));
-    }
-
-    /** A death published twice in one check is still filed once, in the half it joins. */
-    @Test
-    void aForcedDeathPublishedTwiceIsFiledOnce() {
-        Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
-        Card bears = TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
-        SpellAbility forced = pyroclasm(game);
-        ForkEventSink sink = resolving(game, forced);
-        GameEventCardChangeZone dies = new GameEventCardChangeZone(
-                bears, zone(ZoneType.Battlefield), zone(ZoneType.Graveyard));
-
-        sink.onTapped(new GameEventCardTapped(bears, true));
-        sink.onResolved(new GameEventSpellResolved(forced, false));
-        duringStateBasedCheck(game, () -> {
-            sink.onCardChangeZone(dies);
-            sink.onCardChangeZone(dies);
-        });
-
-        assertEquals(List.of(List.of(EventType.TAPPED, EventType.ZONE_CHANGE)),
-                halfTypes(sink));
-    }
-
-    /** Run {@code body} with the game's view tracker frozen, as a state-based check holds it. */
-    private static void duringStateBasedCheck(Game game, Runnable body) {
-        game.getTracker().freeze();
-        try {
-            body.run();
-        } finally {
-            game.getTracker().unfreeze();
-        }
-    }
-
-    private static List<EventType> types(List<EffectEvent> events) {
-        List<EventType> types = new ArrayList<>();
-        for (EffectEvent event : events) {
-            types.add(event.type());
-        }
-        return types;
     }
 }

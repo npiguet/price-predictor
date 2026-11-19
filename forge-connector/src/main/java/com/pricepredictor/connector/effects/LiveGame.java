@@ -13,11 +13,11 @@ import java.util.Map;
  * The game a recording is for, and what every patched hook asks of it.
  *
  * <p>The patched hooks are plain JVM statics with no {@code Game} reference
- * of their own, and a fork fires them too: {@code GameSimulator.resolveStack}
- * resolves a forked ability through the same
- * {@code AbilityUtils.resolveApiAbility} the hooks are installed against.
- * {@link ForkEventSink} keeps a fork's <em>bus</em> events out of this game's
- * records by subscribing to the fork's own {@code Game}, but the hooks are
+ * of their own, and a fork fires them too: a forced resolution resolves a
+ * forked ability through the same {@code AbilityUtils.resolveApiAbility} the
+ * hooks are installed against. A fork's collectors keep its <em>bus</em>
+ * events out of this game's records by subscribing to the fork's own
+ * {@code Game}, but the hooks are
  * not bus subscriptions — without the checks here, a fork's
  * {@code vote_taken} or {@code coin_flipped} lands in the live game's bracket
  * with nothing marking it as hypothetical.

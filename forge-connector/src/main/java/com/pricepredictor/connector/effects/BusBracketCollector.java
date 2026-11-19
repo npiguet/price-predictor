@@ -250,8 +250,8 @@ public final class BusBracketCollector extends BusEventReader {
     /**
      * The resolution hook's listener: the stack's top item starts to resolve
      * (FR-042b). Its effect half's board is read here, before its first
-     * clause; another game's item goes to the fork running on this thread,
-     * if one is ({@link Forks#forkHooks}).
+     * clause. Another game's item is not this game's: a forced
+     * resolution's is its fork-bound recording's ({@link ForcedResolution}).
      */
     PatchHooks.Listener resolutionHandler() {
         return PatchHooks.RESOLUTION_LISTENER.listener((callback, args) -> {
@@ -259,11 +259,8 @@ public final class BusBracketCollector extends BusEventReader {
             if (item == null) {
                 return;
             }
-            boolean fizzled = Boolean.TRUE.equals(args.get(1));
             if (owns(item)) {
-                resolutionStarting(item, fizzled, args.optional(2));
-            } else {
-                Forks.forkHooks().resolutionStarting(item, fizzled, args.optional(2));
+                resolutionStarting(item, Boolean.TRUE.equals(args.get(1)), args.optional(2));
             }
         });
     }
@@ -439,7 +436,12 @@ public final class BusBracketCollector extends BusEventReader {
         }
         return new OpenResolution(
                 ability, ProvenanceResolver.resolve(ability), actorOf(ability), atCast,
-                context.gameId() + ".link." + ability.getId(), PaidCosts.of(ability, payments.take(ability)));
+                linkOf(context.gameId(), ability), PaidCosts.of(ability, payments.take(ability)));
+    }
+
+    /** The link a cast or activated item's halves carry in game {@code gameId}: its cost half's. */
+    static String linkOf(String gameId, SpellAbility item) {
+        return gameId + ".link." + item.getId();
     }
 
     /**
@@ -1397,9 +1399,8 @@ public final class BusBracketCollector extends BusEventReader {
             // listener it calls is this game's). args[0] is declared
             // SpellAbility on Forge's side. A refusal of another game's
             // ability, and one naming no ability while a fork that is not
-            // this collector's game runs on this thread, is handed to the
-            // forced resolution listening there (Forks.forkHooks), as the
-            // clause and outcome handlers hand theirs.
+            // this collector's game runs on this thread, is not this
+            // game's: a forced resolution's is its fork-bound recording's.
             if (!Boolean.FALSE.equals(args.get(1))) {
                 return;
             }
@@ -1407,8 +1408,6 @@ public final class BusBracketCollector extends BusEventReader {
             boolean ours = offered != null ? belongsToLiveGame(offered) : ownsNullConfirm();
             if (ours) {
                 noteDeclined();
-            } else {
-                Forks.forkHooks().declined(offered);
             }
         });
     }

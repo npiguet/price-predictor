@@ -587,9 +587,9 @@ class BusBracketCollectorTest {
 
     /**
      * A refusal naming no ability while a fork runs on this thread is the
-     * fork's, not the live game's: it leaves the live bracket resolved and
-     * reaches the forced resolution listening there, as a refusal of the
-     * fork's own ability does.
+     * fork's, not the live game's: it leaves the live bracket resolved, as a
+     * refusal of the fork's own ability does. A forced resolution hears its
+     * own through its fork-bound recording.
      */
     @Test
     void aRefusalNamingNoAbilityInsideAForkIsTheForks() throws IOException {
@@ -599,24 +599,16 @@ class BusBracketCollectorTest {
         BusBracketCollector collector = collector();
         SpellAbility bolt = damageAbility();
         HookShapes.Confirm listener = confirmListener(collector);
-        List<Object> heard = new java.util.ArrayList<>();
-        Forks.ForkHooks hooks = new Forks.ForkHooks() {
-            @Override
-            public void declined(SpellAbility offered) {
-                heard.add(offered == null ? "none" : offered);
-            }
-        };
 
         collector.beginBracket(bolt);
-        Forks.asFork(() -> Forks.listeningForHooks(hooks, () -> {
+        Forks.asFork(() -> {
             listener.onConfirm(null, false);
             listener.onConfirm(forkAbility, false);
             return null;
-        }));
+        });
         collector.endBracket(bolt.getId(), false);
         collector.onNextAction();
 
-        assertEquals(List.of("none", forkAbility), heard);
         assertTrue(written().get(1).contains("\"outcome\":\"resolved\""), written().toString());
     }
 }

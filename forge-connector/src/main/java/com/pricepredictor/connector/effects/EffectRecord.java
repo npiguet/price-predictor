@@ -261,6 +261,11 @@ public final class EffectRecord {
         return recordId;
     }
 
+    /** Whether this is an effect half under {@code link}: one of the halves its item's resolution wrote. */
+    boolean isEffectHalfOf(String link) {
+        return moment == Moment.RESOLUTION && link != null && link.equals(linkId);
+    }
+
     /**
      * The rendered parts of what this record says, for {@link RecordDedup}.
      *

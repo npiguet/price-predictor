@@ -246,21 +246,17 @@ final class ManaChannel implements BusBracketCollector.EventTap {
     /** Route the mana the engine reported; {@code event} is null for zero mana. */
     private void made(SpellAbility ability, String player, String produced, EffectEvent event) {
         // A fork's own mana abilities can resolve through the inline path
-        // too (forceResolution's forced ability, or costs it pays along
-        // the way), and this hook is a JVM static like the others.
+        // too (a forced ability, or costs it pays along the way), and this
+        // hook is a JVM static like the others: the fork's are its
+        // fork-bound recording's.
         if (!live.owns(ability)) {
-            forked(ability, event);
-        } else if (ability.isManaAbility()) {
+            return;
+        }
+        if (ability.isManaAbility()) {
             produced(ability, player, produced, event);
         } else if (event != null && bracket != null) {
             // A resolving spell's or trigger's mana: its effect half's (C3).
             bracket.recordClauseEvent(event);
-        }
-    }
-
-    private static void forked(SpellAbility ability, EffectEvent event) {
-        if (event != null && !ability.isManaAbility()) {
-            Forks.forkHooks().manaProduced(ability, event);
         }
     }
 

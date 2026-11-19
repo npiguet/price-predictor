@@ -327,9 +327,9 @@ final class HeldResolutionWindow {
      * what a combat record's state-based deaths carry too, while {@code
      * cause} is the resolved line's host card: the death is filed because
      * that line caused it, and it is what an interventional fork writes for
-     * the same death, since its sink is still listening when
-     * {@code GameSimulator.resolveStack} runs the check against the forced
-     * ability. One death, one rendering, observed or forced.
+     * the same death, since its fork-bound recording is this same code
+     * ({@link ForcedResolution}). One death, one rendering, observed or
+     * forced.
      *
      * <p>Only while {@link #isHolding}.
      */

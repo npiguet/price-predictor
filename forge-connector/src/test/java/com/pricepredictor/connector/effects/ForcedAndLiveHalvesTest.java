@@ -47,6 +47,9 @@ class ForcedAndLiveHalvesTest {
     @TempDir
     Path tempDir;
 
+    /** The most stack items a live play resolves before the next step: the play and what it set off. */
+    private static final int MAX_ITEMS = 10;
+
     private final java.util.concurrent.atomic.AtomicInteger runs = new java.util.concurrent.atomic.AtomicInteger();
 
     /** A board, built afresh for each side, and the spell or ability its first player plays on it. */
@@ -79,35 +82,44 @@ class ForcedAndLiveHalvesTest {
         throw new AssertionError("no " + name + " in hand");
     }
 
-    /** The effect half of the play resolved live, hooks on. */
-    private String liveHalf(Play play, boolean declining) throws Throwable {
+    /**
+     * The effect halves of the play resolved live, hooks on: the resolution
+     * records under a cost half's link, which a trigger or a copy the play
+     * set off has none of. What the play triggered goes on the stack, and
+     * the stack is resolved until it is empty, each item followed by the
+     * state-based check and the triggers it left, then the next step begins.
+     */
+    private List<String> liveHalves(Play play, boolean declining) throws Throwable {
         Game game = play.board().apply(declining);
         SpellAbility spell = play.pick().apply(game);
         play.liveChoices().accept(spell);
         List<String> records = ShardRun.recordsWithClauseHook(tempDir.resolve("live" + runs.incrementAndGet()), game, WHY, () -> {
             game.getStack().addAndUnfreeze(spell);
-            game.getStack().resolveStack();
-            game.getAction().checkStateEffects(false);
+            game.getStack().addAllTriggeredAbilitiesToStack();
+            for (int items = 0; items < MAX_ITEMS && !game.getStack().isEmpty(); items++) {
+                game.getStack().resolveStack();
+                game.getAction().checkStateEffects(false);
+                game.getStack().addAllTriggeredAbilitiesToStack();
+            }
             TestBoard.nextStep(game);
         });
         List<String> halves = records.stream()
                 .filter(line -> "resolution".equals(parse(line).get("kind"))
-                        && "resolution".equals(parse(line).get("moment")))
+                        && "resolution".equals(parse(line).get("moment"))
+                        && RecordLines.linkOf(line) != null)
                 .toList();
-        assertEquals(1, halves.size(), records.toString());
-        return halves.get(0);
+        assertTrue(!halves.isEmpty(), records.toString());
+        return halves;
     }
 
-    /** The effect half of the same play forced in a fork of the same board. */
-    private String forcedHalf(Play play, boolean declining) throws java.io.IOException {
+    /** The effect halves of the same play forced in a fork of the same board. */
+    private List<String> forcedHalves(Play play, boolean declining) throws java.io.IOException {
         Game game = play.board().apply(declining);
         SpellAbility spell = play.pick().apply(game);
         CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(1).probes(0).build();
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(tempDir.resolve("fork" + runs.incrementAndGet()), game, caps, 1L, spell, WHY);
         assertTrue(fork.wrote(), "the forced play wrote nothing");
-        List<String> records = fork.records();
-        assertEquals(1, records.size(), records.toString());
-        return records.get(0);
+        return fork.records();
     }
 
     private static Map<String, Object> withoutForkMembers(String record) {
@@ -120,18 +132,17 @@ class ForcedAndLiveHalvesTest {
         assertAlike(play, declining, live -> { });
     }
 
-    /** The same, with a check of the live half, which the forced one then matches. */
+    /** The same, with a check of the live halves, which the forced ones then match. */
     private void assertAlike(Play play, boolean declining, Consumer<String> checkLive) throws Throwable {
-        String live = liveHalf(play, declining);
-        checkLive.accept(live);
-        String forced = forcedHalf(play, declining);
-        Map<String, Object> liveMembers = withoutForkMembers(live);
-        Map<String, Object> forcedMembers = withoutForkMembers(forced);
-        for (String member : liveMembers.keySet()) {
-            assertEquals(liveMembers.get(member), forcedMembers.get(member),
-                    play.spell() + ": " + member + "\nlive:   " + live + "\nforced: " + forced);
+        List<String> live = liveHalves(play, declining);
+        live.forEach(checkLive);
+        List<String> forced = forcedHalves(play, declining);
+        assertEquals(live.size(), forced.size(), play.spell() + "\nlive:   " + live + "\nforced: " + forced);
+        for (int index = 0; index < live.size(); index++) {
+            // Member for member: the maps differ in a member or in the members they hold.
+            assertEquals(withoutForkMembers(live.get(index)), withoutForkMembers(forced.get(index)),
+                    play.spell() + "\nlive:   " + live.get(index) + "\nforced: " + forced.get(index));
         }
-        assertEquals(liveMembers.keySet(), forcedMembers.keySet(), play.spell());
     }
 
     private static Game withLibrary(Game game, String card, int count) {
@@ -185,7 +196,7 @@ class ForcedAndLiveHalvesTest {
         }, "Druidic Ritual", spell -> { });
         assertAlike(play, false);
         assertAlike(play, true);
-        assertEquals("declined", RecordLines.payload(liveHalf(play, true)).get("outcome"));
+        assertEquals("declined", RecordLines.payload(liveHalves(play, true).get(0)).get("outcome"));
     }
 
     /** Abzan Charm with no creature out: its one legal mode, draw two and lose 2 life. */
@@ -309,6 +320,136 @@ class ForcedAndLiveHalvesTest {
         assertAlike(play, false, linksAre(List.of(
                 List.of("removed_from_combat", "root"), List.of("control_change", "root"),
                 List.of("control_change", "root"), List.of("zone_change", "unresolved"))));
+    }
+
+    /**
+     * Flame Slash killing the one creature out, the opponent's Grizzly Bears
+     * under the first player's Pacifism: the state-based check that kills
+     * the bears takes the Aura off, and both halves hold its {@code
+     * unattached} (finding 5.1).
+     */
+    @Test
+    void anEnchantedCreatureKilledInTheStateBasedCheck() throws Throwable {
+        Play play = new Play(declining -> {
+            Game game = game(declining);
+            Player caster = game.getPlayers().get(0);
+            Card bears = TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
+            TestBoard.inPlay(game, caster, "Pacifism").attachToEntity(bears, null);
+            TestBoard.inHand(game, caster, "Flame Slash");
+            return game;
+        }, "Flame Slash", aimed -> {
+            aimed.resetTargets();
+            aimed.getTargets().add(aimed.getActivatingPlayer().getOpponents().get(0)
+                    .getCreaturesInPlay().get(0));
+        });
+        assertAlike(play, false, live -> assertTrue(
+                RecordLines.eventTypes(live).contains("unattached"), live));
+    }
+
+    /**
+     * Silumgar's Command with the opponent's Phantasmal Bear the one
+     * permanent out: its one legal pair of modes, return it and -3/-3, both
+     * at the bear, which its own trigger sacrifices before the Command
+     * resolves. The Command fizzles, and each chosen mode writes its own
+     * empty half, the card's move off the stack in the last (finding 5.6).
+     */
+    @Test
+    void aFizzledCharm() throws Throwable {
+        Play play = new Play(declining -> {
+            Game game = game(declining);
+            TestBoard.inPlay(game, game.getPlayers().get(1), "Phantasmal Bear");
+            TestBoard.inHand(game, game.getPlayers().get(0), "Silumgar's Command");
+            return game;
+        }, "Silumgar's Command", spell -> {
+            Card bear = spell.getActivatingPlayer().getOpponents().get(0).getCreaturesInPlay().get(0);
+            for (AbilitySub mode : TestBoard.chain(spell, 1, 2)) {
+                mode.resetTargets();
+                mode.getTargets().add(bear);
+            }
+        });
+        assertEquals(2, liveHalves(play, false).size(), "one half per chosen mode");
+        assertAlike(play, false, live -> assertEquals("fizzled", RecordLines.outcomeOf(live), live));
+    }
+
+    /**
+     * Sundial of the Infinite ending the turn of a player holding eight
+     * cards: the cleanup step it skips to discards one, which is the step's
+     * and not the half's (finding 5.6).
+     */
+    @Test
+    void anEndTurn() throws Throwable {
+        Play play = new Play(declining -> {
+            Game game = game(declining);
+            Player caster = game.getPlayers().get(0);
+            TestBoard.inPlay(game, caster, "Sundial of the Infinite");
+            for (int i = 0; i < 8; i++) {
+                TestBoard.inHand(game, caster, "Shock");
+            }
+            return game;
+        }, "Sundial of the Infinite", game -> abilityOf(game, ApiType.EndTurn), sundial -> { });
+        assertAlike(play, false, live -> assertTrue(RecordLines.events(live).stream()
+                .noneMatch(event -> "hand".equals(paramsOf(event).get("from_zone"))), live));
+    }
+
+    /**
+     * Chain Lightning killing the opponent's Grizzly Bears, the one target
+     * two Ivory Masks leave: the opponent pays {R}{R} and copies it as it
+     * finishes, and the bears' death in the state-based check after is still
+     * the spell's (finding 5.6).
+     */
+    @Test
+    void aSelfCopyingSpell() throws Throwable {
+        Play play = new Play(declining -> {
+            Game game = game(declining);
+            Player caster = game.getPlayers().get(0);
+            Player opponent = game.getPlayers().get(1);
+            TestBoard.inPlay(game, caster, "Ivory Mask");
+            TestBoard.inPlay(game, opponent, "Ivory Mask");
+            TestBoard.inPlay(game, opponent, "Mountain");
+            TestBoard.inPlay(game, opponent, "Mountain");
+            TestBoard.inPlay(game, opponent, "Grizzly Bears");
+            TestBoard.inHand(game, caster, "Chain Lightning");
+            game.getAction().checkStaticAbilities();
+            return game;
+        }, "Chain Lightning", aimed -> {
+            aimed.resetTargets();
+            aimed.getTargets().add(aimed.getActivatingPlayer().getOpponents().get(0)
+                    .getCreaturesInPlay().get(0));
+        });
+        assertAlike(play, false, live -> assertTrue(RecordLines.events(live).stream()
+                .anyMatch(event -> "battlefield".equals(paramsOf(event).get("from_zone"))
+                        && "graveyard".equals(paramsOf(event).get("to_zone"))), live));
+    }
+
+    /**
+     * Wild Might on the first player's Grizzly Bears, the one creature out:
+     * the opponent taps a Forest and pays {2} to deny the +4/+4. The mana
+     * abilities it activated are its payment's, in no effect half
+     * (finding 5.6).
+     */
+    @Test
+    void anUnlessCostPaidWithMana() throws Throwable {
+        Play play = new Play(declining -> {
+            Game game = game(declining);
+            Player caster = game.getPlayers().get(0);
+            Player opponent = game.getPlayers().get(1);
+            TestBoard.inPlay(game, caster, "Grizzly Bears");
+            TestBoard.inPlay(game, opponent, "Forest");
+            TestBoard.inPlay(game, opponent, "Forest");
+            TestBoard.inHand(game, caster, "Wild Might");
+            return game;
+        }, "Wild Might", aimed -> {
+            aimed.resetTargets();
+            aimed.getTargets().add(aimed.getActivatingPlayer().getCreaturesInPlay().get(0));
+        });
+        assertAlike(play, false, live -> assertTrue(
+                !RecordLines.eventTypes(live).contains("tapped"), live));
+    }
+
+    /** An event's parameters, none when it has none. */
+    private static Map<String, Object> paramsOf(Map<String, Object> event) {
+        Map<String, Object> params = RecordLines.asMap(event.get("params"));
+        return params == null ? Map.of() : params;
     }
 
     /** A check that a record's events are {@code expected}: each one's type and {@code attributed_to}, in order. */

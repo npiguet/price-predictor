@@ -25,8 +25,9 @@ import java.util.function.Function;
  * otherwise discard — a coin flip, a vote, a token made. Both file through
  * {@link BusBracketCollector#recordClauseEvent}, because only the bracket
  * collector of this same game knows which resolution is open, and both hand
- * what a fork reports on the same JVM-static hooks to the forced resolution
- * or probe running on their thread ({@link Forks#forkHooks}), if any.
+ * the events a fork reports on the same JVM-static hooks to the probe
+ * running on their thread ({@link Forks#forkHooks}), if any. A forced
+ * resolution's are its fork-bound recording's ({@link ForcedResolution}).
  */
 final class ClauseOutcomeRouter {
 
@@ -103,8 +104,8 @@ final class ClauseOutcomeRouter {
         clauseObservations.get().push(ApiEvents.observe(clause, rules));
         // A chosen mode's first clause is where a modal resolution is
         // cut into per-mode halves (FR-029a): the live bracket opens
-        // the next half here, and a fork running on this thread marks
-        // the same boundary in its own event stream. "Resolving" of the
+        // the next half here; a forced resolution's fork-bound recording
+        // hears its own fork's clauses. "Resolving" of the
         // first clause is the one moment FR-029b's snapshot has to be taken.
         if (live.owns(clause)) {
             // The timestamp a floating effect's rows will carry is drawn
@@ -114,8 +115,6 @@ final class ClauseOutcomeRouter {
             if (start != null) {
                 bracket.beginMode(clause, start.option());
             }
-        } else {
-            Forks.forkHooks().clauseResolving(clause);
         }
     }
 
@@ -139,7 +138,7 @@ final class ClauseOutcomeRouter {
                 : observations.pop();
         boolean ran = ran(run);
         if (!live.owns(clause)) {
-            forkClauseResolved(clause, run, ran ? observed : null);
+            forkClauseResolved(clause, ran ? observed : null);
             return;
         }
         FloatingEffects.of(live.game()).clauseResolved(live.game(), clause);
@@ -167,15 +166,14 @@ final class ClauseOutcomeRouter {
     }
 
     /**
-     * A fork's clause, told to the fork hooks, with its events as the live
-     * bracket files them: built only for a fork listening, which a fork
-     * played on is not (its own recording's router files them).
+     * A fork's clause's events, told to the probe listening, as the live
+     * bracket files them: built only for a probe listening, which a fork
+     * played on or a forced resolution is not (its own recording's router
+     * files them).
      *
      * @param ran the clause's observation when its own effect ran, else null
      */
-    private static void forkClauseResolved(
-            SpellAbility clause, String run, ApiEvents.ClauseObservation<?> ran) {
-        Forks.forkHooks().clauseResolved(clause, run);
+    private static void forkClauseResolved(SpellAbility clause, ApiEvents.ClauseObservation<?> ran) {
         if (ran != null && Forks.forkHooksListening()) {
             ran.finish().forEach(event -> Forks.forkHooks().clauseEvent(clause, event));
         }

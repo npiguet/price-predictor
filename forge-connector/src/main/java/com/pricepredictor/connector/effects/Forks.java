@@ -55,8 +55,8 @@ final class Forks {
      * resolving-clause pointer is null for every segment of a fork outside
      * {@code AbilityUtils.resolve} -- the copy, the score check and
      * {@link #mappedAbility}, {@code InterventionFork.forceResolution}'s mode,
-     * target and X draws, and {@code GameSimulator.resolveStack}'s own
-     * state-based check and trigger pass. A null-ability outcome fired in any
+     * target and X draws, and the forced resolution's own state-based check
+     * and trigger pass. A null-ability outcome fired in any
      * of them would otherwise be indistinguishable from the live game's own
      * turn-based actions. So "a fork is running on this thread" is a
      * sufficient answer on its own, and {@code ownsNullAbilityOutcome} checks
@@ -102,53 +102,21 @@ final class Forks {
     }
 
     /**
-     * What a forced resolution or a probe hears of the hooks while it runs:
-     * the resolutions and clauses of its fork, the mana its resolutions make,
-     * the events its clauses promise and the outcomes its effects report.
+     * What a damage-step probe hears of the hooks while it runs: the events
+     * its fork's clauses promise and the outcomes its effects report.
      *
      * <p>The hooks are JVM statics that the live game's handlers own, and
      * each handler drops a fork's callbacks on game identity — rightly, for
-     * its own records. A forced resolution needs the same moments the live
-     * bracket takes: its resolution's start (FR-042b), each chosen mode's
-     * first clause (FR-029f), whether each conditional clause met its
-     * condition (FR-034) and the mana it made (FR-042c); and both it and a
-     * probe need the events the live record takes from the hooks rather
-     * than the bus, the clauses' and the outcomes' (a token made, damage
-     * prevented), or a fork's record would lack what its live twin holds.
-     * So the live handlers hand what they are not keeping to whatever fork
-     * is running on their thread, and {@code InterventionFork.forceResolution}
-     * and {@code DamageStepProbe} install one for exactly the span of their
-     * own resolution or damage step.
+     * its own records. A probe needs the events the live record takes from
+     * the hooks rather than the bus, the clauses' and the outcomes' (damage
+     * prevented), or its record would lack what its live twin holds. So the
+     * live handlers hand those to whatever probe is running on their thread,
+     * and {@code DamageStepProbe} installs one for exactly the span of its
+     * damage step. A forced resolution needs more, and has it all: its
+     * fork-bound recording is handed every hook's callbacks
+     * ({@link ForcedResolution}).
      */
     interface ForkHooks {
-        /** An item of some other game's stack starts to resolve. */
-        default void resolutionStarting(SpellAbility item, boolean fizzled) {
-        }
-
-        /**
-         * The same, with the hook's third argument: each chain link's
-         * targets before Forge's check for illegal targets, or null.
-         */
-        default void resolutionStarting(SpellAbility item, boolean fizzled, Object targetsAtCast) {
-            resolutionStarting(item, fizzled);
-        }
-
-        /** A clause of some other game starts to resolve. */
-        default void clauseResolving(SpellAbility clause) {
-        }
-
-        /**
-         * A clause of some other game has finished its own effect.
-         *
-         * @param run the {@code ClauseRun} constant Forge reported, or null
-         */
-        default void clauseResolved(SpellAbility clause, String run) {
-        }
-
-        /** Mana some other game's resolving spell or trigger made, as its event. */
-        default void manaProduced(SpellAbility producer, EffectEvent produced) {
-        }
-
         /**
          * The event a clause of some other game promised by its effect API's
          * own parameters, told once the clause ran ({@code ApiEvents}): a
@@ -166,20 +134,10 @@ final class Forks {
          */
         default void outcome(SpellAbility ability, EffectEvent event) {
         }
-
-        /**
-         * Some other game's controller turned down a "you may" (the confirm
-         * hook answered false).
-         *
-         * @param offered the ability asked about, or null where the engine
-         *                named none
-         */
-        default void declined(SpellAbility offered) {
-        }
     }
 
     /**
-     * The forced resolution's {@link ForkHooks} on this thread, or null.
+     * The running probe's {@link ForkHooks} on this thread, or null.
      * Thread-local like {@link #FORK_RUNNING}, and for the same reason: the
      * engine runs games on more than one thread.
      */
@@ -194,7 +152,7 @@ final class Forks {
     private static final ForkHooks NO_FORK = new ForkHooks() {
     };
 
-    /** Whether a forced resolution or a probe on this thread hears the hooks, which some callbacks cost to build for. */
+    /** Whether a probe on this thread hears the hooks, which some callbacks cost to build for. */
     static boolean forkHooksListening() {
         return FORK_HOOKS.get() != null;
     }

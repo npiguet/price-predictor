@@ -68,8 +68,10 @@ class ForkRecordsTest {
         return TestCollectors.context(writer, ShardRun.GAME_ID);
     }
 
+    /** Forced resolutions of no game, whose every copy fails, writing through the last {@link #context}'s writer. */
     private InterventionFork interventions(CollectionCaps caps) {
-        return new InterventionFork(null, context(caps), budget, 42L);
+        context(caps);
+        return new InterventionFork(null, null, budget, 42L);
     }
 
     private DamageStepProbe probes(CollectionCaps caps) {
@@ -680,10 +682,11 @@ class ForkRecordsTest {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         TestBoard.inHand(game, game.getPlayers().get(0), "Lightning Bolt");
         RecordShardWriter shard = ShardRun.writer(tempDir);
-        ForkBudget budget = new ForkBudget(forkCaps().interventions(1).probes(0).build());
-        try {
+        CollectionCaps caps = forkCaps().interventions(1).probes(0).build();
+        ForkBudget budget = new ForkBudget(caps);
+        try (GameRecording live = new GameRecording(game, shard, ShardRun.GAME_ID, caps, 1L, null)) {
             InterventionScheduler scheduler = new InterventionScheduler(game, new InterventionFork(
-                    game, TestCollectors.context(shard, ShardRun.GAME_ID), budget, 1L));
+                    game, live, budget, 1L));
             scheduler.collect(PhaseType.COMBAT_BEGIN);
             assertTrue(budget.mayIntervene(-1), "an intervention was forced at the beginning of combat");
             scheduler.collect(PhaseType.MAIN2);
@@ -700,9 +703,9 @@ class ForkRecordsTest {
     private List<String> scheduled(Game game, CollectionCaps caps, int boundaries, Runnable... between)
             throws IOException {
         RecordShardWriter shard = ShardRun.writer(tempDir);
-        try {
+        try (GameRecording live = new GameRecording(game, shard, ShardRun.GAME_ID, caps, 1L, null)) {
             InterventionScheduler scheduler = new InterventionScheduler(game, new InterventionFork(
-                    game, TestCollectors.context(shard, ShardRun.GAME_ID), new ForkBudget(caps), 1L));
+                    game, live, new ForkBudget(caps), 1L));
             scheduler.collect();
             for (Runnable next : between) {
                 next.run();

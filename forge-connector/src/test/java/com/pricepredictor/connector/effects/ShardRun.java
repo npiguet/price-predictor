@@ -189,22 +189,20 @@ final class ShardRun {
 
     // ── forced resolutions ──────────────────────────────────────────────
 
-    /** Fork {@code game} once and force {@code ability} to resolve, with no hook installed. */
+    /**
+     * Fork {@code game} once and force {@code ability} to resolve, with no
+     * hook installed: the game's recording is never opened, so the fork's
+     * collectors hear its bus alone.
+     */
     static Fork forked(Path dir, Game game, CollectionCaps caps, long seed, SpellAbility ability) {
-        RecordShardWriter writer = writer(dir);
-        boolean wrote;
-        try {
-            wrote = new InterventionFork(game, TestCollectors.context(writer, GAME_ID), new ForkBudget(caps), seed)
-                    .intervene(ability, 1);
-        } finally {
-            writer.close();
-        }
-        return new Fork(wrote, writer.path());
+        return forkedUnder(dir, game, caps,
+                live -> new InterventionFork(game, live, new ForkBudget(caps), seed).intervene(ability, 1));
     }
 
     /**
-     * The same with every hook the checkout offers installed, so the fork's
-     * clauses reach the collectors as a live game's do; skipped on a checkout
+     * The same with the game recorded as a worker records it, every hook the
+     * checkout offers installed, so the fork's clauses reach the fork's
+     * collectors as a live game's reach its own; skipped on a checkout
      * without the clause hook.
      *
      * @param why what the test needs the clause hook for, shown when it skips
@@ -213,14 +211,19 @@ final class ShardRun {
             Path dir, Game game, CollectionCaps caps, long seed, SpellAbility ability,
             String why) {
         assumeClauseHook(why);
+        return forkedUnder(dir, game, caps, live -> {
+            live.open();
+            return new InterventionFork(game, live, new ForkBudget(caps), seed).intervene(ability, 1);
+        });
+    }
+
+    /** Run {@code force} under the game's recording, and the shard it wrote to. */
+    private static Fork forkedUnder(
+            Path dir, Game game, CollectionCaps caps, java.util.function.Predicate<GameRecording> force) {
         RecordShardWriter writer = writer(dir);
         boolean wrote;
-        try (PatchedCollectors collectors = new PatchedCollectors(
-                game, TestCollectors.context(writer, GAME_ID), caps, SEED,
-                TestCollectors.bracket(game, writer, GAME_ID))) {
-            collectors.install();
-            wrote = new InterventionFork(game, TestCollectors.context(writer, GAME_ID), new ForkBudget(caps), seed)
-                    .intervene(ability, 1);
+        try (GameRecording live = new GameRecording(game, writer, GAME_ID, caps, SEED, null)) {
+            wrote = force.test(live);
         } finally {
             writer.close();
         }
