@@ -47,7 +47,7 @@ import java.util.function.Consumer;
 final class ProtectionFork {
 
     /** The fork's kind, as the failure report and the dropped-event counts name it. */
-    static final String KIND = "protection";
+    static final String KIND = ForkKind.PROTECTION.wireName();
 
     /** The chance a first main phase with a creature on the battlefield is forked. */
     static final double PROBABILITY = 0.25;
@@ -59,7 +59,7 @@ final class ProtectionFork {
     static final PhaseType PHASE = PhaseType.MAIN1;
 
     /** Every record of a protection fork carries these flags. */
-    static final Consumer<EffectRecord> FLAGS = record -> record.fork(true).interventional(true);
+    static final Consumer<EffectRecord> FLAGS = record -> record.fork(ForkKind.PROTECTION).interventional(true);
 
     /** Kept apart from the other streams the same game seed seeds. */
     private static final long SEED_SALT = 0x7F4A7C159E3779B9L;

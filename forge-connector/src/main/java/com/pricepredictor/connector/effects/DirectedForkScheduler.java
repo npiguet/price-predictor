@@ -126,7 +126,7 @@ final class DirectedForkScheduler {
             // before the fork is taken, so the budget is not spent on it.
             Optional<String> refused = ForcedPlayRun.dryRun(application, match.binding(), game);
             if (refused.isPresent()) {
-                ForkRefusals.count("directed", refused.get());
+                ForkRefusals.count(DirectedFork.KIND, refused.get());
                 continue;
             }
             budget.spendDirected();

@@ -43,21 +43,28 @@ A gen-3 key is `(script_file, face, trait_kind, index_within_kind[, option][, bu
 | Field | Shape | Present on |
 |---|---|---|
 | `generation` | `3` | every record |
+| `fork_kind` | `"probe"` | fork records only, right after `fork`: the kind of fork that wrote the record, one of `intervention` (an interventional resolution), `probe` (a damage-step probe), `protection` (a protection fork) and `directed` (a directed fork); absent on every live record |
 | `aimed_at` | `["704.5f", …]` | aimed records only: every `collect-coverage` and `collect-variants` record (the run's `--directed-fork-rules`, `[]` when it names none) and every directed fork (`[rule]`); never another `match-outcomes` record |
 | `directed` | `{"variant": "tougher", "operation": "pt"}` | directed-fork records only |
 | `copy_dropped` | `{"remembered": 1, "command": 2}` | fork records only (interventional resolution, damage-step probe, directed fork, protection fork), after `directed`: what the copier left out of the fork's copy for want of a counterpart in it, kind to count, kinds in name order, each count at least 1; absent on every live record and on a fork whose copy left nothing out |
 
-Flag signatures, added row:
+Flag signatures, added rows and the `fork_kind` column:
 
-| record | `interventional` | `fork` | `directed` | `aimed_at` |
-|---|---|---|---|---|
-| directed fork | `false` | `true` | set | `[rule]` |
-| protection fork (FR-058) | `true` | `true` | absent | the run's, as a live record's |
+| record | `interventional` | `fork` | `fork_kind` | `directed` | `aimed_at` |
+|---|---|---|---|---|---|
+| observed | `false` | `false` | absent | absent | the run's on `collect-coverage` and `collect-variants`, else absent |
+| interventional resolution | `true` | `true` | `intervention` | absent | the run's, as a live record's |
+| damage-step probe | `false` | `true` | `probe` | absent | the run's, as a live record's |
+| directed fork | `false` | `true` | `directed` | set | `[rule]` |
+| protection fork (FR-058) | `true` | `true` | `protection` | absent | the run's, as a live record's |
+
+A protection fork's records and an interventional resolution's half share `interventional: true`
+and `fork: true`; `fork_kind` tells them apart, the premise record (`fork_edit`) included.
 
 A protection fork's records are of any kind, played on to the end of the turn, and its cost halves
 carry `link_id` as live halves do. An interventional resolution's forced effect half has no
 partner, and neither has a protection fork's mana record (every event `mana_produced`), as a live
-one has none; no flag tells the two apart. Readers accept an interventional record of every kind, with
+one has none; only `fork_kind` tells the two apart. Readers accept an interventional record of every kind, with
 or without `link_id`.
 
 `mirror_of` is `null` on a directed-fork record: a directed fork is taken at a phase boundary,
@@ -108,7 +115,7 @@ curated stratum.
   trigger and mana reservoirs' records, the rewrite records still waiting on a buffered ability,
   and every kept fork's records.
 - Written only for a game that ended (`Game.isGameOver()`) with every end-of-game write done: the
-  record holding the outcome (`player_lost`, `player_won`), the fired trigger records, the mana
+  live record holding the outcome (`player_lost`, `player_won`), the fired trigger records, the mana
   records and the waiting rewrite records, none of which the cap withholds. A game that threw
   mid-match, a game whose end-of-game writes threw, a game whose outcome was published and reached
   no written record, a game open while the shard lost a block flush (the append is cut back and
@@ -132,12 +139,17 @@ on its own:
 | fired `trigger` records | 24 per trigger line (`lineKey`: its provenance key, or reason, host, mode and parameters for a line that keys to none) |
 | mana records | `--mana-cap` per mana key (the ability's text and the mana it produced) |
 | rewrite records still waiting on a buffered ability's run | 1 per replacement the game ended on, none of them withheld |
-| the record holding the outcome | 1 |
+| the live record holding the outcome | 1 |
 | the marker | 1 |
 
 A game therefore writes at most the cap + 24 × its fired trigger lines + `--mana-cap` × its mana
 keys + its waiting rewrite records + 2 records. At the defaults (cap 5000, `--mana-cap` 1), a game whose 20 trigger lines fired
 and whose lands made 10 kinds of mana writes at most 5000 + 480 + 10 + 2 = 5492.
+
+A fork's record holding `player_lost` or `player_won` (a probe branch whose stripped keyword ended
+the copy's game, a forced resolution or a played-forward fork that ended it) holds the fork's
+outcome, not the game's. Past the cap it is withheld as any other record, and it never stands for
+the live record holding the outcome that the marker requires.
 - Payload `{"events": [], "records_withheld": n}`: `records_withheld` the records of the game the
   cap kept out of the shard (`0` for none).
 - `actor_player` the player whose turn the game ended in, else the first registered player;
@@ -412,7 +424,7 @@ member, or the provenance `mode` any event may carry. `state_flag_change` gains 
 | `destroyed` | resolution, combat and `turn_action` records | subjects the permanent, `cause` the host of the line the record attributes it to (as every bracket event's), written just before its `zone_change` off the battlefield and filed where that move is filed (a state-based destruction joins the held half or the damage step's record its death joins). No `regenerable` (Forge's bus event does not say); a destruction a replacement or regeneration stopped writes nothing |
 | `sacrificed` | resolution, combat and `turn_action` records | subjects the permanent, `cause` as on `destroyed`, just before its `zone_change` off the battlefield, filed where that move is filed. A sacrifice paid as a cost is the payment's and reaches no record |
 | `face_change` | resolution, combat and `turn_action` records | subjects the permanent, `to_state` the face now up: `front`, `back`, `flipped`, `melded` or `face_down` (an entity's `face_state` values), written when a battlefield permanent's face differs from the one last read (transformed, flipped, turned face up or face down), beside the stat changes the new face makes |
-| `player_lost` | the record the game's outcome is written in | subjects the player, `reason` Forge's `GameLossReason` name (`LifeReachedZero`, `Milled`, `Poisoned`, `SpellEffect`, `Conceded`, `CommanderDamage`, `OpponentWon`), one per losing player, before `player_won` when there is a winner. The record is the effect half of the `LosesGame` or `WinsGame` ability whose resolution ended the game (Door to Nothingness, a "you win the game"), which holds `player_lost` and `player_won`, then a spell's card's move off the stack; the combat record, when the game ends in a combat damage step whose record is open; for any other end of the game, the game-end record, never the bracket of a cast or activation still on the stack (a "pay life" cost paid to 0). The game-end record is an effect half with no `ability`, no `link_id` and `outcome` null, its board read at the game's end, and holds `player_lost` and `player_won` only; every other event filed with no bracket open since the last cast or resolution is counted as dropped. Each is written once per game. A draw (every player lost at once) writes a `player_lost` per player and no `player_won`; a player who agreed to a draw writes none |
+| `player_lost` | the record the game's outcome is written in | subjects the player, `reason` Forge's `GameLossReason` name (`LifeReachedZero`, `Milled`, `Poisoned`, `SpellEffect`, `Conceded`, `CommanderDamage`, `OpponentWon`), one per losing player, before `player_won` when there is a winner. The record is the effect half of the `LosesGame` or `WinsGame` ability whose resolution ended the game (Door to Nothingness, a "you win the game"), which holds `player_lost` and `player_won`, then a spell's card's move off the stack; the combat record, when the game ends in a combat damage step whose record is open; for any other end of the game, the game-end record, never the bracket of a cast or activation still on the stack (a "pay life" cost paid to 0). The game-end record is an effect half with no `ability`, no `link_id` and `outcome` null, its board read at the game's end, and holds `player_lost` and `player_won` only; every other event filed with no bracket open since the last cast or resolution is counted as dropped. Each is written once per game among the live records; a fork that ends its copy's game files its own in its records as a live game does, marked by their `fork_kind`. A draw (every player lost at once) writes a `player_lost` per player and no `player_won`; a player who agreed to a draw writes none |
 | `keyword_change` | `keywords`, `hidden` | a stat change's `keywords` are sorted, a second instance of a keyword counted as a keyword gained or lost; `hidden: true`, last, on a change of Forge's hidden keywords, whose `keywords` are spelled as Forge writes them (`CARDNAME can't block.`), absent on any other |
 | `ability_change` | from a stat change | the abilities the card gained, other than a keyword's, as `abilities` comma-joined line keys (`ProvenanceKey.describe`, `runtime` for one that keys to no line) with `removed: false`; any it lost as `abilities: ""` with `removed: true`; not written while an `Animate` or `AnimateAll` clause resolves, whose own rule writes its grants |
 | `name_change` | `name` | new type, from a stat change: subjects the permanent, `name` the name it has now; written when the name changes with no face change and no copy effect (an `Animate`'s `Name$`, a `SetName$` static) |

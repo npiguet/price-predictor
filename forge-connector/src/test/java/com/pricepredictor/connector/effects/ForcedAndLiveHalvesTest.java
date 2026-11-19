@@ -42,7 +42,7 @@ class ForcedAndLiveHalvesTest {
 
     /** The envelope members a fork's record differs in by construction. */
     private static final Set<String> FORK_MEMBERS =
-            Set.of("record_id", "timestamp", "link_id", "interventional", "fork", "copy_dropped");
+            Set.of("record_id", "timestamp", "link_id", "interventional", "fork", "fork_kind", "copy_dropped");
 
     @TempDir
     Path tempDir;

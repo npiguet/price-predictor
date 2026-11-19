@@ -38,7 +38,7 @@ import java.util.function.Supplier;
 final class DirectedFork {
 
     /** The fork's kind, as the failure report and the dropped-event counts name it. */
-    static final String KIND = "directed";
+    static final String KIND = ForkKind.DIRECTED.wireName();
 
     private final Game game;
     private final ForkPlayForward playForward;
@@ -85,6 +85,6 @@ final class DirectedFork {
      * paired with the live turn by {@code game_id}, turn and {@code directed}.
      */
     static Consumer<EffectRecord> flags(String rule, DirectedTag tag) {
-        return record -> record.fork(true).interventional(false).aimedAt(List.of(rule)).directed(tag);
+        return record -> record.fork(ForkKind.DIRECTED).interventional(false).aimedAt(List.of(rule)).directed(tag);
     }
 }

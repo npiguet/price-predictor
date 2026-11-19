@@ -70,7 +70,7 @@ class EffectRecordTest {
         assertTrue(coverage.contains("\"random_seat\":false,\"aimed_at\":[],\"actor_player\":"),
                 coverage);
 
-        String fork = record(RecordKind.COMBAT).fork(true).aimedAt(List.of("704.5f"))
+        String fork = record(RecordKind.COMBAT).fork(ForkKind.DIRECTED).aimedAt(List.of("704.5f"))
                 .directed(new DirectedTag("tougher", ForkOperation.PT)).toJson();
         assertTrue(fork.contains(
                 "\"aimed_at\":[\"704.5f\"],\"directed\":{\"variant\":\"tougher\",\"operation\":\"pt\"},"),
@@ -114,7 +114,7 @@ class EffectRecordTest {
             context.emit(context.newResolution(Moment.RESOLUTION));
             EffectRecord combat = context.newRecord(RecordKind.COMBAT);
             if (forkRule != null) {
-                combat.fork(true).aimedAt(List.of(forkRule))
+                combat.fork(ForkKind.DIRECTED).aimedAt(List.of(forkRule))
                         .directed(new DirectedTag("tougher", ForkOperation.PT));
             }
             context.emit(combat);
@@ -136,12 +136,29 @@ class EffectRecordTest {
     void aDirectedTagNeedsAnAimedNonInterventionalFork() {
         DirectedTag tag = new DirectedTag("tougher", ForkOperation.PT);
         assertThrows(IllegalStateException.class,
-                () -> record(RecordKind.COMBAT).fork(true).directed(tag).toJson());
+                () -> record(RecordKind.COMBAT).fork(ForkKind.DIRECTED).directed(tag).toJson());
         assertThrows(IllegalStateException.class,
                 () -> record(RecordKind.COMBAT).aimedAt(List.of("704.5f")).directed(tag).toJson());
         assertThrows(IllegalStateException.class,
-                () -> resolution(Moment.RESOLUTION).fork(true).interventional(true)
+                () -> resolution(Moment.RESOLUTION).fork(ForkKind.PROTECTION).interventional(true)
                         .aimedAt(List.of("704.5f")).directed(tag).toJson());
+    }
+
+    /**
+     * {@code fork_kind} follows {@code fork} on a fork's record, naming the
+     * kind that wrote it, which also sets {@code fork}; a live record has
+     * none.
+     */
+    @Test
+    void forkKindFollowsForkOnAForksRecordOnly() {
+        String live = resolution(Moment.RESOLUTION).toJson();
+        assertTrue(live.contains("\"fork\":false,\"synthetic\":false,"), live);
+        assertFalse(live.contains("fork_kind"), live);
+        for (ForkKind kind : ForkKind.values()) {
+            String fork = record(RecordKind.COMBAT).fork(kind).toJson();
+            assertTrue(fork.contains("\"fork\":true,\"fork_kind\":\"" + kind.wireName()
+                    + "\",\"synthetic\":false,"), fork);
+        }
     }
 
     /**

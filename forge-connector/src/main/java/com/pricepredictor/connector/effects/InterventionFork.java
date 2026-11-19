@@ -24,6 +24,9 @@ import java.util.function.Supplier;
  */
 final class InterventionFork implements InterventionScheduler.Forcing {
 
+    /** The fork's kind, as the failure report and the refusal tally name it. */
+    static final String KIND = ForkKind.INTERVENTION.wireName();
+
     /** A refusal's reason: the forced ability never reached the copy's stack (a special action). */
     static final String NOT_ON_THE_STACK = "nothing reached the stack";
 
@@ -164,11 +167,11 @@ final class InterventionFork implements InterventionScheduler.Forcing {
             // on a line whose forced resolution throws or reads a payment
             // never made. The scheduler passes such a line over before it
             // asks (InterventionScheduler.refusedForAnUnpaidCost).
-            ForkRefusals.count("intervention", refusal);
+            ForkRefusals.count(KIND, refusal);
             return false;
         }
         Forks.ForkRun run = new Forks.ForkRun(
-                "intervention", game, () -> budget.spendIntervention(realResolutionId), perspective);
+                KIND, game, () -> budget.spendIntervention(realResolutionId), perspective);
         Boolean written = run.take((verified, snapshots) -> {
             SpellAbility forked = Forks.mappedAbility(verified.copier(), ability);
             Player actor = forked == null

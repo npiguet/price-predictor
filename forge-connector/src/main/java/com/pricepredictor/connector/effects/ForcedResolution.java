@@ -103,7 +103,7 @@ final class ForcedResolution {
      */
     private void keep(EffectRecord record) {
         if (record.isEffectHalfOf(link)) {
-            verified.stamp(record.linkId(null).interventional(true).fork(true));
+            verified.stamp(record.linkId(null).interventional(true).fork(ForkKind.INTERVENTION));
             halves.add(record);
         }
     }

@@ -445,7 +445,7 @@ final class InterventionScheduler {
             return false;
         }
         if (unpaidCostRefused.add(lineKey(candidate))) {
-            ForkRefusals.count("intervention", refusal);
+            ForkRefusals.count(InterventionFork.KIND, refusal);
         }
         return true;
     }

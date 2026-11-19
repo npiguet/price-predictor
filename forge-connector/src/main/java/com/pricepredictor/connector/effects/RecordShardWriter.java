@@ -224,11 +224,23 @@ public final class RecordShardWriter implements AutoCloseable {
     }
 
     /**
-     * Whether a record holds the game's outcome ({@code player_lost},
-     * {@code player_won}): written once per game, so past the cap too, or a
-     * capped game would keep its marker and lose its result.
+     * Whether a record holds the game's outcome: a live record holding
+     * {@code player_lost} or {@code player_won}, written once per game, so
+     * past the cap too, or a capped game would keep its marker and lose its
+     * result.
+     *
+     * <p>A fork's record holding them (a probe branch whose stripped keyword
+     * ended the game, a played-forward fork or a forced resolution that ended
+     * it) holds the fork's outcome, not the game's: the cap withholds it as
+     * any other record, rather than write it while the live record it
+     * mirrors is withheld.
      */
     static boolean holdsTheOutcome(String recordJson) {
+        return RecordLine.isLive(recordJson) && namesAnOutcome(recordJson);
+    }
+
+    /** Whether a record line holds {@code player_lost} or {@code player_won}. */
+    private static boolean namesAnOutcome(String recordJson) {
         return recordJson.contains("\"type\":\"player_lost\"")
                 || recordJson.contains("\"type\":\"player_won\"");
     }
@@ -352,7 +364,7 @@ public final class RecordShardWriter implements AutoCloseable {
 
     /**
      * The first value of a field in a rendered record line, read without
-     * parsing it: the envelope's {@code game_id}, the snapshot's
+     * parsing it: the envelope's {@code game_id} and {@code fork_kind}, the snapshot's
      * {@code turn}, the acting line's {@code script_file}.
      */
     static final class RecordLine {
@@ -374,6 +386,11 @@ public final class RecordShardWriter implements AutoCloseable {
             start += marker.length();
             int end = json.indexOf('"', start);
             return end < 0 ? null : json.substring(start, end);
+        }
+
+        /** Whether the line is a live record's: its {@code fork_kind} names no kind of fork. */
+        static boolean isLive(String json) {
+            return string(json, "fork_kind") == null;
         }
 
         /** The script file of the record's acting line, its {@code ability}'s first key, or null. */

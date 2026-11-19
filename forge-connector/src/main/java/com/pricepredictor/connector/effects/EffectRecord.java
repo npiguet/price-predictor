@@ -40,7 +40,12 @@ public final class EffectRecord {
     private String linkId;
     private String mirrorOf;
     private boolean interventional;
-    private boolean fork;
+    /**
+     * The kind of fork that wrote this record, written as {@code fork_kind};
+     * null on a live record, which writes no {@code fork_kind}. {@code fork}
+     * is written from it: a record is a fork's exactly when it names its kind.
+     */
+    private ForkKind forkKind;
     /**
      * Whether {@code actor_player} is the match's random seat (FR-030).
      *
@@ -162,8 +167,9 @@ public final class EffectRecord {
         return this;
     }
 
-    public EffectRecord fork(boolean value) {
-        this.fork = value;
+    /** A record {@code kind} of fork wrote; null for a live record. */
+    public EffectRecord fork(ForkKind kind) {
+        this.forkKind = kind;
         return this;
     }
 
@@ -305,7 +311,7 @@ public final class EffectRecord {
     }
 
     public String toJson() {
-        if (directed != null && (aimedAt == null || !fork || interventional)) {
+        if (directed != null && !signsAsADirectedFork()) {
             throw new IllegalStateException(
                     "a directed fork is a non-interventional fork naming the rule it aimed at");
         }
@@ -325,13 +331,34 @@ public final class EffectRecord {
                 .value("variant_of", null)
                 .value("mode", mode)
                 .value("interventional", interventional)
-                .value("fork", fork)
-                .value("synthetic", false)
+                .value("fork", forkKind != null);
+        if (forkKind != null) {
+            // Beside the fork flags it says more about; absent on a live record.
+            json.value("fork_kind", forkKind);
+        }
+        json.value("synthetic", false)
                 // Right after synthetic on every record, and what_if right
                 // after it where set (blockers alone): the order is part of the
                 // contract (record-schema-delta.md), and the reader names a
                 // shard's generation by the first field's presence.
                 .value("random_seat", randomSeat);
+        writeOptionalMembers(json);
+        return json
+                .value("actor_player", actorPlayer)
+                .raw("ability", abilityJson())
+                .value("ability_unresolved", abilityUnresolved)
+                .raw("state", stateJson)
+                .raw("payload", payloadJson)
+                .render();
+    }
+
+    /** Whether the stamps are a directed fork's: a non-interventional fork naming its rule. */
+    private boolean signsAsADirectedFork() {
+        return aimedAt != null && forkKind != null && !interventional;
+    }
+
+    /** The members written only where set, in their contract order. */
+    private void writeOptionalMembers(Json.ObjectWriter json) {
         if (whatIf != null) {
             json.value("what_if", whatIf);
         }
@@ -344,13 +371,6 @@ public final class EffectRecord {
         if (!copyDropped.isEmpty()) {
             json.value("copy_dropped", copyDropped);
         }
-        return json
-                .value("actor_player", actorPlayer)
-                .raw("ability", abilityJson())
-                .value("ability_unresolved", abilityUnresolved)
-                .raw("state", stateJson)
-                .raw("payload", payloadJson)
-                .render();
     }
 
     String abilityJson() {

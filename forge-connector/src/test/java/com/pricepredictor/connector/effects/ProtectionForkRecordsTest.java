@@ -59,6 +59,9 @@ class ProtectionForkRecordsTest {
         assertEquals(Boolean.TRUE, premise.get("fork"));
         assertEquals(Boolean.TRUE, premise.get("interventional"));
         assertEquals(forked.get(0), fell.get(0), "the premise is the fork's first record");
+        for (String record : forked) {
+            assertEquals("protection", parse(record).get("fork_kind"), record);
+        }
     }
 
     /**

@@ -45,6 +45,9 @@ final class DamageStepProbe {
     /** A refusal's reason: the copy holds no combat to deal. */
     static final String NO_COMBAT = "no combat in the copy";
 
+    /** The fork's kind, as the failure report and the refusal tally name it. */
+    static final String KIND = ForkKind.PROBE.wireName();
+
     /**
      * Re-run this damage step without one creature's keyword.
      *
@@ -68,7 +71,7 @@ final class DamageStepProbe {
             return null;
         }
         Forks.ForkRun run = new Forks.ForkRun(
-                "probe", game,
+                KIND, game,
                 budget::spendProbe,
                 () -> game.getPhaseHandler() == null
                         ? null : game.getPhaseHandler().getPlayerTurn());
@@ -314,7 +317,7 @@ final class DamageStepProbe {
             return false;
         }
         context.emit(context.newRecord(RecordKind.COMBAT)
-                .fork(true)
+                .fork(ForkKind.PROBE)
                 .interventional(false)
                 .mirrorOf(mirrorOfRecordId)
                 .copyDropped(held.copyDropped())

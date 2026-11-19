@@ -56,6 +56,13 @@ class WireVocabularyTest {
                 wireNames(TurnActionSubkind.class));
     }
 
+    /** A fork record's {@code fork_kind}, null on a live record. */
+    @Test
+    void forkKinds() {
+        assertEquals(List.of("intervention", "probe", "protection", "directed"),
+                wireNames(ForkKind.class));
+    }
+
     /** {@code ResolutionOutcome} in {@code records.py}. */
     @Test
     void activationOutcomes() {

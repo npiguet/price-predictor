@@ -189,7 +189,7 @@ KINDS_WITHOUT_ACTING_ABILITY: frozenset[RecordKind] = frozenset({
 #: was: none of them may reach the model (compatibility rule 4).
 COLLECTION_METADATA_FIELDS: frozenset[str] = frozenset({
     "mode", "interventional", "fork", "synthetic", "ability_unresolved", "random_seat",
-    "what_if", "generation", "aimed_at", "directed", "copy_dropped",
+    "what_if", "generation", "aimed_at", "directed", "copy_dropped", "fork_kind",
 })
 
 
@@ -867,6 +867,11 @@ class EffectRecord:
     #: record and on a fork whose copy left nothing out. Collection metadata:
     #: it decides nothing, it is counted (``validate-corpus``).
     copy_dropped: tuple[tuple[str, int], ...] | None = None
+    #: The kind of fork that wrote the record, as the writer spells it
+    #: (``intervention``, ``probe``, ``protection``, ``directed``); None on a
+    #: live record, which carries no ``fork_kind``. Kept as read; collection
+    #: metadata.
+    fork_kind: str | None = None
     #: How ``build-corpus`` copied the record (research T1); None on every
     #: collected record. Curation metadata.
     curation: Curation | None = None

@@ -75,7 +75,7 @@ class ForkPlayForwardTest {
     @TempDir
     Path tempDir;
 
-    private static final Consumer<EffectRecord> DIRECTED = record -> record.fork(true).interventional(false);
+    private static final Consumer<EffectRecord> DIRECTED = record -> record.fork(ForkKind.DIRECTED).interventional(false);
 
     static Game board(Game game) {
         game.setAge(GameStage.Play);
@@ -556,6 +556,9 @@ class ForkPlayForwardTest {
         assertEquals("fork_edit", premise.get("subkind"), forked.get(0));
         assertTrue(forked.get(0).contains(deathOf(bears)), forked.get(0));
         assertEquals(1, naming(forked, deathOf(bears)), "the death is the premise's alone");
+        for (String record : forked) {
+            assertEquals("directed", parse(record).get("fork_kind"), record);
+        }
     }
 
     /** A directed fork at the live main phase setting {@code creature}'s toughness to 0; its lines. */

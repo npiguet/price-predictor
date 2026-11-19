@@ -37,6 +37,7 @@ The envelope is frozen within a generation: a later capability makes new `kind` 
 | `mirror_of`, `variant_of` | the live record a fork mirrors; the variant source |
 | `mode` | `patched` or `degraded` |
 | `interventional`, `fork`, `synthetic` | flags; signatures below |
+| `fork_kind` | fork records only, right after `fork`: `intervention`, `probe`, `protection` or `directed`, the kind of fork that wrote the record (`ForkKind.java`); absent on a live record |
 | `random_seat` | every record: `actor_player` is the random seat |
 | `what_if` | `blockers` records only; an `attackers` record carries none |
 | `aimed_at` | gen-3: the rule ids a record was collected for |
@@ -47,7 +48,7 @@ The envelope is frozen within a generation: a later capability makes new `kind` 
 | `state`, `payload` | the board snapshot and the kind's payload |
 | `curation` | curated shards only, written by `build-corpus` |
 
-- `mode`, `interventional`, `fork`, `synthetic`, `random_seat`, `what_if`, `generation`, `aimed_at`, `directed`, `copy_dropped` and `curation` are collection and curation metadata and never reach the model.
+- `mode`, `interventional`, `fork`, `fork_kind`, `synthetic`, `random_seat`, `what_if`, `generation`, `aimed_at`, `directed`, `copy_dropped` and `curation` are collection and curation metadata and never reach the model.
 - A `turn_action` record has no `ability`, its payload is its events, and no curated stratum holds it.
 
 ## Generations
@@ -67,13 +68,15 @@ The envelope is frozen within a generation: a later capability makes new `kind` 
 
 ## Flag signatures
 
-| Record | `fork` | `interventional` | Other |
-|---|---|---|---|
-| Observed | false | false | `aimed_at` absent, or the run's rules on `collect-coverage` and `collect-variants` (`[]` when none) |
-| Interventional resolution | true | true | effect half alone, no `link_id` |
-| Damage-step probe | true | false | `mirror_of`; payload `probed_keyword`, `probed_entity` |
-| Protection fork | true | true | any kind; cost halves linked as live ones |
-| Directed fork | true | false | `directed` set, `aimed_at = [rule]`; `mirror_of` null, since a phase boundary leaves no live record open; its records may hold the one play its variant forced (FR-010b), unmarked |
+| Record | `fork` | `fork_kind` | `interventional` | Other |
+|---|---|---|---|---|
+| Observed | false | absent | false | `aimed_at` absent, or the run's rules on `collect-coverage` and `collect-variants` (`[]` when none) |
+| Interventional resolution | true | `intervention` | true | effect half alone, no `link_id` |
+| Damage-step probe | true | `probe` | false | `mirror_of`; payload `probed_keyword`, `probed_entity` |
+| Protection fork | true | `protection` | true | any kind; cost halves linked as live ones |
+| Directed fork | true | `directed` | false | `directed` set, `aimed_at = [rule]`; `mirror_of` null, since a phase boundary leaves no live record open; its records may hold the one play its variant forced (FR-010b), unmarked |
+
+A fork's record may hold `player_lost` and `player_won`, the outcome of the fork's own game, never the live game's: `forks.md` § Rules for every fork.
 
 A protection copy written by `build-corpus` is a synthetic record `<record_id>~pc<i>`.
 

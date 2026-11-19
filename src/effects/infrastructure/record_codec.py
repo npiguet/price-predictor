@@ -85,7 +85,7 @@ from effects.domain.state_snapshot import (
 #: writer added and is kept in ``EffectRecord.extra_fields``.
 _KNOWN_ENVELOPE_KEYS = frozenset({
     "record_id", "generation", "run_id", "timestamp", "game_id", "kind", "moment", "subkind",
-    "link_id", "mirror_of", "variant_of", "mode", "interventional", "fork",
+    "link_id", "mirror_of", "variant_of", "mode", "interventional", "fork", "fork_kind",
     "synthetic", "random_seat", "what_if", "aimed_at", "directed", "copy_dropped", "curation",
     "actor_player",
     "ability",
@@ -1046,9 +1046,11 @@ def record_to_dict(record: EffectRecord) -> dict:
         "mode": record.mode.value,
         "interventional": record.interventional,
         "fork": record.fork,
-        "synthetic": record.synthetic,
-        "random_seat": record.random_seat,
     }
+    # A fork's record alone, beside the flag it says more about.
+    if record.fork_kind is not None:
+        out["fork_kind"] = record.fork_kind
+    out |= {"synthetic": record.synthetic, "random_seat": record.random_seat}
     # On a blockers record alone, the one kind that carries it.
     if record.what_if is not None:
         out["what_if"] = record.what_if
@@ -1160,6 +1162,7 @@ def record_from_dict(data: dict) -> EffectRecord:
         variant_of=data.get("variant_of"),
         interventional=data["interventional"],
         fork=data["fork"],
+        fork_kind=data.get("fork_kind"),
         synthetic=data["synthetic"],
         random_seat=data["random_seat"],
         what_if=data.get("what_if"),

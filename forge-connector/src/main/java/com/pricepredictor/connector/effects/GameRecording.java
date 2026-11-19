@@ -334,8 +334,9 @@ public final class GameRecording implements AutoCloseable {
         try {
             if (fork) {
                 // A fork played on stops where no event closes its last
-                // records: the turn's end, or the game's, which a fork never
-                // publishes.
+                // records: the turn's end, or the game's, whose finished
+                // event Forge publishes only from a match. A fork that ends
+                // the game does publish its outcome, filed as a live one is.
                 bracket.stopPlaying();
             }
             patched.close();

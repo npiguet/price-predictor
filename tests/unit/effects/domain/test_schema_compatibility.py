@@ -96,6 +96,8 @@ _FROZEN_ENVELOPE: dict[str, str] = {
     "directed": "DirectedTag | None",
     # What a fork's copy left out (WP5), by kind; None on live records.
     "copy_dropped": "tuple[tuple[str, int], ...] | None",
+    # The kind of fork that wrote a record; None on live records.
+    "fork_kind": "str | None",
     # Written by build-corpus on curated records only (research T1): how
     # curation copied the record, never collected.
     "curation": "Curation | None",
@@ -305,6 +307,7 @@ class TestRuleFourMetadataNeverBecomesAModelInput:
     @pytest.mark.parametrize("flip", [
         {"mode": CollectionMode.PATCHED},
         {"fork": True},
+        {"fork": True, "fork_kind": "probe"},
         {"synthetic": True},
         {"random_seat": True},
         {"aimed_at": ()},
@@ -341,6 +344,7 @@ class TestRuleFourMetadataNeverBecomesAModelInput:
         assert COLLECTION_METADATA_FIELDS == {
             "mode", "interventional", "fork", "synthetic", "ability_unresolved",
             "random_seat", "what_if", "generation", "aimed_at", "directed", "copy_dropped",
+            "fork_kind",
         }
 
     def test_an_unresolved_reason_leaves_the_surface_alone(self):
