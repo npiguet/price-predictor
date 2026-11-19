@@ -1,7 +1,12 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import com.google.common.collect.Table;
+import com.google.common.eventbus.Subscribe;
+import forge.card.CardTypeView;
+import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.event.Event;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import org.junit.jupiter.api.Assumptions;
@@ -9,10 +14,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static com.pricepredictor.connector.effects.RecordLines.asMap;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
@@ -31,6 +40,8 @@ class SuppressedProductionTest {
 
     private static final String NO_MANA = "{\"W\":0,\"U\":0,\"B\":0,\"R\":0,\"G\":0,\"C\":0}";
     private static final String ONE_GREEN = "{\"W\":0,\"U\":0,\"B\":0,\"R\":0,\"G\":1,\"C\":0}";
+    private static final String EVERY_COLOR_AND_GREEN =
+            "{\"W\":1,\"U\":1,\"B\":1,\"R\":1,\"G\":2,\"C\":0}";
 
     @TempDir
     Path tempDir;
@@ -96,6 +107,138 @@ class SuppressedProductionTest {
                 "the snapshot changed its sickness");
     }
 
+    /**
+     * A mana ability's colours read from the permanents' colours on the
+     * board without the static: on Painter's Servant's record, the Servant
+     * naming blue, Bloom Tender sees your permanents green (itself, a
+     * Grizzly Bears) and the Servant colourless, and makes green alone; live
+     * every permanent is also blue and it makes green and blue. The live
+     * cards keep their colours and the colour changes Forge keeps.
+     */
+    @Test
+    void aPlayersProductionReadsThePermanentsColoursWithoutTheStatic() throws Throwable {
+        assumeSuppression();
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card servant = board.battlefield("Painter's Servant", board.you);
+        servant.setChosenColors(List.of("blue"));
+        board.battlefield("Bloom Tender", board.you).setSickness(false);
+        board.battlefield("Grizzly Bears", board.you);
+        board.game.getAction().checkStaticAbilities();
+        Map<Integer, List<Object>> colors = colorChanges(board.game);
+
+        assertEquals(parse(greenAnd("U")), liveProduction(board), "the live board's production");
+        String record = continuousRecordOf(board, servant);
+        assertEquals(parse(ONE_GREEN), production(player(record, board.you)),
+                "your production without Painter's Servant");
+        assertEquals(colors, colorChanges(board.game), "the snapshot changed a card's colours");
+    }
+
+    /**
+     * A mana ability's activation read from the types on the board without
+     * the static: Mycosynth Lattice makes a Forest the third artifact you
+     * control, so Mox Opal's metalcraft lets it tap live for any colour, and
+     * on the Lattice's type static's record only the Lattice and the Mox are
+     * artifacts and the Mox makes nothing. The live cards keep their type
+     * lines, the same objects.
+     */
+    @Test
+    void aPlayersProductionReadsThePermanentsTypesWithoutTheStatic() throws Throwable {
+        assumeSuppression();
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card lattice = board.battlefield("Mycosynth Lattice", board.you);
+        board.battlefield("Mox Opal", board.you);
+        board.battlefield("Forest", board.you);
+        board.game.getAction().checkStaticAbilities();
+        Map<Card, CardTypeView> types = cachedTypes(board.game);
+
+        assertEquals(parse(EVERY_COLOR_AND_GREEN), liveProduction(board), "the live board's production");
+        String record = continuousRecordOf(board, lattice, 0);
+        assertEquals(parse(ONE_GREEN), production(player(record, board.you)),
+                "your production without the Lattice's types");
+        types.forEach((card, type) -> assertSame(type, card.getType(),
+                "the snapshot changed " + card + "'s type"));
+    }
+
+    /**
+     * Reading a player's production on the board without a static publishes
+     * no game event: Painter's Servant's colours and Control Magic's control
+     * lent and put back.
+     */
+    @Test
+    void readingProductionWithoutTheStaticPublishesNothing() throws Throwable {
+        assumeSuppression();
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card owned = board.battlefield("Bloom Tender", board.opponent);
+        owned.setSickness(false);
+        Card magic = enchant(board, "Control Magic", owned);
+        Card servant = board.battlefield("Painter's Servant", board.you);
+        servant.setChosenColors(List.of("blue"));
+        board.game.getAction().checkStaticAbilities();
+        List<Object> heard = new ArrayList<>();
+        board.game.subscribeToEvents(new Object() {
+            @Subscribe
+            public void on(Event event) {
+                heard.add(event);
+            }
+        });
+
+        for (Card host : List.of(magic, servant)) {
+            PlayerJson.render(board.game, board.opponent,
+                    StaticSuppression.of(host.getStaticAbilities().get(0)));
+        }
+        assertEquals(List.of(), heard, "the read published events");
+        assertLiveUnchanged(board, magic, magic.getAttachedTo());
+    }
+
+    private static Map<String, Object> liveProduction(CharacterizationBoard board) {
+        return production(parse(PlayerJson.render(board.game, board.you, StaticSuppression.NONE)));
+    }
+
+    /** One green and one of {@code color}, as an {@code untapped_production}. */
+    private static String greenAnd(String color) {
+        return NO_MANA.replace("\"G\":0", "\"G\":1")
+                .replace("\"" + color + "\":0", "\"" + color + "\":1");
+    }
+
+    /** Every card's colours and the colour changes Forge keeps for it, each change the object itself. */
+    private static Map<Integer, List<Object>> colorChanges(Game game) {
+        // Keyed by the card's id: an IdentityHashMap compares its values by identity too.
+        Map<Integer, List<Object>> changes = new LinkedHashMap<>();
+        for (Card card : game.getCardsInGame()) {
+            List<Object> kept = new ArrayList<>();
+            kept.add(card.getColor());
+            for (Table<Long, Long, Object> table : ForgeFields.colorLayers(card)) {
+                table.cellSet().forEach(cell -> kept.add(
+                        new SameCell(cell.getRowKey(), cell.getColumnKey(), cell.getValue())));
+            }
+            changes.put(card.getId(), kept);
+        }
+        return changes;
+    }
+
+    /** A layer-table cell, its value compared by identity. */
+    private record SameCell(Object row, Object column, Object value) {
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof SameCell that && row.equals(that.row)
+                    && column.equals(that.column) && value == that.value;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(row, column, System.identityHashCode(value));
+        }
+    }
+
+    /** Every card's type line as Forge reads it now, the object itself. */
+    private static Map<Card, CardTypeView> cachedTypes(Game game) {
+        Map<Card, CardTypeView> types = new IdentityHashMap<>();
+        for (Card card : game.getCardsInGame()) {
+            types.put(card, card.getType());
+        }
+        return types;
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────
 
     private static void assumeSuppression() {
@@ -115,21 +258,35 @@ class SuppressedProductionTest {
         return aura;
     }
 
-    /** The one continuous record a boundary writes for {@code host}'s static. */
+    /** The one continuous record a boundary writes for {@code host}'s first static. */
     private String continuousRecordOf(CharacterizationBoard board, Card host) throws Throwable {
-        Path dir = java.nio.file.Files.createDirectories(tempDir.resolve("shard" + shards++));
+        return continuousRecordOf(board, host, 0);
+    }
+
+    /** The one continuous record a boundary writes for {@code host}'s static of this index. */
+    private String continuousRecordOf(CharacterizationBoard board, Card host, long index)
+            throws Throwable {
+        Path dir = Files.createDirectories(tempDir.resolve("shard" + shards++));
         List<String> records = ShardRun.records(dir, board.game,
                 (bracket, collectors) -> collectors.continuous().collect());
         String script = ScriptLocator.scriptFileOf(host);
-        List<String> found = new ArrayList<>();
-        for (String record : records) {
-            if ("continuous".equals(parse(record).get("kind"))
-                    && script.equals(RecordLines.scriptOf(record))) {
-                found.add(record);
-            }
-        }
+        List<String> found = records.stream()
+                .filter(record -> "continuous".equals(parse(record).get("kind")))
+                .filter(record -> actsThrough(record, script, index))
+                .toList();
         assertEquals(1, found.size(), "continuous records of " + script + ": " + records);
         return found.get(0);
+    }
+
+    /** Whether the record's first acting key is the static of this index in {@code script}. */
+    private static boolean actsThrough(String record, String script, long index) {
+        List<Map<String, Object>> keys = RecordLines.abilityKeys(record);
+        if (keys.isEmpty()) {
+            return false;
+        }
+        Map<String, Object> key = keys.get(0);
+        return "static".equals(key.get("trait_kind")) && script.equals(key.get("script_file"))
+                && Long.valueOf(index).equals(key.get("index_within_kind"));
     }
 
     private static Map<String, Object> production(Map<String, Object> player) {

@@ -36,11 +36,12 @@ import java.util.List;
  * controller's control this turn, and the summoning sickness of a permanent
  * it made a creature (March of the Machines on an artifact that entered this
  * turn). Forge's own activation checks read the live board only: they ask
- * whether the activator is the card's live controller and whether the live
- * card is sick. So for the read the live cards the static took control of
- * are given their controller without it, and a host sick only as the
- * static's creature is read as not sick; both are put back after, so the
- * read changes nothing in the game.
+ * whether the activator is the card's live controller, count the live
+ * types and colours of the permanents it controls, and ask whether the live
+ * card is sick. So the read is made on the board {@link LentBoard} lends,
+ * every card its type line, colours and controller without the static, and
+ * a host sick only as the static's creature is read as not sick; each is put
+ * back after, so the read changes nothing in the game.
  */
 final class UntappedProduction {
 
@@ -49,29 +50,7 @@ final class UntappedProduction {
 
     /** What {@code player} could still make on {@code board}. */
     static ManaCounts of(Game game, Player player, StaticSuppression board) {
-        List<Runnable> restore = lendControllers(game, board);
-        try {
-            return ManaCounts.tally(producibleFor(game, player, board));
-        } finally {
-            restore.forEach(Runnable::run);
-        }
-    }
-
-    /**
-     * Gives every live permanent whose controller the static changed its
-     * controller on {@code board}, so Forge's controller checks (an ability's
-     * activator is its card's controller, "permanents you control") read
-     * that board; what puts each back.
-     */
-    private static List<Runnable> lendControllers(Game game, StaticSuppression board) {
-        List<Runnable> restore = new ArrayList<>();
-        for (Card card : game.getCardsIn(ZoneType.Battlefield)) {
-            Runnable undo = board.lendController(card);
-            if (undo != null) {
-                restore.add(undo);
-            }
-        }
-        return restore;
+        return LentBoard.read(game, board, () -> ManaCounts.tally(producibleFor(game, player, board)));
     }
 
     private static List<Byte> producibleFor(Game game, Player player, StaticSuppression board) {

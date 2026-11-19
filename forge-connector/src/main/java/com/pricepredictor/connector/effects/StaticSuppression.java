@@ -226,6 +226,18 @@ final class StaticSuppression {
         return ForgeFields.lendCachedType(card.getCurrentState(), type(card));
     }
 
+    /**
+     * Gives the live card this board's colours, for a read Forge makes of
+     * the live board only ("each colour among permanents you control"), by
+     * taking the suppressed static's colour changes out of the tables Forge
+     * computes the card's colours from; putting the same changes back
+     * restores the card exactly. Returns what puts them back, or null when
+     * the suppressed static changed no colour of the card.
+     */
+    Runnable lendColors(Card card) {
+        return staticId == null ? null : ForgeFields.lendColorsWithout(card, staticId);
+    }
+
     /** Whether the suppressed static has a type change on the card. */
     private boolean changedType(Card card) {
         return card.getChangedCardTypesWithout(staticId).size()

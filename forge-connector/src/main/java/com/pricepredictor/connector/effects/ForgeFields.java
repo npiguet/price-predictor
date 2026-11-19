@@ -15,14 +15,16 @@ import forge.util.collect.FCollection;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The few engine fields a snapshot reads that Forge declares private and
- * offers no side-effect-free getter for, and the one it lends for a read.
+ * offers no side-effect-free getter for, and the two it lends for a read.
  *
  * <p>Each read answers null when the field is gone or unreadable, so a Forge
  * that renamed one costs the snapshot that fact rather than the record.
@@ -45,6 +47,11 @@ import java.util.concurrent.ConcurrentHashMap;
  *       Forge caches for a state, lent for a read of the live board as a
  *       continuous record's board and put back after
  *       ({@link #lendCachedType}).</li>
+ *   <li>{@code Card.colorLayers}: the card's colour changes in layer order,
+ *       keyed (timestamp, static id), from which Forge computes every
+ *       colour read and caches none; one static's cells are taken out for a
+ *       read of the live board as a continuous record's board and put back
+ *       after ({@link #lendColorsWithout}).</li>
  * </ul>
  */
 final class ForgeFields {
@@ -133,6 +140,53 @@ final class ForgeFields {
         }
         Object cached = read(CardState.class, "changedType", state);
         return write(field, state, type) ? () -> write(field, state, cached) : null;
+    }
+
+    /**
+     * The card's colour change tables in Forge's layer order
+     * ({@code Card.colorLayers}: by text, characteristic-defining, layer 5),
+     * each keyed (timestamp, static id); the tables themselves, none when
+     * unreadable.
+     */
+    static List<Table<Long, Long, Object>> colorLayers(Card card) {
+        List<Table<Long, Long, Object>> tables = new ArrayList<>();
+        if (read(Card.class, "colorLayers", card) instanceof List<?> layers) {
+            layers.stream().filter(Table.class::isInstance)
+                    .forEach(layer -> tables.add(asColorTable(layer)));
+        }
+        return tables;
+    }
+
+    /** One of {@code Card.colorLayers}, a {@code Table<Long, Long, CardColor>}. */
+    @SuppressWarnings("unchecked")
+    private static Table<Long, Long, Object> asColorTable(Object layer) {
+        return (Table<Long, Long, Object>) layer;
+    }
+
+    /**
+     * Takes the colour changes filed under {@code staticId} out of the
+     * card's colour tables, which every colour read of the live card
+     * computes from (Forge caches no colour), for a read the caller makes
+     * and then undoes with what this returns: the same cells put back under
+     * the same keys. Forge's tables are sorted by those keys, so putting
+     * them back restores each table exactly. Null, with nothing taken, when
+     * the static filed no colour change on the card.
+     */
+    static Runnable lendColorsWithout(Card card, long staticId) {
+        List<Runnable> restore = new ArrayList<>();
+        for (Table<Long, Long, Object> table : colorLayers(card)) {
+            if (table.containsColumn(staticId)) {
+                restore.add(takeColumn(table, staticId));
+            }
+        }
+        return restore.isEmpty() ? null : () -> restore.forEach(Runnable::run);
+    }
+
+    /** Takes {@code column}'s cells out of {@code table}; what puts the same cells back. */
+    private static Runnable takeColumn(Table<Long, Long, Object> table, Long column) {
+        Map<Long, Object> taken = new LinkedHashMap<>(table.column(column));
+        taken.keySet().forEach(row -> table.remove(row, column));
+        return () -> taken.forEach((row, value) -> table.put(row, column, value));
     }
 
     /** The card's layer-3 mana cost changes keyed (timestamp, static id), or null. */
