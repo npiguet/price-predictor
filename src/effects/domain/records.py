@@ -1049,17 +1049,24 @@ class EffectRecord:
 
     @property
     def is_game_end_record(self) -> bool:
-        """Whether the record is a game-end record: an effect half naming no
-        acting line, no cost half and no outcome, which holds the game's
+        """Whether the record is a game-end record: an effect half with
+        ``ability`` the empty tuple and no ``ability_unresolved`` (it seeks no
+        line), no cost half and no outcome, which holds the game's
         ``player_lost`` and ``player_won`` when no other record took them
         (contract ``record-schema-delta.md`` (025), ``player_lost``).
 
-        Not the game-end marker (:func:`is_game_end`). A mana record also
-        has a null outcome, and names its mana ability.
+        Not the game-end marker (:func:`is_game_end`). An unkeyed mana record
+        also has a null outcome and no link, and carries a reason for its
+        empty ability.
         """
         payload = self.payload
         return (isinstance(payload, ResolutionPayload) and payload.outcome is None
-                and not self.ability and self.link_id is None)
+                and self.link_id is None and self._seeks_no_line)
+
+    @property
+    def _seeks_no_line(self) -> bool:
+        """``ability`` is the empty tuple and says nothing about why."""
+        return self.ability == () and self.ability_unresolved is None
 
     @property
     def discriminator(self) -> Moment | PlayabilitySubkind | TurnActionSubkind | None:

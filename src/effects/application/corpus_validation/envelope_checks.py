@@ -451,9 +451,14 @@ class ActingLines:
         #: Records whose ``ability`` is empty and which say nothing about why.
         self.silent_empty = 0
         self.silent_empty_examples: list[str] = []
+        #: Game-end records: ``ability`` empty by design, for they seek no line.
+        self.game_end = 0
 
     def add(self, record: EffectRecord) -> None:
         if record.kind in KINDS_WITHOUT_ACTING_ABILITY:
+            return
+        if record.is_game_end_record:
+            self.game_end += 1
             return
         label = _kind_label(record)
         counts = self.acting[label]
@@ -514,7 +519,8 @@ class ActingLines:
             ok=self.silent_empty == 0,
             measured=(
                 f"{self.silent_empty} of {empty} empty abilities carry "
-                "no ability_unresolved reason"
+                f"no ability_unresolved reason ({self.game_end} game-end "
+                "records seek no line and are not counted)"
             ),
             detail=tuple(
                 f"silent: {example}" for example in self.silent_empty_examples

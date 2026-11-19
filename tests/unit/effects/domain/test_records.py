@@ -534,3 +534,11 @@ class TestGameEndRecord:
         mana = _golden("record-mana.jsonl", fork=False)
         assert mana.payload.outcome is None
         assert not mana.is_game_end_record
+
+    def test_an_unkeyed_mana_record_is_not_one(self):
+        """Empty ``ability``, no link and no outcome, but with a reason."""
+        mana = _golden("record-mana.jsonl", fork=False)
+        unkeyed = replace(mana, ability=(), ability_unresolved=UnresolvedReason.NO_CARD_STATE,
+                          link_id=None)
+        assert not unkeyed.is_game_end_record
+        assert replace(unkeyed, ability_unresolved=None).is_game_end_record

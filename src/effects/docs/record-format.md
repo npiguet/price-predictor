@@ -82,7 +82,7 @@ A protection copy written by `build-corpus` is a synthetic record `<record_id>~p
 
 - `EffectRecord.origin` (`RecordOrigin`) reads what produced a record off `synthetic` and `fork_kind` alone: `SYNTHETIC` for a synthetic record, `LIVE` for an observed one, else its `fork_kind`'s (`FORCED`, `PROBE`, `PROTECTION_FORK`, `DIRECTED_FORK`). An intervention and a protection fork share their flags, so a reader that infers the kind from them confuses the two.
 - `fork_kind` decodes into `records.ForkKind`, and a value outside it is refused. A synthetic record copies a live one and carries none, and a record whose `fork_kind` disagrees with its row above is refused (`EffectRecord._check_fork_kind`). A fork record without one predates the member: it is counted as `fork_kind <absent>` (`wire_closed_lists`), and its `origin` raises rather than guess.
-- `EffectRecord.is_game_end_record` is the game-end record of the 025 contract's `player_lost` row: an effect half with `ability` empty and `ability_unresolved` null, no `link_id` and `outcome` null. It is not the `game_end` marker (`records.is_game_end`), and a mana record, which names its line, is not one.
+- `EffectRecord.is_game_end_record` is the game-end record of the 025 contract's `player_lost` row: an effect half with `ability` empty and `ability_unresolved` null, no `link_id` and `outcome` null. It is not the `game_end` marker (`records.is_game_end`), and a mana record is not one, even unkeyed: its empty `ability` carries a reason. `validate-corpus` counts a game-end record apart and not as a silent empty ability.
 
 ## Gen-3 members worth knowing
 
