@@ -1,7 +1,9 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import forge.card.CardStateName;
 import forge.game.Game;
+import forge.game.GameObject;
 import forge.game.ability.AbilityKey;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
@@ -16,6 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 import static com.pricepredictor.connector.effects.RecordLines.asMap;
 import static com.pricepredictor.connector.effects.RecordLines.outcomeOf;
@@ -88,6 +91,21 @@ class ActingStackExtrasTest {
     }
 
     /**
+     * The spell {@code cast} puts on the stack fizzles once {@code target} is
+     * sacrificed in response; its host's extras still hold the target as cast.
+     */
+    private void assertFizzledKeepingItsTarget(
+            Game game, String script, Card target, Supplier<SpellAbility> cast) throws Throwable {
+        SpellAbility[] spell = {null};
+        String half = resolutionHalf(game, script, () -> {
+            spell[0] = cast.get();
+            sacrifice(game, target);
+        });
+        assertEquals("fizzled", outcomeOf(half), half);
+        assertTargetsAsCast(half, spell[0].getHostCard(), List.of("L" + target.getId()));
+    }
+
+    /**
      * Lightning Bolt whose target was sacrificed in response fizzles; its
      * extras still name the creature as cast, as it last existed, with one
      * target chosen: the refs' {@code targets_at_cast}.
@@ -99,14 +117,63 @@ class ActingStackExtrasTest {
         Player opponent = game.getPlayers().get(1);
         Card bears = TestBoard.inPlay(game, opponent, "Grizzly Bears");
         Card bolt = TestBoard.inHand(game, caster, "Lightning Bolt");
-        SpellAbility[] cast = {null};
+        assertFizzledKeepingItsTarget(game, "cardsfolder/l/lightning_bolt.txt", bears,
+                () -> TestBoard.cast(game, bolt, caster, bears));
+    }
 
-        String half = resolutionHalf(game, "cardsfolder/l/lightning_bolt.txt", () -> {
-            cast[0] = TestBoard.cast(game, bolt, caster, bears);
-            sacrifice(game, bears);
-        });
-        assertEquals("fizzled", outcomeOf(half), half);
-        assertTargetsAsCast(half, cast[0].getHostCard(), List.of("L" + bears.getId()));
+    /**
+     * {@code card}'s spell on {@code face}, cast as the engine's play path
+     * casts it: the card moved to the stack with that ability as its cause,
+     * which turns it to the face, then the ability put on the stack for its owner, aimed at
+     * {@code target} from its first ability that takes one.
+     */
+    private static SpellAbility castOnFace(
+            Game game, Card card, CardStateName face, GameObject target) {
+        Player caster = card.getOwner();
+        SpellAbility faceSpell = card.getAllSpellAbilities().stream()
+                .filter(sa -> sa.isSpell() && sa.getCardState() != null
+                        && sa.getCardState().getStateName() == face)
+                .findFirst().orElseThrow(() -> new AssertionError("no spell on " + face));
+        faceSpell.setActivatingPlayer(caster);
+        SpellAbility spell = TestBoard.spellOf(game.getAction().moveToStack(card, faceSpell), caster);
+        for (SpellAbility link = spell; link != null; link = link.getSubAbility()) {
+            if (link.usesTargeting()) {
+                link.resetTargets();
+                link.getTargets().add(target);
+                break;
+            }
+        }
+        game.getStack().add(spell);
+        return spell;
+    }
+
+    /**
+     * Bonecrusher Giant's Stomp, the Adventure face cast from a hand that
+     * holds the card as the Giant, aimed at a creature sacrificed in
+     * response: the host shows its extras as cast like any other host.
+     */
+    @Test
+    void anAdventureSpellsExtrasHoldItsTargetAsCast() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
+        Card giant = TestBoard.inHand(game, caster, "Bonecrusher Giant");
+        assertFizzledKeepingItsTarget(game, "cardsfolder/b/bonecrusher_giant_stomp.txt", bears,
+                () -> castOnFace(game, giant, CardStateName.Secondary, bears));
+    }
+
+    /**
+     * Hagra Mauling, a modal double-faced card cast as its spell face,
+     * aimed at a creature sacrificed in response: the same.
+     */
+    @Test
+    void aModalDoubleFacedSpellsExtrasHoldItsTargetAsCast() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
+        Card mauling = TestBoard.inHand(game, caster, "Hagra Mauling");
+        assertFizzledKeepingItsTarget(game, "cardsfolder/h/hagra_mauling_hagra_broodpit.txt", bears,
+                () -> castOnFace(game, mauling, CardStateName.Original, bears));
     }
 
     /**
