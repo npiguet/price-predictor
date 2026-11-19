@@ -85,7 +85,7 @@ record Channels(
                 // A declaration of attackers the game ended before it was made.
                 playability::close,
                 // A buffered ability that never ran.
-                rewrites::writeWaiting,
+                rewrites::writeWaitingAtGameEnd,
                 // This is the last moment the game can be said to have ended,
                 // and the reservoirs are only decided then.
                 triggers::flush,

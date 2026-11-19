@@ -60,6 +60,11 @@ final class RewriteTally {
     private long unreadable;
     private long games;
 
+    /** The records counted so far. */
+    synchronized long records() {
+        return records;
+    }
+
     /**
      * One replacement, and what its record says.
      *

@@ -105,6 +105,11 @@ stratum.
   (its snapshot threw; counted as `game-end marker` in the worker's failure report) have none.
 - Never withheld by `--max-records-per-game`.
 
+A record counts toward what the cap bounds, and toward the worker's rewrite tally, only when it
+reaches the shard: a rewrite record the cap withholds is not in the tally, and a not-fired trigger
+record the cap withholds spends neither its mode's negative balance nor its line's negative cap. A
+fired trigger enters its line's reservoir count when Forge runs it, never when it is evaluated.
+
 What `--max-records-per-game` (the cap) bounds: the records of a game written as it is played, its
 forks' included, so a game whose forks wrote records reaches the cap sooner and withholds the live
 records past it. Past the cap the shard still takes the game's end-of-game records, each bounded
@@ -114,11 +119,12 @@ on its own:
 |---|---|
 | fired `trigger` records | 24 per trigger line (`lineKey`: its provenance key, or reason, host, mode and parameters for a line that keys to none) |
 | mana records | `--mana-cap` per mana key (the ability's text and the mana it produced) |
+| rewrite records still waiting on a buffered ability's run | 1 per replacement the game ended on, none of them withheld |
 | the record holding the outcome | 1 |
 | the marker | 1 |
 
 A game therefore writes at most the cap + 24 × its fired trigger lines + `--mana-cap` × its mana
-keys + 2 records. At the defaults (cap 5000, `--mana-cap` 1), a game whose 20 trigger lines fired
+keys + its waiting rewrite records + 2 records. At the defaults (cap 5000, `--mana-cap` 1), a game whose 20 trigger lines fired
 and whose lands made 10 kinds of mana writes at most 5000 + 480 + 10 + 2 = 5492.
 - Payload `{"events": [], "records_withheld": n}`: `records_withheld` the records of the game the
   cap kept out of the shard (`0` for none).

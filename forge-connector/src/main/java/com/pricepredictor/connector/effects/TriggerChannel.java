@@ -17,8 +17,9 @@ import java.util.List;
  * ({@code onTriggerRun}, which hands back the very trigger and run
  * parameters the evaluation was handed): its record, read on the board at
  * the evaluation, waits for that run, and an evaluation never run (a trigger
- * Forge dropped before running it) writes no record. Several runs of one
- * evaluation (Panharmonicon) confirm it once.
+ * Forge dropped before running it) writes no record and counts for nothing in
+ * its line's reservoir. Several runs of one evaluation (Panharmonicon)
+ * confirm it once.
  */
 final class TriggerChannel {
 
@@ -29,9 +30,9 @@ final class TriggerChannel {
     /** Each acting line's fired records, held until the game ends. */
     private final RecordReservoir positives;
     /**
-     * The firings evaluated and not yet run, with the reservoir slot each
-     * drew and its record, read on the board at the evaluation. Few: Forge
-     * runs a trigger right after the evaluation that fired it.
+     * The firings evaluated and not yet run, each with its record, read on
+     * the board at the evaluation. Few: Forge runs a trigger right after the
+     * evaluation that fired it.
      */
     private final List<Firing> unconfirmed = new ArrayList<>();
     /**
@@ -42,8 +43,7 @@ final class TriggerChannel {
 
     /** An evaluation that fired, waiting for its run. */
     private record Firing(
-            Object trigger, Object runParams, String key, int slot, String mode,
-            EffectRecord record) {
+            Object trigger, Object runParams, String key, String mode, EffectRecord record) {
     }
 
     TriggerChannel(
@@ -108,9 +108,10 @@ final class TriggerChannel {
             if (!context.emitDistinct(record(trait, line, args.get(1), fired), dedup)) {
                 return;
             }
-            // Counted only for a record that is actually written, so a
-            // suppressed duplicate spends neither the negatives' quota nor
-            // the line's cap, and the ratio holds over what reaches the shard.
+            // Counted only for a record that reaches the shard, so a
+            // suppressed duplicate or one the per-game cap withheld spends
+            // neither the negatives' quota nor the line's cap, and the ratio
+            // holds over what reaches the shard.
             if (kept) {
                 negatives.keepOutsideTheBalance(key);
             } else {
@@ -138,18 +139,18 @@ final class TriggerChannel {
     }
 
     /**
-     * A firing evaluated: drawn for its line's reservoir now, and built on
-     * this board when it takes a slot, but held only once Forge runs it.
+     * A firing evaluated: built on this board now, and counted in its line's
+     * reservoir only once Forge runs it, so an evaluation that never runs
+     * leaves the reservoir's count alone.
      */
     private void evaluatedFiring(
             Object trait, ProvenanceKey.Resolved line, Object runParams, String mode,
             String key) {
-        int slot = positives.slot(key);
-        if (slot < 0) {
+        if (!positives.keepsAny()) {
             return;
         }
         unconfirmed.add(new Firing(
-                trait, runParams, key, slot, mode, record(trait, line, runParams, true)));
+                trait, runParams, key, mode, record(trait, line, runParams, true)));
         if (!runsAreTold) {
             ran(trait, runParams);
         }
@@ -165,15 +166,24 @@ final class TriggerChannel {
             Firing firing = unconfirmed.get(i);
             if (firing.trigger() == trigger && firing.runParams() == runParams) {
                 unconfirmed.remove(i);
-                // A slot past the records held is a free place, whatever an
-                // earlier build that threw left unfilled (C2 #13).
-                boolean fills = firing.slot() >= positives.held(firing.key());
-                positives.hold(firing.key(), firing.slot(), firing.record());
-                if (fills) {
-                    negatives.keep(firing.mode(), firing.key(), true);
-                }
+                hold(firing);
                 return;
             }
+        }
+    }
+
+    /** Draw a run firing's slot in its line's reservoir and hold it there if it took one. */
+    private void hold(Firing firing) {
+        int slot = positives.slot(firing.key());
+        if (slot < 0) {
+            return;
+        }
+        // A slot past the records held is a free place, whatever an earlier
+        // build that threw left unfilled (C2 #13).
+        boolean fills = slot >= positives.held(firing.key());
+        positives.hold(firing.key(), slot, firing.record());
+        if (fills) {
+            negatives.keep(firing.mode(), firing.key(), true);
         }
     }
 

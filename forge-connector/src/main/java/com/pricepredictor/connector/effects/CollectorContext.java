@@ -4,6 +4,7 @@ import com.pricepredictor.connector.effects.directed.KeptRecords;
 
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * What a collector of one game writes its records through.
@@ -42,13 +43,16 @@ final class CollectorContext {
      * the stamps above; nothing for a live game's.
      */
     private final Consumer<EffectRecord> forkFlags;
-    /** Where a finished record's line goes: the shard, or a fork's held lines. */
-    private final Consumer<String> out;
+    /**
+     * Where a finished record's line goes: the shard, or a fork's held lines;
+     * says whether the line was taken, which the shard's cap may refuse.
+     */
+    private final Predicate<String> out;
     /**
      * Where an end-of-game record's line goes: the shard past the per-game
      * cap ({@link RecordShardWriter#writeUncapped}), or a fork's held lines.
      */
-    private final Consumer<String> endOfGameOut;
+    private final Predicate<String> endOfGameOut;
     /** Whether this context writes a fork's records. */
     private final boolean fork;
     /**
@@ -66,15 +70,18 @@ final class CollectorContext {
                 aimedAt == null ? null : List.copyOf(aimedAt), record -> { },
                 // Not writer::write, which would dereference a writer a
                 // collector that never writes is built without.
-                line -> writer.write(line), line -> writer.writeUncapped(line), false,
+                line -> writer.write(line), line -> {
+                    writer.writeUncapped(line);
+                    return true;
+                }, false,
                 KeptRecords.NONE);
     }
 
     private CollectorContext(
             RecordShardWriter writer, String gameId, AttributionMode mode,
             String randomSeatPlayerId, List<String> aimedAt,
-            Consumer<EffectRecord> forkFlags, Consumer<String> out,
-            Consumer<String> endOfGameOut, boolean fork, KeptRecords kept) {
+            Consumer<EffectRecord> forkFlags, Predicate<String> out,
+            Predicate<String> endOfGameOut, boolean fork, KeptRecords kept) {
         this.writer = writer;
         this.gameId = gameId;
         this.mode = mode;
@@ -96,8 +103,12 @@ final class CollectorContext {
      * samplers draw (FR-010c).
      */
     CollectorContext forFork(Consumer<EffectRecord> flags, Consumer<String> out, KeptRecords kept) {
+        Predicate<String> held = line -> {
+            out.accept(line);
+            return true;
+        };
         return new CollectorContext(
-                writer, gameId, mode, randomSeatPlayerId, aimedAt, flags, out, out, true, kept);
+                writer, gameId, mode, randomSeatPlayerId, aimedAt, flags, held, held, true, kept);
     }
 
     /** The records written whatever the samplers draw: none but in a directed fork. */
@@ -191,14 +202,11 @@ final class CollectorContext {
      * finished record, rather than a key each channel assembles for itself and
      * can leave a field out of.
      *
-     * @return whether the record was written
+     * @return whether the record reached the shard: false for a repeat, and
+     *         for one the per-game cap withheld
      */
     boolean emitDistinct(EffectRecord record, RecordDedup dedup) {
-        if (!dedup.allowDistinct(record)) {
-            return false;
-        }
-        emit(record);
-        return true;
+        return dedup.allowDistinct(record) && emit(record);
     }
 
     /**
@@ -206,17 +214,13 @@ final class CollectorContext {
      * {@code --max-records-per-game} on a live game ({@link #endOfGameOut}).
      */
     boolean emitDistinctAtGameEnd(EffectRecord record, RecordDedup dedup) {
-        if (!dedup.allowDistinct(record)) {
-            return false;
-        }
-        emitAtGameEnd(record);
-        return true;
+        return dedup.allowDistinct(record) && emitAtGameEnd(record);
     }
 
     /** {@link #emit}, for a record written at the game's end ({@link #endOfGameOut}). */
-    void emitAtGameEnd(EffectRecord record) {
+    boolean emitAtGameEnd(EffectRecord record) {
         stamp(record);
-        write(endOfGameOut, record.toJson());
+        return write(endOfGameOut, record.toJson());
     }
 
     /**
@@ -225,16 +229,25 @@ final class CollectorContext {
      *
      * <p>A record already aimed keeps its own: a directed fork names the one
      * rule it forked for, which is narrower than the run's list.
+     *
+     * @return whether the line reached the shard: false when the per-game cap
+     *         withheld it
      */
-    void emit(EffectRecord record) {
+    boolean emit(EffectRecord record) {
         stamp(record);
-        write(out, record.toJson());
+        return write(out, record.toJson());
     }
 
-    /** Hand a finished line to {@code to}, noting whether it holds the game's outcome. */
-    private void write(Consumer<String> to, String line) {
-        outcomeWritten |= RecordShardWriter.holdsTheOutcome(line);
-        to.accept(line);
+    /**
+     * Hand a finished line to {@code to}, noting whether it holds the game's
+     * outcome once taken.
+     *
+     * @return whether {@code to} took the line
+     */
+    private boolean write(Predicate<String> to, String line) {
+        boolean taken = to.test(line);
+        outcomeWritten |= taken && RecordShardWriter.holdsTheOutcome(line);
+        return taken;
     }
 
     /**

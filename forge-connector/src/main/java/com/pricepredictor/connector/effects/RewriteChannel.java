@@ -7,6 +7,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
+import java.util.function.BiPredicate;
 
 /**
  * One {@code rewrite} record per replacement, carrying the event it received,
@@ -220,13 +221,26 @@ final class RewriteChannel implements BusBracketCollector.EventTap {
      * Write the records still waiting: one whose ability ran (its run went to
      * an older record, Forge having summed the damage) says it ran, with no
      * events; one whose ability never ran says it did not. At the state-based
-     * loop's start, which no buffered run straddles, and at the game's end.
+     * loop's start, which no buffered run straddles, under the per-game cap.
      */
     void writeWaiting() {
+        writeWaiting(context::emitDistinct);
+    }
+
+    /**
+     * {@link #writeWaiting()} at the game's end: an end-of-game write, which
+     * the per-game cap does not withhold.
+     */
+    void writeWaitingAtGameEnd() {
+        writeWaiting(context::emitDistinctAtGameEnd);
+    }
+
+    private void writeWaiting(BiPredicate<EffectRecord, RecordDedup> door) {
         for (Waiting held : waiting) {
             boolean ran = ranPairs.stream()
                     .anyMatch(done -> done.waitsOn(held.effect(), held.ability()));
-            write(held.record(), held.rewrite(), ran, List.of());
+            fill(held.record(), held.rewrite(), ran, List.of());
+            count(held.rewrite(), door.test(held.record(), dedup));
         }
         waiting.clear();
         ranPairs.clear();
@@ -242,17 +256,30 @@ final class RewriteChannel implements BusBracketCollector.EventTap {
         };
     }
 
-    /**
-     * Write a record with its payload, counting it in the worker's tally
-     * when it reaches the shard of a live game, never a fork's (C5 #16).
-     */
+    /** Write a record with its payload, under the per-game cap, and count it if it got in. */
     private void write(
+            EffectRecord record, Rewrite rewrite, boolean bufferedRan,
+            List<EffectEvent> bufferedEvents) {
+        fill(record, rewrite, bufferedRan, bufferedEvents);
+        count(rewrite, context.emitDistinct(record, dedup));
+    }
+
+    /** Give a record its payload. */
+    private void fill(
             EffectRecord record, Rewrite rewrite, boolean bufferedRan,
             List<EffectEvent> bufferedEvents) {
         record.payload(RecordPayloads.rewritePayload(
                 rewrite.incoming(), rewrite.outgoing(), rewrite.result(), rewrite.replacedBy(),
                 rewrite.incomingUnknown(), rewrite.buffered(), bufferedRan, bufferedEvents));
-        if (context.emitDistinct(record, dedup) && !context.isFork()) {
+    }
+
+    /**
+     * Count a record in the worker's tally when it reached the shard of a
+     * live game, never a fork's (C5 #16): one the cap withheld is not in the
+     * shard, so it is not in the tally.
+     */
+    private void count(Rewrite rewrite, boolean reachedTheShard) {
+        if (reachedTheShard && !context.isFork()) {
             JVM_REWRITES.record(
                     rewrite.mode(), rewrite.result(), rewrite.outgoing() != null,
                     !rewrite.replacedBy().isEmpty(), rewrite.before(), rewrite.after());

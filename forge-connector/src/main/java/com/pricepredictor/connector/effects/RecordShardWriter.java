@@ -157,8 +157,10 @@ public final class RecordShardWriter implements AutoCloseable {
      * Append one already-rendered record line, flushing a full block; or,
      * once its game has written {@code maxRecordsPerGame} records, withhold
      * it and count it against the game (FR-041a).
+     *
+     * @return whether the line was written, false for one the cap withheld
      */
-    public synchronized void write(String recordJson) {
+    public synchronized boolean write(String recordJson) {
         if (closed) {
             throw new IllegalStateException("shard already closed: " + path);
         }
@@ -167,7 +169,7 @@ public final class RecordShardWriter implements AutoCloseable {
             GameRecords records = games.computeIfAbsent(game, id -> new GameRecords());
             if (records.written >= maxRecordsPerGame && !holdsTheOutcome(recordJson)) {
                 records.withhold(recordJson);
-                return;
+                return false;
             }
             records.written++;
         }
@@ -175,6 +177,7 @@ public final class RecordShardWriter implements AutoCloseable {
         if (++blockRecords >= BLOCK_RECORDS) {
             flushBlock();
         }
+        return true;
     }
 
     /**

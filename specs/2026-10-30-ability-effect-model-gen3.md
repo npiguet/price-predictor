@@ -577,7 +577,8 @@ keyed as `attributed_to` spells the segment; `[]` where none resolved.
   not re-applied its statics for the new turn there. Turn-based-action records and directed
   forks still run there.
 - A game writes at most `--max-records-per-game` records. Past the cap the collector writes
-  no further record of that game, counts the records it withheld, and prints one line naming
+  no further record of that game but its end-of-game records (fired trigger, mana, waiting rewrite,
+  the outcome, the marker), counts the records it withheld, and prints one line naming
   the game, the turn and the acting card of the most frequent withheld record.
 - The first gen-3 pilot runs with the dropped-event count on, and reports the number of
   `mana_produced` events whose `mana_by_color` map is empty.
