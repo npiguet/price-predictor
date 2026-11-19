@@ -125,22 +125,18 @@ final class ForkFidelity {
     /**
      * The report's first line, or null when there is nothing to report: the
      * differences' count, where the fork was taken, and the kinds the copier
-     * dropped references of, with how many.
+     * dropped references of, with how many. A copy with no difference, only
+     * drops, reads {@code Effect records: fork copy dropped: ...}, so a count
+     * of {@code fork fidelity:} lines counts the copies that differ.
      */
     static String line(Game live, int differences, Map<?, Integer> noCounterpart) {
-        Map<String, Integer> dropped = new TreeMap<>();
-        if (noCounterpart != null) {
-            noCounterpart.forEach((kind, count) -> {
-                if (count != null && count > 0) {
-                    dropped.put(String.valueOf(kind), count);
-                }
-            });
-        }
+        Map<String, Integer> dropped = droppedKinds(noCounterpart);
         if (differences == 0 && dropped.isEmpty()) {
             return null;
         }
-        StringBuilder out = new StringBuilder("Effect records: fork fidelity: ")
-                .append(differences).append(" difference(s), phase ")
+        StringBuilder out = new StringBuilder(differences == 0
+                ? "Effect records: fork copy dropped: phase "
+                : "Effect records: fork fidelity: " + differences + " difference(s), phase ")
                 .append(live.getPhaseHandler().getPhase())
                 .append(", turn ").append(live.getPhaseHandler().getTurn())
                 .append(", caller ").append(ScoreMismatchReport.caller());
@@ -150,6 +146,19 @@ final class ForkFidelity {
         return out.toString();
     }
 
+    /** The kinds with at least one drop, by name, with their counts. */
+    private static Map<String, Integer> droppedKinds(Map<?, Integer> noCounterpart) {
+        Map<String, Integer> dropped = new TreeMap<>();
+        if (noCounterpart != null) {
+            noCounterpart.forEach((kind, count) -> {
+                if (count != null && count > 0) {
+                    dropped.put(String.valueOf(kind), count);
+                }
+            });
+        }
+        return dropped;
+    }
+
     /**
      * Every difference between two arrays of players or entities, matched by
      * id, field by field: {@code kind id (name).field: live=... fork=...}, or
@@ -157,30 +166,36 @@ final class ForkFidelity {
      */
     static List<String> differencesById(String kind, String realArray, String copyArray) {
         List<String> out = new ArrayList<>();
-        Map<String, Map<String, String>> real = byId(realArray);
-        Map<String, Map<String, String>> copy = byId(copyArray);
+        Map<String, List<Map<String, String>>> real = byId(realArray);
+        Map<String, List<Map<String, String>>> copy = byId(copyArray);
         Set<String> ids = new TreeSet<>(real.keySet());
         ids.addAll(copy.keySet());
         for (String id : ids) {
-            Map<String, String> left = real.get(id);
-            Map<String, String> right = copy.get(id);
-            String label = kind + " " + id + name(left != null ? left : right);
-            if (right == null) {
-                out.add(label + ": only in live");
-            } else if (left == null) {
-                out.add(label + ": only in fork");
-            } else {
-                compareFields(label, left, right, out);
+            List<Map<String, String>> lefts = real.getOrDefault(id, List.of());
+            List<Map<String, String>> rights = copy.getOrDefault(id, List.of());
+            for (int i = 0; i < Math.max(lefts.size(), rights.size()); i++) {
+                Map<String, String> left = i < lefts.size() ? lefts.get(i) : null;
+                Map<String, String> right = i < rights.size() ? rights.get(i) : null;
+                // Entities sharing an id (506.4c's placeholders) pair up in order.
+                String label = kind + " " + id + name(left != null ? left : right);
+                if (right == null) {
+                    out.add(label + ": only in live");
+                } else if (left == null) {
+                    out.add(label + ": only in fork");
+                } else {
+                    compareFields(label, left, right, out);
+                }
             }
         }
         return out;
     }
 
-    private static Map<String, Map<String, String>> byId(String array) {
-        Map<String, Map<String, String>> byId = new LinkedHashMap<>();
+    /** The array's elements by id, those sharing an id kept apart in array order. */
+    private static Map<String, List<Map<String, String>>> byId(String array) {
+        Map<String, List<Map<String, String>>> byId = new LinkedHashMap<>();
         for (String element : JsonParts.elements(array)) {
             Map<String, String> fields = JsonParts.fields(element);
-            byId.put(unquote(fields.getOrDefault("id", "?")), fields);
+            byId.computeIfAbsent(unquote(fields.getOrDefault("id", "?")), id -> new ArrayList<>()).add(fields);
         }
         return byId;
     }

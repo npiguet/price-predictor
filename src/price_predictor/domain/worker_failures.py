@@ -57,7 +57,8 @@ class WorkerFailure(StrEnum):
     FORK_SCORE_MISMATCH = "fork_score_mismatch"
     #: A fork's score could not be checked, discarded.
     FORK_CHECK_FAILED = "fork_check_failed"
-    #: The fork fidelity audit found differences, or could not run.
+    #: The fork fidelity audit found differences (a `0 difference(s)` or drop-only line is not
+    #: one), or could not run.
     FORK_FIDELITY = "fork_fidelity"
     #: A fork's copy, body or writer threw, the fork discarded (the first
     #: failure of each kind of fork and step; later ones are counted in the
@@ -123,7 +124,8 @@ FAILURE_PATTERNS: tuple[FailurePattern, ...] = (
              "Effect records: discarding a fork whose score "),
     _pattern(WorkerFailure.FORK_CHECK_FAILED, r"Effect records: fork score check failed",
              "Effect records: fork score check failed ("),
-    _pattern(WorkerFailure.FORK_FIDELITY, r"Effect records: fork fidelity",
+    _pattern(WorkerFailure.FORK_FIDELITY,
+             r"Effect records: fork fidelity(: [1-9]\d* difference| audit failed)",
              "Effect records: fork fidelity"),
     _pattern(WorkerFailure.FORK_FAILED, r"Effect records: fork \S+ (copy|body|write) threw",
              " threw, and is discarded (later failures"),

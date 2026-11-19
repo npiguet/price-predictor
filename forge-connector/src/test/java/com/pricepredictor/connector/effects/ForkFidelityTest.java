@@ -423,6 +423,42 @@ class ForkFidelityTest {
         assertEquals(null, ForkFidelity.line(live, 0, java.util.Map.of()));
     }
 
+    /** A copy that differs in nothing but its drops prints under a prefix of its own, not the fidelity one. */
+    @Test
+    void aDropOnlyCopyPrintsUnderItsOwnPrefix() {
+        Game live = board();
+        java.util.Map<GameCopier.NoCounterpart, Integer> tally =
+                new java.util.EnumMap<>(GameCopier.NoCounterpart.class);
+        tally.put(GameCopier.NoCounterpart.ACTIVATION, 3);
+
+        String dropOnly = ForkFidelity.line(live, 0, tally);
+        String differing = ForkFidelity.line(live, 2, tally);
+
+        assertTrue(dropOnly.startsWith("Effect records: fork copy dropped: phase "), dropOnly);
+        assertTrue(dropOnly.endsWith(", no counterpart {ACTIVATION=3}"), dropOnly);
+        assertTrue(differing.startsWith("Effect records: fork fidelity: 2 difference(s), phase "), differing);
+        assertTrue(differing.endsWith(", no counterpart {ACTIVATION=3}"), differing);
+    }
+
+    /** Two entities sharing an id (the 506.4c placeholders' -1) are both compared, in order. */
+    @Test
+    void twoEntitiesSharingAnIdAreBothCompared() {
+        String live = "[{\"id\":\"-1\",\"name\":\"A\",\"tapped\":false},"
+                + "{\"id\":\"-1\",\"name\":\"B\",\"tapped\":false}]";
+        String same = live;
+        String second = "[{\"id\":\"-1\",\"name\":\"A\",\"tapped\":false},"
+                + "{\"id\":\"-1\",\"name\":\"B\",\"tapped\":true}]";
+        String one = "[{\"id\":\"-1\",\"name\":\"A\",\"tapped\":false}]";
+
+        assertEquals(List.of(), ForkFidelity.differencesById("entity", live, same));
+        List<String> changed = ForkFidelity.differencesById("entity", live, second);
+        assertEquals(1, changed.size(), changed.toString());
+        assertTrue(changed.get(0).contains(".tapped: live=false fork=true"), changed.toString());
+        List<String> missing = ForkFidelity.differencesById("entity", live, one);
+        assertEquals(1, missing.size(), missing.toString());
+        assertTrue(missing.get(0).endsWith(": only in live"), missing.toString());
+    }
+
     /** What the copier left out is listed after the differences, one line per example, kind first. */
     @Test
     void theReportListsExamplesOfWhatTheCopierLeftOut() {

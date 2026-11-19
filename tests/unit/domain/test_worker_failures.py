@@ -96,6 +96,23 @@ def test_an_ordinary_line_is_no_failure(line):
     assert classify(line) is None
 
 
+@pytest.mark.parametrize("line", [
+    "Effect records: fork fidelity: 0 difference(s), phase MAIN1, turn 3, caller x",
+    "Effect records: fork copy dropped: phase MAIN1, turn 3, caller x, no counterpart {LINK=2}",
+])
+def test_a_fork_copy_without_differences_is_no_failure(line):
+    assert classify(line) is None
+
+
+@pytest.mark.parametrize("line", [
+    "Effect records: fork fidelity: 2 difference(s), phase MAIN1, turn 3, caller x",
+    "Effect records: fork fidelity: 10 difference(s), phase MAIN1, turn 3, caller x",
+    "Effect records: fork fidelity audit failed (java.lang.NullPointerException)",
+])
+def test_a_fork_copy_with_differences_or_a_failed_audit_is_a_fidelity_failure(line):
+    assert classify(line) is WorkerFailure.FORK_FIDELITY
+
+
 @pytest.mark.parametrize(
     "failure", [p for p in FAILURE_PATTERNS if p.source_fragment is not None],
     ids=lambda p: p.kind.value,
