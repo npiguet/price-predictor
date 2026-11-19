@@ -129,7 +129,7 @@ final class CardLines {
             this.game = game;
             this.card = card;
             this.board = board;
-            this.inForce = new LineInForce(card);
+            this.inForce = new LineInForce(card, board);
             this.grants = new LineGrant(card, board.grantedLines(card));
             this.onStack = stackAbilityOf(game, card);
             this.cast = castSpellOf(card, onStack);

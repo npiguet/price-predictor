@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import com.google.common.collect.Table;
+import forge.card.CardTypeView;
 import forge.game.CardTraitBase;
 import forge.game.Game;
 import forge.game.StaticEffect;
@@ -21,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The few engine fields a snapshot reads that Forge declares private and
- * offers no side-effect-free getter for.
+ * offers no side-effect-free getter for, and the one it lends for a read.
  *
  * <p>Each read answers null when the field is gone or unreadable, so a Forge
  * that renamed one costs the snapshot that fact rather than the record.
@@ -40,6 +41,10 @@ import java.util.concurrent.ConcurrentHashMap;
  *       Iterable)}): the public getters assemble a state's traits through the
  *       card's own trait changes only, and a printed line's index is counted
  *       through those changes with no line taken away.</li>
+ *   <li>{@code CardState.changedType}: the one field written, the type line
+ *       Forge caches for a state, lent for a read of the live board as a
+ *       continuous record's board and put back after
+ *       ({@link #lendCachedType}).</li>
  * </ul>
  */
 final class ForgeFields {
@@ -112,6 +117,22 @@ final class ForgeFields {
             }
         }
         return timestamps;
+    }
+
+    /**
+     * Puts {@code type} in {@code state}'s cached type line
+     * ({@code CardState.changedType}), which every type check of the live
+     * card reads, for a read the caller makes and then undoes with what this
+     * returns: the cached object itself put back. Null, with nothing
+     * written, when the field cannot be reached.
+     */
+    static Runnable lendCachedType(CardState state, CardTypeView type) {
+        Field field = field(CardState.class, "changedType");
+        if (field == MISSING) {
+            return null;
+        }
+        Object cached = read(CardState.class, "changedType", state);
+        return write(field, state, type) ? () -> write(field, state, cached) : null;
     }
 
     /** The card's layer-3 mana cost changes keyed (timestamp, static id), or null. */
@@ -222,10 +243,20 @@ final class ForgeFields {
     }
 
     private static Object read(Class<?> owner, String name, Object target) {
-        if (target == null) {
+        Field field = field(owner, name);
+        if (target == null || field == MISSING) {
             return null;
         }
-        Field field = FIELDS.computeIfAbsent(owner.getName() + "#" + name, key -> {
+        try {
+            return field.get(target);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** {@code owner}'s declared field {@code name}, made accessible, or {@link #MISSING}. */
+    private static Field field(Class<?> owner, String name) {
+        return FIELDS.computeIfAbsent(owner.getName() + "#" + name, key -> {
             try {
                 Field found = owner.getDeclaredField(name);
                 found.setAccessible(true);
@@ -234,13 +265,15 @@ final class ForgeFields {
                 return MISSING;
             }
         });
-        if (field == MISSING) {
-            return null;
-        }
+    }
+
+    /** Sets {@code field} of {@code target} to {@code value}; whether it was set. */
+    private static boolean write(Field field, Object target, Object value) {
         try {
-            return field.get(target);
+            field.set(target, value);
+            return true;
         } catch (ReflectiveOperationException | RuntimeException e) {
-            return null;
+            return false;
         }
     }
 }

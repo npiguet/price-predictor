@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Table;
 import forge.card.CardTypeView;
 import forge.card.ColorSet;
@@ -208,6 +209,27 @@ final class StaticSuppression {
         }
         card.removeTempController(timestamp);
         return () -> card.addTempController(live, timestamp);
+    }
+
+    /**
+     * Gives the live card this board's type line, for a read Forge makes of
+     * the live board only (a static's condition counting artifacts), by
+     * lending it as the type line Forge caches for the card's state. The
+     * layer tables the line is computed from are not touched, so putting the
+     * cached line back restores the card exactly. Returns what puts it back,
+     * or null when the suppressed static changed no type of the card.
+     */
+    Runnable lendType(Card card) {
+        if (staticId == null || !changedType(card)) {
+            return null;
+        }
+        return ForgeFields.lendCachedType(card.getCurrentState(), type(card));
+    }
+
+    /** Whether the suppressed static has a type change on the card. */
+    private boolean changedType(Card card) {
+        return card.getChangedCardTypesWithout(staticId).size()
+                != Iterables.size(card.getChangedCardTypes());
     }
 
     /**

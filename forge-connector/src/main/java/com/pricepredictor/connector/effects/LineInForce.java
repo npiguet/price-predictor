@@ -20,7 +20,9 @@ import java.util.Set;
  * Class has reached level N (written whether or not it has), and so is a
  * trait that level grants, which keys to the level's keyword; a Room's line
  * is while its door is unlocked. Every other line says nothing, and reads as
- * in force.
+ * in force. A static's condition is read on the board the lines are read on:
+ * on a {@code continuous} record's board, without the record's static
+ * ({@link LentBoard}).
  *
  * <p>A Room's doors are its two split halves. Forge plays the doors
  * unlocked as the state up: both halves' {@code Original}, one half's own
@@ -39,13 +41,16 @@ final class LineInForce {
             CardStateName.Original, CardStateName.LeftSplit, CardStateName.RightSplit);
 
     private final Card card;
+    /** The board the lines are read on. */
+    private final StaticSuppression board;
     /** The level of each {@code Class:N} keyword of the face up, by its key. */
     private final Map<ProvenanceKey, Integer> levels = new HashMap<>();
     /** True on a Room with a door up: every line of its face up is a door's. */
     private final Boolean doorUp;
 
-    LineInForce(Card card) {
+    LineInForce(Card card, StaticSuppression board) {
         this.card = card;
+        this.board = board;
         this.doorUp = isRoom(card) && DOORS_UP.contains(card.getCurrentStateName()) ? Boolean.TRUE : null;
         CardState up = card.getCurrentState();
         for (KeywordInterface keyword : up.getIntrinsicKeywords()) {
@@ -119,13 +124,13 @@ final class LineInForce {
     }
 
     /**
-     * Forge's answer to whether a static's condition holds now; false when
-     * the question cannot be asked of this card, such as a static on a
-     * card no player controls.
+     * Forge's answer to whether a static's condition holds now on the board;
+     * false when the question cannot be asked of this card, such as a
+     * static on a card no player controls.
      */
-    private static Boolean holds(StaticAbility stat) {
+    private Boolean holds(StaticAbility stat) {
         try {
-            return stat.checkConditions();
+            return LentBoard.read(card.getGame(), board, stat::checkConditions);
         } catch (RuntimeException e) {
             return Boolean.FALSE;
         }
