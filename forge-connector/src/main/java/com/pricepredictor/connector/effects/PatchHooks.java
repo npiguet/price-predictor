@@ -346,6 +346,10 @@ public final class PatchHooks {
     static final Hook COPIED_PERMANENT = new Hook(CARD, "getEffectRecordCopiedPermanent",
             "the keyword keys of a token copy of a copy whose copy effect added keywords (Kiki-Jiki's"
                     + " token of Dack's Duplicate): the permanent its prototype copied");
+    static final Hook CLONE_PRINTER = new Hook("forge.game.card.CardCloneStates", "getEffectRecordPrinter",
+            "the keyword keys and printed script of a Clone whose original's copy effect has since ended"
+                    + " (a Clone of a Cytoshaped creature after the turn): the card whose printed values it"
+                    + " took, noted when it copied");
     static final Hook PRIOR_CONTROLLER = new Hook(CARD, "getEffectRecordPriorController",
             "a continuous record's sickness of a permanent its static took: the controller it"
                     + " had before its most recent control change");
@@ -428,7 +432,7 @@ public final class PatchHooks {
             CANT_BLOCK_BY_STATIC, CANT_BLOCK_STATIC, FAILURE_COUNTS, MANA_LISTENER, CHANGED_TYPES_BY_STATIC,
             CHANGED_COLORS_BY_STATIC, TYPE_WITHOUT, COLOR_WITHOUT, KEYWORDS_WITHOUT,
             PT_WITHOUT, CONTROLLER_WITHOUT, TRAITS_WITHOUT,
-            CHANGED_NAMES, COPY_SOURCE, COPIED_PERMANENT, PRIOR_CONTROLLER, PRIOR_SICKNESS,
+            CHANGED_NAMES, COPY_SOURCE, COPIED_PERMANENT, CLONE_PRINTER, PRIOR_CONTROLLER, PRIOR_SICKNESS,
             ASSIGNED_DAMAGE, CONFIRM_LISTENER, OUTCOME_LISTENER,
             PENDING_DELAYED_TRIGGERS, STATE_BASED_LOOP_LISTENER, PRIORITY_SETTLED_LISTENER,
             CAST_LISTENER, RESOLUTION_LISTENER, PAYMENT_LISTENER);

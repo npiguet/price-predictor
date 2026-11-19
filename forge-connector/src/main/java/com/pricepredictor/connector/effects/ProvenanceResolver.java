@@ -472,7 +472,7 @@ public final class ProvenanceResolver {
      */
     private static CardState copiedStateHolding(Map.Entry<Long, forge.game.card.CardCloneStates> copy,
                                                 CardState state, KeywordInterface keyword) {
-        Card origin = copy.getValue().getOrigin();
+        Card origin = CopyHistory.originOf(copy);
         if (origin == null) {
             return null;
         }

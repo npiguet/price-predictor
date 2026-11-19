@@ -18,7 +18,11 @@ import java.util.NavigableMap;
  * clone state, which {@code Card.getState} reads, is no longer what the Clone
  * copied. Each clone state is filed under its effect's timestamp, so what
  * the original showed when the Clone copied it is its latest clone state
- * filed before the Clone's.
+ * filed before the Clone's. A copy effect on the original that has since
+ * ended (Cytoshape's, until end of turn) took its clone state away, so the
+ * walk then misses what the Clone copied through it: the patch notes on the
+ * Clone's clone states the card whose printed values they took, read when
+ * the Clone copied, and the walk follows that card when it misses it.
  *
  * <p>A copy effect's clone states are those {@code Card.isCloned} counts as
  * a copy: neither a mutation's merged state nor a prototype's.
@@ -83,18 +87,52 @@ final class CopyHistory {
      * keyword (707.9b) is printed by the link whose copy effect added it.
      */
     static List<Card> chainOf(Card card) {
+        return chainFrom(card, NOW, 0);
+    }
+
+    /**
+     * The card a copy effect's clone states copied, as it was then: their
+     * origin, else, when the walk from it no longer reaches the card whose
+     * printed values they took ({@link #printerNoted}), that card.
+     */
+    static Card originOf(Map.Entry<Long, CardCloneStates> copy) {
+        List<Card> tail = tailOf(copy, 0);
+        return tail.isEmpty() ? null : tail.get(0);
+    }
+
+    /** {@code card}, then what its latest copy effect filed before {@code before} copied, and so on. */
+    private static List<Card> chainFrom(Card card, long before, int depth) {
         List<Card> chain = new ArrayList<>(List.of(card));
-        long before = NOW;
-        for (int depth = 0; depth < MAX_COPY_DEPTH; depth++) {
-            Map.Entry<Long, CardCloneStates> copy = copyBefore(chain.get(chain.size() - 1), before);
-            Card origin = copy == null ? null : copy.getValue().getOrigin();
-            if (origin == null) {
-                break;
-            }
-            chain.add(origin);
-            before = copy.getKey();
-        }
+        chain.addAll(tailOf(copyBefore(card, before), depth));
         return chain;
+    }
+
+    /**
+     * What {@code copy} copied, then what that copied when {@code copy} was
+     * made, and so on; empty for no copy, or past {@link #MAX_COPY_DEPTH}.
+     * The walk reads the origin's clone states, which an ended copy effect
+     * on the origin (Cytoshape's, until end of turn) took away, so when it
+     * misses the card the clone states noted as their printer when they
+     * were built, the walk is that card's instead (707.2).
+     */
+    private static List<Card> tailOf(Map.Entry<Long, CardCloneStates> copy, int depth) {
+        Card origin = copy == null ? null : copy.getValue().getOrigin();
+        if (origin == null || depth >= MAX_COPY_DEPTH) {
+            return List.of();
+        }
+        List<Card> tail = chainFrom(origin, copy.getKey(), depth + 1);
+        Card printer = printerNoted(copy.getValue());
+        return printer == null || tail.contains(printer) ? tail : chainFrom(printer, copy.getKey(), depth + 1);
+    }
+
+    /**
+     * The card whose printed values {@code states} took, as the patch's
+     * {@code CardCloneStates.getEffectRecordPrinter} noted it when they were
+     * built; null on a checkout without the hook, and for clone states no
+     * copy effect built.
+     */
+    private static Card printerNoted(CardCloneStates states) {
+        return PatchHooks.CLONE_PRINTER.read(states) instanceof Card printer ? printer : null;
     }
 
     /** {@code card}'s latest copy effect's clone states filed before {@code before}; null for none. */

@@ -91,6 +91,42 @@ class CloneKeywordKeyTest {
     }
 
     /**
+     * Cytoshape makes Grizzly Bears a copy of Moldering Karok until end of
+     * turn, Clone enters as a copy of the Bears (Karok tapped, so the AI
+     * rates the Bears best), so of Karok, then the turn ends and Cytoshape's
+     * effect with it, which takes the Bears' clone state away: the Clone's
+     * Lifelink and Trample, Karok's values when it copied (707.2), still
+     * join Karok's lines, printed, live and forked.
+     */
+    @Test
+    void aClonesKeywordsKeepTheirLinesWhenTheCopyEffectOnWhatItCopiedEnds() throws IOException {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card karok = board.battlefield("Moldering Karok", board.you);
+        ConvertedScript karoks = convertedScriptOf(karok);
+        Card bears = board.battlefield("Grizzly Bears", board.you);
+        SpellAbility cytoshape = board.spell(board.hand("Cytoshape", board.you), board.you);
+        cytoshape.resetTargets();
+        cytoshape.getTargets().add(bears);
+        board.resolve(cytoshape, board.you);
+        board.game.getAction().checkStaticAbilities();
+        assertEquals("Moldering Karok", bears.getName(), "the Bears are a copy of Karok");
+        karok.setTapped(true); // the AI copies the creature it rates best: the untapped Bears
+        Card clone = entersAsACopy(board, "Clone", bears);
+        board.game.getEndOfTurn().executeUntil();
+        board.game.getAction().checkStaticAbilities();
+        assertEquals("Grizzly Bears", bears.getName(), "Cytoshape's effect ended with the turn");
+
+        assertJoinPrinted(board, clone, karoks, KAROKS);
+
+        Game fork = new GameCopier(board.game).makeCopy();
+        Card forked = copierIn(fork, "Clone");
+        assertKeyedAlike(clone, forked, KAROKS);
+        Card copiedInFork = CopyHistory.originOf(CopyHistory.copyHolding(forked.getCurrentState()));
+        assertEquals("Moldering Karok", copiedInFork.getName(), "the fork's Clone copied Karok");
+        assertSame(fork, copiedInFork.getGame(), "the fork's Clone reads Karok in the fork");
+    }
+
+    /**
      * Dreamtail Heron mutates onto a Clone copying Moldering Karok: the
      * merged permanent's Lifelink and Trample, which the Clone brought, join
      * Karok's lines, and Mutate the Heron's; every keyword line is printed.
