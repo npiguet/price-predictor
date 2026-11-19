@@ -29,6 +29,7 @@ import logging
 import random
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from enum import Enum
 from functools import partial
 from pathlib import Path
 
@@ -340,19 +341,35 @@ def collect_steered(config: CollectVariantsConfig, sources: list[Path]) -> int:
                     config.cards_folders, config.variant_scripts).sidecar_roots(),
                 workers=config.workers,
             )
-            if not steer(config, generation, counts, heads, detected, units, supervisor,
-                         games, ruled):
-                return 0
+            outcome = steer(config, generation, counts, heads, detected, units,
+                            supervisor, games, ruled)
+            if outcome is not SteerOutcome.PLAYED:
+                return outcome.exit_code
         return finish(config, units, games, interrupted=supervisor.interrupted)
     finally:
         unstage_variants()
 
 
+class SteerOutcome(Enum):
+    """How a steered round's iterations ended, as the exit code reads it."""
+
+    PLAYED = "played"
+    #: No short pair left: every unit was already done.
+    NOTHING_SHORT = "nothing short"
+    #: Short pairs, and no variant could be made for any of them.
+    NO_VARIANT = "no variant"
+
+    @property
+    def exit_code(self) -> int:
+        return 1 if self is SteerOutcome.NO_VARIANT else 0
+
+
 def steer(config, generation: SteeredGeneration, counts, heads, detected,
-          units: dict[str, VariantGames], supervisor, games, ruled) -> bool:
-    """The iterations (FR-058d); False when no iteration had anything to play."""
+          units: dict[str, VariantGames], supervisor, games, ruled) -> SteerOutcome:
+    """The iterations (FR-058d); what ended them when none had anything to play."""
     retired: set[str] = set()
     played = False
+    stalled = False
     for iteration in range(1, config.steer_iterations + 1):
         before = combined_counts(counts, ruled.document())
         pairs = short_pairs(before, SteerScope(
@@ -362,14 +379,9 @@ def steer(config, generation: SteeredGeneration, counts, heads, detected,
             logger.info("Steered iteration %d: no short pair left", iteration)
             break
         variants = generation.variants(pairs, counts, config.steer_variants)
-        logger.info(
-            "Steered iteration %d: %d short pair(s) over %d rule(s), %d new variant(s)",
-            iteration, len(pairs), len({p.rule for p in pairs}), len(variants),
-        )
-        for variant in variants:
-            logger.info("  %s, from %s, for %s: %s", variant.name, variant.source_card,
-                        variant.rule, variant.perturbation)
+        log_variants(iteration, pairs, variants)
         if not variants:
+            stalled = not played and _log_stall(iteration, len(pairs))
             break
         variants = prepare_variants(config, variants)
         fresh = {variant.name: variant.games_unit() for variant in variants}
@@ -388,4 +400,26 @@ def steer(config, generation: SteeredGeneration, counts, heads, detected,
                     ", ".join(sorted(newly)) or "none")
         if interrupted:
             break
-    return played
+    if played:
+        return SteerOutcome.PLAYED
+    return SteerOutcome.NO_VARIANT if stalled else SteerOutcome.NOTHING_SHORT
+
+
+def _log_stall(iteration: int, pairs: int) -> bool:
+    """Name a round that had short pairs and no variant; always True."""
+    logger.error(
+        "Steered iteration %d: %d short pair(s) and no variant could be made for any "
+        "of them", iteration, pairs,
+    )
+    return True
+
+
+def log_variants(iteration: int, pairs, variants) -> None:
+    """The iteration's short pairs and the variants made for them."""
+    logger.info(
+        "Steered iteration %d: %d short pair(s) over %d rule(s), %d new variant(s)",
+        iteration, len(pairs), len({p.rule for p in pairs}), len(variants),
+    )
+    for variant in variants:
+        logger.info("  %s, from %s, for %s: %s", variant.name, variant.source_card,
+                    variant.rule, variant.perturbation)

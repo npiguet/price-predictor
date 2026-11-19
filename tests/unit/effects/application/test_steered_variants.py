@@ -13,6 +13,7 @@ from effects.application import steered_variants
 from effects.application.collect_variants import CollectVariantsConfig, decks_of
 from effects.application.steered_variants import (
     SteeredGeneration,
+    SteerOutcome,
     combined_counts,
     rule_carriers,
     script_index,
@@ -231,7 +232,7 @@ def _steer(world, monkeypatch, ruled, supervisor=None, **config):
 
 def test_a_rule_whose_short_polarity_gained_nothing_retires(world, monkeypatch):
     played_any, played, _ = _steer(world, monkeypatch, _Ruled())
-    assert played_any and len(played) == 1
+    assert played_any is SteerOutcome.PLAYED and len(played) == 1
     units, by_rule = played[0]
     assert by_rule and {unit.rule for unit in units.values()} == {"702.2b"}
 
@@ -257,7 +258,7 @@ def test_a_corpus_with_no_short_pair_plays_nothing(world, monkeypatch):
     generation, counts, _ = world
     counts["rules"]["702.2b"]["does_not_fire"]["forge_ai"] = 500
     played_any, played, _ = _steer(world, monkeypatch, _Ruled())
-    assert not played_any and played == []
+    assert played_any is SteerOutcome.NOTHING_SHORT and played == []
 
 
 def test_the_script_index_finds_every_face_s_name(tmp_path):

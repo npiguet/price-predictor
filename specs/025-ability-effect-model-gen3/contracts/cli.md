@@ -190,7 +190,7 @@ every status line and at the end the supervisor scans what the logs gained for f
 (`price_predictor.domain.worker_failures`, as on the collectors) and prints them by kind; at the
 end it prints the run's totals, the hook-failure counts, the fork refusals and how the workers
 ended, and records in
-its `run.json` entry `run_id`, `matches` (outcome rows), `matches_played` (progress lines),
+its `run.json` entry, at start, the resolved `caps` (the collectors' members, so the three rates of every run can be compared), and at the end `run_id`, `matches` (outcome rows), `matches_played` (progress lines),
 `worker_failures`, `worker_failure_examples`, `hook_failures`, `fork_refusals`, `directed_fork_tally`, `worker_survivors`,
 `worker_stops`, `stop_timeout`, `recycle_seconds` and `match_outcomes` (the outcome file's path). A run that played matches (outcome rows, progress lines or
 random-seat match errors, so a run of random-seat matches alone counts) and wrote no effect
@@ -223,7 +223,7 @@ and says that a large share means `../forge` is older than the converted cards; 
 
 A run counts a round only once it plays one. A run that plays rounds and writes no record in its
 own shards (`<run id>.*`) exits 1; a run that plays none exits 0 when every unit was already done
-and 1 when units remain that no deck could hold.
+and 1 when units remain that no deck could hold. A steered round (`--round steered`) that plays none exits 0 when no short pair is left and 1 when short pairs remain and no variant could be made for any of them.
 
 ## Both collectors (existing)
 

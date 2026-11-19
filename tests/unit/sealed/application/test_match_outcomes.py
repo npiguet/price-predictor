@@ -530,3 +530,45 @@ class TestTheRunReportsWhatItsWorkersLogged:
         )
         assert supervisor._pool._on_status is None
         assert supervisor.collected_nothing is False
+
+
+class TestTheRunKeepsItsResolvedCapsFromTheStart:
+    """FR-059a: the three rates of every run are checkable from ``run.json``,
+    under the members the collectors record them by, and an interrupted run
+    has them too."""
+
+    def test_the_caps_are_in_the_manifest_before_the_first_worker_starts(self, tmp_path):
+        import argparse
+        import json
+
+        from price_predictor.infrastructure.run_manifest import run_recorded
+        from sealed.infrastructure.cli import _effect_collection_caps
+
+        records = tmp_path / "records"
+        caps = _effect_collection_caps(argparse.Namespace(
+            playability_rate=0.5, mana_cap=3, directed_fork_rules=("704.5f",),
+            directed_rule_probabilities={"704.5f": 0.75},
+        ))
+        seen = {}
+
+        def body():
+            supervisor = MatchOutcomeSupervisor(
+                worker_count=1, output_path=tmp_path / "out.txt", best_of=3,
+                effect_records_dir=records, collection_caps=caps,
+            )
+
+            def stopped_at_start():
+                seen["run"] = json.loads((records / "run.json").read_text(encoding="utf-8"))
+
+            supervisor._pool.run = stopped_at_start
+            supervisor.run()
+            return 0
+
+        run_recorded(records, body, command="python -m sealed match-outcomes")
+
+        entry = seen["run"]["invocations"][0]
+        assert entry["caps"]["playability_rate"] == 0.5, "the resolved rate, under its field name"
+        assert entry["caps"]["mana_cap"] == 3
+        assert entry["caps"]["directed_fork_rules"] == ["704.5f"]
+        assert entry["caps"]["directed_rule_probabilities"] == {"704.5f": 0.75}
+        assert entry["caps"]["aimed_at"] is None

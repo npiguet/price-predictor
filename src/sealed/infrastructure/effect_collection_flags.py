@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 EFFECT_MANA_CAP = 1
@@ -236,6 +236,48 @@ def directed_fork_properties(args: argparse.Namespace) -> dict[str, str]:
             getattr(args, "directed_fork_probability", EFFECT_DIRECTED_FORK_PROBABILITY)
         ),
     }
+
+
+def _comma_list(value: str) -> list[str]:
+    return [item for item in value.split(",") if item]
+
+
+#: Each cap property's ``run.json`` member and how its value reads back: the
+#: members are the effects collectors' ``CollectionCaps`` field names, which
+#: ``tests/unit/effects/domain/test_caps_manifest_spelling.py`` pins.
+_CAP_MEMBERS: dict[str, tuple[str, Callable[[str], object]]] = {
+    "effect.mana.cap": ("mana_cap", int),
+    "effect.playability.rate": ("playability_rate", float),
+    "effect.zone.candidate.rate": ("zone_candidate_rate", float),
+    "effect.plain.candidate.rate": ("plain_candidate_rate", float),
+    "effect.interventions.per.game": ("interventions_per_game", int),
+    "effect.probes.per.game": ("probes_per_game", int),
+    "effect.probe.keywords": ("probe_keywords", str),
+    "effect.random.seat.share": ("random_seat_share", float),
+    "effect.random.seat.probability": ("random_seat_probability", float),
+    "effect.aimed.at": ("aimed_at", _comma_list),
+    COUNT_DROPPED_EVENTS_PROPERTY: ("count_dropped_events", lambda v: v == "true"),
+    DIRECTED_FORK_RULES_PROPERTY: ("directed_fork_rules", _comma_list),
+    DIRECTED_FORKS_PER_GAME_PROPERTY: ("directed_forks_per_game", int),
+    DIRECTED_FORK_PROBABILITY_PROPERTY: ("directed_fork_probability", float),
+    MAX_RECORDS_PER_GAME_PROPERTY: ("max_records_per_game", int),
+}
+
+
+def caps_manifest(properties: Mapping[str, object]) -> dict[str, object]:
+    """The ``-D`` cap properties as ``run.json`` records the resolved caps: the
+    collectors' member names and types, ``aimed_at`` null for a run aimed at
+    no rule (what ``effects``' ``caps_document`` writes for the same caps)."""
+    document: dict[str, object] = {"aimed_at": None}
+    for name, (member, read) in _CAP_MEMBERS.items():
+        if name in properties:
+            document[member] = read(str(properties[name]))
+    document["directed_rule_probabilities"] = {
+        name[len(DIRECTED_RULE_PROBABILITY_PREFIX):]: float(str(value))
+        for name, value in properties.items()
+        if name.startswith(DIRECTED_RULE_PROBABILITY_PREFIX)
+    }
+    return document
 
 
 _DETECTOR_RANK = {"missing": 0, "none": 1, "untaggable": 2, "same_as": 3, "declared": 4}

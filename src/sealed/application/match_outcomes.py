@@ -23,6 +23,7 @@ from price_predictor.infrastructure.run_manifest import annotate_run
 from price_predictor.infrastructure.worker_log_scan import WorkerLogReport
 from sealed.infrastructure.effect_collection_flags import (
     COUNT_DROPPED_EVENTS_PROPERTY,
+    caps_manifest,
     dropped_events_report,
 )
 from sealed.infrastructure.match_worker_connector import (
@@ -169,6 +170,7 @@ class MatchOutcomeSupervisor:
         workers' failure lines and print the dropped-event table when the run
         counted dropped events (FR-041)."""
         baseline = self._pool.output_line_count()
+        self._record_caps()
         try:
             self._pool.run()
         finally:
@@ -182,6 +184,15 @@ class MatchOutcomeSupervisor:
                 self._finish_effect_records()
         if self._counts_dropped_events():
             print(dropped_events_report(self._effect_records_dir, self._run_id))
+
+    def _record_caps(self) -> None:
+        """The resolved caps into ``run.json`` before any worker starts, as
+        the collectors record theirs, so an interrupted run has them."""
+        if self._effect_records_dir is not None and self._collection_caps is not None:
+            annotate_run(
+                self._effect_records_dir, run_id=self._run_id,
+                caps=caps_manifest(self._collection_caps),
+            )
 
     def _report_worker_logs(self) -> None:
         """Print the failure lines the workers logged since the last look."""

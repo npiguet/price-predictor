@@ -15,7 +15,7 @@ class TestEmptyHoldoutIsAnExitCodeNotATraceback:
     building a corpus without a full-strength run in it.
     """
 
-    def test_it_is_logged_and_reported_as_two(self, monkeypatch, caplog):
+    def test_it_is_logged_and_reported_as_one(self, monkeypatch, caplog):
         import argparse
         import logging
 
@@ -35,7 +35,7 @@ class TestEmptyHoldoutIsAnExitCodeNotATraceback:
         )
 
         with caplog.at_level(logging.ERROR):
-            assert cli.run_train_effect_model(args) == 2
+            assert cli.run_train_effect_model(args) == 1
 
         assert "card-disjoint stratum holds no records" in caplog.text
 
@@ -97,7 +97,7 @@ def test_an_out_of_range_value_exits_before_training(monkeypatch, caplog, argv, 
     started = []
     monkeypatch.setattr(train_effect_model, "run", lambda config: started.append(1))
     with caplog.at_level(logging.ERROR):
-        assert cli.run_train_effect_model(_parse(*argv)) == 2
+        assert cli.run_train_effect_model(_parse(*argv)) == 1
     assert not started and message in caplog.text
 
 
@@ -115,6 +115,26 @@ def test_the_startup_refusals_exit_one(monkeypatch, caplog, failure):
         "UnacceptedGenerationError": UnacceptedGenerationError,
         "MissingTrainingInputError": train_effect_model.MissingTrainingInputError,
         "ResumeMismatchError": effect_model_store.ResumeMismatchError,
+    }[failure]
+
+    def refuse(config):
+        raise kind("refused for the test")
+
+    monkeypatch.setattr(train_effect_model, "run", refuse)
+    assert cli.run_train_effect_model(_parse()) == 1
+
+
+@pytest.mark.parametrize("failure", ["SurfaceMismatchError", "FileNotFoundError"])
+def test_a_surface_mismatch_and_a_missing_manifest_or_resume_file_exit_one(
+    monkeypatch, caplog, failure,
+):
+    """``contracts/cli.md``: every refusal exits 1."""
+    from effects.application import train_effect_model
+    from effects.infrastructure import cli
+
+    kind = {
+        "SurfaceMismatchError": train_effect_model.SurfaceMismatchError,
+        "FileNotFoundError": FileNotFoundError,
     }[failure]
 
     def refuse(config):

@@ -960,8 +960,8 @@ def _train_effect_model_parser(subparsers) -> None:
     ValidationGameInTrainingError: 1,
     UnacceptedGenerationError: 1,
     **_SHARD_REFUSED,
-    SurfaceMismatchError: 2,
-    EmptyHoldoutError: 2,
+    SurfaceMismatchError: 1,
+    EmptyHoldoutError: 1,
     # A resume under other settings (contracts/cli.md).
     f"{_EFFECT_MODEL_STORE}.ResumeMismatchError": 1,
     # No selection set frozen for the corpus, or one frozen for another or
@@ -969,7 +969,7 @@ def _train_effect_model_parser(subparsers) -> None:
     "effects.domain.selection_set.SelectionSetError": 1,
     "effects.application.control_score.ControlScoreError": 1,
     # A missing manifest or resume file.
-    FileNotFoundError: 2,
+    FileNotFoundError: 1,
 })
 def run_train_effect_model(args: argparse.Namespace) -> int:
     from effects.application.train_effect_model import run as train
@@ -980,7 +980,7 @@ def run_train_effect_model(args: argparse.Namespace) -> int:
         # An encoder shape the config refuses; a ValueError out of training
         # itself is an invariant and keeps its traceback.
         logger.error("%s", exc)
-        return 2
+        return 1
     return train(config)
 
 
