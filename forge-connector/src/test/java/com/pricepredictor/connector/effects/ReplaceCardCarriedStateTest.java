@@ -7,6 +7,9 @@ import forge.ai.simulation.GameCopier;
 import forge.game.Game;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
+import forge.game.card.CardCollection;
+import forge.game.card.CounterEnumType;
+import forge.game.keyword.Keyword;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
@@ -120,6 +123,99 @@ class ReplaceCardCarriedStateTest {
         goyf.setDamage(1);
         assertFalse(ReplaceCardOperation.replacementDies(goyf, "Grizzly Bears"));
         assertEquals(2, ReplaceCardOperation.replacementPower(goyf, "Grizzly Bears"));
+    }
+
+    private Card forkReplace(Card old, String name, Game[] forkOut) {
+        GameCopier copier = new GameCopier(game);
+        Game fork = copier.makeCopy();
+        forkOut[0] = fork;
+        new ReplaceCardOperation((Card) copier.find(old), name).apply(fork);
+        return fork.getPlayers().get(0).getCardsIn(ZoneType.Battlefield).stream()
+                .filter(card -> card.getName().equals(name)).findFirst().orElseThrow();
+    }
+
+    /** 701.60 (suspect): a suspected permanent has menace and cannot block, whatever card it is. */
+    @Test
+    void aSuspectedPermanentStaysSuspected() {
+        Card bears = permanent("Grizzly Bears");
+        bears.setSuspected(true);
+        game.getAction().checkStaticAbilities();
+        Card mystic = forkReplace(bears, "Elvish Mystic", new Game[1]);
+        assertTrue(mystic.isSuspected());
+        assertTrue(mystic.hasKeyword(Keyword.MENACE));
+    }
+
+    /** 701.54 (the Ring tempts you): the player's ring-bearer is the card in the old one's place. */
+    @Test
+    void aRingBearerStaysTheRingBearer() {
+        Card giant = permanent("Hill Giant");
+        you.setRingBearer(giant);
+        Game[] fork = new Game[1];
+        Card courser = forkReplace(giant, "Centaur Courser", fork);
+        assertTrue(courser.isRingBearer());
+        assertEquals(courser, fork[0].getPlayers().get(0).getRingBearer());
+        assertTrue(courser.isInZone(ZoneType.Battlefield));
+    }
+
+    /** 702.171 (saddle): a Mount saddled this turn stays saddled. */
+    @Test
+    void aSaddledPermanentStaysSaddled() {
+        Card bears = permanent("Grizzly Bears");
+        bears.setSaddled(true);
+        bears.setSaddledByThisTurn(new CardCollection(permanent("Hill Giant")));
+        Card mystic = forkReplace(bears, "Elvish Mystic", new Game[1]);
+        assertTrue(mystic.isSaddled());
+        assertEquals(1, mystic.getTimesSaddledThisTurn());
+        assertEquals(1, mystic.getSaddledByThisTurn().size());
+    }
+
+    /** 701.35 (detain): Forge keeps no way to read who detained it, so the edit refuses. */
+    @Test
+    void aDetainedPermanentIsRefused() {
+        Card wurm = permanent("Craw Wurm");
+        wurm.detain(game.getPlayers().get(1));
+        assertFalse(ReplaceCardOperation.carries(wurm));
+        assertRefused(game, wurm, ReplaceCardOperation.DETAINED);
+    }
+
+    /**
+     * 702.99 (cipher): the encoded spell is tied to its creature. A hand-built link
+     * (no cipher spell is cast in this board): the engine's own link is this one.
+     */
+    @Test
+    void aCreatureHoldingAnEncodedSpellIsRefused() {
+        Card bears = permanent("Grizzly Bears");
+        Card spell = TestBoard.card(game, you, "Hill Giant");
+        bears.addEncodedCard(spell);
+        spell.setEncodingCard(bears);
+        assertFalse(ReplaceCardOperation.carries(bears));
+        assertRefused(game, bears, ReplaceCardOperation.ENCODED);
+    }
+
+    /** 702.87 (level up) and 711.2: Caravan Escort at level 5 is a 5/5; Youthful Knight in its place is 2/1. */
+    @Test
+    void aLevelerPredictsWithoutItsLevelRows() {
+        Card escort = permanent("Caravan Escort");
+        escort.setCounters(CounterEnumType.LEVEL, 5);
+        game.getAction().checkStaticAbilities();
+        escort.setDamage(2);
+        assertEquals(2, ReplaceCardOperation.replacementPower(escort, "Youthful Knight"));
+        assertTrue(ReplaceCardOperation.replacementDies(escort, "Youthful Knight"));
+        Game[] fork = new Game[1];
+        ForkRefusal refusal = assertThrows(ForkRefusal.class, () -> forkReplace(escort, "Youthful Knight", fork));
+        assertEquals(ReplaceCardOperation.DIES, refusal.reason());
+    }
+
+    /** 611.3 (a static's boost): Kird Ape is a 2/3 with a Forest; Elvish Mystic in its place is 1/1 and the prediction says so. */
+    @Test
+    void aSelfPumpPredictsWithoutItsBoostRows() {
+        permanent("Forest");
+        Card ape = permanent("Kird Ape");
+        game.getAction().checkStaticAbilities();
+        assertEquals(2, ape.getNetPower());
+        assertEquals(1, ReplaceCardOperation.replacementPower(ape, "Elvish Mystic"));
+        Game[] fork = new Game[1];
+        assertEquals(1, forkReplace(ape, "Elvish Mystic", fork).getNetPower());
     }
 
     @Test

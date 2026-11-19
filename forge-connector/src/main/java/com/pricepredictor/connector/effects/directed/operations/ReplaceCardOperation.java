@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects.directed.operations;
 
 import com.google.common.collect.HashMultiset;
+import com.google.common.collect.Table;
 import com.pricepredictor.connector.effects.ForkRefusal;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import forge.GameCommand;
@@ -30,6 +31,7 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
+import java.util.stream.Stream;
 
 /**
  * {@code replace_card}: put another card from the card database in a
@@ -60,8 +62,8 @@ import java.util.function.UnaryOperator;
  * pending command of the fork (a phase's, a state-based check's, a card's,
  * the old card's own moved onto the new one), so an until-end-of-turn pump
  * the new card took over ends on it; every delayed trigger hosted by it or
- * remembering it; every card remembering it. Its goad, monstrous and
- * renowned designations are carried.
+ * remembering it; every card remembering it. Its goad, monstrous, renowned,
+ * ring-bearer, suspected and saddled designations are carried.
  *
  * <p>Some state belongs to the old card's own text, or to a face no other
  * card has, and carrying it would describe a board nobody built: the edit
@@ -69,7 +71,8 @@ import java.util.function.UnaryOperator;
  * face-down or phased-out permanent, a Class above its first level, a
  * permanent holding chosen values (a player, number, type, colour, card,
  * name or parity its text chose) or remembered, imprinted or exiled-with
- * cards, a merged (mutated) or melded permanent, whose other cards the edit
+ * cards, a detained permanent (Forge keeps who detained it out of reach), a creature
+ * holding an encoded cipher spell, a merged (mutated) or melded permanent, whose other cards the edit
  * would leave orphaned, a token, which a card in its place would turn into a
  * real card, and a permanent a pending command names that cannot be
  * rewritten. It also refuses, after the edit, a replacing creature the next
@@ -106,6 +109,10 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
     public static final String MERGED = "replace_card merged permanent";
     public static final String MELDED = "replace_card melded permanent";
     public static final String TOKEN = "replace_card token";
+    /** 701.35a: Forge keeps who detained a card out of reach, so the edit cannot name them on the new one. */
+    public static final String DETAINED = "replace_card detained permanent";
+    /** 702.99a: the encoded spell is tied to its creature and the new card's text has no cipher. */
+    public static final String ENCODED = "replace_card creature with an encoded spell";
 
     /** A refusal: what the old card holds that its replacement cannot take over, and its reason. */
     private record Refusal(Predicate<Card> holds, String reason) {
@@ -120,7 +127,9 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
             new Refusal(ReplaceCardOperation::holdsLinkedCards, LINKED_CARDS),
             new Refusal(Card::hasMergedCard, MERGED),
             new Refusal(card -> card.getMeldedWith() != null, MELDED),
-            new Refusal(Card::isToken, TOKEN));
+            new Refusal(Card::isToken, TOKEN),
+            new Refusal(Card::isDetained, DETAINED),
+            new Refusal(Card::hasEncodedCard, ENCODED));
 
     @Override
     public void apply(Game fork) {
@@ -196,7 +205,7 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
             return false;
         }
         int toughness = carriedSetPt(permanent, Pair::getRight).orElse(rules.getMainPart().getIntToughness())
-                + permanent.getTempToughnessBoost() + permanent.getToughnessBonusFromCounters();
+                + carriedBoost(permanent, Pair::getRight) + permanent.getToughnessBonusFromCounters();
         return diesOf(toughness, permanent.getDamage(), permanent.hasBeenDealtDeathtouchDamage());
     }
 
@@ -216,7 +225,7 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
             return 0;
         }
         return carriedSetPt(permanent, Pair::getLeft).orElse(rules.getMainPart().getIntPower())
-                + permanent.getTempPowerBoost() + permanent.getPowerBonusFromCounters();
+                + carriedBoost(permanent, Pair::getLeft) + permanent.getPowerBonusFromCounters();
     }
 
     /**
@@ -228,11 +237,30 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
     private static Optional<Integer> carriedSetPt(
             Card permanent, Function<Pair<Integer, Integer>, Integer> part) {
         Integer last = null;
-        for (Pair<Integer, Integer> set : permanent.getSetPTTable().values()) {
-            Integer value = part.apply(set);
+        for (Table.Cell<Long, Long, Pair<Integer, Integer>> row : permanent.getSetPTTable().cellSet()) {
+            Integer value = carriedRows(permanent, row) ? part.apply(row.getValue()) : null;
             last = value == null ? last : value;
         }
         return Optional.ofNullable(last);
+    }
+
+    /** The sum of the boost rows ({@code part}) the edit carries: see {@link #carriedRows}. */
+    private static int carriedBoost(Card permanent, Function<Pair<Integer, Integer>, Integer> part) {
+        return permanent.getPTBoostTable().cellSet().stream()
+                .filter(row -> carriedRows(permanent, row)).mapToInt(row -> part.apply(row.getValue())).sum();
+    }
+
+    /**
+     * Whether the edit keeps a P/T row: a resolved effect's row (static id 0)
+     * and another permanent's static's stay; a row the replaced permanent's
+     * own static wrote (a leveler's level rows, 702.87a and 711.2, a self-pump
+     * such as Kird Ape's) is stripped by the static check the edit ends with,
+     * since its host left the game.
+     */
+    private static boolean carriedRows(Card permanent, Table.Cell<Long, Long, Pair<Integer, Integer>> row) {
+        long staticId = row.getColumnKey();
+        return staticId == 0 || Stream.concat(permanent.getStaticAbilities().stream(),
+                permanent.getHiddenStaticAbilities().stream()).noneMatch(own -> own.getId() == staticId);
     }
 
     /**
@@ -356,7 +384,42 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
         }
         replacement.setMonstrous(old.isMonstrous());
         replacement.setRenowned(old.isRenowned());
+        carryDesignations(old, replacement);
         replacement.updateKeywordsCache();
+    }
+
+    /** Suspected as {@code old} was, its menace static stamped with the old one's timestamp. */
+    private static void carrySuspected(Card old, Card replacement) {
+        if (!old.isSuspected()) {
+            return;
+        }
+        replacement.setSuspected(true);
+        if (replacement.isSuspected()) {
+            replacement.getSuspectedStatic().putParam("Timestamp", old.getSuspectedStatic().getParam("Timestamp"));
+        }
+    }
+
+    /**
+     * The designations that are plain flags: the Ring-bearer (701.54, the
+     * player's pointer repointed as {@code Card.copyStateFrom} leaves it to
+     * the copier), suspected (701.60, its menace static stamped as it was) and
+     * saddled (702.171b, with how many times and by whom this turn). Detained
+     * and encoded are refused instead ({@link #REFUSALS}).
+     */
+    private static void carryDesignations(Card old, Card replacement) {
+        for (Player player : old.getGame().getPlayers()) {
+            if (player.getRingBearer() == old) {
+                player.setRingBearer(replacement);
+            }
+        }
+        carrySuspected(old, replacement);
+        for (int i = 0; i < old.getTimesSaddledThisTurn(); i++) {
+            replacement.setSaddled(true);
+        }
+        if (!old.isSaddled()) {
+            replacement.setSaddled(false);
+        }
+        replacement.setSaddledByThisTurn(old.getSaddledByThisTurn());
     }
 
     /** {@code old}'s soulbond partner, paired with {@code replacement} instead. */
