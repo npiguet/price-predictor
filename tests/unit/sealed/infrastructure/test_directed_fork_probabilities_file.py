@@ -135,7 +135,7 @@ def test_the_supervisor_starts_from_the_file_and_is_steered_by_it(tmp_path, monk
         "--directed-fork-rules", "704.5f,118.12b", "--directed-fork-probabilities", str(path)])
 
     assert cli.run_match_outcomes(args) == 0
-    caps = built["collection_caps"]
+    caps = built["options"].collection_caps
     assert caps["effect.directed.probability.704.5f"] == "0.6"
     assert caps["effect.directed.probability.118.12b"] == "1.0"
     built["supervisor"].steer_directed_forks.assert_called_once_with(

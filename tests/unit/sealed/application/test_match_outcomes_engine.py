@@ -13,7 +13,7 @@ import pytest
 
 from price_predictor.domain.worker_status import WorkerEngineRefused
 from price_predictor.infrastructure.run_manifest import run_recorded
-from sealed.application.match_outcomes import MatchOutcomeSupervisor
+from sealed.application.match_outcomes import MatchOutcomeSupervisor, MatchRunOptions
 from tests.unit.sealed.conftest import FakeProcess
 from tests.unit.worker_status_line import PINNED_PREFERENCES, status_line
 
@@ -25,7 +25,10 @@ PATCHED_WITH_GAP = status_line("a", hooks={"mode": "patched", "gaps": [GAP]})
 def _supervisor(tmp_path, *, allow_degraded: bool = False) -> MatchOutcomeSupervisor:
     supervisor = MatchOutcomeSupervisor(
         worker_count=1, output_path=tmp_path / "match-outcomes.txt", best_of=3,
-        effect_records_dir=tmp_path / "records", allow_degraded=allow_degraded,
+        options=MatchRunOptions(
+            effect_records_dir=tmp_path / "records",
+            allow_degraded=allow_degraded,
+        ),
     )
     supervisor._connector = MagicMock()
     supervisor._connector.start.return_value = FakeProcess(pid=1000)

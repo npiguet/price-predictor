@@ -9,7 +9,7 @@ import argparse
 import json
 from unittest.mock import MagicMock
 
-from sealed.application.match_outcomes import MatchOutcomeSupervisor
+from sealed.application.match_outcomes import MatchOutcomeSupervisor, MatchRunOptions
 from sealed.domain.directed_fork_needs import DirectedForkNeeds, DirectedRuleNeed
 from sealed.infrastructure.cli import _effect_collection_caps
 from tests.unit.sealed.conftest import FakeProcess
@@ -34,7 +34,10 @@ def _supervisor(tmp_path) -> MatchOutcomeSupervisor:
     ))
     supervisor = MatchOutcomeSupervisor(
         worker_count=1, output_path=tmp_path / "out.txt", best_of=3,
-        effect_records_dir=tmp_path / "records", collection_caps=caps,
+        options=MatchRunOptions(
+            effect_records_dir=tmp_path / "records",
+            collection_caps=caps,
+        ),
     )
     supervisor.steer_directed_forks(NEEDS)
     supervisor._connector = MagicMock()
@@ -101,7 +104,10 @@ def test_a_run_given_no_counts_keeps_its_caps_probabilities_to_the_end(tmp_path)
     def body():
         supervisor = MatchOutcomeSupervisor(
             worker_count=1, output_path=tmp_path / "out.txt", best_of=3,
-            effect_records_dir=records, collection_caps=caps,
+            options=MatchRunOptions(
+                effect_records_dir=records,
+                collection_caps=caps,
+            ),
         )
         supervisor._pool.run = lambda: None
         supervisor.run()

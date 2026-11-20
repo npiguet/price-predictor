@@ -415,7 +415,7 @@ class TestTheWorkerStopFlags:
         monkeypatch.setattr(module, "MatchOutcomeSupervisor", supervisor)
         monkeypatch.setattr(forge_classpath, "check_worker_prerequisites", lambda **_: None)
         assert run_match_outcomes(parse("match-outcomes", "--workers", "1", *argv)) == 0
-        return made["worker_stop"]
+        return made["options"].worker_stop
 
 
 class TestWhereTheTwoSealedCorporaGo:
@@ -482,7 +482,7 @@ class TestTheEngineRefusal:
 
         made = []
         monkeypatch.setattr(module, "MatchOutcomeSupervisor", lambda **kwargs: (
-            made.append(kwargs["allow_degraded"]) or MagicMock(collected_nothing=False)))
+            made.append(kwargs["options"].allow_degraded) or MagicMock(collected_nothing=False)))
         monkeypatch.setattr(forge_classpath, "check_worker_prerequisites", lambda **_: None)
         for extra in ((), ("--allow-degraded",)):
             run_match_outcomes(parse("match-outcomes", "--effect-records", "records", *extra))

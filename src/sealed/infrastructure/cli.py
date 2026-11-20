@@ -58,7 +58,7 @@ from sealed.infrastructure.effect_collection_flags import (
     directed_fork_properties,
     random_seat_error,
 )
-from sealed.infrastructure.match_worker_connector import DEFAULT_SIDE_B_DECKS_WEIGHT
+from sealed.infrastructure.match_worker_connector import DEFAULT_SIDE_B_DECKS_WEIGHT, WorkerDecks
 
 
 def _parse_restarts(value: str) -> int | str:
@@ -1981,7 +1981,7 @@ def _supervise_match_outcomes(
     from price_predictor.domain.converted_provenance import ConversionRefused
     from price_predictor.domain.worker_status import WorkerEngineRefused
     from price_predictor.infrastructure import forge_classpath, forge_worker_pool
-    from sealed.application.match_outcomes import MatchOutcomeSupervisor
+    from sealed.application.match_outcomes import MatchOutcomeSupervisor, MatchRunOptions
 
     output_path = outcomes_dir(args) / MATCH_OUTCOMES_FILE
     side_a_decks = Path(args.side_a_decks) if args.side_a_decks else None
@@ -2012,17 +2012,19 @@ def _supervise_match_outcomes(
         forge_classpath.check_worker_prerequisites(files={"--exclude-cards": exclude_cards})
         check_conversion(args, effect_records_dir)
         supervisor = MatchOutcomeSupervisor(
-            worker_count=args.workers,
-            output_path=output_path,
-            best_of=args.best_of,
-            side_a_decks_path=side_a_decks,
-            side_b_decks_path=side_b_decks,
-            side_b_decks_weight=side_b_decks_weight,
-            effect_records_dir=effect_records_dir,
-            collection_caps=_effect_collection_caps(args),
-            exclude_cards_path=exclude_cards,
-            worker_stop=worker_stop_settings(args),
-            allow_degraded=getattr(args, "allow_degraded", False),
+            worker_count=args.workers, output_path=output_path, best_of=args.best_of,
+            options=MatchRunOptions(
+                decks=WorkerDecks(
+                    side_a=side_a_decks,
+                    side_b=side_b_decks,
+                    side_b_weight=side_b_decks_weight,
+                    exclude_cards=exclude_cards,
+                ),
+                effect_records_dir=effect_records_dir,
+                collection_caps=_effect_collection_caps(args),
+                worker_stop=worker_stop_settings(args),
+                allow_degraded=getattr(args, "allow_degraded", False),
+            ),
         )
         supervisor.steer_directed_forks(getattr(args, "directed_fork_needs", None))
         supervisor.run()

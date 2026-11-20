@@ -6,6 +6,7 @@ import subprocess
 import threading
 import uuid
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 from price_predictor.domain.worker_failures import WorkerFailure
@@ -28,7 +29,6 @@ from sealed.infrastructure.effect_collection_flags import (
     dropped_events_report,
 )
 from sealed.infrastructure.match_worker_connector import (
-    DEFAULT_SIDE_B_DECKS_WEIGHT,
     MatchWorkerConnector,
     WorkerDecks,
     WorkerLaunch,
@@ -38,6 +38,22 @@ from sealed.infrastructure.match_worker_connector import (
 
 #: Under the run directory: every worker log.
 LOGS_DIR = "logs"
+
+
+@dataclass(frozen=True)
+class MatchRunOptions:
+    """What a match-outcomes run adds to its worker count, output file and
+    best-of: where the decks come from (``decks``: the side-A and side-B decks
+    files, the side-B weight and the excluded cards), and, with
+    ``effect_records_dir``, the effect-record collection: its ``collection_caps``
+    (the worker falls back to its own defaults for anything absent), the
+    ``worker_stop`` settings (the defaults when None) and ``allow_degraded``."""
+
+    decks: WorkerDecks = WorkerDecks()
+    effect_records_dir: Path | None = None
+    collection_caps: Mapping[str, object] | None = None
+    worker_stop: WorkerStopSettings | None = None
+    allow_degraded: bool = False
 
 
 class MatchOutcomeSupervisor:
@@ -74,28 +90,20 @@ class MatchOutcomeSupervisor:
         worker_count: int,
         output_path: Path,
         best_of: int,
-        side_a_decks_path: Path | None = None,
-        side_b_decks_path: Path | None = None,
-        side_b_decks_weight: int = DEFAULT_SIDE_B_DECKS_WEIGHT,
-        effect_records_dir: Path | None = None,
-        collection_caps: Mapping[str, object] | None = None,
-        exclude_cards_path: Path | None = None,
-        worker_stop: WorkerStopSettings | None = None,
-        allow_degraded: bool = False,
+        options: MatchRunOptions = MatchRunOptions(),
     ) -> None:
+        effect_records_dir = options.effect_records_dir
+        collection_caps = options.collection_caps
         self._worker_count = worker_count
         self._output_path = output_path
         self._best_of = best_of
-        self._side_a_decks_path = side_a_decks_path
-        self._side_b_decks_path = side_b_decks_path
-        self._side_b_decks_weight = side_b_decks_weight
+        self._decks = options.decks
         # Absent, nothing about this run changes: no shard is opened and the
         # two sealed corpora keep their exact format and content.
         self._effect_records_dir = effect_records_dir
         # Only meaningful alongside the shard directory; the worker falls back
         # to its own defaults for anything absent.
         self._collection_caps = collection_caps
-        self._exclude_cards_path = exclude_cards_path
         #: Set by :meth:`steer_directed_forks`; without, every worker keeps the
         #: caps' directed-fork probabilities.
         self._directed_needs: DirectedForkNeeds | None = None
@@ -120,11 +128,12 @@ class MatchOutcomeSupervisor:
             if effect_records_dir is not None else None
         )
         self._log_report = (
-            WorkerLogReport(self._worker_logs, worker_count, allow_degraded=allow_degraded)
+            WorkerLogReport(
+                self._worker_logs, worker_count, allow_degraded=options.allow_degraded)
             if self._worker_logs is not None else None
         )
         self._worker_stop = (
-            (worker_stop if worker_stop is not None else WorkerStopSettings())
+            (options.worker_stop if options.worker_stop is not None else WorkerStopSettings())
             if self._worker_logs is not None else None
         )
         #: Under the run directory's logs/: one line per match any worker
@@ -345,12 +354,7 @@ class MatchOutcomeSupervisor:
             self._output_path,
             run_id=self._run_id,
             best_of=self._best_of,
-            decks=WorkerDecks(
-                side_a=self._side_a_decks_path,
-                side_b=self._side_b_decks_path,
-                side_b_weight=self._side_b_decks_weight,
-                exclude_cards=self._exclude_cards_path,
-            ),
+            decks=self._decks,
             records=WorkerRecords(
                 directory=self._effect_records_dir,
                 # The slot, not the process: a respawn passes the same number, so

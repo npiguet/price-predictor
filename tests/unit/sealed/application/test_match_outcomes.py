@@ -6,7 +6,8 @@ import threading
 import time
 from unittest.mock import MagicMock
 
-from sealed.application.match_outcomes import MatchOutcomeSupervisor
+from sealed.application.match_outcomes import MatchOutcomeSupervisor, MatchRunOptions
+from sealed.infrastructure.match_worker_connector import WorkerDecks
 from tests.unit.sealed.conftest import FakeProcess
 from tests.unit.worker_status_line import status_line
 
@@ -171,12 +172,10 @@ class TestSupervisorSideDecks:
         side_b = tmp_path / "side-b.txt"
 
         supervisor = MatchOutcomeSupervisor(
-            worker_count=1,
-            output_path=output_file,
-            best_of=3,
-            side_a_decks_path=side_a,
-            side_b_decks_path=side_b,
-            side_b_decks_weight=6,
+            worker_count=1, output_path=output_file, best_of=3,
+            options=MatchRunOptions(
+                decks=WorkerDecks(side_a=side_a, side_b=side_b, side_b_weight=6),
+            ),
         )
 
         fake_connector = MagicMock()
@@ -230,7 +229,9 @@ class TestSupervisorRunId:
         output_file = tmp_path / "match-outcomes.txt"
         supervisor = MatchOutcomeSupervisor(
             worker_count=1, output_path=output_file, best_of=3,
-            effect_records_dir=tmp_path / "records",
+            options=MatchRunOptions(
+                effect_records_dir=tmp_path / "records",
+            ),
         )
 
         fake_connector = MagicMock()
@@ -276,7 +277,9 @@ class TestSupervisorWorkerLogs:
         output_file = tmp_path / "match-outcomes.txt"
         supervisor = MatchOutcomeSupervisor(
             worker_count=1, output_path=output_file, best_of=3,
-            effect_records_dir=records,
+            options=MatchRunOptions(
+                effect_records_dir=records,
+            ),
         )
 
         fake_connector = MagicMock()
@@ -296,7 +299,9 @@ class TestSupervisorWorkerLogs:
         output_file = tmp_path / "match-outcomes.txt"
         supervisor = MatchOutcomeSupervisor(
             worker_count=1, output_path=output_file, best_of=3,
-            effect_records_dir=records,
+            options=MatchRunOptions(
+                effect_records_dir=records,
+            ),
         )
 
         fake_connector = MagicMock()
@@ -314,7 +319,9 @@ class TestSupervisorWorkerLogs:
         output_file = tmp_path / "match-outcomes.txt"
         supervisor = MatchOutcomeSupervisor(
             worker_count=1, output_path=output_file, best_of=3,
-            effect_records_dir=records,
+            options=MatchRunOptions(
+                effect_records_dir=records,
+            ),
         )
         opened: list = []
 
@@ -371,7 +378,9 @@ class TestTheRunReportsWhatItsWorkersLogged:
         output_file = tmp_path / "match-outcomes.txt"
         supervisor = MatchOutcomeSupervisor(
             worker_count=1, output_path=output_file, best_of=3,
-            effect_records_dir=records,
+            options=MatchRunOptions(
+                effect_records_dir=records,
+            ),
         )
 
         def fake_start_worker(worker_id):
@@ -484,8 +493,10 @@ class TestTheRunReportsWhatItsWorkersLogged:
 
         supervisor = MatchOutcomeSupervisor(
             worker_count=1, output_path=tmp_path / "out.txt", best_of=3,
-            effect_records_dir=tmp_path / "records",
-            worker_stop=WorkerStopSettings(timeout=30, recycle_seconds=900),
+            options=MatchRunOptions(
+                effect_records_dir=tmp_path / "records",
+                worker_stop=WorkerStopSettings(timeout=30, recycle_seconds=900),
+            ),
         )
         supervisor._connector = MagicMock()
         supervisor._connector.start.return_value = FakeProcess(pid=1000)
@@ -518,7 +529,9 @@ class TestTheRunReportsWhatItsWorkersLogged:
     def test_the_pool_scans_the_logs_at_every_status_line(self, tmp_path):
         supervisor = MatchOutcomeSupervisor(
             worker_count=1, output_path=tmp_path / "out.txt", best_of=3,
-            effect_records_dir=tmp_path / "records",
+            options=MatchRunOptions(
+                effect_records_dir=tmp_path / "records",
+            ),
         )
         assert supervisor._pool._on_status is not None
 
@@ -552,7 +565,10 @@ class TestTheRunKeepsItsResolvedCapsFromTheStart:
         def body():
             supervisor = MatchOutcomeSupervisor(
                 worker_count=1, output_path=tmp_path / "out.txt", best_of=3,
-                effect_records_dir=records, collection_caps=caps,
+                options=MatchRunOptions(
+                    effect_records_dir=records,
+                    collection_caps=caps,
+                ),
             )
 
             def stopped_at_start():

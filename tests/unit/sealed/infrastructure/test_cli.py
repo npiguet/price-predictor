@@ -72,9 +72,9 @@ class TestMatchOutcomesSideDecks:
             rc = run_match_outcomes(_args())
         assert rc == 0
         kwargs = mock_sup.call_args.kwargs
-        assert kwargs["side_a_decks_path"] is None
-        assert kwargs["side_b_decks_path"] is None
-        assert kwargs["side_b_decks_weight"] == DEFAULT_SIDE_B_DECKS_WEIGHT
+        assert kwargs["options"].decks.side_a is None
+        assert kwargs["options"].decks.side_b is None
+        assert kwargs["options"].decks.side_b_weight == DEFAULT_SIDE_B_DECKS_WEIGHT
 
     def test_side_a_path_forwarded(self, tmp_path):
         side_a = tmp_path / "side-a.txt"
@@ -87,8 +87,8 @@ class TestMatchOutcomesSideDecks:
             rc = run_match_outcomes(_args(side_a_decks=str(side_a)))
         assert rc == 0
         kwargs = mock_sup.call_args.kwargs
-        assert kwargs["side_a_decks_path"] == side_a
-        assert kwargs["side_b_decks_path"] is None
+        assert kwargs["options"].decks.side_a == side_a
+        assert kwargs["options"].decks.side_b is None
 
     def test_side_b_path_and_weight_forwarded(self, tmp_path):
         side_b = tmp_path / "side-b.txt"
@@ -103,8 +103,8 @@ class TestMatchOutcomesSideDecks:
             ))
         assert rc == 0
         kwargs = mock_sup.call_args.kwargs
-        assert kwargs["side_b_decks_path"] == side_b
-        assert kwargs["side_b_decks_weight"] == 8
+        assert kwargs["options"].decks.side_b == side_b
+        assert kwargs["options"].decks.side_b_weight == 8
 
     def test_weight_without_side_b_rejected(self, capsys):
         with patch(

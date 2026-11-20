@@ -48,7 +48,7 @@ from effects.infrastructure.shard_io import ended_games, iter_shard_lines, iter_
 from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
 from price_predictor.infrastructure.run_manifest import run_recorded
 from price_predictor.infrastructure.worker_stops import STOPPED_LINE, WorkerStopSettings
-from sealed.application.match_outcomes import MatchOutcomeSupervisor
+from sealed.application.match_outcomes import MatchOutcomeSupervisor, MatchRunOptions
 from sealed.infrastructure.cli import _effect_collection_caps, build_parser
 from sealed.infrastructure.effect_collection_flags import directed_fork_error
 from tests.integration.conftest import assert_no_lost_output, require_jar
@@ -94,13 +94,13 @@ def recycled_run(tmp_path_factory):
         # Read by the pool at its construction (module docstring).
         patch.setattr(ForgeWorkerPool, "STATUS_INTERVAL", 2 * _RUN_SECONDS)
         supervisor = MatchOutcomeSupervisor(
-            worker_count=1,
-            output_path=root / "match-outcomes.txt",
-            best_of=1,
-            effect_records_dir=run_dir,
-            collection_caps=_effect_collection_caps(args),
-            worker_stop=WorkerStopSettings(
-                timeout=_STOP_TIMEOUT, recycle_seconds=_RECYCLE_SECONDS,
+            worker_count=1, output_path=root / "match-outcomes.txt", best_of=1,
+            options=MatchRunOptions(
+                effect_records_dir=run_dir,
+                collection_caps=_effect_collection_caps(args),
+                worker_stop=WorkerStopSettings(
+                    timeout=_STOP_TIMEOUT, recycle_seconds=_RECYCLE_SECONDS,
+                ),
             ),
         )
     successor_played = threading.Event()

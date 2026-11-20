@@ -13,7 +13,7 @@ from pathlib import Path
 
 from effects.domain.collection_caps import CollectionCaps
 from effects.infrastructure.collector_connector import CollectorRun, CollectorSupervisor
-from sealed.application.match_outcomes import MatchOutcomeSupervisor
+from sealed.application.match_outcomes import MatchOutcomeSupervisor, MatchRunOptions
 from sealed.infrastructure.effect_collection_flags import (
     DROPPED_EVENTS_SUFFIX,
     dropped_events_report,
@@ -97,8 +97,10 @@ class TestMatchOutcomesPrintsItWhenTheRunEnds:
     def _supervisor(self, tmp_path, count: str) -> MatchOutcomeSupervisor:
         supervisor = MatchOutcomeSupervisor(
             worker_count=1, output_path=tmp_path / "match-outcomes.txt", best_of=1,
-            effect_records_dir=tmp_path,
-            collection_caps={"effect.count.dropped.events": count},
+            options=MatchRunOptions(
+                effect_records_dir=tmp_path,
+                collection_caps={"effect.count.dropped.events": count},
+            ),
         )
 
         def played() -> None:
