@@ -81,57 +81,86 @@ def _colors_from_mana_cost(line: str | None) -> set[str]:
 # ── Aggregation (FR-010: primary + @play + per-color counters) ─────────
 
 
-def _record_side(
-    counters: dict[str, CardCounters],
-    deck_played: list[str],
-    deck_not_played: list[str],
-    deck_colors: frozenset[int],
-    *,
-    won: bool,
-    at_play: bool,
+@dataclass(frozen=True)
+class SideDeck:
+    """One side's deck in one game, as :func:`_record_side` folds it.
+
+    ``played`` lists distinct card names that entered the
+    battlefield/stack; ``not_played`` lists distinct names that stayed
+    in the deck (the two sets are disjoint per FR-004). ``colors`` is
+    the deck's WUBRG color set as ``_COLOR_INDEX`` values. ``won`` and
+    ``at_play`` say whether this side won the game and went first.
+    """
+
+    played: list[str]
+    not_played: list[str]
+    colors: frozenset[int]
+    won: bool
+    at_play: bool
+
+
+def _counters_for(counters: dict[str, CardCounters], name: str) -> CardCounters:
+    """Return ``name``'s counters, inserting fresh ones on first sighting."""
+    c = counters.get(name)
+    if c is None:
+        c = counters[name] = CardCounters()
+    return c
+
+
+def _count_colors(
+    in_deck_with: list[int], played_with: list[int], side: SideDeck, played: bool,
 ) -> None:
+    """Increment one card's per-color slots for each color of the deck."""
+    for color in side.colors:
+        in_deck_with[color] += 1
+        if played:
+            played_with[color] += 1
+
+
+def _record_win_at_play(c: CardCounters, played: bool) -> None:
+    c.wins_when_in_deck_at_play += 1
+    if played:
+        c.wins_when_played_at_play += 1
+
+
+def _record_loss_at_play(c: CardCounters, played: bool) -> None:
+    c.losses_when_in_deck_at_play += 1
+    if played:
+        c.losses_when_played_at_play += 1
+
+
+def _record_win(c: CardCounters, played: bool, side: SideDeck) -> None:
+    """Fold one card of a winning deck: primary, ``@play``, per-color."""
+    c.wins_when_in_deck += 1
+    if played:
+        c.wins_when_played += 1
+    if side.at_play:
+        _record_win_at_play(c, played)
+    _count_colors(c.wins_when_in_deck_with, c.wins_when_played_with, side, played)
+
+
+def _record_loss(c: CardCounters, played: bool, side: SideDeck) -> None:
+    """Fold one card of a losing deck: primary, ``@play``, per-color."""
+    c.losses_when_in_deck += 1
+    if played:
+        c.losses_when_played += 1
+    if side.at_play:
+        _record_loss_at_play(c, played)
+    _count_colors(c.losses_when_in_deck_with, c.losses_when_played_with, side, played)
+
+
+def _record_side(counters: dict[str, CardCounters], side: SideDeck) -> None:
     """Fold one side's deck of one game into ``counters``.
 
-    ``deck_played`` lists distinct card names that entered the
-    battlefield/stack; ``deck_not_played`` lists distinct names that
-    stayed in the deck (the two sets are disjoint per FR-004).
-    ``deck_colors`` is the deck's WUBRG color set as ``_COLOR_INDEX``
-    values. For each card the four primary counters, the four ``@play``
-    subset counters, and the four per-color counter slots (one per
-    color in ``deck_colors``) are incremented in a single pass over the
-    deck.
+    For each card the four primary counters, the four ``@play`` subset
+    counters, and the four per-color counter slots (one per color in
+    ``side.colors``) are incremented in a single pass over the deck.
     """
-    played_set = set(deck_played)
-    in_deck_set = played_set | set(deck_not_played)
+    played_set = set(side.played)
+    in_deck_set = played_set | set(side.not_played)
+    record = _record_win if side.won else _record_loss
     for name in in_deck_set:
-        c = counters.get(name)
-        if c is None:
-            c = counters[name] = CardCounters()
-        played = name in played_set
-        if won:
-            c.wins_when_in_deck += 1
-            if played:
-                c.wins_when_played += 1
-            if at_play:
-                c.wins_when_in_deck_at_play += 1
-                if played:
-                    c.wins_when_played_at_play += 1
-            for color in deck_colors:
-                c.wins_when_in_deck_with[color] += 1
-                if played:
-                    c.wins_when_played_with[color] += 1
-        else:
-            c.losses_when_in_deck += 1
-            if played:
-                c.losses_when_played += 1
-            if at_play:
-                c.losses_when_in_deck_at_play += 1
-                if played:
-                    c.losses_when_played_at_play += 1
-            for color in deck_colors:
-                c.losses_when_in_deck_with[color] += 1
-                if played:
-                    c.losses_when_played_with[color] += 1
+        record(_counters_for(counters, name), name in played_set, side)
 
 
 def _aggregate(
@@ -171,16 +200,16 @@ def _aggregate(
     for row in rows:
         a_won = row.winner is Side.A
         a_at_play = row.starter is Side.A
-        _record_side(
-            counters, row.cards_played_a, row.cards_not_played_a,
-            deck_color_set(row.cards_played_a, row.cards_not_played_a),
+        _record_side(counters, SideDeck(
+            played=row.cards_played_a, not_played=row.cards_not_played_a,
+            colors=deck_color_set(row.cards_played_a, row.cards_not_played_a),
             won=a_won, at_play=a_at_play,
-        )
-        _record_side(
-            counters, row.cards_played_b, row.cards_not_played_b,
-            deck_color_set(row.cards_played_b, row.cards_not_played_b),
+        ))
+        _record_side(counters, SideDeck(
+            played=row.cards_played_b, not_played=row.cards_not_played_b,
+            colors=deck_color_set(row.cards_played_b, row.cards_not_played_b),
             won=not a_won, at_play=not a_at_play,
-        )
+        ))
     return counters
 
 
