@@ -372,6 +372,7 @@ def check_decodability(
             f"no win-rate table at {win_rates_path}",
         )
     from price_predictor.application.ridge_probes import (
+        ProbeConfig,
         build_label_table,
         fit_probes,
         load_labels,
@@ -395,7 +396,9 @@ def check_decodability(
         val_names={canonical.get(name.casefold(), name) for name in held_out_cards},
     )
     effects_matrix = np.stack([cached.by_card[name] for name in shared])
-    effects_probes = fit_probes(table, effects_matrix, mode="honest")
+    effects_probes = fit_probes(
+        table, effects_matrix, config=ProbeConfig(mode="honest"),
+    )
     rendered = ", ".join(
         f"{name} {probe.metrics.get('val_r2', float('nan')):.3f}"
         for name, probe in effects_probes.probes.items()

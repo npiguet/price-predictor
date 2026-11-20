@@ -62,16 +62,22 @@ def load_labels(path: Path) -> dict[str, dict]:
         header = handle.readline().rstrip("\n").split(";")
         for line in handle:
             parts = line.rstrip("\n").split(";")
-            if len(parts) != len(header):
-                continue
-            record: dict = {}
-            for key, value in zip(header[1:], parts[1:]):
-                if key in COUNTER_COLUMNS:
-                    record[key] = int(value)
-                else:
-                    record[key] = float(value) if value != "" else None
-            rows[parts[0]] = record
+            if len(parts) == len(header):
+                rows[parts[0]] = _parse_record(header, parts)
     return rows
+
+
+def _parse_cell(key: str, value: str) -> int | float | None:
+    if key in COUNTER_COLUMNS:
+        return int(value)
+    return float(value) if value != "" else None
+
+
+def _parse_record(header: list[str], parts: list[str]) -> dict:
+    return {
+        key: _parse_cell(key, value)
+        for key, value in zip(header[1:], parts[1:])
+    }
 
 
 def head_effective_n(record: dict, head: str, k: float = SHRINKAGE_K) -> float | None:
@@ -96,21 +102,36 @@ def head_effective_n(record: dict, head: str, k: float = SHRINKAGE_K) -> float |
         return float(min(played, in_deck - played))
 
     if head in ("score_play", "score_draw"):
-        raw, shrunk = record[f"raw_{head}"], record[f"shrunk_{head}"]
-        fallback = in_deck / 2.0
+        cells = (record[f"raw_{head}"], record[f"shrunk_{head}"], in_deck / 2.0)
     else:
-        color = head[-1]
-        raw = record[f"raw_color_lift_{color}"]
-        shrunk = record[f"shrunk_color_lift_{color}"]
-        # color_lift subtracts the card's overall score, so undo that first.
-        overall_numerator = record["wins_when_played"] - record["losses_when_played"]
-        if in_deck == 0:
-            return None
-        if raw is not None:
-            raw = raw + overall_numerator / in_deck
-        if shrunk is not None:
-            shrunk = shrunk + overall_numerator / (in_deck + k)
-        fallback = float(in_deck)
+        cells = _color_cells(record, head, k)
+    if cells is None:
+        return None
+    return _implied_n(*cells, k)
+
+
+def _color_cells(
+    record: dict, head: str, k: float,
+) -> tuple[float | None, float | None, float] | None:
+    """``(raw, shrunk, fallback)`` of a color lift, overall score added back."""
+    in_deck = record["wins_when_in_deck"] + record["losses_when_in_deck"]
+    color = head[-1]
+    raw = record[f"raw_color_lift_{color}"]
+    shrunk = record[f"shrunk_color_lift_{color}"]
+    # color_lift subtracts the card's overall score, so undo that first.
+    overall_numerator = record["wins_when_played"] - record["losses_when_played"]
+    if in_deck == 0:
+        return None
+    if raw is not None:
+        raw = raw + overall_numerator / in_deck
+    if shrunk is not None:
+        shrunk = shrunk + overall_numerator / (in_deck + k)
+    return raw, shrunk, float(in_deck)
+
+
+def _implied_n(
+    raw: float | None, shrunk: float | None, fallback: float, k: float,
+) -> float | None:
     if raw is None or shrunk is None:
         return None
     if abs(raw) < 5e-4 or raw == shrunk:
@@ -152,45 +173,60 @@ def build_label_table(
     """
     labels = load_labels(win_rates_path)
     val = set(val_names)
-    rows: list[dict] = []
-    for name in names:
-        record = labels.get(name)
-        row: dict = {
-            "name": name,
-            "split": "val" if name in val else "train",
-            "has_label": record is not None,
-        }
-        if record is None:
-            for column in COUNTER_COLUMNS:
-                row[column] = 0
-            row["n_in_deck"] = 0
-            row["n_played"] = 0
-            for head in HEADS:
-                row[f"raw_{head}"] = float("nan")
-                row[f"shrunk_{head}"] = float("nan")
-                row[f"n_{head}"] = 0.0
-                row[f"w_{head}"] = 0.0
-            rows.append(row)
-            continue
-        row.update(record)
-        row["n_in_deck"] = record["wins_when_in_deck"] + record["losses_when_in_deck"]
-        row["n_played"] = record["wins_when_played"] + record["losses_when_played"]
-        for head in HEADS:
-            n = head_effective_n(record, head, k=shrinkage_k)
-            row[f"n_{head}"] = n if n is not None else 0.0
-            row[f"w_{head}"] = head_weight(n, k=shrinkage_k)
-        rows.append(row)
-
+    rows = [
+        _label_row(
+            name, "val" if name in val else "train", labels.get(name), shrinkage_k,
+        )
+        for name in names
+    ]
     table = pd.DataFrame(rows)
-    # A name repeated in ``names`` would fit the same card several times and
-    # weight it accordingly; keep the busiest occurrence as primary.
+    _mark_primary(table)
+    return table
+
+
+def _label_row(name: str, split: str, record: dict | None, k: float) -> dict:
+    row: dict = {"name": name, "split": split, "has_label": record is not None}
+    if record is None:
+        _fill_unlabelled(row)
+    else:
+        _fill_labelled(row, record, k)
+    return row
+
+
+def _fill_unlabelled(row: dict) -> None:
+    for column in COUNTER_COLUMNS:
+        row[column] = 0
+    row["n_in_deck"] = 0
+    row["n_played"] = 0
+    for head in HEADS:
+        row[f"raw_{head}"] = float("nan")
+        row[f"shrunk_{head}"] = float("nan")
+        row[f"n_{head}"] = 0.0
+        row[f"w_{head}"] = 0.0
+
+
+def _fill_labelled(row: dict, record: dict, k: float) -> None:
+    row.update(record)
+    row["n_in_deck"] = record["wins_when_in_deck"] + record["losses_when_in_deck"]
+    row["n_played"] = record["wins_when_played"] + record["losses_when_played"]
+    for head in HEADS:
+        n = head_effective_n(record, head, k=k)
+        row[f"n_{head}"] = n if n is not None else 0.0
+        row[f"w_{head}"] = head_weight(n, k=k)
+
+
+def _mark_primary(table: pd.DataFrame) -> None:
+    """Add ``is_primary``: a repeated name keeps its busiest row as primary.
+
+    A repeated name would fit the same card several times and weight it
+    accordingly.
+    """
     table["is_primary"] = True
     duplicated = table["name"].duplicated(keep=False)
     if duplicated.any():
         for _, group in table[duplicated].groupby("name"):
             keep = group["n_in_deck"].idxmax()
             table.loc[group.index.difference([keep]), "is_primary"] = False
-    return table
 
 
 # ── ridge probes ────────────────────────────────────────────────────────
@@ -269,15 +305,25 @@ def _pearson(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.corrcoef(a, b)[0, 1])
 
 
+@dataclass(frozen=True)
+class AlphaSearch:
+    """The cross-validation of the ridge penalty: folds, shuffle seed, grid."""
+
+    folds: int = 5
+    seed: int = 42
+    alphas: Sequence[float] = ALPHA_GRID
+
+
 def _choose_alpha(
-    X: np.ndarray, y: np.ndarray, w: np.ndarray, folds: int = 5, seed: int = 42,
-    alphas: Sequence[float] = ALPHA_GRID,
+    X: np.ndarray, y: np.ndarray, w: np.ndarray,
+    search: AlphaSearch = AlphaSearch(),
 ) -> tuple[float, float]:
-    """K-fold CV over ``alphas`` (:data:`ALPHA_GRID` by default).
+    """K-fold CV over ``search.alphas`` (:data:`ALPHA_GRID` by default).
 
     Returns ``(alpha, cv_r2)``.
     """
-    rng = np.random.default_rng(seed)
+    folds, alphas = search.folds, search.alphas
+    rng = np.random.default_rng(search.seed)
     order = rng.permutation(len(y))
     parts = np.array_split(order, folds)
     scores = {float(a): 0.0 for a in alphas}
@@ -292,65 +338,119 @@ def _choose_alpha(
     return best, scores[best]
 
 
+@dataclass(frozen=True)
+class ProbeConfig:
+    """What :func:`fit_probes` fits: mode, weighting, heads and the alpha search."""
+
+    mode: str = "fidelity"
+    weighted: bool = True
+    heads: Sequence[str] = HEADS
+    folds: int = 5
+    alphas: Sequence[float] = ALPHA_GRID
+
+
+@dataclass(frozen=True)
+class _HeadCells:
+    """One head's shrunk labels, sample weights and the rows that carry both."""
+
+    y_all: np.ndarray
+    w_all: np.ndarray
+    have: np.ndarray
+
+
+class _ProbeFitter:
+    """Fits the probes of one joined table and embedding matrix."""
+
+    def __init__(
+        self, join: pd.DataFrame, embeddings: np.ndarray, config: ProbeConfig,
+    ) -> None:
+        self.join = join
+        self.embeddings = embeddings
+        self.config = config
+        self.primary = join["is_primary"].to_numpy()
+        self.is_train = (join["split"] == "train").to_numpy()
+        self.is_val = (join["split"] == "val").to_numpy()
+        honest = config.mode == "honest"
+        self.fit_base = self.primary & (
+            self.is_train if honest else np.ones_like(self.primary)
+        )
+
+    def fit_head(self, head: str) -> dict[str, HeadProbe]:
+        y_all = pd.to_numeric(
+            self.join[f"shrunk_{head}"], errors="coerce"
+        ).to_numpy(float)
+        w_all = self.join[f"w_{head}"].to_numpy(float)
+        cells = _HeadCells(y_all, w_all, np.isfinite(y_all) & (w_all > 0))
+        spaces = [("linear", y_all)]
+        if head == "played_rate":
+            spaces.append(("logit", to_logit(y_all)))
+        probes: dict[str, HeadProbe] = {}
+        for space, target in spaces:
+            name = head if space == "linear" else f"{head}@logit"
+            probes[name] = self._fit_space(head, space, target, cells)
+        return probes
+
+    def _fit_space(
+        self, head: str, space: str, target: np.ndarray, cells: _HeadCells,
+    ) -> HeadProbe:
+        config = self.config
+        fit_mask = self.fit_base & cells.have
+        X, y = self.embeddings[fit_mask], target[fit_mask]
+        w = cells.w_all[fit_mask] if config.weighted else np.ones(fit_mask.sum())
+        search = AlphaSearch(folds=config.folds, alphas=config.alphas)
+        alpha, cv_r2 = _choose_alpha(X, y, w, search)
+        coef, b = _ridge_solve(X, y, w, [alpha])[alpha]
+        metrics = {"cv_r2": cv_r2, "in_sample_r2": _r2(y, X @ coef + b, w)}
+        metrics.update(self._split_metrics(target, (coef, b), cells))
+        return HeadProbe(
+            head=head, space=space, coef=coef, intercept=b, alpha=alpha,
+            n_fit=int(fit_mask.sum()), metrics=metrics,
+        )
+
+    def _split_metrics(
+        self, target: np.ndarray, fit: tuple[np.ndarray, float], cells: _HeadCells,
+    ) -> dict:
+        coef, b = fit
+        metrics: dict = {}
+        for split_name, split_mask in (("train", self.is_train), ("val", self.is_val)):
+            m = self.primary & cells.have & split_mask
+            if m.sum() < 2:
+                continue
+            pred = self.embeddings[m] @ coef + b
+            mw = cells.w_all[m] if self.config.weighted else np.ones(int(m.sum()))
+            metrics[f"{split_name}_r2"] = _r2(target[m], pred, mw)
+            metrics[f"{split_name}_pearson"] = _pearson(target[m], pred)
+            metrics[f"{split_name}_n"] = int(m.sum())
+        return metrics
+
+
 def fit_probes(
     join: pd.DataFrame,
     embeddings: np.ndarray,
     *,
-    mode: str = "fidelity",
-    weighted: bool = True,
-    heads: Sequence[str] = HEADS,
-    folds: int = 5,
-    alphas: Sequence[float] = ALPHA_GRID,
+    config: ProbeConfig = ProbeConfig(),
 ) -> ProbeSet:
     """Ridge probes from an embedding matrix to each shrunk label.
 
-    ``mode='fidelity'`` fits on every joined card — the read-off model for
-    counterfactual edits, where generalization is not the claim.
-    ``mode='honest'`` fits only on the train split, so its metrics on the val
-    split are an unrecycled generalization number.
+    ``config.mode='fidelity'`` fits on every joined card — the read-off model
+    for counterfactual edits, where generalization is not the claim.
+    ``config.mode='honest'`` fits only on the train split, so its metrics on the
+    val split are an unrecycled generalization number.
 
-    ``weighted`` applies the training objective's ``n/(n+k)`` per-head sample
-    weight. ``played_rate`` is fitted twice — linearly and in logit space
+    ``config.weighted`` applies the training objective's ``n/(n+k)`` per-head
+    sample weight. ``played_rate`` is fitted twice — linearly and in logit space
     (``played_rate@logit``), since a rate bounded in [0, 1] with mass near both
     ends is not a linear target.
 
     ``embeddings`` must be row-aligned with ``join``, which needs the columns
     :func:`build_label_table` produces.
     """
-    if mode not in ("fidelity", "honest"):
-        raise ValueError(f"mode must be 'fidelity' or 'honest', got {mode!r}")
-    primary = join["is_primary"].to_numpy()
-    is_train = (join["split"] == "train").to_numpy()
-    is_val = (join["split"] == "val").to_numpy()
-    fit_base = primary & (is_train if mode == "honest" else np.ones_like(primary))
-
+    if config.mode not in ("fidelity", "honest"):
+        raise ValueError(
+            f"mode must be 'fidelity' or 'honest', got {config.mode!r}"
+        )
+    fitter = _ProbeFitter(join, embeddings, config)
     probes: dict[str, HeadProbe] = {}
-    for head in heads:
-        y_all = pd.to_numeric(join[f"shrunk_{head}"], errors="coerce").to_numpy(float)
-        w_all = join[f"w_{head}"].to_numpy(float)
-        have = np.isfinite(y_all) & (w_all > 0)
-        spaces = [("linear", y_all)]
-        if head == "played_rate":
-            spaces.append(("logit", to_logit(y_all)))
-        for space, target in spaces:
-            fit_mask = fit_base & have
-            X, y = embeddings[fit_mask], target[fit_mask]
-            w = w_all[fit_mask] if weighted else np.ones(fit_mask.sum())
-            alpha, cv_r2 = _choose_alpha(X, y, w, folds=folds, alphas=alphas)
-            coef, b = _ridge_solve(X, y, w, [alpha])[alpha]
-            metrics = {"cv_r2": cv_r2, "in_sample_r2": _r2(y, X @ coef + b, w)}
-            for split_name, split_mask in (("train", is_train), ("val", is_val)):
-                m = primary & have & split_mask
-                if m.sum() < 2:
-                    continue
-                pred = embeddings[m] @ coef + b
-                mw = w_all[m] if weighted else np.ones(int(m.sum()))
-                metrics[f"{split_name}_r2"] = _r2(target[m], pred, mw)
-                metrics[f"{split_name}_pearson"] = _pearson(target[m], pred)
-                metrics[f"{split_name}_n"] = int(m.sum())
-            name = head if space == "linear" else f"{head}@logit"
-            probes[name] = HeadProbe(
-                head=head, space=space, coef=coef, intercept=b, alpha=alpha,
-                n_fit=int(fit_mask.sum()), metrics=metrics,
-            )
-    return ProbeSet(mode=mode, weighted=weighted, probes=probes)
+    for head in config.heads:
+        probes.update(fitter.fit_head(head))
+    return ProbeSet(mode=config.mode, weighted=config.weighted, probes=probes)

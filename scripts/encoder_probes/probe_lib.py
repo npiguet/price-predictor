@@ -37,7 +37,9 @@ import torch
 from price_predictor.application.ridge_probes import (  # noqa: F401
     ALPHA_GRID,
     HEADS,
+    AlphaSearch,
     HeadProbe,
+    ProbeConfig,
     ProbeSet,
     _choose_alpha,
     _pearson,
@@ -622,7 +624,7 @@ def ridge_fit(X: np.ndarray, y: np.ndarray, w: np.ndarray | None = None):
     Returns ``(alpha, cv_r2, coef, intercept)``.
     """
     w = np.ones(len(y)) if w is None else w
-    alpha, cv_r2 = _choose_alpha(X, y, w, folds=5)
+    alpha, cv_r2 = _choose_alpha(X, y, w, AlphaSearch(folds=5))
     coef, b = _ridge_solve(X, y, w, [alpha])[alpha]
     return alpha, cv_r2, coef, b
 

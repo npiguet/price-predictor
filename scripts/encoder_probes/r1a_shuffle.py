@@ -111,7 +111,8 @@ def main() -> None:
             })
 
         # 3. refit honest probes on the degraded embeddings
-        ps = pl.fit_probes(join, emb, mode="honest", weighted=True, heads=HEADS)
+        config = pl.ProbeConfig(mode="honest", weighted=True, heads=HEADS)
+        ps = pl.fit_probes(join, emb, config=config)
         for head in HEADS:
             m = ps.probes[head].metrics
             rows.append({

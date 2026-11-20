@@ -428,8 +428,9 @@ def main(argv: list[str] | None = None) -> int:
     probe_sets = []
     for mode in ("fidelity", "honest"):
         for weighted in (True, False):
-            ps = pl.fit_probes(join, embeddings, mode=mode, weighted=weighted,
-                               folds=folds, alphas=alphas)
+            config = pl.ProbeConfig(mode=mode, weighted=weighted,
+                                    folds=folds, alphas=alphas)
+            ps = pl.fit_probes(join, embeddings, config=config)
             probe_sets.append(ps)
             if not args.smoke:
                 pl.save_probes(ps)

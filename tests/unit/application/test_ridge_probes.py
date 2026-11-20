@@ -13,6 +13,8 @@ import pytest
 from price_predictor.application.ridge_probes import (
     ALPHA_GRID,
     HEADS,
+    AlphaSearch,
+    ProbeConfig,
     _choose_alpha,
     _pearson,
     _r2,
@@ -24,6 +26,8 @@ from price_predictor.application.ridge_probes import (
     load_labels,
     to_logit,
 )
+
+THREE_FOLDS = ProbeConfig(heads=("score_play",), folds=3)
 
 _WIN_RATE_HEADER = (
     "card_name;wins_when_played;wins_when_in_deck;losses_when_played;"
@@ -127,18 +131,19 @@ class TestToLogit:
 class TestChooseAlpha:
     def test_picks_a_grid_member(self, synthetic):
         X, y, w = synthetic
-        alpha, cv_r2 = _choose_alpha(X, y, w, folds=3)
+        alpha, cv_r2 = _choose_alpha(X, y, w, AlphaSearch(folds=3))
         assert alpha in [float(a) for a in ALPHA_GRID]
         assert cv_r2 > 0.9  # the target is nearly noiseless
 
     def test_honours_an_explicit_grid(self, synthetic):
         X, y, w = synthetic
-        alpha, _ = _choose_alpha(X, y, w, folds=3, alphas=(1.0, 10.0))
+        alpha, _ = _choose_alpha(X, y, w, AlphaSearch(folds=3, alphas=(1.0, 10.0)))
         assert alpha in (1.0, 10.0)
 
     def test_is_deterministic_under_a_fixed_seed(self, synthetic):
         X, y, w = synthetic
-        assert _choose_alpha(X, y, w, folds=3) == _choose_alpha(X, y, w, folds=3)
+        search = AlphaSearch(folds=3)
+        assert _choose_alpha(X, y, w, search) == _choose_alpha(X, y, w, search)
 
 
 class TestHeadWeighting:
@@ -274,49 +279,53 @@ class TestFitProbes:
 
     def test_recovers_a_linear_label_from_the_embedding(self):
         table, X = self._table_and_embeddings()
-        probes = fit_probes(table, X, heads=("score_play",), folds=3)
+        probes = fit_probes(table, X, config=THREE_FOLDS)
         assert probes.probes["score_play"].metrics["cv_r2"] > 0.99
 
     def test_reports_both_splits(self):
         table, X = self._table_and_embeddings()
-        probes = fit_probes(table, X, heads=("score_play",), folds=3)
+        probes = fit_probes(table, X, config=THREE_FOLDS)
         metrics = probes.probes["score_play"].metrics
         assert metrics["train_n"] + metrics["val_n"] == len(table)
 
     def test_honest_mode_fits_on_the_train_split_only(self):
         table, X = self._table_and_embeddings()
-        honest = fit_probes(table, X, heads=("score_play",), mode="honest", folds=3)
+        honest = fit_probes(
+            table, X, config=ProbeConfig(heads=("score_play",), mode="honest", folds=3),
+        )
         n_train = int((table["split"] == "train").sum())
         assert honest.probes["score_play"].n_fit == n_train
 
     def test_played_rate_is_fitted_in_both_spaces(self):
         table, X = self._table_and_embeddings()
-        probes = fit_probes(table, X, heads=("played_rate",), folds=3)
+        config = ProbeConfig(heads=("played_rate",), folds=3)
+        probes = fit_probes(table, X, config=config)
         assert set(probes.probes) == {"played_rate", "played_rate@logit"}
 
     def test_zero_weight_rows_are_dropped_from_the_fit(self):
         table, X = self._table_and_embeddings()
         table.loc[:9, "w_score_play"] = 0.0
-        probes = fit_probes(table, X, heads=("score_play",), folds=3)
+        probes = fit_probes(table, X, config=THREE_FOLDS)
         assert probes.probes["score_play"].n_fit == len(table) - 10
 
     def test_an_unknown_mode_is_rejected(self):
         table, X = self._table_and_embeddings()
         with pytest.raises(ValueError, match="mode must be"):
-            fit_probes(table, X, mode="sideways")
+            fit_probes(table, X, config=ProbeConfig(mode="sideways"))
 
     def test_probe_predict_applies_coefficients_and_intercept(self):
         table, X = self._table_and_embeddings()
-        probe = fit_probes(table, X, heads=("score_play",), folds=3).probes["score_play"]
+        probe = fit_probes(table, X, config=THREE_FOLDS).probes["score_play"]
         np.testing.assert_allclose(
             probe.predict(X), X @ probe.coef + probe.intercept, atol=1e-12
         )
 
     def test_probe_set_key_names_mode_and_weighting(self):
         table, X = self._table_and_embeddings()
-        weighted = fit_probes(table, X, heads=("score_play",), folds=3)
+        weighted = fit_probes(table, X, config=THREE_FOLDS)
         unweighted = fit_probes(
-            table, X, heads=("score_play",), weighted=False, folds=3
+            table, X,
+            config=ProbeConfig(heads=("score_play",), weighted=False, folds=3),
         )
         assert weighted.key == "fidelity_w"
         assert unweighted.key == "fidelity_u"
