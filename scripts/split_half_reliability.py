@@ -39,13 +39,13 @@ from pathlib import Path
 import numpy as np
 from _lib.stats import pearson
 
-from sealed.application.train_encoder import (
+from sealed.application.encoder_counters import _aggregate
+from sealed.application.encoder_heads import (
     _ALL_HEAD_NAMES,
     _COLOR_LIFT_OFFSET,
-    _aggregate,
-    _build_label_map,
     _label_value,
 )
+from sealed.application.encoder_labels import _build_label_map
 from sealed.infrastructure.cards_played_reader import CardsPlayedRow, iter_rows
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 

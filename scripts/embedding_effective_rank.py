@@ -168,7 +168,8 @@ class LabelSources:
 
 def _label_maps(sources: LabelSources):
     """The shrunk label map, and the canonical name of each card file stem."""
-    from sealed.application.train_encoder import _aggregate, _build_label_map
+    from sealed.application.encoder_counters import _aggregate
+    from sealed.application.encoder_labels import _build_label_map
     from sealed.infrastructure.cards_played_reader import iter_rows
     from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
@@ -196,7 +197,7 @@ def _pc_scores(X: np.ndarray) -> np.ndarray:
 
 def _head_targets(h: int, stem_to_row: dict[str, int], labels: dict, stem_to_name: dict):
     """The rows of the encoded cards labelled on head ``h``, and their values."""
-    from sealed.application.train_encoder import _label_value
+    from sealed.application.encoder_heads import _label_value
 
     rows: list[int] = []
     ys: list[float] = []
@@ -243,7 +244,7 @@ def _print_r2_header(matched: int, total: int, k_grid: list[int]) -> None:
 
 
 def _label_r2_report(X: np.ndarray, stems: list[str], sources: LabelSources) -> None:
-    from sealed.application.train_encoder import _ALL_HEAD_NAMES
+    from sealed.application.encoder_heads import _ALL_HEAD_NAMES
 
     labels, stem_to_name = _label_maps(sources)
     stem_to_row = {stem: i for i, stem in enumerate(stems)}

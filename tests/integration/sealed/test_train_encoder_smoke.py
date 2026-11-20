@@ -18,13 +18,10 @@ from pathlib import Path
 import pytest
 
 from price_predictor.infrastructure.tokenizer_store import save_vocabulary
-from sealed.application.train_encoder import (
-    SealedEncoderModel,
-    TrainEncoderConfig,
-    _make_optimizer,
-)
+from sealed.application.encoder_training_loop import _make_optimizer
+from sealed.application.train_encoder import TrainEncoderConfig
 from sealed.application.train_encoder import run as run_train_encoder
-from sealed.domain.encoder_model import SealedEncoderConfig
+from sealed.domain.encoder_model import SealedEncoderConfig, SealedEncoderModel
 from sealed.infrastructure.encoder_store import SealedEncoderStore
 
 _FIXTURE_DIR = Path(__file__).parent.parent.parent / "fixtures"

@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# Head order matches ``sealed.application.train_encoder``'s head names and the
+# Head order matches ``sealed.application.encoder_heads``' head names and the
 # column order of ``cards-win-rates.txt``.
 HEADS: tuple[str, ...] = (
     "score_play", "score_draw", "played_rate", "cast_lift",

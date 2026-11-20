@@ -176,7 +176,7 @@ def resolve_card_file(
 
 
 def reconstruct_split(labels: dict[str, dict]) -> tuple[set[str], set[str]]:
-    """Rebuild ``train_encoder._split_cards`` from the label snapshot.
+    """Rebuild ``encoder_split._split_cards`` from the label snapshot.
 
     The snapshot ``cards-win-rates.txt`` *is* the label map the trainer
     split (it is written immediately before the split, after the
@@ -185,11 +185,9 @@ def reconstruct_split(labels: dict[str, dict]) -> tuple[set[str], set[str]]:
     the run's own partition. ``p0_build`` asserts the sizes against the
     training log.
     """
-    from sealed.application.train_encoder import (  # noqa: I001 — local: heavy import
-        CardCounters,
-        CardLabels,
-        _split_cards,
-    )
+    from sealed.application.encoder_counters import CardCounters
+    from sealed.application.encoder_labels import CardLabels
+    from sealed.application.encoder_split import _split_cards
 
     label_map = {}
     for name, rec in labels.items():

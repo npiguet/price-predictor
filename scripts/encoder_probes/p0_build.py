@@ -113,7 +113,7 @@ def section_split(split: tuple[set[str], set[str]], join: pd.DataFrame) -> str:
     lines = [
         "## Train/val split reconstruction",
         "",
-        "Rebuilt by importing `train_encoder._split_cards` and feeding it "
+        "Rebuilt by importing `encoder_split._split_cards` and feeding it "
         "`CardLabels` reconstructed from the label snapshot — the snapshot is "
         "written immediately before the split, so it is the run's own label map.",
         "",
