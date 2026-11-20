@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import random
+from dataclasses import dataclass
 from unittest.mock import MagicMock
 
 import pytest
@@ -203,15 +204,25 @@ def test_a_damaged_shard_the_recount_met_goes_to_the_run_manifest(world, monkeyp
     gaining = [{"rules": {}}]
     supervisor = MagicMock()
     _steer(world, monkeypatch, _Ruled(*gaining, damaged=["s.jsonl.gz: corrupt"]),
-           supervisor=supervisor, steer_iterations=1)
+           _Round(steer_iterations=1, supervisor=supervisor))
     supervisor.record.assert_any_call(corrupt_shards=["s.jsonl.gz: corrupt"])
 
 
-def _steer(world, monkeypatch, ruled, **config):
-    """``supervisor``, when among ``config``, is the round's; the rest are
-    ``CollectVariantsConfig`` fields."""
+@dataclass(frozen=True)
+class _Round:
+    """What a test sets of its steered round: how many iterations it may take
+    (``CollectVariantsConfig``'s default when None) and the supervisor it
+    reports to (a fresh mock when None)."""
+
+    steer_iterations: int | None = None
+    supervisor: MagicMock | None = None
+
+
+def _steer(world, monkeypatch, ruled, round_: _Round = _Round()):
     generation, counts, rules = world
-    supervisor = config.pop("supervisor", None)
+    supervisor = round_.supervisor
+    iterations = {} if round_.steer_iterations is None else {
+        "steer_iterations": round_.steer_iterations}
     played = []
 
     def play(rounds, supervisor, *, rng):
@@ -222,7 +233,7 @@ def _steer(world, monkeypatch, ruled, **config):
     monkeypatch.setattr(steered_variants, "prepare_variants", lambda config, variants: variants)
     config = CollectVariantsConfig(
         steer_variants=3, rules_dir=rules, effect_records=rules.parent / "records",
-        variant_scripts=rules.parent / "variant-scripts", **config,
+        variant_scripts=rules.parent / "variant-scripts", **iterations,
     )
     catalogue = load_scenarios(rules)
     units: dict = {}
@@ -245,7 +256,7 @@ def test_a_rule_that_gained_plays_again_with_new_variants_until_the_last_iterati
     world, monkeypatch,
 ):
     gaining = [{"rules": {"702.2b": {"does_not_fire": {"aimed": n}}}} for n in (5, 10, 15)]
-    _, played, units = _steer(world, monkeypatch, _Ruled(*gaining), steer_iterations=3)
+    _, played, units = _steer(world, monkeypatch, _Ruled(*gaining), _Round(steer_iterations=3))
     assert len(played) == 3
     names = [set(round_units) for round_units, _ in played]
     assert not (names[0] & names[1]) and not (names[1] & names[2])
@@ -254,7 +265,7 @@ def test_a_rule_that_gained_plays_again_with_new_variants_until_the_last_iterati
 
 def test_the_round_ends_when_no_short_pair_is_left(world, monkeypatch):
     filled = {"rules": {"702.2b": {"does_not_fire": {"aimed": 90}}}}
-    _, played, _ = _steer(world, monkeypatch, _Ruled(filled), steer_iterations=5)
+    _, played, _ = _steer(world, monkeypatch, _Ruled(filled), _Round(steer_iterations=5))
     assert len(played) == 1
 
 
