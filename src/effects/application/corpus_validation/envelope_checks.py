@@ -12,6 +12,7 @@ from typing import NamedTuple
 from effects.application.corpus_validation.findings import (
     EXAMPLES,
     Finding,
+    RateReading,
     Share,
     Thresholds,
     ceiling_finding,
@@ -327,14 +328,16 @@ class GameEnds:
         unmarked = closed - self.ended
         share = share_of(len(unmarked), len(closed))
         return ceiling_finding(
-            name="closed games end with their game-end marker",
-            ceiling=limits.max_unmarked_closed_game_rate,
-            rate=share,
-            measured=lambda limit: (
-                f"{len(unmarked)} of {len(closed)} closed game(s) (a later game of their "
-                f"JVM lifetime follows) have no game-end marker ({share:.1%}, {limit})"
+            report=RateReading(
+                name="closed games end with their game-end marker",
+                rate=share,
+                measured=lambda limit: (
+                    f"{len(unmarked)} of {len(closed)} closed game(s) (a later game of their "
+                    f"JVM lifetime follows) have no game-end marker ({share:.1%}, {limit})"
+                ),
+                detail=sorted(unmarked)[:EXAMPLES],
             ),
-            detail=sorted(unmarked)[:EXAMPLES],
+            ceiling=limits.max_unmarked_closed_game_rate,
         )
 
 
@@ -406,21 +409,23 @@ class Links:
         paired = unpaired.seen - unpaired.hit
         sizes = Counter(len(halves) for halves in self.links.values())
         yield ceiling_finding(
-            name=(
-                "every link_id joins one activation to its resolution(s): one, "
-                "or one per chosen mode of a charm, or none for an "
-                "activation whose item never resolved"
+            report=RateReading(
+                name=(
+                    "every link_id joins one activation to its resolution(s): one, "
+                    "or one per chosen mode of a charm, or none for an "
+                    "activation whose item never resolved"
+                ),
+                rate=unpaired.rate,
+                measured=lambda limit: (
+                    f"{paired}/{unpaired.seen} link ids paired, {unpaired.hit} "
+                    f"unpaired ({unpaired.rate:.1%}, {limit})"
+                ),
+                detail=(
+                    f"{count} link ids carry {size} half(s)"
+                    for size, count in sorted(sizes.items())
+                ),
             ),
             ceiling=limits.max_unpaired_link_rate,
-            rate=unpaired.rate,
-            measured=lambda limit: (
-                f"{paired}/{unpaired.seen} link ids paired, {unpaired.hit} "
-                f"unpaired ({unpaired.rate:.1%}, {limit})"
-            ),
-            detail=(
-                f"{count} link ids carry {size} half(s)"
-                for size, count in sorted(sizes.items())
-            ),
         )
         yield self._casts_met(limits)
 
@@ -639,18 +644,20 @@ class Duplicates:
         worst = max((share.rate for share in judged), default=0.0)
         overall = Share.total(self.by_kind.values())
         yield ceiling_finding(
-            name="exact duplicates within a game stay rare, per kind",
+            report=RateReading(
+                name="exact duplicates within a game stay rare, per kind",
+                rate=worst,
+                measured=lambda limit: (
+                    f"{overall.hit}/{overall.seen} overall ({overall.rate:.1%}); "
+                    f"worst of the {len(judged)} kinds with at least "
+                    f"{limits.min_duplicate_kind_records} records {worst:.1%}, {limit}"
+                ),
+                detail=(
+                    f"{label}: {share.hit}/{share.seen} ({share.rate:.1%})"
+                    for label, share in kinds
+                ),
+            ),
             ceiling=limits.max_duplicate_rate,
-            rate=worst,
-            measured=lambda limit: (
-                f"{overall.hit}/{overall.seen} overall ({overall.rate:.1%}); "
-                f"worst of the {len(judged)} kinds with at least "
-                f"{limits.min_duplicate_kind_records} records {worst:.1%}, {limit}"
-            ),
-            detail=(
-                f"{label}: {share.hit}/{share.seen} ({share.rate:.1%})"
-                for label, share in kinds
-            ),
         )
 
 
@@ -727,15 +734,17 @@ class MirrorTurns:
         unfound = share_of(uncomparable, len(self.mirrors))
         tail = "" if self.window_cut else self._unfound_tail(limits, unfound)
         turns = ceiling_finding(
-            name=name,
-            ceiling=limits.max_mirror_turn_disagreement_rate,
-            rate=disagreed.rate,
-            measured=lambda limit: (
-                f"{disagreed.hit}/{disagreed.seen} forks disagree with their "
-                f"mirror about the turn ({disagreed.rate:.1%}, {limit}); "
-                f"{uncomparable} mirrors fell outside the window{tail}"
+            report=RateReading(
+                name=name,
+                rate=disagreed.rate,
+                measured=lambda limit: (
+                    f"{disagreed.hit}/{disagreed.seen} forks disagree with their "
+                    f"mirror about the turn ({disagreed.rate:.1%}, {limit}); "
+                    f"{uncomparable} mirrors fell outside the window{tail}"
+                ),
+                detail=examples,
             ),
-            detail=examples,
+            ceiling=limits.max_mirror_turn_disagreement_rate,
         )
         if not self._unfound_breaks(limits, disagreed, unfound):
             yield turns

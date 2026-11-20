@@ -10,6 +10,7 @@ from dataclasses import dataclass, fields
 from effects.application.corpus_validation.findings import (
     EXAMPLES,
     Finding,
+    RateReading,
     Share,
     Thresholds,
     ceiling_finding,
@@ -208,18 +209,20 @@ class Triggers:
             reverse=True,
         )
         yield ceiling_finding(
-            name="trigger records draw negatives against positives",
+            report=RateReading(
+                name="trigger records draw negatives against positives",
+                rate=fired.rate,
+                measured=lambda limit: (
+                    f"{fired.hit}:{fired.seen - fired.hit} fired:not-fired over "
+                    f"{fired.seen} trigger records ({fired.rate:.1%} fired, {limit})"
+                ),
+                detail=(
+                    f"{mode}: {counts.hit}:{counts.seen - counts.hit} "
+                    f"({rate:.1%} fired)"
+                    for rate, mode, counts in skewed[:EXAMPLES]
+                ),
+            ),
             ceiling=limits.max_trigger_fired_share,
-            rate=fired.rate,
-            measured=lambda limit: (
-                f"{fired.hit}:{fired.seen - fired.hit} fired:not-fired over "
-                f"{fired.seen} trigger records ({fired.rate:.1%} fired, {limit})"
-            ),
-            detail=(
-                f"{mode}: {counts.hit}:{counts.seen - counts.hit} "
-                f"({rate:.1%} fired)"
-                for rate, mode, counts in skewed[:EXAMPLES]
-            ),
         )
         yield self._positives(limits)
 
@@ -237,16 +240,18 @@ class Triggers:
                 f"{finished.seen} trigger records of games that ended in the window, under "
                 f"the {self.MIN_FINISHED} the floor judges at ({finished.hit} fired)"))
         return floor_finding(
-            name=name,
+            report=RateReading(
+                name=name,
+                rate=finished.rate,
+                measured=lambda limit: (
+                    f"{finished.hit}:{finished.seen - finished.hit} fired:not-fired over "
+                    f"{finished.seen} trigger records of {len(self.ended & set(self.games))} "
+                    f"games that ended ({finished.rate:.1%} fired, {limit})"
+                ),
+                detail=(),
+            ),
             floor=limits.min_trigger_fired_share,
             seen=finished.seen,
-            rate=finished.rate,
-            measured=lambda limit: (
-                f"{finished.hit}:{finished.seen - finished.hit} fired:not-fired over "
-                f"{finished.seen} trigger records of {len(self.ended & set(self.games))} "
-                f"games that ended ({finished.rate:.1%} fired, {limit})"
-            ),
-            detail=(),
         )
 
 
@@ -415,19 +420,21 @@ class Rewrites:
                 seen += counts.seen
         rate = share_of(named, seen)
         return floor_finding(
-            name="rewrites name the ability that ran instead",
+            report=RateReading(
+                name="rewrites name the ability that ran instead",
+                rate=rate,
+                measured=lambda limit: (
+                    f"{named}/{seen} replaced/updated records name a replaced_by "
+                    f"key ({rate:.1%}, {limit})"
+                ),
+                detail=(
+                    f"{name}: {counts.with_replaced_by}/{counts.seen} name one, "
+                    f"{counts.with_buffered} a buffered one"
+                    for name, counts in self._by_name()
+                ),
+            ),
             floor=limits.min_rewrite_replaced_by_rate,
             seen=seen,
-            rate=rate,
-            measured=lambda limit: (
-                f"{named}/{seen} replaced/updated records name a replaced_by "
-                f"key ({rate:.1%}, {limit})"
-            ),
-            detail=(
-                f"{name}: {counts.with_replaced_by}/{counts.seen} name one, "
-                f"{counts.with_buffered} a buffered one"
-                for name, counts in self._by_name()
-            ),
         )
 
 

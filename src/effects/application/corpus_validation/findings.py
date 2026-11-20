@@ -2,7 +2,7 @@
 
 A :class:`Finding` with no threshold is watched: it prints ``[WATCH]`` and
 never fails a run. :func:`floor_finding` and :func:`ceiling_finding` are the two
-ways a measured share is judged, and :class:`Share` is how one is counted.
+ways a measured share (a :class:`RateReading`) is judged, and :class:`Share` is how one is counted.
 """
 
 from __future__ import annotations
@@ -227,49 +227,49 @@ def keep_example(examples: list[str], example: str) -> None:
         examples.append(example)
 
 
-def floor_finding(
-    name: str,
-    floor: float | None,
-    seen: int,
-    rate: float,
-    measured: Callable[[str], str],
-    detail: Iterable[str],
-) -> Finding:
+@dataclass(frozen=True, slots=True)
+class RateReading:
+    """A measured rate and how it is reported: the finding's ``name``, the
+    ``rate``, ``measured`` (handed the limit's label to place in its own
+    sentence) and the ``detail`` lines."""
+
+    name: str
+    rate: float
+    measured: Callable[[str], str]
+    detail: Iterable[str]
+
+
+def floor_finding(report: RateReading, floor: float | None, seen: int) -> Finding:
     """A rate judged against a floor, watched when the floor is ``None``.
 
-    ``measured`` is handed the floor's label to place in its own sentence. An
-    empty window holds whatever the floor.
+    ``report.measured`` is handed the floor's label to place in its own
+    sentence. An empty window (``seen`` of 0) holds whatever the floor.
     """
     limit = "watched, no floor" if floor is None else f"floor {floor:.1%}"
     return Finding(
-        name=name,
-        ok=floor is None or not seen or rate >= floor,
+        name=report.name,
+        ok=floor is None or not seen or report.rate >= floor,
         watched=floor is None,
-        measured=measured(limit),
-        detail=tuple(detail),
+        measured=report.measured(limit),
+        detail=tuple(report.detail),
     )
 
 
-def ceiling_finding(
-    name: str,
-    ceiling: float | None,
-    rate: float,
-    measured: Callable[[str], str],
-    detail: Iterable[str],
-) -> Finding:
+def ceiling_finding(report: RateReading, ceiling: float | None) -> Finding:
     """A rate judged against a ceiling, :func:`floor_finding`'s mirror.
 
-    ``measured`` is handed the ceiling's label to place in its own sentence.
-    An empty window's rate is 0.0, so it holds whatever the ceiling. A
-    ``None`` ceiling watches the rate.
+    ``report.measured`` is handed the ceiling's label to place in its own
+    sentence. An empty window's rate is 0.0, so it holds whatever the ceiling.
+    A ``None`` ceiling watches the rate.
     """
     if ceiling is None:
-        return Finding.watch(name, measured("watched, no limit"), tuple(detail))
+        return Finding.watch(
+            report.name, report.measured("watched, no limit"), tuple(report.detail))
     return Finding(
-        name=name,
-        ok=rate <= ceiling,
-        measured=measured(f"limit {ceiling:.1%}"),
-        detail=tuple(detail),
+        name=report.name,
+        ok=report.rate <= ceiling,
+        measured=report.measured(f"limit {ceiling:.1%}"),
+        detail=tuple(report.detail),
     )
 
 

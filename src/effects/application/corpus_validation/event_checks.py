@@ -10,6 +10,7 @@ from collections.abc import Callable, Iterator
 from effects.application.corpus_validation.findings import (
     EXAMPLES,
     Finding,
+    RateReading,
     Share,
     Thresholds,
     ceiling_finding,
@@ -55,17 +56,19 @@ class _Repeats:
     def finding(self, name: str, noun: str, ceiling: float | None) -> Finding:
         share = self.share
         return ceiling_finding(
-            name=name,
+            report=RateReading(
+                name=name,
+                rate=share.rate,
+                measured=lambda limit: (
+                    f"{share.hit}/{share.seen} {noun} repeat another in the "
+                    f"same record ({share.rate:.1%}, {limit})"
+                ),
+                detail=(
+                    f"{event_type}: {count}"
+                    for event_type, count in self.by_type.most_common(EXAMPLES)
+                ),
+            ),
             ceiling=ceiling,
-            rate=share.rate,
-            measured=lambda limit: (
-                f"{share.hit}/{share.seen} {noun} repeat another in the "
-                f"same record ({share.rate:.1%}, {limit})"
-            ),
-            detail=(
-                f"{event_type}: {count}"
-                for event_type, count in self.by_type.most_common(EXAMPLES)
-            ),
         )
 
 
@@ -127,19 +130,21 @@ class ZoneChanges:
         to_stack = self.to_zone.get("stack", 0)
         stack_rate = share_of(to_stack, with_from.seen)
         yield floor_finding(
-            name="zone_change events say where the card came from",
+            report=RateReading(
+                name="zone_change events say where the card came from",
+                rate=with_from.rate,
+                measured=lambda limit: (
+                    f"{with_from.hit}/{with_from.seen} carry "
+                    f"from_zone ({with_from.rate:.1%}, {limit}); {to_stack} say "
+                    f"to_zone=stack ({stack_rate:.1%})"
+                ),
+                detail=(
+                    f"to_zone={zone}: {count}"
+                    for zone, count in self.to_zone.most_common(EXAMPLES)
+                ),
+            ),
             floor=limits.min_zone_change_from_zone_rate,
             seen=with_from.seen,
-            rate=with_from.rate,
-            measured=lambda limit: (
-                f"{with_from.hit}/{with_from.seen} carry "
-                f"from_zone ({with_from.rate:.1%}, {limit}); {to_stack} say "
-                f"to_zone=stack ({stack_rate:.1%})"
-            ),
-            detail=(
-                f"to_zone={zone}: {count}"
-                for zone, count in self.to_zone.most_common(EXAMPLES)
-            ),
         )
 
 
@@ -186,18 +191,20 @@ class Attribution:
         named = self.events - self.attribution.get(AttributionKind.ABSENT, 0)
         rate = share_of(named, self.events)
         yield floor_finding(
-            name=self.name,
+            report=RateReading(
+                name=self.name,
+                rate=rate,
+                measured=lambda limit: (
+                    f"{named}/{self.events} {self.noun} name a clause "
+                    f"({rate:.1%}, {limit})"
+                ),
+                detail=(
+                    f"{state}: {count}"
+                    for state, count in sorted(self.attribution.items())
+                ),
+            ),
             floor=self.floor_of(limits),
             seen=self.events,
-            rate=rate,
-            measured=lambda limit: (
-                f"{named}/{self.events} {self.noun} name a clause "
-                f"({rate:.1%}, {limit})"
-            ),
-            detail=(
-                f"{state}: {count}"
-                for state, count in sorted(self.attribution.items())
-            ),
         )
 
 
@@ -222,19 +229,21 @@ class CauseBearing:
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
         caused = Share.total(self.by_type.values())
         yield floor_finding(
-            name="events that declare a cause name one",
+            report=RateReading(
+                name="events that declare a cause name one",
+                rate=caused.rate,
+                measured=lambda limit: (
+                    f"{caused.hit}/{caused.seen} events of the "
+                    f"{len(CAUSE_BEARING_TYPES)} cause-bearing types carry a cause "
+                    f"({caused.rate:.1%}, {limit})"
+                ),
+                detail=(
+                    f"{event_type}: {counts.hit}/{counts.seen}"
+                    for event_type, counts in sorted(self.by_type.items())
+                ),
+            ),
             floor=limits.min_cause_rate,
             seen=caused.seen,
-            rate=caused.rate,
-            measured=lambda limit: (
-                f"{caused.hit}/{caused.seen} events of the "
-                f"{len(CAUSE_BEARING_TYPES)} cause-bearing types carry a cause "
-                f"({caused.rate:.1%}, {limit})"
-            ),
-            detail=(
-                f"{event_type}: {counts.hit}/{counts.seen}"
-                for event_type, counts in sorted(self.by_type.items())
-            ),
         )
 
 
