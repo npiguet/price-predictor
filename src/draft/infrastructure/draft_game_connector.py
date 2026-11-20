@@ -16,7 +16,7 @@ import subprocess
 from pathlib import Path
 
 from price_predictor.infrastructure.forge_classpath import build_forge_classpath
-from price_predictor.infrastructure.jvm_processes import build_jvm_command
+from price_predictor.infrastructure.jvm_processes import JvmOptions, build_jvm_command
 
 MAIN_CLASS = "com.pricepredictor.connector.DraftGameWorkerMain"
 WORKER_XMX = "1200m"  # matches the sealed evaluation worker
@@ -44,14 +44,16 @@ class DraftGameConnector:
         return build_jvm_command(
             main_class=MAIN_CLASS,
             classpath=build_forge_classpath(),
-            system_properties={
-                "seats.file": str(seats_file),
-                "output.file": str(output_file),
-                "run.id": run_id,
-                "best.of": str(best_of),
-                "include.mirrors": "true" if include_mirrors else "false",
-            },
-            xmx=WORKER_XMX,
+            options=JvmOptions(
+                system_properties={
+                    "seats.file": str(seats_file),
+                    "output.file": str(output_file),
+                    "run.id": run_id,
+                    "best.of": str(best_of),
+                    "include.mirrors": "true" if include_mirrors else "false",
+                },
+                xmx=WORKER_XMX,
+            ),
         )
 
     def start(

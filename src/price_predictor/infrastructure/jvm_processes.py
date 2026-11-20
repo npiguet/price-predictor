@@ -3,12 +3,14 @@ killing a process tree."""
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import os
 import platform
 import re
 import signal
 import subprocess
+from collections.abc import Mapping
 
 from price_predictor.infrastructure.custom_card_staging import clear_stale_staging
 from price_predictor.infrastructure.forge_classpath import build_forge_classpath
@@ -65,12 +67,28 @@ def java_feature_version() -> int | None:
     return parse_java_feature_version(output) if isinstance(output, str) else None
 
 
+@dataclasses.dataclass(frozen=True)
+class JvmOptions:
+    """A JVM's own options, which go before its classpath: its system
+    properties (each ``-Dkey=value``, in order) and its maximum heap
+    (``-Xmx``)."""
+
+    system_properties: Mapping[str, str] | None = None
+    xmx: str | None = None
+
+    def flags(self) -> list[str]:
+        """The options as ``java`` arguments."""
+        flags = [f"-D{key}={value}" for key, value in (self.system_properties or {}).items()]
+        if self.xmx:
+            flags.append(f"-Xmx{self.xmx}")
+        return flags
+
+
 def build_jvm_command(
     *,
     main_class: str,
     classpath: str,
-    system_properties: dict[str, str] | None = None,
-    xmx: str | None = None,
+    options: JvmOptions | None = None,
     main_args: list[str] | None = None,
 ) -> list[str]:
     """Construct a ``java`` subprocess command list. The first one a process
@@ -81,11 +99,7 @@ def build_jvm_command(
     version = java_feature_version()
     if version is not None and version >= _FIRST_WARNING_JDK:
         cmd.append(UNSAFE_MEMORY_ACCESS_OPTION)
-    if system_properties:
-        for key, value in system_properties.items():
-            cmd.append(f"-D{key}={value}")
-    if xmx:
-        cmd.append(f"-Xmx{xmx}")
+    cmd.extend((options or JvmOptions()).flags())
     cmd.extend(["-cp", classpath, main_class])
     if main_args:
         cmd.extend(main_args)
@@ -100,33 +114,48 @@ class ForgeWorkerTimeout(TimeoutError):
     """
 
 
+@dataclasses.dataclass(frozen=True)
+class OneShotRun:
+    """How :func:`run_forge_worker` runs its JVM.
+
+    Attributes:
+        xmx: the JVM's maximum heap; None leaves the JVM's default.
+        include_dependency_glob: passed to :func:`build_forge_classpath`.
+        timeout: seconds after which the JVM's tree is killed and
+            :class:`ForgeWorkerTimeout` raised; None waits for ever.
+    """
+
+    xmx: str | None = None
+    include_dependency_glob: bool = False
+    timeout: float | None = None
+
+
 def run_forge_worker(
     main_class: str,
     *,
     main_args: list[str] | None = None,
-    xmx: str | None = None,
     input_text: str | None = None,
-    include_dependency_glob: bool = False,
-    timeout: float | None = None,
+    run: OneShotRun | None = None,
 ) -> subprocess.CompletedProcess:
     """Run a one-shot forge-connector main class and return the result.
 
-    ``include_dependency_glob`` is passed to :func:`build_forge_classpath`.
-    The JVM is bound to this process (:func:`bind_to_this_process`), so a
-    hard-killed caller does not leave it running. Past ``timeout`` seconds
-    (None waits for ever) its process tree is killed and
-    :class:`ForgeWorkerTimeout` raised: a Forge startup can hang, and nothing
-    else would end the command.
+    The JVM runs as ``run`` says (:class:`OneShotRun`). It is bound to this
+    process (:func:`bind_to_this_process`), so a hard-killed caller does not
+    leave it running. Past ``run.timeout`` seconds its process tree is
+    killed and :class:`ForgeWorkerTimeout` raised: a Forge startup can hang,
+    and nothing else would end the command.
 
     Raises FileNotFoundError if ``java`` is not on PATH.
     """
+    run = run or OneShotRun()
+    timeout = run.timeout
     cmd = build_jvm_command(
         main_class=main_class,
         classpath=build_forge_classpath(
-            include_dependency_glob=include_dependency_glob,
+            include_dependency_glob=run.include_dependency_glob,
         ),
         main_args=main_args,
-        xmx=xmx,
+        options=JvmOptions(xmx=run.xmx),
     )
     capture = input_text is not None
     pipe = subprocess.PIPE if capture else None
@@ -177,23 +206,8 @@ def kill_process_tree(proc: subprocess.Popen, *, timeout: float = KILL_WAIT_SECO
     """
     if proc.poll() is not None:
         return True
-    try:
-        if platform.system() == "Windows":
-            subprocess.run(
-                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            )
-        else:
-            try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-            except (ProcessLookupError, PermissionError):
-                proc.kill()
-        if _waited(proc, timeout):
-            return True
-    except Exception as exc:  # noqa: BLE001 — the direct kill below still runs
-        print(f"Tree kill of worker PID {proc.pid} failed ({exc}); killing it directly")
+    if _tree_killed(proc, timeout):
+        return True
     try:
         proc.kill()
     except Exception:  # noqa: BLE001, S110 — the wait below decides
@@ -205,6 +219,34 @@ def kill_process_tree(proc: subprocess.Popen, *, timeout: float = KILL_WAIT_SECO
         "shard and progress file"
     )
     return False
+
+
+def _tree_killed(proc: subprocess.Popen, timeout: float) -> bool:
+    """Kill ``proc``'s tree; whether it ended within ``timeout`` seconds. A
+    tree kill that raises is reported and counts as not ended."""
+    try:
+        _kill_tree(proc)
+        return _waited(proc, timeout)
+    except Exception as exc:  # noqa: BLE001 — the direct kill still runs
+        print(f"Tree kill of worker PID {proc.pid} failed ({exc}); killing it directly")
+        return False
+
+
+def _kill_tree(proc: subprocess.Popen) -> None:
+    """``taskkill /F /T`` on Windows; elsewhere kill the process group, or
+    the process alone when its group cannot be signalled."""
+    if platform.system() == "Windows":
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        return
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        proc.kill()
 
 
 def _waited(proc: subprocess.Popen, timeout: float) -> bool:

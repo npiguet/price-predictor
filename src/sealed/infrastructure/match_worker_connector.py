@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import IO
 
 from price_predictor.infrastructure.forge_classpath import build_forge_classpath
-from price_predictor.infrastructure.jvm_processes import build_jvm_command
+from price_predictor.infrastructure.jvm_processes import JvmOptions, build_jvm_command
 from price_predictor.infrastructure.worker_stops import (
     RECYCLE_SECONDS_PROPERTY,
     STOP_FILE_PROPERTY,
@@ -171,7 +171,7 @@ class MatchWorkerConnector:
         cmd = build_jvm_command(
             main_class="com.pricepredictor.connector.MatchWorkerMain",
             classpath=build_forge_classpath(),
-            system_properties=system_properties,
+            options=JvmOptions(system_properties=system_properties, xmx="1200m"),
             # 1200m is containment, not a memory budget. Forge misbehaves late
             # in a JVM's life — runaway allocation, loops that do not
             # terminate — and a small heap turns that into an early, cheap
@@ -184,7 +184,6 @@ class MatchWorkerConnector:
             # pool's recycle (ForgeWorkerPool._kill_oldest_worker, and with a
             # stop file recycle_seconds) — the two are one measure,
             # not two knobs.
-            xmx="1200m",
         )
 
         stdio = log_file if log_file is not None else subprocess.DEVNULL

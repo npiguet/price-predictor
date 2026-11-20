@@ -16,7 +16,7 @@ import subprocess
 from pathlib import Path
 
 from price_predictor.infrastructure.forge_classpath import build_forge_classpath
-from price_predictor.infrastructure.jvm_processes import build_jvm_command
+from price_predictor.infrastructure.jvm_processes import JvmOptions, build_jvm_command
 
 _MAIN_CLASS = "com.pricepredictor.connector.DraftWorkerMain"
 
@@ -70,8 +70,7 @@ class DraftWorkerConnector:
         cmd = build_jvm_command(
             main_class=_MAIN_CLASS,
             classpath=build_forge_classpath(),
-            system_properties=system_properties,
-            xmx=xmx,
+            options=JvmOptions(system_properties=system_properties, xmx=xmx),
         )
 
         # Pipe stdin only when the worker may emit pick requests; redirect stderr

@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from price_predictor.infrastructure.worker_log_files import WorkerLogFiles
-from price_predictor.infrastructure.worker_log_mark import _LogMark, _past_forge_start
+from price_predictor.infrastructure.worker_log_mark import LogMark, past_forge_start
 from price_predictor.infrastructure.worker_stops import STARTUP_LINE
 
 MIB = 1024 * 1024
@@ -24,55 +24,55 @@ def _append(path: Path, text: str) -> None:
 def test_a_startup_line_three_mib_into_the_log_reads_as_started(tmp_path):
     log = tmp_path / "run.0.log"
     _append(log, "an earlier lifetime\n")
-    mark = _LogMark.of(log)
+    mark = LogMark.of(log)
     _append(log, NOISE * (3 * MIB // len(NOISE)))
-    assert not _past_forge_start(mark)
+    assert not past_forge_start(mark)
 
     _append(log, f"{STARTUP_LINE}...\n")
 
-    assert _past_forge_start(mark), "startup line 3 MiB in was not found"
+    assert past_forge_start(mark), "startup line 3 MiB in was not found"
 
 
 def test_a_startup_line_before_the_mark_is_an_earlier_lifetime_s(tmp_path):
     log = tmp_path / "run.0.log"
     _append(log, f"{STARTUP_LINE}...\n")
-    mark = _LogMark.of(log)
+    mark = LogMark.of(log)
     _append(log, "Forge loading\n")
 
-    assert not _past_forge_start(mark)
+    assert not past_forge_start(mark)
 
 
 def test_a_startup_line_split_across_two_reads_is_found(tmp_path):
     log = tmp_path / "run.0.log"
-    mark = _LogMark.of(log)
+    mark = LogMark.of(log)
     half = len(STARTUP_LINE) // 2
     _append(log, "noise\n" + STARTUP_LINE[:half])
-    assert not _past_forge_start(mark)
+    assert not past_forge_start(mark)
 
     _append(log, STARTUP_LINE[half:] + "...\n")
 
-    assert _past_forge_start(mark)
+    assert past_forge_start(mark)
 
 
 def test_once_seen_the_log_is_not_read_again(tmp_path):
     log = tmp_path / "run.0.log"
-    mark = _LogMark.of(log)
+    mark = LogMark.of(log)
     _append(log, f"{STARTUP_LINE}...\n")
-    assert _past_forge_start(mark)
+    assert past_forge_start(mark)
 
     log.unlink()
 
-    assert _past_forge_start(mark)
+    assert past_forge_start(mark)
 
 
 def test_a_log_rotated_at_the_spawn_is_read_from_its_start(tmp_path):
     log = tmp_path / "run.0.log"
     _append(log, "x" * 100)
-    mark = _LogMark.of(log)
+    mark = LogMark.of(log)
     log.rename(log.with_name("run.0.log.1"))
     _append(log, f"{STARTUP_LINE}...\n")
 
-    assert _past_forge_start(mark)
+    assert past_forge_start(mark)
 
 
 def test_an_unopenable_log_fails_the_spawn_naming_its_path(tmp_path):

@@ -35,37 +35,64 @@ def process_start_time(pid: int | None = None) -> int | None:
     A PID and its start time together name one process: Windows and Linux
     reuse PIDs, never both."""
     if platform.system() == "Windows":
-        import ctypes
-        from ctypes import wintypes
-
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        kernel32.OpenProcess.restype = wintypes.HANDLE
-        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
-        kernel32.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.c_void_p] * 4
-        kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.c_void_p]
-        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-        own = pid is None
-        handle = kernel32.GetCurrentProcess() if own else kernel32.OpenProcess(0x1000, False, pid)
-        if not handle:
-            return None
-        try:
-            code = wintypes.DWORD()
-            if not own and kernel32.GetExitCodeProcess(handle, ctypes.byref(code)) and (
-                code.value != 259  # STILL_ACTIVE
-            ):
-                return None
-            times = [ctypes.c_uint64() for _ in range(4)]
-            if not kernel32.GetProcessTimes(handle, *(ctypes.byref(t) for t in times)):
-                return None
-            return times[0].value
-        finally:
-            if not own:
-                kernel32.CloseHandle(handle)
+        return _windows_start_time(pid)
     try:
         stat = Path(f"/proc/{os.getpid() if pid is None else pid}/stat").read_text()
     except OSError:
         return None
     return int(stat.rsplit(")", 1)[1].split()[19])
+
+
+def _kernel32():
+    """``kernel32`` with the signatures :func:`_windows_start_time` calls."""
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel32.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.c_void_p] * 4
+    kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.c_void_p]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    return kernel32
+
+
+def _windows_start_time(pid: int | None) -> int | None:
+    """:func:`process_start_time` on Windows: the process's creation time."""
+    kernel32 = _kernel32()
+    own = pid is None
+    handle = kernel32.GetCurrentProcess() if own else kernel32.OpenProcess(0x1000, False, pid)
+    if not handle:
+        return None
+    try:
+        if not own and _has_exited(kernel32, handle):
+            return None
+        return _creation_time(kernel32, handle)
+    finally:
+        if not own:
+            kernel32.CloseHandle(handle)
+
+
+def _has_exited(kernel32, handle) -> bool:
+    """Whether the process ``handle`` names has an exit code other than
+    ``STILL_ACTIVE`` (a code that cannot be read says nothing)."""
+    import ctypes
+    from ctypes import wintypes
+
+    code = wintypes.DWORD()
+    if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+        return False
+    return code.value != 259  # STILL_ACTIVE
+
+
+def _creation_time(kernel32, handle) -> int | None:
+    """The creation time of the process ``handle`` names, or None."""
+    import ctypes
+
+    times = [ctypes.c_uint64() for _ in range(4)]
+    if not kernel32.GetProcessTimes(handle, *(ctypes.byref(t) for t in times)):
+        return None
+    return times[0].value
 
 
 def claim_staging(directory: Path | None = None) -> None:

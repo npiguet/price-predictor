@@ -14,7 +14,7 @@ import logging
 import tempfile
 from pathlib import Path
 
-from price_predictor.infrastructure.jvm_processes import run_forge_worker
+from price_predictor.infrastructure.jvm_processes import OneShotRun, run_forge_worker
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +44,8 @@ def scaled_timeout(scripts: int) -> float:
 
 def _run(main: str, main_args: list[str], *, timeout: float = ONE_SHOT_TIMEOUT_SECONDS) -> int:
     return run_forge_worker(
-        f"{_PACKAGE}.{main}", main_args=main_args, include_dependency_glob=True,
-        timeout=timeout,
+        f"{_PACKAGE}.{main}", main_args=main_args,
+        run=OneShotRun(include_dependency_glob=True, timeout=timeout),
     ).returncode
 
 

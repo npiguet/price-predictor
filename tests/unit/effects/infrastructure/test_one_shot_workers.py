@@ -16,10 +16,10 @@ def _run_with(answer: dict[str, str] | str | None, returncode: int = 0):
     """Patch the JVM launch: record the call, write ``answer`` as the output."""
     seen: dict[str, object] = {}
 
-    def run(main_class, *, main_args, include_dependency_glob, timeout):
+    def run(main_class, *, main_args, run):
         seen.update(
             main_class=main_class, args=list(main_args),
-            glob=include_dependency_glob, timeout=timeout,
+            glob=run.include_dependency_glob, timeout=run.timeout,
         )
         if answer is not None:
             output = Path(main_args[main_args.index("--output") + 1])

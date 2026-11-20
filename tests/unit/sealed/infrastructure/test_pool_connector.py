@@ -125,7 +125,7 @@ class TestDepletedCollection:
                 exclude_cards_path=listed,
             )
 
-        props = build.call_args.kwargs["system_properties"]
+        props = build.call_args.kwargs["options"].system_properties
         assert props["sealed.exclude.cards"] == str(listed)
 
     def test_an_ordinary_run_sets_no_exclusion_property(self, tmp_path):
@@ -144,4 +144,4 @@ class TestDepletedCollection:
                 run_id="r", best_of=7, output_file=tmp_path / "out.txt",
             )
 
-        assert "sealed.exclude.cards" not in build.call_args.kwargs["system_properties"]
+        assert "sealed.exclude.cards" not in build.call_args.kwargs["options"].system_properties

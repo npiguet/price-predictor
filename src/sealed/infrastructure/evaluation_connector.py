@@ -10,6 +10,8 @@ from typing import IO
 
 from price_predictor.infrastructure.forge_classpath import build_forge_classpath
 from price_predictor.infrastructure.jvm_processes import (
+    JvmOptions,
+    OneShotRun,
     build_jvm_command,
     kill_process_tree,
     run_forge_worker,
@@ -53,8 +55,8 @@ class EvaluationConnector:
 
         result = run_forge_worker(
             "com.pricepredictor.connector.DeckBuilderMain",
-            xmx="1200m",
             input_text=stdin_text,
+            run=OneShotRun(xmx="1200m"),
         )
 
         if result.returncode != 0:
@@ -209,10 +211,12 @@ class EvaluationConnector:
         return build_jvm_command(
             main_class="com.pricepredictor.connector.ValidationWorkerMain",
             classpath=build_forge_classpath(),
-            system_properties={
-                "matches.file": str(matches_file),
-                "best.of": str(best_of),
-            },
-            xmx="1200m",
+            options=JvmOptions(
+                system_properties={
+                    "matches.file": str(matches_file),
+                    "best.of": str(best_of),
+                },
+                xmx="1200m",
+            ),
         )
 

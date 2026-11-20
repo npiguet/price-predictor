@@ -94,29 +94,43 @@ def bind_to_this_process(proc: subprocess.Popen) -> bool:
     Elsewhere than on Windows nothing is bound, and a failure to bind is
     reported and leaves the worker running unbound.
     """
-    global _job_handle, _job_unavailable
     if not isinstance(proc, _POPEN) or platform.system() != "Windows":
         return False
     handle = getattr(proc, "_handle", None)
     if handle is None:
         return False
     import ctypes
-    from ctypes import wintypes
 
     with _job_lock:
-        if _job_handle is None and not _job_unavailable:
-            _job_handle = _create_kill_on_close_job()
-            if _job_handle is None:
-                _job_unavailable = True
-                print("Could not create a job object; workers outlive a hard-killed supervisor")
-        if _job_handle is None:
+        job = _this_process_job()
+        if job is None:
             return False
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
-        if kernel32.AssignProcessToJobObject(_job_handle, int(handle)):
+        if _assign_to_job(job, handle):
             return True
     print(
         f"Could not bind worker PID {proc.pid} to this process "
         f"(error {ctypes.get_last_error()}); it outlives a hard-killed supervisor"
     )
     return False
+
+
+def _this_process_job() -> int | None:
+    """Under ``_job_lock``: this process's job handle, made on first use;
+    None once making it has failed."""
+    global _job_handle, _job_unavailable
+    if _job_handle is None and not _job_unavailable:
+        _job_handle = _create_kill_on_close_job()
+        if _job_handle is None:
+            _job_unavailable = True
+            print("Could not create a job object; workers outlive a hard-killed supervisor")
+    return _job_handle
+
+
+def _assign_to_job(job: int, handle) -> bool:
+    """Whether Windows put the process ``handle`` names into ``job``."""
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+    return bool(kernel32.AssignProcessToJobObject(job, int(handle)))

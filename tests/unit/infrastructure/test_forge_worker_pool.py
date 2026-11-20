@@ -15,7 +15,7 @@ from unittest.mock import patch
 import pytest
 
 from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool, WorkerStartError
-from price_predictor.infrastructure.worker_log_mark import _LogMark
+from price_predictor.infrastructure.worker_log_mark import LogMark
 from price_predictor.infrastructure.worker_stops import STARTUP_LINE, GracefulStop
 from tests.unit.infrastructure.real_processes import SLEEPER
 
@@ -159,7 +159,7 @@ class TestRecycleUnderTheStopProtocol:
                            encoding="utf-8")
             pool._start_times[proc] = started
             pool._slots[proc] = slot
-            pool._log_marks[proc] = _LogMark(log, None, 0)
+            pool._log_marks[proc] = LogMark(log, None, 0)
         return pool
 
     def test_the_oldest_worker_past_its_forge_start_is_killed(self, tmp_path, capsys):

@@ -18,7 +18,7 @@ _SCAN_CHUNK_BYTES = 1024 * 1024
 
 
 @dataclasses.dataclass
-class _LogMark:
+class LogMark:
     """Where a slot's log stood when a worker was spawned: its identity and
     size, so what that worker wrote can be read back. The mark also keeps the
     worker's startup scan: how far the log has been searched for the startup
@@ -33,7 +33,7 @@ class _LogMark:
     started: bool = False
 
     @classmethod
-    def of(cls, path: Path) -> _LogMark:
+    def of(cls, path: Path) -> LogMark:
         try:
             stat = os.stat(path)
         except OSError:
@@ -56,7 +56,7 @@ class _LogMark:
         return chunk.decode("utf-8", errors="replace")
 
 
-def _past_forge_start(mark: _LogMark | None) -> bool:
+def past_forge_start(mark: LogMark | None) -> bool:
     """Whether the worker whose log ``mark`` marks has finished starting
     Forge: its startup line is anywhere in what it wrote since its spawn.
     Each call reads only what the log gained since the last; once the line has
@@ -68,7 +68,7 @@ def _past_forge_start(mark: _LogMark | None) -> bool:
     return mark.started
 
 
-def _scan_for_startup(mark: _LogMark) -> None:
+def _scan_for_startup(mark: LogMark) -> None:
     """Search the log's new bytes for the startup line."""
     try:
         size = os.stat(mark.path).st_size
@@ -82,12 +82,12 @@ def _scan_for_startup(mark: _LogMark) -> None:
         return
 
 
-def _same_file(mark: _LogMark) -> bool:
+def _same_file(mark: LogMark) -> bool:
     """Whether the log is still the file the mark was taken of."""
     return os.stat(mark.path).st_ino == mark.identity
 
 
-def _read_through(handle: IO[bytes], mark: _LogMark) -> None:
+def _read_through(handle: IO[bytes], mark: LogMark) -> None:
     """Read ``handle`` to its end a chunk at a time, advancing the mark's
     scan and setting ``started`` on the startup line. The last bytes of a
     chunk carry over, for a line split across two reads."""

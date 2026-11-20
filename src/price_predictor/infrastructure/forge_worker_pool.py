@@ -13,7 +13,7 @@ from pathlib import Path
 
 from price_predictor.infrastructure.job_objects import bind_to_this_process
 from price_predictor.infrastructure.jvm_processes import kill_process_tree
-from price_predictor.infrastructure.worker_log_mark import _LogMark, _past_forge_start, stop_line_of
+from price_predictor.infrastructure.worker_log_mark import LogMark, past_forge_start, stop_line_of
 from price_predictor.infrastructure.worker_stops import GracefulStop, WorkerStops
 
 #: The most workers a pool may run: the machine runs at most twelve CPU-busy
@@ -184,7 +184,7 @@ class ForgeWorkerPool:
         #: stood at its spawn, and when each worker was asked to stop and by
         #: when it must have ended.
         self._slots: dict[subprocess.Popen, int] = {}
-        self._log_marks: dict[subprocess.Popen, _LogMark] = {}
+        self._log_marks: dict[subprocess.Popen, LogMark] = {}
         self._deadlines: dict[subprocess.Popen, float] = {}
         #: How the workers ended so far.
         self._stops = WorkerStops()
@@ -406,7 +406,7 @@ class ForgeWorkerPool:
                 with self._processes_lock:
                     self._failed_starts[worker_id] = 0
 
-    def _prepare_slot(self, worker_id: int) -> _LogMark | None:
+    def _prepare_slot(self, worker_id: int) -> LogMark | None:
         """Under the protocol, before a slot's worker is spawned: delete its
         stop file, which an earlier worker's stop left there and which would
         stop the new one before its first match, and mark where its log
@@ -418,7 +418,7 @@ class ForgeWorkerPool:
             stop_file.unlink(missing_ok=True)
         except OSError as exc:
             print(f"Could not delete worker {worker_id}'s stop file {stop_file}: {exc}")
-        return _LogMark.of(Path(self._graceful.log_path_for(worker_id)))
+        return LogMark.of(Path(self._graceful.log_path_for(worker_id)))
 
     def _ending(self, proc: subprocess.Popen) -> tuple[str, int | None, int | None]:
         """How an ended worker ended (a :class:`WorkerStops` field) and, for
@@ -647,7 +647,7 @@ class ForgeWorkerPool:
                 key=lambda candidate: candidate[0],
             )
         for started, proc, slot, mark in candidates:
-            if not _past_forge_start(mark):
+            if not past_forge_start(mark):
                 continue
             age = time.monotonic() - started
             self._kill(proc)
@@ -732,7 +732,7 @@ class ForgeWorkerPool:
         for proc, slot in asked:
             with self._processes_lock:
                 mark = self._log_marks.get(proc)
-            if not _past_forge_start(mark):
+            if not past_forge_start(mark):
                 starting.append(proc)
                 print(f"Killing worker {slot} (PID {proc.pid}): still starting Forge, "
                       "no game to cut")

@@ -26,6 +26,7 @@ from price_predictor.infrastructure.forge_classpath import (
 )
 from price_predictor.infrastructure.jvm_processes import (
     UNSAFE_MEMORY_ACCESS_OPTION,
+    JvmOptions,
     build_jvm_command,
     parse_java_feature_version,
 )
@@ -109,7 +110,9 @@ class TestRunForgeWorker:
             popen.return_value.communicate.return_value = (None, None)
             popen.return_value.returncode = 0
             if glob:
-                jvm_processes.run_forge_worker("Main", include_dependency_glob=True)
+                jvm_processes.run_forge_worker(
+                    "Main", run=jvm_processes.OneShotRun(include_dependency_glob=True),
+                )
             else:
                 jvm_processes.run_forge_worker("Main")
 
@@ -129,7 +132,7 @@ class TestBuildJvmCommand:
 
     def test_xmx_flag_included(self):
         cmd = build_jvm_command(
-            main_class="com.example.Main", classpath="cp", xmx="1200m"
+            main_class="com.example.Main", classpath="cp", options=JvmOptions(xmx="1200m")
         )
         assert "-Xmx1200m" in cmd
 
@@ -137,7 +140,7 @@ class TestBuildJvmCommand:
         cmd = build_jvm_command(
             main_class="com.example.Main",
             classpath="cp",
-            system_properties={"foo": "bar", "best.of": "3"},
+            options=JvmOptions(system_properties={"foo": "bar", "best.of": "3"}),
         )
         assert "-Dfoo=bar" in cmd
         assert "-Dbest.of=3" in cmd
@@ -560,7 +563,7 @@ class TestOneShotTimeout:
         begun = time.monotonic()
         try:
             with pytest.raises(jvm_processes.ForgeWorkerTimeout, match="Main"):
-                jvm_processes.run_forge_worker("Main", timeout=1.0)
+                jvm_processes.run_forge_worker("Main", run=jvm_processes.OneShotRun(timeout=1.0))
             assert time.monotonic() - begun < 20
             assert started[0].poll() is not None
         finally:
