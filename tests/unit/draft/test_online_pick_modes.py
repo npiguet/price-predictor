@@ -10,6 +10,7 @@ have kept. Naming one anyway is a deliberate experiment, so it is supported.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -61,11 +62,25 @@ def base_checkpoint(tmp_path: Path) -> Path:
     return path
 
 
+@dataclass(frozen=True)
+class _Inputs:
+    """The card embeddings folder and the base checkpoint a run is built on."""
+
+    cards_path: Path
+    base_checkpoint: Path
+
+
+@pytest.fixture
+def inputs(cards_path: Path, base_checkpoint: Path) -> _Inputs:
+    return _Inputs(cards_path, base_checkpoint)
+
+
 def _capture(
-    tmp_path: Path, cards_path: Path, base_checkpoint: Path,
+    tmp_path: Path, inputs: _Inputs,
     monkeypatch: pytest.MonkeyPatch, agent_temperatures: dict[str, float],
 ) -> dict:
     """Run ``execute`` up to ``AgentRegistry.build`` and capture its arguments."""
+    cards_path, base_checkpoint = inputs.cards_path, inputs.base_checkpoint
     monkeypatch.setattr(
         "draft.application.generate_draft_data.build_labeler",
         lambda config, *, locator=None: object(),
@@ -103,23 +118,19 @@ def _capture(
 
 @pytest.fixture
 def registry_call(
-    tmp_path: Path, cards_path: Path, base_checkpoint: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, inputs: _Inputs, monkeypatch: pytest.MonkeyPatch,
 ) -> dict:
     """The default field: only the learner is named, so everything else is argmax."""
-    return _capture(
-        tmp_path, cards_path, base_checkpoint, monkeypatch, {LEARNER: TEMPERATURE},
-    )
+    return _capture(tmp_path, inputs, monkeypatch, {LEARNER: TEMPERATURE})
 
 
 @pytest.fixture
 def sampled_field_call(
-    tmp_path: Path, cards_path: Path, base_checkpoint: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, inputs: _Inputs, monkeypatch: pytest.MonkeyPatch,
 ) -> dict:
     """One frozen label is named too — the deliberate sampled-field experiment."""
     return _capture(
-        tmp_path, cards_path, base_checkpoint, monkeypatch,
+        tmp_path, inputs, monkeypatch,
         {LEARNER: TEMPERATURE, ANCHOR: FROZEN_TEMPERATURE},
     )
 

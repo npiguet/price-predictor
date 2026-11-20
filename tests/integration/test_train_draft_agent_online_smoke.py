@@ -10,6 +10,7 @@ loadable gen-3 one, round 2 trained on drafts generated *after* round 1's update
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -113,12 +114,25 @@ def base_checkpoint(tmp_path: Path) -> Path:
     return path
 
 
+@dataclass(frozen=True)
+class _Inputs:
+    """The card embeddings folder and the base checkpoint a run is built on."""
+
+    cards_path: Path
+    base_checkpoint: Path
+
+
+@pytest.fixture
+def inputs(cards_path: Path, base_checkpoint: Path) -> _Inputs:
+    return _Inputs(cards_path, base_checkpoint)
+
+
 @pytest.fixture
 def run(
-    tmp_path: Path, cards_path: Path, base_checkpoint: Path,
-    monkeypatch: pytest.MonkeyPatch, capsys,
+    tmp_path: Path, inputs: _Inputs, monkeypatch: pytest.MonkeyPatch, capsys,
 ):
     """Drive two rounds and return (result, captured stdout, paths)."""
+    cards_path, base_checkpoint = inputs.cards_path, inputs.base_checkpoint
     checkpoint_dir = tmp_path / "models"
 
     launched: list[int] = []
@@ -276,10 +290,10 @@ def test_round_two_trained_on_drafts_generated_after_round_one(run) -> None:
 
 
 def test_best_checkpoint_is_written_once_the_window_fills(
-    tmp_path: Path, cards_path: Path, base_checkpoint: Path,
-    monkeypatch: pytest.MonkeyPatch, capsys,
+    tmp_path: Path, inputs: _Inputs, monkeypatch: pytest.MonkeyPatch, capsys,
 ) -> None:
     """With anchor_window == drafts_per_round the window fills on round 0."""
+    cards_path, base_checkpoint = inputs.cards_path, inputs.base_checkpoint
     checkpoint_dir = tmp_path / "models"
     labeler = _VaryingLabeler()
     monkeypatch.setattr(

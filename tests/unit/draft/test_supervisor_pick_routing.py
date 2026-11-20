@@ -7,6 +7,7 @@ canned line stream and captures the responses written to its stdin.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 
 import pytest
 
@@ -85,15 +86,23 @@ def _event(draft_id="d-done") -> str:
     })
 
 
-def _supervisor(tmp_path, lines, *, registry, target=1, max_faults=5):
+@dataclass(frozen=True)
+class _Limits:
+    """How many drafts a run records, and how many consecutive faults abort it."""
+
+    target: int = 1
+    max_faults: int = 5
+
+
+def _supervisor(tmp_path, lines, *, registry, limits=_Limits()):
     config = GenerateDraftDataConfig(
-        n_drafts=target,
+        n_drafts=limits.target,
         agent_mix=[("draft-agent", 1), ("forge-full", 1)],
         scorer_checkpoint=tmp_path / "scorer.pt",
         cards_path=tmp_path / "cards",
         output_path=tmp_path / "drafts.jsonl",
         worker_log_dir=tmp_path / "logs",
-        max_consecutive_faults=max_faults,
+        max_consecutive_faults=limits.max_faults,
     )
     proc = _FakeProc(lines)
     sup = GenerateDraftDataSupervisor(
@@ -163,7 +172,7 @@ def test_consecutive_fault_auto_abort(tmp_path) -> None:
     registry = _FakeRegistry(fault=True)
     lines = [_pick_request(draft_id=f"f{i}") for i in range(5)]
     sup, proc = _supervisor(
-        tmp_path, lines, registry=registry, target=99, max_faults=3,
+        tmp_path, lines, registry=registry, limits=_Limits(target=99, max_faults=3),
     )
     with pytest.raises(MaxConsecutiveFaultsError):
         sup.run()

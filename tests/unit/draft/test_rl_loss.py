@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -28,7 +29,15 @@ def _table() -> np.ndarray:
     return np.random.default_rng(0).standard_normal((6, DIM)).astype(np.float32)
 
 
-def _ex(types: list[int], action_token: int, learner: bool, reward: float, adv: float) -> RLExample:
+@dataclass(frozen=True)
+class _Credit:
+    """What a pick was rewarded and how much better it was than expected."""
+
+    reward: float
+    advantage: float
+
+
+def _ex(types: list[int], action_token: int, learner: bool, credit: _Credit) -> RLExample:
     n = len(types)
     return RLExample(
         draft_index=0,
@@ -41,8 +50,8 @@ def _ex(types: list[int], action_token: int, learner: bool, reward: float, adv: 
         action_token=action_token,
         learner_active=learner,
         critic_active=True,
-        reward=reward,
-        advantage=adv,
+        reward=credit.reward,
+        advantage=credit.advantage,
     )
 
 
@@ -63,8 +72,8 @@ def test_total_is_weighted_sum_of_components() -> None:
     ref = _model()  # different init → nonzero KL
     table = _table()
     batch = _collate(
-        [_ex([TYPE_PACK, TYPE_PACK, TYPE_POOL], 0, True, 1.0, 0.5),
-         _ex([TYPE_PACK, TYPE_POOL, TYPE_TAKEN], 0, False, -1.0, 0.0)],
+        [_ex([TYPE_PACK, TYPE_PACK, TYPE_POOL], 0, True, _Credit(1.0, 0.5)),
+         _ex([TYPE_PACK, TYPE_POOL, TYPE_TAKEN], 0, False, _Credit(-1.0, 0.0))],
         table, 0.0, 1.0, torch.device("cpu"),
     )
     cfg = _config(value_weight=2.0)
@@ -83,7 +92,7 @@ def test_kl_is_zero_against_identical_reference() -> None:
     ref.load_state_dict(model.state_dict())  # identical → KL == 0
     table = _table()
     batch = _collate(
-        [_ex([TYPE_PACK, TYPE_PACK, TYPE_POOL], 0, True, 1.0, 0.5)],
+        [_ex([TYPE_PACK, TYPE_PACK, TYPE_POOL], 0, True, _Credit(1.0, 0.5))],
         table, 0.0, 1.0, torch.device("cpu"),
     )
     out = _compute_loss(model, ref, batch, _config(), entropy_coef=0.0, kl_coef=1.0)
@@ -97,8 +106,8 @@ def test_non_learner_batch_has_zero_policy_terms() -> None:
     table = _table()
     # Both rows non-learner → only the critic (value) term is active.
     batch = _collate(
-        [_ex([TYPE_PACK, TYPE_POOL], 0, False, 1.0, 0.0),
-         _ex([TYPE_PACK, TYPE_TAKEN], 0, False, -1.0, 0.0)],
+        [_ex([TYPE_PACK, TYPE_POOL], 0, False, _Credit(1.0, 0.0)),
+         _ex([TYPE_PACK, TYPE_TAKEN], 0, False, _Credit(-1.0, 0.0))],
         table, 0.0, 1.0, torch.device("cpu"),
     )
     out = _compute_loss(model, ref, batch, _config(), entropy_coef=0.1, kl_coef=0.3)
@@ -113,8 +122,8 @@ def test_backward_is_finite_with_masked_rows() -> None:
     ref = _model()
     table = _table()
     batch = _collate(
-        [_ex([TYPE_PACK, TYPE_PACK, TYPE_POOL], 1, True, 1.0, -0.7),
-         _ex([TYPE_PACK, TYPE_POOL, TYPE_TAKEN], 0, False, 0.5, 0.0)],
+        [_ex([TYPE_PACK, TYPE_PACK, TYPE_POOL], 1, True, _Credit(1.0, -0.7)),
+         _ex([TYPE_PACK, TYPE_POOL, TYPE_TAKEN], 0, False, _Credit(0.5, 0.0))],
         table, 0.0, 1.0, torch.device("cpu"),
     )
     out = _compute_loss(model, ref, batch, _config(), entropy_coef=0.05, kl_coef=0.2)
@@ -128,7 +137,7 @@ def test_temperature_changes_entropy() -> None:
     model = _model()
     ref = _model()
     table = _table()
-    rows = [_ex([TYPE_PACK, TYPE_PACK, TYPE_PACK, TYPE_POOL], 0, True, 1.0, 0.1)]
+    rows = [_ex([TYPE_PACK, TYPE_PACK, TYPE_PACK, TYPE_POOL], 0, True, _Credit(1.0, 0.1))]
     cold = _compute_loss(
         model, ref, _collate(rows, table, 0.0, 1.0, torch.device("cpu")),
         _config(), entropy_coef=1.0, kl_coef=0.0,
