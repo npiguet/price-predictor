@@ -523,8 +523,7 @@ class TestOnlyDeckedCardsCountAStalledRound:
     def test_the_round_reports_exactly_the_names_it_decked(self, tmp_path, fake_supervisor):
         """``run`` must hand ``retire_stalled`` the round's own decks, not the
         whole coverage unit -- otherwise the guard above never fires."""
-        from effects.application import collect_coverage
-        from effects.application import collection_rounds
+        from effects.application import collect_coverage, collection_rounds
 
         # Sixty candidates against a single deck of 23 nonland slots: most of
         # the unit cannot be in the round at all, which is the real shape of
@@ -1525,8 +1524,7 @@ class TestARoundChargesTheCardsItsGamesShowed:
     not to every card of every deck written."""
 
     def test_a_written_card_no_game_showed_is_not_charged(self, tmp_path, fake_supervisor):
-        from effects.application import collect_coverage
-        from effects.application import collection_rounds
+        from effects.application import collect_coverage, collection_rounds
 
         cards = tmp_path / "cardsfolder"
         cards.mkdir()
