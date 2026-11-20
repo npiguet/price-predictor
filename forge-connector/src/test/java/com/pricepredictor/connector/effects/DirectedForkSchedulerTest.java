@@ -49,8 +49,8 @@ class DirectedForkSchedulerTest {
     private static final BoardPrecondition NEVER = live -> Optional.empty();
 
     private static DirectedRule rule(String id, BoardPrecondition precondition) {
-        return DirectedRule.of(id, id + "-1", precondition, "tapped",
-                new Application(ForkOperation.TAP, binding -> new TapOperation(binding.card("creature"), true)));
+        return DirectedRule.of(id, id + "-1", precondition, new DirectedRule.Variant("tapped",
+                new Application(ForkOperation.TAP, binding -> new TapOperation(binding.card("creature"), true))));
     }
 
     /** The rules a stand-in fork was handed, in order. */
@@ -404,8 +404,8 @@ class DirectedForkSchedulerTest {
         Card bears = game.getCardsIn(ZoneType.Battlefield).stream()
                 .filter(card -> card.getName().equals("Grizzly Bears")).findFirst().orElseThrow();
         DirectedRule rule = DirectedRule.of("A", "A-1", live -> Optional.of(Binding.empty().with("creature", bears)),
-                "tapped", new Application(ForkOperation.TAP,
-                        binding -> new TapOperation(binding.card("creature"), true)));
+                new DirectedRule.Variant("tapped", new Application(ForkOperation.TAP,
+                        binding -> new TapOperation(binding.card("creature"), true))));
         CollectionCaps caps = TestCaps.caps().interventions(0).probes(0).directed(2, 1.0, "A").build();
         Supplier<Player> perspective = () -> {
             if (disturb) {

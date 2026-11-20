@@ -47,10 +47,10 @@ public final class Bolster {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, Bolster::bind, HAS_CREATURE,
+        return DirectedRule.of(RULE, SCENARIO, Bolster::bind, new DirectedRule.Variant(HAS_CREATURE,
                 new Application(ForkOperation.ADD_PERMANENT,
                         fork -> AddPermanentOperation.of(BEARS, fork.player(PLAYER), true))
-                        .forcing(ForcedPlay.cast(PLAYER, CARD).playing(BOLSTERING)));
+                        .forcing(ForcedPlay.cast(PLAYER, CARD).playing(BOLSTERING))));
     }
 
     static Optional<Binding> bind(Game live) {

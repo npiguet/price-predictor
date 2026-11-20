@@ -48,10 +48,10 @@ public final class Mayhem {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, Mayhem::bind, ONE_MOUNTAIN,
+        return DirectedRule.of(RULE, SCENARIO, Mayhem::bind, new DirectedRule.Variant(ONE_MOUNTAIN,
                 new Application(ForkOperation.REMOVE_PERMANENT,
                         fork -> new RemovePermanentOperation(fork.card(LAND)))
-                        .keepingCandidatesOf(CARD));
+                        .keepingCandidatesOf(CARD)));
     }
 
     static Optional<Binding> bind(Game live) {

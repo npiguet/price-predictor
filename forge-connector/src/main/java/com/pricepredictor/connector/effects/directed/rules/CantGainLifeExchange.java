@@ -48,11 +48,11 @@ public final class CantGainLifeExchange {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, CantGainLifeExchange::bind, LEYLINE,
+        return DirectedRule.of(RULE, SCENARIO, CantGainLifeExchange::bind, new DirectedRule.Variant(LEYLINE,
                 new Application(ForkOperation.ADD_PERMANENT,
                         fork -> AddPermanentOperation.of(LEYLINE_OF_PUNISHMENT, fork.player(PLAYER), false))
                         .forcing(ForcedPlay.activate(PLAYER, PERMANENT,
-                                ForcedPlay.Line.api("ExchangeLifeVariant"))));
+                                ForcedPlay.Line.api("ExchangeLifeVariant")))));
     }
 
     static Optional<Binding> bind(Game live) {

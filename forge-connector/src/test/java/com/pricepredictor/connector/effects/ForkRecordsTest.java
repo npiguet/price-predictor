@@ -812,8 +812,8 @@ class ForkRecordsTest {
             return live.getCardsIn(ZoneType.Battlefield).stream()
                     .filter(card -> card.getName().equals("Grizzly Bears")).findFirst()
                     .map(bears -> Binding.empty().with("creature", bears));
-        }, "tougher", new Application(ForkOperation.PT,
-                binding -> new PtOperation(binding.card("creature"), null, 5)));
+        }, new DirectedRule.Variant("tougher", new Application(ForkOperation.PT,
+                binding -> new PtOperation(binding.card("creature"), null, 5))));
     }
 
     /** The live turn of the Sneak Attack board played out with the rule enabled; the shard's lines. */

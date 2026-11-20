@@ -49,10 +49,10 @@ public final class MutagenToken {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, MutagenToken::bind, MANA_AVAILABLE,
+        return DirectedRule.of(RULE, SCENARIO, MutagenToken::bind, new DirectedRule.Variant(MANA_AVAILABLE,
                 new Application(ForkOperation.ADD_PERMANENT,
                         fork -> AddPermanentOperation.of(ISLAND, fork.player(PLAYER), false))
-                        .forcing(ForcedPlay.activate(PLAYER, TOKEN, ForcedPlay.Line.api("PutCounter"))));
+                        .forcing(ForcedPlay.activate(PLAYER, TOKEN, ForcedPlay.Line.api("PutCounter")))));
     }
 
     static Optional<Binding> bind(Game live) {

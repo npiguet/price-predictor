@@ -48,10 +48,10 @@ public final class TypeSettingAura {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, TypeSettingAura::bind, COUNTER_KEPT,
+        return DirectedRule.of(RULE, SCENARIO, TypeSettingAura::bind, new DirectedRule.Variant(COUNTER_KEPT,
                 new Application(ForkOperation.COUNTERS,
                         fork -> new CountersOperation(fork.card(CREATURE), CounterEnumType.P1P1, 1))
-                        .forcing(ForcedPlay.cast(CASTER, AURA).targeting(CREATURE)));
+                        .forcing(ForcedPlay.cast(CASTER, AURA).targeting(CREATURE))));
     }
 
     static Optional<Binding> bind(Game live) {

@@ -52,10 +52,10 @@ public final class ExploreEmptyLibrary {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, ExploreEmptyLibrary::bind, EMPTY_LIBRARY,
+        return DirectedRule.of(RULE, SCENARIO, ExploreEmptyLibrary::bind, new DirectedRule.Variant(EMPTY_LIBRARY,
                 new Application(ForkOperation.MOVE_CARD,
                         fork -> new EmptyLibraryOperation(fork.player(PLAYER)))
-                        .forcing(ForcedPlay.cast(PLAYER, CARD).playing(EXPLORING)));
+                        .forcing(ForcedPlay.cast(PLAYER, CARD).playing(EXPLORING))));
     }
 
     static Optional<Binding> bind(Game live) {

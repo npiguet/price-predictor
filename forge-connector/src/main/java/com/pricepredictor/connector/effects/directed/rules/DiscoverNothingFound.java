@@ -53,10 +53,10 @@ public final class DiscoverNothingFound {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, DiscoverNothingFound::bind, EMPTY_LIBRARY,
+        return DirectedRule.of(RULE, SCENARIO, DiscoverNothingFound::bind, new DirectedRule.Variant(EMPTY_LIBRARY,
                 new Application(ForkOperation.MOVE_CARD,
                         fork -> new EmptyLibraryOperation(fork.player(PLAYER)))
-                        .forcing(ForcedPlay.cast(PLAYER, DISCOVERER).playing(DISCOVERING)));
+                        .forcing(ForcedPlay.cast(PLAYER, DISCOVERER).playing(DISCOVERING))));
     }
 
     static Optional<Binding> bind(Game live) {

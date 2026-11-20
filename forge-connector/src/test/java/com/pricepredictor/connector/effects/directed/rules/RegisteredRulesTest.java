@@ -2567,7 +2567,7 @@ class RegisteredRulesTest {
                                               Function<Binding, BoardEdit> edit) {
         return DirectedRule.of("0.0", "0.0-1",
                 live -> Optional.of(Binding.empty().with("player", Boards.active(live))),
-                "v", new Application(operation, edit));
+                new DirectedRule.Variant("v", new Application(operation, edit)));
     }
 
     /** TC3: the first check ending the fork's game moves no card, and the twin still sees it. */
@@ -2618,9 +2618,9 @@ class RegisteredRulesTest {
         board.subject.setCounters(CounterEnumType.M1M1, 1);
         Card giant = board.subject;
         DirectedRule counter = DirectedRule.of("0.0", "0.0-1",
-                live -> Optional.of(Binding.empty().with("creature", giant)), "v",
+                live -> Optional.of(Binding.empty().with("creature", giant)), new DirectedRule.Variant("v",
                 new Application(ForkOperation.COUNTERS,
-                        fork -> new CountersOperation(fork.card("creature"), CounterEnumType.P1P1, 1)));
+                        fork -> new CountersOperation(fork.card("creature"), CounterEnumType.P1P1, 1))));
         AssertionError error = assertThrows(AssertionError.class,
                 () -> board.twin(counter));
         assertTrue(error.getMessage().contains("changed the edited board"), error.getMessage());

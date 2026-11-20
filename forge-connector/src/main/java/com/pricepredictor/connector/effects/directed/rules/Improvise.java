@@ -55,9 +55,9 @@ public final class Improvise {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, Improvise::bind, ONE_ARTIFACT_TAPPED,
+        return DirectedRule.of(RULE, SCENARIO, Improvise::bind, new DirectedRule.Variant(ONE_ARTIFACT_TAPPED,
                 new Application(ForkOperation.TAP, fork -> new TapOperation(fork.card(ARTIFACT), true))
-                        .keepingCandidatesOf(CARD));
+                        .keepingCandidatesOf(CARD)));
     }
 
     static Optional<Binding> bind(Game live) {

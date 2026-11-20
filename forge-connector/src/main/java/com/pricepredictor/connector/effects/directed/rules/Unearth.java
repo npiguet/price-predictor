@@ -43,10 +43,10 @@ public final class Unearth {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, Unearth::bind, CARD_IN_HAND,
+        return DirectedRule.of(RULE, SCENARIO, Unearth::bind, new DirectedRule.Variant(CARD_IN_HAND,
                 new Application(ForkOperation.MOVE_CARD,
                         fork -> MoveCardOperation.move(fork.card(CARD), ZoneType.Hand, null))
-                        .keepingCandidatesOf(CARD));
+                        .keepingCandidatesOf(CARD)));
     }
 
     static Optional<Binding> bind(Game live) {

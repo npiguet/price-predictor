@@ -118,7 +118,7 @@ class ForcedPlayTest {
         BoardPrecondition precondition = live -> live.getPhaseHandler().is(step)
                 ? Optional.of(roles.apply(live).with("player", you(live)).with("opponent", opponent(live)))
                 : Optional.empty();
-        return DirectedRule.of("T.1", "T.1-1", precondition, "forced", application);
+        return DirectedRule.of("T.1", "T.1-1", precondition, new DirectedRule.Variant("forced", application));
     }
 
     /**

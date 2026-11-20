@@ -40,9 +40,9 @@ public final class UnleashCantBlock {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, UnleashCantBlock::bind, NO_COUNTER,
+        return DirectedRule.of(RULE, SCENARIO, UnleashCantBlock::bind, new DirectedRule.Variant(NO_COUNTER,
                 new Application(ForkOperation.COUNTERS,
-                        fork -> new CountersOperation(fork.card(Combats.BLOCKER), CounterEnumType.P1P1, 0)));
+                        fork -> new CountersOperation(fork.card(Combats.BLOCKER), CounterEnumType.P1P1, 0))));
     }
 
     static Optional<Binding> bind(Game live) {

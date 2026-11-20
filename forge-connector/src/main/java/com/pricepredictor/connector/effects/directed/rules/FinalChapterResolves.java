@@ -55,11 +55,11 @@ public final class FinalChapterResolves {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, FinalChapterResolves::bind, FINAL_CHAPTER,
+        return DirectedRule.of(RULE, SCENARIO, FinalChapterResolves::bind, new DirectedRule.Variant(FINAL_CHAPTER,
                 new Application(ForkOperation.COUNTERS, fork -> {
                     Card saga = fork.card(SAGA);
                     return new CountersOperation(saga, LORE, saga.getCounters(LORE) + 1);
-                }).keepingNegativesOf(WATCHER));
+                }).keepingNegativesOf(WATCHER)));
     }
 
     static Optional<Binding> bind(Game live) {

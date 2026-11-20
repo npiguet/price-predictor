@@ -50,10 +50,10 @@ public final class Prototype {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, Prototype::bind, TWO_MOUNTAINS,
+        return DirectedRule.of(RULE, SCENARIO, Prototype::bind, new DirectedRule.Variant(TWO_MOUNTAINS,
                 new Application(ForkOperation.REMOVE_PERMANENT,
                         fork -> new RemovePermanentOperation(fork.card(LAND)))
-                        .keepingCandidatesOf(CARD));
+                        .keepingCandidatesOf(CARD)));
     }
 
     static Optional<Binding> bind(Game live) {

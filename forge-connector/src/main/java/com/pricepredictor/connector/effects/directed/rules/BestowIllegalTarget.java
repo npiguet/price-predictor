@@ -55,11 +55,11 @@ public final class BestowIllegalTarget {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, BestowIllegalTarget::bind, SKULKING_GHOST,
+        return DirectedRule.of(RULE, SCENARIO, BestowIllegalTarget::bind, new DirectedRule.Variant(SKULKING_GHOST,
                 new Application(ForkOperation.REPLACE_CARD,
                         fork -> new ReplaceCardOperation(fork.card(CREATURE), GHOST))
                         .forcing(ForcedPlay.cast(PLAYER, CARD)
-                                .playing(new ForcedPlay.Line("bestow", ability -> ability.isSpell() && ability.isBestow()))));
+                                .playing(new ForcedPlay.Line("bestow", ability -> ability.isSpell() && ability.isBestow())))));
     }
 
     static Optional<Binding> bind(Game live) {

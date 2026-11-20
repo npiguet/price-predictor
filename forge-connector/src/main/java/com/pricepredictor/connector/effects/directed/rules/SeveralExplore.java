@@ -55,9 +55,9 @@ public final class SeveralExplore {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, SeveralExplore::bind, BRANCHWALKER_IN_PLACE,
+        return DirectedRule.of(RULE, SCENARIO, SeveralExplore::bind, new DirectedRule.Variant(BRANCHWALKER_IN_PLACE,
                 new Application(ForkOperation.REPLACE_CARD,
-                        fork -> new ReplaceCardOperation(fork.card(CREATURE), BRANCHWALKER)));
+                        fork -> new ReplaceCardOperation(fork.card(CREATURE), BRANCHWALKER))));
     }
 
     static Optional<Binding> bind(Game live) {

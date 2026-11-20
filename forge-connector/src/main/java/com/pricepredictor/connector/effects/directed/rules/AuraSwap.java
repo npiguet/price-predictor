@@ -58,7 +58,7 @@ public final class AuraSwap {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, AuraSwap::bind, AURA_IN_HAND, auraInHand())
+        return DirectedRule.of(RULE, SCENARIO, AuraSwap::bind, new DirectedRule.Variant(AURA_IN_HAND, auraInHand()))
                 .alsoFor(EXCHANGE_RULE, EXCHANGE_SCENARIO);
     }
 

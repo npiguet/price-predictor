@@ -56,10 +56,10 @@ public final class CantEnterBattlefield {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, CantEnterBattlefield::bind, CAGE,
+        return DirectedRule.of(RULE, SCENARIO, CantEnterBattlefield::bind, new DirectedRule.Variant(CAGE,
                 new Application(ForkOperation.ADD_PERMANENT,
                         fork -> AddPermanentOperation.of(GRAFDIGGERS_CAGE, fork.player(PLAYER), false))
-                        .forcing(ForcedPlay.cast(PLAYER, CARD).playing(REANIMATION)));
+                        .forcing(ForcedPlay.cast(PLAYER, CARD).playing(REANIMATION))));
     }
 
     static Optional<Binding> bind(Game live) {

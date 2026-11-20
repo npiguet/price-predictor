@@ -42,10 +42,10 @@ public final class Aftermath {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, Aftermath::bind, FROM_HAND,
+        return DirectedRule.of(RULE, SCENARIO, Aftermath::bind, new DirectedRule.Variant(FROM_HAND,
                 new Application(ForkOperation.MOVE_CARD,
                         fork -> MoveCardOperation.move(fork.card(CARD), ZoneType.Hand, null))
-                        .keepingCandidatesOf(CARD));
+                        .keepingCandidatesOf(CARD)));
     }
 
     static Optional<Binding> bind(Game live) {

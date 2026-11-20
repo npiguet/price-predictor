@@ -53,10 +53,10 @@ public final class SearchUnderMindcensor {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, SearchUnderMindcensor::bind, MINDCENSOR_ADDED,
+        return DirectedRule.of(RULE, SCENARIO, SearchUnderMindcensor::bind, new DirectedRule.Variant(MINDCENSOR_ADDED,
                 new Application(ForkOperation.ADD_PERMANENT,
                         fork -> AddPermanentOperation.of(MINDCENSOR, fork.player(WATCHER), false))
-                        .forcing(ForcedPlay.activate(SEARCHER, PERMANENT, LIBRARY_SEARCH)));
+                        .forcing(ForcedPlay.activate(SEARCHER, PERMANENT, LIBRARY_SEARCH))));
     }
 
     static Optional<Binding> bind(Game live) {

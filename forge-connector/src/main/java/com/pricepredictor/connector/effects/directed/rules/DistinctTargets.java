@@ -53,10 +53,10 @@ public final class DistinctTargets {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, DistinctTargets::bind, TWO_CREATURES,
+        return DirectedRule.of(RULE, SCENARIO, DistinctTargets::bind, new DirectedRule.Variant(TWO_CREATURES,
                 new Application(ForkOperation.ADD_PERMANENT,
                         fork -> AddPermanentOperation.of(WURM, fork.player(OPPONENT), false))
-                        .keepingCandidatesOf(SPELL));
+                        .keepingCandidatesOf(SPELL)));
     }
 
     static Optional<Binding> bind(Game live) {

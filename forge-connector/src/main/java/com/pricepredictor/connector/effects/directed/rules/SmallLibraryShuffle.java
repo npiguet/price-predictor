@@ -51,10 +51,10 @@ public final class SmallLibraryShuffle {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, SmallLibraryShuffle::bind, EMPTY_LIBRARY,
+        return DirectedRule.of(RULE, SCENARIO, SmallLibraryShuffle::bind, new DirectedRule.Variant(EMPTY_LIBRARY,
                 new Application(ForkOperation.MOVE_CARD,
                         fork -> new EmptyLibraryOperation(fork.player(SEARCHER)))
-                        .forcing(ForcedPlay.cast(SEARCHER, SPELL).playing(Scan.LIBRARY_SEARCH_SPELL)));
+                        .forcing(ForcedPlay.cast(SEARCHER, SPELL).playing(Scan.LIBRARY_SEARCH_SPELL))));
     }
 
     static Optional<Binding> bind(Game live) {

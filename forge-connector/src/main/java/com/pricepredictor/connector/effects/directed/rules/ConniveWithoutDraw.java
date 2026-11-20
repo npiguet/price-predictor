@@ -56,10 +56,10 @@ public final class ConniveWithoutDraw {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, ConniveWithoutDraw::bind, SPIRIT_ADDED,
+        return DirectedRule.of(RULE, SCENARIO, ConniveWithoutDraw::bind, new DirectedRule.Variant(SPIRIT_ADDED,
                 new Application(ForkOperation.ADD_PERMANENT,
                         fork -> AddPermanentOperation.tapped(SPIRIT, fork.player(OPPONENT)))
-                        .forcing(ForcedPlay.cast(PLAYER, CONNIVER).playing(CONNIVING)));
+                        .forcing(ForcedPlay.cast(PLAYER, CONNIVER).playing(CONNIVING))));
     }
 
     static Optional<Binding> bind(Game live) {

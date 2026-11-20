@@ -55,10 +55,10 @@ public final class PlottedFromHand {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, PlottedFromHand::bind, SMALL_CARD_IN_HAND,
+        return DirectedRule.of(RULE, SCENARIO, PlottedFromHand::bind, new DirectedRule.Variant(SMALL_CARD_IN_HAND,
                 new Application(ForkOperation.MOVE_CARD,
                         fork -> MoveCardOperation.replace(fork.card(CARD), BEARS))
-                        .forcing(ForcedPlay.cast(PLAYER, SPELL)));
+                        .forcing(ForcedPlay.cast(PLAYER, SPELL))));
     }
 
     static Optional<Binding> bind(Game live) {

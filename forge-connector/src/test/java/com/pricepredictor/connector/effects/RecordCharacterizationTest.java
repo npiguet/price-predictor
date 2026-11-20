@@ -918,10 +918,10 @@ class RecordCharacterizationTest {
                         live -> java.util.Optional.of(
                                 com.pricepredictor.connector.effects.directed.Binding.empty()
                                         .with("creature", bears)),
-                        "tougher", new com.pricepredictor.connector.effects.directed.Application(
+                        new com.pricepredictor.connector.effects.directed.DirectedRule.Variant("tougher", new com.pricepredictor.connector.effects.directed.Application(
                                 com.pricepredictor.connector.effects.directed.ForkOperation.PT,
                                 binding -> new com.pricepredictor.connector.effects.directed.operations
-                                        .PtOperation(binding.card("creature"), null, 5)));
+                                        .PtOperation(binding.card("creature"), null, 5))));
         RecordShardWriter writer = ShardRun.writer(tempDir);
         boolean kept;
         try (GameRecording recording = new GameRecording(

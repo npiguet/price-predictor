@@ -48,9 +48,9 @@ public final class DrawFromEmptyLibrary {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, DrawFromEmptyLibrary::bind, EMPTY,
+        return DirectedRule.of(RULE, SCENARIO, DrawFromEmptyLibrary::bind, new DirectedRule.Variant(EMPTY,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.move(fork.card(CARD), ZoneType.Graveyard, null)));
+                        fork -> MoveCardOperation.move(fork.card(CARD), ZoneType.Graveyard, null))));
     }
 
     static Optional<Binding> bind(Game live) {

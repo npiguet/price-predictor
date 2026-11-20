@@ -254,10 +254,10 @@ class GameRecordingTest {
                                 ? java.util.Optional.of(com.pricepredictor.connector.effects.directed.Binding
                                         .empty().with("creature", bears))
                                 : java.util.Optional.empty(),
-                        "tapped", new com.pricepredictor.connector.effects.directed.Application(
+                        new com.pricepredictor.connector.effects.directed.DirectedRule.Variant("tapped", new com.pricepredictor.connector.effects.directed.Application(
                                 com.pricepredictor.connector.effects.directed.ForkOperation.TAP,
                                 binding -> new com.pricepredictor.connector.effects.directed.operations
-                                        .TapOperation(binding.card("creature"), true)));
+                                        .TapOperation(binding.card("creature"), true))));
         CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(4).probes(0)
                 .directed(1, 1.0, "A").build();
         DirectedForkTally tally = new DirectedForkTally();

@@ -48,9 +48,9 @@ public final class SkulkBlocker {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, SkulkBlocker::bind, LESSER_POWER,
+        return DirectedRule.of(RULE, SCENARIO, SkulkBlocker::bind, new DirectedRule.Variant(LESSER_POWER,
                 new Application(ForkOperation.REPLACE_CARD,
-                        fork -> new ReplaceCardOperation(fork.card(Combats.BLOCKER), ELVES)));
+                        fork -> new ReplaceCardOperation(fork.card(Combats.BLOCKER), ELVES))));
     }
 
     /**

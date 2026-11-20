@@ -63,9 +63,9 @@ public final class ToughnessZero {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, ToughnessZero::bind, TOUGHER,
+        return DirectedRule.of(RULE, SCENARIO, ToughnessZero::bind, new DirectedRule.Variant(TOUGHER,
                 new Application(ForkOperation.PT, ToughnessZero::tougher)
-                        .forcing(ForcedPlay.cast(HOLDER, SPELL).playing(SHRINKING).targeting(CREATURE)));
+                        .forcing(ForcedPlay.cast(HOLDER, SPELL).playing(SHRINKING).targeting(CREATURE))));
     }
 
     static Optional<Binding> bind(Game live) {

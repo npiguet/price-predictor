@@ -46,8 +46,8 @@ public final class LifeTotalWin {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, LifeTotalWin::bind, FORTY,
-                new Application(ForkOperation.LIFE, LifeTotalWin::winning));
+        return DirectedRule.of(RULE, SCENARIO, LifeTotalWin::bind, new DirectedRule.Variant(FORTY,
+                new Application(ForkOperation.LIFE, LifeTotalWin::winning)));
     }
 
     static Optional<Binding> bind(Game live) {

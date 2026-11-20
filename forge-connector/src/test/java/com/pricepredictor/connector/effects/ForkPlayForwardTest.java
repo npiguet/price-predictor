@@ -577,7 +577,7 @@ class ForkPlayForwardTest {
         CollectionCaps caps = TestCaps.caps().interventions(0).probes(0).build();
         Application zero = new Application(ForkOperation.PT,
                 binding -> new PtOperation(binding.card("creature"), null, 0));
-        DirectedRule rule = DirectedRule.of("704.5f", "704.5f-1", live -> Optional.empty(), "zero", zero);
+        DirectedRule rule = DirectedRule.of("704.5f", "704.5f-1", live -> Optional.empty(), new DirectedRule.Variant("zero", zero));
         RecordShardWriter writer = ShardRun.writer(tempDir);
         try (GameRecording recording = new GameRecording(
                 GameRecordingRequest.of(game, writer, ShardRun.GAME_ID, caps)

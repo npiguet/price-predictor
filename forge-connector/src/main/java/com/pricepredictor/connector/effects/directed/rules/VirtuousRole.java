@@ -49,10 +49,10 @@ public final class VirtuousRole {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, VirtuousRole::bind, TWO_ENCHANTMENTS,
+        return DirectedRule.of(RULE, SCENARIO, VirtuousRole::bind, new DirectedRule.Variant(TWO_ENCHANTMENTS,
                 new Application(ForkOperation.ADD_PERMANENT,
                         fork -> AddPermanentOperation.of(SEAL_OF_FIRE, fork.player(CASTER), false))
-                        .forcing(ForcedPlay.cast(CASTER, CARD)));
+                        .forcing(ForcedPlay.cast(CASTER, CARD))));
     }
 
     static Optional<Binding> bind(Game live) {

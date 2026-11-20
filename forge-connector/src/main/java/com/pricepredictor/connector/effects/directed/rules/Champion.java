@@ -49,10 +49,10 @@ public final class Champion {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, Champion::bind, NO_CREATURE_TO_CHAMPION,
+        return DirectedRule.of(RULE, SCENARIO, Champion::bind, new DirectedRule.Variant(NO_CREATURE_TO_CHAMPION,
                 new Application(ForkOperation.REMOVE_PERMANENT,
                         fork -> new RemovePermanentOperation(fork.card(CREATURE)))
-                        .forcing(ForcedPlay.cast(PLAYER, CARD)));
+                        .forcing(ForcedPlay.cast(PLAYER, CARD))));
     }
 
     static Optional<Binding> bind(Game live) {

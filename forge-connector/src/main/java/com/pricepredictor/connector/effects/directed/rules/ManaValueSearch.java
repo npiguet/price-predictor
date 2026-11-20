@@ -82,10 +82,10 @@ public final class ManaValueSearch {
                           Replacement replacement) {
 
         DirectedRule rule(String rule, String scenario, String variant) {
-            return DirectedRule.of(rule, scenario, this::bind, variant,
+            return DirectedRule.of(rule, scenario, this::bind, new DirectedRule.Variant(variant,
                     new Application(ForkOperation.MOVE_CARD, fork -> MoveCardOperation.replace(fork.card(CARD),
                             replacement.instead(fork.card(SOURCE))))
-                            .forcing(ForcedPlay.activate(PLAYER, SOURCE, ForcedPlay.Line.keyword(keyword))));
+                            .forcing(ForcedPlay.activate(PLAYER, SOURCE, ForcedPlay.Line.keyword(keyword)))));
         }
 
         Optional<Binding> bind(Game live) {

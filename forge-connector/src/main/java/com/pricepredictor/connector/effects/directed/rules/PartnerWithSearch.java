@@ -52,11 +52,11 @@ public final class PartnerWithSearch {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, PartnerWithSearch::bind, NAMED_CARD_IN_LIBRARY,
+        return DirectedRule.of(RULE, SCENARIO, PartnerWithSearch::bind, new DirectedRule.Variant(NAMED_CARD_IN_LIBRARY,
                 new Application(ForkOperation.MOVE_CARD, fork -> MoveCardOperation.replace(fork.card(CARD),
                         partnerName(fork.card(PARTNER_WITH)).orElseThrow(
                                 () -> new IllegalStateException("the fork's card names no partner"))))
-                        .forcing(ForcedPlay.cast(PLAYER, PARTNER_WITH)));
+                        .forcing(ForcedPlay.cast(PLAYER, PARTNER_WITH))));
     }
 
     static Optional<Binding> bind(Game live) {

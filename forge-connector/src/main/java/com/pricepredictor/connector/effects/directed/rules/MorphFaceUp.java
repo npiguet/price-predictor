@@ -54,9 +54,9 @@ public final class MorphFaceUp {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, MorphFaceUp::bind, CANNOT_PAY,
+        return DirectedRule.of(RULE, SCENARIO, MorphFaceUp::bind, new DirectedRule.Variant(CANNOT_PAY,
                 new Application(ForkOperation.TAP, fork -> new TapOperation(fork.card(LAND), true))
-                        .keepingCandidatesOf(PERMANENT));
+                        .keepingCandidatesOf(PERMANENT)));
     }
 
     static Optional<Binding> bind(Game live) {

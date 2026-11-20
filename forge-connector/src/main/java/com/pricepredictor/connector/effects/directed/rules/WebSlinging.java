@@ -48,9 +48,9 @@ public final class WebSlinging {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, WebSlinging::bind, CREATURE_UNTAPPED,
+        return DirectedRule.of(RULE, SCENARIO, WebSlinging::bind, new DirectedRule.Variant(CREATURE_UNTAPPED,
                 new Application(ForkOperation.TAP, fork -> new TapOperation(fork.card(CREATURE), false))
-                        .keepingCandidatesOf(CARD));
+                        .keepingCandidatesOf(CARD)));
     }
 
     static Optional<Binding> bind(Game live) {

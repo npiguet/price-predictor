@@ -39,10 +39,10 @@ public final class AuraSwapCantEnchant {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, AuraSwapCantEnchant::bind, CAN_ENCHANT,
+        return DirectedRule.of(RULE, SCENARIO, AuraSwapCantEnchant::bind, new DirectedRule.Variant(CAN_ENCHANT,
                 new Application(ForkOperation.MOVE_CARD,
                         fork -> MoveCardOperation.replace(fork.card(CARD), HOLY_STRENGTH))
-                        .forcing(AuraSwap.swap()));
+                        .forcing(AuraSwap.swap())));
     }
 
     static Optional<Binding> bind(Game live) {

@@ -52,10 +52,10 @@ public final class PoisonLoss {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, PoisonLoss::bind, NINE,
+        return DirectedRule.of(RULE, SCENARIO, PoisonLoss::bind, new DirectedRule.Variant(NINE,
                 new Application(ForkOperation.COUNTERS,
                         fork -> new CountersOperation(fork.player(PLAYER), CounterEnumType.POISON, ONE_SHORT))
-                        .forcing(ForcedPlay.cast(CASTER, CARD)));
+                        .forcing(ForcedPlay.cast(CASTER, CARD))));
     }
 
     static Optional<Binding> bind(Game live) {

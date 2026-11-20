@@ -60,9 +60,9 @@ public final class Dethrone {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, Dethrone::bind, TIED,
+        return DirectedRule.of(RULE, SCENARIO, Dethrone::bind, new DirectedRule.Variant(TIED,
                 new Application(ForkOperation.LIFE, Dethrone::tied)
-                        .forcing(ForcedPlay.attack(PLAYER, ATTACKER, OPPONENT)));
+                        .forcing(ForcedPlay.attack(PLAYER, ATTACKER, OPPONENT))));
     }
 
     static Optional<Binding> bind(Game live) {

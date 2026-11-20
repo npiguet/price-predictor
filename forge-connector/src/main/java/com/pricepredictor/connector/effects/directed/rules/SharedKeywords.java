@@ -51,9 +51,9 @@ public final class SharedKeywords {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, SharedKeywords::bind, NO_KEYWORDS,
+        return DirectedRule.of(RULE, SCENARIO, SharedKeywords::bind, new DirectedRule.Variant(NO_KEYWORDS,
                 new Application(ForkOperation.REPLACE_CARD,
-                        fork -> new ReplaceCardOperation(fork.card(CREATURE), GIANT)));
+                        fork -> new ReplaceCardOperation(fork.card(CREATURE), GIANT))));
     }
 
     static Optional<Binding> bind(Game live) {

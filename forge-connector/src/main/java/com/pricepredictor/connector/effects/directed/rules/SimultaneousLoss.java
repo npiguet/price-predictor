@@ -57,8 +57,8 @@ public final class SimultaneousLoss {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, SimultaneousLoss::bind, BOTH_AT_ONE,
-                new Application(ForkOperation.LIFE, SimultaneousLoss::inReach));
+        return DirectedRule.of(RULE, SCENARIO, SimultaneousLoss::bind, new DirectedRule.Variant(BOTH_AT_ONE,
+                new Application(ForkOperation.LIFE, SimultaneousLoss::inReach)));
     }
 
     static Optional<Binding> bind(Game live) {

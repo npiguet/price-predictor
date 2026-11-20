@@ -54,11 +54,11 @@ public final class OptionalSearch {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, OptionalSearch::bind, SANCTUARY_ADDED,
+        return DirectedRule.of(RULE, SCENARIO, OptionalSearch::bind, new DirectedRule.Variant(SANCTUARY_ADDED,
                 new Application(ForkOperation.ADD_PERMANENT,
                         fork -> AddPermanentOperation.of(SANCTUARY, fork.player(PLAYER), false))
                         .making(SANCTUARY_ROLE, OptionalSearch::added)
-                        .forcing(ForcedPlay.answer(PLAYER, SANCTUARY_ROLE, true)));
+                        .forcing(ForcedPlay.answer(PLAYER, SANCTUARY_ROLE, true))));
     }
 
     static Optional<Binding> bind(Game live) {

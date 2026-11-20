@@ -51,10 +51,10 @@ public final class LifeExchange {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, LifeExchange::bind, OPPONENT_ABOVE,
+        return DirectedRule.of(RULE, SCENARIO, LifeExchange::bind, new DirectedRule.Variant(OPPONENT_ABOVE,
                 new Application(ForkOperation.LIFE, LifeExchange::opponentAbove)
                         .forcing(ForcedPlay.activate(PLAYER, PERMANENT,
-                                ForcedPlay.Line.api("ExchangeLifeVariant")).targeting(OPPONENT)));
+                                ForcedPlay.Line.api("ExchangeLifeVariant")).targeting(OPPONENT))));
     }
 
     static Optional<Binding> bind(Game live) {

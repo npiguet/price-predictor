@@ -164,7 +164,7 @@ class DirectedRulesContractTest {
 
     private static DirectedRule rule(String rule, String scenario, String variant, ForkOperation operation) {
         Application application = new Application(operation, binding -> new TapOperation(binding.card("x"), true));
-        return DirectedRule.of(rule, scenario, live -> Optional.empty(), variant, application);
+        return DirectedRule.of(rule, scenario, live -> Optional.empty(), new DirectedRule.Variant(variant, application));
     }
 
     @Test

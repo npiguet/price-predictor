@@ -53,10 +53,10 @@ public final class AscendBlessing {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, AscendBlessing::bind, TEN_PERMANENTS,
+        return DirectedRule.of(RULE, SCENARIO, AscendBlessing::bind, new DirectedRule.Variant(TEN_PERMANENTS,
                 new Application(ForkOperation.ADD_PERMANENT, fork -> new AddPermanentOperation(
                         ISLAND, fork.player(PLAYER), fork.player(PLAYER), true, false, Map.of()))
-                        .forcing(ForcedPlay.cast(PLAYER, SPELL)));
+                        .forcing(ForcedPlay.cast(PLAYER, SPELL))));
     }
 
     static Optional<Binding> bind(Game live) {

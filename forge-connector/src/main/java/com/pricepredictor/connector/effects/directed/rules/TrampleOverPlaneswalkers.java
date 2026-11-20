@@ -46,9 +46,9 @@ public final class TrampleOverPlaneswalkers {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, TrampleOverPlaneswalkers::bind, THRASTA_IN_PLACE,
+        return DirectedRule.of(RULE, SCENARIO, TrampleOverPlaneswalkers::bind, new DirectedRule.Variant(THRASTA_IN_PLACE,
                 new Application(ForkOperation.REPLACE_CARD,
-                        fork -> new ReplaceCardOperation(fork.card(Combats.ATTACKER), THRASTA)));
+                        fork -> new ReplaceCardOperation(fork.card(Combats.ATTACKER), THRASTA))));
     }
 
     static Optional<Binding> bind(Game live) {

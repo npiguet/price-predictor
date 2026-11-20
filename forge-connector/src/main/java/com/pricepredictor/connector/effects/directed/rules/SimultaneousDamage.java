@@ -49,9 +49,9 @@ public final class SimultaneousDamage {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, SimultaneousDamage::bind, KNIGHT_IN_PLACE,
+        return DirectedRule.of(RULE, SCENARIO, SimultaneousDamage::bind, new DirectedRule.Variant(KNIGHT_IN_PLACE,
                 new Application(ForkOperation.REPLACE_CARD,
-                        fork -> new ReplaceCardOperation(fork.card(Combats.BLOCKER), KNIGHT)));
+                        fork -> new ReplaceCardOperation(fork.card(Combats.BLOCKER), KNIGHT))));
     }
 
     static Optional<Binding> bind(Game live) {

@@ -56,7 +56,7 @@ public final class Meld {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, Meld::bind, MELD_PAIR, pairing())
+        return DirectedRule.of(RULE, SCENARIO, Meld::bind, new DirectedRule.Variant(MELD_PAIR, pairing()))
                 .alsoFor(PAIR_RULE, PAIR_SCENARIO)
                 .alsoFor(ENTRY_RULE, PAIR_SCENARIO);
     }

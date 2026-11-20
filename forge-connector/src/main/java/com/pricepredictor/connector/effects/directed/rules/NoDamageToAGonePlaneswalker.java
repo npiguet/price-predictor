@@ -47,9 +47,9 @@ public final class NoDamageToAGonePlaneswalker {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, NoDamageToAGonePlaneswalker::bind, TRAMPLE_OVER_PLANESWALKERS,
+        return DirectedRule.of(RULE, SCENARIO, NoDamageToAGonePlaneswalker::bind, new DirectedRule.Variant(TRAMPLE_OVER_PLANESWALKERS,
                 new Application(ForkOperation.REPLACE_CARD,
-                        fork -> new ReplaceCardOperation(fork.card(Combats.ATTACKER), THRASTA)));
+                        fork -> new ReplaceCardOperation(fork.card(Combats.ATTACKER), THRASTA))));
     }
 
     static Optional<Binding> bind(Game live) {

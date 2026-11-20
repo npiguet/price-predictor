@@ -44,10 +44,10 @@ public final class JumpStartFromHand {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, JumpStartFromHand::bind, CAST_FROM_HAND,
+        return DirectedRule.of(RULE, SCENARIO, JumpStartFromHand::bind, new DirectedRule.Variant(CAST_FROM_HAND,
                 new Application(ForkOperation.MOVE_CARD,
                         fork -> MoveCardOperation.move(fork.card(CARD), ZoneType.Hand, null))
-                        .forcing(ForcedPlay.cast(CASTER, CARD)));
+                        .forcing(ForcedPlay.cast(CASTER, CARD))));
     }
 
     static Optional<Binding> bind(Game live) {
