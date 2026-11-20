@@ -234,28 +234,33 @@ def _fixture_keyword_lines() -> list[str]:
     return lines
 
 
-@pytest.mark.parametrize("surface", ["prose", "script"])
-def test_no_definition_expands_to_a_percent_or_unk(surface):
-    """SC-002 over every real definition and every real fixture keyword line,
-    against a vocabulary seeded the way ``build-vocab`` seeds it."""
+def _seeded_tokenizer(
+    surface: str,
+    definitions: dict[str, KeywordDefinition],
+    staged: list[str],
+) -> AbilityTokenizer:
+    """A tokenizer over a vocabulary seeded the way ``build-vocab`` seeds it."""
     from effects.application.build_vocab import (
         SEEDED_SPECIALS,
         seed_tokens,
         staging_tokenizer,
     )
-    from effects.infrastructure.tokenizer_loading import (
-        load_keyword_definitions,
-    )
     from price_predictor.application.build_vocabulary import MULTI_WORD_KEYWORDS
 
-    definitions = load_keyword_definitions(_FIXTURE_DEFINITIONS)
-    staged = _fixture_keyword_lines() if surface == "script" else []
     seeded = seed_tokens(staging_tokenizer(surface, definitions), definitions, staged)
     vocab: dict[str, int] = {}
     for token in (*SEEDED_SPECIALS, *MULTI_WORD_KEYWORDS, *seeded.all()):
         vocab.setdefault(token, len(vocab))
-    tokenizer = AbilityTokenizer(vocab, definitions, surface=surface)
+    return AbilityTokenizer(vocab, definitions, surface=surface)
 
+
+def _expanded_keyword_texts(
+    tokenizer: AbilityTokenizer,
+    definitions: dict[str, KeywordDefinition],
+    staged: list[str],
+) -> list[str]:
+    """The line text of every definition with a template, then of every staged
+    keyword line whose keyword has one, filled with that line's details."""
     texts = [
         tokenizer.keywords.line_text(name)
         for name, d in definitions.items() if d.reminder_template
@@ -264,6 +269,21 @@ def test_no_definition_expands_to_a_percent_or_unk(surface):
         keyword = tokenizer.keywords.line_of(line)
         if keyword is not None and definitions[keyword.name].reminder_template:
             texts.append(tokenizer.keywords.line_text(keyword.name, keyword.details))
+    return texts
+
+
+@pytest.mark.parametrize("surface", ["prose", "script"])
+def test_no_definition_expands_to_a_percent_or_unk(surface):
+    """SC-002 over every real definition and every real fixture keyword line,
+    against a vocabulary seeded the way ``build-vocab`` seeds it."""
+    from effects.infrastructure.tokenizer_loading import (
+        load_keyword_definitions,
+    )
+
+    definitions = load_keyword_definitions(_FIXTURE_DEFINITIONS)
+    staged = _fixture_keyword_lines() if surface == "script" else []
+    tokenizer = _seeded_tokenizer(surface, definitions, staged)
+    texts = _expanded_keyword_texts(tokenizer, definitions, staged)
     assert len(texts) > 150
     for text in texts:
         tokens = tokenizer.tokenize(text)
