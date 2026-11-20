@@ -1,5 +1,7 @@
 package com.pricepredictor.connector;
 
+import forge.util.MyRandom;
+
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -87,7 +89,7 @@ public class SeatTableIndex {
     private final Random random;
 
     public SeatTableIndex(List<SeatEntry> seats, boolean includeMirrors) {
-        this(seats, includeMirrors, new Random());
+        this(seats, includeMirrors, MyRandom.getRandom());
     }
 
     SeatTableIndex(List<SeatEntry> seats, boolean includeMirrors, Random random) {
@@ -113,11 +115,7 @@ public class SeatTableIndex {
 
     /** Load a seat table from disk. */
     public static SeatTableIndex load(Path seatsFile, boolean includeMirrors) throws IOException {
-        List<SeatEntry> seats = new ArrayList<>();
-        for (String line : CorpusFiles.nonBlankLines(seatsFile)) {
-            seats.add(parseLine(line));
-        }
-        return new SeatTableIndex(seats, includeMirrors);
+        return new SeatTableIndex(SeatTableParser.parse(seatsFile), includeMirrors);
     }
 
     /** Total seats loaded, including those in pods that cannot yield a pairing. */
@@ -171,24 +169,5 @@ public class SeatTableIndex {
             }
         }
         return false;  // every seat shares one label; excluded so the retry terminates
-    }
-
-    private static SeatEntry parseLine(String line) {
-        String[] parts = line.split(CardNameList.FIELD_SEPARATOR, 5);
-        if (parts.length < 5) {
-            throw new IllegalArgumentException(
-                    "seat line needs 5 ';'-separated fields, got " + parts.length + ": " + line);
-        }
-        SeatKind kind;
-        try {
-            kind = WireNamed.fromWireName(SeatKind.class, parts[3]);
-        } catch (IllegalArgumentException e) {
-            // Worded for whoever wrote the table, not in the generic lookup's
-            // terms: the operator fixes a seat line, not an enum.
-            throw new IllegalArgumentException(
-                    "seat kind must be 'deck' or 'pool', got '" + parts[3] + "': " + line, e);
-        }
-        return new SeatEntry(
-                parts[0], parts[1], parts[2], kind, CardNameList.parse(parts[4]));
     }
 }
