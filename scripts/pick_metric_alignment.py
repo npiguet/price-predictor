@@ -110,26 +110,46 @@ def axis_value(wr: dict, axis: str, lane: list[str]):
     return value
 
 
+def _rank_of_taken(val, decision, min_choices: int) -> tuple[float, int] | None:
+    """``(percentile, top-1 hit)`` of the taken card on one axis, or None when the
+    pick carries no label or fewer than ``min_choices`` labelled cards remain."""
+    tv = val(decision.taken)
+    if tv is None:
+        return None
+    vs = [v for v in map(val, decision.legal) if v is not None]
+    if len(vs) < min_choices:
+        return None
+    return percentile(vs, tv), 1 if tv >= max(vs) else 0
+
+
+class AlignmentTally:
+    """agent -> axis -> ``[sum of percentiles, top-1 count, decisions]``."""
+
+    def __init__(self, min_choices: int) -> None:
+        self.acc: dict = defaultdict(lambda: defaultdict(lambda: [0.0, 0, 0]))
+        self.min_choices = min_choices
+
+    def add_decision(self, agent: str, values: dict, decision) -> None:
+        for axis, val in values.items():
+            ranked = _rank_of_taken(val, decision, self.min_choices)
+            if ranked is None:
+                continue
+            cell = self.acc[agent][axis]
+            cell[0] += ranked[0]
+            cell[1] += ranked[1]
+            cell[2] += 1
+
+
 def alignment(path: Path, wr: dict, colours: ColourResolver, min_choices: int) -> dict:
     """agent -> axis -> ``[sum of percentiles, top-1 count, decisions]``."""
-    acc: dict = defaultdict(lambda: defaultdict(lambda: [0.0, 0, 0]))
+    tally = AlignmentTally(min_choices)
     for record, geom in read_records(path):
         for seat_i, seat in enumerate(record.seats):
             lane = sorted(top_two_colours(geom.drafted_pool(record, seat_i), colours))
             values = {axis: axis_value(wr, axis, lane) for axis in ALL_AXES}
             for decision in seat_decisions(record, geom, seat_i):
-                for axis, val in values.items():
-                    tv = val(decision.taken)
-                    if tv is None:
-                        continue
-                    vs = [v for v in map(val, decision.legal) if v is not None]
-                    if len(vs) < min_choices:
-                        continue
-                    cell = acc[seat.agent][axis]
-                    cell[0] += percentile(vs, tv)
-                    cell[1] += 1 if tv >= max(vs) else 0
-                    cell[2] += 1
-    return acc
+                tally.add_decision(seat.agent, values, decision)
+    return tally.acc
 
 
 def report_alignment(label: str, acc: dict) -> None:
