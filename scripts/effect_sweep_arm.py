@@ -167,25 +167,34 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     return parser.parse_args(own), train_args
 
 
+def _overwrites_trained_arm(args: argparse.Namespace) -> bool:
+    return (args.from_step == "train" and not args.resume
+            and (args.run_dir / "latest.pt").exists())
+
+
+def _refusal(args: argparse.Namespace, train_args: list[str]) -> str | None:
+    """Why the arm cannot start with these arguments, or ``None``."""
+    run_dir: Path = args.run_dir
+    if args.resume and args.from_step != "train":
+        return "--resume continues the training step; drop --from-step"
+    if args.resume and not (run_dir / "resume.pt").exists():
+        return f"{run_dir} holds no resume.pt to continue from"
+    if _overwrites_trained_arm(args):
+        return (f"{run_dir} already holds a trained arm; pick another --run-dir, "
+                "continue its training with --resume, or skip to a later step "
+                "with --from-step")
+    if args.from_step == "train" and not train_args:
+        return "pass the arm's train-effect-model flags after --"
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     args, train_args = parse_args(argv)
     run_dir: Path = args.run_dir
-    if args.resume and args.from_step != "train":
-        print("--resume continues the training step; drop --from-step",
-              file=sys.stderr)
-        return 2
-    if args.resume and not (run_dir / "resume.pt").exists():
-        print(f"{run_dir} holds no resume.pt to continue from", file=sys.stderr)
-        return 2
-    if (args.from_step == "train" and not args.resume
-            and (run_dir / "latest.pt").exists()):
-        print(f"{run_dir} already holds a trained arm; pick another --run-dir, "
-              "continue its training with --resume, or skip to a later step "
-              "with --from-step", file=sys.stderr)
-        return 2
-    if args.from_step == "train" and not train_args:
-        print("pass the arm's train-effect-model flags after --", file=sys.stderr)
+    refusal = _refusal(args, train_args)
+    if refusal is not None:
+        print(refusal, file=sys.stderr)
         return 2
     from price_predictor.infrastructure.run_manifest import run_script
 
