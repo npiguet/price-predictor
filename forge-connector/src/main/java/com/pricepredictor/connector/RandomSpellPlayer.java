@@ -27,6 +27,7 @@ import forge.game.spellability.SpellAbility;
 import forge.game.zone.Zone;
 import forge.game.zone.ZoneType;
 
+import java.util.List;
 import java.util.Random;
 import java.util.function.Consumer;
 
@@ -78,39 +79,18 @@ public final class RandomSpellPlayer {
         final Zone hz = host.isCopiedSpell() ? null : host.getZone();
         source.setSplitStateToPlayAbility(sa);
 
-        if (sa.isSpell() && !source.isCopiedSpell()) {
+        if (castFromItsCard(sa, source)) {
             sa = AbilityUtils.addSpliceEffects(sa);
-            if (sa.getSplicedCards() != null && !sa.getSplicedCards().isEmpty()
-                    && ai.getController().isAI()) {
-                // The original's own comment: after splice the SA must be
-                // retargeted, or the AI fails to add the card to the stack
-                // and that knocks it out of the game.
-                sa.resetTargets();
-                if (((PlayerControllerAi) ai.getController()).getAi().canPlaySa(sa)
-                        != AiPlayDecision.WillPlay) {
-                    return false;
-                }
+            if (!stillPlayedAfterSplice(ai, sa)) {
+                return false;
             }
-
             sa.setHostCard(game.getAction().moveToStack(source, sa));
         }
 
-        if (!sa.isCopied()) {
-            sa.resetPaidHash();
-            sa.setPaidLife(0);
-        }
+        sa = withExtraKeywordCosts(sa);
 
-        sa = GameActionUtil.addExtraKeywordCost(sa);
-
-        if (sa.getApi() == ApiType.Charm && !CharmEffect.makeChoices(sa)) {
-            // 603.3c If no mode is chosen, the ability is removed from the stack.
+        if (!modesAndTargetsChosen(sa, chooseTargets)) {
             return false;
-        }
-        if (chooseTargets != null) {
-            chooseTargets.accept(sa);
-            if (!sa.isTargetNumberValid()) {
-                return false;
-            }
         }
         // Spell Permanents inherit their cost from Mana Cost
         final Cost cost = sa.getPayCosts();
@@ -119,25 +99,92 @@ public final class RandomSpellPlayer {
 
         final CostPayment pay = new CostPayment(cost, sa);
         if (pay.payComputerCosts(decision)) {
-            game.getStack().addAndUnfreeze(sa);
-            if (sa.getSplicedCards() != null && !sa.getSplicedCards().isEmpty()) {
-                game.getAction().reveal(
-                        sa.getSplicedCards(), ai, true, "Computer reveals spliced cards from ");
-            }
+            putOnStack(game, ai, sa);
             return true;
         }
-        // The original's own recovery, kept verbatim: the card may be stuck on
-        // the stack zone, so it is moved back and the play marked to skip.
+        skipFailedPlay(game, sa, host, hz);
+        return false;
+    }
+
+    /** Whether the play is a spell cast from its card, which splices and moves to the stack. */
+    private static boolean castFromItsCard(SpellAbility sa, Card source) {
+        return sa.isSpell() && !source.isCopiedSpell();
+    }
+
+    /**
+     * Whether the AI still plays a spliced spell. The original's own comment:
+     * after splice the SA must be retargeted, or the AI fails to add the card
+     * to the stack and that knocks it out of the game. True for a spell
+     * nothing was spliced onto, or one a non-AI controller casts.
+     */
+    private static boolean stillPlayedAfterSplice(Player ai, SpellAbility sa) {
+        if (!hasSplicedCards(sa) || !ai.getController().isAI()) {
+            return true;
+        }
+        sa.resetTargets();
+        return ((PlayerControllerAi) ai.getController()).getAi().canPlaySa(sa)
+                == AiPlayDecision.WillPlay;
+    }
+
+    private static boolean hasSplicedCards(SpellAbility sa) {
+        return sa.getSplicedCards() != null && !sa.getSplicedCards().isEmpty();
+    }
+
+    /** The play with an original's paid record cleared and its extra keyword costs added. */
+    private static SpellAbility withExtraKeywordCosts(SpellAbility sa) {
+        if (!sa.isCopied()) {
+            sa.resetPaidHash();
+            sa.setPaidLife(0);
+        }
+        return GameActionUtil.addExtraKeywordCost(sa);
+    }
+
+    /**
+     * Whether a charm's modes are chosen and the deferred targets valid.
+     * 603.3c If no mode is chosen, the ability is removed from the stack.
+     */
+    private static boolean modesAndTargetsChosen(
+            SpellAbility sa, Consumer<SpellAbility> chooseTargets) {
+        if (sa.getApi() == ApiType.Charm && !CharmEffect.makeChoices(sa)) {
+            return false;
+        }
+        if (chooseTargets == null) {
+            return true;
+        }
+        chooseTargets.accept(sa);
+        return sa.isTargetNumberValid();
+    }
+
+    /** A paid play onto the stack, its spliced cards revealed. */
+    private static void putOnStack(Game game, Player ai, SpellAbility sa) {
+        game.getStack().addAndUnfreeze(sa);
+        if (hasSplicedCards(sa)) {
+            game.getAction().reveal(
+                    sa.getSplicedCards(), ai, true, "Computer reveals spliced cards from ");
+        }
+    }
+
+    /**
+     * The original's own recovery, kept verbatim: the card may be stuck on
+     * the stack zone, so it is moved back and the play marked to skip.
+     *
+     * @param hz the zone the card was in before the play, or null for a copied spell
+     */
+    private static void skipFailedPlay(Game game, SpellAbility sa, Card host, Zone hz) {
         System.out.println("[" + sa.getActivatingPlayer() + "] random seat failed to play "
                 + sa.getHostCard() + " [" + sa.getHostCard().getZone() + "]");
         sa.setSkip(true);
-        if (host != null && hz != null && hz.is(ZoneType.Stack)) {
-            Card c = game.getAction().moveTo(hz.getZoneType(), host, null, null);
-            for (SpellAbility csa : c.getSpellAbilities()) {
-                csa.setSkip(true);
-            }
+        if (!leftOnStack(host, hz)) {
+            return;
         }
-        return false;
+        Card c = game.getAction().moveTo(hz.getZoneType(), host, null, null);
+        for (SpellAbility csa : c.getSpellAbilities()) {
+            csa.setSkip(true);
+        }
+    }
+
+    private static boolean leftOnStack(Card host, Zone hz) {
+        return host != null && hz != null && hz.is(ZoneType.Stack);
     }
 
     /**
@@ -152,6 +199,18 @@ public final class RandomSpellPlayer {
      */
     static final class RandomCostDecision extends AiCostDecision {
 
+        /** Discard types the draw cannot pick for: the whole hand, the last drawn, a random card. */
+        private static final List<String> AI_DISCARD_TYPES = List.of("Hand", "LastDrawn", "Random");
+        /** Discard type properties that relate the cards, or need a chosen colour or an X. */
+        private static final List<String> AI_DISCARD_PROPERTIES =
+                List.of("WithSameName", "WithDifferentNames", "ChosenColor", "X");
+        /** Exile type properties the draw cannot express: the top of a graveyard, a total mana value. */
+        private static final List<String> AI_EXILE_PROPERTIES =
+                List.of("FromTopGrave", "+withTotalCMCGE");
+        /** Tap type properties the draw cannot express: a shared creature type, a total power. */
+        private static final List<String> AI_TAP_PROPERTIES =
+                List.of("sharesCreatureTypeWith", "+withTotalPowerGE");
+
         private final Random random;
 
         RandomCostDecision(Player ai, SpellAbility sa, Random random) {
@@ -161,8 +220,7 @@ public final class RandomSpellPlayer {
 
         @Override
         public PaymentDecision visit(CostSacrifice cost) {
-            if (cost.payCostFromSource() || "OriginalHost".equals(cost.getType())
-                    || "All".equalsIgnoreCase(cost.getAmount())) {
+            if (leftToAi(cost)) {
                 return super.visit(cost);
             }
             CardCollection valid = CardLists.getValidCards(
@@ -175,10 +233,7 @@ public final class RandomSpellPlayer {
         @Override
         public PaymentDecision visit(CostDiscard cost) {
             String type = cost.getType();
-            if (cost.payCostFromSource() || type.equals("Hand") || type.equals("LastDrawn")
-                    || type.equals("Random") || type.contains("WithSameName")
-                    || type.contains("WithDifferentNames") || type.contains("ChosenColor")
-                    || type.contains("X")) {
+            if (leftToAi(cost, type)) {
                 return super.visit(cost);
             }
             CardCollectionView hand = player.canDiscardBy(ability, isEffect())
@@ -192,17 +247,11 @@ public final class RandomSpellPlayer {
         @Override
         public PaymentDecision visit(CostExile cost) {
             String type = cost.getType();
-            if (cost.payCostFromSource() || type.equals("All") || type.contains("FromTopGrave")
-                    || type.contains("+withTotalCMCGE") || cost.zoneRestriction == 0
-                    || (cost.getFrom().size() == 1
-                            && cost.getFrom().get(0).equals(ZoneType.Library))) {
+            if (leftToAi(cost, type)) {
                 return super.visit(cost);
             }
-            CardCollectionView from = cost.zoneRestriction != 1
-                    ? player.getGame().getCardsIn(cost.getFrom())
-                    : player.getCardsIn(cost.getFrom());
             CardCollection valid = CardLists.getValidCards(
-                    from, type.split(";"), player, source, ability);
+                    exileCandidates(cost), type.split(";"), player, source, ability);
             valid = CardLists.filter(valid, CardPredicates.canExiledBy(ability, isEffect()));
             return pick(valid, cost.getAbilityAmount(ability));
         }
@@ -210,7 +259,7 @@ public final class RandomSpellPlayer {
         @Override
         public PaymentDecision visit(CostTapType cost) {
             String type = cost.getType();
-            if (type.contains("sharesCreatureTypeWith") || type.contains("+withTotalPowerGE")) {
+            if (containsAny(type, AI_TAP_PROPERTIES)) {
                 return super.visit(cost);
             }
             CardCollection valid = CardLists.getValidCards(
@@ -221,6 +270,43 @@ public final class RandomSpellPlayer {
                 valid.remove(source);
             }
             return pick(valid, cost.getAbilityAmount(ability));
+        }
+
+        /** Whether a sacrifice is the AI's: of the source, of the original host, or of all. */
+        private static boolean leftToAi(CostSacrifice cost) {
+            return cost.payCostFromSource() || "OriginalHost".equals(cost.getType())
+                    || "All".equalsIgnoreCase(cost.getAmount());
+        }
+
+        /** Whether a discard is the AI's: of the source, or of a type the draw cannot express. */
+        private static boolean leftToAi(CostDiscard cost, String type) {
+            return cost.payCostFromSource() || AI_DISCARD_TYPES.contains(type)
+                    || containsAny(type, AI_DISCARD_PROPERTIES);
+        }
+
+        /**
+         * Whether an exile is the AI's: of the source, of all, of a type the
+         * draw cannot express, from no restricted zone, or from the library alone.
+         */
+        private static boolean leftToAi(CostExile cost, String type) {
+            return cost.payCostFromSource() || type.equals("All")
+                    || containsAny(type, AI_EXILE_PROPERTIES) || cost.zoneRestriction == 0
+                    || fromLibraryAlone(cost);
+        }
+
+        private static boolean fromLibraryAlone(CostExile cost) {
+            return cost.getFrom().size() == 1 && cost.getFrom().get(0).equals(ZoneType.Library);
+        }
+
+        private static boolean containsAny(String type, List<String> properties) {
+            return properties.stream().anyMatch(type::contains);
+        }
+
+        /** The cards an exile may take: in its zones across the game, or the payer's own. */
+        private CardCollectionView exileCandidates(CostExile cost) {
+            return cost.zoneRestriction != 1
+                    ? player.getGame().getCardsIn(cost.getFrom())
+                    : player.getCardsIn(cost.getFrom());
         }
 
         /** {@code count} distinct members of {@code valid}, or null when it has fewer. */
