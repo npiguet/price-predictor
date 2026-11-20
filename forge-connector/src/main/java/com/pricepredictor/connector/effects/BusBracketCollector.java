@@ -264,7 +264,7 @@ public final class BusBracketCollector extends BusEventReader {
         if (!inStateBasedLoop) {
             onNextAction();
         }
-        OpenResolution resolving = brackets.startResolving(item.getId());
+        OpenResolution resolving = brackets.startResolving(AbilityId.of(item));
         if (resolving == null) {
             return;
         }
@@ -303,7 +303,7 @@ public final class BusBracketCollector extends BusEventReader {
     void beginBracket(SpellAbility ability) {
         endPreviousConsequences();
         if (ability != null) {
-            brackets.writeOff(ability.getId());
+            brackets.writeOff(AbilityId.of(ability));
         }
         CastTracker.PendingCast started = castTracker.startedCast(ability);
         OpenResolution cast = ability == null ? null : castTracker.openResolution(ability, started);
@@ -440,7 +440,7 @@ public final class BusBracketCollector extends BusEventReader {
         onNextAction();
         // An item this collector never saw cast has no bracket, and no
         // effect half.
-        OpenResolution resolved = brackets.closeAfterResolution(abilityId);
+        OpenResolution resolved = brackets.closeAfterResolution(new AbilityId(abilityId));
         if (resolved == null) {
             return;
         }

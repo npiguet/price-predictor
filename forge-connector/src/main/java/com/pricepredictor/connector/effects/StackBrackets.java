@@ -85,7 +85,7 @@ final class StackBrackets {
 
     /** Whether a bracket of this ability id is kept: its cast event has been seen. */
     boolean holds(int abilityId) {
-        return find(abilityId) != null;
+        return find(new AbilityId(abilityId)) != null;
     }
 
     /** Whether no item's bracket is kept. */
@@ -100,7 +100,7 @@ final class StackBrackets {
      *
      * @return its bracket, or null for an item this collector never saw cast
      */
-    OpenResolution startResolving(int abilityId) {
+    OpenResolution startResolving(AbilityId abilityId) {
         OpenResolution item = find(abilityId);
         if (item != null) {
             finishing = null;
@@ -256,13 +256,13 @@ final class StackBrackets {
      * @return the resolved item's bracket, or null for an item this collector
      *         never saw cast
      */
-    OpenResolution closeAfterResolution(int abilityId) {
+    OpenResolution closeAfterResolution(AbilityId abilityId) {
         OpenResolution resolved = remove(abilityId);
         items.addAll(waiting);
         waiting.clear();
         open = null;
         discardOrphans();
-        finishing = abilityId;
+        finishing = abilityId.value();
         return resolved;
     }
 
@@ -291,7 +291,7 @@ final class StackBrackets {
     }
 
     /** The bracket of {@code abilityId} is written off, and closed if it was open. */
-    void writeOff(int abilityId) {
+    void writeOff(AbilityId abilityId) {
         OpenResolution gone = remove(abilityId);
         if (gone != null && open == gone) {
             open = null;
@@ -315,6 +315,19 @@ final class StackBrackets {
      */
     void removeAbsent(Set<Integer> onStack, String phase, boolean resolving) {
         OpenResolution kept = resolving ? resolvingBracket() : null;
+        List<OpenResolution> gone = absentFrom(onStack, kept);
+        items.removeAll(gone);
+        waiting.removeAll(gone);
+        for (OpenResolution item : gone) {
+            countDropped(item, phase);
+        }
+        if (open != null && !holdsBracket(open)) {
+            open = null;
+        }
+    }
+
+    /** The brackets, but {@code kept}, whose ability the stack no longer holds. */
+    private List<OpenResolution> absentFrom(Set<Integer> onStack, OpenResolution kept) {
         List<OpenResolution> gone = new ArrayList<>();
         for (List<OpenResolution> list : List.of(items, waiting)) {
             for (OpenResolution item : list) {
@@ -323,14 +336,12 @@ final class StackBrackets {
                 }
             }
         }
-        items.removeAll(gone);
-        waiting.removeAll(gone);
-        for (OpenResolution item : gone) {
-            countDropped(item, phase);
-        }
-        if (open != null && !items.contains(open) && !waiting.contains(open)) {
-            open = null;
-        }
+        return gone;
+    }
+
+    /** Whether {@code item} is one of the kept brackets, on the stack or beside it. */
+    private boolean holdsBracket(OpenResolution item) {
+        return items.contains(item) || waiting.contains(item);
     }
 
     /**
@@ -382,32 +393,32 @@ final class StackBrackets {
     }
 
     /** The bracket of {@code abilityId}, wherever it is, or null. */
-    private OpenResolution find(int abilityId) {
-        for (int i = items.size() - 1; i >= 0; i--) {
-            if (items.get(i).is(abilityId)) {
-                return items.get(i);
-            }
+    private OpenResolution find(AbilityId abilityId) {
+        int onStack = lastIndexOf(items, abilityId);
+        if (onStack >= 0) {
+            return items.get(onStack);
         }
-        for (int i = waiting.size() - 1; i >= 0; i--) {
-            if (waiting.get(i).is(abilityId)) {
-                return waiting.get(i);
-            }
-        }
-        return null;
+        int beside = lastIndexOf(waiting, abilityId);
+        return beside >= 0 ? waiting.get(beside) : null;
     }
 
     /** The bracket of {@code abilityId}, no longer on the stack, or null. */
-    private OpenResolution remove(int abilityId) {
-        for (int i = items.size() - 1; i >= 0; i--) {
-            if (items.get(i).is(abilityId)) {
-                return items.remove(i);
+    private OpenResolution remove(AbilityId abilityId) {
+        int onStack = lastIndexOf(items, abilityId);
+        if (onStack >= 0) {
+            return items.remove(onStack);
+        }
+        int beside = lastIndexOf(waiting, abilityId);
+        return beside >= 0 ? waiting.remove(beside) : null;
+    }
+
+    /** The index of the last bracket of {@code abilityId} in {@code list}, or -1. */
+    private static int lastIndexOf(List<OpenResolution> list, AbilityId abilityId) {
+        for (int i = list.size() - 1; i >= 0; i--) {
+            if (list.get(i).is(abilityId.value())) {
+                return i;
             }
         }
-        for (int i = waiting.size() - 1; i >= 0; i--) {
-            if (waiting.get(i).is(abilityId)) {
-                return waiting.remove(i);
-            }
-        }
-        return null;
+        return -1;
     }
 }
