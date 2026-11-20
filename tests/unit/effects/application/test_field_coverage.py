@@ -14,7 +14,6 @@ import dataclasses
 import pytest
 
 from effects.application.field_coverage import (
-    GEN3_FIELDS,
     KNOWN_CONSTANT_FIELDS,
     FieldCoverage,
     event_param_lines,
@@ -23,6 +22,7 @@ from effects.application.field_coverage import (
     report_lines,
 )
 from effects.domain.event_schema import Event, EventType
+from effects.domain.gen3_members import FIXED_PATHS, WALK_PATHS
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     Candidate,
@@ -317,8 +317,57 @@ class TestReportLines:
         ]
 
 
+_PAYLOAD = "record.payload"
+
+
+def _held_constant_by_the_pilot() -> set[str]:
+    """The gen-3 fixture's constant members outside its events."""
+    return {
+        # One run, one mode.
+        "record.mode",
+        # No emblem, battle, rad or energy counter, spell targeting a spell,
+        # chosen value or granted line with its reason in any pilot game.
+        "record.state.global_.emblems", "record.state.refs.targets_on_stack",
+        "record.state.refs.choices", "record.state.players[].energy",
+        "record.state.players[].rad", "record.state.entities[].printed_defense",
+        "record.state.entities[].lines[].grant",
+        # No rewrite of an event Forge's bus does not name, and no attacker
+        # forbidden by a line that keys to nothing or held elsewhere.
+        f"{_PAYLOAD}<RewritePayload>.incoming_unknown",
+        f"{_PAYLOAD}<PlayabilityAttackersPayload>.forbidden[].responsible_unresolved",
+        f"{_PAYLOAD}<PlayabilityAttackersPayload>.forbidden[].required_elsewhere",
+        f"{_PAYLOAD}<PlayabilityBlockersPayload>.min_blockers",
+        # Fifteen contributions, none a colour, hidden-keyword, name or
+        # control change.
+        *(f"{_PAYLOAD}<ContinuousPayload>.contributions[].{name}"
+          for name in ("colors", "hidden_keywords", "name", "controller")),
+    }
+
+
+def _event_members_held_constant() -> set[str]:
+    """The fixture's events: one rewrite with an outgoing event, cost halves
+    of one event type, and the varying durations and attributions on effect
+    halves and combat damage only."""
+    outgoing = f"{_PAYLOAD}<RewritePayload>.outgoing"
+    durations = (f"{_PAYLOAD}<ActivationPayload>.events[]", f"{_PAYLOAD}<CombatPayload>.events[]",
+                 f"{_PAYLOAD}<RewritePayload>.incoming", outgoing,
+                 f"{_PAYLOAD}<TriggerPayload>.event", f"{_PAYLOAD}<TurnActionPayload>.events[]",
+                 "record.state.pending_event")
+    attributions = (f"{_PAYLOAD}<ActivationPayload>.events[]",
+                    f"{_PAYLOAD}<RewritePayload>.incoming", outgoing,
+                    f"{_PAYLOAD}<RewritePayload>.buffered_events[]",
+                    f"{_PAYLOAD}<TriggerPayload>.event",
+                    f"{_PAYLOAD}<TurnActionPayload>.events[]", "record.state.pending_event")
+    return {
+        f"{_PAYLOAD}<ActivationPayload>.events[].type",
+        *(f"{outgoing}.{name}" for name in ("type", "subjects", "params")),
+        *(f"{where}.duration" for where in durations),
+        *(f"{where}.attributed_to" for where in attributions),
+    }
+
+
 class TestTheGen3Fields:
-    """Root § 8.13's fields, each with a row of its own on a gen-3 corpus (T076)."""
+    """Each member of the gen-3 table, with a row of its own on a gen-3 corpus (T076)."""
 
     @staticmethod
     def _golden() -> list[EffectRecord]:
@@ -340,29 +389,34 @@ class TestTheGen3Fields:
                            Event(type=EventType.ZONE_CHANGE, subjects=("E9",)),)))
 
     def test_every_listed_path_is_one_the_walk_reaches(self):
-        walked = field_coverage([*self._golden(), self._turn_action()])
-        assert set(GEN3_FIELDS) <= set(walked), sorted(set(GEN3_FIELDS) - set(walked))
+        """The goldens hold no failed check; the fixture holds no turn wrap's
+        own payload beside a marker, so the two are read together."""
+        from effects.infrastructure.record_codec import record_from_dict
+        from tests.unit.effects.builders import gen3_fixture_records
+
+        walked = field_coverage([
+            *self._golden(), self._turn_action(),
+            *(record_from_dict(raw) for raw in gen3_fixture_records())])
+        assert [path for path in WALK_PATHS if path not in walked] == []
 
     def test_the_gen3_fixture_reaches_every_listed_path_and_varies_most(self):
-        """The fixture's records reach every root § 8.13 field, a real
+        """The fixture's records reach every member of the table, a real
         turn_action included, and vary each but the ones the 2026-11-15
         pilot it was cut from holds constant itself (its ``field-coverage``
-        report): the one generation, and what no pilot game showed."""
+        report): the members the writer fixes, the one run's mode, and what
+        no pilot game showed."""
         from effects.infrastructure.record_codec import record_from_dict
         from tests.unit.effects.builders import gen3_fixture_records
 
         coverage = field_coverage(record_from_dict(raw) for raw in gen3_fixture_records())
-        assert set(GEN3_FIELDS) <= set(coverage), sorted(set(GEN3_FIELDS) - set(coverage))
-        constant = {path for path in GEN3_FIELDS if coverage[path].constant}
-        assert constant == {
-            "record.generation",
-            # No battle, no rad counter in any pilot game.
-            "record.state.entities[].printed_defense", "record.state.players[].rad",
-            # No rewrite of an event Forge's bus does not name, and no
-            # attacker forbidden by a line that keys to nothing.
-            "record.payload<RewritePayload>.incoming_unknown",
-            "record.payload<PlayabilityAttackersPayload>.forbidden[].responsible_unresolved",
-        }, sorted(constant)
+        assert [path for path in WALK_PATHS if path not in coverage] == []
+        constant = {path for path in WALK_PATHS if coverage[path].constant}
+        assert {path for path in constant if path in FIXED_PATHS} == {
+            "record.generation", "record.variant_of", "record.synthetic", "record.curation",
+            "record.state.tiers",
+        }
+        held = _held_constant_by_the_pilot() | _event_members_held_constant()
+        assert constant - set(FIXED_PATHS) == held, sorted(constant - set(FIXED_PATHS))
 
     def test_the_members_the_fixture_holds_constant_are_written_and_vary_on_the_goldens(self):
         """The collector's own records write and vary the members an earlier
@@ -390,13 +444,14 @@ class TestTheGen3Fields:
 
     def test_the_report_rows_each_gen3_field(self):
         lines = gen3_report_lines(field_coverage(self._golden()))
-        assert lines[1].startswith("gen-3 fields (root § 8.13): ")
-        assert len(lines) == 2 + len(GEN3_FIELDS)
+        assert lines[1].startswith("gen-3 record members: ")
+        assert len(lines) == 2 + len(WALK_PATHS)
         status = {}
         for line in lines[2:]:
             tag, rest = line.strip()[1:].split("] ", 1)
             status[rest.split()[0]] = tag.strip()
-        assert list(status) == list(GEN3_FIELDS)
+        assert list(status) == list(WALK_PATHS)
+        assert status["record.generation"] == "fixed"
         assert status["record.state.entities[].owner"] == "varies"
         # The goldens' turn actions: the game-end markers, whose events are
         # always empty, and a turn wrap's six actions, each with its own.
@@ -410,15 +465,17 @@ class TestTheGen3Fields:
 
     def test_an_empty_read_gets_no_section(self):
         assert gen3_report_lines(field_coverage([])) == []
-        assert not any("gen-3 fields" in line for line in report_lines(field_coverage([])))
+        assert not any("gen-3 record" in line for line in report_lines(field_coverage([])))
 
     def test_the_section_follows_the_constant_fields(self):
         """After every constant-field row, set off by a blank line, and
         before the event parameters."""
         lines = report_lines(field_coverage(self._golden()))
-        header = next(i for i, line in enumerate(lines) if line.startswith("gen-3 fields"))
+        header = next(i for i, line in enumerate(lines) if line.startswith("gen-3 record"))
         events = next(i for i, line in enumerate(lines) if line.startswith("event parameters"))
         rows = [i for i, line in enumerate(lines)
                 if line.startswith(("  [known ]", "  [NEW   ]"))]
         assert rows and max(rows) < header < events
+        # The gen-3 section rows a fixed member too, under the same tag.
+        assert lines.index(next(line for line in lines if line.startswith("  [fixed ]"))) < header
         assert lines[header - 1] == ""

@@ -26,6 +26,8 @@ What a reader or writer of effect records has to know that no single source file
 
 The envelope is frozen within a generation: a later capability makes new `kind` values reachable and adds members, and never redefines a field. `tests/unit/effects/domain/test_schema_compatibility.py` enforces the four compatibility rules; there is no version stamp.
 
+Which members the envelope, each snapshot block, each kind's payload, a contribution, a candidate and an event carry, and which of them the writer puts on every instance (`always`) rather than only `when` a condition holds, is one table, `domain/gen3_members.py`, read off the Java writer. A member the writer adds or drops changes that table in the same change: `tests/unit/effects/application/test_gen3_members.py` fails on a fixture member the table lacks and on an `always` member a fixture instance lacks.
+
 | Member | Notes |
 |---|---|
 | `record_id`, `run_id`, `timestamp`, `game_id` | ids as above; timestamp ISO 8601 UTC |
@@ -100,7 +102,7 @@ A protection copy written by `build-corpus` is a synthetic record `<record_id>~p
 - Decision candidates are enumerated by the collector itself at every priority stop and written as a two-stage sample (`--playability-rate`, then `--zone-candidate-rate` or `--plain-candidate-rate`). The sampling is what keeps a gen-3 game near 350 KB gzipped.
 - Attackers records are one per creature.
 - A rewrite record names one line in both `replaced_by` and `buffered` only when its replacement's own `ReplaceDamage`, `ReplaceSplitDamage` or `ReplaceEffect` ability ran in the event's place and Forge buffered that ability's sub-ability (Forcefield); any other buffered record has `replaced_by: []`. Two different lists, or a non-empty `replaced_by` beside `buffered: []`, is a contradiction `validate-corpus` fails. The shapes: `contracts/record-schema-delta.md` (025), the rewrite-record bullet.
-- `validate-corpus` checks every gen-3 field is on every record that owes it, and `field-coverage` that each varies.
+- `validate-corpus` checks that every `always` member of `domain/gen3_members.py` is on every instance of its site, and `field-coverage` rows each member of the table, tagging `fixed` the ones the writer fixes (`generation`, `variant_of`, `synthetic`, `curation`, `state.tiers`) so their constancy never reads as a dead field.
 
 ## Dropped-event counts
 

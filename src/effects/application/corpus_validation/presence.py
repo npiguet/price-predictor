@@ -3,7 +3,8 @@
 Read from the raw lines rather than the parsed records, since a parsed record
 cannot say whether a field was on the wire: three findings, one for
 ``what_if``, which blockers records alone carry (FR-033), one for the members
-every gen-3 record owes (root § 8.13 and § 8.4), and one refusing the
+every gen-3 record owes (the ``always`` rows of :mod:`effects.domain.gen3_members`,
+on every instance of their site), and one refusing the
 ``curation`` member a collected shard never carries. A record of an older
 generation is refused, named, as every reader refuses it.
 """
@@ -19,75 +20,21 @@ from effects.application.corpus_validation.findings import (
     Finding,
     histogram,
 )
-from effects.domain.records import (
-    Moment,
-    PlayabilitySubkind,
-    RecordKind,
-    TurnActionSubkind,
-)
+from effects.domain.gen3_members import ALWAYS, site_blocks
+from effects.domain.records import PlayabilitySubkind, RecordKind
 from effects.domain.shard_generation import UnacceptedGenerationError, require_gen3
 
 #: The member only ``build-corpus`` writes, on every record of a curated shard.
 CURATION_MEMBER = "curation"
 
-#: What every gen-3 record owes where it applies, by where it sits: the
-#: members of root § 8.13 and the snapshot facts of § 8.4, all written on
-#: every record of their site (null or empty where there is nothing to say).
-GEN3_ENVELOPE_MEMBERS = ("random_seat",)
-GEN3_STATE_MEMBERS = ("links",)
-GEN3_GLOBAL_MEMBERS = ("day_night", "floating_effects", "delayed_triggers", "dungeons")
-GEN3_PLAYER_MEMBERS = ("max_land_plays", "speed", "city_blessing", "rad", "monarch",
-                       "initiative", "turn_counts")
-GEN3_ENTITY_MEMBERS = (
-    "owner", "face_state", "mana_cost", "base_pt", "pt_boosts", "printed_loyalty",
-    "printed_defense", "real_face", "designations", "x_paid", "chosen", "costs_paid",
-    "history", "order_rank", "lines", "role",
-)
-GEN3_REFS_MEMBERS = ("random",)
-GEN3_ATTACKERS_MEMBERS = ("anchor_attacker", "legal_defenders", "must_attack")
-GEN3_BLOCKERS_MEMBERS = ("must_block",)
-GEN3_CANDIDATE_MEMBERS = ("failed_checks", "land_play")
-GEN3_VERDICT_MEMBERS = ("timing",)
-#: A resolution's effect half: every one, its game-end rescue and mana ones too.
-GEN3_EFFECT_HALF_MEMBERS = ("conditions_met",)
-#: The game-end marker (WP7): the records of its game the cap withheld.
-GEN3_GAME_END_MEMBERS = ("records_withheld",)
-
 
 def _owed(data: Mapping) -> Iterator[tuple[str, bool]]:
-    """Each member site a gen-3 record owes, and whether it carries it."""
-    yield from _members("record", data, GEN3_ENVELOPE_MEMBERS)
-    state = data.get("state") or {}
-    yield from _members("state", state, GEN3_STATE_MEMBERS)
-    yield from _members("state.global", state.get("global") or {}, GEN3_GLOBAL_MEMBERS)
-    yield from _members("state.refs", state.get("refs") or {}, GEN3_REFS_MEMBERS)
-    for player in state.get("players") or ():
-        yield from _members("state.players[]", player, GEN3_PLAYER_MEMBERS)
-    for entity in state.get("entities") or ():
-        yield from _members("state.entities[]", entity, GEN3_ENTITY_MEMBERS)
-        for line in entity.get("lines") or ():
-            if line.get("kind") == "static":
-                yield "state.entities[].lines[static].active", "active" in line
-    payload = data.get("payload") or {}
-    kind, subkind = data.get("kind"), data.get("subkind")
-    if kind == RecordKind.RESOLUTION and data.get("moment") == Moment.RESOLUTION:
-        yield from _members("payload", payload, GEN3_EFFECT_HALF_MEMBERS)
-    elif kind == RecordKind.TURN_ACTION and subkind == TurnActionSubkind.GAME_END:
-        yield from _members("payload", payload, GEN3_GAME_END_MEMBERS)
-    elif kind == RecordKind.PLAYABILITY and subkind == PlayabilitySubkind.ATTACKERS:
-        yield from _members("payload", payload, GEN3_ATTACKERS_MEMBERS)
-    elif kind == RecordKind.PLAYABILITY and subkind == PlayabilitySubkind.BLOCKERS:
-        yield from _members("payload", payload, GEN3_BLOCKERS_MEMBERS)
-    elif kind == RecordKind.PLAYABILITY and subkind == PlayabilitySubkind.DECISION:
-        for candidate in payload.get("candidates") or ():
-            yield from _members("payload.candidates[]", candidate, GEN3_CANDIDATE_MEMBERS)
-            yield from _members("payload.candidates[].verdict",
-                                candidate.get("verdict") or {}, GEN3_VERDICT_MEMBERS)
-
-
-def _members(site: str, block: Mapping, members: tuple[str, ...]) -> Iterator[tuple[str, bool]]:
-    for member in members:
-        yield f"{site}.{member}", member in block
+    """Each member a gen-3 record owes, by site, and whether it carries it:
+    every ``always`` row of :mod:`effects.domain.gen3_members`, on every
+    instance of its site."""
+    for site, block in site_blocks(data):
+        for member in ALWAYS[site]:
+            yield f"{site.value}.{member}", member in block
 
 
 def _owes_what_if(data: Mapping) -> bool:

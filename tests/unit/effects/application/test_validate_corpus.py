@@ -21,20 +21,14 @@ from pathlib import Path
 import pytest
 
 from effects.application.corpus_validation.findings import Finding, Findings, Thresholds
-from effects.application.corpus_validation.presence import (
-    GEN3_ENTITY_MEMBERS,
-    GEN3_GLOBAL_MEMBERS,
-    GEN3_PLAYER_MEMBERS,
-    GEN3_REFS_MEMBERS,
-    GEN3_STATE_MEMBERS,
-    FieldPresence,
-)
+from effects.application.corpus_validation.presence import FieldPresence
 from effects.application.validate_corpus import validate_corpus, validate_directory
 from effects.domain.event_schema import (
     AttributionKind,
     Event,
     EventType,
 )
+from effects.domain.gen3_members import ALWAYS, Site
 from effects.domain.provenance import (
     ProvenanceKey,
     ProvenanceSidecar,
@@ -2298,8 +2292,9 @@ class TestGen3FieldPresence:
         del half["payload"]["conditions_met"]
         finding = _named(self._findings(tmp_path, rows), "gen-3 fields")
         assert not finding.ok
-        assert "payload.conditions_met 1" in finding.detail[0]
-        assert finding.detail[1] == f"{half['record_id']}: no payload.conditions_met"
+        assert "payload<resolution/resolution>.conditions_met 1" in finding.detail[0]
+        assert finding.detail[1] == (
+            f"{half['record_id']}: no payload<resolution/resolution>.conditions_met")
 
     def test_a_game_end_marker_without_its_withheld_count_is_short(self, tmp_path):
         """WP7: the marker says how many of its game's records the cap withheld."""
@@ -2308,7 +2303,8 @@ class TestGen3FieldPresence:
         del marker["payload"]["records_withheld"]
         finding = _named(self._findings(tmp_path, rows), "gen-3 fields")
         assert not finding.ok
-        assert finding.detail[1] == f"{marker['record_id']}: no payload.records_withheld"
+        assert finding.detail[1] == (
+            f"{marker['record_id']}: no payload<turn_action/game_end>.records_withheld")
 
     @pytest.mark.parametrize(("site", "edit"), [
         ("state.links", lambda row: row["state"].pop("links")),
@@ -2327,11 +2323,9 @@ class TestGen3FieldPresence:
         assert not finding.ok and f"{site} 1" in finding.detail[0]
 
     @pytest.mark.parametrize(("site", "member"), [
-        *(("state", m) for m in GEN3_STATE_MEMBERS),
-        *(("state.global", m) for m in GEN3_GLOBAL_MEMBERS),
-        *(("state.players[]", m) for m in GEN3_PLAYER_MEMBERS),
-        *(("state.entities[]", m) for m in GEN3_ENTITY_MEMBERS),
-        *(("state.refs", m) for m in GEN3_REFS_MEMBERS),
+        (site.value, member)
+        for site in (Site.STATE, Site.GLOBAL, Site.PLAYER, Site.ENTITY, Site.REFS)
+        for member in ALWAYS[site]
     ])
     def test_every_owed_snapshot_member_missing_is_named(self, tmp_path, site, member):
         """Each member of every owed list, not one per site: dropped from the
@@ -2364,7 +2358,7 @@ class TestGen3FieldPresence:
         row = next(row for row in rows if row.get("subkind") == subkind)
         del row["payload"][member]
         finding = _named(self._findings(tmp_path, rows), "gen-3 fields")
-        assert f"payload.{member} 1" in finding.detail[0]
+        assert f"payload<playability/{subkind}>.{member} 1" in finding.detail[0]
 
     def test_a_candidate_without_timing_or_failed_checks_is_short(self, tmp_path):
         rows = self._golden()
@@ -2372,8 +2366,9 @@ class TestGen3FieldPresence:
                          if row.get("subkind") == "decision")["payload"]["candidates"][0]
         del candidate["verdict"]["timing"], candidate["failed_checks"]
         finding = _named(self._findings(tmp_path, rows), "gen-3 fields")
-        assert "payload.candidates[].verdict.timing 1" in finding.detail[0]
-        assert "payload.candidates[].failed_checks 1" in finding.detail[0]
+        decision = "payload<playability/decision>"
+        assert f"{decision}.candidates[].verdict.timing 1" in finding.detail[0]
+        assert f"{decision}.candidates[].failed_checks 1" in finding.detail[0]
 
     def test_a_candidate_without_land_play_is_short(self, tmp_path):
         rows = self._golden()
@@ -2381,7 +2376,8 @@ class TestGen3FieldPresence:
                          if row.get("subkind") == "decision")["payload"]["candidates"][0]
         del candidate["land_play"]
         finding = _named(self._findings(tmp_path, rows), "gen-3 fields")
-        assert not finding.ok and "payload.candidates[].land_play 1" in finding.detail[0]
+        assert not finding.ok and (
+            "payload<playability/decision>.candidates[].land_play 1" in finding.detail[0])
 
     def test_an_unlimited_land_play_count_is_carried_not_missing(self, tmp_path):
         """Fastbond's null is the member written, not the member absent."""

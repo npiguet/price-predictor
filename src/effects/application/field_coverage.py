@@ -9,9 +9,11 @@ Absence is not proof: a field reads constant whether it is unwired or the corpus
 merely never exercised it, which is why :data:`KNOWN_CONSTANT_FIELDS` is
 asserted in one direction only.
 
-The walk reaches every gen-3 field too; :data:`GEN3_FIELDS` names the ones
-root § 8.13 adds so a gen-3 corpus's report rows each one of them, absent
-ones included, which the walk alone cannot show.
+The walk reaches every gen-3 member too; the table of the members a gen-3
+record writes (:mod:`effects.domain.gen3_members`) gives each its own row on a
+gen-3 corpus's report, absent ones included, which the walk alone cannot show,
+and names the members constant by construction, tagged ``fixed`` rather than
+``NEW``.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from collections.abc import Iterable
 from typing import Any
 
 from effects.domain.event_schema import EVENT_PARAMS, Event, EventType
+from effects.domain.gen3_members import FIXED_PATHS, WALK_PATHS
 from effects.domain.records import EffectRecord
 from price_predictor.domain.dataclass_defaults import field_default
 
@@ -71,47 +74,6 @@ class FieldCoverage:
 KNOWN_CONSTANT_FIELDS: frozenset[str] = frozenset()
 
 
-_ENTITY = "record.state.entities[]"
-_DECISION = "record.payload<PlayabilityDecisionPayload>.candidates[]"
-_ATTACKERS = "record.payload<PlayabilityAttackersPayload>"
-
-#: The fields of the gen-3 record (root § 8.13, with the snapshot facts of
-#: § 8.4 it points to), by walk path. A gen-3 pilot is judged on each one
-#: varying, being listed as constant, or being absent for a reason the
-#: operator accepts (SC-003), so the report gives every one its own row.
-GEN3_FIELDS: tuple[str, ...] = (
-    "record.generation", "record.aimed_at", "record.directed", "record.copy_dropped",
-    *(f"{_ENTITY}.{name}" for name in (
-        "owner", "face_state", "mana_cost", "printed_loyalty", "printed_defense",
-        "real_face", "designations", "x_paid", "chosen", "costs_paid", "history",
-        "order_rank", "role")),
-    f"{_ENTITY}.lines[].active", f"{_ENTITY}.lines[].affected",
-    *(f"record.state.players[].{name}" for name in (
-        "max_land_plays", "land_plays_unlimited", "speed", "city_blessing", "rad",
-        "monarch", "initiative", "turn_counts")),
-    *(f"record.state.global_.{name}" for name in (
-        "day_night", "floating_effects", "delayed_triggers", "dungeons")),
-    "record.state.refs.random", "record.state.links",
-    "record.payload<ResolutionPayload>.conditions_met",
-    "record.payload<ResolutionPayload>.outcome", "record.payload<ActivationPayload>.events",
-    f"{_DECISION}.timing", f"{_DECISION}.failed_checks", f"{_DECISION}.land_play",
-    *(f"{_ATTACKERS}.{name}" for name in (
-        "anchor_attacker", "legal_defenders", "must_attack", "tapped_by_attack")),
-    "record.payload<PlayabilityBlockersPayload>.must_block",
-    "record.payload<TurnActionPayload>.events",
-    # WP7: the game-end marker's withheld count, a rewrite's unknown incoming
-    # event and set-aside ability, a blocker a lure requires elsewhere.
-    "record.payload<TurnActionPayload>.records_withheld",
-    *(f"record.payload<RewritePayload>.{name}" for name in (
-        "incoming_unknown", "buffered", "buffered_ran", "buffered_events")),
-    "record.payload<PlayabilityBlockersPayload>.forbidden[].required_elsewhere",
-    # A forbidden creature's own keyword line, and a responsible line no key names.
-    *(f"record.payload<{payload}>.forbidden[].{name}"
-      for payload in ("PlayabilityAttackersPayload", "PlayabilityBlockersPayload")
-      for name in ("responsible_own", "responsible_unresolved")),
-)
-
-
 def field_coverage(records: Iterable[EffectRecord]) -> dict[str, FieldCoverage]:
     """Per-field coverage over a corpus, keyed by dotted path.
 
@@ -136,18 +98,17 @@ def report_lines(
     """``field-coverage``'s rows, constant fields only unless ``all_fields``.
 
     A constant field is tagged ``known`` when :data:`KNOWN_CONSTANT_FIELDS`
-    lists it and ``NEW`` otherwise: only the writer says whether a new one is
-    broken or merely rare. A listed field that varied is named for removal.
+    lists it, ``fixed`` when the gen-3 table says the writer fixes its value
+    (``generation``, the frozen ``tiers``), and ``NEW`` otherwise: only the
+    writer says whether a new one is broken or merely rare. A listed field
+    that varied is named for removal.
     """
     lines = []
     for row in coverage.values():
-        if not row.constant:
-            if all_fields:
-                lines.append(f"  [varies] {row.path}   ({row.populated}/{row.seen})")
-        elif row.path in KNOWN_CONSTANT_FIELDS:
-            lines.append(f"  [known ] {row.path}   (seen {row.seen})")
-        else:
-            lines.append(f"  [NEW   ] {row.path}   (seen {row.seen})")
+        if row.constant:
+            lines.append(f"  [{_constant_tag(row.path)}] {row.path}   (seen {row.seen})")
+        elif all_fields:
+            lines.append(f"  [varies] {row.path}   ({row.populated}/{row.seen})")
     stale = sorted(
         path for path in KNOWN_CONSTANT_FIELDS
         if path in coverage and not coverage[path].constant
@@ -156,6 +117,12 @@ def report_lines(
         lines += ["", "listed as constant but carrying data — remove from the list:"]
         lines.extend(f"  {path}" for path in stale)
     return lines + gen3_report_lines(coverage) + event_param_lines(coverage)
+
+
+def _constant_tag(path: str) -> str:
+    if path in KNOWN_CONSTANT_FIELDS:
+        return "known "
+    return "fixed " if path in FIXED_PATHS else "NEW   "
 
 
 def event_param_lines(coverage: dict[str, FieldCoverage]) -> list[str]:
@@ -191,29 +158,34 @@ def event_param_lines(coverage: dict[str, FieldCoverage]) -> list[str]:
 
 
 def gen3_report_lines(coverage: dict[str, FieldCoverage]) -> list[str]:
-    """One row per :data:`GEN3_FIELDS` path; none when no record was read.
+    """One row per walk path of the gen-3 member table; none when no record
+    was read.
 
     ``absent`` is a path no record reached (no record of its kind, or no
-    instance of its block); ``const`` one that never varied, ``known`` when
+    instance of its block); ``fixed`` one constant by construction;
+    ``const`` one that never varied, ``known`` when
     :data:`KNOWN_CONSTANT_FIELDS` lists it.
     """
     if "record.generation" not in coverage:
         return []
-    rows, tally = [], {"varies": 0, "const": 0, "absent": 0}
-    for path in GEN3_FIELDS:
-        row = coverage.get(path)
-        if row is None:
-            status, seen = "absent", ""
-        elif row.constant:
-            status = "const"
-            seen = f"   (seen {row.seen}{', known' if path in KNOWN_CONSTANT_FIELDS else ''})"
-        else:
-            status, seen = "varies", f"   ({row.populated}/{row.seen})"
+    rows, tally = [], {"varies": 0, "const": 0, "fixed": 0, "absent": 0}
+    for path in WALK_PATHS:
+        status, seen = _gen3_status(path, coverage.get(path))
         tally[status] += 1
         rows.append(f"  [{status:<6}] {path}{seen}")
-    head = (f"gen-3 fields (root § 8.13): {tally['varies']} vary, {tally['const']} "
-            f"constant, {tally['absent']} absent")
+    head = (f"gen-3 record members: {tally['varies']} vary, {tally['const']} constant, "
+            f"{tally['fixed']} fixed by the writer, {tally['absent']} absent")
     return ["", head, *rows]
+
+
+def _gen3_status(path: str, row: FieldCoverage | None) -> tuple[str, str]:
+    """A gen-3 row's status and its count, as printed after the path."""
+    if row is None:
+        return "absent", ""
+    if not row.constant:
+        return "varies", f"   ({row.populated}/{row.seen})"
+    known = ", known" if path in KNOWN_CONSTANT_FIELDS else ""
+    return ("fixed" if path in FIXED_PATHS else "const"), f"   (seen {row.seen}{known})"
 
 
 class _Tally:

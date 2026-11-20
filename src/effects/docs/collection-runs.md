@@ -125,4 +125,4 @@ Rules to respect when running, babysitting or changing `collect-coverage`, `coll
 
 ## `field-coverage`
 
-- Names every record field a corpus never varied; on gen-3 records it ends with one row per field of the gen-3 snapshot, then one row per parameter of each event type the corpus holds. Why it exists: `collection-internals.md` § Dead fields.
+- Names every record field a corpus never varied, a member the writer fixes tagged `fixed` rather than `NEW`; on gen-3 records it ends with one row per member of the gen-3 member table (`domain/gen3_members.py`), then one row per parameter of each event type the corpus holds. Why it exists: `collection-internals.md` § Dead fields.

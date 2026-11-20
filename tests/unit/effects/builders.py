@@ -36,6 +36,7 @@ from effects.domain.state_snapshot import (
     GlobalState,
     InclusionTier,
     PlayerState,
+    Refs,
     StateSnapshot,
 )
 from effects.domain.text_holdout import holdout_key
@@ -195,11 +196,13 @@ STAGE_ONE_TIERS: frozenset[InclusionTier] = frozenset(
 
 def make_snapshot(**overrides) -> StateSnapshot:
     """An empty turn-1 board collected at the stage-one tiers; ``overrides``
-    replace any ``StateSnapshot`` field."""
+    replace any ``StateSnapshot`` field. Its refs name no target on the stack,
+    as the collector writes a refs block that has none: ``[]``, not absent."""
     defaults: dict = {
         "global_": GlobalState(
             turn=1, phase="main1", active="P0", priority="P0", stack_size=0,
         ),
+        "refs": Refs(targets_on_stack=()),
         "players": (),
         "entities": (),
         "tiers": STAGE_ONE_TIERS,
