@@ -13,6 +13,7 @@ from tests.unit.effects.application.validate_corpus_support import (
     _resolution,
     _snapshot,
     _trigger,
+    _TriggerEvent,
 )
 
 
@@ -38,7 +39,7 @@ class TestTriggerNegatives:
         reservoir writes at the game's end all lost. Judged over games that
         ended in the window: an unfinished game's positives are still held."""
         game = "run.0-L1.0"
-        negatives = [_trigger(f"run.0-L1.{index}", fired=False, game_id=game,
+        negatives = [_trigger(f"run.0-L1.{index}", event=_TriggerEvent(fired=False), game_id=game,
                               state=_snapshot(turn=7)) for index in range(900, 960)]
         records = [r for r in _healthy() if r.kind not in (RecordKind.TRIGGER,
                                                            RecordKind.TURN_ACTION)] + negatives
@@ -59,7 +60,7 @@ class TestTriggerNegatives:
         """One mode drawing no negatives hides behind every other mode."""
         records = _healthy() + [
             _trigger(
-                f"run.0-L1.{index}", mode="Attacks",
+                f"run.0-L1.{index}", event=_TriggerEvent(mode="Attacks"),
                 state=_snapshot(turn=7 + index),
             )
             for index in range(900, 903)

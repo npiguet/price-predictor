@@ -25,6 +25,7 @@ from tests.unit.effects.application.validate_corpus_support import (
     _resolution,
     _snapshot,
     _trigger,
+    _TriggerEvent,
 )
 
 
@@ -196,7 +197,7 @@ class TestTheManaReservoirFlushIsNotAGameBoundary:
         boundary."""
         records = _healthy() + [
             _resolution("run.0-L1.900", state=_snapshot(turn=9)),
-            _trigger("run.0-L1.901", fired=False, state=_snapshot(turn=2)),
+            _trigger("run.0-L1.901", event=_TriggerEvent(fired=False), state=_snapshot(turn=2)),
         ]
         assert not _named(validate_corpus(records), "one game").ok
 
@@ -256,7 +257,7 @@ class TestGameEndMarkers:
         """The trigger floor's finished games: a gen-3 record holding the
         outcome is no longer read as the game's end; the marker is."""
         game = "run.0-L1.0"
-        negatives = [_trigger(f"{game}.t{index}", fired=False, game_id=game,
+        negatives = [_trigger(f"{game}.t{index}", event=_TriggerEvent(fired=False), game_id=game,
                               state=_snapshot(turn=7)) for index in range(60)]
         won = Event(type=EventType.PLAYER_WON, subjects=("P0",), attributed_to="unresolved")
         outcome = _combat(f"{game}.999", game_id=game, state=_snapshot(turn=30),

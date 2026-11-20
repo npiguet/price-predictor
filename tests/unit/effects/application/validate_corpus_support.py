@@ -1,6 +1,12 @@
 """Builders the validate-corpus test modules share: a healthy window and the
 records each test perturbs it with.
 
+Each test builds a small shard directory that reproduces one measured defect
+from the first collected corpus and asserts the validator names it. The point
+is not that the checks exist but that they *fire*: the corpus that motivated
+them parsed cleanly, satisfied every schema test, and was worthless, so a
+validator that passed it would be worse than none.
+
 The synthetic shards are written through :class:`RawShardWriter` rather than by
 hand, so a defect is planted in the records themselves and has to survive a
 real serialize/parse round trip to be found — the same path a collector's
@@ -8,6 +14,8 @@ output takes.
 """
 
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 from effects.application.corpus_validation.findings import Finding
 from effects.domain.event_schema import AttributionKind, Event, EventType
@@ -91,7 +99,16 @@ def _activation(record_id: str, **overrides):
     return _resolution(record_id, **fields)
 
 
-def _trigger(record_id: str, ability=(_KEY,), fired=True, mode="ChangesZone",
+@dataclass(frozen=True)
+class _TriggerEvent:
+    """What a built trigger record's event says: whether the trigger fired,
+    and the zone-change mode it was evaluated for."""
+
+    fired: bool = True
+    mode: str = "ChangesZone"
+
+
+def _trigger(record_id: str, ability=(_KEY,), event: _TriggerEvent = _TriggerEvent(),
              **overrides):
     fields: dict = {
         "kind": RecordKind.TRIGGER,
@@ -101,11 +118,11 @@ def _trigger(record_id: str, ability=(_KEY,), fired=True, mode="ChangesZone",
             event=Event(
                 type=EventType.ZONE_CHANGE,
                 params={
-                    "mode": mode, "from_zone": "battlefield",
+                    "mode": event.mode, "from_zone": "battlefield",
                     "to_zone": "graveyard",
                 },
             ),
-            fired=fired,
+            fired=event.fired,
         ),
     }
     fields.update(overrides)
@@ -186,7 +203,7 @@ def _healthy() -> list[EffectRecord]:
             # The negative half of the trigger sample. Without it every window
             # reads 100% fired, which is the very skew the check looks for.
             _trigger(
-                f"run.0-L1.{base + 6}", game_id=gid, fired=False,
+                f"run.0-L1.{base + 6}", game_id=gid, event=_TriggerEvent(fired=False),
                 state=_snapshot(turn=4),
             ),
             _rewrite(f"run.0-L1.{base + 4}", game_id=gid, state=_snapshot(turn=5)),
