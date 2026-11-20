@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from effects.domain.effect_targets import _STATE_FLAG_FIELDS
 from effects.domain.records import ForkKind
 from effects.domain.wire_closed_lists import (
     ABSENT,
@@ -194,6 +195,14 @@ def test_the_fork_kinds_are_the_connector_s_in_its_order():
     spells the same list out on the Java side."""
     source = (_CONNECTOR / "ForkKind.java").read_text(encoding="utf-8")
     assert list(ForkKind) == re.findall(r'^\s*[A-Z]+\("([a-z]+)"\)', source, re.MULTILINE)
+
+
+def test_the_state_flags_are_the_connector_s():
+    """``StateFlag.java``'s wire names: ``class_level`` (levels gained, no
+    field of its own) then the binary flags ``_STATE_FLAG_FIELDS`` maps."""
+    source = (_CONNECTOR / "StateFlag.java").read_text(encoding="utf-8")
+    declared = re.findall(r'^\s*[A-Z_]+\("([a-z_]+)"\)[,;]', source, re.MULTILINE)
+    assert declared == ["class_level", *_STATE_FLAG_FIELDS]
 
 
 def test_a_live_record_s_absent_fork_kind_is_on_the_list():

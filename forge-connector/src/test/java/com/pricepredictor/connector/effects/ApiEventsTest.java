@@ -69,7 +69,7 @@ class ApiEventsTest {
 
         assertNotNull(event);
         assertEquals(EventType.TURN_ADDED, event.type());
-        assertEquals(1, event.params().get("count"));
+        assertEquals(1, event.param(EventParam.COUNT));
     }
 
     /**
@@ -81,7 +81,7 @@ class ApiEventsTest {
         SpellAbility sa = AbilityFactory.getAbility(
                 "SP$ AddTurn | Defined$ You | NumTurns$ 3", TestCards.build("Grizzly Bears"));
 
-        assertEquals(3, TestCards.onlyEvent(observe(sa)).params().get("count"));
+        assertEquals(3, TestCards.onlyEvent(observe(sa)).param(EventParam.COUNT));
     }
 
     /** The same for a skipped turn. */
@@ -90,7 +90,7 @@ class ApiEventsTest {
         SpellAbility sa = AbilityFactory.getAbility(
                 "SP$ SkipTurn | Defined$ You | NumTurns$ 2", TestCards.build("Grizzly Bears"));
 
-        assertEquals(2, TestCards.onlyEvent(observe(sa)).params().get("count"));
+        assertEquals(2, TestCards.onlyEvent(observe(sa)).param(EventParam.COUNT));
     }
 
     /**
@@ -108,7 +108,7 @@ class ApiEventsTest {
         EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.PHASE_SKIPPED, event.type());
-        assertEquals("combat_begin", event.params().get("phase"));
+        assertEquals("combat_begin", event.param(EventParam.PHASE));
     }
 
     @Test
@@ -127,7 +127,7 @@ class ApiEventsTest {
         EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.TURN_SKIPPED, event.type());
-        assertEquals(1, event.params().get("count"));
+        assertEquals(1, event.param(EventParam.COUNT));
     }
 
     /** Full Throttle: {@code SP$ AddPhase | ExtraPhase$ Combat | NumPhases$ 2}. */
@@ -138,8 +138,8 @@ class ApiEventsTest {
         EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.PHASE_ADDED, event.type());
-        assertEquals("Combat", event.params().get("phase"));
-        assertEquals(2, event.params().get("count"));
+        assertEquals("Combat", event.param(EventParam.PHASE));
+        assertEquals(2, event.param(EventParam.COUNT));
     }
 
     /**
@@ -163,7 +163,7 @@ class ApiEventsTest {
 
         assertEquals(EventType.OWNERSHIP_CHANGE, event.type());
         // OwnershipGainEffect's fallback: no DefinedPlayer, the activator.
-        assertEquals(Refs.of(activator), event.params().get("owner"));
+        assertEquals(Refs.of(activator), event.param(EventParam.OWNER));
     }
 
     /**
@@ -197,7 +197,7 @@ class ApiEventsTest {
 
         EffectEvent event = TestCards.onlyEvent(observe(sa));
 
-        assertEquals(Refs.of(targeted), event.params().get("owner"));
+        assertEquals(Refs.of(targeted), event.param(EventParam.OWNER));
     }
 
     // ── subject is who the effect affects, not who cast it ──────────────
@@ -325,8 +325,8 @@ class ApiEventsTest {
         EffectEvent event = TestCards.onlyEvent(observed);
 
         assertEquals(EventType.CHOICE_MADE, event.type());
-        assertEquals("color", event.params().get("choice_kind"));
-        assertEquals("red", event.params().get("value"));
+        assertEquals("color", event.param(EventParam.CHOICE_KIND));
+        assertEquals("red", event.param(EventParam.VALUE));
     }
 
     /**
@@ -449,11 +449,11 @@ class ApiEventsTest {
             assertNotNull(event, fixture.getKey() + " -- choice() reported nothing");
             assertEquals(EventType.CHOICE_MADE, event.type(), fixture.getKey());
             assertEquals(
-                    fixture.getValue().expectedKind(), event.params().get("choice_kind"),
+                    fixture.getValue().expectedKind(), event.param(EventParam.CHOICE_KIND),
                     fixture.getKey());
-            assertNotNull(event.params().get("value"), fixture.getKey() + " -- empty value");
+            assertNotNull(event.param(EventParam.VALUE), fixture.getKey() + " -- empty value");
             if (fixture.getValue().expectedValue() != null) {
-                assertEquals(fixture.getValue().expectedValue(), event.params().get("value"),
+                assertEquals(fixture.getValue().expectedValue(), event.param(EventParam.VALUE),
                         fixture.getKey());
             }
         }
@@ -504,7 +504,7 @@ class ApiEventsTest {
         EffectEvent event = TestCards.onlyEvent(observed);
 
         assertEquals(EventType.DAMAGE_HEALED, event.type());
-        assertEquals(3, event.params().get("amount"));
+        assertEquals(3, event.param(EventParam.AMOUNT));
     }
 
     /**
@@ -523,7 +523,7 @@ class ApiEventsTest {
         EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.ABILITY_CHANGE, event.type());
-        assertEquals(true, event.params().get("removed"));
+        assertEquals(true, event.param(EventParam.REMOVED));
     }
 
     /**
@@ -552,7 +552,7 @@ class ApiEventsTest {
         EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.TARGETS_CHANGED, event.type());
-        assertEquals(List.of(Refs.of(newTarget)), event.params().get("targets"));
+        assertEquals(List.of(Refs.of(newTarget)), event.param(EventParam.TARGETS));
     }
 
     /**
@@ -584,7 +584,7 @@ class ApiEventsTest {
         EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.TARGETS_CHANGED, event.type());
-        assertEquals(List.of(Refs.of(newTarget)), event.params().get("targets"));
+        assertEquals(List.of(Refs.of(newTarget)), event.param(EventParam.TARGETS));
     }
 
     /**
@@ -608,8 +608,8 @@ class ApiEventsTest {
         EffectEvent event = TestCards.onlyEvent(observe(sa));
 
         assertEquals(EventType.CHOICE_MADE, event.type());
-        assertEquals("number", event.params().get("choice_kind"));
-        assertEquals("7", event.params().get("value"));
+        assertEquals("number", event.param(EventParam.CHOICE_KIND));
+        assertEquals("7", event.param(EventParam.VALUE));
     }
 
     // ── the once-latched failure reports ─────────────────────────────────

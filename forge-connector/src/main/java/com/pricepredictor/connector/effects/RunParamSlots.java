@@ -70,18 +70,18 @@ final class RunParamSlots {
     static final ModeRow.Slot ZONE_TABLE_MOVE = RunParamSlots::zoneTableMove;
 
     private static void zones(EffectEvent event, ModeRow.RunParams params) {
-        event.param("from_zone", CardSpelling.zoneName(params.get("Origin")));
-        event.param("to_zone", CardSpelling.zoneName(params.get("Destination")));
+        event.param(EventParam.FROM_ZONE, CardSpelling.zoneName(params.get("Origin")));
+        event.param(EventParam.TO_ZONE, CardSpelling.zoneName(params.get("Destination")));
     }
 
     private static void combat(EffectEvent event, ModeRow.RunParams params) {
         Boolean combat = boolOf(params.get("IsCombatDamage"));
-        event.param("combat", combat != null ? combat : boolOf(params.get("IsCombat")));
+        event.param(EventParam.COMBAT, combat != null ? combat : boolOf(params.get("IsCombat")));
     }
 
     private static void damageMapTotal(EffectEvent event, ModeRow.RunParams params) {
         if (params.get("DamageMap") instanceof Map<?, ?> map) {
-            event.param("amount", sumOf(map.values()));
+            event.param(EventParam.AMOUNT, sumOf(map.values()));
         }
     }
 
@@ -89,22 +89,22 @@ final class RunParamSlots {
         if (!(params.get("DamageMap") instanceof Map<?, ?> map)) {
             return;
         }
-        event.param("amount", sumOf(map.values()));
+        event.param(EventParam.AMOUNT, sumOf(map.values()));
         if (map.size() == 1) {
-            event.param("source", subjectOf(map.keySet().iterator().next()));
+            event.param(EventParam.SOURCE, subjectOf(map.keySet().iterator().next()));
         }
     }
 
     private static void damageTableTotal(EffectEvent event, ModeRow.RunParams params) {
         if (params.get("DamageMap") instanceof Table<?, ?, ?> table) {
-            event.param("amount", sumOf(table.values()));
+            event.param(EventParam.AMOUNT, sumOf(table.values()));
         }
     }
 
     private static void damageTableSource(EffectEvent event, ModeRow.RunParams params) {
         if (params.get("DamageMap") instanceof Table<?, ?, ?> table
                 && table.rowKeySet().size() == 1) {
-            event.param("source", subjectOf(table.rowKeySet().iterator().next()));
+            event.param(EventParam.SOURCE, subjectOf(table.rowKeySet().iterator().next()));
         }
     }
 
@@ -112,8 +112,8 @@ final class RunParamSlots {
         if (params.get("Cards") instanceof Table<?, ?, ?> table && table.size() == 1) {
             // Its one move: origin, destination and the cards that made it.
             table.cellSet().forEach(only -> {
-                event.param("from_zone", CardSpelling.zoneName(only.getRowKey()));
-                event.param("to_zone", CardSpelling.zoneName(only.getColumnKey()));
+                event.param(EventParam.FROM_ZONE, CardSpelling.zoneName(only.getRowKey()));
+                event.param(EventParam.TO_ZONE, CardSpelling.zoneName(only.getColumnKey()));
             });
         }
     }
@@ -122,7 +122,7 @@ final class RunParamSlots {
 
     /** {@code count}: the cards drawn, milled or discarded, the tokens made, the copies. */
     static ModeRow.Slot count(RunParamAmount amount) {
-        return (event, params) -> event.param("count", amount.read(params.byName()));
+        return (event, params) -> event.param(EventParam.COUNT, amount.read(params.byName()));
     }
 
     /**
@@ -132,7 +132,7 @@ final class RunParamSlots {
      * {@code PayLife}'s.
      */
     static ModeRow.Slot lifeDelta(ModeRow.Sign sign) {
-        return (event, params) -> event.param("delta", sign.apply(
+        return (event, params) -> event.param(EventParam.DELTA, sign.apply(
                 firstInt(params.byName(), "LifeAmount", "LifeGained", "Amount")));
     }
 
@@ -211,7 +211,7 @@ final class RunParamSlots {
 
     /** {@code out}: whether the permanent phased out (true) or in (false). */
     static ModeRow.Slot phased(boolean out) {
-        return (event, params) -> event.param("out", out);
+        return (event, params) -> event.param(EventParam.OUT, out);
     }
 
     /** {@code RolledDie}: one die, its {@code sides} and its natural and final value. */
@@ -227,7 +227,7 @@ final class RunParamSlots {
         }
         if (produced instanceof String text) {
             Map<String, Integer> mana = ProducedMana.byColor(text.trim());
-            event.param("mana_by_color", mana.isEmpty() ? null : mana);
+            event.param(EventParam.MANA_BY_COLOR, mana.isEmpty() ? null : mana);
         }
     }
 
@@ -244,11 +244,11 @@ final class RunParamSlots {
         if (!(card instanceof Card)) {
             card = params.get("Affected");
         }
-        event.param("to_state", card instanceof Card turned ? CardFacts.faceState(turned) : null);
+        event.param(EventParam.TO_STATE, card instanceof Card turned ? CardFacts.faceState(turned) : null);
     }
 
     private static void oneDie(EffectEvent event, ModeRow.RunParams params) {
-        event.param("sides", intOf(params.get("Sides")));
+        event.param(EventParam.SIDES, intOf(params.get("Sides")));
         Integer result = intOf(params.get("Result"));
         if (result == null) {
             return;
@@ -259,11 +259,11 @@ final class RunParamSlots {
             die.put("natural", natural);
         }
         die.put("final", result);
-        event.param("results", List.of(die));
+        event.param(EventParam.RESULTS, List.of(die));
     }
 
     private static void dice(EffectEvent event, ModeRow.RunParams params) {
-        event.param("sides", intOf(params.get("Sides")));
+        event.param(EventParam.SIDES, intOf(params.get("Sides")));
         if (params.get("Result") instanceof Iterable<?> results) {
             List<Map<String, Integer>> dice = new ArrayList<>();
             for (Object result : results) {
@@ -272,44 +272,44 @@ final class RunParamSlots {
                     dice.add(Map.of("final", value));
                 }
             }
-            event.param("results", dice);
+            event.param(EventParam.RESULTS, dice);
         }
     }
 
     private static void damageAmount(EffectEvent event, ModeRow.RunParams params) {
-        event.param("amount", intOf(params.get("DamageAmount")));
+        event.param(EventParam.AMOUNT, intOf(params.get("DamageAmount")));
     }
 
     private static void damageSource(EffectEvent event, ModeRow.RunParams params) {
-        event.param("source", subjectOf(params.get("DamageSource")));
+        event.param(EventParam.SOURCE, subjectOf(params.get("DamageSource")));
     }
 
     private static void regenerable(EffectEvent event, ModeRow.RunParams params) {
-        event.param("regenerable", boolOf(params.get("Regeneration")));
+        event.param(EventParam.REGENERABLE, boolOf(params.get("Regeneration")));
     }
 
     private static void attachedTo(EffectEvent event, ModeRow.RunParams params) {
-        event.param("attached_to", firstRef(params.byName(), "AttachTarget"));
+        event.param(EventParam.ATTACHED_TO, firstRef(params.byName(), "AttachTarget"));
     }
 
     private static void detachedFrom(EffectEvent event, ModeRow.RunParams params) {
-        event.param("detached_from", firstRef(params.byName(), "Object"));
+        event.param(EventParam.DETACHED_FROM, firstRef(params.byName(), "Object"));
     }
 
     private static void defender(EffectEvent event, ModeRow.RunParams params) {
-        event.param("defender", firstRef(params.byName(),
+        event.param(EventParam.DEFENDER, firstRef(params.byName(),
                 "Attacked", "Defender", "AttackedTarget", "DefendingPlayer", "Defenders"));
     }
 
     private static void blocked(EffectEvent event, ModeRow.RunParams params) {
-        event.param("blocked", firstRef(params.byName(), "Attackers", "Attacker"));
+        event.param(EventParam.BLOCKED, firstRef(params.byName(), "Attackers", "Attacker"));
     }
 
     private static void blockers(EffectEvent event, ModeRow.RunParams params) {
-        event.param("blockers", refList(params.byName(), "Blockers", "Blocker"));
+        event.param(EventParam.BLOCKERS, refList(params.byName(), "Blockers", "Blocker"));
     }
 
     private static void loseReason(EffectEvent event, ModeRow.RunParams params) {
-        event.param("reason", textOf(params.get("LoseReason")));
+        event.param(EventParam.REASON, textOf(params.get("LoseReason")));
     }
 }

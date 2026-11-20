@@ -38,11 +38,11 @@ record CounterSlot(RunParamAmount amount, ModeRow.Sign sign) implements ModeRow.
         }
         Object type = params.get("CounterType");
         if (type != null) {
-            event.param("counter_type", CardSpelling.counterName(type));
+            event.param(EventParam.COUNTER_TYPE, CardSpelling.counterName(type));
         }
         Integer read = amount.read(params.byName());
         if (read != null) {
-            event.param("delta", sign.apply(read));
+            event.param(EventParam.DELTA, sign.apply(read));
             return;
         }
         wholeMap(event, params, type == null);
@@ -50,9 +50,9 @@ record CounterSlot(RunParamAmount amount, ModeRow.Sign sign) implements ModeRow.
 
     private void oneType(EffectEvent event, ModeRow.RunParams params) {
         String only = params.counterType();
-        event.param("counter_type", only);
+        event.param(EventParam.COUNTER_TYPE, only);
         Map<String, Integer> total = RunParamValues.counterMapTotals(params.get("CounterMap"));
-        event.param("delta", sign.apply(total.getOrDefault(only, 0)));
+        event.param(EventParam.DELTA, sign.apply(total.getOrDefault(only, 0)));
     }
 
     /** The {@code CounterMap} summed, its type named when it holds one and no other names it. */
@@ -62,8 +62,8 @@ record CounterSlot(RunParamAmount amount, ModeRow.Sign sign) implements ModeRow.
             return;
         }
         if (total.size() == 1 && untyped) {
-            event.param("counter_type", total.keySet().iterator().next());
+            event.param(EventParam.COUNTER_TYPE, total.keySet().iterator().next());
         }
-        event.param("delta", sign.apply(RunParamValues.sumOf(total.values())));
+        event.param(EventParam.DELTA, sign.apply(RunParamValues.sumOf(total.values())));
     }
 }

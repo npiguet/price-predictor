@@ -222,7 +222,7 @@ class CostPayloadTest {
     void aCostPayloadIsItsEventsThenItsCostsAndNoOutcome() {
         PaidCosts costs = PaidCosts.of(null);
         EffectEvent moved = new EffectEvent(EventType.ZONE_CHANGE)
-                .subject("E7").param("from_zone", "hand").param("to_zone", "stack");
+                .subject("E7").param(EventParam.FROM_ZONE, "hand").param(EventParam.TO_ZONE, "stack");
 
         String spell = RecordPayloads.costPayload(java.util.List.of(moved), costs);
         String ability = RecordPayloads.costPayload(java.util.List.of(), costs);

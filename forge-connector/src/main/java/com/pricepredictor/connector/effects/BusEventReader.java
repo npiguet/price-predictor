@@ -352,18 +352,17 @@ abstract class BusEventReader {
             return;
         }
         if (now.blessed() && !before.blessed()) {
-            fileOutcome(commandMark(player, "city_blessing"), null);
+            fileOutcome(commandMark(player, StateFlag.CITY_BLESSING), null);
         }
         if (now.dungeonsCompleted() > before.dungeonsCompleted()) {
-            fileOutcome(commandMark(player, "dungeon_completed"), null);
+            fileOutcome(commandMark(player, StateFlag.DUNGEON_COMPLETED), null);
         }
     }
 
-    private static EffectEvent commandMark(Player player, String flag) {
+    private static EffectEvent commandMark(Player player, StateFlag flag) {
         return new EffectEvent(EventType.STATE_FLAG_CHANGE)
                 .subject(Refs.of(player))
-                .param("flag", flag)
-                .param("value", true);
+                .flag(flag, true);
     }
 
     /** A library shuffled. No named cause: see {@link BusEvents#libraryShuffled}. */
@@ -565,7 +564,7 @@ abstract class BusEventReader {
             return;
         }
         boolean bottom = index > 0 && index == library.size() - 1;
-        moved.param("library_position", bottom ? -1 : index);
+        moved.param(EventParam.LIBRARY_POSITION, bottom ? -1 : index);
         moved.intoLibraryOf(Refs.of(owner));
     }
 
@@ -642,7 +641,7 @@ abstract class BusEventReader {
         }
         return new EffectEvent(EventType.FACE_CHANGE)
                 .subject(Refs.of(card))
-                .param("to_state", now);
+                .param(EventParam.TO_STATE, now);
     }
 
     /**

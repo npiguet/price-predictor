@@ -309,7 +309,7 @@ class EffectRecordTest {
     @Test
     void anEventCarriesItsTypeSubjectsAndParams() {
         String json = new EffectEvent(EventType.DAMAGE_DEALT)
-                .subject("E12").param("amount", 3).param("combat", true)
+                .subject("E12").param(EventParam.AMOUNT, 3).param(EventParam.COMBAT, true)
                 .toJson();
         assertTrue(json.contains("\"type\":\"damage_dealt\""), json);
         assertTrue(json.contains("\"subjects\":[\"E12\"]"), json);
@@ -320,7 +320,7 @@ class EffectRecordTest {
     @Test
     void aNullParamIsOmittedRatherThanWrittenAsNull() {
         String json = new EffectEvent(EventType.ZONE_CHANGE)
-                .subject("E1").param("to_zone", null).toJson();
+                .subject("E1").param(EventParam.TO_ZONE, null).toJson();
         assertTrue(json.contains("\"params\":{}"), json);
     }
 
@@ -343,7 +343,7 @@ class EffectRecordTest {
     void aMapParamRendersAsAnObject() {
         String json = new EffectEvent(EventType.MANA_PRODUCED)
                 .subject("P0")
-                .param("mana_by_color", java.util.Map.of("R", 2))
+                .param(EventParam.MANA_BY_COLOR, java.util.Map.of("R", 2))
                 .toJson();
         assertTrue(json.contains("\"mana_by_color\":{\"R\":2}"), json);
     }

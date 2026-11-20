@@ -23,7 +23,7 @@ final class ValueAndOwnershipApiRules {
 
     static void valueAndOwnershipRules(Map<String, Rule<?>> rules) {
         put(rules, Rule.shaped(EventType.X_CHANGED, null, (event, sa, host, memo) ->
-                        event.param("value", amount(sa, host, "Value", "0"))),
+                        event.param(EventParam.VALUE, amount(sa, host, "Value", "0"))),
                 "ChangeX");
         put(rules, Rule.shaped(EventType.OWNERSHIP_CHANGE,
                         (sa, host) -> ClauseTargets.affectedCards(sa), ValueAndOwnershipApiRules::ownershipChange),
@@ -40,7 +40,7 @@ final class ValueAndOwnershipApiRules {
         if (cards != null) {
             cards.forEach(card -> event.subject(Refs.of(card)));
         }
-        return event.param("owner", ownerOf(sa));
+        return event.param(EventParam.OWNER, ownerOf(sa));
     }
 
     /**

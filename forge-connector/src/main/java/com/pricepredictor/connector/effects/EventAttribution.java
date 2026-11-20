@@ -247,19 +247,19 @@ final class EventAttribution {
      */
     static List<EffectEvent> withCombatSources(List<EffectEvent> events, CombatShape combat) {
         for (EffectEvent event : events) {
-            if (event.type() != EventType.DAMAGE_DEALT || event.params().containsKey("source")) {
+            if (event.type() != EventType.DAMAGE_DEALT || event.hasParam(EventParam.SOURCE)) {
                 continue;
             }
             String source = combatSourceOf(event, combat);
             if (source != null) {
-                event.param("source", source);
+                event.param(EventParam.SOURCE, source);
             }
         }
         return events;
     }
 
     private static String combatSourceOf(EffectEvent event, CombatShape combat) {
-        if (event.params().get("cause") instanceof String named) {
+        if (event.param(EventParam.CAUSE) instanceof String named) {
             return named;
         }
         if (event.subjects().size() != 1) {
@@ -269,7 +269,7 @@ final class EventAttribution {
         if (assigned.size() == 1) {
             return assigned.keySet().iterator().next();
         }
-        Object amount = event.params().get("amount");
+        Object amount = event.param(EventParam.AMOUNT);
         String exact = null;
         for (Map.Entry<String, Integer> entry : assigned.entrySet()) {
             if (amount instanceof Number dealt && entry.getValue() == dealt.intValue()) {

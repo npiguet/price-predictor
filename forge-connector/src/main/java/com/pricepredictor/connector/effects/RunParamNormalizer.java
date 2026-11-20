@@ -77,7 +77,7 @@ final class RunParamNormalizer {
         // every one would be a table nobody could keep true; carrying the mode
         // loses nothing and lets a later stage map more of them.
         if (mode != null) {
-            event.param("mode", mode);
+            event.param(EventParam.MODE, mode);
         }
         if (byName.isEmpty()) {
             return event;
@@ -104,7 +104,7 @@ final class RunParamNormalizer {
     static boolean preventedNothing(EffectEvent event) {
         return event != null
                 && event.type() == EventType.DAMAGE_PREVENTED
-                && event.params().get("amount") instanceof Number amount
+                && event.param(EventParam.AMOUNT) instanceof Number amount
                 && amount.intValue() <= 0;
     }
 

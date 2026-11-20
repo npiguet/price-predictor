@@ -348,15 +348,15 @@ final class ClauseOutcomeRouter {
             Object value = entry.getValue();
             switch (key) {
                 case "subjects" -> addOutcomeSubjects(event, value);
-                case "source" -> event.param("source", outcomeRefOf(value));
-                case "from_zone", "to_zone" -> event.param(key, outcomeZoneOf(value));
+                case "source" -> event.param(EventParam.SOURCE, outcomeRefOf(value));
+                case "from_zone", "to_zone" -> event.paramNamed(key, outcomeZoneOf(value));
                 case "sample" -> {
                     if (value instanceof Card token) {
-                        event.param("token_script_id", CardSpelling.tokenScriptIdOf(token));
-                        event.param("characteristics", tokenCharacteristics(token));
+                        event.param(EventParam.TOKEN_SCRIPT_ID, CardSpelling.tokenScriptIdOf(token));
+                        event.param(EventParam.CHARACTERISTICS, tokenCharacteristics(token));
                     }
                 }
-                default -> event.param(key, inKeyOrder(value));
+                default -> event.paramNamed(key, inKeyOrder(value));
             }
         }
         return event;

@@ -336,7 +336,7 @@ class EventAttributionTest {
 
     private static EffectEvent damage(String subject, int amount) {
         return new EffectEvent(EventType.DAMAGE_DEALT).subject(subject)
-                .param("amount", amount).param("combat", true);
+                .param(EventParam.AMOUNT, amount).param(EventParam.COMBAT, true);
     }
 
     /**
@@ -368,33 +368,33 @@ class EventAttributionTest {
                 damage(player, 5),
                 damage(player, 3).cause(Refs.of(giant))), shape);
 
-        assertEquals(Refs.of(bears), events.get(0).params().get("source"), "the wall's one assigner");
-        assertEquals(Refs.of(elves), events.get(1).params().get("source"), "the exact amount's assigner");
-        assertNull(events.get(2).params().get("source"), "no assigner of 5: none named");
-        assertEquals(Refs.of(giant), events.get(3).params().get("source"), "the bus's own cause");
+        assertEquals(Refs.of(bears), events.get(0).param(EventParam.SOURCE), "the wall's one assigner");
+        assertEquals(Refs.of(elves), events.get(1).param(EventParam.SOURCE), "the exact amount's assigner");
+        assertNull(events.get(2).param(EventParam.SOURCE), "no assigner of 5: none named");
+        assertEquals(Refs.of(giant), events.get(3).param(EventParam.SOURCE), "the bus's own cause");
     }
 
     /** Only damage gets a source; an assignment says nothing about a life change. */
     @Test
     void aProbesOtherEventsGetNoSource() {
         List<EffectEvent> events = EventAttribution.withCombatSources(List.of(
-                new EffectEvent(EventType.LIFE_CHANGE).subject("P1").param("delta", -1)
+                new EffectEvent(EventType.LIFE_CHANGE).subject("P1").param(EventParam.DELTA, -1)
                         .cause("E1")), CombatShape.of(null));
 
-        assertFalse(events.get(0).params().containsKey("source"), events.get(0).toJson());
+        assertFalse(events.get(0).hasParam(EventParam.SOURCE), events.get(0).toJson());
     }
 
     /** A prevention of nothing is no prevention (FR-035); one of something is. */
     @Test
     void aPreventionOfNothingIsRecognised() {
         assertTrue(RunParamNormalizer.preventedNothing(
-                new EffectEvent(EventType.DAMAGE_PREVENTED).param("amount", 0)));
+                new EffectEvent(EventType.DAMAGE_PREVENTED).param(EventParam.AMOUNT, 0)));
         assertFalse(RunParamNormalizer.preventedNothing(
-                new EffectEvent(EventType.DAMAGE_PREVENTED).param("amount", 2)));
+                new EffectEvent(EventType.DAMAGE_PREVENTED).param(EventParam.AMOUNT, 2)));
         assertFalse(RunParamNormalizer.preventedNothing(
                 new EffectEvent(EventType.DAMAGE_PREVENTED)), "an unread amount says nothing");
         assertFalse(RunParamNormalizer.preventedNothing(
-                new EffectEvent(EventType.DAMAGE_DEALT).param("amount", 0)));
+                new EffectEvent(EventType.DAMAGE_DEALT).param(EventParam.AMOUNT, 0)));
     }
 
     /**

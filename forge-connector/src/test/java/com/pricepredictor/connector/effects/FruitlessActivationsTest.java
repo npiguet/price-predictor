@@ -22,11 +22,11 @@ class FruitlessActivationsTest {
     @Test
     void onlyAnEmptyAbilityChangeChangesNothing() {
         EffectEvent empty = new EffectEvent(EventType.ABILITY_CHANGE)
-                .param("abilities", "").param("removed", false);
+                .param(EventParam.ABILITIES, "").param(EventParam.REMOVED, false);
         EffectEvent granted = new EffectEvent(EventType.ABILITY_CHANGE)
-                .param("abilities", "ABPump").param("removed", false);
+                .param(EventParam.ABILITIES, "ABPump").param(EventParam.REMOVED, false);
         EffectEvent removed = new EffectEvent(EventType.ABILITY_CHANGE)
-                .param("abilities", "").param("removed", true);
+                .param(EventParam.ABILITIES, "").param(EventParam.REMOVED, true);
         EffectEvent stats = new EffectEvent(EventType.PT_CHANGE).subject("E1");
 
         assertTrue(FruitlessActivations.changesNothing(List.of()));

@@ -117,9 +117,9 @@ final class BusEvents {
     static EffectEvent cardDamaged(GameEventCardDamaged event, boolean combat) {
         return new EffectEvent(EventType.DAMAGE_DEALT)
                 .subject(Refs.of(event.card()))
-                .param("amount", event.amount())
-                .param("combat", combat)
-                .param("damage_type", damageType(event.type()));
+                .param(EventParam.AMOUNT, event.amount())
+                .param(EventParam.COMBAT, combat)
+                .param(EventParam.DAMAGE_TYPE, damageType(event.type()));
     }
 
     /** A card damage's type as {@code damage_type} spells it, or null when Forge named none. */
@@ -138,20 +138,20 @@ final class BusEvents {
     static EffectEvent playerDamaged(GameEventPlayerDamaged event) {
         return new EffectEvent(EventType.DAMAGE_DEALT)
                 .subject(Refs.of(event.target()))
-                .param("amount", event.amount())
-                .param("combat", event.combat());
+                .param(EventParam.AMOUNT, event.amount())
+                .param(EventParam.COMBAT, event.combat());
     }
 
     static EffectEvent lifeChanged(GameEventPlayerLivesChanged event) {
         return new EffectEvent(EventType.LIFE_CHANGE)
                 .subject(Refs.of(event.player()))
-                .param("delta", event.newLives() - event.oldLives());
+                .param(EventParam.DELTA, event.newLives() - event.oldLives());
     }
 
     static EffectEvent poisoned(GameEventPlayerPoisoned event) {
         return new EffectEvent(EventType.POISON_CHANGE)
                 .subject(Refs.of(event.receiver()))
-                .param("delta", event.amount());
+                .param(EventParam.DELTA, event.amount());
     }
 
     /**
@@ -187,25 +187,25 @@ final class BusEvents {
         }
         return new EffectEvent(EventType.ENERGY_CHANGE)
                 .subject(Refs.of(event.receiver()))
-                .param("delta", event.amount() - event.oldValue());
+                .param(EventParam.DELTA, event.amount() - event.oldValue());
     }
 
     static EffectEvent radiation(GameEventPlayerRadiation event) {
         return new EffectEvent(EventType.RADIATION_CHANGE)
                 .subject(Refs.of(event.receiver()))
-                .param("delta", event.change());
+                .param(EventParam.DELTA, event.change());
     }
 
     static EffectEvent speed(GameEventSpeedChanged event) {
         return new EffectEvent(EventType.SPEED_CHANGED)
                 .subject(Refs.of(event.player()))
-                .param("delta", event.newValue() - event.oldValue());
+                .param(EventParam.DELTA, event.newValue() - event.oldValue());
     }
 
     /** Day and night are a property of the game, so this event names no subject. */
     static EffectEvent dayTime(GameEventDayTimeChanged event) {
         return new EffectEvent(EventType.DAY_NIGHT_CHANGED)
-                .param("to", event.daytime() ? "day" : "night");
+                .param(EventParam.TO, event.daytime() ? "day" : "night");
     }
 
     /**
@@ -306,7 +306,7 @@ final class BusEvents {
             }
             lost.add(new EffectEvent(EventType.PLAYER_LOST)
                     .subject(Refs.of(player))
-                    .param("reason", reason.name()));
+                    .param(EventParam.REASON, reason.name()));
         }
         return lost;
     }
@@ -332,8 +332,8 @@ final class BusEvents {
     static EffectEvent counters(GameEventCardCounters event) {
         return new EffectEvent(EventType.COUNTER_CHANGE)
                 .subject(Refs.of(event.card()))
-                .param("counter_type", CardSpelling.counterName(event.type()))
-                .param("delta", event.newValue() - event.oldValue());
+                .param(EventParam.COUNTER_TYPE, CardSpelling.counterName(event.type()))
+                .param(EventParam.DELTA, event.newValue() - event.oldValue());
     }
 
     /**
@@ -350,7 +350,7 @@ final class BusEvents {
         }
         return new EffectEvent(EventType.PHASED)
                 .subject(Refs.of(event.card()))
-                .param("out", event.phaseState());
+                .param(EventParam.OUT, event.phaseState());
     }
 
     static EffectEvent tapped(GameEventCardTapped event) {
@@ -403,8 +403,8 @@ final class BusEvents {
         }
         return new EffectEvent(EventType.ZONE_CHANGE)
                 .subject(Refs.of(move.card()))
-                .param("from_zone", from)
-                .param("to_zone", to);
+                .param(EventParam.FROM_ZONE, from)
+                .param(EventParam.TO_ZONE, to);
     }
 
     /**
@@ -441,7 +441,7 @@ final class BusEvents {
         }
         return new EffectEvent(type)
                 .subject(Refs.of(move.card().getOwner()))
-                .param("count", 1);
+                .param(EventParam.COUNT, 1);
     }
 
     private static EventType movementType(Move move, Player owner) {
@@ -498,8 +498,8 @@ final class BusEvents {
                 .subject(Refs.of(event.equipment()));
         String host = entityRef(attaching ? event.newTarget() : event.oldEntity());
         return attaching
-                ? built.param("attached_to", host)
-                : built.param("detached_from", host);
+                ? built.param(EventParam.ATTACHED_TO, host)
+                : built.param(EventParam.DETACHED_FROM, host);
     }
 
     /** A card's or a player's ref from its view, or null for neither. */
@@ -530,9 +530,9 @@ final class BusEvents {
         String player = Refs.of(event.player());
         return List.of(
                 new EffectEvent(EventType.CARD_LOOKED_AT)
-                        .subject(player).param("count", count).param("mode", SCRY),
+                        .subject(player).param(EventParam.COUNT, count).param(EventParam.MODE, SCRY),
                 new EffectEvent(EventType.LIBRARY_REORDERED)
-                        .subject(player).param("count", count));
+                        .subject(player).param(EventParam.COUNT, count));
     }
 
     /**
@@ -551,9 +551,9 @@ final class BusEvents {
         String player = Refs.of(event.player());
         List<EffectEvent> events = new ArrayList<>();
         events.add(new EffectEvent(EventType.CARD_LOOKED_AT)
-                .subject(player).param("count", count).param("mode", SURVEIL));
+                .subject(player).param(EventParam.COUNT, count).param(EventParam.MODE, SURVEIL));
         events.add(new EffectEvent(EventType.LIBRARY_REORDERED)
-                .subject(player).param("count", count));
+                .subject(player).param(EventParam.COUNT, count));
         return events;
     }
 }

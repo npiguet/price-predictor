@@ -109,14 +109,14 @@ final class RefsJson {
         int lost = 0;
         for (EffectEvent event : events) {
             if (event.type() == EventType.DICE_ROLLED
-                    && event.params().get("results") instanceof Iterable<?> results) {
+                    && event.param(EventParam.RESULTS) instanceof Iterable<?> results) {
                 for (Object die : results) {
                     if (die instanceof java.util.Map<?, ?> rolled && rolled.get("final") != null) {
                         dice.add(rolled.get("final"));
                     }
                 }
             } else if (event.type() == EventType.COIN_FLIPPED
-                    && event.params().get("results") instanceof Iterable<?> results) {
+                    && event.param(EventParam.RESULTS) instanceof Iterable<?> results) {
                 for (Object flip : results) {
                     String result = String.valueOf(flip);
                     if (result.equals("win") || result.equals("heads")) {

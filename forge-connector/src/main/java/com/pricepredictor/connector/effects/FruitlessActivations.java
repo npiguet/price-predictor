@@ -63,8 +63,8 @@ public final class FruitlessActivations {
     static boolean changesNothing(List<EffectEvent> events) {
         for (EffectEvent event : events) {
             if (!(event.type() == EventType.ABILITY_CHANGE
-                    && "".equals(String.valueOf(event.params().getOrDefault("abilities", "")))
-                    && !Boolean.TRUE.equals(event.params().get("removed")))) {
+                    && "".equals(String.valueOf(event.param(EventParam.ABILITIES) == null ? "" : event.param(EventParam.ABILITIES)))
+                    && !Boolean.TRUE.equals(event.param(EventParam.REMOVED)))) {
                 return false;
             }
         }

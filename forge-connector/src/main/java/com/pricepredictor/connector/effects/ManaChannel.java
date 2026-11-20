@@ -221,7 +221,7 @@ final class ManaChannel implements EventRouter.EventTap {
         }
         return new EffectEvent(EventType.MANA_PRODUCED)
                 .subject(player)
-                .param("mana_by_color", byColor);
+                .param(EventParam.MANA_BY_COLOR, byColor);
     }
 
     /**

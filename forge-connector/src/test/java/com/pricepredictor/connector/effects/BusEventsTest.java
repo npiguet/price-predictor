@@ -55,7 +55,7 @@ class BusEventsTest {
 
         assertNotNull(event);
         assertEquals(EventType.ENERGY_CHANGE, event.type());
-        assertEquals(2, event.params().get("delta"));
+        assertEquals(2, event.param(EventParam.DELTA));
         assertEquals(List.of("P" + player.getId()), event.subjects());
     }
 
@@ -76,7 +76,7 @@ class BusEventsTest {
                 new GameEventPlayerCounters(
                         player, CounterEnumType.ENERGY, 3, 5));
 
-        assertEquals(2, event.params().get("delta"));
+        assertEquals(2, event.param(EventParam.DELTA));
     }
 
     /** A counter with no vocabulary entry is not guessed at. */
@@ -107,15 +107,15 @@ class BusEventsTest {
         EffectEvent event = BusEvents.dayTime(new GameEventDayTimeChanged(false));
 
         assertEquals(EventType.DAY_NIGHT_CHANGED, event.type());
-        assertEquals("night", event.params().get("to"));
+        assertEquals("night", event.param(EventParam.TO));
     }
 
     @Test
     void speedAndRadiationCarryTheirDelta() {
         assertEquals(2, BusEvents.speed(
-                new GameEventSpeedChanged(player, 1, 3)).params().get("delta"));
+                new GameEventSpeedChanged(player, 1, 3)).param(EventParam.DELTA));
         assertEquals(3, BusEvents.radiation(
-                new GameEventPlayerRadiation(player, player, 3)).params().get("delta"));
+                new GameEventPlayerRadiation(player, player, 3)).param(EventParam.DELTA));
     }
 
     /**
@@ -153,9 +153,9 @@ class BusEventsTest {
         EffectEvent surveilled = BusEvents.surveil(new GameEventSurveil(view, 2, 0)).get(0);
 
         assertEquals(EventType.CARD_LOOKED_AT, scried.type());
-        assertEquals("Scry", scried.params().get("mode"));
+        assertEquals("Scry", scried.param(EventParam.MODE));
         assertEquals(EventType.CARD_LOOKED_AT, surveilled.type());
-        assertEquals("Surveil", surveilled.params().get("mode"));
+        assertEquals("Surveil", surveilled.param(EventParam.MODE));
         assertEquals(2, BusEvents.surveil(new GameEventSurveil(view, 2, 0)).size(),
                 "a surveil that milled nothing is a look and a reorder");
     }

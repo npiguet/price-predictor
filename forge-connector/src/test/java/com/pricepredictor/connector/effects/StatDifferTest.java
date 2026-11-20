@@ -130,8 +130,8 @@ class StatDifferTest {
                 game.getNextTimestamp(), null);
 
         EffectEvent event = only(differ.diff(bears), EventType.KEYWORD_CHANGE);
-        assertEquals(List.of("flying", "trample", "vigilance"), event.params().get("keywords"));
-        assertEquals(false, event.params().get("removed"));
+        assertEquals(List.of("flying", "trample", "vigilance"), event.param(EventParam.KEYWORDS));
+        assertEquals(false, event.param(EventParam.REMOVED));
     }
 
     /** A second instance of a stacking keyword is a keyword gained (C2 #7). */
@@ -147,7 +147,7 @@ class StatDifferTest {
                 game.getNextTimestamp(), null);
 
         EffectEvent event = only(differ.diff(bears), EventType.KEYWORD_CHANGE);
-        assertEquals(List.of("bushido:1"), event.params().get("keywords"));
+        assertEquals(List.of("bushido:1"), event.param(EventParam.KEYWORDS));
     }
 
     /** A hidden keyword is a keyword change of its own, flagged hidden (X1 #10). */
@@ -166,8 +166,8 @@ class StatDifferTest {
 
         bears.removeHiddenExtrinsicKeywords(timestamp, 0);
         EffectEvent lost = only(differ.diff(bears), EventType.KEYWORD_CHANGE);
-        assertEquals(true, lost.params().get("removed"));
-        assertEquals(true, lost.params().get("hidden"));
+        assertEquals(true, lost.param(EventParam.REMOVED));
+        assertEquals(true, lost.param(EventParam.HIDDEN));
     }
 
     /**
@@ -185,8 +185,8 @@ class StatDifferTest {
         game.getAction().checkStaticAbilities();
 
         EffectEvent gained = only(differ.diff(bears), EventType.ABILITY_CHANGE);
-        assertEquals(false, gained.params().get("removed"));
-        assertTrue(String.valueOf(gained.params().get("abilities"))
+        assertEquals(false, gained.param(EventParam.REMOVED));
+        assertTrue(String.valueOf(gained.param(EventParam.ABILITIES))
                 .startsWith("(cardsfolder/c/cryptolith_rite.txt)"), gained.params().toString());
 
         game.getAction().moveToGraveyard(rite, null);
@@ -264,7 +264,7 @@ class StatDifferTest {
         bears.addTempController(thief, game.getNextTimestamp());
 
         EffectEvent event = only(differ.diff(bears), EventType.CONTROL_CHANGE);
-        assertEquals(Refs.of(thief), event.params().get("controller"));
+        assertEquals(Refs.of(thief), event.param(EventParam.CONTROLLER));
     }
 
     /** An Animate's Name$ is a name change, naming the name now (follow-up item 10). */
@@ -295,8 +295,8 @@ class StatDifferTest {
                 new forge.card.mana.ManaCostParser("5 G")), false, game.getNextTimestamp(), 0L);
 
         EffectEvent event = only(differ.diff(bears), EventType.MANA_COST_CHANGE);
-        assertEquals(Map.of("generic", 5, "G", 1), event.params().get("mana_cost"));
-        assertEquals(6, event.params().get("mana_value"));
+        assertEquals(Map.of("generic", 5, "G", 1), event.param(EventParam.MANA_COST));
+        assertEquals(6, event.param(EventParam.MANA_VALUE));
     }
 
     /** A transform's new name is the face change's, not a name change of its own. */

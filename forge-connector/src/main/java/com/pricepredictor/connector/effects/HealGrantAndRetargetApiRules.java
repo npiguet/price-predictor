@@ -63,7 +63,7 @@ final class HealGrantAndRetargetApiRules {
         String layers = sa.getParamOrDefault("StaticAbilities", "");
         for (Card card : host.getGame().getCardsIn(ZoneType.Command)) {
             if (card.isImmutable() && !before.contains(card.getId())) {
-                events.add(new EffectEvent(EventType.CONTINUOUS_EFFECT_CREATED).param("layers", layers));
+                events.add(new EffectEvent(EventType.CONTINUOUS_EFFECT_CREATED).param(EventParam.LAYERS, layers));
             }
         }
         return events;
@@ -91,7 +91,7 @@ final class HealGrantAndRetargetApiRules {
             if (removed > 0) {
                 events.add(new EffectEvent(EventType.DAMAGE_HEALED)
                         .subject(Refs.of(card))
-                        .param("amount", removed));
+                        .param(EventParam.AMOUNT, removed));
             }
         });
         return events;
@@ -140,8 +140,8 @@ final class HealGrantAndRetargetApiRules {
             stillInPlay(event, host.getGame(), animated);
         }
         return event
-                .param("abilities", String.join(",", granted))
-                .param("removed", sa.hasParam("RemoveAllAbilities"));
+                .param(EventParam.ABILITIES, String.join(",", granted))
+                .param(EventParam.REMOVED, sa.hasParam("RemoveAllAbilities"));
     }
 
     /** The trait names the animation's {@link #GRANT_LISTS} hold, in their order. */
@@ -229,7 +229,7 @@ final class HealGrantAndRetargetApiRules {
                 addTargets(changed, targets);
             }
         }
-        return event.param("targets", targets);
+        return event.param(EventParam.TARGETS, targets);
     }
 
     /** What {@code changed} targets now, as refs, onto {@code targets}. */

@@ -82,7 +82,7 @@ class UnannouncedOutcomesTest {
         /** The {@code state_flag_change} events naming {@code flag}. */
         List<EffectEvent> flagged(String flag) {
             return of(EventType.STATE_FLAG_CHANGE).stream()
-                    .filter(e -> flag.equals(e.params().get("flag")))
+                    .filter(e -> flag.equals(e.param(EventParam.FLAG)))
                     .toList();
         }
     }
@@ -115,9 +115,9 @@ class UnannouncedOutcomesTest {
         game.getAction().moveToLibrary(bottom, -1, null);
         game.getAction().moveToLibrary(second, 1, null);
 
-        assertEquals(0, capture.moveOf(top).params().get("library_position"));
-        assertEquals(-1, capture.moveOf(bottom).params().get("library_position"));
-        assertEquals(1, capture.moveOf(second).params().get("library_position"));
+        assertEquals(0, capture.moveOf(top).param(EventParam.LIBRARY_POSITION));
+        assertEquals(-1, capture.moveOf(bottom).param(EventParam.LIBRARY_POSITION));
+        assertEquals(1, capture.moveOf(second).param(EventParam.LIBRARY_POSITION));
     }
 
     /** A move anywhere else names no position. */
@@ -130,7 +130,7 @@ class UnannouncedOutcomesTest {
 
         game.getAction().moveTo(ZoneType.Graveyard, bears, null, null);
 
-        assertFalse(capture.moveOf(bears).params().containsKey("library_position"));
+        assertFalse(capture.moveOf(bears).hasParam(EventParam.LIBRARY_POSITION));
     }
 
     // ── a player's command-zone marks ───────────────────────────────────
@@ -147,7 +147,7 @@ class UnannouncedOutcomesTest {
         List<EffectEvent> blessed = capture.flagged("city_blessing");
         assertEquals(1, blessed.size(), capture.events.toString());
         assertEquals(List.of(Refs.of(a)), blessed.get(0).subjects());
-        assertEquals(true, blessed.get(0).params().get("value"));
+        assertEquals(true, blessed.get(0).param(EventParam.VALUE));
     }
 
     @Test
@@ -195,8 +195,8 @@ class UnannouncedOutcomesTest {
         assertNotNull(event);
         assertEquals(EventType.ABILITY_CHANGE, event.type());
         assertEquals(List.of(Refs.of(den)), event.subjects());
-        assertEquals("TrigAttack", event.params().get("abilities"));
-        assertEquals(false, event.params().get("removed"));
+        assertEquals("TrigAttack", event.param(EventParam.ABILITIES));
+        assertEquals(false, event.param(EventParam.REMOVED));
     }
 
     /** A search of one's own library is a look at it named for the search. */
@@ -215,8 +215,8 @@ class UnannouncedOutcomesTest {
         assertNotNull(event);
         assertEquals(EventType.CARD_LOOKED_AT, event.type());
         assertEquals(List.of(Refs.of(a)), event.subjects());
-        assertEquals("SearchedLibrary", event.params().get("mode"));
-        assertEquals("library", event.params().get("from_zone"));
+        assertEquals("SearchedLibrary", event.param(EventParam.MODE));
+        assertEquals("library", event.param(EventParam.FROM_ZONE));
     }
 
     /** A zone change that searched nothing and put nobody into combat says nothing. */
@@ -259,7 +259,7 @@ class UnannouncedOutcomesTest {
 
         assertNotNull(event);
         assertEquals(EventType.STATE_FLAG_CHANGE, event.type());
-        assertEquals("entered_attacking", event.params().get("flag"));
+        assertEquals("entered_attacking", event.param(EventParam.FLAG));
         assertEquals(List.of(Refs.of(made)), event.subjects());
     }
 
@@ -285,7 +285,7 @@ class UnannouncedOutcomesTest {
         assertNotNull(event);
         assertEquals(EventType.BECAME_BLOCKED, event.type());
         assertEquals(List.of(Refs.of(attacker)), event.subjects());
-        assertEquals(List.of(), event.params().get("blockers"));
+        assertEquals(List.of(), event.param(EventParam.BLOCKERS));
     }
 
     /** A clause making a creature block an attacker: the attacker became blocked, by it. */
@@ -312,7 +312,7 @@ class UnannouncedOutcomesTest {
         assertNotNull(event);
         assertEquals(EventType.BECAME_BLOCKED, event.type());
         assertEquals(List.of(Refs.of(attacker)), event.subjects());
-        assertEquals(List.of(Refs.of(blocker)), event.params().get("blockers"));
+        assertEquals(List.of(Refs.of(blocker)), event.param(EventParam.BLOCKERS));
     }
 
     @Test
@@ -328,8 +328,8 @@ class UnannouncedOutcomesTest {
         EffectEvent event = TestCards.onlyEvent(observed);
 
         assertNotNull(event);
-        assertEquals("class_level", event.params().get("flag"));
-        assertEquals(sorcerer.getClassLevel(), event.params().get("value"));
+        assertEquals("class_level", event.param(EventParam.FLAG));
+        assertEquals(sorcerer.getClassLevel(), event.param(EventParam.VALUE));
         assertEquals(List.of(Refs.of(sorcerer)), event.subjects());
     }
 
@@ -345,7 +345,7 @@ class UnannouncedOutcomesTest {
         EffectEvent event = TestCards.onlyEvent(observed);
 
         assertNotNull(event);
-        assertEquals("door_unlocked", event.params().get("flag"));
+        assertEquals("door_unlocked", event.param(EventParam.FLAG));
         assertEquals(List.of(Refs.of(room)), event.subjects());
     }
 
@@ -364,7 +364,7 @@ class UnannouncedOutcomesTest {
         EffectEvent event = TestCards.onlyEvent(observed);
 
         assertNotNull(event);
-        assertEquals("paired", event.params().get("flag"));
+        assertEquals("paired", event.param(EventParam.FLAG));
         assertEquals(List.of(Refs.of(paladin), Refs.of(bears)).stream().sorted().toList(),
                 event.subjects().stream().sorted().toList());
     }
@@ -382,7 +382,7 @@ class UnannouncedOutcomesTest {
         EffectEvent event = TestCards.onlyEvent(observed);
 
         assertNotNull(event);
-        assertEquals("merged", event.params().get("flag"));
+        assertEquals("merged", event.param(EventParam.FLAG));
         assertEquals(List.of(Refs.of(bears)), event.subjects());
     }
 }

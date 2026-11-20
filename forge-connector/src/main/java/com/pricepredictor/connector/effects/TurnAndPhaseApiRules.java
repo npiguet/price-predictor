@@ -40,7 +40,7 @@ final class TurnAndPhaseApiRules {
     /** How many turns are added or skipped, for each player affected. */
     private static EffectEvent turns(
             EffectEvent event, SpellAbility sa, Card host, List<Player> players) {
-        return withSubjects(event.param("count", amount(sa, host, "NumTurns", "1")), players);
+        return withSubjects(event.param(EventParam.COUNT, amount(sa, host, "NumTurns", "1")), players);
     }
 
     /** The phase added, how many times, for the activating player. */
@@ -48,8 +48,8 @@ final class TurnAndPhaseApiRules {
             EffectEvent event, SpellAbility sa, Card host, Object memo) {
         return event
                 .subject(playerOf(sa))
-                .param("phase", sa.getParamOrDefault("ExtraPhase", "?"))
-                .param("count", amount(sa, host, "NumPhases", "1"));
+                .param(EventParam.PHASE, sa.getParamOrDefault("ExtraPhase", "?"))
+                .param(EventParam.COUNT, amount(sa, host, "NumPhases", "1"));
     }
 
     /**
@@ -65,7 +65,7 @@ final class TurnAndPhaseApiRules {
     private static EffectEvent skippedPhase(
             EffectEvent event, SpellAbility sa, Card host, List<Player> players) {
         String named = sa.hasParam("Phase") ? sa.getParam("Phase") : sa.getParam("Step");
-        return withSubjects(event.param("phase", phaseSpelling(named)), players);
+        return withSubjects(event.param(EventParam.PHASE, phaseSpelling(named)), players);
     }
 
     /** A script's phase or step as the snapshot's {@code phase}, members of a range joined by commas. */

@@ -396,6 +396,21 @@ class TestEveryDeclaredTypeIsReachable:
             "source -- its wiring may have been silently removed"
         )
 
+def _written_parameters(root: Path) -> set[str]:
+    """The keys ``EventParam.java`` (under ``root``) declares: the one table
+    of every parameter name the connector writes."""
+    table = (root / "EventParam.java").read_text(encoding="utf-8")
+    return set(re.findall(r'^\s*[A-Z_]+\("([a-z_]+)"\)[,;]', table, re.MULTILINE))
+
+
+def _bare_parameter_keys(root: Path) -> list[str]:
+    """Every ``.param("key"`` or ``.paramNamed("key"`` in the connector: a
+    key spelled as a string literal outside the table."""
+    return [f"{path.name}: {key}" for path in sorted(root.rglob("*.java"))
+            for key in re.findall(r'\.param(?:Named)?\(\s*"([^"]*)"',
+                                  path.read_text(encoding="utf-8"))]
+
+
 class TestTheJavaVocabularyBothWays:
     """The writer's vocabulary and the reader's are one list. A type or a
     parameter the connector writes and Python lacks fails every record that
@@ -413,13 +428,22 @@ class TestTheJavaVocabularyBothWays:
         assert python - java <= set(KNOWN_UNEMITTED)
 
     def test_every_parameter_the_connector_writes_is_one_python_reads(self):
-        """Read off every ``.param("name", …)`` call in the connector: no call
-        names a parameter outside ``EVENT_PARAMS`` and the provenance pair.
-        Which type each name rides cannot be read off the source; that was
-        checked by hand against the contract's tables."""
-        root = _CONNECTOR_EFFECTS.parent
-        written = {name for path in root.rglob("*.java")
-                   for name in re.findall(r'\.param\("([a-z_]+)"',
-                                          path.read_text(encoding="utf-8"))}
+        """Read off ``EventParam``, the one table of the keys the connector
+        writes: none names a parameter outside ``EVENT_PARAMS`` and the
+        provenance pair. Which type each name rides cannot be read off the
+        source; that was checked by hand against the contract's tables."""
+        written = _written_parameters(_CONNECTOR_EFFECTS)
         known = {name for names in EVENT_PARAMS.values() for name in names}
         assert written and not written - known - Event.PROVENANCE_PARAMS
+
+    def test_no_connector_call_spells_a_parameter_key_as_a_bare_string(self):
+        """A key written as ``.param("name", ...)`` skips the table above, so
+        the check above would never see it."""
+        assert _bare_parameter_keys(_CONNECTOR_EFFECTS) == []
+
+    def test_the_scanners_catch_a_bare_key_and_read_the_table(self, tmp_path):
+        table = '    AMOUNT("amount"),\n    TO_ZONE("to_zone");\n'
+        (tmp_path / "EventParam.java").write_text(table)
+        (tmp_path / "Other.java").write_text('e.param("not_a_key", 1).paramNamed( "x", 2)')
+        assert _written_parameters(tmp_path) == {"amount", "to_zone"}
+        assert _bare_parameter_keys(tmp_path) == ["Other.java: not_a_key", "Other.java: x"]

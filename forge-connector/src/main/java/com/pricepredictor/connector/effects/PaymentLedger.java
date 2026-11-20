@@ -41,7 +41,7 @@ final class PaymentLedger {
     /** Keep {@code event} if it is a counter or a life change made while paying. */
     void note(EffectEvent event) {
         SpellAbility paid = payingNow();
-        if (paid == null || !(event.params().get("delta") instanceof Integer delta)) {
+        if (paid == null || !(event.param(EventParam.DELTA) instanceof Integer delta)) {
             return;
         }
         if (payments.size() > CAP) {
@@ -49,7 +49,7 @@ final class PaymentLedger {
         }
         if (event.type() == EventType.COUNTER_CHANGE) {
             movedBy(paid).counters
-                    .merge(String.valueOf(event.params().get("counter_type")), delta, Integer::sum);
+                    .merge(String.valueOf(event.param(EventParam.COUNTER_TYPE)), delta, Integer::sum);
         } else if (event.type() == EventType.LIFE_CHANGE && delta < 0) {
             movedBy(paid).life -= delta;
         }

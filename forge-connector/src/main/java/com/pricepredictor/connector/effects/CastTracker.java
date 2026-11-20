@@ -173,8 +173,8 @@ final class CastTracker {
         }
         EffectEvent moved = new EffectEvent(EventType.ZONE_CHANGE)
                 .subject(Refs.of(host))
-                .param("from_zone", from)
-                .param("to_zone", CardSpelling.zoneName(ZoneType.Stack));
+                .param(EventParam.FROM_ZONE, from)
+                .param(EventParam.TO_ZONE, CardSpelling.zoneName(ZoneType.Stack));
         return List.of(EventAttribution.stampAt(moved, ability, null, null));
     }
 

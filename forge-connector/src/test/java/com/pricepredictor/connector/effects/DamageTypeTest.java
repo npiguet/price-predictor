@@ -45,7 +45,7 @@ class DamageTypeTest {
         for (DamageType type : DamageType.values()) {
             EffectEvent event = BusEvents.cardDamaged(new GameEventCardDamaged(
                     CardView.get(bears), CardView.get(bears), 2, type), false);
-            spelled.put(type, (String) event.params().get("damage_type"));
+            spelled.put(type, (String) event.param(EventParam.DAMAGE_TYPE));
         }
         assertEquals(Map.of(
                 DamageType.Normal, "normal",

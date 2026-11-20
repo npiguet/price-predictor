@@ -50,7 +50,7 @@ class ClauseOutcomeEventsTest {
 
         assertEquals(1, events.size(), events.toString());
         assertEquals(EventType.PHASE_SKIPPED, events.get(0).type());
-        assertEquals("draw", events.get(0).params().get("phase"));
+        assertEquals("draw", events.get(0).param(EventParam.PHASE));
         assertEquals(List.of(Refs.of(board.you)), events.get(0).subjects());
     }
 
@@ -64,7 +64,7 @@ class ClauseOutcomeEventsTest {
 
         List<EffectEvent> events = resolved(skip);
 
-        assertEquals("main1,main2", events.get(0).params().get("phase"));
+        assertEquals("main1,main2", events.get(0).param(EventParam.PHASE));
     }
 
     // ── continuous_effect_created ───────────────────────────────────────
@@ -106,7 +106,7 @@ class ClauseOutcomeEventsTest {
         assertEquals(2, events.size(), events.toString());
         for (EffectEvent event : events) {
             assertEquals(EventType.CONTINUOUS_EFFECT_CREATED, event.type());
-            assertEquals("DBCantBlock", event.params().get("layers"));
+            assertEquals("DBCantBlock", event.param(EventParam.LAYERS));
         }
     }
 
@@ -132,7 +132,7 @@ class ClauseOutcomeEventsTest {
         assertEquals(1, events.size(), events.toString());
         assertEquals(EventType.DAMAGE_HEALED, events.get(0).type());
         assertEquals(List.of(Refs.of(wolverine)), events.get(0).subjects());
-        assertEquals(2, events.get(0).params().get("amount"));
+        assertEquals(2, events.get(0).param(EventParam.AMOUNT));
     }
 
     /** A heal of an undamaged permanent removed nothing and writes nothing. */
@@ -164,7 +164,7 @@ class ClauseOutcomeEventsTest {
         assertEquals(board.you, theirs.getOwner(), "the premise: the card changed hands");
         assertEquals(1, events.size(), events.toString());
         assertEquals(List.of(Refs.of(theirs)), events.get(0).subjects());
-        assertEquals(Refs.of(board.you), events.get(0).params().get("owner"));
+        assertEquals(Refs.of(board.you), events.get(0).param(EventParam.OWNER));
     }
 
     // ── targets_changed ─────────────────────────────────────────────────
@@ -189,6 +189,6 @@ class ClauseOutcomeEventsTest {
 
         assertEquals(EventType.TARGETS_CHANGED, event.type());
         assertEquals(List.of(Refs.of(bolt.getHostCard())), event.subjects());
-        assertEquals(List.of(Refs.of(bears)), event.params().get("targets"));
+        assertEquals(List.of(Refs.of(bears)), event.param(EventParam.TARGETS));
     }
 }

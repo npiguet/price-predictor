@@ -1183,10 +1183,10 @@ class SnapshotBuilderTest {
         /** The resolving ability's die results and coin flips, read off its events. */
         @Test
         void randomResultsAreTheResolutionsDiceAndCoins() {
-            EffectEvent dice = new EffectEvent(EventType.DICE_ROLLED).param("results", List.of(
+            EffectEvent dice = new EffectEvent(EventType.DICE_ROLLED).param(EventParam.RESULTS, List.of(
                     Map.of("natural", 3, "final", 4), Map.of("natural", 6, "final", 6)));
             EffectEvent coins = new EffectEvent(EventType.COIN_FLIPPED)
-                    .param("results", List.of("win", "loss", "loss"));
+                    .param(EventParam.RESULTS, List.of("win", "loss", "loss"));
 
             Map<String, Object> random = RecordLines.asMap(RecordLines.parse(
                     RefsJson.renderHalf(null, List.of(dice, coins), null, List.of(), null, List.of())).get("random"));

@@ -214,23 +214,23 @@ class TurnActionRecordTest {
     @Test
     void onlyTheEventsAnActionIsMadeOfAreTaken() {
         assertEquals(TurnActionSubkind.PHASING, TurnActionWindow.actionOf(PhaseType.UNTAP,
-                new EffectEvent(EventType.PHASED).subject("E1").param("out", true)));
+                new EffectEvent(EventType.PHASED).subject("E1").param(EventParam.OUT, true)));
         assertNull(TurnActionWindow.actionOf(PhaseType.UNTAP,
                 new EffectEvent(EventType.PT_CHANGE).subject("E1")));
         assertNull(TurnActionWindow.actionOf(PhaseType.UNTAP,
                 new EffectEvent(EventType.TAPPED).subject("E1")));
         assertNull(TurnActionWindow.actionOf(PhaseType.MAIN1,
                 new EffectEvent(EventType.COUNTER_CHANGE).subject("E1")
-                        .param("counter_type", "P1P1").param("delta", 1)));
+                        .param(EventParam.COUNTER_TYPE, "P1P1").param(EventParam.DELTA, 1)));
         assertNull(TurnActionWindow.actionOf(PhaseType.DRAW,
                 new EffectEvent(EventType.ZONE_CHANGE).subject("E1")
-                        .param("from_zone", "hand").param("to_zone", "graveyard")));
+                        .param(EventParam.FROM_ZONE, "hand").param(EventParam.TO_ZONE, "graveyard")));
         assertEquals(TurnActionSubkind.DRAW, TurnActionWindow.actionOf(PhaseType.DRAW,
                 new EffectEvent(EventType.ZONE_CHANGE).subject("E1")
-                        .param("from_zone", "graveyard").param("to_zone", "hand")));
+                        .param(EventParam.FROM_ZONE, "graveyard").param(EventParam.TO_ZONE, "hand")));
         assertEquals(TurnActionSubkind.CLEANUP_DISCARD, TurnActionWindow.actionOf(
                 PhaseType.CLEANUP, new EffectEvent(EventType.ZONE_CHANGE).subject("E1")
-                        .param("from_zone", "hand").param("to_zone", "exile")));
+                        .param(EventParam.FROM_ZONE, "hand").param(EventParam.TO_ZONE, "exile")));
         assertNull(TurnActionWindow.actionOf(PhaseType.UPKEEP,
                 new EffectEvent(EventType.UNTAPPED).subject("E1")));
     }

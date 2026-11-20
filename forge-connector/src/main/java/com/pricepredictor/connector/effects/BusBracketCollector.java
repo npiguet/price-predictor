@@ -737,7 +737,7 @@ public final class BusBracketCollector extends BusEventReader {
             // permanent the held resolution killed or changed: part of that
             // check's moves, as the Aura's own move to the graveyard is,
             // filed with the half that names the permanent it left.
-            Object host = event.params().get("detached_from");
+            Object host = event.param(EventParam.DETACHED_FROM);
             heldResolution.fileConsequence(
                     event, host instanceof String left ? left : event.subjects().get(0));
             return;

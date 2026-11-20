@@ -97,12 +97,12 @@ final class StatDiffer {
         addKeywordEvents(events, subject, before.hiddenKeywords(), now.hiddenKeywords(), true);
         addAbilityEvents(events, subject, card, before.abilities(), now.abilities());
         addSetChangeEvent(events, subject, EventType.TYPE_CHANGE,
-                "types_added", "types_removed", before.types(), now.types());
+                EventParam.TYPES_ADDED, EventParam.TYPES_REMOVED, before.types(), now.types());
         // colors_removed is this side's addition to the type's normalization:
         // the head has a colors_lost field and the event carried no way to say
         // a colour went away.
         addSetChangeEvent(events, subject, EventType.COLOR_CHANGE,
-                "colors", "colors_removed", before.colors(), now.colors());
+                EventParam.COLORS, EventParam.COLORS_REMOVED, before.colors(), now.colors());
         if (control != null) {
             events.add(control);
         }
@@ -112,13 +112,13 @@ final class StatDiffer {
         if (ownChange && !java.util.Objects.equals(before.name(), now.name())) {
             events.add(new EffectEvent(EventType.NAME_CHANGE)
                     .subject(subject)
-                    .param("name", now.name()));
+                    .param(EventParam.NAME, now.name()));
         }
         if (ownChange && !java.util.Objects.equals(before.manaCost(), now.manaCost())) {
             events.add(new EffectEvent(EventType.MANA_COST_CHANGE)
                     .subject(subject)
-                    .param("mana_cost", CardFacts.manaCostSymbols(card.getManaCost()))
-                    .param("mana_value", now.manaValue()));
+                    .param(EventParam.MANA_COST, CardFacts.manaCostSymbols(card.getManaCost()))
+                    .param(EventParam.MANA_VALUE, now.manaValue()));
         }
         return events;
     }
@@ -133,20 +133,20 @@ final class StatDiffer {
         }
         EffectEvent pt = new EffectEvent(EventType.PT_CHANGE)
                 .subject(Refs.of(card))
-                .param("power_delta", now.power() - before.power())
-                .param("toughness_delta", now.toughness() - before.toughness());
+                .param(EventParam.POWER_DELTA, now.power() - before.power())
+                .param(EventParam.TOUGHNESS_DELTA, now.toughness() - before.toughness());
         // The base a setting effect gave it (layer 7b, or a CDA's 7a), as
         // the snapshot's base_pt spells it: without it a 0/0 artifact
         // animated into a 5/5 reads the same as a 0/0 creature pumped
         // +5/+5. Only on a creature, as base_pt is.
         if (setsBase) {
-            pt.param("set_pt", List.of(now.basePower(), now.baseToughness()));
+            pt.param(EventParam.SET_PT, List.of(now.basePower(), now.baseToughness()));
         }
         return pt;
     }
 
     private static EffectEvent controlChangeEvent(String subject, String controller) {
-        return new EffectEvent(EventType.CONTROL_CHANGE).subject(subject).param("controller", controller);
+        return new EffectEvent(EventType.CONTROL_CHANGE).subject(subject).param(EventParam.CONTROLLER, controller);
     }
 
     /**
@@ -224,10 +224,10 @@ final class StatDiffer {
             String subject, List<String> keywords, boolean removed, boolean hidden) {
         EffectEvent event = new EffectEvent(EventType.KEYWORD_CHANGE)
                 .subject(subject)
-                .param("keywords", keywords)
-                .param("removed", removed);
+                .param(EventParam.KEYWORDS, keywords)
+                .param(EventParam.REMOVED, removed);
         if (hidden) {
-            event.param("hidden", true);
+            event.param(EventParam.HIDDEN, true);
         }
         return event;
     }
@@ -248,14 +248,14 @@ final class StatDiffer {
         if (!gained.isEmpty()) {
             events.add(new EffectEvent(EventType.ABILITY_CHANGE)
                     .subject(subject)
-                    .param("abilities", String.join(",", namesOf(card, gained)))
-                    .param("removed", false));
+                    .param(EventParam.ABILITIES, String.join(",", namesOf(card, gained)))
+                    .param(EventParam.REMOVED, false));
         }
         if (!lost.isEmpty()) {
             events.add(new EffectEvent(EventType.ABILITY_CHANGE)
                     .subject(subject)
-                    .param("abilities", "")
-                    .param("removed", true));
+                    .param(EventParam.ABILITIES, "")
+                    .param(EventParam.REMOVED, true));
         }
     }
 
@@ -278,7 +278,7 @@ final class StatDiffer {
     /** One event naming what joined and what left a set, or none when neither did. */
     private static void addSetChangeEvent(
             List<EffectEvent> events, String subject, EventType type,
-            String addedParam, String removedParam,
+            EventParam addedParam, EventParam removedParam,
             Set<String> before, Set<String> now) {
         Set<String> added = new LinkedHashSet<>(now);
         added.removeAll(before);

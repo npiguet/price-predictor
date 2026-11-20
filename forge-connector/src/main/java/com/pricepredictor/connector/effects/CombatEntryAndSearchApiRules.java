@@ -79,14 +79,14 @@ final class CombatEntryAndSearchApiRules {
         if (before == null || combat == null) {
             return null;
         }
-        EffectEvent attacking = joined(combat.getAttackers(), before, "entered_attacking");
+        EffectEvent attacking = joined(combat.getAttackers(), before, StateFlag.ENTERED_ATTACKING);
         return attacking != null ? attacking
-                : joined(combat.getAllBlockers(), before, "entered_blocking");
+                : joined(combat.getAllBlockers(), before, StateFlag.ENTERED_BLOCKING);
     }
 
-    private static EffectEvent joined(Iterable<Card> now, Set<Integer> before, String flag) {
+    private static EffectEvent joined(Iterable<Card> now, Set<Integer> before, StateFlag flag) {
         EffectEvent event = new EffectEvent(EventType.STATE_FLAG_CHANGE)
-                .param("flag", flag).param("value", true);
+                .flag(flag, true);
         for (Card card : now) {
             if (!before.contains(card.getId())) {
                 event.subject(Refs.of(card));
@@ -116,8 +116,8 @@ final class CombatEntryAndSearchApiRules {
             return entered;
         }
         EffectEvent searched = new EffectEvent(EventType.CARD_LOOKED_AT)
-                .param("from_zone", CardSpelling.zoneName(ZoneType.Library))
-                .param("mode", BusEvents.SEARCHED_LIBRARY);
+                .param(EventParam.FROM_ZONE, CardSpelling.zoneName(ZoneType.Library))
+                .param(EventParam.MODE, BusEvents.SEARCHED_LIBRARY);
         before.searches().forEach((player, count) -> {
             if (player.getLibrarySearched() > count) {
                 searched.subject(Refs.of(player));
@@ -158,7 +158,7 @@ final class CombatEntryAndSearchApiRules {
                 addBlockers(combat.getBlockers(attacker), blockers);
             }
         }
-        return event.subjects().isEmpty() ? null : event.param("blockers", blockers);
+        return event.subjects().isEmpty() ? null : event.param(EventParam.BLOCKERS, blockers);
     }
 
     /** Each of {@code blocking}'s refs not already in {@code blockers}, onto it, in order. */

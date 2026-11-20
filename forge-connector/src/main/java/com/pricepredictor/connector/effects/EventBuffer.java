@@ -126,7 +126,7 @@ final class EventBuffer {
         for (EffectEvent earlier : events) {
             if (earlier.type() == EventType.ZONE_CHANGE
                     && shuffled.contains(earlier.intoLibraryOf())) {
-                earlier.params().remove("library_position");
+                earlier.removeParam(EventParam.LIBRARY_POSITION);
             }
         }
     }

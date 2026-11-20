@@ -138,19 +138,19 @@ final class TurnActionWindow {
             case CLEANUP -> type == EventType.CARD_DISCARDED || movedFrom(event, "hand")
                     ? TurnActionSubkind.CLEANUP_DISCARD : null;
             case MAIN1 -> type == EventType.COUNTER_CHANGE
-                    && "LORE".equals(event.params().get("counter_type"))
+                    && "LORE".equals(event.param(EventParam.COUNTER_TYPE))
                     ? TurnActionSubkind.LORE_COUNTER : null;
             default -> null;
         };
     }
 
     private static boolean movedTo(EffectEvent event, String zone) {
-        return event.type() == EventType.ZONE_CHANGE && zone.equals(event.params().get("to_zone"));
+        return event.type() == EventType.ZONE_CHANGE && zone.equals(event.param(EventParam.TO_ZONE));
     }
 
     private static boolean movedFrom(EffectEvent event, String zone) {
         return event.type() == EventType.ZONE_CHANGE
-                && zone.equals(event.params().get("from_zone"));
+                && zone.equals(event.param(EventParam.FROM_ZONE));
     }
 
     /** Write one record per action the window took events for, and close it. */

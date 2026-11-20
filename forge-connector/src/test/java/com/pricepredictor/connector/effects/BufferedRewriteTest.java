@@ -54,7 +54,7 @@ class BufferedRewriteTest {
     }
 
     private static EffectEvent drawn() {
-        return new EffectEvent(EventType.CARD_DRAWN).subject("P1").param("count", 1);
+        return new EffectEvent(EventType.CARD_DRAWN).subject("P1").param(EventParam.COUNT, 1);
     }
 
     private static Map<String, Object> rewrite(String line) {

@@ -39,8 +39,7 @@ final class PermanentStateApiRules {
                                 ? null
                                 : new EffectEvent(EventType.STATE_FLAG_CHANGE)
                                         .subject(Refs.of(host))
-                                        .param("flag", "class_level")
-                                        .param("value", host.getClassLevel())),
+                                        .flag(StateFlag.CLASS_LEVEL, host.getClassLevel())),
                 "ClassLevelUp");
         put(rules, Rule.one(EventType.STATE_FLAG_CHANGE, PermanentStateApiRules::unlockedDoors,
                         (sa, host, before) -> doorsUnlocked(host, before)),
@@ -66,7 +65,7 @@ final class PermanentStateApiRules {
         if (before == null) {
             return null;
         }
-        return flagged(host, "door_unlocked",
+        return flagged(host, StateFlag.DOOR_UNLOCKED,
                 card -> doors(card) > before.getOrDefault(card.getId(), 0));
     }
 
@@ -74,9 +73,9 @@ final class PermanentStateApiRules {
      * {@code state_flag_change} {@code flag} on every permanent on the
      * battlefield that {@code changed} holds for; null when it holds for none.
      */
-    private static EffectEvent flagged(Card host, String flag, Predicate<Card> changed) {
+    private static EffectEvent flagged(Card host, StateFlag flag, Predicate<Card> changed) {
         EffectEvent event = new EffectEvent(EventType.STATE_FLAG_CHANGE)
-                .param("flag", flag).param("value", true);
+                .flag(flag, true);
         for (Card card : host.getGame().getCardsIn(ZoneType.Battlefield)) {
             if (changed.test(card)) {
                 event.subject(Refs.of(card));
@@ -104,7 +103,7 @@ final class PermanentStateApiRules {
         if (before == null) {
             return null;
         }
-        return flagged(host, "paired", card -> card.isPaired() && !before.contains(card.getId()));
+        return flagged(host, StateFlag.PAIRED, card -> card.isPaired() && !before.contains(card.getId()));
     }
 
     /**
@@ -119,7 +118,6 @@ final class PermanentStateApiRules {
         }
         return new EffectEvent(EventType.STATE_FLAG_CHANGE)
                 .subject(Refs.of(into))
-                .param("flag", "merged")
-                .param("value", true);
+                .flag(StateFlag.MERGED, true);
     }
 }

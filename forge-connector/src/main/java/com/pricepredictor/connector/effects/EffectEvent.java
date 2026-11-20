@@ -40,11 +40,41 @@ public final class EffectEvent {
         return this;
     }
 
-    public EffectEvent param(String key, Object value) {
+    public EffectEvent param(EventParam key, Object value) {
+        return paramNamed(key.wireName(), value);
+    }
+
+    /** The {@code flag} and {@code value} of a {@code state_flag_change}. */
+    EffectEvent flag(StateFlag flag, Object value) {
+        return param(EventParam.FLAG, flag.wireName()).param(EventParam.VALUE, value);
+    }
+
+    /**
+     * A param under a key Forge itself supplies, as a clause outcome's own
+     * params are: the keys are not known here, so the table cannot name them.
+     * Everything the connector spells itself goes through {@link
+     * #param(EventParam, Object)}.
+     */
+    EffectEvent paramNamed(String key, Object value) {
         if (value != null) {
             params.put(key, value);
         }
         return this;
+    }
+
+    /** The value under {@code key}, or null when the event has none. */
+    public Object param(EventParam key) {
+        return params.get(key.wireName());
+    }
+
+    /** Whether the event carries {@code key}. */
+    boolean hasParam(EventParam key) {
+        return params.containsKey(key.wireName());
+    }
+
+    /** Drop {@code key}; the event no longer says it. */
+    void removeParam(EventParam key) {
+        params.remove(key.wireName());
     }
 
     /**
@@ -73,7 +103,7 @@ public final class EffectEvent {
      * attack, and an honest absence is what a reader can act on.
      */
     public EffectEvent cause(String ref) {
-        return param("cause", ref);
+        return param(EventParam.CAUSE, ref);
     }
 
     /** How long the outcome lasts; null where nothing stamped it. */
@@ -147,8 +177,9 @@ public final class EffectEvent {
 
     /**
      * The normalized params, as a read accessor for tests and other readers
-     * that check one key rather than parse {@link #toJson()}. The collectors
-     * never read an event's params back; they only write them.
+     * that check several keys rather than parse {@link #toJson()}. Collectors
+     * that read one key back ({@code EventAttribution}, {@code TurnActionWindow}
+     * and others) ask {@link #param(EventParam)}.
      */
     public Map<String, Object> params() {
         return params;

@@ -132,7 +132,7 @@ class RunParamRowsTest {
         }
 
         Map<String, Object> params() {
-            return Map.of("mode", event.params().get("mode"),
+            return Map.of("mode", event.param(EventParam.MODE),
                     "amount", 5, "combat", false, "source", Refs.of(bears));
         }
     }
@@ -236,7 +236,7 @@ class RunParamRowsTest {
         for (EffectEvent event : events) {
             assertEquals(EventType.TOKEN_CREATED, event.type(), event.toJson());
             assertEquals(1, event.subjects().size(), event.toJson());
-            assertEquals(1, event.params().get("count"), event.toJson());
+            assertEquals(1, event.param(EventParam.COUNT), event.toJson());
         }
     }
 
@@ -255,7 +255,7 @@ class RunParamRowsTest {
         Object[] made = you(game).getCardsIn(ZoneType.Battlefield).stream()
                 .filter(Card::isToken).toArray();
         assertEquals(List.copyOf(refsOf(made)), event.subjects(), event.toJson());
-        assertEquals(2, event.params().get("count"), event.toJson());
+        assertEquals(2, event.param(EventParam.COUNT), event.toJson());
     }
 
     // ── batches of moves ────────────────────────────────────────────────
@@ -318,7 +318,7 @@ class RunParamRowsTest {
 
         assertEquals(EventType.BLOCKERS_DECLARED, event.type(), event.toJson());
         assertEquals(List.of(Refs.of(board.sentinels())), event.subjects(), event.toJson());
-        assertEquals(Refs.of(board.bearsOne()), event.params().get("blocked"), event.toJson());
+        assertEquals(Refs.of(board.bearsOne()), event.param(EventParam.BLOCKED), event.toJson());
     }
 
     /**
@@ -343,7 +343,7 @@ class RunParamRowsTest {
         assertEquals(Map.of(Refs.of(board.sentinels()), Refs.of(board.bearsTwo()),
                         Refs.of(board.giant()), Refs.of(board.bearsOne())),
                 events.stream().collect(Collectors.toMap(
-                        event -> event.subjects().get(0), event -> event.params().get("blocked"))),
+                        event -> event.subjects().get(0), event -> event.param(EventParam.BLOCKED))),
                 events.toString());
         for (EffectEvent event : events) {
             assertEquals(EventType.BLOCKERS_DECLARED, event.type(), event.toJson());

@@ -63,7 +63,7 @@ class EventBufferTest {
 
     private static EffectEvent move(String card, String from, String to) {
         return new EffectEvent(EventType.ZONE_CHANGE)
-                .subject(card).param("from_zone", from).param("to_zone", to);
+                .subject(card).param(EventParam.FROM_ZONE, from).param(EventParam.TO_ZONE, to);
     }
 
     /**
@@ -97,8 +97,8 @@ class EventBufferTest {
 
         into.file(new EffectEvent(EventType.LIBRARY_SHUFFLED).subject("P0"));
 
-        assertFalse(shuffledIn.params().containsKey("library_position"));
-        assertEquals(-1, elsewhere.params().get("library_position"));
+        assertFalse(shuffledIn.hasParam(EventParam.LIBRARY_POSITION));
+        assertEquals(-1, elsewhere.param(EventParam.LIBRARY_POSITION));
     }
 
     /** A move after the shuffle is where it was put. */
@@ -110,23 +110,23 @@ class EventBufferTest {
 
         into.file(onTop);
 
-        assertEquals(0, onTop.params().get("library_position"));
+        assertEquals(0, onTop.param(EventParam.LIBRARY_POSITION));
     }
 
     private static EffectEvent intoLibrary(String card, int position) {
         return new EffectEvent(EventType.ZONE_CHANGE)
-                .subject(card).param("from_zone", "hand")
-                .param("to_zone", "library").param("library_position", position);
+                .subject(card).param(EventParam.FROM_ZONE, "hand")
+                .param(EventParam.TO_ZONE, "library").param(EventParam.LIBRARY_POSITION, position);
     }
 
     private static EffectEvent zoneChange() {
         return new EffectEvent(EventType.ZONE_CHANGE)
-                .subject("E7").param("from_zone", "hand")
-                .param("to_zone", "battlefield");
+                .subject("E7").param(EventParam.FROM_ZONE, "hand")
+                .param(EventParam.TO_ZONE, "battlefield");
     }
 
     private static EffectEvent oneDamage() {
         return new EffectEvent(EventType.DAMAGE_DEALT)
-                .subject("E7").param("amount", 1).param("combat", true);
+                .subject("E7").param(EventParam.AMOUNT, 1).param(EventParam.COMBAT, true);
     }
 }

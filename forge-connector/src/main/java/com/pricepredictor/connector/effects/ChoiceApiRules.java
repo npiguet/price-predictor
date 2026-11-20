@@ -99,8 +99,8 @@ final class ChoiceApiRules {
             }
             String value = reading.read().apply(host);
             return value == null ? null : new EffectEvent(EventType.CHOICE_MADE)
-                    .param("choice_kind", kind)
-                    .param("value", value);
+                    .param(EventParam.CHOICE_KIND, kind)
+                    .param(EventParam.VALUE, value);
         }
         return null;
     }
