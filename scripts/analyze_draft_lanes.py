@@ -79,6 +79,11 @@ def _pct(numerator: int, denominator: int) -> str:
     return f"{100 * numerator / denominator:5.1f}%" if denominator else "    -"
 
 
+def _lean_count(colours: frozenset) -> float:
+    """How many of a card's colours sit inside ``LEAN_COLOURS``."""
+    return sum(1.0 for c in colours if c in LEAN_COLOURS)
+
+
 def _window(pick: int) -> str | None:
     return next((name for name, lo, hi in WINDOWS if lo <= pick <= hi), None)
 
@@ -110,30 +115,38 @@ class LaneStats:
         self.seats_seen[agent] += 1
         pool = geometry.drafted_pool(record, index)
         top2 = top_two_colours(pool, self.colours)
-        if seat.deck:
-            width = mana_base_width(seat.deck)
-            self.width_counts[agent][width] += 1
-            if seat.deck_score is not None:
-                self.width_scores[agent][width].append(seat.deck_score)
-        self._concentration(agent, pool, top2, geometry.packs, geometry.pack_size)
+        self._width(agent, seat)
+        self._concentration(agent, pool, top2, geometry)
         lane = Lane(frozenset(top2), self.colours)
         for decision in seat_decisions(record, geometry, index):
             if self.colours(decision.taken):
                 self._off_lane_colour(agent, decision, lane)
                 self._off_lane_rate(agent, decision, lane)
 
+    def _width(self, agent: str, seat) -> None:
+        if not seat.deck:
+            return
+        width = mana_base_width(seat.deck)
+        self.width_counts[agent][width] += 1
+        if seat.deck_score is not None:
+            self.width_scores[agent][width].append(seat.deck_score)
+
     def _concentration(self, agent: str, pool: list[str], top2: set[str],
-                       packs: int, pack_size: int) -> None:
-        for cut in range(1, packs + 1):
-            accumulated: Counter = Counter()
-            for card in pool[:cut * pack_size]:
-                for colour in self.colours(card):
-                    accumulated[colour] += 1
+                       geometry) -> None:
+        for cut in range(1, geometry.packs + 1):
+            accumulated = self._colour_counts(pool[:cut * geometry.pack_size])
             self.eff_counts[agent][cut][effective_colour_count(accumulated)] += 1
             total = sum(accumulated.values())
             if total:
                 self.top2_share[agent][cut].append(
                     sum(n for c, n in accumulated.items() if c in top2) / total)
+
+    def _colour_counts(self, cards: list[str]) -> Counter:
+        accumulated: Counter = Counter()
+        for card in cards:
+            for colour in self.colours(card):
+                accumulated[colour] += 1
+        return accumulated
 
     def _off_lane_colour(self, agent: str, decision: Decision, lane: Lane) -> None:
         """Report D's tallies, over every pick rather than only the three windows."""
@@ -145,12 +158,14 @@ class LaneStats:
         for c in taken_colours:
             self.lean_taken[agent][c] += 1.0 / len(taken_colours)
         for option in options:
-            for c in option:
-                self.lean_avail[agent][c] += weight / len(option)
-        taken_lean = sum(1.0 for c in taken_colours if c in LEAN_COLOURS) / len(taken_colours)
-        avail_lean = sum(weight * sum(1.0 for c in option if c in LEAN_COLOURS) / len(option)
-                         for option in options)
+            self._spread_availability(agent, option, weight)
+        taken_lean = _lean_count(taken_colours) / len(taken_colours)
+        avail_lean = sum(weight * _lean_count(option) / len(option) for option in options)
         self.lean_diff[agent].append(taken_lean - avail_lean)
+
+    def _spread_availability(self, agent: str, option: frozenset, weight: float) -> None:
+        for c in option:
+            self.lean_avail[agent][c] += weight / len(option)
 
     def _off_lane_rate(self, agent: str, decision: Decision, lane: Lane) -> None:
         window = _window(decision.pick)
@@ -167,6 +182,13 @@ class LaneStats:
             declined[0] += 1
 
 
+def _width_cell(stats: LaneStats, agent: str, n: int, total: int) -> str:
+    scores = stats.width_scores[agent][n]
+    share = f"{100 * stats.width_counts[agent].get(n, 0) / total:4.1f}%"
+    mean = f"{sum(scores) / len(scores):+5.2f}" if scores else "    -"
+    return f"{share} {mean}"
+
+
 def report_width(stats: LaneStats, reported: list[str]) -> None:
     print("\n  A. mana-base width of the built deck (share of decks, mean deck_score)")
     print(f"     {'agent':<12} " + "  ".join(f"{n} types" for n in range(1, 6)) + "   >=4")
@@ -175,12 +197,7 @@ def report_width(stats: LaneStats, reported: list[str]) -> None:
         total = sum(counts.values())
         if not total:
             continue
-        cells = []
-        for n in range(1, 6):
-            scores = stats.width_scores[agent][n]
-            share = f"{100 * counts.get(n, 0) / total:4.1f}%"
-            mean = f"{sum(scores) / len(scores):+5.2f}" if scores else "    -"
-            cells.append(f"{share} {mean}")
+        cells = [_width_cell(stats, agent, n, total) for n in range(1, 6)]
         wide = sum(v for k, v in counts.items() if k >= 4)
         print(f"     {agent:<12} " + " ".join(cells) + f"  {_pct(wide, total)}")
 
@@ -201,6 +218,14 @@ def report_concentration(stats: LaneStats, reported: list[str]) -> None:
         print()
 
 
+def _off_lane_cell(stats: LaneStats, agent: str, pack: int, name: str) -> str:
+    off, total = stats.off_lane[agent][(pack, name)]
+    vol, vol_total = stats.voluntary[agent][(pack, name)]
+    rate = f"{100 * off / total:4.1f}%" if total else "   - "
+    share = f"{100 * vol / vol_total:4.1f}%" if vol_total else "   - "
+    return f"{rate} ({share})"
+
+
 def report_off_lane(stats: LaneStats, reported: list[str]) -> None:
     print("  C. off-lane rate (coloured picks outside the eventual top-2 colours), and")
     print("     of those, the share made with an on-colour card still in the pack")
@@ -208,16 +233,41 @@ def report_off_lane(stats: LaneStats, reported: list[str]) -> None:
     print(f"     {'agent':<12} {'pack':<5} {header}")
     for agent in reported:
         for pack in sorted({p for p, _ in stats.off_lane[agent]}):
-            cells = []
-            for name, _, _ in WINDOWS:
-                off, total = stats.off_lane[agent][(pack, name)]
-                vol, vol_total = stats.voluntary[agent][(pack, name)]
-                rate = f"{100 * off / total:4.1f}%" if total else "   - "
-                share = f"{100 * vol / vol_total:4.1f}%" if vol_total else "   - "
-                cells.append(f"{rate} ({share})")
+            cells = [_off_lane_cell(stats, agent, pack, name) for name, _, _ in WINDOWS]
             head = agent if pack == 1 else ""
             print(f"     {head:<12} {pack:<5} " + "  ".join(f"{c:>14}" for c in cells))
         print()
+
+
+def _colour_row(stats: LaneStats, agent: str) -> str | None:
+    """One agent's row of report D, or None when it made no off-lane pick."""
+    taken_total = sum(stats.lean_taken[agent].values())
+    avail_total = sum(stats.lean_avail[agent].values())
+    if not taken_total or not avail_total:
+        return None
+    cells = []
+    for colour in WUBRG:
+        took = stats.lean_taken[agent][colour] / taken_total
+        supply = stats.lean_avail[agent][colour] / avail_total
+        lift = f"{took / supply:4.2f}" if supply else "   -"
+        cells.append(f"{100 * took:4.1f}/{100 * supply:4.1f} {lift}")
+    return f"     {agent:<12} " + "".join(f"{c:>15}" for c in cells)
+
+
+def _lean_row(stats: LaneStats, agent: str) -> str | None:
+    """One agent's row of the lean table, or None when too few picks to say."""
+    mean, se, _ = mean_se(stats.lean_diff[agent])
+    if se != se:  # nan — too few off-lane picks to say anything
+        return None
+    z = mean / se if se else float("nan")
+    return (f"     {agent:<12} {100 * mean:+8.2f}pp {100 * se:6.2f} {z:7.1f} "
+            f"{len(stats.lean_diff[agent]):8d}")
+
+
+def _print_rows(rows: list[str | None]) -> None:
+    for row in rows:
+        if row is not None:
+            print(row)
 
 
 def report_off_lane_colour(stats: LaneStats, reported: list[str]) -> None:
@@ -225,29 +275,12 @@ def report_off_lane_colour(stats: LaneStats, reported: list[str]) -> None:
     print("     with the lift (taken/available). Availability is per decision, so a")
     print("     15-card pack and a 2-card pack weigh the same.")
     print(f"     {'agent':<12} " + "".join(f"{c:>15}" for c in WUBRG))
-    for agent in reported:
-        taken_total = sum(stats.lean_taken[agent].values())
-        avail_total = sum(stats.lean_avail[agent].values())
-        if not taken_total or not avail_total:
-            continue
-        cells = []
-        for colour in WUBRG:
-            took = stats.lean_taken[agent][colour] / taken_total
-            supply = stats.lean_avail[agent][colour] / avail_total
-            lift = f"{took / supply:4.2f}" if supply else "   -"
-            cells.append(f"{100 * took:4.1f}/{100 * supply:4.1f} {lift}")
-        print(f"     {agent:<12} " + "".join(f"{c:>15}" for c in cells))
+    _print_rows([_colour_row(stats, agent) for agent in reported])
 
     print()
     print(f"     lean towards {''.join(sorted(LEAN_COLOURS))}: mean(taken - available)")
     print(f"     {'agent':<12} {'diff':>9} {'se':>7} {'z':>7} {'picks':>8}")
-    for agent in reported:
-        mean, se, _ = mean_se(stats.lean_diff[agent])
-        if se != se:  # nan — too few off-lane picks to say anything
-            continue
-        z = mean / se if se else float("nan")
-        print(f"     {agent:<12} {100 * mean:+8.2f}pp {100 * se:6.2f} {z:7.1f} "
-              f"{len(stats.lean_diff[agent]):8d}")
+    _print_rows([_lean_row(stats, agent) for agent in reported])
     print()
 
 

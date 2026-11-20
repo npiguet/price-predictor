@@ -33,6 +33,19 @@ BASIC_LAND_TYPES = frozenset(
 )
 
 
+def _cost_colours(cost: str) -> frozenset:
+    """The WUBRG colours in an upper-cased mana cost line; empty for no cost."""
+    if not cost:
+        return frozenset()
+    out = frozenset(c for c in WUBRG if "{%s}" % c in cost)
+    if out:
+        return out
+    # hybrid / phyrexian pips ({W/U}, {W/P}) miss the exact-pip test above, so
+    # fall back to scanning inside the braces.
+    inner = "".join(re.findall(r"\{([^}]*)\}", cost))
+    return frozenset(c for c in WUBRG if c in inner)
+
+
 class ColourResolver:
     """Card name -> WUBRG colour identity, memoized, from the converted corpus.
 
@@ -51,18 +64,11 @@ class ColourResolver:
         if cached is not None:
             return cached
         text = self._locator.load_text(card_name)
-        out: frozenset = frozenset()
         if text is None:
             self.unresolved[card_name] += 1
+            out: frozenset = frozenset()
         else:
-            cost = (text.mana_cost_line() or "").upper()
-            if cost:
-                out = frozenset(c for c in WUBRG if "{%s}" % c in cost)
-                if not out:
-                    # hybrid / phyrexian pips ({W/U}, {W/P}) miss the exact-pip
-                    # test above, so fall back to scanning inside the braces.
-                    inner = "".join(re.findall(r"\{([^}]*)\}", cost))
-                    out = frozenset(c for c in WUBRG if c in inner)
+            out = _cost_colours((text.mana_cost_line() or "").upper())
         self._cache[card_name] = out
         return out
 
