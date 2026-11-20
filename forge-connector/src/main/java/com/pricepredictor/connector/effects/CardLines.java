@@ -76,7 +76,7 @@ final class CardLines {
      * {@code grant} is a printed line, written {@code granted: false}.
      */
     private record Line(
-            List<ProvenanceKey> keys, String kind, String grant, Boolean active,
+            List<ProvenanceKey> keys, LineKind kind, String grant, Boolean active,
             Integer castWith, List<Integer> chosen, String fragment, List<String> affected) {
 
         String toJson() {
@@ -160,7 +160,7 @@ final class CardLines {
                 }
                 ProvenanceKey key = ProvenanceResolver.keyOfKeyword(state, keyword);
                 int castWith = faceUp ? castWithCount(keyword) : 0;
-                add(new Line(keysOf(key), "keyword",
+                add(new Line(keysOf(key), LineKind.KEYWORD,
                         grants.ofKeyword(keyword, printed.contains(keyword), key),
                         inForce.ofKeyword(keyword, faceUp),
                         castWith > 0 ? castWith : null, null, keyword.getOriginal(), null),
@@ -206,21 +206,21 @@ final class CardLines {
                 if (isRulesSpell(ability)) {
                     continue;
                 }
-                addTrait(ability, ability.isSpell() ? "spell" : "activated",
+                addTrait(ability, ability.isSpell() ? LineKind.SPELL : LineKind.ACTIVATED,
                         faceUp, keywordLines, keywordTexts, stackKey);
             }
             for (CardTraitBase trigger : board.triggers(state)) {
-                addTrait(trigger, "trigger", faceUp, keywordLines, keywordTexts, stackKey);
+                addTrait(trigger, LineKind.TRIGGER, faceUp, keywordLines, keywordTexts, stackKey);
             }
             for (CardTraitBase stat : board.staticAbilities(state)) {
-                addTrait(stat, "static", faceUp, keywordLines, keywordTexts, stackKey);
+                addTrait(stat, LineKind.STATIC, faceUp, keywordLines, keywordTexts, stackKey);
             }
             for (CardTraitBase replacement : board.replacementEffects(state)) {
-                addTrait(replacement, "replacement", faceUp, keywordLines, keywordTexts, stackKey);
+                addTrait(replacement, LineKind.REPLACEMENT, faceUp, keywordLines, keywordTexts, stackKey);
             }
         }
 
-        private void addTrait(CardTraitBase trait, String kind, boolean faceUp,
+        private void addTrait(CardTraitBase trait, LineKind kind, boolean faceUp,
                               Set<KeywordInterface> keywordLines, Set<String> keywordTexts,
                               ProvenanceKey stackKey) {
             if (!faceUp && grants.byLayerChange(trait)) {
@@ -302,7 +302,7 @@ final class CardLines {
             for (Card spliced : onStack.getSplicedCards()) {
                 SpellAbility spell = spliced.getFirstSpellAbility();
                 ProvenanceKey key = spell == null ? null : ProvenanceResolver.of(spell);
-                add(new Line(keysOf(key), "spell", LineGrant.SPLICE, null, null, null, null, null), key, true);
+                add(new Line(keysOf(key), LineKind.SPELL, LineGrant.SPLICE, null, null, null, null, null), key, true);
             }
         }
 

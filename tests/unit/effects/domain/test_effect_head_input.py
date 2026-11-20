@@ -917,15 +917,15 @@ class TestCardSlotInputs:
         assert loyalty[:2] == (1.0, 3.0) and sum(loyalty[3:]) == 3
 
     def test_the_designations_are_the_collector_s_table(self):
-        """``CardFacts.designationTable`` writes the closed list the input reads."""
+        """``Designation`` writes the closed list the input reads."""
         import re
         from pathlib import Path
 
         from effects.domain.effect_head_input import DESIGNATIONS
 
         java = (Path(__file__).resolve().parents[4] / "forge-connector/src/main/java/com/"
-                "pricepredictor/connector/effects/CardFacts.java").read_text(encoding="utf-8")
-        assert tuple(re.findall(r'table\.put\("([a-z_]+)"', java)) == DESIGNATIONS
+                "pricepredictor/connector/effects/Designation.java").read_text(encoding="utf-8")
+        assert tuple(re.findall(r'^\s*[A-Z_]+\("([a-z_]+)",', java, re.MULTILINE)) == DESIGNATIONS
 
     def test_designations_x_paid_history_and_order_rank(self):
         from effects.domain.effect_head_input import DESIGNATIONS

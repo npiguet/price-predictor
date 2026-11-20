@@ -252,8 +252,8 @@ class EventAttributionTest {
 
         assertEquals(bucket,
                 EventAttribution.duration(pump, pump, EventType.PT_CHANGE).wireName(), declared);
-        assertEquals(bucket, "until_leaves".equals(FloatingEffects.bucket(declared))
-                ? "permanent" : FloatingEffects.bucket(declared), declared);
+        assertEquals(bucket, FloatingEffects.bucket(declared) == FloatingDuration.UNTIL_LEAVES
+                ? "permanent" : FloatingEffects.bucket(declared).wireName(), declared);
     }
 
     /**

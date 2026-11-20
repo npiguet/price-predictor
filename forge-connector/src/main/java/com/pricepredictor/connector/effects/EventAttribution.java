@@ -171,7 +171,7 @@ final class EventAttribution {
             return api != null && END_OF_TURN_BY_DEFAULT.contains(api)
                     ? EventDuration.END_OF_TURN : EventDuration.PERMANENT;
         }
-        return "end_of_turn".equals(FloatingEffects.bucket(declared))
+        return FloatingEffects.bucket(declared) == FloatingDuration.END_OF_TURN
                 ? EventDuration.END_OF_TURN : EventDuration.PERMANENT;
     }
 

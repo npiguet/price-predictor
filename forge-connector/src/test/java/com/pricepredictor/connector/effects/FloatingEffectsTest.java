@@ -184,7 +184,7 @@ class FloatingEffectsTest {
             "UntilUntaps, until_leaves",
     })
     void aDurationIsOneOfThree(String declared, String bucket) {
-        assertEquals(bucket, FloatingEffects.bucket(declared));
+        assertEquals(bucket, FloatingEffects.bucket(declared).wireName());
     }
 
     // ── helpers ─────────────────────────────────────────────────────────

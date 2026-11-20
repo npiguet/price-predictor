@@ -285,7 +285,7 @@ public final class SnapshotBuilder {
      * under that id.
      */
     private String renderCeased(Card card, SnapshotLinks.Acting acting, StaticSuppression board) {
-        return EntityJson.render(game, card, board, EntityJson.Beyond.lastKnown(null, ROLE_LAST_KNOWN)
+        return EntityJson.render(game, card, board, EntityJson.Beyond.lastKnown(null, EntityRole.LAST_KNOWN)
                 .withStackTargets(stackTargetsOf(card, acting)));
     }
 
@@ -373,11 +373,6 @@ public final class SnapshotBuilder {
         }
     }
 
-    static final String ROLE_LIBRARY_CARD = "library_card";
-    static final String ROLE_EXILED_WITH = "exiled_with";
-    static final String ROLE_MUTATE_COMPONENT = "mutate_component";
-    static final String ROLE_LAST_KNOWN = "last_known";
-
     /**
      * The card entities beyond the four tiers (FR-024), each once, after
      * them and with its {@code role}: each library's top card; the library
@@ -424,7 +419,7 @@ public final class SnapshotBuilder {
         for (Card card : entities.tiers()) {
             if (card.isInPlay()) {
                 card.getExiledCards().forEach(
-                        exiled -> entities.addBeyond(exiled, ROLE_EXILED_WITH));
+                        exiled -> entities.addBeyond(exiled, EntityRole.EXILED_WITH));
             }
         }
     }
@@ -434,7 +429,7 @@ public final class SnapshotBuilder {
         for (Card card : entities.tiers()) {
             if (card.isInPlay() && card.isMutated()) {
                 card.getMergedCards().forEach(
-                        component -> entities.addBeyond(component, ROLE_MUTATE_COMPONENT));
+                        component -> entities.addBeyond(component, EntityRole.MUTATE_COMPONENT));
             }
         }
     }
@@ -497,7 +492,7 @@ public final class SnapshotBuilder {
                 .value("combat_substep", DamageStep.of(phase))
                 .raw("emblems", ProvenanceKey.toJsonArray(emblems()))
                 // Forge's daytime field is true at night, null for neither.
-                .value("day_night", night == null ? null : night ? "night" : "day")
+                .value("day_night", DayNight.of(night))
                 .raw("floating_effects",
                         floating.floatingEffectsJson(game, cards, board))
                 .raw("delayed_triggers", FloatingEffects.delayedTriggersJson(game))

@@ -87,7 +87,7 @@ abstract class BusEventReader {
      * by card id, so a stats change can say the card turned: read as it
      * enters, at each snapshot that rebaselines, and at each face change.
      */
-    private final Map<Integer, String> faces = new HashMap<>();
+    private final Map<Integer, FaceState> faces = new HashMap<>();
 
     /**
      * Whether Forge has just said a permanent is destroyed, which its next
@@ -634,8 +634,8 @@ abstract class BusEventReader {
      * was never read; the face is read now either way.
      */
     private EffectEvent faceChange(Card card) {
-        String now = CardFacts.faceState(card);
-        String before = faces.put(card.getId(), now);
+        FaceState now = CardFacts.faceState(card);
+        FaceState before = faces.put(card.getId(), now);
         if (before == null || before.equals(now)) {
             return null;
         }

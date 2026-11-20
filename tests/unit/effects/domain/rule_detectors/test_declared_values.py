@@ -91,11 +91,11 @@ def test_the_role_kinds_are_forge_s_role_tokens():
 
 
 def test_the_designations_are_the_connector_s():
-    path = _CONNECTOR / "CardFacts.java"
+    path = _CONNECTOR / "Designation.java"
     if not path.exists():
         pytest.skip(f"no connector source at {path}")
     source = path.read_text(encoding="utf-8")
-    assert dv.DESIGNATIONS == set(re.findall(r'table\.put\("([a-z_]+)"', source))
+    assert dv.DESIGNATIONS == set(re.findall(r'^\s*[A-Z_]+\("([a-z_]+)",', source, re.MULTILINE))
 
 
 def test_a_keyword_of_its_own_by_its_detail_is_a_keyword():

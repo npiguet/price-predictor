@@ -18,7 +18,6 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Predicate;
 
 /**
  * The card facts of FR-024 a card slot carries beside its characteristics:
@@ -37,24 +36,23 @@ final class CardFacts {
     }
 
     /**
-     * Which face is up: {@code front}, {@code back}, {@code flipped},
-     * {@code melded} or {@code face_down}. A split card, a prepared spell and
-     * a specialized card are on their front.
+     * Which face is up. A split card, a prepared spell and a specialized card
+     * are on their front.
      */
-    static String faceState(Card card) {
+    static FaceState faceState(Card card) {
         if (card.isFaceDown()) {
-            return "face_down";
+            return FaceState.FACE_DOWN;
         }
         CardStateName state = card.getCurrentStateName();
         if (state == null) {
-            return "front";
+            return FaceState.FRONT;
         }
         return switch (state) {
-            case FaceDown -> "face_down";
-            case Backside, Secondary -> "back";
-            case Flipped -> "flipped";
-            case Meld -> "melded";
-            default -> "front";
+            case FaceDown -> FaceState.FACE_DOWN;
+            case Backside, Secondary -> FaceState.BACK;
+            case Flipped -> FaceState.FLIPPED;
+            case Meld -> FaceState.MELDED;
+            default -> FaceState.FRONT;
         };
     }
 
@@ -64,38 +62,12 @@ final class CardFacts {
      */
     static List<String> designations(Card card) {
         List<String> held = new ArrayList<>();
-        for (Map.Entry<String, Predicate<Card>> designation : DESIGNATIONS.entrySet()) {
-            if (designation.getValue().test(card)) {
-                held.add(designation.getKey());
+        for (Designation designation : Designation.values()) {
+            if (designation.heldBy(card)) {
+                held.add(designation.wireName());
             }
         }
         return held;
-    }
-
-    /** In wire-name order, so the list is written sorted. */
-    private static final Map<String, Predicate<Card>> DESIGNATIONS = designationTable();
-
-    private static Map<String, Predicate<Card>> designationTable() {
-        Map<String, Predicate<Card>> table = new LinkedHashMap<>();
-        table.put("bestowed", Card::isBestowed);
-        table.put("cloaked", Card::isCloaked);
-        table.put("commander", Card::isCommander);
-        table.put("foretold", Card::isForetold);
-        table.put("goaded", Card::isGoaded);
-        table.put("harnessed", Card::isHarnessed);
-        table.put("manifested", Card::isManifested);
-        table.put("monstrous", Card::isMonstrous);
-        table.put("phased_out", Card::isPhasedOut);
-        table.put("plotted", Card::isPlotted);
-        table.put("renowned", Card::isRenowned);
-        table.put("ring_bearer", Card::isRingBearer);
-        table.put("saddled", Card::isSaddled);
-        table.put("solved", Card::isSolved);
-        table.put("specialized", Card::isSpecialized);
-        table.put("suspected", Card::isSuspected);
-        table.put("unearthed", Card::isUnearthed);
-        table.put("warped", Card::isWarped);
-        return table;
     }
 
     /**

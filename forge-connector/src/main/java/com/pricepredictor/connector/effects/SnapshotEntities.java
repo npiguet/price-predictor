@@ -74,7 +74,7 @@ final class SnapshotEntities {
         String ref = ChainTargets.lastKnownRef(gone);
         if (present.add(ref)) {
             rendered.add(EntityJson.render(game, gone, board,
-                    EntityJson.Beyond.lastKnown(ref, SnapshotBuilder.ROLE_LAST_KNOWN)));
+                    EntityJson.Beyond.lastKnown(ref, EntityRole.LAST_KNOWN)));
         }
     }
 
@@ -89,12 +89,12 @@ final class SnapshotEntities {
             cards.add(card);
             rendered.add(EntityJson.render(game, LibraryCapture.asInLibrary(card), board,
                     new EntityJson.Beyond(null, "library", position,
-                            SnapshotBuilder.ROLE_LIBRARY_CARD)));
+                            EntityRole.LIBRARY_CARD)));
         }
     }
 
     /** {@code card}, with {@code role}, unless it is already an entity. */
-    void addBeyond(Card card, String role) {
+    void addBeyond(Card card, EntityRole role) {
         if (card != null && present.add(Refs.of(card))) {
             cards.add(card);
             rendered.add(EntityJson.render(game, card, board,
@@ -109,6 +109,6 @@ final class SnapshotEntities {
         rendered.add(EntityJson.render(game, lastKnown, board, new EntityJson.Beyond(
                 "L" + lastKnown.getId(),
                 zone == null ? null : CardSpelling.zoneName(zone.getZoneType()),
-                null, SnapshotBuilder.ROLE_LAST_KNOWN)));
+                null, EntityRole.LAST_KNOWN)));
     }
 }

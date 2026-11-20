@@ -60,16 +60,16 @@ final class EntityJson {
      *             item's as cast on an effect half ({@link StackExtras});
      *             null for those it holds now
      */
-    record Beyond(String id, String zone, Integer rank, String role, boolean zoneless,
+    record Beyond(String id, String zone, Integer rank, EntityRole role, boolean zoneless,
                   ChainTargets stackTargets) {
         static final Beyond NONE = new Beyond(null, null, null, null);
 
-        Beyond(String id, String zone, Integer rank, String role) {
+        Beyond(String id, String zone, Integer rank, EntityRole role) {
             this(id, zone, rank, role, false, null);
         }
 
         /** A card as it last existed, which no zone holds: zone and rank null. */
-        static Beyond lastKnown(String id, String role) {
+        static Beyond lastKnown(String id, EntityRole role) {
             return new Beyond(id, null, null, role, true, null);
         }
 

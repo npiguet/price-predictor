@@ -59,7 +59,7 @@ final class StatDiffer {
             int power, int toughness, int basePower, int baseToughness, List<String> keywords,
             List<String> hiddenKeywords, List<String> abilities,
             Set<String> types, Set<String> colors,
-            String name, String manaCost, int manaValue, String face, int copies) {
+            String name, String manaCost, int manaValue, FaceState face, int copies) {
     }
 
     private final Map<Integer, Stats> last = new HashMap<>();

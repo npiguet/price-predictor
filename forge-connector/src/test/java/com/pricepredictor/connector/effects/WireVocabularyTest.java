@@ -95,6 +95,52 @@ class WireVocabularyTest {
                 wireNames(EventDuration.class));
     }
 
+    /** {@code FaceState} in {@code state_snapshot.py}, in its order. */
+    @Test
+    void faceStates() {
+        assertEquals(List.of("front", "back", "flipped", "melded", "face_down"),
+                wireNames(FaceState.class));
+    }
+
+    /** {@code EntityRole} in {@code state_snapshot.py}, in its order. */
+    @Test
+    void entityRoles() {
+        assertEquals(List.of("library_card", "exiled_with", "mutate_component", "last_known"),
+                wireNames(EntityRole.class));
+    }
+
+    /** {@code LineKind} in {@code state_snapshot.py}, in its order. */
+    @Test
+    void lineKinds() {
+        assertEquals(
+                List.of("spell", "activated", "trigger", "static", "replacement", "keyword"),
+                wireNames(LineKind.class));
+    }
+
+    /** {@code EffectDuration} in {@code state_snapshot.py}, in its order. */
+    @Test
+    void floatingDurations() {
+        assertEquals(List.of("end_of_turn", "until_leaves", "permanent"),
+                wireNames(FloatingDuration.class));
+    }
+
+    /** {@code DayNight} in {@code state_snapshot.py}, in its order. */
+    @Test
+    void dayNights() {
+        assertEquals(List.of("day", "night"), wireNames(DayNight.class));
+    }
+
+    /** {@code DESIGNATIONS} in {@code effect_head_input.py}, in its order. */
+    @Test
+    void designations() {
+        assertEquals(
+                List.of("bestowed", "cloaked", "commander", "foretold", "goaded", "harnessed",
+                        "manifested", "monstrous", "phased_out", "plotted", "renowned",
+                        "ring_bearer", "saddled", "solved", "specialized", "suspected",
+                        "unearthed", "warped"),
+                wireNames(Designation.class));
+    }
+
     /** {@code COMBAT_SUBSTEPS} in {@code effect_head_input.py}. */
     @Test
     void damageSteps() {

@@ -263,16 +263,14 @@ class TestTheGen3FactsRead:
 
     def test_every_face_the_collector_names_reads_as_its_face_state(self):
         """Every golden entity is on its front, so the other faces are read off
-        the writer (``CardFacts.faceState``) and decoded on a golden entity."""
+        the writer (``FaceState.java``) and decoded on a golden entity."""
         import re
 
         from effects.infrastructure.record_codec import _entity_from_json
         from tests.unit.forge_sources import connector_source
 
-        source = connector_source("effects/CardFacts.java")
-        body = source[source.index("static String faceState(Card card)"):]
-        body = body[:body.index("\n    }\n")]
-        written = set(re.findall(r'"([a-z_]+)"', body))
+        source = connector_source("effects/FaceState.java")
+        written = set(re.findall(r'^\s*[A-Z_]+\("([a-z_]+)"\)', source, re.MULTILINE))
         assert written == {face.value for face in FaceState}
         golden = java_golden_entities()[0]
         for face in sorted(written):

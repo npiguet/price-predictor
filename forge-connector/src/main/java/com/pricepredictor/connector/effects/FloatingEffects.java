@@ -242,23 +242,23 @@ final class FloatingEffects {
      * reads as until end of turn, until end of combat, until your next turn,
      * or a host-leaves duration that also ends at end of turn or combat.
      */
-    static String bucket(String duration) {
+    static FloatingDuration bucket(String duration) {
         if (duration == null || duration.isEmpty()) {
-            return "end_of_turn";
+            return FloatingDuration.END_OF_TURN;
         }
         if (duration.equals("Permanent") || duration.equals("Perpetual")) {
-            return "permanent";
+            return FloatingDuration.PERMANENT;
         }
         if (duration.endsWith("OrEOT") || duration.endsWith("OrEndOfCombat")) {
-            return "end_of_turn";
+            return FloatingDuration.END_OF_TURN;
         }
         if (duration.startsWith("UntilHostLeavesPlay") || duration.startsWith("AsLongAs")
                 || duration.equals("UntilLoseControlOfHost") || duration.endsWith("Untaps")
                 || duration.equals("UntilUnattached") || duration.equals("UntilFacedown")
                 || duration.equals("UntilAnimatedFaceup")) {
-            return "until_leaves";
+            return FloatingDuration.UNTIL_LEAVES;
         }
-        return "end_of_turn";
+        return FloatingDuration.END_OF_TURN;
     }
 
     // ── the snapshot's three lists ───────────────────────────────────
@@ -355,7 +355,7 @@ final class FloatingEffects {
                 // An effect no ability made is a designation's (the monarch,
                 // the initiative, the city's blessing): it lasts until the
                 // game takes it away.
-                source == null ? "permanent" : bucket(declaredDuration(source)),
+                source == null ? FloatingDuration.PERMANENT : bucket(declaredDuration(source)),
                 shieldLeft(effect));
     }
 
@@ -443,7 +443,7 @@ final class FloatingEffects {
         for (Pending pending : pendingDelayedTriggers(game)) {
             objects.add(objectJson(pending.id(),
                     keysOf(ProvenanceResolver.of(pending.trigger())), List.of(),
-                    pending.remembered(), pending.thisTurn() ? "end_of_turn" : "permanent", null));
+                    pending.remembered(), pending.thisTurn() ? FloatingDuration.END_OF_TURN : FloatingDuration.PERMANENT, null));
         }
         return "[" + String.join(",", objects) + "]";
     }
@@ -515,7 +515,7 @@ final class FloatingEffects {
 
     private static String objectJson(
             String id, List<ProvenanceKey> sourceLines, List<String> affected,
-            List<String> remembered, String duration, Integer shieldLeft) {
+            List<String> remembered, FloatingDuration duration, Integer shieldLeft) {
         return Json.object()
                 .value("id", id)
                 .raw("source_lines", ProvenanceKey.toJsonArray(sourceLines))

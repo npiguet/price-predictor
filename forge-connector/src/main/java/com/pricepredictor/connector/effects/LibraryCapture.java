@@ -80,7 +80,7 @@ record LibraryCapture(
         for (Slot slot : slots) {
             rendered.add(EntityJson.render(game, asInLibrary(slot.card()), board,
                     new EntityJson.Beyond(null, "library", slot.position(),
-                            SnapshotBuilder.ROLE_LIBRARY_CARD)));
+                            EntityRole.LIBRARY_CARD)));
         }
         return String.join(",", rendered);
     }

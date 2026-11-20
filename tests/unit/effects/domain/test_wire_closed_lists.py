@@ -14,8 +14,17 @@ from pathlib import Path
 
 import pytest
 
+from effects.domain.effect_head_input import DESIGNATIONS
 from effects.domain.effect_targets import _STATE_FLAG_FIELDS
 from effects.domain.records import ForkKind
+from effects.domain.rule_detectors import declared_values
+from effects.domain.state_snapshot import (
+    DayNight,
+    EffectDuration,
+    EntityRole,
+    FaceState,
+    LineKind,
+)
 from effects.domain.wire_closed_lists import (
     ABSENT,
     CHOICE_KINDS,
@@ -203,6 +212,37 @@ def test_the_state_flags_are_the_connector_s():
     source = (_CONNECTOR / "StateFlag.java").read_text(encoding="utf-8")
     declared = re.findall(r'^\s*[A-Z_]+\("([a-z_]+)"\)[,;]', source, re.MULTILINE)
     assert declared == ["class_level", *_STATE_FLAG_FIELDS]
+
+
+def _wire_names(file: str) -> list[str]:
+    """The wire names a connector enum declares, in its order: each constant's
+    first string argument."""
+    source = (_CONNECTOR / file).read_text(encoding="utf-8")
+    return re.findall(r'^\s*[A-Z_]+\("([a-z_]+)"[,)]', source, re.MULTILINE)
+
+
+@pytest.mark.parametrize(("file", "vocabulary"), [
+    ("FaceState.java", FaceState),
+    ("EntityRole.java", EntityRole),
+    ("LineKind.java", LineKind),
+    ("FloatingDuration.java", EffectDuration),
+    ("DayNight.java", DayNight),
+])
+def test_the_snapshot_s_vocabularies_are_the_connector_s_in_its_order(file, vocabulary):
+    """``WireVocabularyTest`` spells each list out on the Java side."""
+    assert list(vocabulary) == _wire_names(file)
+
+
+def test_the_designations_are_the_connector_s_in_its_order():
+    """``Designation.java``'s wire names, which ``WireVocabularyTest.designations``
+    spells out on the Java side."""
+    assert list(DESIGNATIONS) == _wire_names("Designation.java")
+
+
+def test_the_two_python_copies_of_the_designations_are_equal():
+    """``effect_head_input.py`` and ``rule_detectors/declared_values.py`` each
+    list them; this task pins the Java enum against the first."""
+    assert set(DESIGNATIONS) == declared_values.DESIGNATIONS
 
 
 def test_a_live_record_s_absent_fork_kind_is_on_the_list():
