@@ -71,10 +71,26 @@ final class RewriteChannel implements EventRouter.EventTap {
     /** The (effect, ability) pairs that ran since the waiting records were last written. */
     private final List<Waiting> ranPairs = new ArrayList<>();
 
+    /**
+     * A replacement effect and the buffered ability it set aside, which Forge
+     * names in the bracket of the run; matched by identity, not equality.
+     */
+    private record BufferedPair(Object effect, Object ability) {
+        boolean sameAs(BufferedPair other) {
+            return effect == other.effect && ability == other.ability;
+        }
+    }
+
+    /** What {@code onReplacement} reported: the effect, the event before and after, the call's outcome. */
+    private record Reported(
+            Object trait, Object before, Object after, Object result, Object replacedBy,
+            Object buffered) {
+    }
+
     /** A replacement's record, built but for its payload, waiting on its buffered ability. */
-    private record Waiting(Object effect, Object ability, EffectRecord record, Rewrite rewrite) {
-        boolean waitsOn(Object effect, Object ability) {
-            return this.effect == effect && this.ability == ability;
+    private record Waiting(BufferedPair pair, EffectRecord record, Rewrite rewrite) {
+        boolean waitsOn(BufferedPair other) {
+            return pair.sameAs(other);
         }
     }
 
@@ -90,7 +106,7 @@ final class RewriteChannel implements EventRouter.EventTap {
     }
 
     /** One buffered ability's run, and the record that takes its events, or none. */
-    private record Run(Object effect, Object ability, Waiting taker, List<EffectEvent> events) {
+    private record Run(BufferedPair pair, Waiting taker, List<EffectEvent> events) {
     }
 
     RewriteChannel(LiveGame live, CollectorContext context, RecordDedup dedup) {
@@ -131,10 +147,14 @@ final class RewriteChannel implements EventRouter.EventTap {
                 case ON_REPLACING -> replacing.push(new Pending(
                         args.get(0), board(args.get(0), args.get(1))));
                 case ON_REPLACEMENT -> replaced(
-                        args.get(0), args.get(1), args.get(2), args.optional(3),
-                        args.optional(4), args.optional(5), boardBefore(args.get(0)));
-                case ON_BUFFERED_ABILITY_STARTING -> bufferedStarting(args.get(0), args.get(1));
-                case ON_BUFFERED_ABILITY_FINISHED -> bufferedFinished(args.get(0), args.get(1));
+                        new Reported(
+                                args.get(0), args.get(1), args.get(2), args.optional(3),
+                                args.optional(4), args.optional(5)),
+                        boardBefore(args.get(0)));
+                case ON_BUFFERED_ABILITY_STARTING ->
+                        bufferedStarting(new BufferedPair(args.get(0), args.get(1)));
+                case ON_BUFFERED_ABILITY_FINISHED ->
+                        bufferedFinished(new BufferedPair(args.get(0), args.get(1)));
                 default -> { }
             }
         });
@@ -147,50 +167,49 @@ final class RewriteChannel implements EventRouter.EventTap {
      *
      * @param board the board read at {@code onReplacing}, or null to read it now
      */
-    private void replaced(
-            Object trait, Object before, Object after, Object result, Object replacedBy,
-            Object buffered, Snapshot board) {
-        List<String> types = RunParamNormalizer.changedCounterTypes(trait, before, after);
+    private void replaced(Reported reported, Snapshot board) {
+        List<String> types = RunParamNormalizer.changedCounterTypes(
+                reported.trait(), reported.before(), reported.after());
         if (types.isEmpty()) {
-            replaced(trait, rewrite(trait, before, after, result, replacedBy, buffered, null),
-                    buffered, board == null ? null : board.state());
+            replaced(reported, rewrite(reported, null), board == null ? null : board.state());
             return;
         }
         for (String type : types) {
-            Rewrite rewrite = rewrite(trait, before, after, result, replacedBy, buffered, type);
+            Rewrite rewrite = rewrite(reported, type);
             // The board this type's event would have been read with: the
             // same subjects and last-known card as the whole map's.
-            replaced(trait, rewrite, buffered,
+            replaced(reported, rewrite,
                     board == null ? null : board.withPendingEvent(rewrite.incoming()).state());
         }
     }
 
     /** One record of a replacement, on {@code state}, or on the board now. */
-    private void replaced(Object trait, Rewrite rewrite, Object buffered, RecordState state) {
-        EffectRecord record = shell(trait, rewrite.incoming(), state);
+    private void replaced(Reported reported, Rewrite rewrite, RecordState state) {
+        EffectRecord record = shell(reported.trait(), rewrite.incoming(), state);
         if (rewrite.buffered() == null) {
             write(record, rewrite, false, List.of());
             return;
         }
-        waiting.add(new Waiting(trait, buffered, record, rewrite));
+        waiting.add(new Waiting(
+                new BufferedPair(reported.trait(), reported.buffered()), record, rewrite));
     }
 
     /** A buffered ability starts its run: the oldest record waiting on it takes its events. */
-    private void bufferedStarting(Object effect, Object ability) {
+    private void bufferedStarting(BufferedPair started) {
         Waiting taker = null;
         for (Waiting candidate : waiting) {
-            if (candidate.waitsOn(effect, ability)) {
+            if (candidate.waitsOn(started)) {
                 taker = candidate;
                 break;
             }
         }
-        running.push(new Run(effect, ability, taker, new ArrayList<>()));
+        running.push(new Run(started, taker, new ArrayList<>()));
     }
 
     /** A buffered ability's run is over: its taker is written with the run's events. */
-    private void bufferedFinished(Object effect, Object ability) {
+    private void bufferedFinished(BufferedPair finished) {
         Run run = running.peek();
-        if (run == null || run.effect() != effect || run.ability() != ability) {
+        if (run == null || !run.pair().sameAs(finished)) {
             return;
         }
         running.pop();
@@ -213,7 +232,7 @@ final class RewriteChannel implements EventRouter.EventTap {
             return false;
         }
         run.events().add(EventAttribution.stamp(
-                event, run.ability() instanceof SpellAbility sa ? sa : null, namedCause));
+                event, run.pair().ability() instanceof SpellAbility sa ? sa : null, namedCause));
         return true;
     }
 
@@ -238,7 +257,7 @@ final class RewriteChannel implements EventRouter.EventTap {
     private void writeWaiting(BiPredicate<EffectRecord, RecordDedup> door) {
         for (Waiting held : waiting) {
             boolean ran = ranPairs.stream()
-                    .anyMatch(done -> done.waitsOn(held.effect(), held.ability()));
+                    .anyMatch(done -> done.waitsOn(held.pair()));
             fill(held.record(), held.rewrite(), ran, List.of());
             count(held.rewrite(), door.test(held.record(), dedup));
         }
@@ -348,7 +367,8 @@ final class RewriteChannel implements EventRouter.EventTap {
     EffectRecord record(
             Object trait, Object before, Object after, Object result,
             Object replacedBy, RecordState state) {
-        Rewrite rewrite = rewrite(trait, before, after, result, replacedBy, null, null);
+        Rewrite rewrite = rewrite(
+                new Reported(trait, before, after, result, replacedBy, null), null);
         return shell(trait, rewrite.incoming(), state).payload(RecordPayloads.rewritePayload(
                 rewrite.incoming(), rewrite.outgoing(), rewrite.result(), rewrite.replacedBy(),
                 rewrite.incomingUnknown(), null, false, List.of()));
@@ -375,9 +395,10 @@ final class RewriteChannel implements EventRouter.EventTap {
      * @param counterType the one counter type this record is about, or null
      *                    for the whole event
      */
-    private Rewrite rewrite(
-            Object trait, Object before, Object after, Object result, Object replacedBy,
-            Object buffered, String counterType) {
+    private Rewrite rewrite(Reported reported, String counterType) {
+        Object trait = reported.trait();
+        Object before = reported.before();
+        Object after = reported.after();
         boolean unknown = before == null;
         EffectEvent rendered = RunParamNormalizer.describeParams(trait, after, counterType);
         EffectEvent incoming = unknown
@@ -391,7 +412,7 @@ final class RewriteChannel implements EventRouter.EventTap {
         // combat damage down to one.
         EffectEvent outgoing = unknown || incoming.toJson().equals(rendered.toJson())
                 ? null : rendered;
-        CardTraitBase ran = replacedBy instanceof CardTraitBase ctb ? ctb : null;
+        CardTraitBase ran = reported.replacedBy() instanceof CardTraitBase ctb ? ctb : null;
         // Keyed through the same resolver as the record's own acting line, so
         // both join the provenance sidecar identically. Usually it answers that
         // same printed line, because ReplaceWith$ names an SVar on the card the
@@ -399,11 +420,11 @@ final class RewriteChannel implements EventRouter.EventTap {
         // does not is that an ability ran at all, and the rarer case where the
         // overriding ability was granted from somewhere else.
         List<ProvenanceKey> ranKeys = ran == null ? List.of() : ProvenanceResolver.keysOf(ran);
-        List<ProvenanceKey> bufferedKeys = buffered instanceof CardTraitBase set
+        List<ProvenanceKey> bufferedKeys = reported.buffered() instanceof CardTraitBase set
                 ? ProvenanceResolver.keysOf(set) : null;
         return new Rewrite(
                 RunParamNormalizer.modeOf(trait), incoming, outgoing, unknown,
-                RecordPayloads.rewriteResult(result), ranKeys, bufferedKeys,
+                RecordPayloads.rewriteResult(reported.result()), ranKeys, bufferedKeys,
                 unknown ? after : before, after);
     }
 }
