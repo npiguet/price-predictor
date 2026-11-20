@@ -66,7 +66,8 @@ def test_the_bus_set_is_what_the_bus_shapers_build():
 
 
 def test_the_clause_hook_set_is_what_the_clause_hooks_build():
-    hooks = _named("ApiEvents", *_API_RULE_FAMILIES) | _outcome_hook_types() | {EventType.MANA_PRODUCED}
+    api_events = _named("ApiEvents", *_API_RULE_FAMILIES)
+    hooks = api_events | _outcome_hook_types() | {EventType.MANA_PRODUCED}
     assert CLAUSE_HOOKS == hooks
 
 
