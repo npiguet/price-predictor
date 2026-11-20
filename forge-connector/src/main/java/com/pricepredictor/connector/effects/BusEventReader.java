@@ -172,7 +172,7 @@ abstract class BusEventReader {
 
     /** Whether this move takes a permanent off the battlefield. */
     static boolean leavesBattlefield(GameEventCardChangeZone event) {
-        return event.from() != null && event.from().zoneType() == ZoneType.Battlefield;
+        return new Move(event).from(ZoneType.Battlefield);
     }
 
     /**
@@ -197,12 +197,19 @@ abstract class BusEventReader {
         }
         for (CostPaymentStack.Entry entry : game.costPaymentStack) {
             var paid = entry.payment() == null ? null : entry.payment().getAbility();
-            if (paid != null && paid.isSpell() && paid.isCastFromPlayEffect()
-                    && paid != resolving) {
+            if (castFromPlayEffect(paid, resolving)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /** Whether {@code paid}, a spell cast from a {@code Play} effect, is not the resolving ability. */
+    private static boolean castFromPlayEffect(SpellAbility paid, SpellAbility resolving) {
+        if (paid == null || !paid.isSpell()) {
+            return false;
+        }
+        return paid.isCastFromPlayEffect() && paid != resolving;
     }
 
     /**
@@ -433,49 +440,62 @@ abstract class BusEventReader {
      */
     @Subscribe
     public void onCardChangeZone(GameEventCardChangeZone event) {
-        Player libraryOwner = libraryLeftBy(event);
+        Move move = new Move(event);
+        Player libraryOwner = libraryLeftBy(move);
         if (libraryOwner != null) {
             draws.settle(libraryOwner);
             mills.settle(libraryOwner);
         }
-        EffectEvent moved = BusEvents.cardMoved(event);
-        for (EffectEvent how : howItLeft(event)) {
+        fileCardMoved(event, move);
+        file(checkedMovement(move, libraryOwner), null);
+        if (move.card() != null) {
+            followBoard(move);
+        }
+    }
+
+    /** File the move itself, and how a permanent left, ahead of it. */
+    private void fileCardMoved(GameEventCardChangeZone event, Move move) {
+        EffectEvent moved = BusEvents.cardMoved(move);
+        for (EffectEvent how : howItLeft(move)) {
             // Filed as the move is, ahead of it, so a state-based death's
             // destroyed joins the record its move joins.
             fileMove(event, how);
         }
         if (moved != null) {
-            placeInLibrary(event, moved);
+            placeInLibrary(move, moved);
             fileMove(event, moved);
         }
-        file(checkedMovement(event, libraryOwner), null);
-        if (event.card() == null) {
-            return;
-        }
-        if (event.from() != null && event.from().zoneType() == ZoneType.Battlefield) {
+    }
+
+    /** What the move does to the readings kept of the battlefield and to the stack's followers. */
+    private void followBoard(Move move) {
+        int id = move.card().getId();
+        if (move.from(ZoneType.Battlefield)) {
             // Off the battlefield a card's computed characteristics stop
             // meaning anything, and one that returns is a new object.
-            stats.forget(event.card().getId());
-            faces.remove(event.card().getId());
+            stats.forget(id);
+            faces.remove(id);
         }
-        if (event.to() != null && event.to().zoneType() == ZoneType.Battlefield) {
-            // Forge publishes a stats change after applying it, so without a
-            // reading taken now the first pump finds no earlier value and
-            // reports nothing. Read off the battlefield object, which the
-            // statics and the counters it entered with have already reached.
-            Card entered = cardById(event.card().getId());
-            stats.prime(entered);
-            if (entered != null) {
-                faces.put(entered.getId(), CardFacts.faceState(entered));
-            }
+        if (move.to(ZoneType.Battlefield)) {
+            enteredBattlefield(id);
         }
-        if (event.to() != null && event.to().zoneType() == ZoneType.Battlefield) {
-            enteredTapped(event);
+        if (move.to(ZoneType.Stack)) {
+            onStackArrival(id, move.fromName());
         }
-        if (event.to() != null && event.to().zoneType() == ZoneType.Stack) {
-            onStackArrival(event.card().getId(),
-                    event.from() == null ? null : CardSpelling.zoneName(event.from().zoneType()));
+    }
+
+    /** A card entered the battlefield: take its readings, and report it tapped if it is. */
+    private void enteredBattlefield(int id) {
+        // Forge publishes a stats change after applying it, so without a
+        // reading taken now the first pump finds no earlier value and
+        // reports nothing. Read off the battlefield object, which the
+        // statics and the counters it entered with have already reached.
+        Card entered = cardById(id);
+        stats.prime(entered);
+        if (entered != null) {
+            faces.put(entered.getId(), CardFacts.faceState(entered));
         }
+        enteredTapped(id);
     }
 
     /**
@@ -489,8 +509,8 @@ abstract class BusEventReader {
      * shows, and a library card a record names is rendered as it was in the
      * library (FR-042e), untapped.
      */
-    private void enteredTapped(GameEventCardChangeZone event) {
-        Card entered = cardById(event.card().getId());
+    private void enteredTapped(int id) {
+        Card entered = cardById(id);
         if (entered != null && entered.isTapped()) {
             fileOutcome(new EffectEvent(EventType.TAPPED).subject(Refs.of(entered)), null);
         }
@@ -502,19 +522,19 @@ abstract class BusEventReader {
      * empty. A pending destruction is the next move's only, whatever it is,
      * so a destruction whose move never came names nothing later.
      */
-    private List<EffectEvent> howItLeft(GameEventCardChangeZone event) {
+    private List<EffectEvent> howItLeft(Move move) {
         boolean destroyed = destroyPending;
         destroyPending = false;
-        if (event.card() == null || !leavesBattlefield(event)) {
+        if (move.card() == null || !move.from(ZoneType.Battlefield)) {
             return List.of();
         }
         List<EffectEvent> how = new ArrayList<>(2);
-        EffectEvent sacrificed = sacrificesPending.remove(event.card().getId());
+        EffectEvent sacrificed = sacrificesPending.remove(move.card().getId());
         if (sacrificed != null) {
             how.add(sacrificed);
         }
         if (destroyed) {
-            how.add(new EffectEvent(EventType.DESTROYED).subject(Refs.of(event.card())));
+            how.add(new EffectEvent(EventType.DESTROYED).subject(Refs.of(move.card())));
         }
         return how;
     }
@@ -533,26 +553,38 @@ abstract class BusEventReader {
      * <p>Into a library only. A move out of one says nothing of where the card
      * was: by the time the bus publishes it the card has left.
      */
-    private void placeInLibrary(GameEventCardChangeZone event, EffectEvent moved) {
-        if (game == null || event.to() == null || event.to().zoneType() != ZoneType.Library
-                || event.to().player() == null) {
-            return;
-        }
-        Player owner = game.getPlayer(event.to().player());
+    private void placeInLibrary(Move move, EffectEvent moved) {
+        Player owner = libraryReached(move);
         if (owner == null) {
             return;
         }
         List<Card> library = new ArrayList<>();
         owner.getCardsIn(ZoneType.Library).forEach(library::add);
-        int id = event.card().getId();
-        for (int index = 0; index < library.size(); index++) {
-            if (library.get(index).getId() == id) {
-                boolean bottom = index > 0 && index == library.size() - 1;
-                moved.param("library_position", bottom ? -1 : index);
-                moved.intoLibraryOf(Refs.of(owner));
-                return;
+        int index = indexOf(library, move.card().getId());
+        if (index < 0) {
+            return;
+        }
+        boolean bottom = index > 0 && index == library.size() - 1;
+        moved.param("library_position", bottom ? -1 : index);
+        moved.intoLibraryOf(Refs.of(owner));
+    }
+
+    /** The player whose library the move reached, or null when it reached none or there is no game. */
+    private Player libraryReached(Move move) {
+        if (game == null || !move.to(ZoneType.Library)) {
+            return null;
+        }
+        PlayerView owner = move.toPlayer();
+        return owner == null ? null : game.getPlayer(owner);
+    }
+
+    private static int indexOf(List<Card> cards, int id) {
+        for (int index = 0; index < cards.size(); index++) {
+            if (cards.get(index).getId() == id) {
+                return index;
             }
         }
+        return -1;
     }
 
     /**
@@ -632,23 +664,25 @@ abstract class BusEventReader {
             return;
         }
         for (CardView view : event.cards()) {
-            if (view == null) {
-                continue;
-            }
-            Card card = cardById(view.getId());
+            Card card = view == null ? null : cardById(view.getId());
             if (card != null) {
-                EffectEvent turned = faceChange(card);
-                if (turned != null) {
-                    fileOutcome(turned, null);
-                }
-                boolean animating = animating();
-                for (EffectEvent changed : stats.diff(card)) {
-                    // An Animate clause's grants are its own clause rule's
-                    // ability_change (ApiEvents), named by their SVars.
-                    if (!(animating && changed.type() == EventType.ABILITY_CHANGE)) {
-                        fileOutcome(changed, null);
-                    }
-                }
+                fileStatChanges(card);
+            }
+        }
+    }
+
+    /** File the face turn and the stat changes the card shows since it was last read. */
+    private void fileStatChanges(Card card) {
+        EffectEvent turned = faceChange(card);
+        if (turned != null) {
+            fileOutcome(turned, null);
+        }
+        boolean animating = animating();
+        for (EffectEvent changed : stats.diff(card)) {
+            // An Animate clause's grants are its own clause rule's
+            // ability_change (ApiEvents), named by their SVars.
+            if (!(animating && changed.type() == EventType.ABILITY_CHANGE)) {
+                fileOutcome(changed, null);
             }
         }
     }
@@ -694,12 +728,12 @@ abstract class BusEventReader {
     }
 
     /** The player whose library this move takes a card out of, or null when it is none or this reader has no game. */
-    private Player libraryLeftBy(GameEventCardChangeZone event) {
-        if (game == null || event.card() == null || event.card().getOwner() == null
-                || event.from() == null || event.from().zoneType() != ZoneType.Library) {
+    private Player libraryLeftBy(Move move) {
+        if (game == null || !move.from(ZoneType.Library)) {
             return null;
         }
-        return game.getPlayer(event.card().getOwner());
+        PlayerView owner = move.owner();
+        return owner == null ? null : game.getPlayer(owner);
     }
 
     /**
@@ -707,23 +741,22 @@ abstract class BusEventReader {
      * Forge counted for it ({@link DrawCheck}, {@link MillCheck}); null for
      * none.
      */
-    private EffectEvent checkedMovement(GameEventCardChangeZone event, Player libraryOwner) {
-        EffectEvent movement = BusEvents.libraryMovement(event, ownerOf(event));
+    private EffectEvent checkedMovement(Move move, Player libraryOwner) {
+        EffectEvent movement = BusEvents.libraryMovement(move, ownerOf(move));
         if (movement == null || libraryOwner == null) {
             return movement;
         }
         if (movement.type() == EventType.CARD_DRAWN) {
             movement.onlyIf(draws.open(libraryOwner)::drawn);
         } else if (movement.type() == EventType.CARD_MILLED) {
-            movement.onlyIf(mills.open(libraryOwner, event.card().getId())::milled);
+            movement.onlyIf(mills.open(libraryOwner, move.card().getId())::milled);
         }
         return movement;
     }
 
     /** The live owner of the card a move names, or null. */
-    private Player ownerOf(GameEventCardChangeZone event) {
-        CardView card = event.card();
-        PlayerView owner = card == null ? null : card.getOwner();
+    private Player ownerOf(Move move) {
+        PlayerView owner = move.owner();
         return game == null || owner == null ? null : game.getPlayer(owner);
     }
 

@@ -300,16 +300,25 @@ final class BusEvents {
         List<EffectEvent> lost = new ArrayList<>();
         // Registered rather than in the game: a player who lost has left it.
         for (Player player : game.getRegisteredPlayers()) {
-            var outcome = player.getOutcome();
-            if (outcome == null || outcome.lossState == null
-                    || outcome.lossState == forge.game.player.GameLossReason.IntentionalDraw) {
+            var reason = lossOf(player);
+            if (reason == null) {
                 continue;
             }
             lost.add(new EffectEvent(EventType.PLAYER_LOST)
                     .subject(Refs.of(player))
-                    .param("reason", outcome.lossState.name()));
+                    .param("reason", reason.name()));
         }
         return lost;
+    }
+
+    /** Why the player lost, or null when they lost nothing: no outcome, or a draw. */
+    private static forge.game.player.GameLossReason lossOf(Player player) {
+        var outcome = player.getOutcome();
+        if (outcome == null || outcome.lossState == null) {
+            return null;
+        }
+        return outcome.lossState == forge.game.player.GameLossReason.IntentionalDraw
+                ? null : outcome.lossState;
     }
 
     /** A permanent sacrificed, or null when the event names no card. */
@@ -376,25 +385,26 @@ final class BusEvents {
      * and says {@code from_zone=stack}.
      */
     static EffectEvent cardMoved(GameEventCardChangeZone event) {
-        if (event.card() == null) {
+        return cardMoved(new Move(event));
+    }
+
+    /** {@link #cardMoved(GameEventCardChangeZone)} for a move already read. */
+    static EffectEvent cardMoved(Move move) {
+        if (move.card() == null) {
             return null;
         }
-        String from = zoneName(event.from());
-        String to = zoneName(event.to());
+        String from = move.fromName();
+        String to = move.toName();
         if (from == null && to == null) {
             return null;
         }
-        if (event.to() != null && event.to().zoneType() == ZoneType.Stack) {
+        if (move.to(ZoneType.Stack)) {
             return null;
         }
         return new EffectEvent(EventType.ZONE_CHANGE)
-                .subject(Refs.of(event.card()))
+                .subject(Refs.of(move.card()))
                 .param("from_zone", from)
                 .param("to_zone", to);
-    }
-
-    private static String zoneName(forge.game.zone.ZoneView zone) {
-        return zone == null ? null : CardSpelling.zoneName(zone.zoneType());
     }
 
     /**
@@ -418,33 +428,38 @@ final class BusEvents {
      * the player's discarded list says that card was just discarded, which is
      * how a madness discard reads.
      */
-    static EffectEvent libraryMovement(GameEventCardChangeZone event, Player owner) {
-        if (event.card() == null || event.card().getOwner() == null
-                || event.from() == null || event.to() == null) {
+    static EffectEvent libraryMovement(Move move, Player owner) {
+        if (move.card() == null || move.owner() == null) {
             return null;
         }
-        ZoneType from = event.from().zoneType();
-        ZoneType to = event.to().zoneType();
-        if (from == null || to == null) {
+        if (move.fromZone() == null || move.toZone() == null) {
             return null;
         }
-        EventType type = switch (to) {
+        EventType type = movementType(move, owner);
+        if (type == null) {
+            return null;
+        }
+        return new EffectEvent(type)
+                .subject(Refs.of(move.card().getOwner()))
+                .param("count", 1);
+    }
+
+    private static EventType movementType(Move move, Player owner) {
+        ZoneType from = move.fromZone();
+        return switch (move.toZone()) {
             case Hand -> from == ZoneType.Library ? EventType.CARD_DRAWN : null;
             case Graveyard -> switch (from) {
                 case Hand -> EventType.CARD_DISCARDED;
                 case Library -> EventType.CARD_MILLED;
                 default -> null;
             };
-            case Exile -> from == ZoneType.Hand && justDiscarded(owner, event)
-                    ? EventType.CARD_DISCARDED : null;
+            case Exile -> discardedToExile(move, owner) ? EventType.CARD_DISCARDED : null;
             default -> null;
         };
-        if (type == null) {
-            return null;
-        }
-        return new EffectEvent(type)
-                .subject(Refs.of(event.card().getOwner()))
-                .param("count", 1);
+    }
+
+    private static boolean discardedToExile(Move move, Player owner) {
+        return move.from(ZoneType.Hand) && justDiscarded(owner, move.card());
     }
 
     /**
@@ -455,13 +470,13 @@ final class BusEvents {
      * graveyard (702.35a) is the list's last card when its move is
      * published. Any other move from the hand to exile is no discard.
      */
-    private static boolean justDiscarded(Player owner, GameEventCardChangeZone event) {
+    private static boolean justDiscarded(Player owner, CardView card) {
         if (owner == null) {
             return false;
         }
         List<Card> discarded = owner.getDiscardedThisTurn();
         return !discarded.isEmpty()
-                && discarded.get(discarded.size() - 1).getId() == event.card().getId();
+                && discarded.get(discarded.size() - 1).getId() == card.getId();
     }
 
     /**
