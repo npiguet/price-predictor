@@ -74,21 +74,23 @@ _DEFAULTS = {
 }
 
 
+def _norm(value):
+    if isinstance(value, str):
+        return value.lower()
+    if isinstance(value, list):
+        return sorted(_norm(v) for v in value)
+    if isinstance(value, dict):
+        return {k: _norm(v) for k, v in value.items()}
+    return value
+
+
 def _normalised(family: str, params) -> str:
     """A declaration's parameters as the family reads them: text without
     case, lists in order, defaults dropped."""
-    def norm(value):
-        if isinstance(value, str):
-            return value.lower()
-        if isinstance(value, list):
-            return sorted(norm(v) for v in value)
-        if isinstance(value, dict):
-            return {k: norm(v) for k, v in value.items()}
-        return value
-    defaults = {k: norm(v) for k, v in _DEFAULTS.get(family, {}).items()}
+    defaults = {k: _norm(v) for k, v in _DEFAULTS.get(family, {}).items()}
     if family == "rewrite_event" and params.get("prevention"):
         defaults.pop("result")  # a prevention's fires side is every preventing result
-    kept = {k: norm(v) for k, v in params.items() if defaults.get(k, object()) != norm(v)}
+    kept = {k: _norm(v) for k, v in params.items() if defaults.get(k, object()) != _norm(v)}
     return json.dumps(kept, sort_keys=True)
 
 

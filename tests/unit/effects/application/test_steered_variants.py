@@ -207,8 +207,11 @@ def test_a_damaged_shard_the_recount_met_goes_to_the_run_manifest(world, monkeyp
     supervisor.record.assert_any_call(corrupt_shards=["s.jsonl.gz: corrupt"])
 
 
-def _steer(world, monkeypatch, ruled, supervisor=None, **config):
+def _steer(world, monkeypatch, ruled, **config):
+    """``supervisor``, when among ``config``, is the round's; the rest are
+    ``CollectVariantsConfig`` fields."""
     generation, counts, rules = world
+    supervisor = config.pop("supervisor", None)
     played = []
 
     def play(rounds, supervisor, *, rng):
