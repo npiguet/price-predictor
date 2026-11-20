@@ -16,6 +16,14 @@ def _build_train_encoder_parser(subparsers) -> None:
         ),
     )
     parser.set_defaults(func=run_train_encoder)
+    _add_encoder_io_flags(parser)
+    _add_encoder_training_flags(parser)
+    _add_encoder_architecture_flags(parser)
+    _add_encoder_label_and_mlm_flags(parser)
+
+
+def _add_encoder_io_flags(parser: argparse.ArgumentParser) -> None:
+    """The corpus, the cards, the vocabulary and the outputs."""
     parser.add_argument(
         "--cards-played-path", required=True,
         help="Path to cards-played.txt",
@@ -39,6 +47,10 @@ def _build_train_encoder_parser(subparsers) -> None:
             "--model-output)"
         ),
     )
+
+
+def _add_encoder_training_flags(parser: argparse.ArgumentParser) -> None:
+    """Batch size, epochs, learning rate, patience and dropout."""
     parser.add_argument(
         "--batch-size", type=int, default=64,
         help="Training batch size (default: 64)",
@@ -59,6 +71,10 @@ def _build_train_encoder_parser(subparsers) -> None:
         "--dropout", type=float, default=0.1,
         help="Dropout rate (default: 0.1)",
     )
+
+
+def _add_encoder_architecture_flags(parser: argparse.ArgumentParser) -> None:
+    """The encoder's shape and its pooling."""
     parser.add_argument(
         "--n-layers", type=int, default=6,
         help="Number of transformer encoder layers (default: 6)",
@@ -94,6 +110,10 @@ def _build_train_encoder_parser(subparsers) -> None:
             "width d_model)."
         ),
     )
+
+
+def _add_encoder_label_and_mlm_flags(parser: argparse.ArgumentParser) -> None:
+    """The label shrinkage and the MLM auxiliary loss."""
     parser.add_argument(
         "--shrinkage-k", type=float, default=20.0,
         help=(

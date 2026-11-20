@@ -44,6 +44,14 @@ def _build_match_outcomes_parser(subparsers) -> None:
         help="Generate sealed match outcome training data using Forge AI",
     )
     match_parser.set_defaults(func=run_match_outcomes)
+    _add_pool_and_worker_flags(match_parser)
+    _add_side_deck_flags(match_parser)
+    _add_match_and_corpus_flags(match_parser)
+    _add_effect_record_flags(match_parser)
+
+
+def _add_pool_and_worker_flags(match_parser: argparse.ArgumentParser) -> None:
+    """The cards no pool may contain and the worker count."""
     match_parser.add_argument(
         "--exclude-cards",
         default=None,
@@ -62,6 +70,10 @@ def _build_match_outcomes_parser(subparsers) -> None:
         default=12,
         help="Number of parallel Java worker processes to spawn, 1 to 12 (default: 12)",
     )
+
+
+def _add_side_deck_flags(match_parser: argparse.ArgumentParser) -> None:
+    """The generated-decks files each side samples from."""
     match_parser.add_argument(
         "--side-a-decks",
         default=None,
@@ -100,6 +112,10 @@ def _build_match_outcomes_parser(subparsers) -> None:
             " --side-b-decks is an error."
         ),
     )
+
+
+def _add_match_and_corpus_flags(match_parser: argparse.ArgumentParser) -> None:
+    """The games per match and where the two corpora go."""
     match_parser.add_argument(
         "--best-of",
         type=int,
@@ -119,7 +135,6 @@ def _build_match_outcomes_parser(subparsers) -> None:
             " directory; one of the two flags is required."
         ),
     )
-    _add_effect_record_flags(match_parser)
 
 
 # ── effect-record instrumentation (spec 023) ────────────────────────────
