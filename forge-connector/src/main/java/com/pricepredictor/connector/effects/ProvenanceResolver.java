@@ -1,34 +1,24 @@
 package com.pricepredictor.connector.effects;
 
-import com.google.common.collect.Table;
 import com.pricepredictor.connector.effects.ProvenanceKey.Resolved;
-import forge.card.CardTypeView;
+import forge.card.CardStateName;
 import forge.card.GamePieceType;
-import forge.card.MagicColor;
 import forge.game.CardTraitBase;
 import forge.game.card.Card;
+import forge.game.card.CardCloneStates;
 import forge.game.card.CardState;
-import forge.game.card.CardTraitChanges;
-import forge.game.card.ICardTraitChanges;
-import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;
-import forge.game.replacement.ReplacementEffect;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
 import forge.game.trigger.Trigger;
 import forge.game.trigger.WrappedAbility;
-import forge.util.FileSection;
 
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.function.Predicate;
-import java.util.regex.Pattern;
 
 /**
  * The printed line a live Forge trait came from, or the reason it has none.
@@ -49,10 +39,7 @@ public final class ProvenanceResolver {
     }
 
     /** How many donor hops {@link #resolve} will take before giving up. */
-    private static final int MAX_HOPS = 8;
-
-    /** How a line separates the SVar names it grants: spaces, commas, ampersands. */
-    private static final Pattern SVAR_LIST = Pattern.compile("[\\s,&]+");
+    static final int MAX_HOPS = 8;
 
     /**
      * The key for a live trait, following the donor chain for wrapped, granted
@@ -117,16 +104,26 @@ public final class ProvenanceResolver {
 
     /**
      * The printed spell line a keyword-cast spell copies, by its script
-     * parameters ({@link #indexLike}), or null when the trait is not inside a
-     * spell or no single printed spell matches.
+     * parameters ({@link PrintedSlice#indexLike}), or null when the trait is
+     * not inside a spell or no single printed spell matches.
      */
     private static ProvenanceKey printedSpellOf(CardTraitBase trait) {
         if (!(trait instanceof SpellAbility clause)) return null;
         SpellAbility root = clause.getRootAbility();
-        if (root == null || !root.isSpell() || root.getKeyword() == null) return null;
+        if (!isKeywordCastSpell(root)) return null;
         CardState state = root.getCardState();
-        if (state == null || state.getCard() == null || isScriptless(state.getCard())) return null;
-        return keyAt(state, TraitKind.SPELL, indexLike(state, root, TraitKind.SPELL));
+        if (!onScriptedCard(state)) return null;
+        return keyAt(state, TraitKind.SPELL, PrintedSlice.of(state, TraitKind.SPELL).indexLike(root));
+    }
+
+    /** Whether {@code root} is a spell cast through a keyword (Flashback); false for null. */
+    private static boolean isKeywordCastSpell(SpellAbility root) {
+        return root != null && root.isSpell() && root.getKeyword() != null;
+    }
+
+    /** Whether {@code state} is a state of a card that has a script file; false for null. */
+    private static boolean onScriptedCard(CardState state) {
+        return state != null && state.getCard() != null && !isScriptless(state.getCard());
     }
 
     private static Resolved resolveRoot(CardTraitBase trait) {
@@ -301,11 +298,11 @@ public final class ProvenanceResolver {
 
     /**
      * {@link #keyFor}, {@code depth} granting lines into a search for one
-     * ({@link #grantingLineKey}): a granted line that names the SVar of
+     * ({@link GrantingLineSearch#keyOf}): a granted line that names the SVar of
      * another is keyed by its own granting line in turn, as deep as
      * {@link #MAX_HOPS}, and two lines granting each other end there.
      */
-    private static ProvenanceKey keyFor(CardTraitBase trait, int depth) {
+    static ProvenanceKey keyFor(CardTraitBase trait, int depth) {
         if (trait == null) return null;
         CardState state = trait.getCardState();
         if (state == null) return null;
@@ -315,7 +312,7 @@ public final class ProvenanceResolver {
         if (trait.getKeyword() != null) {
             return keyOfPrinted(state, trait.getKeyword(), builtOf(trait), 0);
         }
-        forge.game.card.CardCloneStates cloned = copyStatesOf(state);
+        CardCloneStates cloned = copyStatesOf(state);
         if (cloned != null) return lineOfCopyEffect(cloned, state, trait);
         TraitKind kind = TraitKind.of(trait);
         if (kind == null) return null;
@@ -330,7 +327,7 @@ public final class ProvenanceResolver {
      * (a land copy's mana ability, a copied planeswalker's loyalty
      * replacement) is in no list of the state's own and keys to nothing.
      */
-    private static ProvenanceKey lineOfCopyEffect(forge.game.card.CardCloneStates cloned,
+    private static ProvenanceKey lineOfCopyEffect(CardCloneStates cloned,
                                                   CardState state, CardTraitBase trait) {
         CardTraitBase source = cloned.getSource();
         if (source == null || source == trait) return null;
@@ -342,13 +339,13 @@ public final class ProvenanceResolver {
         TraitKind kind = TraitKind.of(trait);
         List<? extends CardTraitBase> own = kind == null ? null
                 : ForgeFields.traitsThrough(state, kind, List.of());
-        return own != null && indexIn(own, trait) >= 0;
+        return own != null && PrintedSlice.indexIn(own, trait) >= 0;
     }
 
     /**
      * A trait of a state that copies nothing, keyed by its index in the
      * state's slice, unless the card granted it to itself: then the line
-     * that granted it ({@link #grantingLineKey}), and the index only when no
+     * that granted it ({@link GrantingLineSearch#keyOf}), and the index only when no
      * line is found.
      *
      * <p>Forge lists a state's traits printed first, then the ones its trait
@@ -363,11 +360,12 @@ public final class ProvenanceResolver {
     private static ProvenanceKey keyInState(CardState state, CardTraitBase trait, TraitKind kind,
                                             int depth) {
         if (depth < MAX_HOPS && grantedInPlace(state, trait, kind)) {
-            ProvenanceKey granting = grantingLineKey(trait, depth);
+            ProvenanceKey granting = GrantingLineSearch.keyOf(trait, depth);
             if (granting != null) return granting;
         }
-        int index = indexWithin(state, trait, kind);
-        return keyAt(state, kind, index < 0 ? indexLike(state, trait, kind) : index);
+        PrintedSlice slice = PrintedSlice.of(state, kind);
+        int index = slice.indexOf(trait);
+        return keyAt(state, kind, index < 0 ? slice.indexLike(trait) : index);
     }
 
     /**
@@ -378,7 +376,7 @@ public final class ProvenanceResolver {
      * printed trait and every keyword-built trait are among its own; a trait
      * another card granted stands in the donor's state, and not in that
      * state's slice. A land trait a type change built is not among its own
-     * either, but names no SVar, so {@link #grantingLineKey} finds no line
+     * either, but names no SVar, so {@link GrantingLineSearch#keyOf} finds no line
      * for it.
      *
      * <p>An ability a card's own {@code Animate} granted ({@code Abilities$},
@@ -394,7 +392,8 @@ public final class ProvenanceResolver {
     /** Whether {@code trait} is in its state's live slice and not in {@code own}; false for null. */
     private static boolean grantedAmong(List<? extends CardTraitBase> own, CardState state, TraitKind kind,
                                         CardTraitBase trait) {
-        return trait != null && indexIn(own, trait) < 0 && indexIn(kind.slice(state), trait) >= 0;
+        return trait != null && PrintedSlice.indexIn(own, trait) < 0
+                && PrintedSlice.indexIn(kind.slice(state), trait) >= 0;
     }
 
     /**
@@ -451,7 +450,7 @@ public final class ProvenanceResolver {
      */
     private static ProvenanceKey keyOfPrinted(CardState state, KeywordInterface keyword,
                                               ProvenanceKey.Built built, int depth) {
-        Map.Entry<Long, forge.game.card.CardCloneStates> copy = CopyHistory.copyHolding(state);
+        Map.Entry<Long, CardCloneStates> copy = CopyHistory.copyHolding(state);
         if (copy == null) {
             return keyOfUncloned(state, keyword, built, depth);
         }
@@ -470,13 +469,13 @@ public final class ProvenanceResolver {
      * transformed card copies its back face into its own front). Null for
      * none: a keyword the copy effect added.
      */
-    private static CardState copiedStateHolding(Map.Entry<Long, forge.game.card.CardCloneStates> copy,
+    private static CardState copiedStateHolding(Map.Entry<Long, CardCloneStates> copy,
                                                 CardState state, KeywordInterface keyword) {
         Card origin = CopyHistory.originOf(copy);
         if (origin == null) {
             return null;
         }
-        for (forge.card.CardStateName name : List.of(state.getStateName(), origin.getCurrentStateName())) {
+        for (CardStateName name : List.of(state.getStateName(), origin.getCurrentStateName())) {
             CardState original = CopyHistory.stateAsOf(origin, name, copy.getKey());
             if (holdsKeyword(original, state, keyword)) {
                 return original;
@@ -541,7 +540,7 @@ public final class ProvenanceResolver {
 
     /** The position of {@code trait} itself in {@code items}, or -1; -1 for null. */
     private static int indexOfSame(Iterable<? extends CardTraitBase> items, CardTraitBase trait) {
-        return trait == null ? -1 : soleIndex(items, each -> each == trait);
+        return trait == null ? -1 : SoleMatch.indexOf(items, each -> each == trait);
     }
 
     /** The ability a stack copy was made from, or null. */
@@ -555,8 +554,8 @@ public final class ProvenanceResolver {
      * ({@link CopyHistory#copyHolding}, which a mutation's or a prototype's
      * are not), else null.
      */
-    static forge.game.card.CardCloneStates copyStatesOf(CardState state) {
-        Map.Entry<Long, forge.game.card.CardCloneStates> copy = CopyHistory.copyHolding(state);
+    static CardCloneStates copyStatesOf(CardState state) {
+        Map.Entry<Long, CardCloneStates> copy = CopyHistory.copyHolding(state);
         return copy == null ? null : copy.getValue();
     }
 
@@ -586,11 +585,13 @@ public final class ProvenanceResolver {
      */
     private static StepResult keywordGrantor(CardTraitBase trait) {
         KeywordInterface keyword = trait.getKeyword();
-        if (keyword != null && keyword.getStatic() != null
-                && FaceOrder.keywordIndex(trait.getCardState(), keyword) < 0) {
-            return new Hop(keyword.getStatic());
-        }
-        return Pass.PASS;
+        return grantedByStatic(trait, keyword) ? new Hop(keyword.getStatic()) : Pass.PASS;
+    }
+
+    /** Whether {@code keyword}, the trait's, came from a static and is not one the trait's state prints. */
+    private static boolean grantedByStatic(CardTraitBase trait, KeywordInterface keyword) {
+        return keyword != null && keyword.getStatic() != null
+                && FaceOrder.keywordIndex(trait.getCardState(), keyword) < 0;
     }
 
     /**
@@ -634,24 +635,8 @@ public final class ProvenanceResolver {
     }
 
     /**
-     * The printed line that granted a trait out of one of its own SVars.
-     *
-     * <p>An aura's or an equipment's {@code AddTrigger$}, an {@code Animate}'s
-     * {@code Triggers$} and an {@code Effect}'s traits are all parsed from an
-     * SVar of the donor, and Forge points the result at the donor's
-     * {@code CardState} — so the card is known, and only the line is missing.
-     * Nothing in the engine records which line named the SVar, but the state
-     * still holds both halves, so the lookup Forge did on the way out can be
-     * done again on the way back: find the SVar whose text parses to exactly
-     * these parameters, then find the line that names that SVar.
-     *
-     * <p>Both halves refuse when more than one candidate matches, unless the
-     * naming lines all key to one line ({@link #oneLineOf}), for the
-     * reason {@link #indexLike} refuses: a record with no key is still
-     * trainable through its state and payload, while a record with the wrong
-     * key silently trains the wrong line. The parameter comparison is equality
-     * between two runs of Forge's own {@code FileSection} parse, not a
-     * resemblance test, so a match is the SVar and not something like it.
+     * The printed line that granted a trait out of one of its own SVars
+     * ({@link GrantingLineSearch}).
      *
      * <p>Forge keeps no back-reference for these, so this is the one step
      * that searches rather than follows, and it is last for that reason. It
@@ -661,148 +646,7 @@ public final class ProvenanceResolver {
      * exception: {@link #keyInState} searches for its line before its index.
      */
     private static StepResult grantingLine(CardTraitBase trait) {
-        return keyed(grantingLineKey(trait, 0));
-    }
-
-    /** The key of the line that granted {@code trait} ({@link #grantingLine}), or null. */
-    private static ProvenanceKey grantingLineKey(CardTraitBase trait, int depth) {
-        CardState state = trait.getCardState();
-        if (state == null) return null;
-        Map<String, String> want = trait.getOriginalMapParams();
-        if (want == null || want.isEmpty()) return null;
-        String svar = soleSVarParsingTo(state, want);
-        // The SVar may itself be named only by another SVar: a Clone's
-        // AddAbilities$ names the granted ability's SVar from the copy
-        // ability's own SVar, which the replacement line names (Gigantoplasm,
-        // FR-039). Climbed one SVar at a time, each step refusing two
-        // candidates, until a line names one.
-        Set<String> climbed = new HashSet<>();
-        for (int hop = 0; svar != null && hop < MAX_HOPS && climbed.add(svar); hop++) {
-            List<CardTraitBase> naming = linesNaming(state, svar);
-            if (!naming.isEmpty()) return oneLineOf(naming, depth);
-            svar = soleSVarNaming(state, svar);
-        }
-        return null;
-    }
-
-    /**
-     * The key of the one line every trait in {@code naming} keys to: their
-     * key when they all key alike; the bare keyword key when they differ only
-     * in {@code built}; else null, refusing as {@link #indexLike} refuses.
-     *
-     * <p>A keyword names its SVars in its own text, so each trait it built
-     * names them: a Class level's static, which grants the level's lines,
-     * and its level-up ability both name each SVar the level grants. They
-     * are one line, the {@code Class:N} keyword's, which declares the bare
-     * key; a granted line is none of the traits the keyword built, so no
-     * {@code built} names it.
-     */
-    private static ProvenanceKey oneLineOf(List<CardTraitBase> naming, int depth) {
-        Set<ProvenanceKey> keys = new HashSet<>();
-        Set<ProvenanceKey> bare = new HashSet<>();
-        for (CardTraitBase line : naming) {
-            ProvenanceKey key = keyFor(line, depth + 1);
-            keys.add(key);
-            bare.add(key == null ? null : key.withoutBuilt());
-        }
-        if (keys.size() == 1) return keys.iterator().next();
-        return bare.size() == 1 ? bare.iterator().next() : null;
-    }
-
-    /** The one other SVar of {@code state} whose text names {@code svar}, or null. */
-    private static String soleSVarNaming(CardState state, String svar) {
-        Map.Entry<String, String> hit = sole(state.getSVars().entrySet(), other ->
-                !other.getKey().equals(svar) && textNames(other.getValue(), svar));
-        return hit == null ? null : hit.getKey();
-    }
-
-    /** The one SVar of {@code state} whose text parses to {@code want}, or null. */
-    private static String soleSVarParsingTo(CardState state, Map<String, String> want) {
-        Map.Entry<String, String> hit = sole(state.getSVars().entrySet(), svar -> {
-            String text = svar.getValue();
-            return text != null && text.indexOf('$') >= 0 && want.equals(
-                    FileSection.parseToMap(text, FileSection.DOLLAR_SIGN_KV_SEPARATOR));
-        });
-        return hit == null ? null : hit.getKey();
-    }
-
-    /** The printed lines of {@code state} that name {@code svar}. */
-    private static List<CardTraitBase> linesNaming(CardState state, String svar) {
-        List<CardTraitBase> naming = new ArrayList<>();
-        for (TraitKind kind : TraitKind.values()) {
-            kind.slice(state).forEach(line -> {
-                if (namesSVar(line, svar)) naming.add(line);
-            });
-        }
-        return naming;
-    }
-
-    /**
-     * The position of the only item that matches, or -1 when none or several
-     * do.
-     *
-     * <p>Every fallback that recognises a line by resemblance refuses on two
-     * candidates: a record with no key is still trainable through its state
-     * and payload, while a record with the wrong key silently trains the
-     * wrong line.
-     */
-    private static <T> int soleIndex(Iterable<? extends T> items, Predicate<? super T> matches) {
-        int index = 0;
-        int hit = -1;
-        for (T item : items) {
-            if (matches.test(item)) {
-                if (hit >= 0) {
-                    return -1;
-                }
-                hit = index;
-            }
-            index++;
-        }
-        return hit;
-    }
-
-    /** The only item that matches, or null when none or several do; see {@link #soleIndex}. */
-    private static <T> T sole(Iterable<? extends T> items, Predicate<? super T> matches) {
-        T hit = null;
-        boolean found = false;
-        for (T item : items) {
-            if (matches.test(item)) {
-                if (found) {
-                    return null;
-                }
-                hit = item;
-                found = true;
-            }
-        }
-        return hit;
-    }
-
-    /**
-     * Whether a line names an SVar, as a whole word.
-     *
-     * <p>{@code AddTrigger$ TrigA & TrigB} and {@code Triggers$ TrigA} both
-     * name {@code TrigA}; a substring test would also match {@code TrigAttack}.
-     */
-    private static boolean namesSVar(CardTraitBase trait, String svar) {
-        // A keyword-built line names its SVars in the keyword's own text,
-        // colon-separated: ETBReplacement:Copy:DBCopy:Optional.
-        KeywordInterface keyword = trait.getKeyword();
-        if (keyword != null && textNames(keyword.getOriginal().replace(':', ' '), svar)) return true;
-        Map<String, String> params = trait.getOriginalMapParams();
-        if (params == null) return false;
-        for (String value : params.values()) {
-            if (textNames(value, svar)) return true;
-        }
-        return false;
-    }
-
-    /** Whether a parameter value or an SVar's text names {@code svar}, as a whole word. */
-    private static boolean textNames(String text, String svar) {
-        if (text == null) return false;
-        for (String token : SVAR_LIST.split(text)) {
-            if (token.equals(svar)) return true;
-        }
-        return false;
+        return keyed(GrantingLineSearch.keyOf(trait, 0));
     }
 
     /**
@@ -867,206 +711,11 @@ public final class ProvenanceResolver {
     }
 
     /**
-     * Index of {@code trait} within its kind's slice of {@code state}'s trait
-     * list, counted as the sidecar counts it: with every line a trait change
-     * took away back in its printed place ({@link #indexedSlice}).
-     *
-     * <p>Two cases need that. A printed line a static took away ("loses all
-     * abilities") is in no live slice, yet a {@code continuous} record's
-     * board, read without that static, lists it. And a static that takes away
-     * only some lines (Blood Sun: lands lose all but their mana abilities)
-     * moves every line it leaves up the live slice, where a live index would
-     * name the line printed before it. A type change does both at once: Blood
-     * Moon clears a nonbasic land's lines and adds a Mountain's mana ability
-     * where they stood, and Urborg lists a Forest's Swamp mana ability before
-     * its own, so such a trait is counted past every printed line instead.
-     *
-     * <p>When Forge's assembly cannot be read, the live slice, then the slice
-     * without each static that removes lines from the card.
-     */
-    private static int indexWithin(CardState state, CardTraitBase trait, TraitKind kind) {
-        Iterable<? extends CardTraitBase> printed = indexedSlice(state, kind);
-        if (printed != null) return indexIn(printed, trait);
-        int index = indexIn(kind.slice(state), trait);
-        if (index >= 0 || state.getCard() == null) return index;
-        for (Table.Cell<Long, Long, ICardTraitChanges> cell
-                : state.getCard().getChangedCardTraits().cellSet()) {
-            if (cell.getValue() instanceof CardTraitChanges changes && changes.remove() != null) {
-                index = indexIn(kind.sliceWithout(state, cell.getColumnKey()), trait);
-                if (index >= 0) return index;
-            }
-        }
-        return -1;
-    }
-
-    /**
-     * The kind's slice of {@code state} as the sidecar numbers it: the
-     * printed assembly ({@link #printedChanges}), then every live trait it
-     * lacks — the ones a type change added — so a printed line stands at the
-     * index the sidecar gives it and a runtime one past them all; the live
-     * slice when no change takes a line or changes a type; null when Forge's
-     * assembly cannot be read ({@link ForgeFields#traitsThrough}).
-     */
-    private static Iterable<? extends CardTraitBase> indexedSlice(CardState state, TraitKind kind) {
-        List<ICardTraitChanges> printed = printedChanges(state, kind);
-        if (printed == null) return kind.slice(state);
-        List<? extends CardTraitBase> assembled = ForgeFields.traitsThrough(state, kind, printed);
-        if (assembled == null) return null;
-        List<CardTraitBase> indexed = new ArrayList<>(assembled);
-        Set<CardTraitBase> listed = Collections.newSetFromMap(new IdentityHashMap<>());
-        listed.addAll(assembled);
-        for (CardTraitBase live : kind.slice(state)) {
-            if (listed.add(live)) indexed.add(live);
-        }
-        return indexed;
-    }
-
-    /**
-     * Whether a trait is one a type change attached at runtime: a basic land
-     * type's mana ability on a land not printed with that type (Blood Moon,
-     * Spreading Seas, Urborg, an {@code Animate} that sets a land type), a
-     * loyalty replacement on a permanent made a planeswalker. Such a trait is
-     * missing from the printed assembly ({@link #printedChanges}), so it is
-     * keyed past every printed line, and its card slot flags it granted. A
-     * line a layer-6 change granted is in that assembly and is not one of
-     * these.
+     * Whether a trait is one a type change attached at runtime, missing from
+     * its state's printed assembly and so keyed past every printed line
+     * ({@link PrintedSlice#addedByTypeChange}).
      */
     static boolean addedByTypeChange(CardTraitBase trait) {
-        if (trait == null || trait.getKeyword() != null) return false;
-        CardState state = trait.getCardState();
-        TraitKind kind = TraitKind.of(trait);
-        if (state == null || kind == null) return false;
-        List<ICardTraitChanges> printed = printedChanges(state, kind);
-        if (printed == null) return false;
-        List<? extends CardTraitBase> assembled = ForgeFields.traitsThrough(state, kind, printed);
-        if (assembled == null) return false;
-        for (CardTraitBase candidate : assembled) {
-            if (candidate == trait) return false;
-        }
-        return true;
-    }
-
-    /**
-     * The trait changes that assemble the printed list of a kind (the
-     * printed assembly): the card's own, but with every line a change took
-     * away left in place, and layer 4's land traits built from the state's
-     * printed type rather than its live one ({@link PrintedLandTraits}).
-     * Lines a change added stay, appended after the printed ones. Null when
-     * that list is the live one: no change takes a line and no type changed.
-     */
-    private static List<ICardTraitChanges> printedChanges(CardState state, TraitKind kind) {
-        Card card = state.getCard();
-        if (card == null || kind == TraitKind.KEYWORD) return null;
-        boolean differs = card.getChangedCardTypes().iterator().hasNext();
-        List<?> layerFour = state.getLandTraitChanges();
-        List<ICardTraitChanges> printed = new ArrayList<>();
-        for (ICardTraitChanges changes : card.getChangedCardTraitsList(state)) {
-            if (changes instanceof CardTraitChanges taking && taking.remove() != null) {
-                differs = true;
-                printed.add(new CardTraitChanges(taking.abilities(), taking.triggers(),
-                        taking.replacements(), taking.staticAbilities(), null));
-            } else if (layerFour.contains(changes)) {
-                printed.add(new PrintedLandTraits(state));
-            } else {
-                printed.add(changes);
-            }
-        }
-        return differs ? printed : null;
-    }
-
-    /**
-     * Layer 4's land traits as the state's printed type builds them, which is
-     * how the converter, reading the card with no game around it, numbered
-     * them: each printed basic land type's mana ability, in Forge's colour
-     * order, and the replacement a printed planeswalker, battle or saga
-     * carries. Unlike Forge's own, it clears nothing: a type change that
-     * removes every land type (Blood Moon) takes the printed lines from the
-     * live list, not from their places.
-     */
-    private record PrintedLandTraits(CardState state) implements ICardTraitChanges {
-
-        @Override
-        public List<SpellAbility> applySpellAbility(List<SpellAbility> list) {
-            CardTypeView type = state.getType();
-            if (!type.isLand()) return list;
-            for (MagicColor.Color colour : MagicColor.Color.values()) {
-                String landType = colour.getBasicLandType();
-                if (landType != null && type.hasSubtype(landType)) {
-                    list.add(state.getLandManaForColor(colour));
-                }
-            }
-            return list;
-        }
-
-        @Override
-        public List<ReplacementEffect> applyReplacementEffect(List<ReplacementEffect> list) {
-            CardTypeView type = state.getType();
-            if (type.isPlaneswalker()) list.add(state.getLoyaltyRep());
-            if (type.isBattle()) list.add(state.getDefenseRep());
-            if (type.isSaga() && !state.hasKeyword(Keyword.READ_AHEAD)) list.add(state.getSagaRep());
-            return list;
-        }
-
-        @Override
-        public ICardTraitChanges copy(Card host, boolean lki) {
-            return this;
-        }
-    }
-
-    private static int indexIn(Iterable<? extends CardTraitBase> slice, CardTraitBase trait) {
-        int index = 0;
-        for (CardTraitBase candidate : slice) {
-            if (candidate == trait) return index;
-            index++;
-        }
-        return -1;
-    }
-
-    /**
-     * The position of the one same-shape member of the kind's slice, or -1.
-     *
-     * <p>The fingerprint is {@code getOriginalMapParams()}, the script's own
-     * parameters as parsed. {@code SpellAbility.copy} preserves it because
-     * {@code putParam} writes only the live {@code mapParams}, so a stack copy,
-     * an alternative-cost copy and a copied spell all still fingerprint back to
-     * the line they came from even though none of them carries a back-reference.
-     *
-     * <p>Refuses to answer when two members match: a record with no key is
-     * still trainable through its state and payload, while a record with the
-     * wrong key silently trains the wrong line.
-     */
-    private static int indexLike(CardState state, CardTraitBase trait, TraitKind kind) {
-        Iterable<? extends CardTraitBase> slice = sliceToCount(state, kind);
-        Map<String, String> want = trait.getOriginalMapParams();
-        if (want == null || want.isEmpty()) return indexIfUnique(state, trait, kind);
-        return soleIndex(slice, candidate -> candidate.getClass() == trait.getClass()
-                && want.equals(candidate.getOriginalMapParams()));
-    }
-
-    /**
-     * The position of the kind's only member of this trait's class, or -1.
-     *
-     * <p>The fallback for a trait with no fingerprint at all. A permanent spell
-     * is built in Java rather than parsed from a line -- {@code SpellPermanent}
-     * is constructed with an empty parameter map -- so a cost variant of one
-     * carries nothing to recognise it by: an Adventure half, a kicker, a
-     * {@code MayFlashCost} cast all copy the spell and set no back-reference,
-     * and the copy's fingerprint is as empty as the original's.
-     *
-     * <p>What is left is arithmetic. A card state has exactly one permanent
-     * spell, and a single candidate of the right class cannot be the wrong one.
-     * Two candidates and this refuses, for the reason {@link #indexLike}
-     * refuses: a record with no key is still trainable through its state and
-     * payload, while a record with the wrong key silently trains the wrong line.
-     */
-    private static int indexIfUnique(CardState state, CardTraitBase trait, TraitKind kind) {
-        return soleIndex(sliceToCount(state, kind),
-                candidate -> candidate.getClass() == trait.getClass());
-    }
-
-    /** {@link #indexedSlice}, or the live slice when Forge's assembly cannot be read. */
-    private static Iterable<? extends CardTraitBase> sliceToCount(CardState state, TraitKind kind) {
-        Iterable<? extends CardTraitBase> printed = indexedSlice(state, kind);
-        return printed != null ? printed : kind.slice(state);
+        return PrintedSlice.addedByTypeChange(trait);
     }
 }
