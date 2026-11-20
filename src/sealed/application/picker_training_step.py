@@ -45,7 +45,7 @@ def _add_kl(
         ref_logits, _ = reference(pool_cards, pool_mask)
     kl = kl_divergence(logits, ref_logits, pool_mask).mean()
     total = total + run.config.kl_coef * kl
-    kl_value = float(kl)
+    kl_value = float(kl.detach())
     return total, kl_value
 
 
