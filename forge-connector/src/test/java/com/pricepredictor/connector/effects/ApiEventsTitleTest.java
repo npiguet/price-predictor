@@ -21,6 +21,39 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 @ExtendWith(ForgeExtension.class)
 class ApiEventsTitleTest {
 
+    private static final String BECOME_MONARCH = "SP$ BecomeMonarch | ValidTgts$ Player";
+    private static final String TAKE_INITIATIVE = "SP$ TakeInitiative | ValidTgts$ Player";
+
+    /** A clause and the one player it targets. */
+    private record PlayerClause(SpellAbility sa, Player target) {
+    }
+
+    /** {@code script} built on Grizzly Bears, targeting a new player {@code name}. */
+    private static PlayerClause playerClause(String script, String name, int playerId) {
+        SpellAbility sa = AbilityFactory.getAbility(script, TestCards.build("Grizzly Bears"));
+        Player target = new Player(name, TestCards.game(), playerId);
+        sa.resetTargets();
+        sa.getTargets().add(target);
+        return new PlayerClause(sa, target);
+    }
+
+    /** The event {@code sa}'s rule reports when {@code resolution} runs while it is observed. */
+    private static EffectEvent eventAcross(SpellAbility sa, Runnable resolution) {
+        ApiEvents.ClauseObservation<?> observed = observe(sa);
+        resolution.run();
+        return TestCards.onlyEvent(observed);
+    }
+
+    /** {@code GameAction.becomeMonarch}, as {@code BecomeMonarchEffect.resolve()} calls it. */
+    private static void becomeMonarch(Player player) {
+        player.getGame().getAction().becomeMonarch(player, "M12");
+    }
+
+    /** {@code GameAction.takeInitiative}, as {@code TakeInitiativeEffect.resolve()} calls it. */
+    private static void takeInitiative(Player player) {
+        player.getGame().getAction().takeInitiative(player, "BRO");
+    }
+
     // ── monarch_changed ────────────────────────────────────────────────────
 
     /**
@@ -32,15 +65,10 @@ class ApiEventsTitleTest {
      */
     @Test
     void becomingMonarchNamesTheNewMonarch() {
-        SpellAbility sa = AbilityFactory.getAbility(
-                "SP$ BecomeMonarch | ValidTgts$ Player", TestCards.build("Grizzly Bears"));
-        Player target = new Player("target", TestCards.game(), 93001);
-        sa.resetTargets();
-        sa.getTargets().add(target);
+        PlayerClause clause = playerClause(BECOME_MONARCH, "target", 93001);
+        Player target = clause.target();
 
-        ApiEvents.ClauseObservation<?> observed = observe(sa);
-        target.getGame().getAction().becomeMonarch(target, "M12");
-        EffectEvent event = TestCards.onlyEvent(observed);
+        EffectEvent event = eventAcross(clause.sa(), () -> becomeMonarch(target));
 
         assertEquals(EventType.MONARCH_CHANGED, event.type());
         assertEquals(List.of(Refs.of(target)), event.subjects());
@@ -54,16 +82,11 @@ class ApiEventsTitleTest {
      */
     @Test
     void reaffirmingTheSameMonarchNamesNoOne() {
-        SpellAbility sa = AbilityFactory.getAbility(
-                "SP$ BecomeMonarch | ValidTgts$ Player", TestCards.build("Grizzly Bears"));
-        Player target = new Player("already-monarch", TestCards.game(), 93002);
-        sa.resetTargets();
-        sa.getTargets().add(target);
-        target.getGame().getAction().becomeMonarch(target, "M12");
+        PlayerClause clause = playerClause(BECOME_MONARCH, "already-monarch", 93002);
+        Player target = clause.target();
+        becomeMonarch(target);
 
-        ApiEvents.ClauseObservation<?> observed = observe(sa);
-        target.getGame().getAction().becomeMonarch(target, "M12");
-        EffectEvent event = TestCards.onlyEvent(observed);
+        EffectEvent event = eventAcross(clause.sa(), () -> becomeMonarch(target));
 
         assertNull(event, "the monarch did not change, so nothing should be reported");
     }
@@ -129,14 +152,11 @@ class ApiEventsTitleTest {
      */
     @Test
     void takingInitiativeNamesThePlayer() {
-        SpellAbility sa = AbilityFactory.getAbility(
-                "SP$ TakeInitiative | ValidTgts$ Player", TestCards.build("Grizzly Bears"));
-        Player target = new Player("initiative-taker", TestCards.game(), 93401);
-        sa.resetTargets();
-        sa.getTargets().add(target);
+        PlayerClause clause = playerClause(TAKE_INITIATIVE, "initiative-taker", 93401);
+        Player target = clause.target();
 
-        target.getGame().getAction().takeInitiative(target, "BRO");
-        EffectEvent event = TestCards.onlyEvent(observe(sa));
+        takeInitiative(target);
+        EffectEvent event = TestCards.onlyEvent(observe(clause.sa()));
 
         assertEquals(EventType.INITIATIVE_TAKEN, event.type());
         assertEquals(List.of(Refs.of(target)), event.subjects());
@@ -152,16 +172,11 @@ class ApiEventsTitleTest {
      */
     @Test
     void takingInitiativeAgainStillNamesThePlayer() {
-        SpellAbility sa = AbilityFactory.getAbility(
-                "SP$ TakeInitiative | ValidTgts$ Player", TestCards.build("Grizzly Bears"));
-        Player target = new Player("already-has-it", TestCards.game(), 93402);
-        sa.resetTargets();
-        sa.getTargets().add(target);
-        target.getGame().getAction().takeInitiative(target, "BRO");
+        PlayerClause clause = playerClause(TAKE_INITIATIVE, "already-has-it", 93402);
+        Player target = clause.target();
+        takeInitiative(target);
 
-        ApiEvents.ClauseObservation<?> observed = observe(sa);
-        target.getGame().getAction().takeInitiative(target, "BRO");
-        EffectEvent event = TestCards.onlyEvent(observed);
+        EffectEvent event = eventAcross(clause.sa(), () -> takeInitiative(target));
 
         assertEquals(EventType.INITIATIVE_TAKEN, event.type());
         assertEquals(List.of(Refs.of(target)), event.subjects());
@@ -170,13 +185,10 @@ class ApiEventsTitleTest {
     /** No one processed by this clause ever took the initiative here. */
     @Test
     void noInitiativeTakenNamesNoOne() {
-        SpellAbility sa = AbilityFactory.getAbility(
-                "SP$ TakeInitiative | ValidTgts$ Player", TestCards.build("Grizzly Bears"));
-        Player target = new Player("never-took-it", TestCards.game(), 93403);
-        sa.resetTargets();
-        sa.getTargets().add(target);
+        PlayerClause clause = playerClause(TAKE_INITIATIVE, "never-took-it", 93403);
+        Player target = clause.target();
 
-        EffectEvent event = TestCards.onlyEvent(observe(sa));
+        EffectEvent event = TestCards.onlyEvent(observe(clause.sa()));
 
         assertNull(event, "nobody targeted by this clause holds the initiative");
     }

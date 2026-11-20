@@ -54,7 +54,7 @@ class ApiEventsTextTest {
      * added to {@code sa}'s own targets via {@code TargetChoices.add(GameObject)}'s
      * {@code SpellAbility} overload, the same way real targeting leaves it.
      * The plausible wrong implementation this falsifies is {@link
-     * #affectedCards} alone (no {@code getTargetSpells()} union at all),
+     * ClauseTargets#affectedCards} alone (no {@code getTargetSpells()} union at all),
      * which would report zero subjects here instead of one.
      */
     @Test

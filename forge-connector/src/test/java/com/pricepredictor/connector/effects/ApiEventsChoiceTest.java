@@ -84,13 +84,31 @@ class ApiEventsChoiceTest {
      */
     @Test
     void everyChoiceMadeApiHasAReadableChoice() {
-        record ChoiceFixture(String expectedKind, Consumer<Card> mutate, Object expectedValue) {
-            /** A fixture whose value is only required to be there. */
-            ChoiceFixture(String expectedKind, Consumer<Card> mutate) {
-                this(expectedKind, mutate, null);
-            }
-        }
+        Map<String, ChoiceFixture> fixtures = choiceFixtures();
 
+        assertEquals(fixtures.keySet(), choiceMadeApis(),
+                "the fixture table above and RULES's live choice_made keys have "
+                        + "drifted apart -- add a fixture (and, if it is new, a "
+                        + "choice() branch to read it) for whichever API changed");
+
+        for (Map.Entry<String, ChoiceFixture> fixture : fixtures.entrySet()) {
+            assertReadsBackItsOwnChoice(fixture.getKey(), fixture.getValue());
+        }
+    }
+
+    /**
+     * What one Choose* API's effect class leaves on its host, and how
+     * {@code choice()} reads it back.
+     */
+    private record ChoiceFixture(String expectedKind, Consumer<Card> mutate, Object expectedValue) {
+        /** A fixture whose value is only required to be there. */
+        ChoiceFixture(String expectedKind, Consumer<Card> mutate) {
+            this(expectedKind, mutate, null);
+        }
+    }
+
+    /** One fixture per API whose rule emits {@code choice_made}, by API name. */
+    private static Map<String, ChoiceFixture> choiceFixtures() {
         Map<String, ChoiceFixture> fixtures = new TreeMap<>();
         fixtures.put("ChooseColor", new ChoiceFixture("color",
                 host -> host.setChosenColors(List.of("blue"))));
@@ -112,45 +130,59 @@ class ApiEventsChoiceTest {
                 host -> host.setChosenEvenOdd(EvenOdd.Odd)));
         fixtures.put("GenericChoice", new ChoiceFixture("mode",
                 host -> host.setChosenMode("Abzan")));
+        return fixtures;
+    }
 
+    /** Every API whose live rule emits {@code choice_made}, read off the table. */
+    private static Set<String> choiceMadeApis() {
         Set<String> choiceMadeApis = new TreeSet<>();
         for (ApiType api : ApiType.values()) {
-            ApiEvents.Rule<?> rule = ApiEvents.ruleFor(api);
-            if (rule != null && EventType.CHOICE_MADE.equals(rule.eventType())) {
+            if (emitsChoiceMade(ApiEvents.ruleFor(api))) {
                 choiceMadeApis.add(api.name());
             }
         }
-        assertEquals(fixtures.keySet(), choiceMadeApis,
-                "the fixture table above and RULES's live choice_made keys have "
-                        + "drifted apart -- add a fixture (and, if it is new, a "
-                        + "choice() branch to read it) for whichever API changed");
+        return choiceMadeApis;
+    }
 
-        for (Map.Entry<String, ChoiceFixture> fixture : fixtures.entrySet()) {
-            Card host = TestCards.build("Grizzly Bears");
-            SpellAbility sa = AbilityFactory.getAbility("SP$ " + fixture.getKey(), host);
-            // Earlier choices the host still holds, which every other API's
-            // reading would find first: the clause's own API decides the
-            // reading, not what the host happens to hold.
-            if (!"ChooseColor".equals(fixture.getKey())) {
-                host.setChosenColors(List.of("red"));
-            }
-            if (!"ChooseNumber".equals(fixture.getKey())) {
-                host.setChosenNumber(9);
-            }
-            fixture.getValue().mutate().accept(host);
+    private static boolean emitsChoiceMade(ApiEvents.Rule<?> rule) {
+        return rule != null && EventType.CHOICE_MADE.equals(rule.eventType());
+    }
 
-            EffectEvent event = TestCards.onlyEvent(observe(sa));
+    /**
+     * {@code api}'s clause, on a fresh host {@code fixture} has written its
+     * choice to, reads back as that choice.
+     */
+    private static void assertReadsBackItsOwnChoice(String api, ChoiceFixture fixture) {
+        Card host = TestCards.build("Grizzly Bears");
+        SpellAbility sa = AbilityFactory.getAbility("SP$ " + api, host);
+        holdEarlierChoices(host, api);
+        fixture.mutate().accept(host);
 
-            assertNotNull(event, fixture.getKey() + " -- choice() reported nothing");
-            assertEquals(EventType.CHOICE_MADE, event.type(), fixture.getKey());
-            assertEquals(
-                    fixture.getValue().expectedKind(), event.param(EventParam.CHOICE_KIND),
-                    fixture.getKey());
-            assertNotNull(event.param(EventParam.VALUE), fixture.getKey() + " -- empty value");
-            if (fixture.getValue().expectedValue() != null) {
-                assertEquals(fixture.getValue().expectedValue(), event.param(EventParam.VALUE),
-                        fixture.getKey());
-            }
+        EffectEvent event = TestCards.onlyEvent(observe(sa));
+
+        assertNotNull(event, api + " -- choice() reported nothing");
+        assertEquals(EventType.CHOICE_MADE, event.type(), api);
+        assertEquals(
+                fixture.expectedKind(), event.param(EventParam.CHOICE_KIND),
+                api);
+        assertNotNull(event.param(EventParam.VALUE), api + " -- empty value");
+        if (fixture.expectedValue() != null) {
+            assertEquals(fixture.expectedValue(), event.param(EventParam.VALUE),
+                    api);
+        }
+    }
+
+    /**
+     * Earlier choices the host still holds, which every other API's
+     * reading would find first: the clause's own API decides the
+     * reading, not what the host happens to hold.
+     */
+    private static void holdEarlierChoices(Card host, String api) {
+        if (!"ChooseColor".equals(api)) {
+            host.setChosenColors(List.of("red"));
+        }
+        if (!"ChooseNumber".equals(api)) {
+            host.setChosenNumber(9);
         }
     }
 

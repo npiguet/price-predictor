@@ -50,6 +50,26 @@ class ApiEventsCombatRemovalTest {
         return sa;
     }
 
+    /**
+     * A {@code RemoveFromCombat} clause hosted by {@code c1}, targeting both
+     * {@code c1} and {@code c2}, attackers in {@code combat}.
+     */
+    private record RemovalClause(Card c1, Card c2, Combat combat, SpellAbility sa) {
+    }
+
+    /**
+     * Grizzly Bears and Runeclaw Bear attacking in a game of their own, and a
+     * {@code RemoveFromCombat} clause targeting both.
+     */
+    private static RemovalClause removalOfTwoAttackers(int attackerControllerId, int defenderId) {
+        Game game = TestBoard.anotherGame();
+        Card c1 = TestBoard.cardIn(game, "Grizzly Bears");
+        Card c2 = TestBoard.cardIn(game, "Runeclaw Bear");
+        Combat combat = combatOf(game, attackerControllerId, new Player("defender", game, defenderId), c1, c2);
+        SpellAbility sa = targeting("DB$ RemoveFromCombat | ValidTgts$ Creature", c1, c1, c2);
+        return new RemovalClause(c1, c2, combat, sa);
+    }
+
     @Test
     void endingTheCombatPhaseNamesTheAttackingPlayer() {
         Game game = TestBoard.anotherGame();
@@ -82,15 +102,13 @@ class ApiEventsCombatRemovalTest {
      */
     @Test
     void removeFromCombatNamesEveryCreatureActuallyRemoved() {
-        Game game = TestBoard.anotherGame();
-        Card c1 = TestBoard.cardIn(game, "Grizzly Bears");
-        Card c2 = TestBoard.cardIn(game, "Runeclaw Bear");
-        Combat combat = combatOf(game, 93201, new Player("defender", game, 93202), c1, c2);
-        SpellAbility sa = targeting("DB$ RemoveFromCombat | ValidTgts$ Creature", c1, c1, c2);
+        RemovalClause clause = removalOfTwoAttackers(93201, 93202);
+        Card c1 = clause.c1();
+        Card c2 = clause.c2();
 
-        ApiEvents.ClauseObservation<?> observed = observe(sa);
-        combat.removeFromCombat(c1);
-        combat.removeFromCombat(c2);
+        ApiEvents.ClauseObservation<?> observed = observe(clause.sa());
+        clause.combat().removeFromCombat(c1);
+        clause.combat().removeFromCombat(c2);
         EffectEvent event = TestCards.onlyEvent(observed);
 
         assertEquals(EventType.REMOVED_FROM_COMBAT, event.type());
@@ -107,14 +125,11 @@ class ApiEventsCombatRemovalTest {
      */
     @Test
     void removeFromCombatNamesOnlyTheCreatureThatWasActuallyRemoved() {
-        Game game = TestBoard.anotherGame();
-        Card c1 = TestBoard.cardIn(game, "Grizzly Bears");
-        Card c2 = TestBoard.cardIn(game, "Runeclaw Bear");
-        Combat combat = combatOf(game, 93203, new Player("defender", game, 93204), c1, c2);
-        SpellAbility sa = targeting("DB$ RemoveFromCombat | ValidTgts$ Creature", c1, c1, c2);
+        RemovalClause clause = removalOfTwoAttackers(93203, 93204);
+        Card c1 = clause.c1();
 
-        ApiEvents.ClauseObservation<?> observed = observe(sa);
-        combat.removeFromCombat(c1);
+        ApiEvents.ClauseObservation<?> observed = observe(clause.sa());
+        clause.combat().removeFromCombat(c1);
         // c2 stays attacking -- its own removal was skipped by a guard this
         // rule does not replicate.
         EffectEvent event = TestCards.onlyEvent(observed);
