@@ -37,8 +37,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code Boolean} as a clause and simply produces no event, with nothing
  * anywhere to say so. These tests are what stands in for the compiler.
  *
- * <p>{@link ApiEventsTest} covers what {@link ApiEvents} says about a clause
- * once it is handed one. What is here is the wiring that hands it one at all:
+ * <p>{@link ApiEventsTest} and the {@code ApiEvents<Family>Test} classes
+ * beside it cover what {@link ApiEvents} says about a clause once it is
+ * handed one. What is here is the wiring that hands it one at all:
  * {@link ClauseOutcomeRouter#clauseHandler()}, called the way the engine calls
  * it, with two real, distinct, non-null values so a position swap has
  * something to disagree with rather than two nulls agreeing by accident.
