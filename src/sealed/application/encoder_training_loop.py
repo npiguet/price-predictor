@@ -15,7 +15,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from sealed.application.encoder_losses import _per_batch_weighted_mse, _stack_head_preds
-from sealed.application.encoder_mlm import _draw_mlm_mask
+from sealed.application.encoder_mlm import MlmMaskSpec, _draw_mlm_mask
 from sealed.domain.encoder_model import SealedEncoderModel
 
 # ── Best-checkpoint helper ──────────────────────────────────────────────
@@ -72,12 +72,46 @@ def _select_device() -> torch.device:
 
 @dataclass
 class _TrainContext:
-    """Read-only context passed through the training and evaluation loops."""
+    """Read-only context passed through the training and evaluation loops:
+    the MLM loss weight, what the MLM mask draw masks, and the device the
+    batches run on.
+    """
 
     mlm_weight: float
-    mlm_mask_prob: float
-    mask_token_id: int
-    special_token_ids: tuple[int, ...]
+    mlm_mask: MlmMaskSpec
+    device: torch.device
+
+
+@dataclass(frozen=True)
+class _Batch:
+    """One collated batch (see ``_pad_collate``), on the training device."""
+
+    ids: torch.Tensor
+    attention_mask: torch.Tensor
+    labels: torch.Tensor
+    weights: torch.Tensor
+    head_mask: torch.Tensor
+
+    @classmethod
+    def on_device(
+        cls, collated: tuple[torch.Tensor, ...], device: torch.device,
+    ) -> _Batch:
+        """Move the loader's ``(ids, mask, labels, weights, head_mask)`` to
+        ``device``, in that order.
+        """
+        ids, mask, labels, weights, head_mask = collated
+        return cls(
+            ids.to(device), mask.to(device), labels.to(device),
+            weights.to(device), head_mask.to(device),
+        )
+
+
+@dataclass(frozen=True)
+class _Stepper:
+    """The optimizer and its warmup schedule, stepped once per batch."""
+
+    optimizer: torch.optim.Optimizer
+    scheduler: torch.optim.lr_scheduler.LambdaLR
 
 
 @dataclass
@@ -101,13 +135,7 @@ class _BatchResult:
 
 
 def _forward_batch(
-    model: SealedEncoderModel,
-    ids: torch.Tensor,
-    attention_mask: torch.Tensor,
-    labels: torch.Tensor,
-    weights: torch.Tensor,
-    head_mask: torch.Tensor,
-    ctx: _TrainContext,
+    model: SealedEncoderModel, batch: _Batch, ctx: _TrainContext,
 ) -> _BatchResult:
     """Run one batch end-to-end.
 
@@ -119,13 +147,15 @@ def _forward_batch(
     on-device (``mask_positions`` is produced on-device by
     :func:`_draw_mlm_mask`), so there is no host sync.
     """
+    ids = batch.ids
     masked_ids, mask_positions = _draw_mlm_mask(
-        ids, attention_mask, ctx.mlm_mask_prob,
-        ctx.mask_token_id, ctx.special_token_ids,
+        ids, batch.attention_mask, ctx.mlm_mask,
     )
-    predictions = model(masked_ids, attention_mask)
+    predictions = model(masked_ids, batch.attention_mask)
     head_preds = _stack_head_preds(predictions)                 # (B, 9)
-    l_reg = _per_batch_weighted_mse(predictions, labels, weights, head_mask)
+    l_reg = _per_batch_weighted_mse(
+        predictions, batch.labels, batch.weights, batch.head_mask,
+    )
     contextualized = predictions["contextualized"]              # (B, T, d_model)
     if mask_positions.any():
         mask_targets = ids[mask_positions]                      # (N,)
@@ -173,12 +203,39 @@ class _EpochTrainMetrics:
     trunk_grad_mlm_weighted: float | None
 
 
+def _probes_trunk(batch_idx: int, result: _BatchResult) -> bool:
+    """Whether this batch runs the trunk gradient-norm probe: the epoch's
+    first batch, when its regression loss has a graph and some position
+    was masked.
+    """
+    return (
+        batch_idx == 0
+        and result.l_reg.requires_grad
+        and result.mlm_logits_at_mask is not None
+    )
+
+
+def _trunk_grad_norms(
+    result: _BatchResult, trunk_params: list[torch.Tensor], mlm_weight: float,
+) -> tuple[float, float]:
+    """‖∂L_reg/∂trunk‖ and ‖∂(w·L_mlm)/∂trunk‖, keeping the graph for the
+    optimization ``backward()``.
+    """
+    grad_reg = _global_grad_norm(torch.autograd.grad(
+        result.l_reg, trunk_params,
+        retain_graph=True, allow_unused=True,
+    ))
+    grad_mlm_weighted = _global_grad_norm(torch.autograd.grad(
+        mlm_weight * result.l_mlm, trunk_params,
+        retain_graph=True, allow_unused=True,
+    ))
+    return grad_reg, grad_mlm_weighted
+
+
 def _train_epoch(
     model: SealedEncoderModel,
     loader: DataLoader,
-    optimizer: torch.optim.Optimizer,
-    scheduler: torch.optim.lr_scheduler.LambdaLR,
-    device: torch.device,
+    stepper: _Stepper,
     ctx: _TrainContext,
 ) -> _EpochTrainMetrics:
     """Train for one epoch.
@@ -200,31 +257,18 @@ def _train_epoch(
     )
     grad_reg: float | None = None
     grad_mlm_weighted: float | None = None
-    for batch_idx, (ids, mask, labels, weights, head_mask) in enumerate(loader):
-        ids = ids.to(device)
-        mask = mask.to(device)
-        labels = labels.to(device)
-        weights = weights.to(device)
-        head_mask = head_mask.to(device)
-        optimizer.zero_grad()
-        result = _forward_batch(model, ids, mask, labels, weights, head_mask, ctx)
-        if (
-            batch_idx == 0
-            and result.l_reg.requires_grad
-            and result.mlm_logits_at_mask is not None
-        ):
-            grad_reg = _global_grad_norm(torch.autograd.grad(
-                result.l_reg, trunk_params,
-                retain_graph=True, allow_unused=True,
-            ))
-            grad_mlm_weighted = _global_grad_norm(torch.autograd.grad(
-                ctx.mlm_weight * result.l_mlm, trunk_params,
-                retain_graph=True, allow_unused=True,
-            ))
+    for batch_idx, collated in enumerate(loader):
+        batch = _Batch.on_device(collated, ctx.device)
+        stepper.optimizer.zero_grad()
+        result = _forward_batch(model, batch, ctx)
+        if _probes_trunk(batch_idx, result):
+            grad_reg, grad_mlm_weighted = _trunk_grad_norms(
+                result, trunk_params, ctx.mlm_weight,
+            )
         result.l_total.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        optimizer.step()
-        scheduler.step()
+        stepper.optimizer.step()
+        stepper.scheduler.step()
         sum_reg += float(result.l_reg.item())
         sum_mlm += float(result.l_mlm.item())
         sum_total += float(result.l_total.item())

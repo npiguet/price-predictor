@@ -23,10 +23,14 @@ from pathlib import Path
 
 from price_predictor.infrastructure.tokenizer_store import load_vocabulary
 from sealed.application.encoder_counters import _aggregate, _drop_missing_cards
-from sealed.application.encoder_evaluation import _eval_loss, _format_head_corrs
-from sealed.application.encoder_labels import _build_label_map
+from sealed.application.encoder_evaluation import (
+    _eval_loss,
+    _EvalMetrics,
+    _format_head_corrs,
+)
+from sealed.application.encoder_labels import CardLabelMap, _build_label_map
 from sealed.application.encoder_mlm import _MASK_TOKEN
-from sealed.application.encoder_split import _split_cards
+from sealed.application.encoder_split import CardSplit, _split_cards
 from sealed.application.encoder_training_common import (
     D_MODEL,
     FF_DIM,
@@ -36,10 +40,14 @@ from sealed.application.encoder_training_common import (
 )
 from sealed.application.encoder_training_loop import (
     _BestCheckpoint,
+    _EpochTrainMetrics,
     _format_trunk_grads,
     _train_epoch,
 )
-from sealed.application.encoder_training_setup import _build_training_setup
+from sealed.application.encoder_training_setup import (
+    _build_training_setup,
+    _TrainingSetup,
+)
 from sealed.application.encoder_win_rates import _write_win_rates
 from sealed.infrastructure.cards_played_reader import iter_rows
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
@@ -92,7 +100,7 @@ class _PreFlightError(RuntimeError):
         self.exit_code = exit_code
 
 
-def _run_preflight(config: TrainEncoderConfig) -> None:
+def _check_vocabulary(config: TrainEncoderConfig) -> None:
     if not config.vocab_path.exists():
         raise _PreFlightError(
             f"Vocabulary file not found: {config.vocab_path}. "
@@ -107,6 +115,9 @@ def _run_preflight(config: TrainEncoderConfig) -> None:
             "(FR-009a). Re-run python -m sealed build-vocab to refresh.",
             exit_code=2,
         )
+
+
+def _check_cards_played(config: TrainEncoderConfig) -> None:
     if (
         not config.cards_played_path.exists()
         or config.cards_played_path.stat().st_size == 0
@@ -116,6 +127,9 @@ def _run_preflight(config: TrainEncoderConfig) -> None:
             "Run python -m sealed match-outcomes to collect data first.",
             exit_code=3,
         )
+
+
+def _check_cards_folder(config: TrainEncoderConfig) -> None:
     if not config.cards_folder.is_dir() or not any(
         config.cards_folder.rglob("*.txt")
     ):
@@ -124,6 +138,9 @@ def _run_preflight(config: TrainEncoderConfig) -> None:
             "Run python -m price_predictor convert to build the corpus.",
             exit_code=4,
         )
+
+
+def _check_divisibility(config: TrainEncoderConfig) -> None:
     # d_model / n_heads / n_pool_queries divisibility is validated again
     # inside SealedEncoderConfig.__post_init__, but we surface it as exit
     # code 6 at the CLI handler level (the dataclass raises ValueError).
@@ -141,18 +158,22 @@ def _run_preflight(config: TrainEncoderConfig) -> None:
         )
 
 
-def run(config: TrainEncoderConfig) -> Path:
-    """Execute the train-encoder pipeline.
+def _run_preflight(config: TrainEncoderConfig) -> None:
+    _check_vocabulary(config)
+    _check_cards_played(config)
+    _check_cards_folder(config)
+    _check_divisibility(config)
 
-    Returns the path of the saved ``latest.pt``. Raises ``_PreFlightError``
-    on pre-flight failure (CLI handler maps to exit codes). Cards
-    referenced by ``cards-played.txt`` that lack a converted ``.txt`` are
-    reported via a log warning and dropped — they do not block the run.
+
+# ── Pipeline stages ─────────────────────────────────────────────────────
+
+
+def _labels_from_corpus(
+    config: TrainEncoderConfig, locator: ConvertedCardLocator,
+) -> CardLabelMap:
+    """Aggregate ``cards-played.txt``, drop cards with no converted text,
+    build the label map and write its snapshot.
     """
-    _run_preflight(config)
-
-    locator = ConvertedCardLocator(config.cards_folder)
-
     _log(f"Reading {config.cards_played_path}")
     counters = _aggregate(iter_rows(config.cards_played_path), locator)
     _log(f"Aggregated counters for {len(counters)} card(s)")
@@ -170,7 +191,11 @@ def run(config: TrainEncoderConfig) -> Path:
     win_rates_path = Path(config.win_rates_path)
     _write_win_rates(labels, win_rates_path)
     _log(f"Wrote per-card label snapshot to {win_rates_path}")
+    return labels
 
+
+def _card_split(config: TrainEncoderConfig, labels: CardLabelMap) -> CardSplit:
+    """Split the labelled cards, refusing a split with an empty side."""
     train_names, val_names = _split_cards(
         labels, val_fraction=config.val_fraction, seed=config.random_seed,
     )
@@ -180,44 +205,56 @@ def run(config: TrainEncoderConfig) -> Path:
             f"train={len(train_names)}, val={len(val_names)}"
         )
     _log(f"Card-level split: {len(train_names)} train / {len(val_names)} val")
+    return CardSplit(train_names, val_names)
 
-    setup = _build_training_setup(config, labels, train_names, val_names, locator)
-    model, encoder_config = setup.model, setup.encoder_config
-    device, ctx = setup.device, setup.ctx
-    train_loader, val_loader = setup.train_loader, setup.val_loader
-    optimizer, scheduler = setup.optimizer, setup.scheduler
 
+def _epoch_line(
+    progress: str, train: _EpochTrainMetrics, val: _EvalMetrics, improved: bool,
+) -> str:
+    """One epoch's loss summary line; ``progress`` reads ``Epoch <e>/<n>``."""
+    marker = "*" if improved else " "
+    return (
+        f"{progress}  "
+        f"train_loss={train.total:.4f} "
+        f"(reg={train.reg:.4f}, mlm={train.mlm:.4f} ppl={math.exp(train.mlm):.1f})  "
+        f"val_loss={val.total:.4f} "
+        f"(reg={val.reg:.4f}, mlm={val.mlm:.4f} ppl={val.mlm_perplexity:.1f} "
+        f"acc={val.mlm_top1_accuracy * 100:.1f}%)  "
+        f"best={marker}"
+    )
+
+
+def _train_epochs(
+    config: TrainEncoderConfig, setup: _TrainingSetup,
+) -> _BestCheckpoint:
+    """Run the epoch loop, stopping after ``patience`` epochs without a
+    better val loss, and return the best checkpoint seen.
+    """
+    model, ctx = setup.model, setup.ctx
     best = _BestCheckpoint()
     epochs_since_best = 0
     for epoch in range(1, config.epochs + 1):
-        train = _train_epoch(
-            model, train_loader, optimizer, scheduler, device, ctx,
-        )
-        val = _eval_loss(model, val_loader, device, ctx)
+        train = _train_epoch(model, setup.train_loader, setup.stepper, ctx)
+        val = _eval_loss(model, setup.val_loader, ctx)
         improved = best.update(model, epoch, val.total)
-        marker = "*" if improved else " "
-        _log(
-            f"Epoch {epoch}/{config.epochs}  "
-            f"train_loss={train.total:.4f} "
-            f"(reg={train.reg:.4f}, mlm={train.mlm:.4f} ppl={math.exp(train.mlm):.1f})  "
-            f"val_loss={val.total:.4f} "
-            f"(reg={val.reg:.4f}, mlm={val.mlm:.4f} ppl={val.mlm_perplexity:.1f} "
-            f"acc={val.mlm_top1_accuracy * 100:.1f}%)  "
-            f"best={marker}"
-        )
+        _log(_epoch_line(f"Epoch {epoch}/{config.epochs}", train, val, improved))
         _log("  " + _format_head_corrs(val.head_correlations))
         _log("  " + _format_trunk_grads(train, ctx.mlm_weight))
-        if improved:
-            epochs_since_best = 0
-        else:
-            epochs_since_best += 1
-            if epochs_since_best >= config.patience:
-                _log(
-                    f"Early stop after {epochs_since_best} epochs "
-                    f"without improvement.",
-                )
-                break
+        epochs_since_best = 0 if improved else epochs_since_best + 1
+        if not improved and epochs_since_best >= config.patience:
+            _log(
+                f"Early stop after {epochs_since_best} epochs "
+                f"without improvement.",
+            )
+            break
+    return best
 
+
+def _save_best(
+    config: TrainEncoderConfig, setup: _TrainingSetup, best: _BestCheckpoint,
+) -> Path:
+    """Restore the best epoch's weights, save the encoder, return ``latest.pt``."""
+    model = setup.model
     if best.best_state_dict is not None:
         model.load_state_dict(best.best_state_dict)
         _log(
@@ -226,10 +263,27 @@ def run(config: TrainEncoderConfig) -> Path:
         )
 
     store = SealedEncoderStore()
-    saved = store.save_encoder(model, encoder_config, config.model_output_dir)
+    saved = store.save_encoder(model, setup.encoder_config, config.model_output_dir)
     latest = config.model_output_dir / "latest.pt"
     _log(
         f"Best epoch: {best.best_epoch}, val_loss: {best.best_val_loss:.4f}. "
         f"Saved {saved}",
     )
     return latest
+
+
+def run(config: TrainEncoderConfig) -> Path:
+    """Execute the train-encoder pipeline.
+
+    Returns the path of the saved ``latest.pt``. Raises ``_PreFlightError``
+    on pre-flight failure (CLI handler maps to exit codes). Cards
+    referenced by ``cards-played.txt`` that lack a converted ``.txt`` are
+    reported via a log warning and dropped — they do not block the run.
+    """
+    _run_preflight(config)
+    locator = ConvertedCardLocator(config.cards_folder)
+    labels = _labels_from_corpus(config, locator)
+    split = _card_split(config, labels)
+    setup = _build_training_setup(config, labels, split, locator)
+    best = _train_epochs(config, setup)
+    return _save_best(config, setup, best)

@@ -20,7 +20,7 @@ from sealed.application.encoder_evaluation import _HeadCorrAccumulator
 from sealed.application.encoder_heads import N_HEADS
 from sealed.application.encoder_labels import CardLabels, _build_label_map
 from sealed.application.encoder_losses import _per_batch_weighted_mse
-from sealed.application.encoder_mlm import _draw_mlm_mask
+from sealed.application.encoder_mlm import MlmMaskSpec, _draw_mlm_mask
 from sealed.application.encoder_split import _split_cards
 from sealed.application.encoder_win_rates import _write_win_rates
 from sealed.domain.encoder_model import COLOR_ORDER
@@ -538,8 +538,10 @@ class TestDrawMlmMask:
         mask_token_id = 3
         special_token_ids = (0, 1, 2, 3)
         masked, positions = _draw_mlm_mask(
-            ids, attention_mask, mask_prob=1.0,
-            mask_token_id=mask_token_id, special_token_ids=special_token_ids,
+            ids, attention_mask, MlmMaskSpec(
+                mask_prob=1.0, mask_token_id=mask_token_id,
+                special_token_ids=special_token_ids,
+            ),
         )
         # mask_prob=1 → every eligible position must flip; specials must not.
         for col, original in enumerate(ids[0].tolist()):
@@ -555,8 +557,9 @@ class TestDrawMlmMask:
         ids = torch.tensor([[5, 6, 0, 0]], dtype=torch.long)  # PAD = 0
         attention_mask = torch.tensor([[1, 1, 0, 0]], dtype=torch.long)
         masked, positions = _draw_mlm_mask(
-            ids, attention_mask, mask_prob=1.0,
-            mask_token_id=3, special_token_ids=(0, 1, 2, 3),
+            ids, attention_mask, MlmMaskSpec(
+                mask_prob=1.0, mask_token_id=3, special_token_ids=(0, 1, 2, 3),
+            ),
         )
         # The two PAD positions are not eligible.
         assert positions[0, 2].item() == 0
@@ -568,8 +571,9 @@ class TestDrawMlmMask:
         ids = torch.full((1, n_real), 5, dtype=torch.long)
         attention_mask = torch.ones_like(ids)
         _, positions = _draw_mlm_mask(
-            ids, attention_mask, mask_prob=0.15,
-            mask_token_id=3, special_token_ids=(0, 1, 2, 3),
+            ids, attention_mask, MlmMaskSpec(
+                mask_prob=0.15, mask_token_id=3, special_token_ids=(0, 1, 2, 3),
+            ),
         )
         fraction = positions.float().mean().item()
         # Rough sanity check; CLT gives stddev ~ sqrt(0.15*0.85/1000) ≈ 0.011

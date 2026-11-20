@@ -5,7 +5,7 @@ the tokenized corpus, the model, the datasets and loaders, the optimizer.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING
 
 import torch
 from torch.utils.data import DataLoader
@@ -21,11 +21,13 @@ from sealed.application.encoder_batches import (
     _WinnabilityDataset,
 )
 from sealed.application.encoder_labels import CardLabelMap
-from sealed.application.encoder_mlm import _resolve_special_token_ids
+from sealed.application.encoder_mlm import MlmMaskSpec, _resolve_special_token_ids
+from sealed.application.encoder_split import CardSplit
 from sealed.application.encoder_training_common import _log
 from sealed.application.encoder_training_loop import (
     _make_optimizer,
     _select_device,
+    _Stepper,
     _TrainContext,
 )
 from sealed.domain.encoder_model import SealedEncoderConfig, SealedEncoderModel
@@ -41,19 +43,16 @@ class _TrainingSetup:
 
     model: SealedEncoderModel
     encoder_config: SealedEncoderConfig
-    device: torch.device
     train_loader: DataLoader
     val_loader: DataLoader
-    optimizer: torch.optim.Optimizer
-    scheduler: torch.optim.lr_scheduler.LambdaLR
+    stepper: _Stepper
     ctx: _TrainContext
 
 
 def _build_training_setup(
     config: TrainEncoderConfig,
     labels: CardLabelMap,
-    train_names: Sequence[str],
-    val_names: Sequence[str],
+    split: CardSplit,
     locator: ConvertedCardLocator,
 ) -> _TrainingSetup:
     """Tokenize the corpus once, build the model + datasets + loaders +
@@ -86,10 +85,10 @@ def _build_training_setup(
     _log(f"Sealed encoder on {device}")
 
     train_ds = _WinnabilityDataset(
-        train_names, labels, tokenized_by_name, config.shrinkage_k,
+        split.train, labels, tokenized_by_name, config.shrinkage_k,
     )
     val_ds = _WinnabilityDataset(
-        val_names, labels, tokenized_by_name, config.shrinkage_k,
+        split.val, labels, tokenized_by_name, config.shrinkage_k,
     )
     train_loader = DataLoader(
         train_ds,
@@ -111,11 +110,14 @@ def _build_training_setup(
 
     ctx = _TrainContext(
         mlm_weight=config.mlm_weight,
-        mlm_mask_prob=config.mlm_mask_prob,
-        mask_token_id=mask_token_id,
-        special_token_ids=special_token_ids,
+        mlm_mask=MlmMaskSpec(
+            mask_prob=config.mlm_mask_prob,
+            mask_token_id=mask_token_id,
+            special_token_ids=special_token_ids,
+        ),
+        device=device,
     )
     return _TrainingSetup(
-        model, encoder_config, device, train_loader, val_loader,
-        optimizer, scheduler, ctx,
+        model, encoder_config, train_loader, val_loader,
+        _Stepper(optimizer, scheduler), ctx,
     )

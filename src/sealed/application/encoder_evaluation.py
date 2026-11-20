@@ -12,7 +12,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from sealed.application.encoder_heads import _ALL_HEAD_NAMES, N_HEADS
-from sealed.application.encoder_training_loop import _forward_batch, _TrainContext
+from sealed.application.encoder_training_loop import _Batch, _forward_batch, _TrainContext
 from sealed.domain.encoder_model import COLOR_ORDER, SealedEncoderModel
 
 # ── Per-head prediction↔target correlation (val-set diagnostics) ───────
@@ -100,7 +100,6 @@ def _format_head_corrs(corrs: dict[str, float | None]) -> str:
 def _eval_loss(
     model: SealedEncoderModel,
     loader: DataLoader,
-    device: torch.device,
     ctx: _TrainContext,
 ) -> _EvalMetrics:
     """Evaluate on the val set.
@@ -118,13 +117,9 @@ def _eval_loss(
     mlm_correct = 0
     mlm_total = 0
     corr = _HeadCorrAccumulator()
-    for ids, mask, labels, weights, head_mask in loader:
-        ids = ids.to(device)
-        mask = mask.to(device)
-        labels = labels.to(device)
-        weights = weights.to(device)
-        head_mask = head_mask.to(device)
-        result = _forward_batch(model, ids, mask, labels, weights, head_mask, ctx)
+    for collated in loader:
+        batch = _Batch.on_device(collated, ctx.device)
+        result = _forward_batch(model, batch, ctx)
         sum_reg += float(result.l_reg.item())
         sum_mlm += float(result.l_mlm.item())
         sum_total += float(result.l_total.item())
@@ -136,7 +131,7 @@ def _eval_loss(
             )
             mlm_total += int(result.mask_targets.numel())
         # Per-head prediction↔target correlation over non-empty cells.
-        corr.add(result.head_preds, labels, head_mask)
+        corr.add(result.head_preds, batch.labels, batch.head_mask)
     n = max(n_batches, 1)
     mlm_avg = sum_mlm / n
     return _EvalMetrics(
