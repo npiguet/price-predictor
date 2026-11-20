@@ -162,17 +162,18 @@ final class ToolMain {
      *
      * @throws Exit with {@link ExitCode#BAD_CONFIG}, the argument named
      */
-    static Args args(String[] args, Set<String> switches, String... flags) {
-        Set<String> known = Set.of(flags);
+    static Args args(String[] args, Set<Flag> switches, Flag... flags) {
+        Set<String> known = names(Set.of(flags));
+        Set<String> switchNames = names(switches);
         Map<String, String> values = new HashMap<>();
         Set<String> given = new HashSet<>();
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
-            if (switches.contains(arg)) {
+            if (switchNames.contains(arg)) {
                 given.add(arg);
             } else if (!known.contains(arg)) {
                 throw badConfig("unknown argument " + arg + "; this tool takes "
-                        + new TreeSet<>(union(known, switches)));
+                        + new TreeSet<>(union(known, switchNames)));
             } else if (i + 1 == args.length) {
                 throw badConfig(arg + " needs a value");
             } else {
@@ -182,23 +183,35 @@ final class ToolMain {
         return new Args(values, given);
     }
 
+    private static Set<String> names(Set<Flag> flags) {
+        Set<String> names = new HashSet<>();
+        for (Flag flag : flags) {
+            names.add(flag.name());
+        }
+        return names;
+    }
+
     private static Set<String> union(Set<String> first, Set<String> second) {
         Set<String> all = new HashSet<>(first);
         all.addAll(second);
         return all;
     }
 
+    /** A command-line flag, written with its dashes: {@code --output}. */
+    record Flag(String name) {
+    }
+
     /** Parsed {@code --flag value} pairs, and the switches given. */
     record Args(Map<String, String> values, Set<String> switches) {
 
         /** Whether the switch {@code flag} was given. */
-        boolean has(String flag) {
-            return switches.contains(flag);
+        boolean has(Flag flag) {
+            return switches.contains(flag.name());
         }
 
         /** The flag's value, or {@code defaultValue} when it was not given. */
-        String get(String flag, String defaultValue) {
-            return values.getOrDefault(flag, defaultValue);
+        String get(Flag flag, String defaultValue) {
+            return values.getOrDefault(flag.name(), defaultValue);
         }
 
         /**
@@ -207,21 +220,21 @@ final class ToolMain {
          *
          * @throws Exit with {@link ExitCode#BAD_CONFIG} when the value is not an integer
          */
-        int intValue(String flag, int defaultValue) {
-            String value = values.get(flag);
+        int intValue(Flag flag, int defaultValue) {
+            String value = values.get(flag.name());
             if (value == null) {
                 return defaultValue;
             }
             try {
                 return Integer.parseInt(value);
             } catch (NumberFormatException e) {
-                throw badConfig(flag + " must be an integer, got: " + value);
+                throw badConfig(flag.name() + " must be an integer, got: " + value);
             }
         }
 
         /** The flag's value, or null when it was not given. */
-        String get(String flag) {
-            return values.get(flag);
+        String get(Flag flag) {
+            return values.get(flag.name());
         }
 
         /**
@@ -230,10 +243,10 @@ final class ToolMain {
          * @throws Exit with {@link ExitCode#BAD_CONFIG}, the flag named, when it
          *         was not given
          */
-        String require(String flag) {
-            String value = values.get(flag);
+        String require(Flag flag) {
+            String value = values.get(flag.name());
             if (value == null) {
-                throw badConfig(flag + " is required");
+                throw badConfig(flag.name() + " is required");
             }
             return value;
         }

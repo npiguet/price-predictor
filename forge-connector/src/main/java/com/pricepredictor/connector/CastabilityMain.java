@@ -33,6 +33,9 @@ import java.util.Set;
  */
 public class CastabilityMain {
 
+    private static final ToolMain.Flag CARDS = new ToolMain.Flag("--cards");
+    private static final ToolMain.Flag OUTPUT = new ToolMain.Flag("--output");
+
     /** A card's answer; {@link #wireName()} is what the Python side reads. */
     enum Verdict implements WireNamed {
         CASTABLE("castable"),
@@ -56,9 +59,9 @@ public class CastabilityMain {
 
     /** The consult itself; an exit it requests ends the process through {@link ToolMain#run}. */
     static void work(String[] args) throws IOException {
-        ToolMain.Args cli = ToolMain.args(args, Set.of(), "--cards", "--output");
-        Path cardsFile = Path.of(cli.require("--cards"));
-        Path output = Path.of(cli.require("--output"));
+        ToolMain.Args cli = ToolMain.args(args, Set.of(), CARDS, OUTPUT);
+        Path cardsFile = Path.of(cli.require(CARDS));
+        Path output = Path.of(cli.require(OUTPUT));
         ForgeEnvironmentInitializer.initialize();
         List<String> names = CorpusFiles.nonBlankLines(cardsFile);
         Map<String, Verdict> verdicts = consult(names);

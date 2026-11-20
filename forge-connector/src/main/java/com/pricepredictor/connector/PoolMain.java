@@ -30,6 +30,11 @@ import java.util.Set;
  */
 public class PoolMain {
 
+    private static final ToolMain.Flag SET = new ToolMain.Flag("--set");
+    private static final ToolMain.Flag SIZE = new ToolMain.Flag("--size");
+    private static final ToolMain.Flag POOLS_PATH = new ToolMain.Flag("--pools-path");
+    private static final ToolMain.Flag EXCLUDE_CARDS = new ToolMain.Flag("--exclude-cards");
+
     /**
      * Pools generated per call when every pool is from one set: large enough
      * to amortise the generator's per-call set lookup, small enough that the
@@ -47,11 +52,11 @@ public class PoolMain {
     /** The generation itself; an exit it requests ends the process through {@link ToolMain#run}. */
     static void work(String[] args) throws java.io.IOException {
         ToolMain.Args cli = ToolMain.args(
-                args, Set.of(), "--set", "--size", "--pools-path", "--exclude-cards");
-        String setCode = cli.get("--set");
-        String poolsPath = cli.require("--pools-path");
-        String excludePath = cli.get("--exclude-cards");
-        int poolCount = cli.intValue("--size", 10000);
+                args, Set.of(), SET, SIZE, POOLS_PATH, EXCLUDE_CARDS);
+        String setCode = cli.get(SET);
+        String poolsPath = cli.require(POOLS_PATH);
+        String excludePath = cli.get(EXCLUDE_CARDS);
+        int poolCount = cli.intValue(SIZE, 10000);
         ForgeEnvironmentInitializer.initialize();
         writePools(setCode, poolCount, Path.of(poolsPath), excludePath);
     }

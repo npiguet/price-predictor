@@ -46,13 +46,15 @@ import java.util.regex.Pattern;
  */
 public class KeywordDefinitionMain {
 
+    private static final ToolMain.Flag OUTPUT = new ToolMain.Flag("--output");
+
     public static void main(String[] args) {
         ToolMain.run(() -> work(args));
     }
 
     /** The extraction itself; an exit it requests ends the process through {@link ToolMain#run}. */
     static void work(String[] args) throws IOException {
-        String outputPath = ToolMain.args(args, Set.of(), "--output").require("--output");
+        String outputPath = ToolMain.args(args, Set.of(), OUTPUT).require(OUTPUT);
         ForgeEnvironmentInitializer.initialize();
         System.out.println("Wrote keyword definitions to "
                 + writeTo(Path.of(outputPath)));

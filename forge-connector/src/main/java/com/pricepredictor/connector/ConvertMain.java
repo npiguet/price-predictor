@@ -28,6 +28,12 @@ import java.util.Set;
  */
 public class ConvertMain {
 
+    private static final ToolMain.Flag REPLACE = new ToolMain.Flag("--replace");
+    private static final ToolMain.Flag CARDS_PATH = new ToolMain.Flag("--cards-path");
+    private static final ToolMain.Flag OUTPUT_PATH = new ToolMain.Flag("--output-path");
+    private static final ToolMain.Flag TOKENS_PATH = new ToolMain.Flag("--tokens-path");
+    private static final ToolMain.Flag TOKENS_OUTPUT_PATH = new ToolMain.Flag("--tokens-output-path");
+
     /** How many failed scripts the closing line names. */
     private static final int NAMED_FAILURES = 10;
 
@@ -49,11 +55,11 @@ public class ConvertMain {
 
     /** {@link #work(String[])} with the Forge hook probe given, for a test. */
     static void work(String[] args, Runnable hookProbe) throws IOException {
-        ToolMain.Args cli = ToolMain.args(args, Set.of("--replace"),
-                "--cards-path", "--output-path", "--tokens-path", "--tokens-output-path");
+        ToolMain.Args cli = ToolMain.args(args, Set.of(REPLACE),
+                CARDS_PATH, OUTPUT_PATH, TOKENS_PATH, TOKENS_OUTPUT_PATH);
         List<Conversion> conversions = conversions(cli);
         List<Path> outputs = conversions.stream().map(Conversion::output).toList();
-        boolean replace = cli.has("--replace");
+        boolean replace = cli.has(REPLACE);
 
         ConvertedTrees.refuseUnsafe(
                 outputs, conversions.stream().map(Conversion::source).toList());
@@ -82,13 +88,13 @@ public class ConvertMain {
      * token source is skipped, its output tree neither checked nor touched.
      */
     private static List<Conversion> conversions(ToolMain.Args cli) {
-        String cardsPath = cli.get("--cards-path", "../forge/forge-gui/res/cardsfolder/");
+        String cardsPath = cli.get(CARDS_PATH, "../forge/forge-gui/res/cardsfolder/");
         // No default output tree: the run directory belongs to the caller
         // (the artifact layout), and a default would take the conversion
         // wherever a misspelt flag left it.
-        String outputPath = cli.require("--output-path");
-        String tokensOutputPath = cli.require("--tokens-output-path");
-        String tokensPath = cli.get("--tokens-path", defaultSibling(cardsPath, "tokenscripts"));
+        String outputPath = cli.require(OUTPUT_PATH);
+        String tokensOutputPath = cli.require(TOKENS_OUTPUT_PATH);
+        String tokensPath = cli.get(TOKENS_PATH, defaultSibling(cardsPath, "tokenscripts"));
 
         List<Conversion> conversions = new ArrayList<>(2);
         conversions.add(new Conversion(Path.of(cardsPath), Path.of(outputPath), SourceTree.CARDSFOLDER));

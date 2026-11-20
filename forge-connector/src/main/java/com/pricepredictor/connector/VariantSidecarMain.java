@@ -23,14 +23,16 @@ import java.util.Set;
  */
 public class VariantSidecarMain {
 
+    private static final ToolMain.Flag VARIANTS_PATH = new ToolMain.Flag("--variants-path");
+
     public static void main(String[] args) {
         ToolMain.guard(() -> work(args));
     }
 
     /** The worker itself; an exit it requests ends the process through {@link ToolMain#guard}. */
     static void work(String[] args) {
-        String variantsPath = ToolMain.args(args, Set.of(), "--variants-path")
-                .require("--variants-path");
+        String variantsPath = ToolMain.args(args, Set.of(), VARIANTS_PATH)
+                .require(VARIANTS_PATH);
 
         Path variants = Path.of(variantsPath);
         if (!Files.isDirectory(variants)) {
