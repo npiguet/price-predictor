@@ -96,6 +96,19 @@ def _keys_outside_the_copied_file(
     return bool(outside) and not (inside and len(outside) == 1)
 
 
+def _copied_files(record: EffectRecord, entity: EntityState) -> set[str]:
+    """The script files the card a copy copies keys its lines into, as the
+    snapshot shows them; none where that card is not in the snapshot."""
+    copied = record.state.entity(entity.copy_source)
+    return {key.script_file for key in copied.line_keys} if copied else set()
+
+
+def _printed_keyword_keys(entity: EntityState) -> list[ProvenanceKey]:
+    """The keys of the entity's own (not granted) keyword lines."""
+    return [key for line in entity.lines if line.kind == "keyword" and not line.granted
+            for key in line.keys]
+
+
 class KeyJoins:
     """Every provenance key the window names resolves in its own sidecar.
 
@@ -134,10 +147,8 @@ class KeyJoins:
                 self._add_copy(record, entity)
 
     def _add_copy(self, record: EffectRecord, entity: EntityState) -> None:
-        copied = record.state.entity(entity.copy_source)
-        files = {key.script_file for key in copied.line_keys} if copied else set()
-        keys = [key for line in entity.lines if line.kind == "keyword" and not line.granted
-                for key in line.keys]
+        files = _copied_files(record, entity)
+        keys = _printed_keyword_keys(entity)
         if not files or not keys:
             return
         who = (record.game_id, entity.id)
