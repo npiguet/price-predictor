@@ -164,7 +164,7 @@ final class ForkPlayForward {
         int turn = phases.getTurn();
         PhaseStart.begin(phases);
         int steps = 0;
-        while (!fork.isGameOver() && phases.getTurn() == turn && !turnWouldEnd(fork)) {
+        while (!fork.isGameOver() && stillInTurn(fork, turn)) {
             if (++steps > MAX_STEPS) {
                 throw new IllegalStateException(
                         "fork took " + MAX_STEPS + " steps without ending turn " + turn);
@@ -177,6 +177,10 @@ final class ForkPlayForward {
             }
             phases.mainLoopStep();
         }
+    }
+
+    private static boolean stillInTurn(Game fork, int turn) {
+        return fork.getPhaseHandler().getTurn() == turn && !turnWouldEnd(fork);
     }
 
     /**
@@ -263,20 +267,29 @@ final class ForkPlayForward {
             phases.getPlayerTurn().getGame().fireEvent(
                     new GameEventTurnPhase(phases.getPlayerTurn(), phases.getPhase(), ""));
             phases.setPriority(phases.getPlayerTurn());
+            beginThePhase(phases);
+        }
+
+        private static void beginThePhase(PhaseHandler phases) {
             try {
                 GIVE_PRIORITY.setBoolean(phases, true);
                 ON_PHASE_BEGIN.invoke(phases);
             } catch (IllegalAccessException e) {
                 throw new IllegalStateException(e);
             } catch (java.lang.reflect.InvocationTargetException e) {
-                if (e.getCause() instanceof RuntimeException runtime) {
-                    throw runtime;
-                }
-                if (e.getCause() instanceof Error error) {
-                    throw error;
-                }
-                throw new IllegalStateException(e.getCause());
+                throw rethrown(e.getCause());
             }
+        }
+
+        /** The engine's own exception or error, as it was thrown; anything else wrapped. */
+        private static RuntimeException rethrown(Throwable cause) {
+            if (cause instanceof RuntimeException runtime) {
+                return runtime;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            return new IllegalStateException(cause);
         }
     }
 }

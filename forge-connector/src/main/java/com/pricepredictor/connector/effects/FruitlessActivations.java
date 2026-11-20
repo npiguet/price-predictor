@@ -62,13 +62,23 @@ public final class FruitlessActivations {
      */
     static boolean changesNothing(List<EffectEvent> events) {
         for (EffectEvent event : events) {
-            if (!(event.type() == EventType.ABILITY_CHANGE
-                    && "".equals(String.valueOf(event.param(EventParam.ABILITIES) == null ? "" : event.param(EventParam.ABILITIES)))
-                    && !Boolean.TRUE.equals(event.param(EventParam.REMOVED)))) {
+            if (!isEmptyAbilityChange(event)) {
                 return false;
             }
         }
         return true;
+    }
+
+    /** An {@code ability_change} that granted nothing and removed nothing. */
+    private static boolean isEmptyAbilityChange(EffectEvent event) {
+        return event.type() == EventType.ABILITY_CHANGE
+                && grantsNothing(event)
+                && !Boolean.TRUE.equals(event.param(EventParam.REMOVED));
+    }
+
+    private static boolean grantsNothing(EffectEvent event) {
+        Object abilities = event.param(EventParam.ABILITIES);
+        return "".equals(String.valueOf(abilities == null ? "" : abilities));
     }
 
     /** A free activation of the line {@code key} has been put on the stack. */
@@ -102,12 +112,19 @@ public final class FruitlessActivations {
     public boolean isFruitless(SpellAbility ability) {
         current();
         dropResolved();
-        if ((thisTurn.isEmpty() && onStack.isEmpty())
-                || ability == null || ability.getHostCard() == null) {
+        if (nothingRemembered() || hasNoHost(ability)) {
             return false;
         }
         Activation activation = Activation.of(ability, ProvenanceResolver.of(ability));
         return thisTurn.contains(activation) || onStack.containsValue(activation);
+    }
+
+    private boolean nothingRemembered() {
+        return thisTurn.isEmpty() && onStack.isEmpty();
+    }
+
+    private static boolean hasNoHost(SpellAbility ability) {
+        return ability == null || ability.getHostCard() == null;
     }
 
     /** Forget the pending activations that have left the stack, however they left. */

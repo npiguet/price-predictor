@@ -91,20 +91,13 @@ record LibraryCapture(
      * printing to build from.
      */
     static Card asInLibrary(Card card) {
-        if (card.getPaperCard() == null || card.isToken() || card.isCopiedSpell()
-                || card.getCopiedPermanent() != null) {
+        if (hasNoPrintingToBuild(card)) {
             return card;
         }
-        Map<Integer, Card> built;
-        synchronized (BUILT) {
-            built = BUILT.computeIfAbsent(card.getGame(), game -> new java.util.HashMap<>());
-        }
-        synchronized (built) {
-            Card cached = built.get(card.getId());
-            if (cached != null && cached.getPaperCard() == card.getPaperCard()
-                    && cached.getOwner() == card.getOwner()) {
-                return cached;
-            }
+        Map<Integer, Card> built = builtFor(card.getGame());
+        Card cached = cachedBuild(built, card);
+        if (cached != null) {
+            return cached;
         }
         try {
             Card fresh = CardFactory.getCard(
@@ -119,6 +112,31 @@ record LibraryCapture(
             return fresh;
         } catch (RuntimeException e) {
             return card;
+        }
+    }
+
+    /** Whether the card is a token, a copy or has no printing: read as it is. */
+    private static boolean hasNoPrintingToBuild(Card card) {
+        return card.getPaperCard() == null || isCopyOrToken(card);
+    }
+
+    private static boolean isCopyOrToken(Card card) {
+        return card.isToken() || card.isCopiedSpell() || card.getCopiedPermanent() != null;
+    }
+
+    private static Map<Integer, Card> builtFor(Game game) {
+        synchronized (BUILT) {
+            return BUILT.computeIfAbsent(game, g -> new java.util.HashMap<>());
+        }
+    }
+
+    /** The build of the card kept for its game, or null when none matches its printing and owner. */
+    private static Card cachedBuild(Map<Integer, Card> built, Card card) {
+        synchronized (built) {
+            Card cached = built.get(card.getId());
+            boolean same = cached != null && cached.getPaperCard() == card.getPaperCard()
+                    && cached.getOwner() == card.getOwner();
+            return same ? cached : null;
         }
     }
 
