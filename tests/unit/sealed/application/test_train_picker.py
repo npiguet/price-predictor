@@ -9,18 +9,11 @@ import pytest
 import torch
 
 from price_predictor.infrastructure.torch_training import kl_divergence, policy_entropy
-from sealed.application.train_picker import (
-    RANDOM_SEED,
-    PreparedPool,
-    TrainPickerConfig,
-    _compute_losses,
-    _EntropySchedule,
-    _plackett_luce_log_prob,
-    _sample_decks,
-    _should_stop,
-    _shuffle_train,
-    _split_pools,
-)
+from sealed.application.picker_losses import _compute_losses
+from sealed.application.picker_pools import PreparedPool, _shuffle_train, _split_pools
+from sealed.application.picker_sampling import _plackett_luce_log_prob, _sample_decks
+from sealed.application.picker_training_loop import _EntropySchedule, _should_stop
+from sealed.application.train_picker import RANDOM_SEED, TrainPickerConfig
 from sealed.domain.card_embedding_layout import FEATURE_COUNT
 from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE
 
@@ -527,7 +520,7 @@ class TestUseCaseEndToEnd:
 
 class TestAuditCorrelation:
     def test_spearman_perfect_and_inverse(self):
-        from sealed.application.train_picker import _audit_correlation
+        from sealed.application.picker_validation import _audit_correlation
         assert _audit_correlation(
             np.array([1.0, 2.0, 3.0, 4.0]), np.array([1.0, 2.0, 3.0, 4.0]),
         ) == pytest.approx(1.0)
@@ -552,7 +545,7 @@ class TestDistribSummaries:
         return emb
 
     def test_summaries(self):
-        from sealed.application.train_picker import _distrib_summaries
+        from sealed.application.picker_validation import _distrib_summaries
         cards = np.stack([
             self._emb(color_idx=0, mana_value=2, power=2, toughness=2),  # W creature
             self._emb(color_idx=1, mana_value=4, power=0, toughness=0),  # U noncreature
@@ -579,13 +572,10 @@ class TestAuditorEndToEnd:
             "\n".join(f"SET;{'|'.join(names)}" for _ in range(5)) + "\n",
             encoding="utf-8",
         )
-        from sealed.application.train_picker import (
-            TrainPickerUseCase,
-            _load_scorer,
-            _prepare_pools,
-            _select_device,
-            _validate,
-        )
+        from sealed.application.picker_pools import _prepare_pools
+        from sealed.application.picker_scoring import _load_scorer, _select_device
+        from sealed.application.picker_validation import _validate
+        from sealed.application.train_picker import TrainPickerUseCase
         from sealed.domain.picker_model import PickerConfig, PickerModel
         from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
         from sealed.infrastructure.pool_file_reader import parse_pools

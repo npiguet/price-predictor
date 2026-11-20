@@ -273,7 +273,7 @@ def split_draft_disjoint(
 
 
 class _CoefSchedule:
-    """Val-driven coefficient decay (entropy / KL), copied from train_picker.
+    """Val-driven coefficient decay (entropy / KL), copied from picker_training_loop.
 
     Held at ``initial`` until the val metric improves for ``decay_after``
     consecutive evals, then multiplied by ``factor`` on each eval that fails to

@@ -143,7 +143,7 @@ class _Loader:
         self._missing: set[str] = set()
         self._missing_total = 0
         # Shared embedding table: each distinct card is loaded once; examples
-        # keep only int rows into it (mirrors train_picker's PreparedPool).
+        # keep only int rows into it (mirrors picker_pools' PreparedPool).
         self._table_rows: list[np.ndarray] = []
         self._name_to_idx: dict[str, int | None] = {}
 

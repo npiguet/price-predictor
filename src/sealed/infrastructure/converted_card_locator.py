@@ -140,7 +140,7 @@ class ConvertedCardLocator:
         defensive copy is returned on each call so callers keep the original
         "fresh array per call" contract and cannot mutate the cached row. Same
         memoize-by-name technique as ``MatchDataLoader._intern`` and
-        ``train_picker._prepare_pools``.
+        ``picker_pools._prepare_pools``.
         """
         if card_name not in self._embedding_cache:
             path = self.embedding_path(card_name)
