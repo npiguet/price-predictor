@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from sealed.infrastructure.cli_common import _add_embeddings_path, _missing_paths_error
@@ -18,6 +19,16 @@ def _build_train_picker_parser(subparsers) -> None:
     parser.set_defaults(func=run_train_picker)
     # Resumable flags register with default=None so resume-precedence resolution
     # (explicit CLI > resumed train_config > dataclass default) works.
+    _add_picker_path_flags(parser)
+    _add_picker_start_flags(parser)
+    _add_picker_architecture_flags(parser)
+    _add_picker_objective_flags(parser)
+    _add_picker_sampling_flags(parser)
+    _add_picker_schedule_flags(parser)
+
+
+def _add_picker_path_flags(parser: argparse.ArgumentParser) -> None:
+    """The pools, the scorers, the embeddings and the run directory."""
     parser.add_argument(
         "--pools-path", default=None,
         help="Pre-generated pools file (SET_CODE;Card1|...). Required. Resumable.",
@@ -48,6 +59,10 @@ def _build_train_picker_parser(subparsers) -> None:
             "Required unless --resume. Resumable."
         ),
     )
+
+
+def _add_picker_start_flags(parser: argparse.ArgumentParser) -> None:
+    """What a run starts from: a resumed run or another picker's weights."""
     parser.add_argument(
         "--resume", default=None,
         help=(
@@ -64,42 +79,33 @@ def _build_train_picker_parser(subparsers) -> None:
             "Mutually exclusive with --resume."
         ),
     )
-    parser.add_argument(
-        "--d-model", type=int, default=None, dest="d_model",
-        help=(
-            "Picker internal width (default: derived = embedding width). When set "
-            "to a value other than the embedding width, a single input projection "
-            "is inserted. Forbidden alongside --resume / --picker-checkpoint."
-        ),
-    )
-    parser.add_argument(
-        "--n-layers", type=int, default=None, dest="n_layers",
-        help=(
-            "Number of SAB layers (default: 4). Forbidden alongside "
-            "--resume / --picker-checkpoint."
-        ),
-    )
-    parser.add_argument(
-        "--n-heads", type=int, default=None, dest="n_heads",
-        help=(
-            "Attention heads per SAB (default: 8). Forbidden alongside "
-            "--resume / --picker-checkpoint."
-        ),
-    )
-    parser.add_argument(
-        "--ff-dim", type=int, default=None, dest="d_ff",
-        help=(
-            "Feed-forward dim (default: 4*d_model). Forbidden alongside "
-            "--resume / --picker-checkpoint."
-        ),
-    )
-    parser.add_argument(
-        "--dropout", type=float, default=None, dest="dropout",
-        help=(
-            "Dropout in SAB layers (default: 0.0). Forbidden alongside "
-            "--resume / --picker-checkpoint."
-        ),
-    )
+
+
+#: The architecture flags: (flag, dest, type, help text before the shared
+#: "Forbidden" sentence).
+_PICKER_ARCHITECTURE_FLAG_SPECS: tuple[tuple[str, str, type, str], ...] = (
+    ("--d-model", "d_model", int, (
+        "Picker internal width (default: derived = embedding width). When set "
+        "to a value other than the embedding width, a single input projection "
+        "is inserted. "
+    )),
+    ("--n-layers", "n_layers", int, "Number of SAB layers (default: 4). "),
+    ("--n-heads", "n_heads", int, "Attention heads per SAB (default: 8). "),
+    ("--ff-dim", "d_ff", int, "Feed-forward dim (default: 4*d_model). "),
+    ("--dropout", "dropout", float, "Dropout in SAB layers (default: 0.0). "),
+)
+
+
+def _add_picker_architecture_flags(parser: argparse.ArgumentParser) -> None:
+    """The picker's shape, which a resumed or bootstrapped run inherits."""
+    for flag, dest, kind, text in _PICKER_ARCHITECTURE_FLAG_SPECS:
+        parser.add_argument(
+            flag, type=kind, default=None, dest=dest,
+            help=text + "Forbidden alongside --resume / --picker-checkpoint.",
+        )
+
+def _add_picker_objective_flags(parser: argparse.ArgumentParser) -> None:
+    """The loss: the aux weight, advantage normalization and the objective."""
     parser.add_argument(
         "--aux-weight", type=float, default=None, dest="aux_weight",
         help="Coefficient on the aux pool-quality MSE loss (default: 0.1). Resumable.",
@@ -135,6 +141,10 @@ def _build_train_picker_parser(subparsers) -> None:
             "between 1 and --n-samples; smaller = greedier. Resumable."
         ),
     )
+
+
+def _add_picker_sampling_flags(parser: argparse.ArgumentParser) -> None:
+    """How decks are sampled and how the optimizer steps."""
     parser.add_argument(
         "--batch-size", type=int, default=None, dest="batch_size",
         help="Pools per gradient step (default: 16). Resumable.",
@@ -163,6 +173,10 @@ def _build_train_picker_parser(subparsers) -> None:
         "--max-grad-norm", type=float, default=None, dest="max_grad_norm",
         help="Per-parameter-group L2 norm cap (default: 1.0). Resumable.",
     )
+
+
+def _add_picker_schedule_flags(parser: argparse.ArgumentParser) -> None:
+    """How long it trains, how it validates and the KL penalty."""
     parser.add_argument(
         "--epochs", type=int, default=None, dest="epochs",
         help="Maximum epochs (default: 100). Resumable.",
@@ -221,92 +235,140 @@ _PICKER_REQUIRED_PATHS: tuple[str, ...] = (
 )
 
 
-def run_train_picker(args: argparse.Namespace) -> int:
-    """Execute the train-picker command."""
-    from sealed.application.train_picker import TrainPickerConfig, TrainPickerUseCase
-    from sealed.domain.picker_model import PickerArchitectureError
-    from sealed.infrastructure.picker_store import PickerStore
-
+def _resume_with_picker_checkpoint(args: argparse.Namespace) -> str | None:
     if args.resume is not None and args.picker_checkpoint is not None:
-        print(
+        return (
             "Error: --resume and --picker-checkpoint are mutually exclusive: "
             "--resume continues an existing run; --picker-checkpoint bootstraps "
-            "a fresh run from another picker's weights.",
-            file=sys.stderr,
+            "a fresh run from another picker's weights."
         )
-        return 2
+    return None
 
-    if args.resume is not None or args.picker_checkpoint is not None:
-        for flag in _TRAIN_PICKER_ARCHITECTURE_FLAGS:
-            if getattr(args, flag) is not None:
-                print(
-                    f"Error: architecture flag --{flag.replace('_', '-')} "
-                    "conflicts with --resume / --picker-checkpoint; architecture "
-                    "is inherited from the checkpoint's stored config. Omit the flag.",
-                    file=sys.stderr,
-                )
-                return 2
 
-    kl_coef = args.kl_coef if args.kl_coef is not None else 0.0
-    if kl_coef != 0 and args.picker_checkpoint is None:
-        print(
-            "Error: --kl-coef is non-zero but --picker-checkpoint is not set. "
-            "The KL penalty needs a reference distribution; pass "
-            "--picker-checkpoint <path>.",
-            file=sys.stderr,
-        )
-        return 2
-
-    resumed_train_config: dict | None = None
-    if args.resume is not None:
-        try:
-            resumed = PickerStore().load_checkpoint(Path(args.resume))
-        except FileNotFoundError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
-            return 2
-        resumed_train_config = resumed.train_config
-
-    missing_err = _missing_paths_error(args, resumed_train_config, _PICKER_REQUIRED_PATHS)
-    if missing_err is not None:
-        return missing_err
-
-    resolved = resolve_resumable_args(
-        args,
-        flag_names=_RESUMABLE_PICKER_FLAG_NAMES,
-        config_cls=TrainPickerConfig,
-        path_fields=_PICKER_PATH_FIELDS,
-        resumed_config=resumed_train_config,
+def _architecture_flag_given(args: argparse.Namespace) -> str | None:
+    """The first architecture flag given, or None."""
+    return next(
+        (flag for flag in _TRAIN_PICKER_ARCHITECTURE_FLAGS if getattr(args, flag) is not None),
+        None,
     )
 
-    if resolved["pools_path"] is None:
-        print("Error: --pools-path is required.", file=sys.stderr)
-        return 2
 
+def _architecture_on_inherited(args: argparse.Namespace) -> str | None:
+    if args.resume is not None or args.picker_checkpoint is not None:
+        flag = _architecture_flag_given(args)
+        if flag is not None:
+            return (
+                f"Error: architecture flag --{flag.replace('_', '-')} "
+                "conflicts with --resume / --picker-checkpoint; architecture "
+                "is inherited from the checkpoint's stored config. Omit the flag."
+            )
+    return None
+
+
+def _kl_without_reference(args: argparse.Namespace) -> str | None:
+    kl_coef = args.kl_coef if args.kl_coef is not None else 0.0
+    if kl_coef != 0 and args.picker_checkpoint is None:
+        return (
+            "Error: --kl-coef is non-zero but --picker-checkpoint is not set. "
+            "The KL penalty needs a reference distribution; pass "
+            "--picker-checkpoint <path>."
+        )
+    return None
+
+
+#: The checks on the flags as given, in the order they refuse a run: each
+#: returns its refusal, or None.
+_FLAG_CHECKS = (
+    _resume_with_picker_checkpoint,
+    _architecture_on_inherited,
+    _kl_without_reference,
+)
+
+
+def _no_pools(resolved: dict) -> str | None:
+    if resolved["pools_path"] is None:
+        return "Error: --pools-path is required."
+    return None
+
+
+def _topk_without_selection(resolved: dict) -> str | None:
     # Top-k objective needs real selection pressure: 1 <= topk < n_samples
     # (FR-039). topk == n_samples keeps every sampled deck = no selection.
     if resolved["objective"] == "topk":
         topk = int(resolved["topk"])  # type: ignore[arg-type]
         n_samples = int(resolved["n_samples"])  # type: ignore[arg-type]
         if not 1 <= topk < n_samples:
-            print(
+            return (
                 f"Error: --topk must be between 1 and --n-samples-1 "
                 f"({n_samples - 1}) for the topk objective, got {topk} with "
                 f"--n-samples {n_samples}. topk == n_samples keeps every "
-                "sampled deck, which removes all selection pressure.",
-                file=sys.stderr,
+                "sampled deck, which removes all selection pressure."
             )
-            return 2
+    return None
 
+
+def _missing_scorer(resolved: dict) -> str | None:
     # Scorer must exist (FR-036).
     scorer_path = resolved["scorer_checkpoint"]
     if not scorer_path.exists():
-        print(
+        return (
             f"Error: scorer checkpoint not found at {scorer_path}. Train a "
             "scorer first (python -m sealed train-scorer), or pass an existing "
-            "--scorer-checkpoint <path>.",
-            file=sys.stderr,
+            "--scorer-checkpoint <path>."
         )
+    return None
+
+
+#: The checks on the resolved values, in the order they refuse a run.
+_RESOLVED_CHECKS = (_no_pools, _topk_without_selection, _missing_scorer)
+
+
+def _first_refusal(checks, value) -> int | None:
+    """Exit 2 printing the first of ``checks``' refusals of ``value``, or None."""
+    for check in checks:
+        refusal = check(value)
+        if refusal is not None:
+            print(refusal, file=sys.stderr)
+            return 2
+    return None
+
+
+@dataclass(frozen=True)
+class _ResumedPicker:
+    """``--resume``'s recorded train config (None without it)."""
+
+    train_config: dict | None = None
+
+
+def _load_resumed_picker(args: argparse.Namespace) -> _ResumedPicker | int:
+    """Load ``--resume``'s checkpoint; exit 2 when it is missing."""
+    from sealed.infrastructure.picker_store import PickerStore
+
+    if args.resume is None:
+        return _ResumedPicker()
+    try:
+        resumed = PickerStore().load_checkpoint(Path(args.resume))
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
         return 2
+    return _ResumedPicker(resumed.train_config)
+
+
+def _resolve_picker_args(args: argparse.Namespace, resumed: _ResumedPicker) -> dict:
+    from sealed.application.train_picker import TrainPickerConfig
+
+    return resolve_resumable_args(
+        args,
+        flag_names=_RESUMABLE_PICKER_FLAG_NAMES,
+        config_cls=TrainPickerConfig,
+        path_fields=_PICKER_PATH_FIELDS,
+        resumed_config=resumed.train_config,
+    )
+
+
+def _execute_train_picker(args: argparse.Namespace, resolved: dict) -> int:
+    from sealed.application.train_picker import TrainPickerConfig, TrainPickerUseCase
+    from sealed.domain.picker_model import PickerArchitectureError
 
     config = TrainPickerConfig(
         resume=Path(args.resume) if args.resume else None,
@@ -332,3 +394,25 @@ def run_train_picker(args: argparse.Namespace) -> int:
         return 2
 
     return 0
+
+
+def run_train_picker(args: argparse.Namespace) -> int:
+    """Execute the train-picker command."""
+    flags_err = _first_refusal(_FLAG_CHECKS, args)
+    if flags_err is not None:
+        return flags_err
+
+    resumed = _load_resumed_picker(args)
+    if isinstance(resumed, int):
+        return resumed
+
+    missing_err = _missing_paths_error(args, resumed.train_config, _PICKER_REQUIRED_PATHS)
+    if missing_err is not None:
+        return missing_err
+
+    resolved = _resolve_picker_args(args, resumed)
+    resolved_err = _first_refusal(_RESOLVED_CHECKS, resolved)
+    if resolved_err is not None:
+        return resolved_err
+
+    return _execute_train_picker(args, resolved)
