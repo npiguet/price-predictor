@@ -7,8 +7,11 @@ import forge.game.card.CounterType;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -343,23 +346,29 @@ final class ClauseOutcomeRouter {
         // parameters are written in the order they are put.
         Map<String, Object> ordered = new TreeMap<>();
         params.forEach((key, value) -> ordered.put(String.valueOf(key), value));
-        for (Map.Entry<String, Object> entry : ordered.entrySet()) {
-            String key = entry.getKey();
-            Object value = entry.getValue();
-            switch (key) {
-                case "subjects" -> addOutcomeSubjects(event, value);
-                case "source" -> event.param(EventParam.SOURCE, outcomeRefOf(value));
-                case "from_zone", "to_zone" -> event.paramNamed(key, outcomeZoneOf(value));
-                case "sample" -> {
-                    if (value instanceof Card token) {
-                        event.param(EventParam.TOKEN_SCRIPT_ID, CardSpelling.tokenScriptIdOf(token));
-                        event.param(EventParam.CHARACTERISTICS, tokenCharacteristics(token));
-                    }
-                }
-                default -> event.paramNamed(key, inKeyOrder(value));
-            }
-        }
+        ordered.entrySet().forEach(entry -> addOutcomeParam(event, entry));
         return event;
+    }
+
+    /** One entry of an outcome's params, filed as {@link #outcomeEvent} says. */
+    private static void addOutcomeParam(EffectEvent event, Map.Entry<String, Object> entry) {
+        String key = entry.getKey();
+        Object value = entry.getValue();
+        switch (key) {
+            case "subjects" -> addOutcomeSubjects(event, value);
+            case "source" -> event.param(EventParam.SOURCE, outcomeRefOf(value));
+            case "from_zone", "to_zone" -> event.paramNamed(key, outcomeZoneOf(value));
+            case "sample" -> addTokenSample(event, entry);
+            default -> event.paramNamed(key, inKeyOrder(value));
+        }
+    }
+
+    /** The token standing for its batch, as {@code token_script_id} and {@code characteristics}; anything else is no sample. */
+    private static void addTokenSample(EffectEvent event, Map.Entry<String, Object> sample) {
+        if (sample.getValue() instanceof Card token) {
+            event.param(EventParam.TOKEN_SCRIPT_ID, CardSpelling.tokenScriptIdOf(token));
+            event.param(EventParam.CHARACTERISTICS, tokenCharacteristics(token));
+        }
     }
 
     /**
@@ -371,26 +380,38 @@ final class ClauseOutcomeRouter {
      */
     static Object inKeyOrder(Object value) {
         if (value instanceof Map<?, ?> map) {
-            Map<String, Object> ordered = new TreeMap<>();
-            map.forEach((key, member) -> ordered.put(String.valueOf(key), inKeyOrder(member)));
-            return ordered;
+            return mapInKeyOrder(map);
         }
-        if (value instanceof java.util.Set<?> set) {
-            java.util.List<Object> members = new java.util.ArrayList<>();
-            for (Object member : set) {
-                members.add(inKeyOrder(member));
-            }
-            members.sort(java.util.Comparator.comparing(String::valueOf));
-            return members;
+        if (value instanceof Set<?> set) {
+            return setInKeyOrder(set);
         }
-        if (value instanceof java.util.List<?> list) {
-            java.util.List<Object> members = new java.util.ArrayList<>(list.size());
-            for (Object member : list) {
-                members.add(inKeyOrder(member));
-            }
-            return members;
+        if (value instanceof List<?> list) {
+            return listInKeyOrder(list);
         }
         return value;
+    }
+
+    private static Map<String, Object> mapInKeyOrder(Map<?, ?> map) {
+        Map<String, Object> ordered = new TreeMap<>();
+        map.forEach((key, member) -> ordered.put(String.valueOf(key), inKeyOrder(member)));
+        return ordered;
+    }
+
+    private static List<Object> setInKeyOrder(Set<?> set) {
+        List<Object> members = new ArrayList<>();
+        for (Object member : set) {
+            members.add(inKeyOrder(member));
+        }
+        members.sort(Comparator.comparing(String::valueOf));
+        return members;
+    }
+
+    private static List<Object> listInKeyOrder(List<?> list) {
+        List<Object> members = new ArrayList<>(list.size());
+        for (Object member : list) {
+            members.add(inKeyOrder(member));
+        }
+        return members;
     }
 
     /**
@@ -434,10 +455,8 @@ final class ClauseOutcomeRouter {
 
     /** A zone an outcome names, as a record spells it, or null for none. */
     private static String outcomeZoneOf(Object value) {
-        if (value instanceof String named && ("?".equals(named) || "null".equals(named))) {
-            return null;
-        }
-        return CardSpelling.zoneName(value);
+        // "?" and "null" are what Forge writes for no zone.
+        return "?".equals(value) || "null".equals(value) ? null : CardSpelling.zoneName(value);
     }
 
     /**

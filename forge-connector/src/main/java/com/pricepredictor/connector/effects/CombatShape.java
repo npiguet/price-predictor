@@ -74,21 +74,26 @@ final class CombatShape {
      * to one target in each (a double striker) is given the sum.
      */
     void addAssignment(Combat combat) {
-        if (combat == null) {
-            return;
+        if (combat != null && PatchHooks.ASSIGNED_DAMAGE.read(combat) instanceof Table<?, ?, ?> table) {
+            addCells(table);
         }
-        if (!(PatchHooks.ASSIGNED_DAMAGE.read(combat) instanceof Table<?, ?, ?> table)) {
-            return;
-        }
+    }
+
+    private void addCells(Table<?, ?, ?> table) {
         for (Table.Cell<?, ?, ?> cell : table.cellSet()) {
-            if (!(cell.getRowKey() instanceof Card source)
-                    || !(cell.getValue() instanceof Integer amount)) {
-                continue;
-            }
-            Refs.ofAny(cell.getColumnKey()).ifPresent(target -> assignment
-                    .computeIfAbsent(Refs.of(source), key -> new LinkedHashMap<>())
-                    .merge(target, amount, Integer::sum));
+            addCell(cell);
         }
+    }
+
+    /** One source's damage to one target, summed into the assignment; a cell of another shape is skipped. */
+    private void addCell(Table.Cell<?, ?, ?> cell) {
+        if (!(cell.getRowKey() instanceof Card source)
+                || !(cell.getValue() instanceof Integer amount)) {
+            return;
+        }
+        Refs.ofAny(cell.getColumnKey()).ifPresent(target -> assignment
+                .computeIfAbsent(Refs.of(source), key -> new LinkedHashMap<>())
+                .merge(target, amount, Integer::sum));
     }
 
     /**
