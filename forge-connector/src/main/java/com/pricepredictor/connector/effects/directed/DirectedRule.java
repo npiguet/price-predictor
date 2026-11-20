@@ -50,12 +50,16 @@ public record DirectedRule(
         variants = Collections.unmodifiableMap(new LinkedHashMap<>(variants));
     }
 
+    /** One variant of a registration: its label and the application that makes it. */
+    public record Variant(String label, Application application) {
+    }
+
     /** A registration of one rule with one variant, the common case. */
     public static DirectedRule of(
-            String rule, String scenario, BoardPrecondition precondition,
-            String variant, Application application) {
+            String rule, String scenario, BoardPrecondition precondition, Variant variant) {
         return new DirectedRule(Map.of(Objects.requireNonNull(rule, "rule"),
-                Objects.requireNonNull(scenario, "scenario")), precondition, Map.of(variant, application));
+                Objects.requireNonNull(scenario, "scenario")), precondition,
+                Map.of(variant.label(), variant.application()));
     }
 
     /**
