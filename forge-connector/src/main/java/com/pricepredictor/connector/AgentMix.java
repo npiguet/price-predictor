@@ -17,14 +17,30 @@ final class AgentMix {
     }
 
     static AgentMix parse(String spec) {
-        String[] tokens = spec.split(",");
-        List<String> labels = new ArrayList<>();
-        List<Integer> weights = new ArrayList<>();
-        for (String token : tokens) {
+        List<Entry> entries = new ArrayList<>();
+        for (String token : spec.split(",")) {
             token = token.trim();
-            if (token.isEmpty()) {
-                continue;
+            if (!token.isEmpty()) {
+                entries.add(Entry.parse(token));
             }
+        }
+        if (entries.isEmpty()) {
+            throw new IllegalArgumentException("agent-mix is empty: " + spec);
+        }
+        String[] labels = new String[entries.size()];
+        int[] cumulative = new int[entries.size()];
+        int running = 0;
+        for (int i = 0; i < entries.size(); i++) {
+            running += entries.get(i).weight();
+            labels[i] = entries.get(i).label();
+            cumulative[i] = running;
+        }
+        return new AgentMix(labels, cumulative, running);
+    }
+
+    /** One {@code label:weight} item of the spec. */
+    private record Entry(String label, int weight) {
+        static Entry parse(String token) {
             int colon = token.indexOf(':');
             if (colon <= 0 || colon != token.lastIndexOf(':')) {
                 throw new IllegalArgumentException(
@@ -36,19 +52,8 @@ final class AgentMix {
                 throw new IllegalArgumentException(
                         "agent-mix entry must have a non-empty label and weight >= 1: " + token);
             }
-            labels.add(label);
-            weights.add(weight);
+            return new Entry(label, weight);
         }
-        if (labels.isEmpty()) {
-            throw new IllegalArgumentException("agent-mix is empty: " + spec);
-        }
-        int[] cumulative = new int[labels.size()];
-        int running = 0;
-        for (int i = 0; i < weights.size(); i++) {
-            running += weights.get(i);
-            cumulative[i] = running;
-        }
-        return new AgentMix(labels.toArray(new String[0]), cumulative, running);
     }
 
     /** The labels the mix draws from, in spec order. */
