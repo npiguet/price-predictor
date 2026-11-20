@@ -66,7 +66,7 @@ public final class ForcedPlayRun {
     /** The step the play is made in; an answer's is null, any step of the turn. */
     private final PhaseType step;
     private final int turn;
-    private final List<List<GameEntity>> targets;
+    private final NamedTargets targets;
     private final List<Card> costs;
     private final GameEntity defender;
     /**
@@ -92,21 +92,38 @@ public final class ForcedPlayRun {
         this.unknown = unknown;
         this.actor = fork.player(play.actor());
         this.sourceId = unknown.contains(play.source()) ? -1 : fork.card(play.source()).getId();
-        this.step = switch (play.kind()) {
+        this.step = stepOf(play.kind(), game);
+        this.turn = game.getPhaseHandler().getTurn();
+        this.targets = new NamedTargets(actor, namedTargets(play, fork, unknown));
+        this.costs = play.costs().stream().filter(role -> !unknown.contains(role)).map(fork::card).toList();
+        this.defender = namedDefender(play, fork, unknown);
+    }
+
+    /** The step a play of {@code kind} is made in, read in {@code game}'s current one. */
+    private static PhaseType stepOf(ForcedPlay.Kind kind, Game game) {
+        return switch (kind) {
             case ANSWER -> null;
             case ATTACK -> PhaseType.COMBAT_DECLARE_ATTACKERS;
             case CAST, ACTIVATE -> game.getPhaseHandler().getPhase();
         };
-        this.turn = game.getPhaseHandler().getTurn();
-        this.targets = new ArrayList<>();
+    }
+
+    /** Per targeting clause, the named objects; a clause naming an unknown role is null: left unchecked. */
+    private static List<List<GameEntity>> namedTargets(ForcedPlay play, Binding fork, Set<String> unknown) {
+        List<List<GameEntity>> targets = new ArrayList<>();
         for (List<String> clause : play.targets()) {
-            // A clause naming an unknown role is null: left unchecked.
-            this.targets.add(clause.stream().anyMatch(unknown::contains) ? null
+            targets.add(clause.stream().anyMatch(unknown::contains) ? null
                     : clause.stream().map(role -> entity(fork, role)).toList());
         }
-        this.costs = play.costs().stream().filter(role -> !unknown.contains(role)).map(fork::card).toList();
-        this.defender = play.defender() == null || unknown.contains(play.defender()) ? null
-                : entity(fork, play.defender());
+        return targets;
+    }
+
+    /** The named defender, or null when the play names none or names an unknown role. */
+    private static GameEntity namedDefender(ForcedPlay play, Binding fork, Set<String> unknown) {
+        if (play.defender() == null || unknown.contains(play.defender())) {
+            return null;
+        }
+        return entity(fork, play.defender());
     }
 
     /**
@@ -192,10 +209,18 @@ public final class ForcedPlayRun {
         return switch (play.kind()) {
             case CAST, ACTIVATE -> lines(source).stream().anyMatch(this::aimable);
             case ANSWER -> true;
-            case ATTACK -> source.isCreature() && source.isInPlay() && source.getController() == actor
-                    && (unknown.contains(play.defender())
-                    || defender != null && CombatUtil.canAttack(source, defender));
+            case ATTACK -> actorsCreatureInPlay(source) && reachesDefender(source);
         };
+    }
+
+    private boolean actorsCreatureInPlay(Card source) {
+        return source.isCreature() && source.isInPlay() && source.getController() == actor;
+    }
+
+    /** Whether {@code attacker} may attack the named defender; an unknown one is left unchecked. */
+    private boolean reachesDefender(Card attacker) {
+        return unknown.contains(play.defender())
+                || defender != null && CombatUtil.canAttack(attacker, defender);
     }
 
     /** Every ability of the actor's candidates hosted by {@code source} that is the play's line. */
@@ -231,7 +256,7 @@ public final class ForcedPlayRun {
         try {
             SpellAbility trial = line.copy(line.getHostCard(), actor, true);
             trial.setActivatingPlayer(actor);
-            return aim(trial, new RandomChoices(new Random(0L)), false);
+            return targets.aim(trial, new RandomChoices(new Random(0L)), false);
         } catch (RuntimeException e) {
             return false;
         }
@@ -264,24 +289,43 @@ public final class ForcedPlayRun {
      * made or refused, or its line not yet playable by the rules.
      */
     public List<SpellAbility> choose(Player player) {
-        if (!play.playsALine() || player != actor || made || refusal != null || !inStep()) {
+        if (!awaitsLine(player) || source() == null) {
             return null;
         }
-        Card source = source();
-        if (source == null) {
+        SpellAbility ability = playableLine();
+        if (ability == null) {
             return null;
         }
+        ability.setActivatingPlayer(actor);
+        pending = ability;
+        List<SpellAbility> chosen = new ArrayList<>(1);
+        chosen.add(ability);
+        return chosen;
+    }
+
+    /** Whether {@code player}'s priority may be the play's line: its actor's, in its step, the play open. */
+    private boolean awaitsLine(Player player) {
+        return play.playsALine() && awaits(player) && inStep();
+    }
+
+    /** Whether {@code player} is the actor and the play is neither made nor refused. */
+    private boolean awaits(Player player) {
+        return player == actor && !made && refusal == null;
+    }
+
+    /** The first of the actor's candidates that is the line, playable by the rules, its named targets legal; or null. */
+    private SpellAbility playableLine() {
         for (PriorityCandidates.Candidate candidate : PriorityCandidates.candidatesOf(game, actor)) {
-            SpellAbility ability = candidate.ability();
-            if (isTheLine(ability, sourceId) && !modal(ability) && candidate.playable() && aimable(ability)) {
-                ability.setActivatingPlayer(actor);
-                pending = ability;
-                List<SpellAbility> chosen = new ArrayList<>(1);
-                chosen.add(ability);
-                return chosen;
+            if (playableLine(candidate)) {
+                return candidate.ability();
             }
         }
         return null;
+    }
+
+    private boolean playableLine(PriorityCandidates.Candidate candidate) {
+        SpellAbility ability = candidate.ability();
+        return isTheLine(ability, sourceId) && !modal(ability) && candidate.playable() && aimable(ability);
     }
 
     /**
@@ -295,24 +339,29 @@ public final class ForcedPlayRun {
             return null;
         }
         pending = null;
-        if (!aim(ability, choices, true)) {
+        if (!targets.aim(ability, choices, true)) {
             refusal = ForkRefusal.FORCED_NO_LINE;
             return false;
         }
-        // The rules said the line is affordable; the AI pays the mana, and
-        // what it holds back can leave it short. Asked before the card moves.
-        boolean affordable;
-        try {
-            affordable = ComputerUtilCost.canPayCost(ability, actor, false);
-        } catch (RuntimeException e) {
-            affordable = false;
-        }
-        if (!affordable || !RandomSpellPlayer.play(actor, ability, new RoleCostDecision(actor, ability, costs), null)) {
+        if (!affordable(ability) || !RandomSpellPlayer.play(actor, ability, new RoleCostDecision(actor, ability, costs), null)) {
             refusal = ForkRefusal.FORCED_COST_NOT_PAID;
             return false;
         }
         made = true;
         return true;
+    }
+
+    /**
+     * Whether the AI can pay {@code ability}'s cost. The rules said the line
+     * is affordable; the AI pays the mana, and what it holds back can leave
+     * it short. Asked before the card moves.
+     */
+    private boolean affordable(SpellAbility ability) {
+        try {
+            return ComputerUtilCost.canPayCost(ability, actor, false);
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     /**
@@ -348,18 +397,22 @@ public final class ForcedPlayRun {
         if (!play.answer()) {
             return false;
         }
-        boolean paid;
-        try {
-            paid = ComputerUtilCost.canPayCost(cost, ability, actor, true)
-                    && new CostPayment(cost, ability).payComputerCosts(
-                            new RoleCostDecision(actor, ability, costs, true));
-        } catch (RuntimeException e) {
-            paid = false;
-        }
+        boolean paid = paidAsNamed(cost, ability);
         if (!paid) {
             refusal = ForkRefusal.FORCED_COST_NOT_PAID;
         }
         return paid;
+    }
+
+    /** Pay {@code cost} with the named cards when it can be paid; whether it was. */
+    private boolean paidAsNamed(Cost cost, SpellAbility ability) {
+        try {
+            return ComputerUtilCost.canPayCost(cost, ability, actor, true)
+                    && new CostPayment(cost, ability).payComputerCosts(
+                            new RoleCostDecision(actor, ability, costs, true));
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     /**
@@ -369,7 +422,7 @@ public final class ForcedPlayRun {
      * a thread of its own, which resolves, pays and confirms nothing.
      */
     private boolean asks(Player player, SpellAbility ability) {
-        return play.kind() == ForcedPlay.Kind.ANSWER && player == actor && !made && refusal == null
+        return play.kind() == ForcedPlay.Kind.ANSWER && awaits(player)
                 && ability != null && isTheLine(ability, sourceId);
     }
 
@@ -379,7 +432,7 @@ public final class ForcedPlayRun {
      * the refusal.
      */
     public void declared(Player player, Combat combat) {
-        if (play.kind() != ForcedPlay.Kind.ATTACK || player != actor || made || refusal != null) {
+        if (play.kind() != ForcedPlay.Kind.ATTACK || !awaits(player)) {
             return;
         }
         Card attacker = source();
@@ -388,22 +441,31 @@ public final class ForcedPlayRun {
             return;
         }
         GameEntity declared = combat.getDefenderByAttacker(attacker);
-        if (declared != defender) {
-            if (declared != null) {
-                combat.removeFromCombat(attacker);
-            }
-            if (!CombatUtil.canAttack(attacker, defender)) {
-                refusal = ForkRefusal.FORCED_NO_LINE;
-                return;
-            }
-            combat.addAttacker(attacker, defender);
-            if (!CombatUtil.validateAttackers(combat)) {
-                combat.removeFromCombat(attacker);
-                refusal = ForkRefusal.FORCED_NO_LINE;
-                return;
-            }
+        if (declared != defender && !redeclared(attacker, declared, combat)) {
+            refusal = ForkRefusal.FORCED_NO_LINE;
+            return;
         }
         made = true;
+    }
+
+    /**
+     * Move {@code attacker}, declared at {@code declared} (or not at all),
+     * to the named defender; whether the engine accepts the declaration. A
+     * rejected one leaves the attacker out of combat.
+     */
+    private boolean redeclared(Card attacker, GameEntity declared, Combat combat) {
+        if (declared != null) {
+            combat.removeFromCombat(attacker);
+        }
+        if (!CombatUtil.canAttack(attacker, defender)) {
+            return false;
+        }
+        combat.addAttacker(attacker, defender);
+        if (CombatUtil.validateAttackers(combat)) {
+            return true;
+        }
+        combat.removeFromCombat(attacker);
+        return false;
     }
 
     // ── the fork's checks ───────────────────────────────────────────────
@@ -416,9 +478,14 @@ public final class ForcedPlayRun {
         if (refusal != null) {
             throw new ForkRefusal(refusal);
         }
-        if (!made && step != null && passed()) {
+        if (overdue()) {
             throw new ForkRefusal(ForkRefusal.FORCED_NOT_MADE);
         }
+    }
+
+    /** Whether the play, made in a step, is not made and its step has passed. */
+    private boolean overdue() {
+        return !made && step != null && passed();
     }
 
     /** After the turn: throw the refusal flagged, or the play not made. */
@@ -440,51 +507,9 @@ public final class ForcedPlayRun {
                 || game.getPhaseHandler().getPhase().ordinal() > step.ordinal();
     }
 
-    // ── choices ─────────────────────────────────────────────────────────
+    // ── roles ───────────────────────────────────────────────────────────
 
-    /**
-     * X and targets for {@code ability}, which is not modal: X drawn, each
-     * targeting clause's targets the named objects, checked with
-     * {@code canTarget}, or drawn where no role names them.
-     *
-     * @param pay whether X is drawn against what the actor can pay; a trial
-     *            announces the least X, reading no mana
-     */
-    private boolean aim(SpellAbility ability, RandomChoices draws, boolean pay) {
-        ability.setXManaCostPaid(null);
-        draws.announceX(ability, pay ? actor : null, 0);
-        List<SpellAbility> clauses = TargetingClauses.chosen(ability);
-        if (targets.size() > clauses.size()
-                && targets.subList(clauses.size(), targets.size()).stream()
-                .anyMatch(named -> named == null || !named.isEmpty())) {
-            return false;
-        }
-        for (int i = 0; i < clauses.size(); i++) {
-            SpellAbility clause = clauses.get(i);
-            List<GameEntity> named = i < targets.size() ? targets.get(i) : List.of();
-            if (named == null) {
-                continue;
-            }
-            if (named.isEmpty()) {
-                if (!draws.chooseTargetsFor(clause)) {
-                    return false;
-                }
-                continue;
-            }
-            clause.clearTargets();
-            for (GameEntity target : named) {
-                if (!clause.canTarget(target)) {
-                    return false;
-                }
-                clause.getTargets().add(target);
-            }
-            if (!clause.isTargetNumberValid()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
+    /** The card {@code binding} holds for {@code role}, else its player. */
     private static GameEntity entity(Binding binding, String role) {
         Card card = binding.cards().get(role);
         return card != null ? card : binding.player(role);
