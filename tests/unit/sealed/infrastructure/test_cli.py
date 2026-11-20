@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from argparse import Namespace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
@@ -22,6 +22,8 @@ from sealed.infrastructure.scorer_store import ScorerStore
 #: Where the worker prerequisites check looks the JAR and ``java`` up.
 CONNECTOR_JAR = "price_predictor.infrastructure.forge_classpath.resolve_connector_jar"
 WHICH = "price_predictor.infrastructure.forge_classpath.shutil.which"
+#: The supervisor ``run_match_outcomes`` starts.
+SUPERVISOR = "sealed.application.match_outcomes.MatchOutcomeSupervisor"
 
 
 @pytest.fixture(autouse=True)
@@ -55,18 +57,23 @@ def _args(**overrides) -> Namespace:
     return Namespace(**defaults)
 
 
+def _run_with_supervisor(args: Namespace) -> tuple[int, MagicMock]:
+    """Run match-outcomes against a mock supervisor whose run collects
+    something; returns the exit code and the mock supervisor class."""
+    with patch(SUPERVISOR) as mock_sup:
+        mock_sup.return_value.run.return_value = None
+        mock_sup.return_value.collected_nothing = False
+        rc = run_match_outcomes(args)
+    return rc, mock_sup
+
+
 class TestMatchOutcomesSideDecks:
     """``--side-a-decks`` / ``--side-b-decks`` / ``--side-b-decks-weight``
     are all optional; supervisor receives them as-is. Weight without
     ``--side-b-decks`` is rejected at argparse-validation time."""
 
     def test_no_paths_is_phase_0(self, tmp_path):
-        with patch(
-            "sealed.application.match_outcomes.MatchOutcomeSupervisor"
-        ) as mock_sup:
-            mock_sup.return_value.run.return_value = None
-            mock_sup.return_value.collected_nothing = False
-            rc = run_match_outcomes(_args())
+        rc, mock_sup = _run_with_supervisor(_args())
         assert rc == 0
         kwargs = mock_sup.call_args.kwargs
         assert kwargs["options"].decks.side_a is None
@@ -76,12 +83,7 @@ class TestMatchOutcomesSideDecks:
     def test_side_a_path_forwarded(self, tmp_path):
         side_a = tmp_path / "side-a.txt"
         side_a.touch()
-        with patch(
-            "sealed.application.match_outcomes.MatchOutcomeSupervisor"
-        ) as mock_sup:
-            mock_sup.return_value.run.return_value = None
-            mock_sup.return_value.collected_nothing = False
-            rc = run_match_outcomes(_args(side_a_decks=str(side_a)))
+        rc, mock_sup = _run_with_supervisor(_args(side_a_decks=str(side_a)))
         assert rc == 0
         kwargs = mock_sup.call_args.kwargs
         assert kwargs["options"].decks.side_a == side_a
@@ -90,24 +92,16 @@ class TestMatchOutcomesSideDecks:
     def test_side_b_path_and_weight_forwarded(self, tmp_path):
         side_b = tmp_path / "side-b.txt"
         side_b.touch()
-        with patch(
-            "sealed.application.match_outcomes.MatchOutcomeSupervisor"
-        ) as mock_sup:
-            mock_sup.return_value.run.return_value = None
-            mock_sup.return_value.collected_nothing = False
-            rc = run_match_outcomes(_args(
-                side_b_decks=str(side_b), side_b_decks_weight=8,
-            ))
+        rc, mock_sup = _run_with_supervisor(_args(
+            side_b_decks=str(side_b), side_b_decks_weight=8,
+        ))
         assert rc == 0
         kwargs = mock_sup.call_args.kwargs
         assert kwargs["options"].decks.side_b == side_b
         assert kwargs["options"].decks.side_b_weight == 8
 
     def test_weight_without_side_b_rejected(self, capsys):
-        with patch(
-            "sealed.application.match_outcomes.MatchOutcomeSupervisor"
-        ) as mock_sup:
-            rc = run_match_outcomes(_args(side_b_decks_weight=8))
+        rc, mock_sup = _run_with_supervisor(_args(side_b_decks_weight=8))
         assert rc == 2
         mock_sup.assert_not_called()
         err = capsys.readouterr().err
@@ -119,51 +113,32 @@ class TestMatchOutcomesBestOf:
     """--best-of default is 7; value is forwarded; odd+positive is enforced."""
 
     def test_default_is_seven(self):
-        with patch(
-            "sealed.application.match_outcomes.MatchOutcomeSupervisor"
-        ) as mock_sup:
-            mock_sup.return_value.run.return_value = None
-            mock_sup.return_value.collected_nothing = False
-            rc = run_match_outcomes(_args())
+        rc, mock_sup = _run_with_supervisor(_args())
         assert rc == 0
         kwargs = mock_sup.call_args.kwargs
         assert kwargs["best_of"] == 7
 
     def test_odd_values_accepted_including_large(self):
         for n in (1, 3, 7, 17, 101):
-            with patch(
-                "sealed.application.match_outcomes.MatchOutcomeSupervisor"
-            ) as mock_sup:
-                mock_sup.return_value.run.return_value = None
-                mock_sup.return_value.collected_nothing = False
-                rc = run_match_outcomes(_args(best_of=n))
+            rc, mock_sup = _run_with_supervisor(_args(best_of=n))
             assert rc == 0
             kwargs = mock_sup.call_args.kwargs
             assert kwargs["best_of"] == n
 
     def test_even_rejected(self, capsys):
-        with patch(
-            "sealed.application.match_outcomes.MatchOutcomeSupervisor"
-        ) as mock_sup:
-            rc = run_match_outcomes(_args(best_of=4))
+        rc, mock_sup = _run_with_supervisor(_args(best_of=4))
         assert rc == 2
         mock_sup.assert_not_called()
         err = capsys.readouterr().err
         assert "positive odd integer" in err
 
     def test_zero_rejected(self, capsys):
-        with patch(
-            "sealed.application.match_outcomes.MatchOutcomeSupervisor"
-        ) as mock_sup:
-            rc = run_match_outcomes(_args(best_of=0))
+        rc, mock_sup = _run_with_supervisor(_args(best_of=0))
         assert rc == 2
         mock_sup.assert_not_called()
 
     def test_negative_rejected(self, capsys):
-        with patch(
-            "sealed.application.match_outcomes.MatchOutcomeSupervisor"
-        ) as mock_sup:
-            rc = run_match_outcomes(_args(best_of=-3))
+        rc, mock_sup = _run_with_supervisor(_args(best_of=-3))
         assert rc == 2
         mock_sup.assert_not_called()
 
@@ -484,9 +459,7 @@ class TestMatchOutcomesWorkerPrerequisites:
     the run with an error instead of restarting forever."""
 
     def test_a_missing_exclude_cards_file_exits_before_any_supervisor(self, tmp_path, capsys):
-        with patch(
-            "sealed.application.match_outcomes.MatchOutcomeSupervisor"
-        ) as mock_sup, patch(CONNECTOR_JAR), \
+        with patch(SUPERVISOR) as mock_sup, patch(CONNECTOR_JAR), \
                 patch(WHICH, return_value="java"):
             rc = run_match_outcomes(_args(exclude_cards=str(tmp_path / "missing.txt")))
         assert rc == 2
@@ -494,9 +467,7 @@ class TestMatchOutcomesWorkerPrerequisites:
         assert "--exclude-cards" in capsys.readouterr().err
 
     def test_a_missing_java_exits_before_any_supervisor(self, capsys):
-        with patch(
-            "sealed.application.match_outcomes.MatchOutcomeSupervisor"
-        ) as mock_sup, patch(CONNECTOR_JAR), \
+        with patch(SUPERVISOR) as mock_sup, patch(CONNECTOR_JAR), \
                 patch(WHICH, return_value=None):
             rc = run_match_outcomes(_args())
         assert rc == 2
@@ -506,9 +477,7 @@ class TestMatchOutcomesWorkerPrerequisites:
     def test_a_pool_that_cannot_start_ends_the_run_with_an_error(self, capsys):
         from price_predictor.infrastructure.forge_worker_pool import WorkerStartError
 
-        with patch(
-            "sealed.application.match_outcomes.MatchOutcomeSupervisor"
-        ) as mock_sup:
+        with patch(SUPERVISOR) as mock_sup:
             mock_sup.return_value.run.side_effect = WorkerStartError("every slot failed")
             rc = run_match_outcomes(_args())
         assert rc == 2
