@@ -16,13 +16,13 @@ import sys
 
 import pytest
 
-from effects.application import collect_coverage, parallel_map
+from effects.application import parallel_map, shard_ledger
 
 _REAL = parallel_map.__dict__["run_parallel"]
 
 
 def _call(workers, items=("a", "b", "c", "d", "e", "f")):
-    return collect_coverage.run_parallel(
+    return shard_ledger.run_parallel(
         list(items), str, workers=workers, label="Counted", progress_every=0,
     )
 
