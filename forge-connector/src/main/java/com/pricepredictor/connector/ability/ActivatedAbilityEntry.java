@@ -7,6 +7,7 @@ import forge.game.spellability.SpellAbility;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Activated or planeswalker ability built from a SpellAbility.
@@ -20,25 +21,25 @@ public record ActivatedAbilityEntry(AbilityType type, String descriptionText, Li
         subAbilities = List.copyOf(subAbilities);
     }
 
-    public static ActivatedAbilityEntry of(SpellAbility sa) {
+    public static Optional<ActivatedAbilityEntry> of(SpellAbility sa) {
         AbilityType type = sa.isPwAbility() ? AbilityType.PLANESWALKER : AbilityType.ACTIVATED;
         boolean described = hasSpellDescription(sa);
 
         // Concatenate sub-ability chain descriptions into the root line so that oracle
         // lines (one paragraph = one activated ability) are not over-split.
         List<Ability> sub = SpellAbilityUtils.chainHead(sa.getSubAbility());
-        if (!described && sub.isEmpty()) return null;
+        if (!described && sub.isEmpty()) return Optional.empty();
         String rootDesc = rootDescription(sa, described);
         // For dice-roll activated abilities, getDescription() appends outcome lines after a
         // newline. Strip them here; they are re-emitted as OPTION sub-abilities below.
         String normalized = AbilityDescription.normalize(AbilityDescription.firstLine(rootDesc));
-        if (normalized == null && described) return null;
+        if (normalized == null && described) return Optional.empty();
         // A cost Forge has no words for prints as its raw selector: no line, its key dropped.
-        if (DescriptionText.hasRawSelector(normalized)) return null;
+        if (DescriptionText.hasRawSelector(normalized)) return Optional.empty();
 
         String fullDesc = RepeatedSentences.appendMissing(normalized == null ? "" : normalized, sub);
-        return new ActivatedAbilityEntry(type, type.formatDescription(fullDesc),
-                DiceOutcomes.of(sa, DiceOutcomes::optionLine));
+        return Optional.of(new ActivatedAbilityEntry(type, type.formatDescription(fullDesc),
+                DiceOutcomes.of(sa, DiceOutcomes::optionLine)));
     }
 
     private static boolean hasSpellDescription(SpellAbility sa) {

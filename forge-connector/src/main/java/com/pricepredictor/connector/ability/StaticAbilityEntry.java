@@ -6,6 +6,8 @@ import com.pricepredictor.connector.AbilityType;
 import forge.game.staticability.StaticAbility;
 import forge.game.staticability.StaticAbilityMode;
 
+import java.util.Optional;
+
 /**
  * The line of a Forge StaticAbility: its normalized {@code Description$}. The
  * type is fixed when the line is built — ADDITIONAL_COST for a RaiseCost or
@@ -14,10 +16,10 @@ import forge.game.staticability.StaticAbilityMode;
  */
 public record StaticAbilityEntry(AbilityType type, String descriptionText) implements Ability {
 
-    public static StaticAbilityEntry of(StaticAbility sa) {
-        if (sa.getKeyword() != null) return null;
+    public static Optional<StaticAbilityEntry> of(StaticAbility sa) {
+        if (sa.getKeyword() != null) return Optional.empty();
         String normalized = AbilityDescription.normalize(sa.getParam("Description"));
-        if (normalized == null) return null;
+        if (normalized == null) return Optional.empty();
 
         AbilityType effectiveType = AbilityType.STATIC;
         if (sa.checkMode(StaticAbilityMode.RaiseCost) || sa.checkMode(StaticAbilityMode.OptionalCost)) {
@@ -30,6 +32,6 @@ public record StaticAbilityEntry(AbilityType type, String descriptionText) imple
             }
         }
 
-        return new StaticAbilityEntry(effectiveType, normalized);
+        return Optional.of(new StaticAbilityEntry(effectiveType, normalized));
     }
 }

@@ -5,6 +5,8 @@ import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
 import forge.game.spellability.SpellAbility;
 
+import java.util.Optional;
+
 /**
  * A spell's additional cost on a line of its own, for a spell whose chain
  * states nothing else (a permanent's). A spell that states an effect opens
@@ -17,10 +19,9 @@ public record SpellAdditionalCost(String descriptionText) implements Ability {
         return AbilityType.ADDITIONAL_COST;
     }
 
-    public static SpellAdditionalCost of(SpellAbility sa) {
-        String sentence = sentenceOf(sa);
-        return sentence == null ? null
-                : new SpellAdditionalCost(AbilityDescription.stripAdditionalCostPrefix(sentence));
+    public static Optional<SpellAdditionalCost> of(SpellAbility sa) {
+        return Optional.ofNullable(sentenceOf(sa)).map(sentence ->
+                new SpellAdditionalCost(AbilityDescription.stripAdditionalCostPrefix(sentence)));
     }
 
     /**

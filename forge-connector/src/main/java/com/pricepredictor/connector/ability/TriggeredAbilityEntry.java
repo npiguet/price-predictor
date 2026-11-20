@@ -10,6 +10,7 @@ import forge.game.trigger.Trigger;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * The line of a Forge Trigger, built from its {@code TriggerDescription$}. Type
@@ -28,23 +29,24 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
         subAbilities = List.copyOf(subAbilities);
     }
 
-    public static TriggeredAbilityEntry of(Trigger trigger) {
-        if (!printsOwnLine(trigger)) return null;
+    public static Optional<TriggeredAbilityEntry> of(Trigger trigger) {
+        if (!printsOwnLine(trigger)) return Optional.empty();
         String rawDesc = trigger.getParam("TriggerDescription");
         String normalized = AbilityDescription.normalize(rawDesc);
-        if (normalized == null) return null;
+        if (normalized == null) return Optional.empty();
         AbilityType type = AbilityType.forTrigger(trigger, normalized);
         if (trigger.getKeyword() != null) {
             // For Tribute, TriggerDescription is the full oracle text (built directly from
             // TrigNotTribute's SpellDescription), so the execute chain would duplicate it.
             // Return with empty children: the description is self-contained.
-            return new TriggeredAbilityEntry(type, normalized, List.of());
+            return Optional.of(new TriggeredAbilityEntry(type, normalized, List.of()));
         }
 
         SpellAbility execute = trigger.getOverridingAbility();
         SpellAbility charm = execute == null ? null : charmOf(execute);
-        if (charm != null) return charmEntry(type, trigger, charm, normalized);
-        return executeEntry(type, rawDesc, normalized, execute);
+        return Optional.of(charm != null
+                ? charmEntry(type, trigger, charm, normalized)
+                : executeEntry(type, rawDesc, normalized, execute));
     }
 
     /**

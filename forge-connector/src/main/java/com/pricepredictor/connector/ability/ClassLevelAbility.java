@@ -8,6 +8,7 @@ import forge.game.keyword.KeywordInterface;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Class level ability. Stores cost + description as the full text, and
@@ -23,22 +24,22 @@ public record ClassLevelAbility(
         return AbilityType.LEVEL;
     }
 
-    public static ClassLevelAbility of(KeywordInterface ki) {
+    public static Optional<ClassLevelAbility> of(KeywordInterface ki) {
         int level = ClassLevel.of(ki).number();
 
         String cost = levelCost(ki);
         if (cost == null) {
-            return null;
+            return Optional.empty();
         }
         String rawDesc = withoutUndescribedTraits(levelDescription(ki));
         if (rawDesc == null) {
-            return null;
+            return Optional.empty();
         }
 
         String normalized = AbilityDescription.normalize(rawDesc);
-        if (normalized == null) return null;
+        if (normalized == null) return Optional.empty();
         String casedCost = AbilityDescription.applyCasing(cost);
-        return new ClassLevelAbility(casedCost + ": " + normalized, level);
+        return Optional.of(new ClassLevelAbility(casedCost + ": " + normalized, level));
     }
 
     /** The level's cost without its trailing colon, or null when it has none. */

@@ -5,6 +5,7 @@ import forge.game.spellability.SpellAbility;
 
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
 
@@ -25,22 +26,22 @@ public final class UndescribedSpellText {
     private UndescribedSpellText() {}
 
     /**
-     * The text of {@code sa}, or null when it has none anywhere.
+     * The text of {@code sa}, or nothing when it has none anywhere.
      *
      * @param oracle the face's {@code Oracle:} value, its line breaks written
      *               as {@code \n} escapes
      * @param name   the face's name, written as CARDNAME
      * @param stated the description texts of the face's other lines
      */
-    public static String of(SpellAbility sa, String oracle, String name, Collection<String> stated) {
-        String own = AbilityDescription.normalize(sa.getParam("Description"));
-        return own != null ? own : unstatedOracle(sa, oracle, name, stated);
+    public static Optional<String> of(SpellAbility sa, String oracle, String name, Collection<String> stated) {
+        return Optional.ofNullable(AbilityDescription.normalize(sa.getParam("Description")))
+                .or(() -> unstatedOracle(sa, oracle, name, stated));
     }
 
     /** The oracle's lines no other line, nor {@code sa}'s own cost, states, joined. */
-    private static String unstatedOracle(
+    private static Optional<String> unstatedOracle(
             SpellAbility sa, String oracle, String name, Collection<String> stated) {
-        if (oracle == null) return null;
+        if (oracle == null) return Optional.empty();
         Set<String> known = new HashSet<>(stated);
         String cost = SpellAdditionalCost.sentenceOf(sa);
         if (cost != null) known.add(cost);
@@ -49,7 +50,7 @@ public final class UndescribedSpellText {
             String line = AbilityDescription.scriptLine(raw, name);
             if (line != null && !isStated(line, known)) unstated.add(line);
         }
-        return unstated.length() == 0 ? null : unstated.toString();
+        return unstated.length() == 0 ? Optional.empty() : Optional.of(unstated.toString());
     }
 
     /**

@@ -51,6 +51,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -285,8 +286,12 @@ final class FaceParser {
      * static granting what the level adds, which Forge builds from the keyword.
      */
     private static KeywordRendering renderClassLevel(KeywordInterface ki) {
-        ClassLevelAbility level = ClassLevelAbility.of(ki);
-        if (level == null) return KeywordRendering.of(List.of());
+        return ClassLevelAbility.of(ki).map(level -> classLevelRendering(ki, level))
+                .orElseGet(() -> KeywordRendering.of(List.of()));
+    }
+
+    /** The rendering of {@code level}, printed by the keyword's level-up abilities and statics. */
+    private static KeywordRendering classLevelRendering(KeywordInterface ki, ClassLevelAbility level) {
         KeywordRendering.Builder rendering = new KeywordRendering.Builder();
         rendering.add(level);
         ki.getAbilities().forEach(levelUp -> rendering.printed(levelUp, level));
@@ -499,7 +504,7 @@ final class FaceParser {
         List<Ability> lines = new ArrayList<>();
         for (KeyedSpell spell : undescribedSpells) {
             String text = UndescribedSpellText.of(
-                    spell.ability(), face.getOracleText(), face.getName(), stated);
+                    spell.ability(), face.getOracleText(), face.getName(), stated).orElse("");
             List<Ability> spellLines = SpellLine.linesOf(spell.ability(), text);
             lines.addAll(spellLines);
             attributeSpellLines(spellLines, spell.key(), spell.ability());
@@ -539,7 +544,7 @@ final class FaceParser {
 
     /** The cleave line, which states only a cost and declares no key. */
     private void addAlternateCost(SpellAbility sa, ProvenanceKey key) {
-        addIfNotNull(abilities, AlternateCostSpell.of(sa));
+        AlternateCostSpell.of(sa).ifPresent(abilities::add);
         alternateCostSpells.add(new KeyedSpell(sa, key));
     }
 
@@ -598,7 +603,7 @@ final class FaceParser {
         List<Ability> out = new ArrayList<>();
         switch (route) {
             case CHARM -> out.addAll(CharmAbility.fromSpellAbility(sa));
-            case ACTIVATED -> addIfNotNull(out, ActivatedAbilityEntry.of(sa));
+            case ACTIVATED -> ActivatedAbilityEntry.of(sa).ifPresent(out::add);
             default -> { }
         }
         return out;
@@ -623,7 +628,7 @@ final class FaceParser {
         for (Trigger t : card.getTriggers()) {
             triggerIndex++;
             if (t.getKeyword() != null) {
-                addBuiltTrait(TriggeredAbilityEntry.of(t), t);
+                TriggeredAbilityEntry.of(t).ifPresent(line -> addBuiltTrait(line, t));
             } else {
                 parseOwnTrigger(t, key(TraitKind.TRIGGER, triggerIndex),
                         primaryExecuteSVars, primaryByExecute);
@@ -655,11 +660,12 @@ final class FaceParser {
         if (exec != null && !secondary) {
             primaryExecuteSVars.add(exec);
         }
-        Ability triggered = TriggeredAbilityEntry.of(t);
-        addIfNotNull(abilities, triggered);
-        duplicates.noteTriggerLine(triggered, t);
-        recorder.attribute(triggered, key, t);
-        if (triggered != null && exec != null) primaryByExecute.put(exec, triggered);
+        TriggeredAbilityEntry.of(t).ifPresent(triggered -> {
+            abilities.add(triggered);
+            duplicates.noteTriggerLine(triggered, t);
+            recorder.attribute(triggered, key, t);
+            if (exec != null) primaryByExecute.put(exec, triggered);
+        });
     }
 
     /** Whether {@code t} is a secondary trigger that is also static: no card text. */
@@ -669,19 +675,21 @@ final class FaceParser {
 
     /** Wrap each static or replacement trait directly in its entry. */
     private <T extends CardTraitBase> void parseTraits(Iterable<T> traits, TraitKind kind,
-                                                       Function<T, Ability> factory) {
+                                                       Function<T, Optional<? extends Ability>> factory) {
         int index = -1;
         for (T trait : traits) {
             index++;
-            Ability entry = factory.apply(trait);
+            Optional<? extends Ability> entry = factory.apply(trait);
             if (trait.getKeyword() != null) {
-                addBuiltTrait(entry, trait);
+                entry.ifPresent(built -> addBuiltTrait(built, trait));
                 continue;
             }
             ProvenanceKey key = key(kind, index);
             recorder.declare(key);
-            addIfNotNull(abilities, entry);
-            recorder.attribute(entry, key, trait);
+            entry.ifPresent(line -> {
+                abilities.add(line);
+                recorder.attribute(line, key, trait);
+            });
         }
     }
 
@@ -692,7 +700,7 @@ final class FaceParser {
      * keyword's key with the trait's {@code built}.
      */
     private void addBuiltTrait(Ability entry, CardTraitBase trait) {
-        addIfNotNull(abilities, entry);
+        abilities.add(entry);
         recorder.attributeBuilt(entry, keywordKey(trait.getKeyword()), trait);
     }
 
@@ -778,9 +786,5 @@ final class FaceParser {
         String typeStr = face.getType().toString();
         typeStr = typeStr.replace(" - ", " ");
         return typeStr.toLowerCase(Locale.ROOT);
-    }
-
-    private static void addIfNotNull(List<Ability> list, Ability item) {
-        if (item != null) list.add(item);
     }
 }

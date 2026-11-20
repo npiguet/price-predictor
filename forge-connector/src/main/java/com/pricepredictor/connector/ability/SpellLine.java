@@ -71,7 +71,6 @@ public record SpellLine(String descriptionText, int costLength, List<Ability> su
     }
 
     private static List<Ability> costLineOf(SpellAbility sa) {
-        SpellAdditionalCost cost = SpellAdditionalCost.of(sa);
-        return cost == null ? List.of() : List.of(cost);
+        return SpellAdditionalCost.of(sa).<List<Ability>>map(List::of).orElseGet(List::of);
     }
 }
