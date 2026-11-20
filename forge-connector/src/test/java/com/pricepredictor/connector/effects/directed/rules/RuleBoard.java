@@ -78,6 +78,11 @@ final class RuleBoard {
         return cards;
     }
 
+    /** {@code library}'s cards at the bottom of {@code owner}'s library in order, as {@link #library(Player, String...)} puts them. */
+    List<Card> library(Player owner, Library library) {
+        return library(owner, library.names().toArray(String[]::new));
+    }
+
     /**
      * Copy the game as a directed fork does, score-check the copy as every
      * fork is checked before it is changed, map the precondition's

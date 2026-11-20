@@ -10,6 +10,7 @@ import forge.game.phase.PhaseType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import static com.pricepredictor.connector.effects.directed.rules.CardName.named;
 import static com.pricepredictor.connector.effects.directed.rules.RegisteredRulesCastingTest.angelBoard;
 import static com.pricepredictor.connector.effects.directed.rules.RegisteredRulesCastingTest.automatonBoard;
 import static com.pricepredictor.connector.effects.directed.rules.RegisteredRulesCastingTest.boltBoard;
@@ -145,7 +146,7 @@ class RegisteredRulesUndoneTest {
      */
     @Test
     void simultaneousDamageBindsNothingWhenTheBlockerCarriesDamage() {
-        RuleBoard board = blockedBoard("Grizzly Bears");
+        RuleBoard board = blockedBoard(named("Grizzly Bears"));
         board.subject.setDamage(1);
         assertTrue(SimultaneousDamage.bind(board.game).isEmpty(), "Youthful Knight is a 2/1");
     }
@@ -162,7 +163,7 @@ class RegisteredRulesUndoneTest {
     /** C4 #6: taking the counter away kills a creature whose toughness rests on it. */
     @Test
     void unleashBindsNothingWhenTheCreatureLivesByItsCounter() {
-        RuleBoard board = unleashBoard("Rakdos Cackler", 1);
+        RuleBoard board = unleashBoard(named("Rakdos Cackler"), 1);
         board.subject.setDamage(2);
         assertTrue(UnleashCantBlock.bind(board.game).isEmpty(), "a 2/2 Cackler with 2 damage dies at 1 toughness");
     }

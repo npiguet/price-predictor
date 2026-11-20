@@ -16,6 +16,7 @@ import java.util.Set;
 
 import static com.pricepredictor.connector.effects.directed.BoardChanges.changes;
 import static com.pricepredictor.connector.effects.directed.BoardChanges.id;
+import static com.pricepredictor.connector.effects.directed.rules.CardName.named;
 import static com.pricepredictor.connector.effects.directed.rules.RuleTwinChecks.assertOnlyAdded;
 import static com.pricepredictor.connector.effects.directed.rules.RuleTwinChecks.assertOnlyChanged;
 import static com.pricepredictor.connector.effects.directed.rules.RuleTwinChecks.assertOnlySwapped;
@@ -38,7 +39,7 @@ class RegisteredRulesLibraryTest {
     // ── 118.12b, an optional search: add_permanent ──────────────────────
 
     /** A's upkeep begins over A's library, listed top card first. */
-    private static RuleBoard upkeepBoard(String... library) {
+    private static RuleBoard upkeepBoard(Library library) {
         RuleBoard board = new RuleBoard(PhaseType.UPKEEP);
         board.library(board.you, library);
         return board;
@@ -46,19 +47,19 @@ class RegisteredRulesLibraryTest {
 
     @Test
     void optionalSearchBindsTheActivePlayerWithABasicLandInItsLibrary() {
-        RuleBoard board = upkeepBoard("Shock", "Forest", "Forest");
+        RuleBoard board = upkeepBoard(Library.of("Shock", "Forest", "Forest"));
         assertEquals(board.you, OptionalSearch.bind(board.game).orElseThrow().player("player"));
     }
 
     @Test
     void optionalSearchBindsNothingWithoutABasicLandToFind() {
-        assertTrue(OptionalSearch.bind(upkeepBoard("Shock", "Lightning Bolt").game).isEmpty());
+        assertTrue(OptionalSearch.bind(upkeepBoard(Library.of("Shock", "Lightning Bolt")).game).isEmpty());
     }
 
     /** Elfhame Sanctuary finds a basic land card: a nonbasic land in the library is none. */
     @Test
     void optionalSearchBindsNothingWithOnlyANonbasicLandToFind() {
-        assertTrue(OptionalSearch.bind(upkeepBoard("Shock", "Evolving Wilds").game).isEmpty());
+        assertTrue(OptionalSearch.bind(upkeepBoard(Library.of("Shock", "Evolving Wilds")).game).isEmpty());
     }
 
     @Test
@@ -71,7 +72,7 @@ class RegisteredRulesLibraryTest {
     /** The added Sanctuary is bound on the copy for the forced answer, which no live card maps to. */
     @Test
     void optionalSearchForksElfhameSanctuaryAndBindsItForTheAnswer() {
-        RuleBoard board = upkeepBoard("Shock", "Forest");
+        RuleBoard board = upkeepBoard(Library.of("Shock", "Forest"));
         RuleTwin twin = board.twin(OptionalSearch.rule());
         assertOnlyAdded(twin, twin.fork().player("player"), OptionalSearch.SANCTUARY);
         Application application = OptionalSearch.rule().variants().get(OptionalSearch.SANCTUARY_ADDED);
@@ -83,17 +84,17 @@ class RegisteredRulesLibraryTest {
     // ── 701.23f, a search limited to the top cards: add_permanent ───────
 
     /** A's Archivist of Oghma and B's untapped {@code permanent}, as A's first main phase begins. */
-    private static RuleBoard archivistBoard(String watcher, String permanent) {
+    private static RuleBoard archivistBoard(CardName watcher, CardName permanent) {
         RuleBoard board = new RuleBoard(PhaseType.MAIN1);
-        board.other = board.card(board.you, watcher);
-        board.subject = board.card(board.opponent, permanent);
+        board.other = board.card(board.you, watcher.name());
+        board.subject = board.card(board.opponent, permanent.name());
         board.library(board.opponent, "Grizzly Bears", "Forest");
         return board;
     }
 
     @Test
     void searchUnderMindcensorBindsTheWatcherTheSearcherAndTheFetch() {
-        RuleBoard board = archivistBoard("Archivist of Oghma", "Evolving Wilds");
+        RuleBoard board = archivistBoard(named("Archivist of Oghma"), named("Evolving Wilds"));
         Binding binding = SearchUnderMindcensor.bind(board.game).orElseThrow();
         assertEquals(board.you, binding.player("watcher"));
         assertEquals(board.opponent, binding.player("searcher"));
@@ -102,12 +103,12 @@ class RegisteredRulesLibraryTest {
 
     @Test
     void searchUnderMindcensorBindsNothingWithoutASearchToWatch() {
-        assertTrue(SearchUnderMindcensor.bind(archivistBoard("Grizzly Bears", "Evolving Wilds").game).isEmpty());
+        assertTrue(SearchUnderMindcensor.bind(archivistBoard(named("Grizzly Bears"), named("Evolving Wilds")).game).isEmpty());
     }
 
     @Test
     void searchUnderMindcensorBindsNothingWithoutASearchingPermanent() {
-        assertTrue(SearchUnderMindcensor.bind(archivistBoard("Archivist of Oghma", "Forest").game).isEmpty());
+        assertTrue(SearchUnderMindcensor.bind(archivistBoard(named("Archivist of Oghma"), named("Forest")).game).isEmpty());
     }
 
     /**
@@ -116,7 +117,7 @@ class RegisteredRulesLibraryTest {
      */
     @Test
     void searchUnderMindcensorBindsNothingForASorcerySpeedSearch() {
-        RuleBoard board = archivistBoard("Archivist of Oghma", "Prime Speaker Vannifar");
+        RuleBoard board = archivistBoard(named("Archivist of Oghma"), named("Prime Speaker Vannifar"));
         board.card(board.opponent, "Grizzly Bears");
         assertTrue(SearchUnderMindcensor.bind(board.game).isEmpty());
     }
@@ -124,7 +125,7 @@ class RegisteredRulesLibraryTest {
     /** A tapped Evolving Wilds cannot pay its own tap, whatever other lands its controller has. */
     @Test
     void searchUnderMindcensorBindsNothingForATappedFetch() {
-        RuleBoard board = archivistBoard("Archivist of Oghma", "Evolving Wilds");
+        RuleBoard board = archivistBoard(named("Archivist of Oghma"), named("Evolving Wilds"));
         board.card(board.opponent, "Forest");
         board.subject.setTapped(true);
         assertTrue(SearchUnderMindcensor.bind(board.game).isEmpty());
@@ -145,7 +146,7 @@ class RegisteredRulesLibraryTest {
      */
     @Test
     void searchUnderMindcensorForksAvenMindcensor() {
-        RuleBoard board = archivistBoard("Archivist of Oghma", "Evolving Wilds");
+        RuleBoard board = archivistBoard(named("Archivist of Oghma"), named("Evolving Wilds"));
         RuleTwin twin = board.twin(SearchUnderMindcensor.rule());
         Card mindcensor = twin.fork().player("watcher").getCardsIn(ZoneType.Battlefield).stream()
                 .filter(c -> c.getName().equals(SearchUnderMindcensor.MINDCENSOR)).findFirst().orElseThrow();
@@ -163,13 +164,13 @@ class RegisteredRulesLibraryTest {
     // ── 701.24e, shuffling a library of one card: move_card ─────────────
 
     /** The opponent's Cosi's Trickster; your Demonic Tutor over {@code library}, top card first. */
-    private static RuleBoard tricksterBoard(String... library) {
+    private static RuleBoard tricksterBoard(Library library) {
         RuleBoard board = new RuleBoard(PhaseType.MAIN1);
         board.card(board.opponent, "Cosi's Trickster");
         board.card(board.you, "Swamp");
         board.card(board.you, "Swamp");
         TestBoard.inHand(board.game, board.you, "Demonic Tutor");
-        for (String name : library) {
+        for (String name : library.names()) {
             board.subject = board.game.getAction().moveToLibrary(
                     TestBoard.card(board.game, board.you, name), -1, null, null);
         }
@@ -180,7 +181,7 @@ class RegisteredRulesLibraryTest {
     @Test
     void smallLibraryShuffleBindsTheSearcherOverAnyLibraryOfOneCardOrMore() {
         for (String[] library : new String[][]{{"Forest"}, {"Forest", "Grizzly Bears", "Island"}}) {
-            RuleBoard board = tricksterBoard(library);
+            RuleBoard board = tricksterBoard(Library.of(library));
             Binding binding = SmallLibraryShuffle.bind(board.game).orElseThrow();
             assertEquals(board.you, binding.player("searcher"));
             assertEquals("Demonic Tutor", binding.card("spell").getName());
@@ -190,12 +191,12 @@ class RegisteredRulesLibraryTest {
     /** An empty library is the rare board itself: the edit would add nothing to it. */
     @Test
     void smallLibraryShuffleBindsNothingOverAnEmptyLibrary() {
-        assertTrue(SmallLibraryShuffle.bind(tricksterBoard().game).isEmpty());
+        assertTrue(SmallLibraryShuffle.bind(tricksterBoard(Library.of()).game).isEmpty());
     }
 
     @Test
     void smallLibraryShuffleForksTheLibraryEmptyAndTheGraveyardAsItWas() {
-        RuleBoard board = tricksterBoard("Forest", "Grizzly Bears", "Island");
+        RuleBoard board = tricksterBoard(Library.of("Forest", "Grizzly Bears", "Island"));
         Card top = board.you.getCardsIn(ZoneType.Library).get(0);
         RuleTwin twin = board.twin(SmallLibraryShuffle.rule());
         // The snapshot shows a library by its count and its top card alone.
@@ -208,26 +209,26 @@ class RegisteredRulesLibraryTest {
     // ── 701.44b, exploring with an empty library: move_card, inverted ──
 
     /** A's Merfolk Branchwalker in hand over two Forests, Wildgrowth Walker, A's library {@code library}. */
-    private static RuleBoard branchwalkerBoard(String... library) {
+    private static RuleBoard branchwalkerBoard(Library library) {
         RuleBoard board = new RuleBoard(PhaseType.MAIN1);
         board.cards(board.you, "Forest", 2);
-        return watchedCast(board, "Wildgrowth Walker", SeveralExplore.BRANCHWALKER, library);
+        return watchedCast(board, named("Wildgrowth Walker"), named(SeveralExplore.BRANCHWALKER), library);
     }
 
     /**
      * {@code board} with {@code card} the subject in your hand beside your
      * {@code watcher}, your library {@code library}, top card first.
      */
-    private static RuleBoard watchedCast(RuleBoard board, String watcher, String card, String... library) {
-        board.card(board.you, watcher);
-        board.subject = TestBoard.inHand(board.game, board.you, card);
+    private static RuleBoard watchedCast(RuleBoard board, CardName watcher, CardName card, Library library) {
+        board.card(board.you, watcher.name());
+        board.subject = TestBoard.inHand(board.game, board.you, card.name());
         board.library(board.you, library);
         return board;
     }
 
     @Test
     void exploreEmptyLibraryBindsTheExplorerOverALibraryOfCommonCards() {
-        RuleBoard board = branchwalkerBoard("Forest", "Grizzly Bears");
+        RuleBoard board = branchwalkerBoard(Library.of("Forest", "Grizzly Bears"));
         Binding binding = ExploreEmptyLibrary.bind(board.game).orElseThrow();
         assertEquals(board.subject, binding.card("card"));
         assertEquals(board.you, binding.player("player"));
@@ -236,12 +237,12 @@ class RegisteredRulesLibraryTest {
     /** An empty library is the rare board itself: the edit would add nothing to it. */
     @Test
     void exploreEmptyLibraryBindsNothingOverAnEmptyLibrary() {
-        assertTrue(ExploreEmptyLibrary.bind(branchwalkerBoard().game).isEmpty());
+        assertTrue(ExploreEmptyLibrary.bind(branchwalkerBoard(Library.of()).game).isEmpty());
     }
 
     @Test
     void exploreEmptyLibraryForksTheLibraryEmpty() {
-        RuleBoard board = branchwalkerBoard("Forest", "Grizzly Bears");
+        RuleBoard board = branchwalkerBoard(Library.of("Forest", "Grizzly Bears"));
         Card top = board.you.getCardsIn(ZoneType.Library).get(0);
         RuleTwin twin = board.twin(ExploreEmptyLibrary.rule());
         // The snapshot shows a library by its count and its top card alone.
@@ -307,15 +308,15 @@ class RegisteredRulesLibraryTest {
     // ── 701.57b, a discovery that finds nothing: move_card, inverted ────
 
     /** A's Geological Appraiser over four Mountains and Val, Marooned Surveyor; A's library top card first. */
-    private static RuleBoard appraiserBoard(String... library) {
+    private static RuleBoard appraiserBoard(Library library) {
         RuleBoard board = new RuleBoard(PhaseType.MAIN1);
         board.cards(board.you, "Mountain", 4);
-        return watchedCast(board, "Val, Marooned Surveyor", "Geological Appraiser", library);
+        return watchedCast(board, named("Val, Marooned Surveyor"), named("Geological Appraiser"), library);
     }
 
     @Test
     void discoverNothingFoundBindsTheDiscovererOverALibraryWithACardToFind() {
-        RuleBoard board = appraiserBoard("Forest", "Grizzly Bears", "Island");
+        RuleBoard board = appraiserBoard(Library.of("Forest", "Grizzly Bears", "Island"));
         Binding binding = DiscoverNothingFound.bind(board.game).orElseThrow();
         assertEquals(board.subject, binding.card("discoverer"));
         assertEquals(board.you, binding.player("player"));
@@ -324,12 +325,12 @@ class RegisteredRulesLibraryTest {
     /** An empty library is the rare board itself: the edit would add nothing to it. */
     @Test
     void discoverNothingFoundBindsNothingOverAnEmptyLibrary() {
-        assertTrue(DiscoverNothingFound.bind(appraiserBoard().game).isEmpty());
+        assertTrue(DiscoverNothingFound.bind(appraiserBoard(Library.of()).game).isEmpty());
     }
 
     @Test
     void discoverNothingFoundForksTheLibraryEmpty() {
-        RuleBoard board = appraiserBoard("Forest", "Grizzly Bears", "Island");
+        RuleBoard board = appraiserBoard(Library.of("Forest", "Grizzly Bears", "Island"));
         Card top = board.you.getCardsIn(ZoneType.Library).get(0);
         RuleTwin twin = board.twin(DiscoverNothingFound.rule());
         // The snapshot shows a library by its count and its top card alone.
@@ -340,7 +341,7 @@ class RegisteredRulesLibraryTest {
     // ── 702.53a, transmute: move_card ───────────────────────────────────
 
     /** A's Dimir Infiltrator in hand over an Island, a Swamp and a Forest; A's library top card first. */
-    private static RuleBoard infiltratorBoard(String... library) {
+    private static RuleBoard infiltratorBoard(Library library) {
         RuleBoard board = new RuleBoard(PhaseType.MAIN1);
         for (String land : List.of("Island", "Swamp", "Forest")) {
             board.card(board.you, land);
@@ -353,7 +354,7 @@ class RegisteredRulesLibraryTest {
 
     @Test
     void transmuteBindsTheTransmuterAndTheOneCardOfItsManaValue() {
-        RuleBoard board = infiltratorBoard("Forest", "Shock", "Grizzly Bears", "Island");
+        RuleBoard board = infiltratorBoard(Library.of("Forest", "Shock", "Grizzly Bears", "Island"));
         Binding binding = ManaValueSearch.transmute().precondition(board.game).orElseThrow();
         assertEquals(board.other, binding.card("source"));
         assertEquals(board.subject, binding.card("card"));
@@ -361,12 +362,12 @@ class RegisteredRulesLibraryTest {
 
     @Test
     void transmuteBindsNothingWithTwoCardsOfItsManaValue() {
-        assertTrue(ManaValueSearch.transmute().precondition(infiltratorBoard("Grizzly Bears", "Grizzly Bears").game).isEmpty());
+        assertTrue(ManaValueSearch.transmute().precondition(infiltratorBoard(Library.of("Grizzly Bears", "Grizzly Bears")).game).isEmpty());
     }
 
     @Test
     void transmuteForksACentaurCourserInTheCardsPlace() {
-        RuleBoard board = infiltratorBoard("Forest", "Shock", "Grizzly Bears", "Island");
+        RuleBoard board = infiltratorBoard(Library.of("Forest", "Shock", "Grizzly Bears", "Island"));
         RuleTwin twin = board.twin(ManaValueSearch.transmute());
         List<Card> library = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library));
         assertEquals(List.of("Forest", "Shock", Cards.COURSER, "Island"),
@@ -379,7 +380,7 @@ class RegisteredRulesLibraryTest {
     // ── 702.71a, transfigure: move_card ─────────────────────────────────
 
     /** A's Fleshwrither (mana value 4) over three Swamps; A's library top card first. */
-    private static RuleBoard fleshwritherBoard(String... library) {
+    private static RuleBoard fleshwritherBoard(Library library) {
         RuleBoard board = new RuleBoard(PhaseType.MAIN1);
         for (int i = 0; i < 3; i++) {
             board.card(board.you, "Swamp");
@@ -391,7 +392,7 @@ class RegisteredRulesLibraryTest {
 
     @Test
     void transfigureBindsTheCreatureAndTheOneCreatureCardOfItsManaValue() {
-        RuleBoard board = fleshwritherBoard("Hill Giant", "Grizzly Bears");
+        RuleBoard board = fleshwritherBoard(Library.of("Hill Giant", "Grizzly Bears"));
         Binding binding = ManaValueSearch.transfigure().precondition(board.game).orElseThrow();
         assertEquals(board.other, binding.card("source"));
         assertEquals(board.subject, binding.card("card"));
@@ -399,12 +400,12 @@ class RegisteredRulesLibraryTest {
 
     @Test
     void transfigureBindsNothingWithTwoCreatureCardsOfItsManaValue() {
-        assertTrue(ManaValueSearch.transfigure().precondition(fleshwritherBoard("Hill Giant", "Hill Giant").game).isEmpty());
+        assertTrue(ManaValueSearch.transfigure().precondition(fleshwritherBoard(Library.of("Hill Giant", "Hill Giant")).game).isEmpty());
     }
 
     @Test
     void transfigureForksACrawWurmInTheCardsPlace() {
-        RuleBoard board = fleshwritherBoard("Hill Giant", "Grizzly Bears");
+        RuleBoard board = fleshwritherBoard(Library.of("Hill Giant", "Grizzly Bears"));
         RuleTwin twin = board.twin(ManaValueSearch.transfigure());
         List<Card> library = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library));
         assertEquals(List.of(Cards.WURM, "Grizzly Bears"), library.stream().map(Card::getName).toList());
@@ -414,7 +415,7 @@ class RegisteredRulesLibraryTest {
     // ── 702.124j, partner with's search: move_card ──────────────────────
 
     /** A's Pir, Imaginative Rascal in hand over three Forests; A's library top card first, the top card the subject. */
-    private static RuleBoard pirBoard(String... library) {
+    private static RuleBoard pirBoard(Library library) {
         RuleBoard board = new RuleBoard(PhaseType.MAIN1);
         for (int i = 0; i < 3; i++) {
             board.card(board.you, "Forest");
@@ -426,7 +427,7 @@ class RegisteredRulesLibraryTest {
 
     @Test
     void partnerWithSearchBindsTheTopCardOfALibraryWithoutThePartner() {
-        RuleBoard board = pirBoard("Forest", "Forest", "Forest");
+        RuleBoard board = pirBoard(Library.of("Forest", "Forest", "Forest"));
         Binding binding = PartnerWithSearch.bind(board.game).orElseThrow();
         assertEquals(board.subject, binding.card("card"));
         assertEquals(board.other, binding.card("partner with"));
@@ -434,12 +435,12 @@ class RegisteredRulesLibraryTest {
 
     @Test
     void partnerWithSearchBindsNothingWithThePartnerInTheLibrary() {
-        assertTrue(PartnerWithSearch.bind(pirBoard("Forest", "Toothy, Imaginary Friend", "Forest").game).isEmpty());
+        assertTrue(PartnerWithSearch.bind(pirBoard(Library.of("Forest", "Toothy, Imaginary Friend", "Forest")).game).isEmpty());
     }
 
     @Test
     void partnerWithSearchForksThePartnerOnTop() {
-        RuleBoard board = pirBoard("Forest", "Forest", "Forest");
+        RuleBoard board = pirBoard(Library.of("Forest", "Forest", "Forest"));
         RuleTwin twin = board.twin(PartnerWithSearch.rule());
         List<Card> library = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library));
         assertEquals(List.of("Toothy, Imaginary Friend", "Forest", "Forest"),

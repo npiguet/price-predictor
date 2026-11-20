@@ -14,6 +14,7 @@ import java.util.Set;
 
 import static com.pricepredictor.connector.effects.directed.BoardChanges.changes;
 import static com.pricepredictor.connector.effects.directed.BoardChanges.id;
+import static com.pricepredictor.connector.effects.directed.rules.CardName.named;
 import static com.pricepredictor.connector.effects.directed.rules.RuleTwinChecks.assertOnlyAdded;
 import static com.pricepredictor.connector.effects.directed.rules.RuleTwinChecks.assertOnlyChanged;
 import static com.pricepredictor.connector.effects.directed.rules.RuleTwinChecks.assertOnlyRemoved;
@@ -66,18 +67,18 @@ class RegisteredRulesCastingTest {
     // ── 702.133a, jump-start: move_card ─────────────────────────────────
 
     /** Radical Idea in A's graveyard and {@code islands} Islands, as A's first main phase begins. */
-    private static RuleBoard jumpStartBoard(String card, int islands) {
+    private static RuleBoard jumpStartBoard(CardName card, int islands) {
         RuleBoard board = new RuleBoard(PhaseType.MAIN1);
         for (int i = 0; i < islands; i++) {
             board.card(board.you, "Island");
         }
-        board.subject = board.game.getAction().moveToGraveyard(TestBoard.card(board.game, board.you, card), null);
+        board.subject = board.game.getAction().moveToGraveyard(TestBoard.card(board.game, board.you, card.name()), null);
         return board;
     }
 
     @Test
     void jumpStartFromHandBindsTheCardInTheGraveyard() {
-        RuleBoard board = jumpStartBoard("Radical Idea", 2);
+        RuleBoard board = jumpStartBoard(named("Radical Idea"), 2);
         Binding binding = JumpStartFromHand.bind(board.game).orElseThrow();
         assertEquals(board.subject, binding.card("card"));
         assertEquals(board.you, binding.player("caster"));
@@ -85,23 +86,23 @@ class RegisteredRulesCastingTest {
 
     @Test
     void jumpStartFromHandBindsNothingWithoutTheLands() {
-        assertTrue(JumpStartFromHand.bind(jumpStartBoard("Radical Idea", 1).game).isEmpty());
+        assertTrue(JumpStartFromHand.bind(jumpStartBoard(named("Radical Idea"), 1).game).isEmpty());
     }
 
     @Test
     void jumpStartFromHandBindsNothingForACardWithoutJumpStart() {
-        assertTrue(JumpStartFromHand.bind(jumpStartBoard("Divination", 3).game).isEmpty());
+        assertTrue(JumpStartFromHand.bind(jumpStartBoard(named("Divination"), 3).game).isEmpty());
     }
 
     /** Quasiduplicate needs a target, which the forced cast's clause would draw: a spell with one is no board the rule binds. */
     @Test
     void jumpStartFromHandBindsNothingForASpellThatTargets() {
-        assertTrue(JumpStartFromHand.bind(jumpStartBoard("Quasiduplicate", 3).game).isEmpty());
+        assertTrue(JumpStartFromHand.bind(jumpStartBoard(named("Quasiduplicate"), 3).game).isEmpty());
     }
 
     @Test
     void jumpStartFromHandForksTheCardInTheHand() {
-        RuleBoard board = jumpStartBoard("Radical Idea", 2);
+        RuleBoard board = jumpStartBoard(named("Radical Idea"), 2);
         RuleTwin twin = board.twin(JumpStartFromHand.rule());
         assertTrue(twin.fork().player("caster").getCardsIn(ZoneType.Hand).stream()
                 .anyMatch(card -> card.getName().equals("Radical Idea")));
@@ -344,18 +345,18 @@ class RegisteredRulesCastingTest {
     // ── 702.170c, a card becoming plotted: move_card ────────────────────
 
     /** A Forest, a Plains and an Island of yours, Kellan Joins Up in your hand, then {@code inHand}. */
-    private static RuleBoard kellanBoard(String... inHand) {
+    private static RuleBoard kellanBoard(Hand inHand) {
         return kellanBoard(PhaseType.MAIN1, inHand);
     }
 
-    /** {@link #kellanBoard(String...)} as {@code step} begins. */
-    private static RuleBoard kellanBoard(PhaseType step, String... inHand) {
+    /** {@link #kellanBoard(Hand)} as {@code step} begins. */
+    private static RuleBoard kellanBoard(PhaseType step, Hand inHand) {
         RuleBoard board = new RuleBoard(step);
         for (String land : List.of("Forest", "Plains", "Island")) {
             board.card(board.you, land);
         }
         board.other = TestBoard.inHand(board.game, board.you, PlottedFromHand.KELLAN);
-        for (String name : inHand) {
+        for (String name : inHand.names()) {
             Card card = TestBoard.inHand(board.game, board.you, name);
             if (board.subject == null) {
                 board.subject = card;
@@ -366,7 +367,7 @@ class RegisteredRulesCastingTest {
 
     @Test
     void plottedFromHandBindsACardTooExpensiveForTheTrigger() {
-        RuleBoard board = kellanBoard("Hill Giant", "Serra Angel", "Forest");
+        RuleBoard board = kellanBoard(Hand.of("Hill Giant", "Serra Angel", "Forest"));
         Binding binding = PlottedFromHand.bind(board.game).orElseThrow();
         assertEquals(board.subject, binding.card("card"));
         assertEquals(board.other, binding.card("spell"));
@@ -374,24 +375,24 @@ class RegisteredRulesCastingTest {
 
     @Test
     void plottedFromHandBindsNothingWithACardTheTriggerCouldExile() {
-        assertTrue(PlottedFromHand.bind(kellanBoard("Hill Giant", "Shock").game).isEmpty());
+        assertTrue(PlottedFromHand.bind(kellanBoard(Hand.of("Hill Giant", "Shock")).game).isEmpty());
     }
 
     @Test
     void plottedFromHandBindsNothingWithOnlyLandsBesideKellan() {
-        assertTrue(PlottedFromHand.bind(kellanBoard("Forest").game).isEmpty());
+        assertTrue(PlottedFromHand.bind(kellanBoard(Hand.of("Forest")).game).isEmpty());
     }
 
     @Test
     void plottedFromHandBindsNothingWithoutTheLandsForKellan() {
-        RuleBoard board = kellanBoard("Hill Giant");
+        RuleBoard board = kellanBoard(Hand.of("Hill Giant"));
         board.you.getLandsInPlay().forEach(land -> land.setTapped(true));
         assertTrue(PlottedFromHand.bind(board.game).isEmpty());
     }
 
     @Test
     void plottedFromHandBindsNothingAtAnotherBoundary() {
-        assertTrue(PlottedFromHand.bind(kellanBoard(PhaseType.COMBAT_DECLARE_ATTACKERS, "Hill Giant").game)
+        assertTrue(PlottedFromHand.bind(kellanBoard(PhaseType.COMBAT_DECLARE_ATTACKERS, Hand.of("Hill Giant")).game)
                 .isEmpty());
     }
 
@@ -401,7 +402,7 @@ class RegisteredRulesCastingTest {
      */
     @Test
     void plottedFromHandBindsNothingWhenBothCanBeCast() {
-        RuleBoard board = kellanBoard("Hill Giant");
+        RuleBoard board = kellanBoard(Hand.of("Hill Giant"));
         board.card(board.you, "Forest");
         assertTrue(PlottedFromHand.bind(board.game).isPresent(), "four lands");
         board.card(board.you, "Forest");
@@ -410,7 +411,7 @@ class RegisteredRulesCastingTest {
 
     @Test
     void plottedFromHandForksAGrizzlyBearsInTheCardsPlace() {
-        RuleBoard board = kellanBoard("Hill Giant");
+        RuleBoard board = kellanBoard(Hand.of("Hill Giant"));
         RuleTwin twin = board.twin(PlottedFromHand.rule());
         Card bears = twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Hand).stream()
                 .filter(card -> card.getName().equals(Cards.BEARS)).findFirst().orElseThrow();

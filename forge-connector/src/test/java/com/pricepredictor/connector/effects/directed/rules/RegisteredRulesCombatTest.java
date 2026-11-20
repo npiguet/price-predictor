@@ -20,6 +20,7 @@ import java.util.Set;
 import static com.pricepredictor.connector.effects.directed.BoardChanges.changes;
 import static com.pricepredictor.connector.effects.directed.BoardChanges.id;
 import static com.pricepredictor.connector.effects.directed.BoardChanges.renamed;
+import static com.pricepredictor.connector.effects.directed.rules.CardName.named;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -39,17 +40,17 @@ class RegisteredRulesCombatTest {
     // ── 510.2 (703.4m), simultaneous combat damage: replace_card ────────
 
     /** A's Grizzly Bears attacks, B's {@code blocker} blocks it; the first-strike damage step begins. */
-    static RuleBoard blockedBoard(String blocker) {
+    static RuleBoard blockedBoard(CardName blocker) {
         RuleBoard board = new RuleBoard(PhaseType.COMBAT_FIRST_STRIKE_DAMAGE);
         board.other = board.card(board.you, "Grizzly Bears");
-        board.subject = board.card(board.opponent, blocker);
+        board.subject = board.card(board.opponent, blocker.name());
         TestBoard.blockedCombat(board.game, board.you, board.opponent, board.other, board.subject);
         return board;
     }
 
     @Test
     void simultaneousDamageBindsTheBlockedAttackerAndItsBlocker() {
-        RuleBoard board = blockedBoard("Grizzly Bears");
+        RuleBoard board = blockedBoard(named("Grizzly Bears"));
         Binding binding = SimultaneousDamage.bind(board.game).orElseThrow();
         assertEquals(board.other, binding.card("attacker"));
         assertEquals(board.subject, binding.card("blocker"));
@@ -57,12 +58,12 @@ class RegisteredRulesCombatTest {
 
     @Test
     void simultaneousDamageBindsNothingWhenTheBlockerStrikesFirst() {
-        assertTrue(SimultaneousDamage.bind(blockedBoard(SimultaneousDamage.KNIGHT).game).isEmpty());
+        assertTrue(SimultaneousDamage.bind(blockedBoard(named(SimultaneousDamage.KNIGHT)).game).isEmpty());
     }
 
     @Test
     void simultaneousDamageForksAFirstStrikeBlockerInTheBlockersPlace() {
-        RuleBoard board = blockedBoard("Grizzly Bears");
+        RuleBoard board = blockedBoard(named("Grizzly Bears"));
         RuleTwin twin = board.twin(SimultaneousDamage.rule());
         Game fork = twin.forkGame();
         Card knight = fork.getCardsIn(ZoneType.Battlefield).stream()
@@ -85,10 +86,10 @@ class RegisteredRulesCombatTest {
     // ── 702.98a, unleash can't block: counters ──────────────────────────
 
     /** Grizzly Bears attacks B, who controls {@code blocker} with {@code counters} +1/+1 counters; no blocker declared yet. */
-    static RuleBoard unleashBoard(String blocker, int counters) {
+    static RuleBoard unleashBoard(CardName blocker, int counters) {
         RuleBoard board = new RuleBoard(PhaseType.COMBAT_DECLARE_BLOCKERS);
         board.other = board.card(board.you, "Grizzly Bears");
-        board.subject = board.card(board.opponent, blocker);
+        board.subject = board.card(board.opponent, blocker.name());
         board.subject.setCounters(CounterEnumType.P1P1, counters);
         board.attacking(board.other);
         return board;
@@ -96,7 +97,7 @@ class RegisteredRulesCombatTest {
 
     @Test
     void unleashBindsTheAttackerAndAnUnleashedCreatureWithACounter() {
-        RuleBoard board = unleashBoard("Rakdos Cackler", 1);
+        RuleBoard board = unleashBoard(named("Rakdos Cackler"), 1);
         Binding binding = UnleashCantBlock.bind(board.game).orElseThrow();
         assertEquals(board.other, binding.card("attacker"));
         assertEquals(board.subject, binding.card("blocker"));
@@ -104,13 +105,13 @@ class RegisteredRulesCombatTest {
 
     @Test
     void unleashBindsNothingWithoutTheCounterOrTheKeyword() {
-        assertTrue(UnleashCantBlock.bind(unleashBoard("Rakdos Cackler", 0).game).isEmpty());
-        assertTrue(UnleashCantBlock.bind(unleashBoard("Runeclaw Bear", 1).game).isEmpty());
+        assertTrue(UnleashCantBlock.bind(unleashBoard(named("Rakdos Cackler"), 0).game).isEmpty());
+        assertTrue(UnleashCantBlock.bind(unleashBoard(named("Runeclaw Bear"), 1).game).isEmpty());
     }
 
     @Test
     void unleashForksTheCreatureWithoutItsCounter() {
-        RuleBoard board = unleashBoard("Rakdos Cackler", 1);
+        RuleBoard board = unleashBoard(named("Rakdos Cackler"), 1);
         RuleTwin twin = board.twin(UnleashCantBlock.rule());
         String cackler = id(board.subject);
         assertTrue(twin.changes().contains(cackler + ".counters"), twin.changes().toString());
@@ -125,14 +126,14 @@ class RegisteredRulesCombatTest {
     // ── 702.19c, trample over planeswalkers: replace_card ───────────────
 
     /** Your {@code attacker} attacks B's Jace Beleren of {@code loyalty} unblocked; the damage step begins. */
-    private static RuleBoard planeswalkerBoard(String attacker, int loyalty) {
+    private static RuleBoard planeswalkerBoard(CardName attacker, int loyalty) {
         return planeswalkerBoard(attacker, loyalty, PhaseType.COMBAT_DAMAGE);
     }
 
-    /** {@link #planeswalkerBoard(String, int)} as {@code step} begins. */
-    private static RuleBoard planeswalkerBoard(String attacker, int loyalty, PhaseType step) {
+    /** {@link #planeswalkerBoard(CardName, int)} as {@code step} begins. */
+    private static RuleBoard planeswalkerBoard(CardName attacker, int loyalty, PhaseType step) {
         RuleBoard board = new RuleBoard(step);
-        board.subject = board.card(board.you, attacker);
+        board.subject = board.card(board.you, attacker.name());
         board.other = board.card(board.opponent, "Jace Beleren");
         board.other.setCounters(CounterEnumType.LOYALTY, loyalty);
         Combat combat = new Combat(board.you);
@@ -144,20 +145,20 @@ class RegisteredRulesCombatTest {
 
     @Test
     void trampleOverPlaneswalkersBindsAnUnblockedAttackerWithoutTheKeyword() {
-        RuleBoard board = planeswalkerBoard("Colossal Dreadmaw", 3);
+        RuleBoard board = planeswalkerBoard(named("Colossal Dreadmaw"), 3);
         assertEquals(board.subject, TrampleOverPlaneswalkers.bind(board.game).orElseThrow().card("attacker"));
     }
 
     /** Thrasta's own attack is the side the counts hold already. */
     @Test
     void trampleOverPlaneswalkersBindsNothingWithTheKeyword() {
-        assertTrue(TrampleOverPlaneswalkers.bind(planeswalkerBoard(Cards.THRASTA, 3).game).isEmpty());
+        assertTrue(TrampleOverPlaneswalkers.bind(planeswalkerBoard(named(Cards.THRASTA), 3).game).isEmpty());
     }
 
     /** A granted trample over planeswalkers is the keyword already, and stays on the Thrasta in its place. */
     @Test
     void trampleOverPlaneswalkersBindsNothingForAGrantedKeyword() {
-        RuleBoard board = planeswalkerBoard("Colossal Dreadmaw", 3);
+        RuleBoard board = planeswalkerBoard(named("Colossal Dreadmaw"), 3);
         board.subject.addChangedCardKeywords(List.of("Trample:Planeswalker"), null, false,
                 board.game.getNextTimestamp(), null);
         assertTrue(Boards.tramplesOverPlaneswalkers(board.subject));
@@ -167,13 +168,13 @@ class RegisteredRulesCombatTest {
     /** Thrasta's 7 does not top a loyalty of 7: the fork's attack would have no excess. */
     @Test
     void trampleOverPlaneswalkersBindsNothingWhenThrastaWouldHaveNoExcess() {
-        assertTrue(TrampleOverPlaneswalkers.bind(planeswalkerBoard("Colossal Dreadmaw", 7).game).isEmpty());
-        assertTrue(TrampleOverPlaneswalkers.bind(planeswalkerBoard("Colossal Dreadmaw", 6).game).isPresent());
+        assertTrue(TrampleOverPlaneswalkers.bind(planeswalkerBoard(named("Colossal Dreadmaw"), 7).game).isEmpty());
+        assertTrue(TrampleOverPlaneswalkers.bind(planeswalkerBoard(named("Colossal Dreadmaw"), 6).game).isPresent());
     }
 
     @Test
     void trampleOverPlaneswalkersBindsNothingOnABlockedAttacker() {
-        RuleBoard board = planeswalkerBoard("Colossal Dreadmaw", 3);
+        RuleBoard board = planeswalkerBoard(named("Colossal Dreadmaw"), 3);
         Card bears = board.card(board.opponent, "Grizzly Bears");
         board.game.getCombat().addBlocker(board.subject, bears);
         board.game.getCombat().setBlocked(board.subject, true);
@@ -182,14 +183,14 @@ class RegisteredRulesCombatTest {
 
     @Test
     void trampleOverPlaneswalkersBindsNothingAtAnotherBoundary() {
-        assertTrue(TrampleOverPlaneswalkers.bind(planeswalkerBoard("Colossal Dreadmaw", 3,
+        assertTrue(TrampleOverPlaneswalkers.bind(planeswalkerBoard(named("Colossal Dreadmaw"), 3,
                 PhaseType.COMBAT_DECLARE_BLOCKERS).game).isEmpty());
     }
 
     /** The Dreadmaw's 7 marked damage would kill a 7/7 Thrasta. */
     @Test
     void trampleOverPlaneswalkersBindsNothingWhenThrastaWouldDie() {
-        RuleBoard board = planeswalkerBoard("Colossal Dreadmaw", 3);
+        RuleBoard board = planeswalkerBoard(named("Colossal Dreadmaw"), 3);
         board.subject.setDamage(5);
         assertTrue(TrampleOverPlaneswalkers.bind(board.game).isPresent());
         board.subject.setDamage(7);
@@ -199,7 +200,7 @@ class RegisteredRulesCombatTest {
     /** A first striker deals its damage in the first-strike step, not in the regular one the rule forks at. */
     @Test
     void trampleOverPlaneswalkersBindsNothingForAFirstStriker() {
-        RuleBoard board = planeswalkerBoard("Colossal Dreadmaw", 3);
+        RuleBoard board = planeswalkerBoard(named("Colossal Dreadmaw"), 3);
         board.subject.addChangedCardKeywords(List.of("First Strike"), null, false,
                 board.game.getNextTimestamp(), null);
         assertTrue(TrampleOverPlaneswalkers.bind(board.game).isEmpty());
@@ -207,7 +208,7 @@ class RegisteredRulesCombatTest {
 
     @Test
     void trampleOverPlaneswalkersForksThrastaAttackingTheSamePlaneswalker() {
-        RuleBoard board = planeswalkerBoard("Colossal Dreadmaw", 3);
+        RuleBoard board = planeswalkerBoard(named("Colossal Dreadmaw"), 3);
         RuleTwin twin = board.twin(TrampleOverPlaneswalkers.rule());
         Card thrasta = twin.forkGame().getCardsIn(ZoneType.Battlefield).stream()
                 .filter(card -> card.getName().equals(Cards.THRASTA)).findFirst().orElseThrow();
@@ -228,7 +229,7 @@ class RegisteredRulesCombatTest {
      * left the battlefield, so the attacker attacks Forge's placeholder
      * (506.4c), while your Grizzly Bears attacks B; {@code step} begins.
      */
-    private static RuleBoard goneWalkerBoard(String attacker, PhaseType step) {
+    private static RuleBoard goneWalkerBoard(CardName attacker, PhaseType step) {
         RuleBoard board = planeswalkerBoard(attacker, 3, step);
         Card bears = board.card(board.you, "Grizzly Bears");
         board.game.getCombat().addAttacker(bears, board.opponent);
@@ -238,31 +239,31 @@ class RegisteredRulesCombatTest {
         return board;
     }
 
-    private static RuleBoard goneWalkerBoard(String attacker) {
+    private static RuleBoard goneWalkerBoard(CardName attacker) {
         return goneWalkerBoard(attacker, PhaseType.COMBAT_DAMAGE);
     }
 
     @Test
     void aGoneWalkersAttackerWithoutTheKeywordBindsTheNoDamageRule() {
-        RuleBoard board = goneWalkerBoard("Craw Wurm");
+        RuleBoard board = goneWalkerBoard(named("Craw Wurm"));
         assertEquals(board.subject, NoDamageToAGonePlaneswalker.bind(board.game).orElseThrow().card("attacker"));
     }
 
     /** Thrasta's own attack is the side 702.19f's counts hold already. */
     @Test
     void aGoneWalkersTramplerBindsNothing() {
-        assertTrue(NoDamageToAGonePlaneswalker.bind(goneWalkerBoard(Cards.THRASTA).game).isEmpty());
+        assertTrue(NoDamageToAGonePlaneswalker.bind(goneWalkerBoard(named(Cards.THRASTA)).game).isEmpty());
     }
 
     @Test
     void theGoneWalkerRuleBindsNothingWhileThePlaneswalkerStays() {
-        assertTrue(NoDamageToAGonePlaneswalker.bind(planeswalkerBoard("Craw Wurm", 3).game).isEmpty());
+        assertTrue(NoDamageToAGonePlaneswalker.bind(planeswalkerBoard(named("Craw Wurm"), 3).game).isEmpty());
     }
 
     /** Alone in the step, the attacker would deal no damage in the live game, which then writes no combat record. */
     @Test
     void theGoneWalkerRuleBindsNothingWithoutAnotherCombatantsDamage() {
-        RuleBoard board = goneWalkerBoard("Craw Wurm");
+        RuleBoard board = goneWalkerBoard(named("Craw Wurm"));
         Card bears = board.game.getCombat().getAttackers().stream()
                 .filter(card -> card.getName().equals("Grizzly Bears")).findFirst().orElseThrow();
         board.game.getCombat().removeFromCombat(bears);
@@ -271,13 +272,13 @@ class RegisteredRulesCombatTest {
 
     @Test
     void theGoneWalkerRuleBindsNothingAtAnotherBoundary() {
-        assertTrue(NoDamageToAGonePlaneswalker.bind(goneWalkerBoard("Craw Wurm",
+        assertTrue(NoDamageToAGonePlaneswalker.bind(goneWalkerBoard(named("Craw Wurm"),
                 PhaseType.COMBAT_DECLARE_BLOCKERS).game).isEmpty());
     }
 
     @Test
     void theGoneWalkerRuleBindsNothingForAGrantedKeyword() {
-        RuleBoard granted = goneWalkerBoard("Craw Wurm");
+        RuleBoard granted = goneWalkerBoard(named("Craw Wurm"));
         granted.subject.addChangedCardKeywords(List.of("Trample:Planeswalker"), null, false,
                 granted.game.getNextTimestamp(), null);
         assertTrue(NoDamageToAGonePlaneswalker.bind(granted.game).isEmpty());
@@ -286,16 +287,16 @@ class RegisteredRulesCombatTest {
     /** Ghalta's 8 marked damage would kill a 7/7 Thrasta. */
     @Test
     void aGoneWalkersAttackerBindsNothingWhenThrastaWouldDie() {
-        RuleBoard board = goneWalkerBoard("Ghalta, Primal Hunger");
+        RuleBoard board = goneWalkerBoard(named("Ghalta, Primal Hunger"));
         assertTrue(NoDamageToAGonePlaneswalker.bind(board.game).isPresent());
         board.subject.setDamage(8);
         assertTrue(NoDamageToAGonePlaneswalker.bind(board.game).isEmpty());
     }
 
     /** The fork's {@code name} attacks the copy's own placeholder; nothing else changed but the new card. */
-    private static void assertReplacedAttackingTheGoneWalker(RuleBoard board, RuleTwin twin, String name) {
+    private static void assertReplacedAttackingTheGoneWalker(RuleBoard board, RuleTwin twin, CardName name) {
         Card replacement = twin.forkGame().getCardsIn(ZoneType.Battlefield).stream()
-                .filter(card -> card.getName().equals(name)).findFirst().orElseThrow();
+                .filter(card -> card.getName().equals(name.name())).findFirst().orElseThrow();
         Combat combat = twin.forkGame().getCombat();
         assertTrue(combat.isAttacking(replacement));
         assertTrue(Combat.isRemovedDefender(combat.getDefenderByAttacker(replacement)));
@@ -308,23 +309,23 @@ class RegisteredRulesCombatTest {
 
     @Test
     void aGoneWalkersAttackerForksThrasta() {
-        RuleBoard board = goneWalkerBoard("Craw Wurm");
+        RuleBoard board = goneWalkerBoard(named("Craw Wurm"));
         assertReplacedAttackingTheGoneWalker(board, board.twin(NoDamageToAGonePlaneswalker.rule()),
-                Cards.THRASTA);
+                named(Cards.THRASTA));
     }
 
     // ── 702.118b, skulk: replace_card ───────────────────────────────────
 
     /** Furtive Homunculus attacks B, who controls {@code blocker}; no blocker declared yet. */
-    private static RuleBoard skulkBoard(String blocker) {
+    private static RuleBoard skulkBoard(CardName blocker) {
         return skulkBoard(blocker, PhaseType.COMBAT_DECLARE_BLOCKERS);
     }
 
-    /** {@link #skulkBoard(String)} as {@code step} begins. */
-    private static RuleBoard skulkBoard(String blocker, PhaseType step) {
+    /** {@link #skulkBoard(CardName)} as {@code step} begins. */
+    private static RuleBoard skulkBoard(CardName blocker, PhaseType step) {
         RuleBoard board = new RuleBoard(step);
         board.other = board.card(board.you, "Furtive Homunculus");
-        board.subject = board.card(board.opponent, blocker);
+        board.subject = board.card(board.opponent, blocker.name());
         Combat combat = new Combat(board.you);
         combat.addAttacker(board.other, board.opponent);
         board.game.getPhaseHandler().setCombat(combat);
@@ -333,7 +334,7 @@ class RegisteredRulesCombatTest {
 
     @Test
     void skulkBlockerBindsTheAttackerAndTheCreatureWithGreaterPower() {
-        RuleBoard board = skulkBoard("Centaur Courser");
+        RuleBoard board = skulkBoard(named("Centaur Courser"));
         Binding binding = SkulkBlocker.bind(board.game).orElseThrow();
         assertEquals(board.other, binding.card("attacker"));
         assertEquals(board.subject, binding.card("blocker"));
@@ -341,20 +342,20 @@ class RegisteredRulesCombatTest {
 
     @Test
     void skulkBlockerBindsNothingWhenTheCreatureMayBlock() {
-        assertTrue(SkulkBlocker.bind(skulkBoard("Grizzly Bears").game).isEmpty());
+        assertTrue(SkulkBlocker.bind(skulkBoard(named("Grizzly Bears")).game).isEmpty());
     }
 
     /** A +1/+1 counter the Elves would carry leaves them at the attacker's power 2, not below it. */
     @Test
     void skulkBlockerBindsNothingWhenTheElvesWouldNotStayBelowTheAttacker() {
-        RuleBoard board = skulkBoard("Centaur Courser");
+        RuleBoard board = skulkBoard(named("Centaur Courser"));
         board.subject.setCounters(CounterEnumType.P1P1, 1);
         assertTrue(SkulkBlocker.bind(board.game).isEmpty());
     }
 
     @Test
     void skulkBlockerBindsNothingAtAnotherBoundary() {
-        assertTrue(SkulkBlocker.bind(skulkBoard("Centaur Courser", PhaseType.COMBAT_DAMAGE).game).isEmpty());
+        assertTrue(SkulkBlocker.bind(skulkBoard(named("Centaur Courser"), PhaseType.COMBAT_DAMAGE).game).isEmpty());
     }
 
     /** Phantom Warrior cannot be blocked at all, the Elves no more than the Courser: no skulk to fork away. */
@@ -375,7 +376,7 @@ class RegisteredRulesCombatTest {
     void skulkBlockerBindsNothingForAnotherEvasionOrAProtection() {
         for (String keyword : List.of("Flying", "Protection from green", "Protection:Creature:creatures",
                 "Protection from blue")) {
-            RuleBoard board = skulkBoard("Centaur Courser");
+            RuleBoard board = skulkBoard(named("Centaur Courser"));
             board.other.addChangedCardKeywords(List.of(keyword), null, false, board.game.getNextTimestamp(), null);
             assertTrue(SkulkBlocker.bind(board.game).isEmpty(), keyword);
         }
@@ -384,7 +385,7 @@ class RegisteredRulesCombatTest {
     /** Protection from green keeps Llanowar Elves out of the block as well, the case the list is for. */
     @Test
     void protectionFromGreenWouldKeepTheElvesOut() {
-        RuleBoard board = skulkBoard("Centaur Courser");
+        RuleBoard board = skulkBoard(named("Centaur Courser"));
         board.other.addChangedCardKeywords(List.of("Protection from green"), null, false,
                 board.game.getNextTimestamp(), null);
         Card elves = board.card(board.opponent, SkulkBlocker.ELVES);
@@ -394,16 +395,16 @@ class RegisteredRulesCombatTest {
 
     @Test
     void skulkBlockerBindsNothingForATappedCreatureOrOneThatCannotBlock() {
-        RuleBoard tapped = skulkBoard("Centaur Courser");
+        RuleBoard tapped = skulkBoard(named("Centaur Courser"));
         tapped.subject.setTapped(true);
         assertTrue(SkulkBlocker.bind(tapped.game).isEmpty(), "tapped");
-        assertTrue(SkulkBlocker.bind(skulkBoard("Craven Giant").game).isEmpty(), "can't block");
+        assertTrue(SkulkBlocker.bind(skulkBoard(named("Craven Giant")).game).isEmpty(), "can't block");
     }
 
     /** One marked damage would kill the 1/1 Elves. */
     @Test
     void skulkBlockerBindsNothingWhenTheElvesWouldDie() {
-        RuleBoard board = skulkBoard("Centaur Courser");
+        RuleBoard board = skulkBoard(named("Centaur Courser"));
         board.subject.setDamage(1);
         assertTrue(SkulkBlocker.bind(board.game).isEmpty());
     }
@@ -426,7 +427,7 @@ class RegisteredRulesCombatTest {
 
     @Test
     void skulkBlockerForksLlanowarElvesAmongTheLegalBlockers() {
-        RuleBoard board = skulkBoard("Centaur Courser");
+        RuleBoard board = skulkBoard(named("Centaur Courser"));
         RuleTwin twin = board.twin(SkulkBlocker.rule());
         Card elves = twin.forkGame().getCardsIn(ZoneType.Battlefield).stream()
                 .filter(card -> card.getName().equals(SkulkBlocker.ELVES)).findFirst().orElseThrow();
