@@ -86,31 +86,33 @@ class WorkerLogScan:
 
     def _scan_one(self, path: Path, failures: WorkerFailures) -> None:
         statuses = self._statuses.setdefault(path, SlotStatuses())
-        try:
-            identity = os.stat(path).st_ino
-        except OSError:
+        identity = _inode(path)
+        if identity is None:
             return
         known, offset = self._read.get(path, (identity, 0))
         if known != identity:
-            # Rotated: the file read so far is ``.1`` now, unless a second
-            # rotation replaced it; finish whichever generation is there.
-            rotated = path.with_name(path.name + ".1")
-            try:
-                rotated_identity = os.stat(rotated).st_ino
-            except OSError:
-                rotated_identity = None
-            if rotated_identity == known:
-                _read_lines(rotated, offset, failures, statuses)
-            else:
-                failures.add(
-                    WorkerFailure.LOG_UNREAD,
-                    f"{path}: rotated at least twice between scans; the "
-                    "generation read so far is gone",
-                )
-                if rotated_identity is not None:
-                    _read_lines(rotated, 0, failures, statuses)
+            self._finish_rotated(path, known, offset, failures)
             offset = 0
         self._read[path] = (identity, _read_lines(path, offset, failures, statuses))
+
+    def _finish_rotated(
+        self, path: Path, known: int, offset: int, failures: WorkerFailures,
+    ) -> None:
+        """Rotated: the file read so far is ``.1`` now, unless a second
+        rotation replaced it; finish whichever generation is there."""
+        statuses = self._statuses[path]
+        rotated = path.with_name(path.name + ".1")
+        rotated_identity = _inode(rotated)
+        if rotated_identity == known:
+            _read_lines(rotated, offset, failures, statuses)
+            return
+        failures.add(
+            WorkerFailure.LOG_UNREAD,
+            f"{path}: rotated at least twice between scans; the "
+            "generation read so far is gone",
+        )
+        if rotated_identity is not None:
+            _read_lines(rotated, 0, failures, statuses)
 
 
 class WorkerLogReport:
@@ -179,6 +181,14 @@ class WorkerLogReport:
             "directed_fork_tally": self.directed_fork_tally(),
             "worker_engine": self.worker_engine(),
         }
+
+
+def _inode(path: Path) -> int | None:
+    """The file's identity, or None when it cannot be statted."""
+    try:
+        return os.stat(path).st_ino
+    except OSError:
+        return None
 
 
 def _read_lines(

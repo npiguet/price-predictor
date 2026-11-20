@@ -31,20 +31,21 @@ def load_vocabulary(vocab_path: Path) -> dict[str, int]:
     return vocabulary_of(vocab_path.read_text(encoding="utf-8").splitlines())
 
 
+def _require_token(lines: list[str], index: int, token: str, absent: str) -> None:
+    """Raise unless ``lines[index]`` is ``token``; ``absent`` names a missing line."""
+    if len(lines) <= index or lines[index] != token:
+        got = lines[index] if len(lines) > index else absent
+        raise ValueError(
+            f"vocab.txt must have '{token}' at line {index}, got: {got!r}"
+        )
+
+
 def vocabulary_of(lines: list[str]) -> dict[str, int]:
     """``{token: id}`` of a vocabulary's token lines, ``[PAD]`` and ``[UNK]``
     checked at lines 0 and 1: what :func:`load_vocabulary` reads, for a reader
     whose file holds more than the tokens."""
-    if not lines or lines[0] != MtgTokenizer.PAD:
-        got = lines[0] if lines else "empty file"
-        raise ValueError(
-            f"vocab.txt must have '[PAD]' at line 0, got: {got!r}"
-        )
-    if len(lines) < 2 or lines[1] != MtgTokenizer.UNK:
-        got = lines[1] if len(lines) > 1 else "missing"
-        raise ValueError(
-            f"vocab.txt must have '[UNK]' at line 1, got: {got!r}"
-        )
+    _require_token(lines, 0, MtgTokenizer.PAD, "empty file")
+    _require_token(lines, 1, MtgTokenizer.UNK, "missing")
 
     return {token: i for i, token in enumerate(lines)}
 
