@@ -6,8 +6,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from effects.application.collect_coverage import build_coverage_units, count_shard
+from effects.application.collect_coverage import build_coverage_units
 from effects.application.collector_common import read_name_list
+from effects.application.coverage_counting import count_shard
 from effects.infrastructure.card_sources import load_converted_cards
 from tests.unit.effects.builders import make_entity, write_plain_shard
 from tests.unit.effects.domain.test_coverage import _record

@@ -32,12 +32,11 @@ from effects.application.collector_common import (
     record_damaged_shards,
 )
 from effects.application.directed_steering import DirectedSteering
-from effects.application.parallel_map import run_parallel
+from effects.application.shard_ledger import ShardLedger, ShardPass, read_records
 from effects.domain import default_paths
 from effects.domain.card_names import fold_card_name
 from effects.domain.coverage import DeckCandidate, is_complete, retire_stalled
 from effects.domain.directed_sides import DirectedForkGames
-from effects.domain.game_ends import GameEnds
 from effects.domain.rule_outcomes import (
     CARD_TYPES,
     CONDITIONS,
@@ -581,21 +580,16 @@ def count_variant_shard(shard: Path) -> VariantShardGames:
     """One shard's variant games: every record read once, a damaged shard's
     up to the damage, which it names, and a game without a game-end
     marker (cut; build-corpus drops it) left out."""
-    from effects.infrastructure.shard_io import SHARD_DAMAGE, read_shard
+    from effects.infrastructure.shard_io import read_shard
 
     found = VariantShardGames()
-    ends = GameEnds()
-    try:
-        for record in read_shard(shard):
-            found.add(record)
-            ends.note(record)
-    except SHARD_DAMAGE as exc:
-        found.damaged.append(str(exc))
-    found.drop_games(ends.cut)
+    read = read_records(read_shard(shard), found.add)
+    found.damaged.extend(read.damaged)
+    found.drop_games(read.cut)
     return found
 
 
-class VariantGameCounter:
+class VariantGameCounter(ShardLedger):
     """Each variant's games from this run's own shards, and from those of the
     runs it continues, each read once.
 
@@ -609,51 +603,31 @@ class VariantGameCounter:
         self, records_dir: Path, run_id: str, workers: int | None,
         *, continues: tuple[str, ...] = (),
     ) -> None:
+        super().__init__()
         self._records_dir = Path(records_dir)
         self._prefix = f"{run_id}."
         self._continued = tuple(f"{earlier}." for earlier in continues)
         self._workers = workers
-        self._counted: set[Path] = set()
         #: Every record this run's own shards hold, over every round so far.
         self.records = 0
         #: Rounds counted so far.
         self.rounds = 0
-        #: Every damaged shard read so far, as its read's message: counted up
-        #: to the damage, once, like any other shard.
-        self.damaged: list[str] = []
         #: The directed forks of every shard counted so far, each once.
         self.directed = DirectedForkGames()
-        #: Cut games left out: over every count so far, and in the last one.
-        self.cut_games = 0
-        self.last_cut = 0
 
     def fresh_shards(self) -> list[Path]:
         """This run's shards not yet counted."""
-        return self._fresh((self._prefix,))
-
-    def _fresh(self, prefixes: tuple[str, ...]) -> list[Path]:
-        from effects.infrastructure.shard_io import iter_shards
-
-        return [
-            shard for shard in iter_shards(self._records_dir)
-            if shard.name.startswith(prefixes) and shard not in self._counted
-        ]
+        return self.fresh(self._records_dir, (self._prefix,))
 
     def _count(self, shards: list[Path]) -> VariantShardGames:
         found = VariantShardGames()
-        for part in run_parallel(
-            shards, count_variant_shard, workers=self._workers, label="Counted",
-            progress_every=PROGRESS_EVERY_SHARDS,
-        ):
-            found.merge(part)
-        self._counted.update(shards)
+        self.count(shards, ShardPass(
+            count_variant_shard, self._workers, PROGRESS_EVERY_SHARDS,
+        ), found.merge)
         self.directed.merge(found.directed)
-        self.last_cut = found.cut_games
-        self.cut_games += found.cut_games
         for message in found.damaged:
             logger.warning("%s; its records before the damage are counted, and the "
                            "shard is not read again", message)
-        self.damaged += found.damaged
         return found
 
     def seed(self, units: Mapping[str, VariantGames]) -> None:
@@ -661,7 +635,7 @@ class VariantGameCounter:
         the first round; their records are no record of this run's."""
         if not self._continued:
             return
-        shards = self._fresh(self._continued)
+        shards = self.fresh(self._records_dir, self._continued)
         credit_games(units, self._count(shards))
         logger.info(
             "Counted %d shard(s) of the continued run(s); %d of %d variants "

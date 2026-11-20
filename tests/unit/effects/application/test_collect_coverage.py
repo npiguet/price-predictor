@@ -807,7 +807,7 @@ class TestCountingReportsProgress:
         probe = (
             "import sys\n"
             "from pathlib import Path\n"
-            "from effects.application.collect_coverage import count_shard\n"
+            "from effects.application.coverage_counting import count_shard\n"
             f"count_shard(Path({str(shard)!r}))\n"
             "print('torch' in sys.modules)\n"
         )
@@ -898,7 +898,7 @@ class TestHeldOutTextUnit:
         """Counted as build-corpus counts a held-out text's games (FR-053):
         from resolution records only, so a text whose triggers fire but never
         resolve is not satisfied."""
-        from effects.application.collect_coverage import count_text_shard
+        from effects.application.coverage_counting import count_text_shard
 
         resolutions, everything = _texts_by_game(_GEN3_SHARD)
         assert resolutions and everything != resolutions
@@ -910,7 +910,7 @@ class TestHeldOutTextUnit:
     def test_a_cut_game_counts_toward_no_text(self, tmp_path):
         """The fixture without its game-end markers, as a killed worker leaves
         a shard: every game reads as cut (WP7), and build-corpus would drop each."""
-        from effects.application.collect_coverage import count_text_shard
+        from effects.application.coverage_counting import count_text_shard
 
         cut = write_cut_gen3_fixture(tmp_path / "cut.jsonl.gz")
         resolutions, everything = _texts_by_game(_GEN3_SHARD)
@@ -928,7 +928,7 @@ class TestHeldOutTextUnit:
         build-corpus credits the game to it, so the round's listed ``Draw``
         text, acting second, must not count the game either.
         """
-        from effects.application.collect_coverage import (
+        from effects.application.coverage_counting import (
             TextCoverageCounter,
             count_text_shard,
         )
@@ -967,7 +967,7 @@ class TestHeldOutTextUnit:
         """A record the quality rules refuse never reaches the manifest."""
         from dataclasses import replace
 
-        from effects.application.collect_coverage import count_text_shard
+        from effects.application.coverage_counting import count_text_shard
         from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
         from effects.infrastructure.shard_io import read_shard
         from tests.unit.effects.builders import write_ended_shard
@@ -993,7 +993,7 @@ class TestHeldOutTextUnit:
 
     def test_a_process_reads_each_sidecar_once_across_shards(self, monkeypatch):
         """A sidecar cache per shard re-read every sidecar the shard named."""
-        from effects.application import collect_coverage
+        from effects.application import coverage_counting
         from effects.infrastructure import converted_trees, sidecar_io
 
         reads: list[Path] = []
@@ -1010,9 +1010,9 @@ class TestHeldOutTextUnit:
             "tokenscripts": str(_FIXTURES / "gen3-sidecars" / "tokenscripts"),
         }
         shard = _FIXTURES / "gen3-records.jsonl.gz"
-        first = collect_coverage.count_text_shard(shard, roots=roots, held_out=_holding(()))
+        first = coverage_counting.count_text_shard(shard, roots=roots, held_out=_holding(()))
         read_by_one = len(reads)
-        second = collect_coverage.count_text_shard(shard, roots=roots, held_out=_holding(()))
+        second = coverage_counting.count_text_shard(shard, roots=roots, held_out=_holding(()))
         converted_trees._process_sidecars.cache_clear()
 
         assert read_by_one > 0
@@ -1387,7 +1387,7 @@ class TestOnlyWhatBuildCorpusKeepsCounts:
     progress though build-corpus writes no such record to any stratum."""
 
     def test_a_turn_action_record_credits_nothing(self, tmp_path):
-        from effects.application.collect_coverage import count_shard
+        from effects.application.coverage_counting import count_shard
 
         drawn, land = make_entity("E1", "drawn card", zone="hand"), make_entity("E2", "forest")
         shard = write_plain_shard(tmp_path, "x", [_turn_action([drawn, land], [
@@ -1402,7 +1402,7 @@ class TestOnlyWhatBuildCorpusKeepsCounts:
         """A resolution with no acting ability is refused as ``no-ability``."""
         from dataclasses import replace
 
-        from effects.application.collect_coverage import count_shard
+        from effects.application.coverage_counting import count_shard
 
         record = replace(
             _record([make_entity("E1", "shock")], source="E1"), ability=None,
@@ -1412,7 +1412,7 @@ class TestOnlyWhatBuildCorpusKeepsCounts:
         assert count_shard(shard).credits == {}
 
     def test_a_kept_record_still_credits(self, tmp_path):
-        from effects.application.collect_coverage import count_shard
+        from effects.application.coverage_counting import count_shard
 
         shard = write_plain_shard(tmp_path, "x", [
             _record([make_entity("E1", "shock")], source="E1"),
@@ -1442,14 +1442,14 @@ class TestAnOlderRecordStopsTheCount:
         return path
 
     def test_the_card_count_refuses_it_naming_its_generation(self, tmp_path):
-        from effects.application.collect_coverage import count_shard
+        from effects.application.coverage_counting import count_shard
         from effects.domain.shard_generation import OlderGenerationError
 
         with pytest.raises(OlderGenerationError, match=r"line 1: the record is gen-2 "):
             count_shard(self._older_shard(tmp_path))
 
     def test_the_held_out_text_count_refuses_it(self, tmp_path):
-        from effects.application.collect_coverage import count_text_shard
+        from effects.application.coverage_counting import count_text_shard
         from effects.domain.shard_generation import OlderGenerationError
 
         _, everything = _texts_by_game(_GEN3_SHARD)

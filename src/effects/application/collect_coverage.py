@@ -16,10 +16,9 @@ from __future__ import annotations
 import logging
 import random
 from abc import ABC, abstractmethod
-from collections import Counter, defaultdict
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from functools import cached_property, partial
+from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -31,32 +30,24 @@ from effects.application.collector_common import (
     read_name_list,
     record_damaged_shards,
 )
-from effects.application.parallel_map import run_parallel
-from effects.domain.card_names import fold_card_name
+from effects.application.coverage_counting import CoverageCounter, TextCoverageCounter
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.coverage import (
     HELD_OUT_GAME_FLOOR,
     CardCoverage,
-    CardOfScript,
     ConsultVerdict,
     CoverageUnit,
     DeckCandidate,
     TextCoverage,
     awaited_texts,
-    cards_shown,
     deck_weights,
     held_out_texts_of,
     is_complete,
     is_deckable,
-    qualifying_cards,
     rank_by_consult,
     retire_stalled,
     text_deck_weights,
 )
-from effects.domain.game_ends import GameEnds
-from effects.domain.provenance import SidecarLookup, SourceTree, split_script_file
-from effects.domain.record_quality import quality_defect, record_refusal
-from effects.domain.records import EffectRecord, RecordKind, acting_keys
 
 if TYPE_CHECKING:
     from effects.domain.split import HeldOutCards
@@ -67,11 +58,6 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TARGET_RECORDS = 50
 DEFAULT_NO_PROGRESS_ROUNDS = 3
-
-#: Shards between progress lines while counting: the first pass reads the whole
-#: existing corpus, and silence that long looks like a hang.
-PROGRESS_EVERY_SHARDS = 10
-
 
 WORDING_BESIDE_ONLY_CARDS = (
     "pass --wording-cards or --only-cards, not both: one is a card round over "
@@ -152,196 +138,6 @@ def no_converted_cards(trees: ConvertedTrees) -> str:
         f"No converted cards under {where}. Run 'python -m price_predictor "
         "convert' first."
     )
-
-
-@dataclass(frozen=True)
-class ShardCoverage:
-    """What one shard adds to the card run: each card's credited records,
-    every card its games showed (a round charges a stalled round to those
-    alone), and how many records it holds."""
-
-    credits: Counter[str]
-    seen: frozenset[str]
-    records: int = 0
-    #: What ended the shard's read early (a damaged member or line), its
-    #: records before the damage counted; None for a whole shard.
-    damaged: str | None = None
-    #: Games without a game-end marker, whose records credit nothing.
-    cut_games: int = 0
-
-
-def _card_of_script(sidecars: SidecarLookup | None) -> CardOfScript | None:
-    """``script file -> converted card name`` (a sidecar's ``card``), for
-    card-tree scripts only; None without sidecars."""
-    if sidecars is None:
-        return None
-
-    def card_of(script_file: str) -> str | None:
-        if split_script_file(script_file)[0] != SourceTree.CARDSFOLDER:
-            return None
-        try:
-            return sidecars.get(script_file).card
-        except (KeyError, OSError, ValueError):
-            return None
-
-    return card_of
-
-
-def _kept(record: EffectRecord, sidecars: SidecarLookup | None) -> bool:
-    """Whether build-corpus would keep the record: not a ``turn_action``, and
-    not refused (its quality rule alone without sidecars)."""
-    if record.kind is RecordKind.TURN_ACTION:
-        return False
-    if sidecars is None:
-        return quality_defect(record) is None
-    return record_refusal(record, sidecars.resolution_of) is None
-
-
-def count_shard(shard: Path, *, roots: Mapping[str, Path] | None = None) -> ShardCoverage:
-    """One shard's qualifying records, keyed by folded card name to match the
-    converted (lowercase) unit names. Top-level so a process pool can pickle it.
-
-    Only the records build-corpus keeps count (python D1): no
-    ``turn_action`` (a draw or an untap is no record of the card), none it
-    refuses, and none of a game its shard holds no game-end marker for (a
-    cut game, which build-corpus drops whole; credits are held per game
-    until the shard is read). A record of an older generation stops the
-    count with :class:`~effects.domain.shard_generation.OlderGenerationError`,
-    as it stops every reader: it is no damage to count past. Under ``roots`` an entity counts as the
-    converted card its printed script is (python D6), and a static's host
-    through its script (python D5). The cards shown are every game's, a cut
-    one's too: its games showed them.
-    """
-    from effects.infrastructure.converted_trees import process_sidecars
-    from effects.infrastructure.shard_io import SHARD_DAMAGE, read_shard
-
-    sidecars = process_sidecars(roots) if roots else None
-    card_of = _card_of_script(sidecars)
-    by_game: dict[str, Counter[str]] = defaultdict(Counter)
-    seen: set[str] = set()
-    ends = GameEnds()
-    records = 0
-    damaged = None
-    try:
-        for record in read_shard(shard):
-            records += 1
-            ends.note(record)
-            seen.update(fold_card_name(name) for name in cards_shown(record, card_of))
-            if not _kept(record, sidecars):
-                continue
-            for name in qualifying_cards(record, card_of):
-                by_game[record.game_id][fold_card_name(name)] += 1
-    except SHARD_DAMAGE as exc:
-        damaged = str(exc)
-    cut = ends.cut
-    counts: Counter[str] = Counter()
-    for game, credits in by_game.items():
-        if game not in cut:
-            counts.update(credits)
-    return ShardCoverage(counts, frozenset(seen), records, damaged, len(cut))
-
-
-class _ShardCounter:
-    """Counts each shard once across a whole run, not once per round.
-
-    Sound because a shard is final once counted: a round's workers have all
-    ended before ``play_round`` returns (each finished its game when asked to
-    stop, or was killed past the stop timeout; a worker spawned while the
-    pool shuts down is killed by the pool too), and a shard's name carries
-    its JVM lifetime, so no later round reopens it. A worker the kill could
-    not end is the exception: the supervisor names it, and its shard is
-    counted as it stood when read, its game in progress cut.
-    """
-
-    def __init__(self, progress_every: int = PROGRESS_EVERY_SHARDS) -> None:
-        self._counted: set[Path] = set()
-        #: Gen-3 games without a game-end marker the counts left out: over
-        #: the whole run, and in the last ``update``.
-        self.cut_games = 0
-        self.last_cut = 0
-        #: Every damaged shard read so far, as its read's message: counted up
-        #: to the damage, once, like any other shard.
-        self.damaged: list[str] = []
-        self._progress_every = progress_every
-        #: Every card the shards of the last ``update`` showed.
-        self.seen: set[str] = set()
-        #: Records per shard counted so far.
-        self._records: dict[Path, int] = {}
-
-    def records_of(self, run_id: str) -> int:
-        """Records in the counted shards of run ``run_id`` (``{run_id}.*``)."""
-        prefix = f"{run_id}."
-        return sum(n for shard, n in self._records.items() if shard.name.startswith(prefix))
-
-    def _count_fresh[T](
-        self,
-        records_dir: Path,
-        count: Callable[[Path], T],
-        apply: Callable[[T], None],
-        *,
-        workers: int | None,
-    ) -> int:
-        """``count`` each shard not yet read, in parallel, and ``apply`` it;
-        returns how many. Applying adds, so the order shards finish in cannot
-        matter. ``count`` must pickle."""
-        from effects.infrastructure.shard_io import iter_shards
-
-        fresh = [
-            shard for shard in iter_shards(records_dir)
-            if shard not in self._counted
-        ]
-        self.last_cut = 0
-        for shard, part in zip(fresh, run_parallel(
-            fresh, count, workers=workers, label="Counted",
-            progress_every=self._progress_every,
-        ), strict=True):
-            apply(part)
-            self._records[shard] = part.records
-            self.last_cut += part.cut_games
-            if part.damaged is not None:
-                logger.warning("%s; its %d records before the damage are counted, and "
-                               "the shard is not read again", part.damaged, part.records)
-                self.damaged.append(part.damaged)
-        self._counted.update(fresh)
-        self.cut_games += self.last_cut
-        return len(fresh)
-
-
-class CoverageCounter(_ShardCounter):
-    """Each card's qualifying records, each shard counted once across the run.
-    ``CardCoverage.records`` is accumulated, so nothing else may overwrite it.
-
-    ``roots`` (the converted trees' sidecar roots) apply build-corpus's whole
-    refusal rule and credit each entity as its converted card; without them
-    only the quality rule applies and an entity counts by its name.
-    """
-
-    def __init__(
-        self, roots: Mapping[str, Path] | None = None,
-        progress_every: int = PROGRESS_EVERY_SHARDS,
-    ) -> None:
-        super().__init__(progress_every)
-        self._roots = dict(roots) if roots else None
-
-    def update(
-        self,
-        coverage: Mapping[str, CardCoverage],
-        records_dir: Path,
-        *,
-        workers: int | None = None,
-    ) -> int:
-        """Add the counts of shards not yet read. Returns how many it read."""
-        self.seen = set()
-
-        def add(part: ShardCoverage) -> None:
-            self.seen |= part.seen
-            for name, records in part.credits.items():
-                card = coverage.get(name)
-                if card is not None:
-                    card.records += records
-
-        count = partial(count_shard, roots=self._roots)
-        return self._count_fresh(records_dir, count, add, workers=workers)
 
 
 @dataclass
@@ -751,106 +547,6 @@ def consult_castability(names: list[str]) -> dict[str, ConsultVerdict]:
 
 
 # ── the held-out coverage round (FR-035–FR-038) ─────────────────────────
-
-
-@dataclass(frozen=True)
-class TextShardCoverage:
-    """What one shard adds to the held-out round: each held-out text's games,
-    every card the shard's games showed, and how many records it holds."""
-
-    games: dict[str, set[str]]
-    seen: frozenset[str]
-    records: int = 0
-    #: As :attr:`ShardCoverage.damaged`.
-    damaged: str | None = None
-    #: As :attr:`ShardCoverage.cut_games`.
-    cut_games: int = 0
-
-
-def count_text_shard(
-    shard: Path, *, roots: dict[str, Path], held_out: HeldOutCards,
-) -> TextShardCoverage:
-    """``held-out text -> the game ids it resolved in``, over one shard.
-
-    Counted as build-corpus counts a held-out text's games (FR-053): from the
-    resolution records its refusal rule keeps, through
-    :meth:`HeldOutCards.text_acted_through`. A random-seat game counts: it
-    goes to the card-disjoint stratum like any game naming a held-out card
-    (FR-059). A game its shard holds no game-end marker for is cut and
-    counts toward no text, as build-corpus drops it. The cards shown are read
-    off the same resolution records, whose snapshots hold every hand,
-    graveyard and permanent. Top-level so a
-    process pool can pickle it; each process resolves keys through its own
-    :func:`~effects.infrastructure.converted_trees.process_sidecars`, because a
-    sidecar cache does not pickle.
-    """
-    from effects.infrastructure.converted_trees import process_sidecars
-    from effects.infrastructure.shard_io import SHARD_DAMAGE, iter_shard_matching
-
-    sidecars = process_sidecars(roots)
-    card_of = _card_of_script(sidecars)
-    games: dict[str, set[str]] = defaultdict(set)
-    seen: set[str] = set()
-    records = 0
-
-    def every_record(head) -> bool:
-        """Count every record; parse only the resolutions and the turn
-        actions, among which the game-end markers."""
-        nonlocal records
-        records += 1
-        return head.kind in (RecordKind.RESOLUTION.value, RecordKind.TURN_ACTION.value)
-
-    ends = GameEnds()
-    damaged = None
-    try:
-        for record in iter_shard_matching(shard, where=every_record):
-            ends.note(record)
-            if record.kind is not RecordKind.RESOLUTION:
-                continue
-            seen.update(fold_card_name(name) for name in cards_shown(record, card_of))
-            if record_refusal(record, sidecars.resolution_of) is not None:
-                continue
-            text = held_out.text_acted_through(acting_keys(record), sidecars.script_text)
-            if text is not None:
-                games[text].add(record.game_id)
-    except SHARD_DAMAGE as exc:
-        damaged = str(exc)
-    cut = ends.cut
-    kept = {text: ids - cut for text, ids in games.items() if ids - cut}
-    return TextShardCoverage(kept, frozenset(seen), records, damaged, len(cut))
-
-
-class TextCoverageCounter(_ShardCounter):
-    """Each held-out text's games, each shard counted once across the run.
-
-    A game credited to a held-out text that is no unit of the round, such as
-    one only a token script prints, counts toward none: build-corpus credits
-    it to that text too, not to a later acting key's.
-    """
-
-    def __init__(
-        self, roots: dict[str, Path], held_out: HeldOutCards,
-        progress_every: int = PROGRESS_EVERY_SHARDS,
-    ) -> None:
-        super().__init__(progress_every)
-        self._roots = dict(roots)
-        self._held_out = held_out
-
-    def update(
-        self, coverage: Mapping[str, TextCoverage], records_dir: Path,
-        *, workers: int | None = None,
-    ) -> int:
-        """Add the games of shards not yet read. Returns how many it read."""
-        self.seen = set()
-
-        def add(part: TextShardCoverage) -> None:
-            self.seen |= part.seen
-            for text, games in part.games.items():
-                if text in coverage:
-                    coverage[text].games |= games
-
-        count = partial(count_text_shard, roots=self._roots, held_out=self._held_out)
-        return self._count_fresh(records_dir, count, add, workers=workers)
 
 
 @dataclass

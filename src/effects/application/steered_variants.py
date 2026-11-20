@@ -44,7 +44,7 @@ from effects.application.collect_variants import (
     write_variant,
 )
 from effects.application.collector_common import collector_supervisor, record_damaged_shards
-from effects.application.parallel_map import run_parallel
+from effects.application.shard_ledger import ShardLedger, ShardPass
 from effects.domain.card_names import fold_card_name
 from effects.domain.provenance import ProvenanceKey, SourceTree, split_script_file
 from effects.domain.rule_catalogue import ScenarioCatalogue, ScriptEdit
@@ -262,7 +262,7 @@ def combined_counts(*documents: Mapping) -> dict:
     return {"rules": rules}
 
 
-class RunRuleCounter:
+class RunRuleCounter(ShardLedger):
     """The rule counts of this run's own shards, each read once (FR-058d:
     the pairs are counted again over the corpus and the round's shards)."""
 
@@ -270,39 +270,36 @@ class RunRuleCounter:
                  sidecar_roots: dict, workers: int | None) -> None:
         from effects.application.rule_counts import RuleCounts
 
-        self._games = VariantGameCounter(records_dir, run_id, workers)
+        super().__init__()
+        self._records_dir = Path(records_dir)
+        self._prefix = f"{run_id}."
         self._rules_dir = rules_dir
         self._roots = sidecar_roots
         self._workers = workers
-        self._counted: set[Path] = set()
         self.total = RuleCounts()
 
     def update(self) -> None:
         """Count the run's shards not counted yet, and say, as ``rule-counts``
-        does, how many gen-3 games they left out as cut."""
-        from effects.application.rule_counts import CountContext, count_shard, cut_games_line
+        does, how many gen-3 games they left out as cut. A damaged shard is
+        counted up to the damage: one must not stop the run."""
+        from effects.application.rule_counts import cut_games_line
 
-        fresh = [shard for shard in self._games.fresh_shards() if shard not in self._counted]
-        cut = 0
-        # A damaged shard is counted up to the damage: one must not stop the run.
-        for found in run_parallel(
-            fresh, partial(count_shard, salvage=True), workers=self._workers,
-            label="Counted rules in",
-            progress_every=50, context=CountContext(self._rules_dir, self._roots),
-        ):
-            cut += found.cut_games
-            merge_into(self.total, found)
-        self._counted.update(fresh)
-        if cut:
-            logger.info("Steered rule counts: %s", cut_games_line(cut))
+        self.count(self.fresh(self._records_dir, (self._prefix,)), self._rule_pass(),
+                   partial(merge_into, self.total))
+        if self.last_cut:
+            logger.info("Steered rule counts: %s", cut_games_line(self.last_cut))
+
+    def _rule_pass(self) -> ShardPass:
+        """``rule-counts``' own shard count, salvaging a damaged shard."""
+        from effects.application.rule_counts import CountContext, count_shard
+
+        return ShardPass(
+            partial(count_shard, salvage=True), self._workers, progress_every=50,
+            label="Counted rules in", context=CountContext(self._rules_dir, self._roots),
+        )
 
     def document(self) -> dict:
         return self.total.to_json()
-
-    @property
-    def damaged(self) -> list[str]:
-        """Every damaged shard counted so far, as its read's message."""
-        return self.total.damaged
 
 
 def collect_steered(config: CollectVariantsConfig, sources: list[Path]) -> int:
