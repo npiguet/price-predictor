@@ -144,77 +144,138 @@ class ReadSettings:
     per_game: int = PROBE_PER_GAME
 
 
-def read_half(context, selection, stratum: str, half: str, settings: ReadSettings, *,
-              acting_text, keywords_of, observe: Callable[[object], None] | None = None
-              ) -> HalfRead:
-    """Read one half of ``stratum`` once and keep what the run's probes ask
-    of it; ``observe`` sees every distinct record (the line labels' observed
+@dataclass(frozen=True)
+class HalfRequest:
+    """One half of one validation stratum to read, with what reads it: the
+    run's settings, the acting-text function, the keyword resolver
+    (``None`` where no gen-3 probe is read) and the optional ``observe``
+    callback that sees every distinct record (the line labels' observed
     outcomes, the interaction pairs' triggers)."""
-    from effect_knowledge_probes import anthem, conditions, labels, sweeps, target_restrictions
 
-    sidecars = context.sidecars()
-    games = selection.halves.get(stratum, {}).get(half, ())
-    read = HalfRead(stratum, half, games=len(games))
+    stratum: str
+    half: str
+    settings: ReadSettings
+    acting_text: Callable
+    keywords_of: Callable | None
+    observe: Callable[[object], None] | None = None
+
+
+def read_half(context, selection, request: HalfRequest) -> HalfRead:
+    """Read one half of ``request.stratum`` once and keep what the run's
+    probes ask of it; ``request.observe`` sees every distinct record."""
+    return _HalfScan(context, selection, request).run()
+
+
+def _frozen_probes(selection, request: HalfRequest) -> dict:
+    """``record_id -> {(probe type, entity): frozen label}`` of the probe
+    types the run reads."""
     frozen_probes: dict[str, dict[tuple[str, str | None], float]] = defaultdict(dict)
-    for probe_type, rows in selection.probes.get(stratum, {}).get(half, {}).items():
-        if probe_type in settings.probe_types:
+    by_type = selection.probes.get(request.stratum, {}).get(request.half, {})
+    for probe_type, rows in by_type.items():
+        if probe_type in request.settings.probe_types:
             for row in rows:
                 frozen_probes[row.record_id][(probe_type, row.entity)] = row.label
+    return frozen_probes
+
+
+def _grid_rows(selection, request: HalfRequest) -> dict:
+    """``record_id -> [(grid, entities)]`` of the half's frozen grids."""
     grid_rows: dict[str, list[tuple[str, tuple[str, ...]]]] = defaultdict(list)
-    for name, grid in selection.grids.get(stratum, {}).get(half, {}).items():
+    grids = selection.grids.get(request.stratum, {}).get(request.half, {})
+    for name, grid in grids.items():
         for row in grid.records:
             grid_rows[row.record_id].append((name, row.entities))
+    return grid_rows
 
-    join = labels.TriggerJoin()
-    selector = sweeps.SweepSelector(sidecars) if settings.sweeps else None
-    caps = {name: Capped(settings.limit, settings.per_game)
-            for name in ("conditions", "anthem", "targeting")}
-    kept: dict[str, object] = {}
-    for record in half_records(context, stratum, games):
+
+class _HalfScan:
+    """One pass over a half's distinct records, one method per step."""
+
+    def __init__(self, context, selection, request: HalfRequest) -> None:
+        from effect_knowledge_probes import labels, sweeps
+
+        self.context, self.request = context, request
+        settings = request.settings
+        self.sidecars = context.sidecars()
+        self.games = selection.halves.get(request.stratum, {}).get(request.half, ())
+        self.read = HalfRead(request.stratum, request.half, games=len(self.games))
+        self.frozen_probes = _frozen_probes(selection, request)
+        self.grid_rows = _grid_rows(selection, request)
+        self.join = labels.TriggerJoin()
+        self.selector = sweeps.SweepSelector(self.sidecars) if settings.sweeps else None
+        self.caps = {name: Capped(settings.limit, settings.per_game)
+                     for name in ("conditions", "anthem", "targeting")}
+        self.kept: dict[str, object] = {}
+
+    def run(self) -> HalfRead:
+        for record in half_records(self.context, self.request.stratum, self.games):
+            self._take(record)
+        self._probe_items()
+        self._finish()
+        return self.read
+
+    def _take(self, record) -> None:
+        self.join.observe(record)
+        if self.request.observe is not None:
+            self.request.observe(record)
+        if self.selector is not None:
+            self.selector.observe(record)
+        self._keep_frozen(record)
+        if self.request.settings.gen3_probes:
+            self._cap_gen3(record)
+
+    def _keep_frozen(self, record) -> None:
         rid = record.record_id
-        join.observe(record)
-        if observe is not None:
-            observe(record)
-        if selector is not None:
-            selector.observe(record)
-        if rid in frozen_probes or rid in grid_rows:
-            kept[rid] = record
-        for name, entities in grid_rows.get(rid, ()):
-            read.grids.setdefault(name, []).append((record, entities))
-        if settings.gen3_probes:
-            found = conditions.record_items(record, sidecars, keywords_of)
-            if found:
-                caps["conditions"].add(record, found)
-            chosen = anthem.chosen(record, sidecars)
-            if chosen is not None:
-                caps["anthem"].add(record, chosen)
-            decision = target_restrictions.decision_items(record, sidecars)
-            if decision is not None:
-                caps["targeting"].add(record, (record, *decision))
+        if rid in self.frozen_probes or rid in self.grid_rows:
+            self.kept[rid] = record
+        for name, entities in self.grid_rows.get(rid, ()):
+            self.read.grids.setdefault(name, []).append((record, entities))
 
-    joined = join.result()
-    for rid, wanted in frozen_probes.items():
-        record = kept.get(rid)
-        if record is None:
-            continue
-        items = [item for item in labels.record_items(record, sidecars, joined, acting_text)
-                 if (item.target, item.entity) in wanted]
-        # The frozen label is the item's: the freeze labelled the same record.
-        items = [_relabelled(item, wanted[(item.target, item.entity)]) for item in items]
-        if items:
-            read.probe_items[rid] = items
-    read.conditions = [item for found in caps["conditions"].values() for item in found]
-    read.anthem = caps["anthem"].values()
-    read.targeting = caps["targeting"].values()
-    read.records = kept
-    if selector is not None:
-        read.sweep_rows = selector.result()
-        wanted = {row["record_id"] for rows in read.sweep_rows.values() for row in rows}
-        missing = wanted - set(kept)
+    def _cap_gen3(self, record) -> None:
+        from effect_knowledge_probes import anthem, conditions, target_restrictions
+
+        found = conditions.record_items(record, self.sidecars, self.request.keywords_of)
+        if found:
+            self.caps["conditions"].add(record, found)
+        chosen = anthem.chosen(record, self.sidecars)
+        if chosen is not None:
+            self.caps["anthem"].add(record, chosen)
+        decision = target_restrictions.decision_items(record, self.sidecars)
+        if decision is not None:
+            self.caps["targeting"].add(record, (record, *decision))
+
+    def _probe_items(self) -> None:
+        from effect_knowledge_probes import labels
+
+        joined = self.join.result()
+        for rid, wanted in self.frozen_probes.items():
+            record = self.kept.get(rid)
+            if record is None:
+                continue
+            items = [item for item in labels.record_items(
+                         record, self.sidecars, joined, self.request.acting_text)
+                     if (item.target, item.entity) in wanted]
+            # The frozen label is the item's: the freeze labelled the same record.
+            items = [_relabelled(item, wanted[(item.target, item.entity)]) for item in items]
+            if items:
+                self.read.probe_items[rid] = items
+
+    def _finish(self) -> None:
+        read, caps = self.read, self.caps
+        read.conditions = [item for found in caps["conditions"].values() for item in found]
+        read.anthem = caps["anthem"].values()
+        read.targeting = caps["targeting"].values()
+        read.records = self.kept
+        if self.selector is not None:
+            read.sweep_rows = self.selector.result()
+            self._read_sweep_records()
+
+    def _read_sweep_records(self) -> None:
+        wanted = {row["record_id"] for rows in self.read.sweep_rows.values() for row in rows}
+        missing = wanted - set(self.kept)
         if missing:
-            for record in half_records(context, stratum, games, missing):
-                kept[record.record_id] = record
-    return read
+            for record in half_records(self.context, self.request.stratum, self.games, missing):
+                self.kept[record.record_id] = record
 
 
 def _relabelled(item, label: float):
@@ -308,7 +369,7 @@ def score_rule_tests(context, selection, probe_model, half: str) -> dict[str, di
 def score_gen3_probes(probe_model, read: HalfRead) -> dict[str, dict]:
     """The turn and step conditions, the anthem and the target-legality
     probes over one half's qualifying records."""
-    from effect_knowledge_probes import anthem, conditions, target_restrictions
+    from effect_knowledge_probes import anthem, conditions
 
     out: dict[str, dict] = {}
     if read.conditions:
@@ -319,17 +380,31 @@ def score_gen3_probes(probe_model, read: HalfRead) -> dict[str, dict]:
         result = anthem.score(rows, anthem.predict_items(probe_model, rows))
         out["anthem"] = {**result, "records": len(read.anthem)}
     if read.targeting:
-        records = [row[0] for row in read.targeting]
-        readings = target_restrictions.read_items(probe_model, records)
-        families = target_restrictions.breakdowns(read.targeting, readings)["family"]
-        names = target_restrictions.READOUTS
-        out["target_legality"] = {
-            "records": len(records),
-            "auc": {name: float(common.auc(
-                [y for cell in families.values() for y in cell[name][0]],
-                [p for cell in families.values() for p in cell[name][1]])) for name in names},
-            "by_family": {key: {"items": len(cell[names[0]][0]),
-                                **{name: float(common.auc(*cell[name])) for name in names}}
-                          for key, cell in sorted(families.items())},
-        }
+        out["target_legality"] = _target_legality(probe_model, read.targeting)
     return out
+
+
+def _target_legality(probe_model, targeting: list) -> dict:
+    """The target-legality probe's record count, pooled AUC and per-family
+    AUCs of one half's qualifying records."""
+    from effect_knowledge_probes import target_restrictions
+
+    records = [row[0] for row in targeting]
+    readings = target_restrictions.read_items(probe_model, records)
+    families = target_restrictions.breakdowns(targeting, readings)["family"]
+    names = target_restrictions.READOUTS
+    return {
+        "records": len(records),
+        "auc": {name: _pooled_auc(families, name) for name in names},
+        "by_family": {key: _family_auc(cell, names) for key, cell in sorted(families.items())},
+    }
+
+
+def _pooled_auc(families: dict, name: str) -> float:
+    return float(common.auc([y for cell in families.values() for y in cell[name][0]],
+                            [p for cell in families.values() for p in cell[name][1]]))
+
+
+def _family_auc(cell: dict, names) -> dict:
+    return {"items": len(cell[names[0]][0]),
+            **{name: float(common.auc(*cell[name])) for name in names}}

@@ -135,8 +135,8 @@ def _read_halves(context, selection, args: argparse.Namespace) -> list:
     reads = []
     for stratum in sorted(selection.halves):
         for half in chosen:
-            read = halves.read_half(context, selection, stratum, half, settings,
-                                    acting_text=acting_text, keywords_of=None)
+            request = halves.HalfRequest(stratum, half, settings, acting_text, None)
+            read = halves.read_half(context, selection, request)
             print(f"{read.name}: {len(read.probe_items)} records", flush=True)
             reads.append(read)
     return reads

@@ -58,9 +58,9 @@ class _HalfReader:
             limit=args.probe_records, per_game=args.probe_per_game)
         progress(f"reading {stratum}/{half}: "
                  f"{len(self.selection.halves[stratum].get(half, ()))} games")
-        read = halves.read_half(self.context, self.selection, stratum, half, settings,
-                                acting_text=self.acting_text, keywords_of=self.keywords_of,
-                                observe=self.observe)
+        request = halves.HalfRequest(stratum, half, settings, self.acting_text,
+                                     self.keywords_of, self.observe)
+        read = halves.read_half(self.context, self.selection, request)
         progress(f"  {len(read.records)} records kept, {len(read.probe_items)} with "
                  f"probe items, {len(read.grids)} grids")
         return read

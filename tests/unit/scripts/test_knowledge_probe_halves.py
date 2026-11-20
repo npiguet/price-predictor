@@ -146,10 +146,10 @@ class TestReadingAHalf:
         context = _context(frozen_corpus, sidecars, probe_model)
         seen: list[str] = []
         settings = halves.ReadSettings(probe_types=frozenset(frozen.probe_kinds))
-        read = halves.read_half(
-            context, frozen, GD, "reporting", settings,
-            acting_text=common.acting_text_function(sidecars, "script"),
-            keywords_of=keywords_of, observe=lambda r: seen.append(r.record_id))
+        request = halves.HalfRequest(
+            GD, "reporting", settings, common.acting_text_function(sidecars, "script"),
+            keywords_of, lambda r: seen.append(r.record_id))
+        read = halves.read_half(context, frozen, request)
         assert seen and len(seen) == len(set(seen))
         _assert_read_within_frozen(read, frozen)
 
@@ -210,8 +210,8 @@ class TestGridsOfAHalf:
         context = _context(frozen_corpus, sidecars, probe_model)
         settings = halves.ReadSettings(probe_types=frozenset(), gen3_probes=False,
                                        sweeps=False)
-        reads = [halves.read_half(context, frozen, GD, half, settings,
-                                  acting_text=lambda key: None, keywords_of=keywords_of)
+        reads = [halves.read_half(context, frozen, halves.HalfRequest(
+                     GD, half, settings, lambda key: None, keywords_of))
                  for half in halves.HALVES]
         scored = [(read, halves.score_grids(probe_model, frozen, read)) for read in reads]
         assert any(found for _, found in scored)
