@@ -94,7 +94,7 @@ class TestMatchWorkerConnectorCommandConstruction:
         assert kwargs["stderr"] is log_file
 
 class TestMatchWorkerConnectorSideDecks:
-    """``side_a_decks_path`` / ``side_b_decks_path`` / ``side_b_decks_weight``
+    """``WorkerDecks``' ``side_a`` / ``side_b`` / ``side_b_weight``
     propagate to the Java worker as ``-Dside.a.decks.file`` /
     ``-Dside.b.decks.file`` / ``-Dside.b.decks.weight`` system properties."""
 

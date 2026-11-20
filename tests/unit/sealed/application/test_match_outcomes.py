@@ -163,8 +163,8 @@ class TestSupervisorStatusReporting:
 
 
 class TestSupervisorSideDecks:
-    """side_a_decks_path / side_b_decks_path / side_b_decks_weight are
-    stored on the supervisor and forwarded to MatchWorkerConnector.start()."""
+    """``MatchRunOptions.decks`` (the side-A and side-B decks files and the
+    side-B weight) is forwarded to MatchWorkerConnector.start()."""
 
     def test_side_paths_forwarded_to_connector(self, tmp_path):
         output_file = tmp_path / "match-outcomes.txt"
