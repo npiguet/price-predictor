@@ -150,7 +150,7 @@ public final class PlayabilityChannel {
         // The candidate's host goes into the snapshot: without it refs.source
         // is null on every playability record, and a decision record would
         // not say which card the candidate is even on except through its key.
-        String state = live.snapshots().ofCandidate(candidate).render();
+        RecordState state = live.snapshots().ofCandidate(candidate).state();
         // Deduplicated because the same candidate at the next stop on an
         // unchanged board answers the same question the same way. The record
         // names no acting line of its own; the candidate's key is in the
@@ -158,7 +158,7 @@ public final class PlayabilityChannel {
         context.emitDistinct(context.newPlayability(PlayabilitySubkind.DECISION)
                 .actor(live.playerIdOrActive(decider))
                 .state(state)
-                .payload(read.payloadJson()), dedup);
+                .payload(read.payload()), dedup);
     }
 
     // ── the legality subkinds ───────────────────────────────────────────
@@ -248,7 +248,7 @@ public final class PlayabilityChannel {
                 .value("min_blockers", minBlockers)
                 .render();
         emitLegality(context.newPlayability(PlayabilitySubkind.BLOCKERS).whatIf(false),
-                decider, live.snapshots().ofBoard().render(), payload);
+                decider, live.snapshots().ofBoard().state(), payload);
     }
 
     /**
@@ -280,18 +280,19 @@ public final class PlayabilityChannel {
     }
 
     /** One attackers record, with no {@code what_if}: only the turn-based declaration writes one. */
-    private void emitAttackers(Player decider, String state, String payload) {
+    private void emitAttackers(Player decider, RecordState state, String payload) {
         emitLegality(context.newPlayability(PlayabilitySubkind.ATTACKERS), decider, state, payload);
     }
 
-    private void emitLegality(EffectRecord record, Player decider, String state, String payload) {
+    private void emitLegality(
+            EffectRecord record, Player decider, RecordState state, String payload) {
         // Keyed on the snapshot as well as the payload (FR-028): the same
         // answer on a board that moved is a second observation, which a
         // payload-only key would drop as a repeat of the first.
         context.emitDistinct(record
                 .actor(live.playerIdOrActive(decider))
                 .state(state)
-                .payload(payload), dedup);
+                .payload(RecordPayload.withoutEvents(payload)), dedup);
     }
 
     /**

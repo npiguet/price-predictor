@@ -147,6 +147,11 @@ public enum EventType implements WireNamed {
         return wireName;
     }
 
+    /** Whether this is the game's outcome: {@code player_lost} or {@code player_won}. */
+    public boolean isGameOutcome() {
+        return this == PLAYER_LOST || this == PLAYER_WON;
+    }
+
     /**
      * The member a wire name spells, or empty for a name this side does not
      * have -- the patched engine names an outcome's type as a plain string,

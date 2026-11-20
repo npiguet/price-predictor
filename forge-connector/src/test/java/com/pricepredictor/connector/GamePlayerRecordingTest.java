@@ -2,6 +2,7 @@ package com.pricepredictor.connector;
 
 import com.google.common.eventbus.Subscribe;
 import com.pricepredictor.connector.effects.CollectionCaps;
+import com.pricepredictor.connector.effects.RecordFacts;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 import com.pricepredictor.connector.effects.TestCaps;
 import forge.ai.PlayerControllerAi;
@@ -257,7 +258,8 @@ class GamePlayerRecordingTest {
     @Test
     void aStoppedWorkerClosesItsShardAndSaysSoWithoutAFailureLine() throws IOException {
         RecordShardWriter writer = writer();
-        writer.write("{\"record_id\":\"r\",\"game_id\":\"run.0-l1.0\"}");
+        writer.write("{\"record_id\":\"r\",\"game_id\":\"run.0-l1.0\"}",
+                new RecordFacts("run.0-l1.0", null, null, false));
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         WorkerLoop.Progress progress = new WorkerLoop.Progress(
                 new PrintStream(out, true, StandardCharsets.UTF_8), 10, "matches generated",

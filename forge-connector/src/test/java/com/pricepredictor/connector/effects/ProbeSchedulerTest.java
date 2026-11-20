@@ -28,7 +28,7 @@ class ProbeSchedulerTest {
 
     private static DamageStepProbe.HeldProbe branch(DamageStep substep) {
         return new DamageStepProbe.HeldProbe(
-                "trample", "E1", "{}", List.of(), "P0", CombatShape.of(null), substep,
+                "trample", "E1", RecordState.EMPTY, List.of(), "P0", CombatShape.of(null), substep,
                 DamageStepProbe.TURN_UNKNOWN, Map.of());
     }
 

@@ -209,7 +209,7 @@ class ForkRecordsTest {
     /** A branch from a named turn, otherwise like every other hand-built one. */
     private static DamageStepProbe.HeldProbe branch(int turn) {
         return new DamageStepProbe.HeldProbe(
-                "trample", "E1", "{}", List.of(), "P0", CombatShape.of(null),
+                "trample", "E1", RecordState.EMPTY, List.of(), "P0", CombatShape.of(null),
                 DamageStep.REGULAR, turn, Map.of());
     }
 
@@ -255,7 +255,7 @@ class ForkRecordsTest {
                 .filter(r -> r.contains("\"kind\":\"combat\"")).findFirst().orElseThrow();
         // Rendered as the branch's record renders it, which names each
         // damage's dealer as the observed record does (FR-035).
-        String branch = held.payload();
+        String branch = held.payload().json();
         String onTheBears = damageTo(held.events(), bears).toJson();
         assertTrue(onTheBears.contains("\"combat\":true"), onTheBears);
         assertTrue(onTheBears.contains("\"cause\":\"E" + dreadmaw.getId() + "\""), onTheBears);

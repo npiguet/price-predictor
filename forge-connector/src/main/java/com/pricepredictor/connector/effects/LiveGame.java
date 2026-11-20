@@ -300,8 +300,8 @@ final class LiveGame {
      * SnapshotBuilder#ofTrait} for the trait's host and the event it is about
      * to handle.
      */
-    String traitState(Object trait, EffectEvent pending) {
-        return traitSnapshot(trait, pending).render();
+    RecordState traitState(Object trait, EffectEvent pending) {
+        return traitSnapshot(trait, pending).state();
     }
 
     /** The same board, unrendered: a replacement's, read before it ran, rendered when it is written. */
@@ -315,7 +315,7 @@ final class LiveGame {
      */
     EffectRecord traitRecordOn(
             CollectorContext context, RecordKind kind, Object trait,
-            ProvenanceKey.Resolved line, String state) {
+            ProvenanceKey.Resolved line, RecordState state) {
         return context.newRecord(kind)
                 .actor(controllerOf(hostOf(trait)))
                 .ability(line)

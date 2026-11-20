@@ -164,7 +164,7 @@ final class TurnActionWindow {
             // library card it was when the step began.
             context.emit(context.newTurnAction(action.getKey())
                     .actor(actor)
-                    .state(state.withEventCards(events).render())
+                    .state(state.withEventCards(events).state())
                     .payload(RecordPayloads.eventsPayload(events)));
         }
         actions.clear();

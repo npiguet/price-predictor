@@ -76,7 +76,7 @@ final class DamageStepProbe {
             Game fork = withoutKeyword(verified, carrier, keyword);
             // The state is the board as the step began, with the keyword
             // already gone: that is the input the counterfactual answers for.
-            String state = snapshots.ofBoard().render();
+            RecordState state = snapshots.ofBoard().state();
             ProbedStep dealt = runDamageSteps(fork, stepsDealt(keyword, step));
             return new HeldProbe(
                     KeywordEdit.normalize(keyword),
@@ -225,7 +225,7 @@ final class DamageStepProbe {
      * package takes a probe or completes one.
      */
     record HeldProbe(
-            String keyword, String carrier, String state,
+            String keyword, String carrier, RecordState state,
             List<EffectEvent> events, String actor, CombatShape combat,
             DamageStep substep, int turn, Map<String, Integer> copyDropped) {
 
@@ -248,7 +248,7 @@ final class DamageStepProbe {
          * how the damage was split with the keyword, and this says the same
          * about the board without it.
          */
-        String payload() {
+        RecordPayload payload() {
             return RecordPayloads.probePayload(combat, events, keyword, carrier);
         }
     }

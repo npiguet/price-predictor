@@ -100,7 +100,14 @@ public record DecisionCandidate(
         return new ArrayList<>(ids);
     }
 
-    /** The record's payload: this one candidate. */
+    /**
+     * The record's payload: this one candidate, naming its line, which the
+     * record names as no acting line of its own.
+     */
+    RecordPayload payload() {
+        return new RecordPayload(payloadJson(), false, keys.isEmpty() ? null : keys.get(0).scriptFile());
+    }
+
     String payloadJson() {
         Json.ObjectWriter cost = Json.object();
         if (manaCost != null) {

@@ -126,7 +126,7 @@ final class ForkPlayForward {
         // Drawn only by a fork that forces: the game's later forks then take
         // the next seeds of the sequence, shifted by one.
         Random forcing = forced == null ? null : new Random(forkSeeds.nextLong());
-        List<String> held = new ArrayList<>();
+        List<ShardLine> held = new ArrayList<>();
         GameRecording recording = live.forkRecording(fork, new ForkOutput(flags, held::add, kept), sampling);
         try {
             recording.open();

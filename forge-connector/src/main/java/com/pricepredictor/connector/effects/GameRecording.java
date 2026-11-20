@@ -204,7 +204,7 @@ public final class GameRecording implements AutoCloseable {
     }
 
     /** Write a kept fork's lines to this game's shard. */
-    void writeForkLines(List<String> lines) {
+    void writeForkLines(List<ShardLine> lines) {
         envelope.writeHeld(lines);
     }
 

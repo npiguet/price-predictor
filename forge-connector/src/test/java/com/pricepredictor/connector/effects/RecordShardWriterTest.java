@@ -72,10 +72,10 @@ class RecordShardWriterTest {
         // rather than a second stream glued onto the first. That is what lets a
         // killed worker truncate the last member and leave the rest readable.
         try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
-            writer.write("{\"a\":1}");
+            writer.write("{\"a\":1}", new RecordFacts(null, null, null, false));
         }
         try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
-            writer.write("{\"a\":2}");
+            writer.write("{\"a\":2}", new RecordFacts(null, null, null, false));
         }
         byte[] bytes = Files.readAllBytes(
                 tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX));
@@ -100,7 +100,7 @@ class RecordShardWriterTest {
         // close would be empty for the whole run.
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         for (int i = 0; i < RecordShardWriter.BLOCK_RECORDS; i++) {
-            writer.write("{\"a\":" + i + "}");
+            writer.write("{\"a\":" + i + "}", new RecordFacts(null, null, null, false));
         }
         assertEquals(RecordShardWriter.BLOCK_RECORDS, ShardRun.readShard(writer.path()).size());
     }
@@ -110,7 +110,8 @@ class RecordShardWriterTest {
         // A kill early in the next game, which runs no shutdown hook, would
         // otherwise lose the finished game's last records and its marker.
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        writer.write("{\"game_id\":\"run.0-l1.0\",\"a\":1}");
+        writer.write("{\"game_id\":\"run.0-l1.0\",\"a\":1}",
+                new RecordFacts("run.0-l1.0", null, null, false));
         writer.writeUncapped("{\"game_id\":\"run.0-l1.0\",\"marker\":true}");
 
         writer.endGame("run.0-l1.0");
@@ -197,7 +198,7 @@ class RecordShardWriterTest {
         for (int i = 0; i < RecordShardWriter.BLOCK_RECORDS + 7; i++) {
             String id = killed.nextRecordId();
             killedIds.add(id);
-            killed.write("{\"record_id\":\"" + id + "\"}");
+            killed.write("{\"record_id\":\"" + id + "\"}", new RecordFacts(null, null, null, false));
         }
         // No close(): the process was killed mid-game.
 
@@ -206,7 +207,7 @@ class RecordShardWriterTest {
         for (int i = 0; i < 10; i++) {
             String id = restarted.nextRecordId();
             restartedIds.add(id);
-            restarted.write("{\"record_id\":\"" + id + "\"}");
+            restarted.write("{\"record_id\":\"" + id + "\"}", new RecordFacts(null, null, null, false));
         }
         restarted.close();
 
@@ -304,12 +305,16 @@ class RecordShardWriterTest {
         String report;
         try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1", 3)) {
             shard = writer.path();
-            writer.write(fakeRecord("r0", "g1", 4, "cardsfolder/h/hill_giant.txt"));
+            writer.write(fakeRecord("r0", "g1", 4, "cardsfolder/h/hill_giant.txt"),
+                    new RecordFacts("g1", 4, "cardsfolder/h/hill_giant.txt", false));
             for (int i = 1; i < 8; i++) {
-                writer.write(fakeRecord("r" + i, "g1", 9, "cardsfolder/c/chain_of_smog.txt"));
+                writer.write(fakeRecord("r" + i, "g1", 9, "cardsfolder/c/chain_of_smog.txt"),
+                        new RecordFacts("g1", 9, "cardsfolder/c/chain_of_smog.txt", false));
             }
-            writer.write(fakeRecord("r8", "g1", 9, "cardsfolder/f/forest.txt"));
-            writer.write(fakeRecord("r9", "g2", 1, "cardsfolder/f/forest.txt"));
+            writer.write(fakeRecord("r8", "g1", 9, "cardsfolder/f/forest.txt"),
+                    new RecordFacts("g1", 9, "cardsfolder/f/forest.txt", false));
+            writer.write(fakeRecord("r9", "g2", 1, "cardsfolder/f/forest.txt"),
+                    new RecordFacts("g2", 1, "cardsfolder/f/forest.txt", false));
             report = com.pricepredictor.connector.StdStreams.captureStderr(() -> {
                 writer.endGame("g1");
                 writer.endGame("g2");
@@ -345,7 +350,7 @@ class RecordShardWriterTest {
     void aFailedFlushLosesNothingAndLeavesOnlyWholeMembers() throws IOException {
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         for (int i = 0; i < RecordShardWriter.BLOCK_RECORDS; i++) {
-            writer.write("{\"game_id\":\"g1\",\"n\":" + i + "}");
+            writer.write("{\"game_id\":\"g1\",\"n\":" + i + "}", new RecordFacts("g1", null, null, false));
         }
         long wholeMember = Files.size(writer.path());
         boolean[] failed = {false};
@@ -362,10 +367,12 @@ class RecordShardWriterTest {
                 writer, "g1", AttributionMode.PATCHED, null, null);
 
         for (int i = 0; i < RecordShardWriter.BLOCK_RECORDS - 1; i++) {
-            writer.write("{\"game_id\":\"g1\",\"n\":" + (1000 + i) + "}");
+            writer.write("{\"game_id\":\"g1\",\"n\":" + (1000 + i) + "}",
+                    new RecordFacts("g1", null, null, false));
         }
         assertThrows(java.io.UncheckedIOException.class,
-                () -> writer.write("{\"game_id\":\"g1\",\"n\":2000}"));
+                () -> writer.write("{\"game_id\":\"g1\",\"n\":2000}",
+                        new RecordFacts("g1", null, null, false)));
 
         assertEquals(wholeMember, Files.size(writer.path()), "cut back to the whole members");
         assertEquals(RecordShardWriter.BLOCK_RECORDS, strictLines(writer.path()).size());
@@ -392,26 +399,26 @@ class RecordShardWriterTest {
             throw new IOException("disk full " + ++attempts[0]);
         });
         for (int i = 0; i < RecordShardWriter.BLOCK_RECORDS - 1; i++) {
-            writer.write("{\"game_id\":\"g1\",\"n\":" + i + "}");
+            writer.write("{\"game_id\":\"g1\",\"n\":" + i + "}", new RecordFacts("g1", null, null, false));
         }
         // The block is full: each further write flushes, and fails.
         for (int failure = 1; failure < RecordShardWriter.MAX_FAILED_APPENDS; failure++) {
             assertThrows(java.io.UncheckedIOException.class,
-                    () -> writer.write("{\"game_id\":\"g1\"}"));
+                    () -> writer.write("{\"game_id\":\"g1\"}", new RecordFacts("g1", null, null, false)));
         }
         assertTrue(writer.heldRecords()
                 <= RecordShardWriter.BLOCK_RECORDS + RecordShardWriter.MAX_FAILED_APPENDS - 1);
 
         RecordShardWriter.ShardUnwritable gaveUp = assertThrows(
                 RecordShardWriter.ShardUnwritable.class,
-                () -> writer.write("{\"game_id\":\"g1\"}"));
+                () -> writer.write("{\"game_id\":\"g1\"}", new RecordFacts("g1", null, null, false)));
 
         assertEquals(RecordShardWriter.MAX_FAILED_APPENDS, attempts[0]);
         assertTrue(gaveUp.getMessage().contains(writer.path().toString()), gaveUp.getMessage());
         assertTrue(gaveUp.getMessage().contains("disk full 3"), gaveUp.getMessage());
         assertEquals(0, writer.heldRecords());
         assertThrows(RecordShardWriter.ShardUnwritable.class,
-                () -> writer.write("{\"game_id\":\"g1\"}"));
+                () -> writer.write("{\"game_id\":\"g1\"}", new RecordFacts("g1", null, null, false)));
         assertEquals(RecordShardWriter.MAX_FAILED_APPENDS, attempts[0], "no append after giving up");
         writer.close();
     }
@@ -429,11 +436,12 @@ class RecordShardWriterTest {
             ShardAppender.FILES.append(path, bytes);
         });
         for (int i = 0; i < RecordShardWriter.BLOCK_RECORDS - 1; i++) {
-            writer.write("{\"game_id\":\"g1\",\"n\":" + i + "}");
+            writer.write("{\"game_id\":\"g1\",\"n\":" + i + "}", new RecordFacts("g1", null, null, false));
         }
         assertThrows(java.io.UncheckedIOException.class,
-                () -> writer.write("{\"game_id\":\"g1\",\"n\":9999}"));
-        writer.write("{\"game_id\":\"g1\",\"n\":10000}");
+                () -> writer.write("{\"game_id\":\"g1\",\"n\":9999}",
+                        new RecordFacts("g1", null, null, false)));
+        writer.write("{\"game_id\":\"g1\",\"n\":10000}", new RecordFacts("g1", null, null, false));
         writer.close();
 
         assertEquals(RecordShardWriter.BLOCK_RECORDS + 1, strictLines(writer.path()).size());

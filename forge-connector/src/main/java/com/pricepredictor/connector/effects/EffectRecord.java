@@ -83,8 +83,8 @@ public final class EffectRecord {
     private String actorPlayer;
     private List<ProvenanceKey> ability;
     private UnresolvedReason abilityUnresolved;
-    private String stateJson = "{}";
-    private String payloadJson = "{}";
+    private RecordState state = RecordState.EMPTY;
+    private RecordPayload payload = RecordPayload.EMPTY;
 
     /**
      * A record of one of the four kinds that take neither a moment nor a
@@ -264,13 +264,13 @@ public final class EffectRecord {
         return this;
     }
 
-    public EffectRecord state(String json) {
-        this.stateJson = json;
+    EffectRecord state(RecordState value) {
+        this.state = value;
         return this;
     }
 
-    public EffectRecord payload(String json) {
-        this.payloadJson = json;
+    EffectRecord payload(RecordPayload value) {
+        this.payload = value;
         return this;
     }
 
@@ -293,11 +293,11 @@ public final class EffectRecord {
      * it is about to write.
      */
     String stateJson() {
-        return stateJson;
+        return state.json();
     }
 
     String payloadJson() {
-        return payloadJson;
+        return payload.json();
     }
 
     /**
@@ -358,9 +358,34 @@ public final class EffectRecord {
                 .value("actor_player", actorPlayer)
                 .raw("ability", abilityJson())
                 .value("ability_unresolved", abilityUnresolved)
-                .raw("state", stateJson)
-                .raw("payload", payloadJson)
+                .raw("state", state.json())
+                .raw("payload", payload.json())
                 .render();
+    }
+
+    /** The line as the shard takes it: rendered, beside the facts its cap reads. */
+    ShardLine toLine() {
+        return new ShardLine(toJson(), facts());
+    }
+
+    /**
+     * What the shard writer's cap reads of this record: its game, the turn
+     * its state was read on, its acting script, and whether it is a live
+     * record holding the game's outcome (in its events, a rewrite's pair or
+     * its state's pending event). A fork's record holding them holds the
+     * fork's outcome, not the game's.
+     */
+    RecordFacts facts() {
+        boolean outcome = state.pendingOutcome() || payload.namesOutcome();
+        return new RecordFacts(gameId, state.turn(), actingScript(), forkKind == null && outcome);
+    }
+
+    /** The acting line's script file, else the line the payload names; null for neither. */
+    private String actingScript() {
+        if (ability == null || ability.isEmpty()) {
+            return payload.namedScript();
+        }
+        return ability.get(0).scriptFile();
     }
 
     /** Whether the stamps are a directed fork's: a non-interventional fork naming its rule. */

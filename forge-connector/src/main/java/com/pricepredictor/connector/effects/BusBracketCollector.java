@@ -1079,7 +1079,7 @@ public final class BusBracketCollector extends BusEventReader {
         }
         context.emit(context.newResolution(Moment.RESOLUTION)
                 .seeksNoLine()
-                .state(snapshots.ofBoard().render())
+                .state(snapshots.ofBoard().state())
                 .payload(RecordPayloads.resolutionPayload(List.copyOf(gameEnd), List.of(), null)));
         gameEnd.clear();
     }

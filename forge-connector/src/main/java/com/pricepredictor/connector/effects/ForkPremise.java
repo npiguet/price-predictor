@@ -61,7 +61,7 @@ final class ForkPremise implements EventRouter.EventTap {
         if (!taken.isEmpty()) {
             context.emit(context.newTurnAction(TurnActionSubkind.FORK_EDIT)
                     .actor(actor)
-                    .state(state.withEventCards(taken).render())
+                    .state(state.withEventCards(taken).state())
                     .payload(RecordPayloads.eventsPayload(taken)));
         }
     }

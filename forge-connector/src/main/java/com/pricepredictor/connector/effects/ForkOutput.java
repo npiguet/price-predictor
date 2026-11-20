@@ -9,9 +9,10 @@ import java.util.function.Consumer;
  * to write through.
  *
  * @param flags the flags every record of the fork carries
- * @param held  where the fork's finished lines go until the fork is kept
+ * @param held  where the fork's finished lines, each beside its facts, go
+ *              until the fork is kept
  * @param kept  the records the fork writes whatever its samplers draw
  *              (FR-010c)
  */
-record ForkOutput(Consumer<EffectRecord> flags, Consumer<String> held, KeptRecords kept) {
+record ForkOutput(Consumer<EffectRecord> flags, Consumer<ShardLine> held, KeptRecords kept) {
 }

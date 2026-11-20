@@ -4,6 +4,7 @@ import com.google.common.base.CaseFormat;
 import com.pricepredictor.connector.json.Json;
 import forge.game.spellability.SpellAbility;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -24,8 +25,9 @@ final class RecordPayloads {
     }
 
     /** ``{"events": [...]}`` — a turn-based action's record. */
-    static String eventsPayload(List<EffectEvent> events) {
-        return Json.object().raw("events", eventArray(events)).render();
+    static RecordPayload eventsPayload(List<EffectEvent> events) {
+        List<EffectEvent> happened = happened(events);
+        return holding(Json.object().raw("events", eventArray(happened)).render(), happened);
     }
 
     /**
@@ -38,14 +40,15 @@ final class RecordPayloads {
      *                resolves no stack item — a mana ability's, the game-end
      *                rescue record — which writes {@code "outcome": null}
      */
-    static String resolutionPayload(
+    static RecordPayload resolutionPayload(
             List<EffectEvent> events, List<ConditionsMet> conditions,
             ActivationOutcome outcome) {
-        return Json.object()
-                .raw("events", eventArray(events))
+        List<EffectEvent> happened = happened(events);
+        return holding(Json.object()
+                .raw("events", eventArray(happened))
                 .raw("conditions_met", ConditionsMet.toJsonArray(conditions))
                 .value("outcome", outcome)
-                .render();
+                .render(), happened);
     }
 
     /**
@@ -53,10 +56,11 @@ final class RecordPayloads {
      * combat as {@link CombatShape#writeTo} writes it, each damage event
      * naming its dealer ({@link EventAttribution#withCombatSources}).
      */
-    static String combatPayload(CombatShape combat, List<EffectEvent> events) {
-        return combat.writeTo(Json.object())
-                .raw("events", eventArray(EventAttribution.withCombatSources(events, combat)))
-                .render();
+    static RecordPayload combatPayload(CombatShape combat, List<EffectEvent> events) {
+        List<EffectEvent> happened = happened(EventAttribution.withCombatSources(events, combat));
+        return holding(combat.writeTo(Json.object())
+                .raw("events", eventArray(happened))
+                .render(), happened);
     }
 
     /**
@@ -65,20 +69,33 @@ final class RecordPayloads {
      * Its damage events name their dealers as the observed record's do
      * (FR-035), so the two read alike.
      */
-    static String probePayload(
+    static RecordPayload probePayload(
             CombatShape combat, List<EffectEvent> events,
             String keyword, String carrier) {
-        return combat.writeTo(Json.object())
-                .raw("events", eventArray(EventAttribution.withCombatSources(events, combat)))
+        List<EffectEvent> happened = happened(EventAttribution.withCombatSources(events, combat));
+        return holding(combat.writeTo(Json.object())
+                .raw("events", eventArray(happened))
                 .raw("probed_keyword", Json.string(keyword))
                 .raw("probed_entity", Json.string(carrier))
-                .render();
+                .render(), happened);
     }
 
-    /** The events that happened, rendered: one filed before it was told apart is left out if it did not. */
-    private static String eventArray(List<EffectEvent> events) {
-        return Json.array(events.stream().filter(EffectEvent::happened).toList(),
-                EffectEvent::toJson);
+    /** The events that happened: one filed before it was told apart is left out if it did not. */
+    private static List<EffectEvent> happened(List<EffectEvent> events) {
+        return events.stream().filter(EffectEvent::happened).toList();
+    }
+
+    private static String eventArray(List<EffectEvent> happened) {
+        return Json.array(happened, EffectEvent::toJson);
+    }
+
+    /** A payload rendered from {@code events}, naming the game's outcome where one of them is. */
+    private static RecordPayload holding(String json, List<EffectEvent> events) {
+        return new RecordPayload(json, events.stream().anyMatch(RecordPayloads::isOutcome), null);
+    }
+
+    private static boolean isOutcome(EffectEvent event) {
+        return event.type().isGameOutcome();
     }
 
     /**
@@ -105,7 +122,7 @@ final class RecordPayloads {
      * @param replacedBy  the ability that stood in for the event; empty when
      *                    none ran, and always a list rather than null
      */
-    static String rewritePayload(
+    static RecordPayload rewritePayload(
             EffectEvent incoming, EffectEvent outgoing, String result,
             List<ProvenanceKey> replacedBy) {
         return rewritePayload(incoming, outgoing, result, replacedBy, false, null, false, List.of());
@@ -123,7 +140,7 @@ final class RecordPayloads {
      *
      * @param buffered the buffered ability's keys, or null when none was set aside
      */
-    static String rewritePayload(
+    static RecordPayload rewritePayload(
             EffectEvent incoming, EffectEvent outgoing, String result,
             List<ProvenanceKey> replacedBy, boolean incomingUnknown,
             List<ProvenanceKey> buffered, boolean bufferedRan, List<EffectEvent> bufferedEvents) {
@@ -136,12 +153,19 @@ final class RecordPayloads {
         if (incomingUnknown) {
             payload.value("incoming_unknown", true);
         }
+        List<EffectEvent> named = new ArrayList<>();
+        named.add(incoming);
+        if (outgoing != null) {
+            named.add(outgoing);
+        }
         if (buffered != null) {
+            List<EffectEvent> ran = happened(bufferedEvents);
             payload.raw("buffered", ProvenanceKey.toJsonArray(buffered))
                     .value("buffered_ran", bufferedRan)
-                    .raw("buffered_events", eventArray(bufferedEvents));
+                    .raw("buffered_events", eventArray(ran));
+            named.addAll(ran);
         }
-        return payload.render();
+        return holding(payload.render(), named);
     }
 
     /**
@@ -174,10 +198,11 @@ final class RecordPayloads {
      * what was paid. No {@code outcome}: what became of the item is its
      * effect half's.
      */
-    static String costPayload(List<EffectEvent> events, PaidCosts costs) {
-        return Json.object()
-                .raw("events", eventArray(events))
+    static RecordPayload costPayload(List<EffectEvent> events, PaidCosts costs) {
+        List<EffectEvent> happened = happened(events);
+        return holding(Json.object()
+                .raw("events", eventArray(happened))
                 .raw("costs", costs.toJson())
-                .render();
+                .render(), happened);
     }
 }

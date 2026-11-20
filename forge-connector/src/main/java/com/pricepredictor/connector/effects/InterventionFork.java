@@ -171,7 +171,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
             }
             return forceResolution(verified, forked, actor);
         }, (verified, resolution) -> {
-            return write(resolution.outcome().stream().map(EffectRecord::toJson).toList(),
+            return write(resolution.outcome().stream().map(EffectRecord::toLine).toList(),
                     resolution.droppedEvents());
         });
         return Boolean.TRUE.equals(written);
@@ -182,7 +182,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
      * events its fork could not file to the game's dropped-event counts,
      * under this kind. Reached only by a resolution that is written.
      */
-    Boolean write(List<String> lines, DroppedEvents dropped) {
+    Boolean write(List<ShardLine> lines, DroppedEvents dropped) {
         live.writeForkLines(lines);
         live.countForkDropped(KIND, dropped);
         return Boolean.TRUE;

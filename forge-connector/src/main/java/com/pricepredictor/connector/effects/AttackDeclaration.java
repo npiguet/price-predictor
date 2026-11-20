@@ -55,7 +55,7 @@ public final class AttackDeclaration {
 
     /** Writes one finished attackers record. */
     interface Emitter {
-        void emit(Player decider, String state, String payload);
+        void emit(Player decider, RecordState state, String payload);
     }
 
     private final LiveGame live;
@@ -90,7 +90,7 @@ public final class AttackDeclaration {
         }
         if (pending == null) {
             pending = new Pending(attacking, List.copyOf(candidates),
-                    live.snapshots().ofBoard().render(), requirements(candidates));
+                    live.snapshots().ofBoard().state(), requirements(candidates));
         }
         pending.defenders.put(defender, legal == null ? List.of() : List.copyOf(legal));
     }
@@ -164,14 +164,14 @@ public final class AttackDeclaration {
 
         final Player attacking;
         final List<Card> candidates;
-        final String state;
+        final RecordState state;
         final Map<Integer, Boolean> mustAttack;
         /** Each defender asked about, in the engine's order, with who may attack it. */
         final Map<GameEntity, List<Card>> defenders = new LinkedHashMap<>();
         /** The card ids tapped since the engine first asked. */
         final Set<Integer> tapped = new HashSet<>();
 
-        Pending(Player attacking, List<Card> candidates, String state,
+        Pending(Player attacking, List<Card> candidates, RecordState state,
                 Map<Integer, Boolean> mustAttack) {
             this.attacking = attacking;
             this.candidates = candidates;

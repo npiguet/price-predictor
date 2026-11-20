@@ -224,8 +224,8 @@ class CostPayloadTest {
         EffectEvent moved = new EffectEvent(EventType.ZONE_CHANGE)
                 .subject("E7").param(EventParam.FROM_ZONE, "hand").param(EventParam.TO_ZONE, "stack");
 
-        String spell = RecordPayloads.costPayload(java.util.List.of(moved), costs);
-        String ability = RecordPayloads.costPayload(java.util.List.of(), costs);
+        String spell = RecordPayloads.costPayload(java.util.List.of(moved), costs).json();
+        String ability = RecordPayloads.costPayload(java.util.List.of(), costs).json();
 
         assertTrue(spell.startsWith("{\"events\":[{\"type\":\"zone_change\""), spell);
         assertTrue(spell.contains("],\"costs\":{"), spell);

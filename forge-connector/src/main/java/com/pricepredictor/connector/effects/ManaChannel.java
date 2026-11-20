@@ -70,13 +70,13 @@ final class ManaChannel implements EventRouter.EventTap {
 
     /** A mana ability's activation, from before its costs until its mana. */
     private static final class Activation {
-        final String state;
+        final RecordState state;
         /** The permanents its cost tapped, read once the payment succeeded. */
         List<String> tapped = List.of();
         /** What its payment did besides the taps: a sacrifice's events. */
         final List<EffectEvent> paid = new ArrayList<>();
 
-        Activation(String state) {
+        Activation(RecordState state) {
             this.state = state;
         }
     }
@@ -84,7 +84,7 @@ final class ManaChannel implements EventRouter.EventTap {
     /** A mana record being built, keyed for the reservoir by the activation's own mana. */
     private record Building(
             SpellAbility source, String key, String actor, ProvenanceKey.Resolved ability,
-            String state, List<EffectEvent> events) {
+            RecordState state, List<EffectEvent> events) {
     }
 
     ManaChannel(
@@ -132,7 +132,7 @@ final class ManaChannel implements EventRouter.EventTap {
         // No stat re-read here: a mana record holds no stat change, and a
         // re-read would take the enclosing cast's unpublished changes out of
         // its cost half whether or not this activation is kept (V3 #15).
-        pending.put(ability, new Activation(live.snapshots().ofBoard().render()));
+        pending.put(ability, new Activation(live.snapshots().ofBoard().state()));
     }
 
     /**

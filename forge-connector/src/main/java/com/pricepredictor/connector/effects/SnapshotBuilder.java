@@ -245,11 +245,12 @@ public final class SnapshotBuilder {
         addBeyondTheTiers(entities, libraries, request.pending());
         EffectEvent pending = request.pending();
         String players = Json.array(game.getPlayers(), player -> PlayerJson.render(game, player, board));
+        int turn = game.getPhaseHandler().getTurn();
         return new Snapshot(
-                globalToJson(tiers, board), players, entities.elements(),
+                globalToJson(turn, tiers, board), turn, players, entities.elements(),
                 SnapshotLinks.render(game, request, entities, floating),
                 RefsJson.render(acting.chosen() ? acting.ability() : null, request.source()),
-                pending == null ? "null" : pending.toJson(),
+                pending == null ? "null" : pending.toJson(), Snapshot.isOutcome(pending),
                 libraries);
     }
 
@@ -322,9 +323,9 @@ public final class SnapshotBuilder {
                 entities.add(renderTier(card, SnapshotLinks.Acting.NONE, StaticSuppression.NONE));
             }
         }
-        return new Snapshot(board.global(), board.players(), List.copyOf(entities),
+        return new Snapshot(board.global(), board.turn(), board.players(), List.copyOf(entities),
                 SnapshotLinks.withTargetsNow(board.links(), game, added, acting),
-                board.refs(), board.pendingEvent(), board.libraries());
+                board.refs(), board.pendingEvent(), board.pendingOutcome(), board.libraries());
     }
 
     /** The targets as cast that ceased to exist or became new objects; none without them. */
@@ -477,11 +478,11 @@ public final class SnapshotBuilder {
         return card;
     }
 
-    private String globalToJson(Collection<Card> cards, StaticSuppression board) {
+    private String globalToJson(int turn, Collection<Card> cards, StaticSuppression board) {
         var phase = game.getPhaseHandler();
         Boolean night = game.getDayTime();
         return Json.object()
-                .value("turn", phase.getTurn())
+                .value("turn", turn)
                 .value("phase", phaseName(phase.getPhase()))
                 .value("active", Refs.ofNullable(phase.getPlayerTurn()))
                 .value("priority", Refs.ofNullable(phase.getPriorityPlayer()))

@@ -44,15 +44,16 @@ final class CollectorContext {
      */
     private final Consumer<EffectRecord> forkFlags;
     /**
-     * Where a finished record's line goes: the shard, or a fork's held lines;
-     * says whether the line was taken, which the shard's cap may refuse.
+     * Where a finished record's line goes, beside its facts: the shard, or a
+     * fork's held lines; says whether the line was taken, which the shard's
+     * cap may refuse.
      */
-    private final Predicate<String> out;
+    private final Predicate<ShardLine> out;
     /**
      * Where an end-of-game record's line goes: the shard past the per-game
      * cap ({@link RecordShardWriter#writeUncapped}), or a fork's held lines.
      */
-    private final Predicate<String> endOfGameOut;
+    private final Predicate<ShardLine> endOfGameOut;
     /** Whether this context writes a fork's records. */
     private final boolean fork;
     /**
@@ -74,9 +75,9 @@ final class CollectorContext {
         this.forkFlags = record -> { };
         // Not writer::write, which would dereference a writer a collector
         // that never writes is built without.
-        this.out = line -> writer.write(line);
+        this.out = line -> writer.write(line.json(), line.facts());
         this.endOfGameOut = line -> {
-            writer.writeUncapped(line);
+            writer.writeUncapped(line.json());
             return true;
         };
         this.fork = false;
@@ -140,8 +141,8 @@ final class CollectorContext {
     }
 
     /** Write lines a {@link #forFork fork's} context held, to this context's shard. */
-    void writeHeld(List<String> lines) {
-        lines.forEach(line -> writer.write(line));
+    void writeHeld(List<ShardLine> lines) {
+        lines.forEach(line -> writer.write(line.json(), line.facts()));
     }
 
     AttributionMode mode() {
@@ -226,7 +227,7 @@ final class CollectorContext {
     /** {@link #emit}, for a record written at the game's end ({@link #endOfGameOut}). */
     boolean emitAtGameEnd(EffectRecord record) {
         stamp(record);
-        return write(endOfGameOut, record.toJson());
+        return write(endOfGameOut, record.toLine());
     }
 
     /**
@@ -241,7 +242,7 @@ final class CollectorContext {
      */
     boolean emit(EffectRecord record) {
         stamp(record);
-        return write(out, record.toJson());
+        return write(out, record.toLine());
     }
 
     /**
@@ -250,9 +251,9 @@ final class CollectorContext {
      *
      * @return whether {@code to} took the line
      */
-    private boolean write(Predicate<String> to, String line) {
+    private boolean write(Predicate<ShardLine> to, ShardLine line) {
         boolean taken = to.test(line);
-        outcomeWritten |= taken && RecordShardWriter.holdsTheOutcome(line);
+        outcomeWritten |= taken && line.facts().holdsOutcome();
         return taken;
     }
 

@@ -99,11 +99,11 @@ final class ContinuousChannel {
             return;
         }
         ProvenanceKey.Resolved acting = ProvenanceResolver.resolve(source);
-        String state = live.snapshots().ofBoardWithout(source).render();
-        String payload = Json.object()
+        RecordState state = live.snapshots().ofBoardWithout(source).state();
+        RecordPayload payload = RecordPayload.withoutEvents(Json.object()
                 .raw("contributions", rendered)
                 .value("board_hash", boardHash)
-                .render();
+                .render());
         // A second gate behind the per-board one, which cannot see this:
         // two *distinct* static ids -- a second copy of the same anthem,
         // two copies of one aura -- resolve to the same key, the same

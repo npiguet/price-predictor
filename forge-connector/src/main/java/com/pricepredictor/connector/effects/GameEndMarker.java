@@ -32,8 +32,8 @@ final class GameEndMarker {
         LiveGame live = new LiveGame(game);
         context.emitAtGameEnd(context.newTurnAction(TurnActionSubkind.GAME_END)
                 .actor(actorOf(game, live))
-                .state(live.snapshots().ofBoard().render())
-                .payload(payload(context.withheld())));
+                .state(live.snapshots().ofBoard().state())
+                .payload(RecordPayload.withoutEvents(payload(context.withheld()))));
     }
 
     /** {@code {"events": [], "records_withheld": n}}. */

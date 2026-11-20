@@ -198,18 +198,22 @@ public final class RecordShardWriter implements AutoCloseable {
      * once its game has written {@code maxRecordsPerGame} records, withhold
      * it and count it against the game (FR-041a).
      *
+     * <p>A live record holding the game's outcome ({@link
+     * RecordFacts#holdsOutcome}) is written past the cap too, or a capped
+     * game would keep its marker and lose its result. A fork's record
+     * holding them holds the fork's outcome, not the game's: the cap
+     * withholds it as any other record, rather than write it while the live
+     * record it mirrors is withheld.
+     *
+     * @param facts what the record's maker held of it: its game, turn,
+     *              acting script and whether it holds the game's outcome
      * @return whether the line was written, false for one the cap withheld
      */
-    public synchronized boolean write(String recordJson) {
+    public synchronized boolean write(String recordJson, RecordFacts facts) {
         requireWritable();
-        String game = RecordLine.string(recordJson, "game_id");
-        if (game != null) {
-            GameRecords records = games.computeIfAbsent(game, id -> new GameRecords());
-            if (records.written >= maxRecordsPerGame && !holdsTheOutcome(recordJson)) {
-                records.withhold(recordJson);
-                return false;
-            }
-            records.written++;
+        if (facts.gameId() != null && !games.computeIfAbsent(facts.gameId(), id -> new GameRecords())
+                .admit(facts, maxRecordsPerGame)) {
+            return false;
         }
         block.append(recordJson).append('\n');
         if (++blockRecords >= BLOCK_RECORDS) {
@@ -226,28 +230,6 @@ public final class RecordShardWriter implements AutoCloseable {
         if (gaveUp != null) {
             throw gaveUp;
         }
-    }
-
-    /**
-     * Whether a record holds the game's outcome: a live record holding
-     * {@code player_lost} or {@code player_won}, written once per game, so
-     * past the cap too, or a capped game would keep its marker and lose its
-     * result.
-     *
-     * <p>A fork's record holding them (a probe branch whose stripped keyword
-     * ended the game, a played-forward fork or a forced resolution that ended
-     * it) holds the fork's outcome, not the game's: the cap withholds it as
-     * any other record, rather than write it while the live record it
-     * mirrors is withheld.
-     */
-    static boolean holdsTheOutcome(String recordJson) {
-        return RecordLine.isLive(recordJson) && namesAnOutcome(recordJson);
-    }
-
-    /** Whether a record line holds {@code player_lost} or {@code player_won}. */
-    private static boolean namesAnOutcome(String recordJson) {
-        return recordJson.contains("\"type\":\"player_lost\"")
-                || recordJson.contains("\"type\":\"player_won\"");
     }
 
     /**
@@ -345,10 +327,25 @@ public final class RecordShardWriter implements AutoCloseable {
         private boolean flushFailed;
         private final Map<String, Integer> byTurnAndCard = new HashMap<>();
 
-        void withhold(String recordJson) {
+        /**
+         * Count a record against the game: written while under {@code cap},
+         * or holding the game's outcome; else withheld.
+         *
+         * @return whether it is written
+         */
+        boolean admit(RecordFacts facts, int cap) {
+            if (written >= cap && !facts.holdsOutcome()) {
+                withhold(facts);
+                return false;
+            }
+            written++;
+            return true;
+        }
+
+        private void withhold(RecordFacts facts) {
             withheld++;
-            String turn = RecordLine.number(recordJson, "turn");
-            String card = RecordLine.actingScript(recordJson);
+            Integer turn = facts.turn();
+            String card = facts.actingScript();
             byTurnAndCard.merge("turn " + (turn == null ? "?" : turn) + ", acting card "
                     + (card == null ? "none" : card), 1, Integer::sum);
         }
@@ -364,59 +361,6 @@ public final class RecordShardWriter implements AutoCloseable {
             return "Effect records: game " + gameId + " reached --max-records-per-game " + cap
                     + "; withheld " + withheld + " more records, most often (" + most.getValue()
                     + ") on " + most.getKey();
-        }
-    }
-
-    /**
-     * The first value of a field in a rendered record line, read without
-     * parsing it: the envelope's {@code game_id} and {@code fork_kind}, the snapshot's
-     * {@code turn}, the acting line's {@code script_file}.
-     */
-    static final class RecordLine {
-        private RecordLine() {
-        }
-
-        /** The string value of the first {@code "key":"..."} in the line, or null. */
-        static String string(String json, String key) {
-            return string(json, key, 0);
-        }
-
-        /** The same, from {@code from} on. */
-        private static String string(String json, String key, int from) {
-            String marker = "\"" + key + "\":\"";
-            int start = json.indexOf(marker, from);
-            if (start < 0) {
-                return null;
-            }
-            start += marker.length();
-            int end = json.indexOf('"', start);
-            return end < 0 ? null : json.substring(start, end);
-        }
-
-        /** Whether the line is a live record's: its {@code fork_kind} names no kind of fork. */
-        static boolean isLive(String json) {
-            return string(json, "fork_kind") == null;
-        }
-
-        /** The script file of the record's acting line, its {@code ability}'s first key, or null. */
-        static String actingScript(String json) {
-            int ability = json.indexOf("\"ability\":[{");
-            return ability < 0 ? null : string(json, "script_file", ability);
-        }
-
-        /** The number value of the first {@code "key":N} in the line, or null. */
-        static String number(String json, String key) {
-            String marker = "\"" + key + "\":";
-            int start = json.indexOf(marker);
-            if (start < 0) {
-                return null;
-            }
-            start += marker.length();
-            int end = start;
-            while (end < json.length() && (Character.isDigit(json.charAt(end)) || json.charAt(end) == '-')) {
-                end++;
-            }
-            return end == start ? null : json.substring(start, end);
         }
     }
 

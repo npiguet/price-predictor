@@ -20,6 +20,8 @@ import java.util.List;
  * already changed, which is the one thing a pre-event snapshot must not do.
  *
  * @param global       the {@code global} block
+ * @param turn         the turn {@code global} names, read where it is built;
+ *                     null for a snapshot not built from a game
  * @param players      the {@code players} array
  * @param entities     the {@code entities} array's elements, each rendered, every
  *                     inclusion tier; joined into the array once, at {@link #render}
@@ -27,20 +29,16 @@ import java.util.List;
  * @param refs         the {@code refs} block for the acting line
  * @param pendingEvent the {@code pending_event} a trait is about to handle, or
  *                     {@code null} rendered
+ * @param pendingOutcome whether {@code pendingEvent} is the game's outcome
+ *                     ({@code player_lost}, {@code player_won})
  * @param libraries    where every library card sat when the board was
  *                     captured, so the library cards the record's events
  *                     later name can join the entities (FR-024); null where
  *                     the snapshot was not built from a game
  */
 record Snapshot(
-        String global, String players, List<String> entities, String links, String refs,
-        String pendingEvent, LibraryCapture libraries) {
-
-    /** A snapshot assembled from rendered blocks alone, with no library capture. */
-    Snapshot(String global, String players, List<String> entities, String links, String refs,
-             String pendingEvent) {
-        this(global, players, entities, links, refs, pendingEvent, null);
-    }
+        String global, Integer turn, String players, List<String> entities, String links,
+        String refs, String pendingEvent, boolean pendingOutcome, LibraryCapture libraries) {
 
     /**
      * The {@code state.tiers} every snapshot carries: all four, always.
@@ -53,7 +51,8 @@ record Snapshot(
 
     /** The same board, with its refs block replaced by a later reading. */
     Snapshot withRefs(String laterRefs) {
-        return new Snapshot(global, players, entities, links, laterRefs, pendingEvent, libraries);
+        return new Snapshot(global, turn, players, entities, links, laterRefs,
+                pendingEvent, pendingOutcome, libraries);
     }
 
     /**
@@ -63,8 +62,13 @@ record Snapshot(
      * are the read one's.
      */
     Snapshot withPendingEvent(EffectEvent pending) {
-        return new Snapshot(global, players, entities, links, refs,
-                pending == null ? "null" : pending.toJson(), libraries);
+        return new Snapshot(global, turn, players, entities, links, refs,
+                pending == null ? "null" : pending.toJson(), isOutcome(pending), libraries);
+    }
+
+    /** Whether {@code pending} is the game's outcome; false for none. */
+    static boolean isOutcome(EffectEvent pending) {
+        return pending != null && pending.type().isGameOutcome();
     }
 
     /**
@@ -85,13 +89,19 @@ record Snapshot(
         List<String> joined = new ArrayList<>(entities);
         joined.addAll(libraries.render(named));
         List<Card> cards = named.stream().map(LibraryCapture.Slot::card).toList();
-        return new Snapshot(global, players, joined, SnapshotLinks.withLibraryCards(links, cards),
-                refs, pendingEvent, libraries);
+        return new Snapshot(global, turn, players, joined,
+                SnapshotLinks.withLibraryCards(links, cards),
+                refs, pendingEvent, pendingOutcome, libraries);
     }
 
     /** The {@code entities} array as written. */
     String entitiesJson() {
         return "[" + String.join(",", entities) + "]";
+    }
+
+    /** The state as a record carries it: rendered, beside what its facts read of it. */
+    RecordState state() {
+        return new RecordState(render(), turn, pendingOutcome);
     }
 
     /** The state as a record writes it, its blocks in the order the schema fixes. */

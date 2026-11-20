@@ -68,11 +68,11 @@ final class HeldResolutionWindow {
      * resolution's own effects cause.
      */
     private record HalfRecord(
-            String recordId, String timestamp, ProvenanceKey.Resolved keys, String state,
+            String recordId, String timestamp, ProvenanceKey.Resolved keys, RecordState state,
             List<ConditionsMet> conditions) {
 
         static HalfRecord of(
-                String recordId, ProvenanceKey.Resolved keys, String state,
+                String recordId, ProvenanceKey.Resolved keys, RecordState state,
                 List<ConditionsMet> conditions) {
             return new HalfRecord(
                     recordId, RecordShardWriter.timestamp(), keys, state, conditions);
@@ -240,7 +240,7 @@ final class HeldResolutionWindow {
             String refs = refsOf(resolved, position, events);
             halves.add(HalfRecord.of(
                     context.nextRecordId(), resolved.keys.withOption(half.mode().option()),
-                    half.mode().state().withRefs(refs).withEventCards(events).render(),
+                    half.mode().state().withRefs(refs).withEventCards(events).state(),
                     keepsConditions ? half.conditions() : List.of()),
                     events);
         }

@@ -22,7 +22,7 @@ class RecordDedupTest {
         return EffectRecord.playability(
                         "r" + nextId, "run", "t" + nextId, "game-1", subkind,
                         AttributionMode.PATCHED)
-                .state(state).payload(payload);
+                .state(new RecordState(state, null, false)).payload(RecordPayload.withoutEvents(payload));
     }
 
     /** The same, for a kind that names its acting line. */
@@ -33,7 +33,7 @@ class RecordDedupTest {
                         "r" + nextId, "run", "t" + nextId, "game-1", kind,
                         AttributionMode.PATCHED)
                 .ability(new ProvenanceKey.Resolved(line, null))
-                .state(state).payload(payload);
+                .state(new RecordState(state, null, false)).payload(RecordPayload.withoutEvents(payload));
     }
 
     /** One of Garruk's Uprising's two {@code ChangesZone} triggers. */

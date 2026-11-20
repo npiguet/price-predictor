@@ -153,7 +153,7 @@ final class RewriteChannel implements EventRouter.EventTap {
         List<String> types = RunParamNormalizer.changedCounterTypes(trait, before, after);
         if (types.isEmpty()) {
             replaced(trait, rewrite(trait, before, after, result, replacedBy, buffered, null),
-                    buffered, board == null ? null : board.render());
+                    buffered, board == null ? null : board.state());
             return;
         }
         for (String type : types) {
@@ -161,12 +161,12 @@ final class RewriteChannel implements EventRouter.EventTap {
             // The board this type's event would have been read with: the
             // same subjects and last-known card as the whole map's.
             replaced(trait, rewrite, buffered,
-                    board == null ? null : board.withPendingEvent(rewrite.incoming()).render());
+                    board == null ? null : board.withPendingEvent(rewrite.incoming()).state());
         }
     }
 
     /** One record of a replacement, on {@code state}, or on the board now. */
-    private void replaced(Object trait, Rewrite rewrite, Object buffered, String state) {
+    private void replaced(Object trait, Rewrite rewrite, Object buffered, RecordState state) {
         EffectRecord record = shell(trait, rewrite.incoming(), state);
         if (rewrite.buffered() == null) {
             write(record, rewrite, false, List.of());
@@ -347,7 +347,7 @@ final class RewriteChannel implements EventRouter.EventTap {
      */
     EffectRecord record(
             Object trait, Object before, Object after, Object result,
-            Object replacedBy, String state) {
+            Object replacedBy, RecordState state) {
         Rewrite rewrite = rewrite(trait, before, after, result, replacedBy, null, null);
         return shell(trait, rewrite.incoming(), state).payload(RecordPayloads.rewritePayload(
                 rewrite.incoming(), rewrite.outgoing(), rewrite.result(), rewrite.replacedBy(),
@@ -355,7 +355,7 @@ final class RewriteChannel implements EventRouter.EventTap {
     }
 
     /** A rewrite record but for its payload, on {@code state}, or on the board now. */
-    private EffectRecord shell(Object trait, EffectEvent incoming, String state) {
+    private EffectRecord shell(Object trait, EffectEvent incoming, RecordState state) {
         return state == null
                 ? live.traitRecord(context, RecordKind.REWRITE, trait, incoming)
                 : live.traitRecordOn(

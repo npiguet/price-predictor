@@ -262,9 +262,9 @@ final class TriggerChannel {
             Object trait, ProvenanceKey.Resolved line, Object runParams, boolean fired) {
         EffectEvent event = RunParamNormalizer.describeParams(trait, runParams);
         return live.traitRecord(context, RecordKind.TRIGGER, trait, line, event)
-                .payload(Json.object()
+                .payload(new RecordPayload(Json.object()
                         .raw("event", event.toJson())
                         .value("fired", fired)
-                        .render());
+                        .render(), event.type().isGameOutcome(), null));
     }
 }

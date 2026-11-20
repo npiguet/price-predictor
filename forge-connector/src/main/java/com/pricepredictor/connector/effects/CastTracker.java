@@ -140,7 +140,7 @@ final class CastTracker {
                 .actor(cast.actor)
                 .ability(cast.keys)
                 .linkId(cast.linkId)
-                .state(board.render())
+                .state(board.state())
                 .payload(RecordPayloads.costPayload(castMove(cast.ability), cast.costs)));
     }
 

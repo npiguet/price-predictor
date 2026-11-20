@@ -33,7 +33,7 @@ final class CombatStepBracket {
      * The board as this damage step began, before any damage, or null outside
      * a damage step; taken by {@link #beginStep} and used by the step's record.
      */
-    private String stepStart;
+    private RecordState stepStart;
 
     /**
      * Whether this damage step's combat record has been written because
@@ -79,11 +79,11 @@ final class CombatStepBracket {
      * step's turn-based action, after the phase event.
      */
     private static final class StepCombat {
-        private final String state;
+        private final RecordState state;
         private final CombatShape shape;
         private final EventBuffer events = new EventBuffer();
 
-        private StepCombat(String state, Combat combat) {
+        private StepCombat(RecordState state, Combat combat) {
             this.state = state;
             // Nothing has died yet, so this is the moment the attackers and
             // blockers are all still in combat. The assignment is Forge's copy of
@@ -93,7 +93,7 @@ final class CombatStepBracket {
             shape.addAssignment(combat);
         }
 
-        String payload() {
+        RecordPayload payload() {
             return RecordPayloads.combatPayload(shape, events.events());
         }
     }
@@ -116,7 +116,7 @@ final class CombatStepBracket {
     boolean beginStep(PhaseType step) {
         stepStart = (step == PhaseType.COMBAT_FIRST_STRIKE_DAMAGE
                 || step == PhaseType.COMBAT_DAMAGE) && game.getCombat() != null
-                ? snapshots.ofBoard().render() : null;
+                ? snapshots.ofBoard().state() : null;
         return stepStart != null;
     }
 
@@ -128,7 +128,7 @@ final class CombatStepBracket {
             heldResolution.close();
             // The step's start where it was seen; a step entered without its
             // phase event (a hand-driven board) is read now, as late as that.
-            String state = stepStart != null ? stepStart : snapshots.ofBoard().render();
+            RecordState state = stepStart != null ? stepStart : snapshots.ofBoard().state();
             stepStart = null;
             combat = new StepCombat(state, game.getCombat());
         }
