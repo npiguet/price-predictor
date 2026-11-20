@@ -117,3 +117,21 @@ def _plackett_luce_log_prob(
         log_prob = log_prob + step_lp * picked_mask[:, step].to(log_prob.dtype)
         removed[arange, idx] = float("-inf")
     return log_prob
+
+
+def _sampled_log_prob(
+    logits: torch.Tensor, pool_mask: torch.Tensor, decks: SampledDecks, temperature: float,
+) -> torch.Tensor:
+    """The ``(B, S)`` PL log-prob of each sampled deck, on the logits scaled by
+    ``temperature`` with the padding masked out, repeated per sample."""
+    b, n = logits.shape
+    n_samples = decks.n_samples
+    scaled = (logits / temperature).masked_fill(
+        ~pool_mask, float("-inf"),
+    )
+    scaled_bs = scaled.unsqueeze(1).expand(b, n_samples, n).reshape(
+        b * n_samples, n,
+    )
+    return _plackett_luce_log_prob(
+        scaled_bs, decks.pick_indices, decks.picked_mask,
+    ).view(b, n_samples)

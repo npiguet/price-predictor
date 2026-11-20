@@ -21,7 +21,6 @@ copies the two small helpers by following the pattern.
 
 from __future__ import annotations
 
-import math
 import random
 import time
 from dataclasses import asdict, dataclass
@@ -32,40 +31,21 @@ from typing import Any
 import numpy as np
 import torch
 
-from price_predictor.infrastructure.torch_training import (
-    clip_per_group,
-    kl_divergence,
-    policy_entropy,
-)
-from sealed.application.picker_losses import LossInputs, LossSpec, _compute_losses
-from sealed.application.picker_pools import (
-    PreparedPool,
-    _collate,
-    _prepare_pools,
-    _shuffle_train,
-    _split_pools,
-)
+from sealed.application.picker_pools import PreparedPool, _prepare_pools, _split_pools
 from sealed.application.picker_resume import (
-    _build_optimizer,
     _check_picker_width,
-    _move_optimizer_state,
+    _reference_picker,
+    _restored_optimizer,
     _resume_or_build_picker,
 )
-from sealed.application.picker_sampling import (
-    SampledDecks,
-    SamplingSpec,
-    _plackett_luce_log_prob,
-    _sample_decks,
+from sealed.application.picker_scoring import _load_scorer, _select_device
+from sealed.application.picker_training_loop import PickerTrainingLoop, _log
+from sealed.application.picker_training_run import (
+    BestSoFar,
+    CheckpointTargets,
+    TrainingModels,
+    TrainingRun,
 )
-from sealed.application.picker_scoring import _load_scorer, _score_sampled, _select_device
-from sealed.application.picker_training_loop import (
-    _EntropySchedule,
-    _EpochStats,
-    _log,
-    _log_epoch,
-    _should_stop,
-)
-from sealed.application.picker_validation import ValidationContext, _validate
 from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE
 from sealed.domain.picker_model import PickerConfig, PickerModel
 from sealed.domain.scorer_model import SetTransformerScorer
@@ -136,6 +116,55 @@ class TrainPickerResult:
     best_path: Path
 
 
+def _prepare_training_pools(
+    config: TrainPickerConfig, scorer: SetTransformerScorer,
+) -> tuple[list[PreparedPool], Path]:
+    """Every usable pool, and the embeddings root they were read from; refuse
+    a pools file with none, or a cache the scorer's width does not match."""
+    locator = ConvertedCardLocator(
+        config.cards_path, embeddings_path=config.embeddings_path,
+    )
+    prepared = _prepare_pools(parse_pools(config.pools_path), locator)
+    if not prepared:
+        raise ValueError(
+            f"No usable pools in {config.pools_path} (every pool had fewer "
+            f"than {NONLAND_DECK_SIZE} embeddable cards under {locator.embeddings_root})."
+        )
+    cache_width = prepared[0].dim
+    _check_picker_width(
+        scorer.config.d_model, cache_width,
+        f"--scorer-checkpoint {config.scorer_checkpoint}", locator.embeddings_root,
+    )
+    return prepared, locator.embeddings_root
+
+
+def _load_auditor(
+    config: TrainPickerConfig, device: torch.device, cache_width: int,
+    embeddings_root: Path,
+) -> SetTransformerScorer | None:
+    """The cross-scorer auditor when one is configured, checked against the
+    cache's width; else None."""
+    if config.auditor_scorer_checkpoint is None:
+        return None
+    auditor = _load_scorer(config.auditor_scorer_checkpoint, device)
+    _check_picker_width(
+        auditor.config.d_model, cache_width,
+        f"--auditor-scorer-checkpoint {config.auditor_scorer_checkpoint}",
+        embeddings_root,
+    )
+    _log("Auditor scorer loaded; cross-scorer audit enabled")
+    return auditor
+
+
+def _checkpoint_targets(config: TrainPickerConfig, store: PickerStore) -> CheckpointTargets:
+    """The run directory, created, with its ``latest`` and timestamped best."""
+    config.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    latest_path = config.checkpoint_dir / "latest.pt"
+    best_path = config.checkpoint_dir / f"best_{timestamp}.pt"
+    return CheckpointTargets(store, latest_path, best_path, _build_train_config(config))
+
+
 class TrainPickerUseCase:
     """Train a one-shot picker via REINFORCE against a frozen scorer."""
 
@@ -150,30 +179,8 @@ class TrainPickerUseCase:
         embedding_dim = scorer.config.d_model
         _log(f"Loaded training scorer (d_model={embedding_dim}) on {device}")
 
-        locator = ConvertedCardLocator(
-            config.cards_path, embeddings_path=config.embeddings_path,
-        )
-        prepared = _prepare_pools(parse_pools(config.pools_path), locator)
-        if not prepared:
-            raise ValueError(
-                f"No usable pools in {config.pools_path} (every pool had fewer "
-                f"than {NONLAND_DECK_SIZE} embeddable cards under {locator.embeddings_root})."
-            )
-        cache_width = prepared[0].dim
-        _check_picker_width(
-            scorer.config.d_model, cache_width,
-            f"--scorer-checkpoint {config.scorer_checkpoint}", locator.embeddings_root,
-        )
-
-        auditor: SetTransformerScorer | None = None
-        if config.auditor_scorer_checkpoint is not None:
-            auditor = _load_scorer(config.auditor_scorer_checkpoint, device)
-            _check_picker_width(
-                auditor.config.d_model, cache_width,
-                f"--auditor-scorer-checkpoint {config.auditor_scorer_checkpoint}",
-                locator.embeddings_root,
-            )
-            _log("Auditor scorer loaded; cross-scorer audit enabled")
+        prepared, embeddings_root = _prepare_training_pools(config, scorer)
+        auditor = _load_auditor(config, device, prepared[0].dim, embeddings_root)
 
         val_pools, train_pools = _split_pools(prepared, config.val_fraction)
         _log(
@@ -183,174 +190,21 @@ class TrainPickerUseCase:
 
         resume = _resume_or_build_picker(config, store, embedding_dim)
         picker = resume.model.to(device)
-        optimizer = _build_optimizer(picker, config)
-        if resume.optimizer_state:
-            optimizer.load_state_dict(resume.optimizer_state)
-            _move_optimizer_state(optimizer, device)
+        optimizer = _restored_optimizer(picker, config, resume, device)
+        reference = _reference_picker(config, resume, picker, device)
+        run = TrainingRun(
+            models=TrainingModels(picker, scorer, auditor, reference, optimizer),
+            config=config, device=device,
+            train_pools=train_pools, val_pools=val_pools,
+            checkpoints=_checkpoint_targets(config, store),
+            rng=random.Random(RANDOM_SEED), start_epoch=resume.start_epoch,
+        )
+        best = BestSoFar(resume.best_val_reward, resume.start_epoch)
+        last_epoch = PickerTrainingLoop(run, best).train()
 
-        reference: PickerModel | None = None
-        if config.kl_coef != 0 and resume.reference_state is not None:
-            reference = PickerModel(picker.config)
-            reference.load_state_dict(resume.reference_state)
-            reference.eval()
-            reference.to(device)
-
-        config.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        latest_path = config.checkpoint_dir / "latest.pt"
-        best_path = config.checkpoint_dir / f"best_{timestamp}.pt"
-        train_config = _build_train_config(config)
-
-        schedule = _EntropySchedule(config.entropy_coef, config.entropy_decay_after)
-        rng = random.Random(RANDOM_SEED)
-        best_val_reward = resume.best_val_reward
-        best_epoch = resume.start_epoch
-        evals_since_best = 0
-
-        # Validate `evals_per_epoch` times per epoch (a "mini-epoch" is one such
-        # interval). With the default 1 this collapses to one eval at epoch end,
-        # i.e. the original behavior. Checkpoints and early-stop act on every
-        # eval, so patience is denominated in mini-epochs (FR-019, FR-020).
-        n_steps = math.ceil(len(train_pools) / config.batch_size)
-        evals_per_epoch = max(1, config.evals_per_epoch)
-        eval_interval = max(1, n_steps // evals_per_epoch)
-
+        best_path = run.checkpoints.best_path
         _log(
-            f"Starting training loop ({config.epochs} epochs, {n_steps} steps/epoch, "
-            f"validating every {eval_interval} steps = ~{evals_per_epoch}x/epoch; "
-            f"patience={config.patience} evals) on {device}"
+            f"Done (last epoch {last_epoch}). Best val_reward={best.reward:.4f} "
+            f"at epoch {best.epoch}; best checkpoint: {best_path}"
         )
-        last_epoch = resume.start_epoch
-        stop = False
-        for epoch in range(resume.start_epoch, resume.start_epoch + config.epochs):
-            last_epoch = epoch
-            shuffled = _shuffle_train(train_pools, rng)
-            picker.train()
-            stats = _EpochStats()
-            for step, start in enumerate(
-                range(0, len(shuffled), config.batch_size), start=1,
-            ):
-                group = shuffled[start:start + config.batch_size]
-                policy, entropy, aux, kl = self._train_one_step(
-                    picker, scorer, reference, optimizer, group, config,
-                    schedule.coef, device,
-                )
-                stats.add(policy, entropy, aux, kl)
-
-                if step % eval_interval != 0 and step != n_steps:
-                    continue
-
-                report = _validate(
-                    picker, val_pools,
-                    ValidationContext(scorer, auditor, config.batch_size, device),
-                )
-                schedule.update(report.mean_reward)
-                _log_epoch(epoch, step, n_steps, stats, report)
-                stats = _EpochStats()
-
-                new_best = report.mean_reward > best_val_reward
-                if new_best:
-                    best_val_reward = report.mean_reward
-                    best_epoch = epoch
-                    evals_since_best = 0
-                else:
-                    evals_since_best += 1
-
-                store.save_checkpoint(
-                    picker, optimizer, epoch, best_val_reward, picker.config,
-                    latest_path, train_config=train_config,
-                )
-                if new_best:
-                    store.save_checkpoint(
-                        picker, optimizer, epoch, best_val_reward, picker.config,
-                        best_path, train_config=train_config,
-                    )
-
-                if _should_stop(evals_since_best, config.patience):
-                    _log(
-                        f"Early stop: {evals_since_best} evals without val-reward "
-                        f"improvement (--patience={config.patience})"
-                    )
-                    stop = True
-                    break
-                picker.train()  # _validate switched the picker to eval mode
-            if stop:
-                break
-
-        _log(
-            f"Done (last epoch {last_epoch}). Best val_reward={best_val_reward:.4f} "
-            f"at epoch {best_epoch}; best checkpoint: {best_path}"
-        )
-        return TrainPickerResult(picker, best_val_reward, best_epoch, best_path)
-
-    def _train_one_step(
-        self,
-        picker: PickerModel,
-        scorer: SetTransformerScorer,
-        reference: PickerModel | None,
-        optimizer: torch.optim.Optimizer,
-        group: list[PreparedPool],
-        config: TrainPickerConfig,
-        entropy_coef: float,
-        device: torch.device,
-    ) -> tuple[float, float, float, float]:
-        """One gradient step over a batch of pools. Returns the detached
-        (policy_loss, entropy_loss, aux_loss, kl) for logging."""
-        cards, mask, land = _collate(group)
-        pool_cards = torch.from_numpy(cards).to(device)
-        pool_mask = torch.from_numpy(mask).to(device)
-        is_land_mask = torch.from_numpy(land).to(device)
-
-        logits, aux_pred = picker(pool_cards, pool_mask)
-
-        pick_indices, picked_mask = _sample_decks(
-            logits.detach(), is_land_mask, pool_mask,
-            SamplingSpec(config.n_samples, config.temperature),
-        )
-
-        norm_pool = scorer.normalize_features(pool_cards)
-        rewards = _score_sampled(
-            scorer, norm_pool, SampledDecks(pick_indices, picked_mask, config.n_samples),
-            device,
-        )  # (B, S)
-
-        # PL log-prob on temperature-scaled, padding-masked logits (B*S, N).
-        b, n = logits.shape
-        scaled = (logits / config.temperature).masked_fill(
-            ~pool_mask, float("-inf"),
-        )
-        scaled_bs = scaled.unsqueeze(1).expand(b, config.n_samples, n).reshape(
-            b * config.n_samples, n,
-        )
-        log_prob = _plackett_luce_log_prob(
-            scaled_bs, pick_indices, picked_mask,
-        ).view(b, config.n_samples)
-
-        entropy = policy_entropy(logits, pool_mask)
-        losses = _compute_losses(
-            LossInputs(rewards, log_prob, entropy, aux_pred),
-            LossSpec(
-                entropy_coef, config.aux_weight, config.normalize_advantage,
-                config.objective, config.topk,
-            ),
-        )
-        total = losses.total
-
-        kl_value = 0.0
-        if reference is not None:
-            with torch.no_grad():
-                ref_logits, _ = reference(pool_cards, pool_mask)
-            kl = kl_divergence(logits, ref_logits, pool_mask).mean()
-            total = total + config.kl_coef * kl
-            kl_value = float(kl)
-
-        optimizer.zero_grad()
-        total.backward()
-        clip_per_group(optimizer, max_norm=config.max_grad_norm)
-        optimizer.step()
-
-        return (
-            float(losses.policy_loss.detach()),
-            float(losses.entropy_loss.detach()),
-            float(losses.aux_loss.detach()), kl_value,
-        )
+        return TrainPickerResult(picker, best.reward, best.epoch, best_path)

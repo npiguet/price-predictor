@@ -95,3 +95,29 @@ def _move_optimizer_state(optimizer: torch.optim.Optimizer, device: torch.device
         for k, v in state.items():
             if isinstance(v, torch.Tensor):
                 state[k] = v.to(device)
+
+
+def _restored_optimizer(
+    picker: PickerModel, config: TrainPickerConfig, resume: _PickerResume,
+    device: torch.device,
+) -> torch.optim.Optimizer:
+    """The picker's optimizer, with a resumed run's state moved to ``device``."""
+    optimizer = _build_optimizer(picker, config)
+    if resume.optimizer_state:
+        optimizer.load_state_dict(resume.optimizer_state)
+        _move_optimizer_state(optimizer, device)
+    return optimizer
+
+
+def _reference_picker(
+    config: TrainPickerConfig, resume: _PickerResume, picker: PickerModel,
+    device: torch.device,
+) -> PickerModel | None:
+    """The frozen bootstrap picker the KL penalty pulls toward, or None."""
+    reference: PickerModel | None = None
+    if config.kl_coef != 0 and resume.reference_state is not None:
+        reference = PickerModel(picker.config)
+        reference.load_state_dict(resume.reference_state)
+        reference.eval()
+        reference.to(device)
+    return reference

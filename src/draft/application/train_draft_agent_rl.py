@@ -16,7 +16,7 @@ A_t is the detached GAE(λ) advantage over the seat's ordered trajectory
 Mirrors ``train_draft_agent``'s scaffolding (warmup-then-constant LR, per-group
 clip, mini-epoch eval + best/latest + early stop, LR-plateau annealing); the
 per-pick state walk is the shared :mod:`draft.application.draft_pick_states`. The
-REINFORCE helpers (entropy/KL) follow ``sealed.application.train_picker``. On-
+REINFORCE helpers (entropy/KL) follow ``sealed.application.picker_training_step``. On-
 policy pairing of corpus↔checkpoint is the operator's responsibility — the only
 safeguard is the behaviour-anomaly warning (research D6); the corpus is unchanged
 (no provenance field, FR-021).
