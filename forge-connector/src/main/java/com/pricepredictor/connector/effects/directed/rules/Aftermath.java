@@ -4,6 +4,7 @@ import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.card.CardStateName;
 import forge.game.Game;
@@ -35,14 +36,16 @@ public final class Aftermath {
     static final String SCENARIO = "702.127a-1";
     static final String FROM_HAND = "from_hand";
 
+    private static final Role<Card> CARD = Role.card("card");
+
     private Aftermath() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, Aftermath::bind, FROM_HAND,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.move(fork.card("card"), ZoneType.Hand, null))
-                        .keepingCandidatesOf("card"));
+                        fork -> MoveCardOperation.move(fork.card(CARD), ZoneType.Hand, null))
+                        .keepingCandidatesOf(CARD));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -52,7 +55,7 @@ public final class Aftermath {
         return Boards.active(live).getCardsIn(ZoneType.Graveyard).stream()
                 .filter(Aftermath::hasAftermathHalf)
                 .findFirst()
-                .map(card -> Binding.empty().with("card", card));
+                .map(card -> Binding.empty().with(CARD, card));
     }
 
     static boolean hasAftermathHalf(Card card) {

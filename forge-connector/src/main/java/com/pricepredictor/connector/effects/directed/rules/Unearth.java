@@ -4,8 +4,10 @@ import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
+import forge.game.card.Card;
 import forge.game.keyword.Keyword;
 import forge.game.player.Player;
 import forge.game.zone.ZoneType;
@@ -35,14 +37,16 @@ public final class Unearth {
     static final String SCENARIO = "702.84a-5";
     static final String CARD_IN_HAND = "card_in_hand";
 
+    private static final Role<Card> CARD = Role.card("card");
+
     private Unearth() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, Unearth::bind, CARD_IN_HAND,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.move(fork.card("card"), ZoneType.Hand, null))
-                        .keepingCandidatesOf("card"));
+                        fork -> MoveCardOperation.move(fork.card(CARD), ZoneType.Hand, null))
+                        .keepingCandidatesOf(CARD));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -53,6 +57,6 @@ public final class Unearth {
         return active.getCardsIn(ZoneType.Graveyard).stream()
                 .filter(card -> Mana.canPayKeyword(active, card, Keyword.UNEARTH))
                 .findFirst()
-                .map(card -> Binding.empty().with("card", card));
+                .map(card -> Binding.empty().with(CARD, card));
     }
 }

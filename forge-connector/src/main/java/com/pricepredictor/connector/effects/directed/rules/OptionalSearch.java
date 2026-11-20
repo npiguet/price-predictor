@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -46,15 +47,18 @@ public final class OptionalSearch {
     static final String SANCTUARY_ADDED = "sanctuary_added";
     static final String SANCTUARY = "Elfhame Sanctuary";
 
+    private static final Role<Player> PLAYER = Role.player("player");
+    private static final Role<Card> SANCTUARY_ROLE = Role.card("sanctuary");
+
     private OptionalSearch() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, OptionalSearch::bind, SANCTUARY_ADDED,
                 new Application(ForkOperation.ADD_PERMANENT,
-                        fork -> AddPermanentOperation.of(SANCTUARY, fork.player("player"), false))
-                        .making("sanctuary", OptionalSearch::added)
-                        .forcing(ForcedPlay.answer("player", "sanctuary", true)));
+                        fork -> AddPermanentOperation.of(SANCTUARY, fork.player(PLAYER), false))
+                        .making(SANCTUARY_ROLE, OptionalSearch::added)
+                        .forcing(ForcedPlay.answer(PLAYER, SANCTUARY_ROLE, true)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -64,12 +68,12 @@ public final class OptionalSearch {
         Player active = Boards.active(live);
         // Elfhame Sanctuary's search finds a basic land card (ChangeType$ Land.Basic).
         boolean findsOne = active.getCardsIn(ZoneType.Library).stream().anyMatch(card -> card.getType().isBasicLand());
-        return findsOne ? Optional.of(Binding.empty().with("player", active)) : Optional.empty();
+        return findsOne ? Optional.of(Binding.empty().with(PLAYER, active)) : Optional.empty();
     }
 
     /** The Elfhame Sanctuary the edit put on the player's battlefield: the newest card of that name there. */
     static Card added(Binding fork, Game game) {
-        return fork.player("player").getCardsIn(ZoneType.Battlefield).stream()
+        return fork.player(PLAYER).getCardsIn(ZoneType.Battlefield).stream()
                 .filter(card -> card.getName().equals(SANCTUARY))
                 .max(Comparator.comparingInt(Card::getId))
                 .orElseThrow(() -> new IllegalStateException("the edit put no " + SANCTUARY + " in play"));

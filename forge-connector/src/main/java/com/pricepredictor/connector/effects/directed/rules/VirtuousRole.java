@@ -5,13 +5,12 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
 import forge.game.Game;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.player.Player;
-import forge.game.trigger.TriggerType;
-import forge.game.zone.ZoneType;
 
 import java.util.Map;
 import java.util.Optional;
@@ -43,14 +42,17 @@ public final class VirtuousRole {
     /** The token script of a Virtuous Role, as Forge names it. */
     private static final String VIRTUOUS_ROLE = "role_virtuous";
 
+    private static final Role<Player> CASTER = Role.player("caster");
+    private static final Role<Card> CARD = Role.card("card");
+
     private VirtuousRole() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, VirtuousRole::bind, TWO_ENCHANTMENTS,
                 new Application(ForkOperation.ADD_PERMANENT,
-                        fork -> AddPermanentOperation.of(SEAL_OF_FIRE, fork.player("caster"), false))
-                        .forcing(ForcedPlay.cast("caster", "card")));
+                        fork -> AddPermanentOperation.of(SEAL_OF_FIRE, fork.player(CASTER), false))
+                        .forcing(ForcedPlay.cast(CASTER, CARD)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -61,11 +63,8 @@ public final class VirtuousRole {
         if (active.getCreaturesInPlay().isEmpty()) {
             return Optional.empty();
         }
-        return active.getCardsIn(ZoneType.Hand).stream()
-                .filter(Card::isCreature)
-                .filter(card -> makesAVirtuousRoleAsItEnters(card) && Mana.affordable(active, card))
-                .findFirst()
-                .map(card -> Binding.empty().with("caster", active).with("card", card));
+        return Scan.handCard(active, card -> card.isCreature() && makesAVirtuousRoleAsItEnters(card))
+                .map(card -> Binding.empty().with(CASTER, active).with(CARD, card));
     }
 
     /**
@@ -75,17 +74,12 @@ public final class VirtuousRole {
      * {@code TokenScript$ role_virtuous} with {@code AttachedTo$ Targeted}.
      */
     static boolean makesAVirtuousRoleAsItEnters(Card card) {
-        return card.getTriggers().stream()
-                .filter(trigger -> trigger.getMode() == TriggerType.ChangesZone
-                        && "Battlefield".equals(trigger.getParam("Destination"))
-                        && "Card.Self".equals(trigger.getParam("ValidCard")))
-                .map(Scripts::executed)
+        return Scan.unconditionedEntersTrigger(card, ApiType.Token.name()).stream()
                 .anyMatch(VirtuousRole::createsAnAttachedVirtuousRole);
     }
 
     private static boolean createsAnAttachedVirtuousRole(Map<String, String> script) {
-        return ApiType.Token.name().equals(Scripts.api(script))
-                && VIRTUOUS_ROLE.equals(script.get("TokenScript"))
+        return VIRTUOUS_ROLE.equals(script.get("TokenScript"))
                 && "Targeted".equals(script.get("AttachedTo"));
     }
 }

@@ -46,6 +46,21 @@ public record Binding(Map<String, Card> cards, Map<String, Player> players) {
         return new Binding(cards, more);
     }
 
+    /** This binding with {@code object} under {@code role}. */
+    public <T extends GameObject> Binding with(Role<T> role, T object) {
+        return object instanceof Card card ? with(role.name(), card) : with(role.name(), (Player) object);
+    }
+
+    /** The card bound under {@code role}, failing when there is none. */
+    public Card card(Role<Card> role) {
+        return card(role.name());
+    }
+
+    /** The player bound under {@code role}, failing when there is none. */
+    public Player player(Role<Player> role) {
+        return player(role.name());
+    }
+
     /** The card bound under {@code role}, failing when there is none. */
     public Card card(String role) {
         Card card = cards.get(role);

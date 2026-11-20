@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -82,9 +83,9 @@ public final class ManaValueSearch {
 
         DirectedRule rule(String rule, String scenario, String variant) {
             return DirectedRule.of(rule, scenario, this::bind, variant,
-                    new Application(ForkOperation.MOVE_CARD, fork -> MoveCardOperation.replace(fork.card("card"),
-                            replacement.instead(fork.card("source"))))
-                            .forcing(ForcedPlay.activate("player", "source", ForcedPlay.Line.keyword(keyword))));
+                    new Application(ForkOperation.MOVE_CARD, fork -> MoveCardOperation.replace(fork.card(CARD),
+                            replacement.instead(fork.card(SOURCE))))
+                            .forcing(ForcedPlay.activate(PLAYER, SOURCE, ForcedPlay.Line.keyword(keyword))));
         }
 
         Optional<Binding> bind(Game live) {
@@ -100,8 +101,8 @@ public final class ManaValueSearch {
                         .filter(card -> finds.test(card) && card.getCMC() == source.getCMC())
                         .toList();
                 if (matching.size() == 1) {
-                    return Optional.of(Binding.empty().with("player", active)
-                            .with("source", source).with("card", matching.get(0)));
+                    return Optional.of(Binding.empty().with(PLAYER, active)
+                            .with(SOURCE, source).with(CARD, matching.get(0)));
                 }
             }
             return Optional.empty();
@@ -112,6 +113,10 @@ public final class ManaValueSearch {
             player -> player.getCardsIn(ZoneType.Hand), card -> true, new Replacement(COURSER, 3, BEARS));
     private static final Search TRANSFIGURE = new Search("TRANSFIGURE",
             Player::getCreaturesInPlay, Card::isCreature, new Replacement(WURM, 6, GIANT));
+
+    private static final Role<Player> PLAYER = Role.player("player");
+    private static final Role<Card> SOURCE = Role.card("source");
+    private static final Role<Card> CARD = Role.card("card");
 
     private ManaValueSearch() {
     }

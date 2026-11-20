@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.BoardEdit;
 import com.pricepredictor.connector.effects.directed.operations.PtOperation;
 import forge.ai.ComputerUtilCard;
@@ -54,13 +55,17 @@ public final class ToughnessZero {
         return loss > 0 && loss == toughnessLoss(spell.getHostCard());
     });
 
+    private static final Role<Player> HOLDER = Role.player("holder");
+    private static final Role<Card> CREATURE = Role.card("creature");
+    private static final Role<Card> SPELL = Role.card("spell");
+
     private ToughnessZero() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, ToughnessZero::bind, TOUGHER,
                 new Application(ForkOperation.PT, ToughnessZero::tougher)
-                        .forcing(ForcedPlay.cast("holder", "spell").playing(SHRINKING).targeting("creature")));
+                        .forcing(ForcedPlay.cast(HOLDER, SPELL).playing(SHRINKING).targeting(CREATURE)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -96,9 +101,9 @@ public final class ToughnessZero {
             return Optional.empty();
         }
         return Optional.of(Binding.empty()
-                .with("holder", holder)
-                .with("creature", ComputerUtilCard.getBestCreatureAI(killed))
-                .with("spell", spell.getHostCard()));
+                .with(HOLDER, holder)
+                .with(CREATURE, ComputerUtilCard.getBestCreatureAI(killed))
+                .with(SPELL, spell.getHostCard()));
     }
 
     /**
@@ -122,8 +127,8 @@ public final class ToughnessZero {
     }
 
     private static BoardEdit tougher(Binding fork) {
-        Card creature = fork.card("creature");
+        Card creature = fork.card(CREATURE);
         return new PtOperation(creature, null,
-                creature.getCurrentToughness() + toughnessLoss(fork.card("spell")));
+                creature.getCurrentToughness() + toughnessLoss(fork.card(SPELL)));
     }
 }

@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -49,6 +50,10 @@ public final class AuraSwap {
     static final String AURA_IN_HAND = "aura_in_hand";
     static final String HOLY_STRENGTH = Cards.HOLY_STRENGTH;
 
+    private static final Role<Player> PLAYER = Role.player("player");
+    private static final Role<Card> CARD = Role.card("card");
+    private static final Role<Card> AURA = Role.card("aura");
+
     private AuraSwap() {
     }
 
@@ -60,7 +65,7 @@ public final class AuraSwap {
     /** Holy Strength in the place of the hand's card the board binds, the swap forced. */
     private static Application auraInHand() {
         return new Application(ForkOperation.MOVE_CARD,
-                fork -> MoveCardOperation.replace(fork.card("card"), HOLY_STRENGTH))
+                fork -> MoveCardOperation.replace(fork.card(CARD), HOLY_STRENGTH))
                 .forcing(swap());
     }
 
@@ -83,7 +88,7 @@ public final class AuraSwap {
         return active.getCardsIn(ZoneType.Battlefield).stream()
                 .filter(aura -> aura.isAura() && swappable(aura, active) && onUnprotectedCreature(aura))
                 .findFirst()
-                .map(aura -> Binding.empty().with("player", active).with("card", hand.get(0)).with("aura", aura));
+                .map(aura -> Binding.empty().with(PLAYER, active).with(CARD, hand.get(0)).with(AURA, aura));
     }
 
     /**
@@ -102,7 +107,7 @@ public final class AuraSwap {
      * prefers, and with nothing or a worse Aura in hand it never activates.
      */
     static ForcedPlay swap() {
-        return ForcedPlay.activate("player", "aura", ForcedPlay.Line.keyword("AURA_SWAP"));
+        return ForcedPlay.activate(PLAYER, AURA, ForcedPlay.Line.keyword("AURA_SWAP"));
     }
 
     /**
@@ -128,7 +133,7 @@ public final class AuraSwap {
                 .filter(aura -> aura.isAura() && swappable(aura, active) && onUnprotectedCreature(aura))
                 .filter(aura -> aura.getEntityAttachedTo().canBeAttached(card, null) == fits)
                 .findFirst()
-                .map(aura -> Binding.empty().with("player", active).with("card", card).with("aura", aura));
+                .map(aura -> Binding.empty().with(PLAYER, active).with(CARD, card).with(AURA, aura));
     }
 
     /** Whether the Aura has Aura swap and {@code player} can pay its cost now ({@link Mana#canPayKeyword}). */

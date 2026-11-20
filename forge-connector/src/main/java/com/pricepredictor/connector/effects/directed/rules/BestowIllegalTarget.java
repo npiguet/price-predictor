@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.ReplaceCardOperation;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -46,14 +47,18 @@ public final class BestowIllegalTarget {
     static final String SKULKING_GHOST = "skulking_ghost";
     static final String GHOST = "Skulking Ghost";
 
+    private static final Role<Player> PLAYER = Role.player("player");
+    private static final Role<Card> CARD = Role.card("card");
+    private static final Role<Card> CREATURE = Role.card("creature");
+
     private BestowIllegalTarget() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, BestowIllegalTarget::bind, SKULKING_GHOST,
                 new Application(ForkOperation.REPLACE_CARD,
-                        fork -> new ReplaceCardOperation(fork.card("creature"), GHOST))
-                        .forcing(ForcedPlay.cast("player", "card")
+                        fork -> new ReplaceCardOperation(fork.card(CREATURE), GHOST))
+                        .forcing(ForcedPlay.cast(PLAYER, CARD)
                                 .playing(new ForcedPlay.Line("bestow", ability -> ability.isSpell() && ability.isBestow()))));
     }
 
@@ -69,7 +74,7 @@ public final class BestowIllegalTarget {
         return active.getCardsIn(ZoneType.Hand).stream()
                 .filter(card -> Mana.canPayKeyword(active, card, Keyword.BESTOW))
                 .findFirst()
-                .map(card -> Binding.empty().with("player", active).with("card", card)
-                        .with("creature", creatures.get(0)));
+                .map(card -> Binding.empty().with(PLAYER, active).with(CARD, card)
+                        .with(CREATURE, creatures.get(0)));
     }
 }

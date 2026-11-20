@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
 import forge.game.Game;
 import forge.game.ability.ApiType;
@@ -39,6 +40,8 @@ public final class CantGainLifeExchange {
     public static final String RULE = "119.7";
     static final String SCENARIO = "119.7-1";
     static final String LEYLINE = "leyline";
+    private static final Role<Player> PLAYER = Role.player("player");
+    private static final Role<Card> PERMANENT = Role.card("permanent");
     static final String LEYLINE_OF_PUNISHMENT = "Leyline of Punishment";
 
     private CantGainLifeExchange() {
@@ -47,8 +50,8 @@ public final class CantGainLifeExchange {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, CantGainLifeExchange::bind, LEYLINE,
                 new Application(ForkOperation.ADD_PERMANENT,
-                        fork -> AddPermanentOperation.of(LEYLINE_OF_PUNISHMENT, fork.player("player"), false))
-                        .forcing(ForcedPlay.activate("player", "permanent",
+                        fork -> AddPermanentOperation.of(LEYLINE_OF_PUNISHMENT, fork.player(PLAYER), false))
+                        .forcing(ForcedPlay.activate(PLAYER, PERMANENT,
                                 ForcedPlay.Line.api("ExchangeLifeVariant"))));
     }
 
@@ -64,20 +67,17 @@ public final class CantGainLifeExchange {
                 .filter(permanent -> !permanent.isTapped() && !permanent.isFirstTurnControlled())
                 .filter(permanent -> exchangesOwnLife(permanent) && active.getLife() < permanent.getNetToughness())
                 .findFirst()
-                .map(permanent -> Binding.empty().with("permanent", permanent).with("player", active));
+                .map(permanent -> Binding.empty().with(PERMANENT, permanent).with(PLAYER, active));
     }
 
     /** Whether the card has an activated ability exchanging its controller's own life total with its toughness. */
     static boolean exchangesOwnLife(Card card) {
-        for (SpellAbility ability : card.getSpellAbilities()) {
-            if (ability.isActivatedAbility()
-                    && ability.getApi() == ApiType.ExchangeLifeVariant
-                    && "Toughness".equals(ability.getParam("Mode"))
-                    && !ability.usesTargeting()
-                    && "You".equals(ability.getParamOrDefault("Defined", "You"))) {
-                return true;
-            }
-        }
-        return false;
+        return card.getSpellAbilities().stream().anyMatch(CantGainLifeExchange::exchangesToughness);
+    }
+
+    private static boolean exchangesToughness(SpellAbility ability) {
+        return ability.isActivatedAbility() && ability.getApi() == ApiType.ExchangeLifeVariant
+                && "Toughness".equals(ability.getParam("Mode")) && !ability.usesTargeting()
+                && "You".equals(ability.getParamOrDefault("Defined", "You"));
     }
 }

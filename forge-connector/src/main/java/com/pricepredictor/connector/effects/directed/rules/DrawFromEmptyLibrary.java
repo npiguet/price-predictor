@@ -4,6 +4,7 @@ import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -41,13 +42,15 @@ public final class DrawFromEmptyLibrary {
     static final String SCENARIO = "704.5b-2";
     static final String EMPTY = "empty";
 
+    private static final Role<Card> CARD = Role.card("card");
+
     private DrawFromEmptyLibrary() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, DrawFromEmptyLibrary::bind, EMPTY,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.move(fork.card("card"), ZoneType.Graveyard, null)));
+                        fork -> MoveCardOperation.move(fork.card(CARD), ZoneType.Graveyard, null)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -59,7 +62,7 @@ public final class DrawFromEmptyLibrary {
         if (library.size() != 1) {
             return Optional.empty();
         }
-        return Optional.of(Binding.empty().with("card", library.get(0)));
+        return Optional.of(Binding.empty().with(CARD, library.get(0)));
     }
 
     /** Whether this turn's draw step is skipped as Forge skips it: a two-player game's first turn. */

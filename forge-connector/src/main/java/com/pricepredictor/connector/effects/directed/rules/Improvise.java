@@ -4,6 +4,7 @@ import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.TapOperation;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -47,13 +48,16 @@ public final class Improvise {
     static final String SCENARIO = "702.126a-1";
     static final String ONE_ARTIFACT_TAPPED = "one_artifact_tapped";
 
+    private static final Role<Card> ARTIFACT = Role.card("artifact");
+    private static final Role<Card> CARD = Role.card("card");
+
     private Improvise() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, Improvise::bind, ONE_ARTIFACT_TAPPED,
-                new Application(ForkOperation.TAP, fork -> new TapOperation(fork.card("artifact"), true))
-                        .keepingCandidatesOf("card"));
+                new Application(ForkOperation.TAP, fork -> new TapOperation(fork.card(ARTIFACT), true))
+                        .keepingCandidatesOf(CARD));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -67,16 +71,19 @@ public final class Improvise {
         List<Card> artifacts = active.getCardsIn(ZoneType.Battlefield).stream()
                 .filter(card -> card.isArtifact() && !card.isLand() && !card.isTapped())
                 .toList();
-        if (artifacts.isEmpty() || artifacts.stream().anyMatch(artifact -> Mana.manaUnits(artifact) > 0)) {
+        if (!allIdleArtifacts(artifacts)) {
             return Optional.empty();
         }
         int mana = otherMana(active, artifacts);
-        return active.getCardsIn(ZoneType.Hand).stream()
-                .filter(card -> card.hasKeyword(Keyword.IMPROVISE) && card.getCMC() == mana + artifacts.size())
-                .filter(card -> card.getManaCost().getGenericCost() >= artifacts.size())
-                .filter(card -> Mana.affordable(active, card))
-                .findFirst()
-                .map(card -> Binding.empty().with("artifact", artifacts.get(0)).with("card", card));
+        return Scan.handCard(active, card -> card.hasKeyword(Keyword.IMPROVISE)
+                        && card.getCMC() == mana + artifacts.size()
+                        && card.getManaCost().getGenericCost() >= artifacts.size())
+                .map(card -> Binding.empty().with(ARTIFACT, artifacts.get(0)).with(CARD, card));
+    }
+
+    /** Whether there is an artifact to tap, and none of them makes mana. */
+    private static boolean allIdleArtifacts(List<Card> artifacts) {
+        return !artifacts.isEmpty() && artifacts.stream().noneMatch(artifact -> Mana.manaUnits(artifact) > 0);
     }
 
     /**

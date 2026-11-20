@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -45,6 +46,8 @@ public final class DistinctTargets {
     static final String SCENARIO = "601.2c-1";
     static final String TWO_CREATURES = "two-creatures";
     static final String WURM = Cards.WURM;
+    private static final Role<Card> SPELL = Role.card("spell");
+    private static final Role<Player> OPPONENT = Role.player("opponent");
 
     private DistinctTargets() {
     }
@@ -52,8 +55,8 @@ public final class DistinctTargets {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, DistinctTargets::bind, TWO_CREATURES,
                 new Application(ForkOperation.ADD_PERMANENT,
-                        fork -> AddPermanentOperation.of(WURM, fork.player("opponent"), false))
-                        .keepingCandidatesOf("spell"));
+                        fork -> AddPermanentOperation.of(WURM, fork.player(OPPONENT), false))
+                        .keepingCandidatesOf(SPELL));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -68,7 +71,7 @@ public final class DistinctTargets {
         return Scan.castableInHand(active,
                         ForcedPlay.Line.spell("sole target", spell -> soleTarget(spell, active))).stream()
                 .findFirst()
-                .map(card -> Binding.empty().with("spell", card).with("opponent", opponent.get()));
+                .map(card -> Binding.empty().with(SPELL, card).with(OPPONENT, opponent.get()));
     }
 
     /**
@@ -77,8 +80,7 @@ public final class DistinctTargets {
      */
     static boolean soleTarget(SpellAbility spell, Player caster) {
         TargetRestrictions targets = spell.getTargetRestrictions();
-        if (!spell.usesTargeting() || targets == null
-                || !Arrays.asList(targets.getValidTgts()).equals(List.of("Creature"))) {
+        if (!targetsOnlyCreatures(spell, targets)) {
             return false;
         }
         Card host = spell.getHostCard();
@@ -90,5 +92,10 @@ public final class DistinctTargets {
         List<Card> candidates = CardLists.getValidCards(caster.getGame().getCardsIn(ZoneType.Battlefield),
                 targets.getValidTgts(), caster, host, cast);
         return candidates.stream().filter(card -> card.canBeTargetedBy(cast)).count() == 1;
+    }
+
+    private static boolean targetsOnlyCreatures(SpellAbility spell, TargetRestrictions targets) {
+        return spell.usesTargeting() && targets != null
+                && Arrays.asList(targets.getValidTgts()).equals(List.of("Creature"));
     }
 }

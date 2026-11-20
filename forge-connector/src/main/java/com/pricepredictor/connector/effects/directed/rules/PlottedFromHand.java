@@ -5,10 +5,10 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
 import forge.game.card.Card;
-import forge.game.card.CardCollectionView;
 import forge.game.player.Player;
 import forge.game.zone.ZoneType;
 
@@ -47,6 +47,9 @@ public final class PlottedFromHand {
     /** Grizzly Bears' mana value. */
     static final int BEARS_MANA_VALUE = 2;
     static final int MOST_MANA_VALUE = 3;
+    private static final Role<Player> PLAYER = Role.player("player");
+    private static final Role<Card> CARD = Role.card("card");
+    private static final Role<Card> SPELL = Role.card("spell");
 
     private PlottedFromHand() {
     }
@@ -54,8 +57,8 @@ public final class PlottedFromHand {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, PlottedFromHand::bind, SMALL_CARD_IN_HAND,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.replace(fork.card("card"), BEARS))
-                        .forcing(ForcedPlay.cast("player", "spell")));
+                        fork -> MoveCardOperation.replace(fork.card(CARD), BEARS))
+                        .forcing(ForcedPlay.cast(PLAYER, SPELL)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -63,18 +66,26 @@ public final class PlottedFromHand {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        CardCollectionView hand = active.getCardsIn(ZoneType.Hand);
-        Optional<Card> kellan = hand.stream()
-                .filter(card -> KELLAN.equals(card.getName()) && Mana.affordable(active, card)).findFirst();
+        Optional<Card> kellan = Scan.handCard(active, card -> KELLAN.equals(card.getName()));
         if (kellan.isEmpty()) {
             return Optional.empty();
         }
-        List<Card> others = hand.stream().filter(card -> card != kellan.get() && !card.isLand()).toList();
-        if (others.isEmpty() || others.stream().anyMatch(card -> card.getCMC() <= MOST_MANA_VALUE)
-                || Mana.manaSources(active).size() >= kellan.get().getCMC() + BEARS_MANA_VALUE) {
+        List<Card> others = active.getCardsIn(ZoneType.Hand).stream()
+                .filter(card -> card != kellan.get() && !card.isLand()).toList();
+        if (!onlyBigOthers(others) || couldCastBeside(active, kellan.get())) {
             return Optional.empty();
         }
-        return Optional.of(Binding.empty().with("player", active)
-                .with("card", others.get(0)).with("spell", kellan.get()));
+        return Optional.of(Binding.empty().with(PLAYER, active)
+                .with(CARD, others.get(0)).with(SPELL, kellan.get()));
+    }
+
+    /** Whether the player holds another nonland card and none of mana value {@link #MOST_MANA_VALUE} or less. */
+    private static boolean onlyBigOthers(List<Card> others) {
+        return !others.isEmpty() && others.stream().noneMatch(card -> card.getCMC() <= MOST_MANA_VALUE);
+    }
+
+    /** Whether the player has the permanents making mana to cast Kellan beside a card of the Bears' mana value. */
+    private static boolean couldCastBeside(Player active, Card kellan) {
+        return Mana.manaSources(active).size() >= kellan.getCMC() + BEARS_MANA_VALUE;
     }
 }

@@ -4,6 +4,7 @@ import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.CountersOperation;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -47,15 +48,18 @@ public final class FinalChapterResolves {
     static final String FINAL_CHAPTER = "final-chapter";
     static final CounterEnumType LORE = CounterEnumType.LORE;
 
+    private static final Role<Card> SAGA = Role.card("saga");
+    private static final Role<Card> WATCHER = Role.card("watcher");
+
     private FinalChapterResolves() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, FinalChapterResolves::bind, FINAL_CHAPTER,
                 new Application(ForkOperation.COUNTERS, fork -> {
-                    Card saga = fork.card("saga");
+                    Card saga = fork.card(SAGA);
                     return new CountersOperation(saga, LORE, saga.getCounters(LORE) + 1);
-                }).keepingNegativesOf("watcher"));
+                }).keepingNegativesOf(WATCHER));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -74,7 +78,7 @@ public final class FinalChapterResolves {
                 .filter(card -> card.getCounters(LORE) >= 1
                         && card.getCounters(LORE) == card.getFinalChapterNr() - 2)
                 .findFirst()
-                .map(saga -> Binding.empty().with("saga", saga).with("watcher", watcher.get()));
+                .map(saga -> Binding.empty().with(SAGA, saga).with(WATCHER, watcher.get()));
     }
 
     /** Whether the trigger fires on a Saga's final chapter ability resolving. */

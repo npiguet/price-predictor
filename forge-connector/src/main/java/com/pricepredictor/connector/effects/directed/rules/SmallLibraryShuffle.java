@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.EmptyLibraryOperation;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -43,6 +44,8 @@ public final class SmallLibraryShuffle {
     public static final String RULE = "701.24e";
     static final String SCENARIO = "701.24e-2";
     static final String EMPTY_LIBRARY = "empty_library";
+    private static final Role<Player> SEARCHER = Role.player("searcher");
+    private static final Role<Card> SPELL = Role.card("spell");
 
     private SmallLibraryShuffle() {
     }
@@ -50,28 +53,29 @@ public final class SmallLibraryShuffle {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, SmallLibraryShuffle::bind, EMPTY_LIBRARY,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> new EmptyLibraryOperation(fork.player("searcher")))
-                        .forcing(ForcedPlay.cast("searcher", "spell").playing(Scan.LIBRARY_SEARCH_SPELL)));
+                        fork -> new EmptyLibraryOperation(fork.player(SEARCHER)))
+                        .forcing(ForcedPlay.cast(SEARCHER, SPELL).playing(Scan.LIBRARY_SEARCH_SPELL)));
     }
 
     static Optional<Binding> bind(Game live) {
         if (!Boards.atMainPhase(live)) {
             return Optional.empty();
         }
-        for (Player watcher : live.getPlayers()) {
-            if (!watchesOpponentsShuffles(watcher)) {
-                continue;
-            }
-            for (Player searcher : watcher.getOpponents()) {
-                boolean hasLibrary = !searcher.getCardsIn(ZoneType.Library).isEmpty();
-                List<Card> spells = Scan.searchersInHand(searcher);
-                if (hasLibrary && !spells.isEmpty()) {
-                    return Optional.of(Binding.empty().with("searcher", searcher)
-                            .with("spell", spells.get(0)));
-                }
-            }
+        return live.getPlayers().stream()
+                .filter(SmallLibraryShuffle::watchesOpponentsShuffles)
+                .flatMap(watcher -> watcher.getOpponents().stream())
+                .map(SmallLibraryShuffle::searcherBinding)
+                .flatMap(Optional::stream)
+                .findFirst();
+    }
+
+    /** The searcher with a library and the first spell of its hand that searches it, or empty. */
+    private static Optional<Binding> searcherBinding(Player searcher) {
+        List<Card> spells = Scan.searchersInHand(searcher);
+        if (searcher.getCardsIn(ZoneType.Library).isEmpty() || spells.isEmpty()) {
+            return Optional.empty();
         }
-        return Optional.empty();
+        return Optional.of(Binding.empty().with(SEARCHER, searcher).with(SPELL, spells.get(0)));
     }
 
     /** Whether {@code player} controls a permanent that triggers when an opponent shuffles their library. */

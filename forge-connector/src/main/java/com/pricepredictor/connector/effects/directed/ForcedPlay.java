@@ -1,6 +1,8 @@
 package com.pricepredictor.connector.effects.directed;
 
+import forge.game.card.Card;
 import forge.game.keyword.Keyword;
+import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
@@ -46,8 +48,8 @@ import java.util.function.Predicate;
  * @param defender the role of the attacked player or permanent, for an attack
  */
 public record ForcedPlay(
-        Kind kind, String actor, String source, Line line,
-        List<List<String>> targets, List<String> costs, boolean answer, String defender) {
+        Kind kind, Role<Player> actor, Role<Card> source, Line line,
+        List<List<Role<?>>> targets, List<Role<Card>> costs, boolean answer, Role<?> defender) {
 
     /** What a variant forces. */
     public enum Kind {
@@ -133,12 +135,12 @@ public record ForcedPlay(
     }
 
     /** {@code actor} casts the spell bound as {@code card}. */
-    public static ForcedPlay cast(String actor, String card) {
+    public static ForcedPlay cast(Role<Player> actor, Role<Card> card) {
         return new ForcedPlay(Kind.CAST, actor, card, Line.SPELL, List.of(), List.of(), false, null);
     }
 
     /** {@code actor} activates {@code line} of the card bound as {@code permanent}. */
-    public static ForcedPlay activate(String actor, String permanent, Line line) {
+    public static ForcedPlay activate(Role<Player> actor, Role<Card> permanent, Line line) {
         return new ForcedPlay(Kind.ACTIVATE, actor, permanent, line, List.of(), List.of(), false, null);
     }
 
@@ -147,12 +149,12 @@ public record ForcedPlay(
      * triggered ability of the card bound as {@code source} asks; another of
      * its lines with {@link #playing}.
      */
-    public static ForcedPlay answer(String actor, String source, boolean yes) {
+    public static ForcedPlay answer(Role<Player> actor, Role<Card> source, boolean yes) {
         return new ForcedPlay(Kind.ANSWER, actor, source, Line.TRIGGER, List.of(), List.of(), yes, null);
     }
 
     /** {@code actor}'s creature bound as {@code attacker} attacks what is bound as {@code defender}. */
-    public static ForcedPlay attack(String actor, String attacker, String defender) {
+    public static ForcedPlay attack(Role<Player> actor, Role<Card> attacker, Role<?> defender) {
         return new ForcedPlay(Kind.ATTACK, actor, attacker, null, List.of(), List.of(), false,
                 Objects.requireNonNull(defender, "defender"));
     }
@@ -161,14 +163,15 @@ public record ForcedPlay(
      * This play, its next targeting clause aimed at the objects bound as
      * {@code roles}; no role draws that clause's targets.
      */
-    public ForcedPlay targeting(String... roles) {
-        List<List<String>> more = new ArrayList<>(targets);
+    public ForcedPlay targeting(Role<?>... roles) {
+        List<List<Role<?>>> more = new ArrayList<>(targets);
         more.add(List.of(roles));
         return new ForcedPlay(kind, actor, source, line, more, costs, answer, defender);
     }
 
     /** This play, its cost sacrificing, discarding or exiling the cards bound as {@code roles}. */
-    public ForcedPlay paying(String... roles) {
+    @SafeVarargs
+    public final ForcedPlay paying(Role<Card>... roles) {
         return new ForcedPlay(kind, actor, source, line, targets, List.of(roles), answer, defender);
     }
 

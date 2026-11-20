@@ -51,7 +51,7 @@ public final class SimultaneousDamage {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, SimultaneousDamage::bind, KNIGHT_IN_PLACE,
                 new Application(ForkOperation.REPLACE_CARD,
-                        fork -> new ReplaceCardOperation(fork.card("blocker"), KNIGHT)));
+                        fork -> new ReplaceCardOperation(fork.card(Combats.BLOCKER), KNIGHT)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -67,8 +67,8 @@ public final class SimultaneousDamage {
             Card blocker = blockers.get(0);
             if (trade(combat, attacker, blocker) && knightKills(live, attacker, blocker)) {
                 return Optional.of(Binding.empty()
-                        .with("attacker", attacker)
-                        .with("blocker", blocker));
+                        .with(Combats.ATTACKER, attacker)
+                        .with(Combats.BLOCKER, blocker));
             }
         }
         return Optional.empty();

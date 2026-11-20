@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.CountersOperation;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -39,6 +40,9 @@ public final class TypeSettingAura {
     public static final String RULE = "205.1a";
     static final String SCENARIO = "205.1a-1";
     static final String COUNTER_KEPT = "counter-kept";
+    private static final Role<Player> CASTER = Role.player("caster");
+    private static final Role<Card> AURA = Role.card("aura");
+    private static final Role<Card> CREATURE = Role.card("creature");
 
     private TypeSettingAura() {
     }
@@ -46,8 +50,8 @@ public final class TypeSettingAura {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, TypeSettingAura::bind, COUNTER_KEPT,
                 new Application(ForkOperation.COUNTERS,
-                        fork -> new CountersOperation(fork.card("creature"), CounterEnumType.P1P1, 1))
-                        .forcing(ForcedPlay.cast("caster", "aura").targeting("creature")));
+                        fork -> new CountersOperation(fork.card(CREATURE), CounterEnumType.P1P1, 1))
+                        .forcing(ForcedPlay.cast(CASTER, AURA).targeting(CREATURE)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -55,27 +59,32 @@ public final class TypeSettingAura {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        for (Card aura : active.getCardsIn(ZoneType.Hand)) {
-            if (!aura.isAura() || !setsCardType(aura) || !Mana.affordable(active, aura)) {
-                continue;
-            }
-            SpellAbility spell = aura.getFirstSpellAbility();
-            if (spell == null) {
-                continue;
-            }
-            // Targets checked on a copy of the cast, never on the live ability.
-            SpellAbility cast = spell.copy(aura, active, true);
-            Optional<Card> creature = live.getCardsIn(ZoneType.Battlefield).stream()
-                    .filter(Card::isCreature)
-                    .filter(card -> card.getCounters(CounterEnumType.P1P1) == 0)
-                    .filter(card -> cast.canTarget(card))
-                    .min((a, b) -> Boolean.compare(a.getController() == active, b.getController() == active));
-            if (creature.isPresent()) {
-                return Optional.of(Binding.empty().with("caster", active).with("aura", aura)
-                        .with("creature", creature.get()));
-            }
+        return Scan.handCard(active, aura -> targetFor(live, active, aura).isPresent())
+                .flatMap(aura -> targetFor(live, active, aura).map(creature -> Binding.empty()
+                        .with(CASTER, active).with(AURA, aura).with(CREATURE, creature)));
+    }
+
+    /**
+     * The creature the type-setting Aura would enchant: one with no +1/+1
+     * counter that the Aura's cast can target, an opponent's before the
+     * active player's; empty for a card that is no such Aura.
+     */
+    private static Optional<Card> targetFor(Game live, Player active, Card aura) {
+        SpellAbility spell = aura.getFirstSpellAbility();
+        if (spell == null || !isTypeSettingAura(aura)) {
+            return Optional.empty();
         }
-        return Optional.empty();
+        // Targets checked on a copy of the cast, never on the live ability.
+        SpellAbility cast = spell.copy(aura, active, true);
+        return live.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(Card::isCreature)
+                .filter(card -> card.getCounters(CounterEnumType.P1P1) == 0)
+                .filter(card -> cast.canTarget(card))
+                .min((a, b) -> Boolean.compare(a.getController() == active, b.getController() == active));
+    }
+
+    private static boolean isTypeSettingAura(Card aura) {
+        return aura.isAura() && setsCardType(aura);
     }
 
     /**
@@ -84,12 +93,11 @@ public final class TypeSettingAura {
      * ({@code RemoveCardTypes$ True}) and adds the ones it names.
      */
     static boolean setsCardType(Card aura) {
-        for (StaticAbility stAb : aura.getStaticAbilities()) {
-            if ("Continuous".equals(stAb.getParam("Mode")) && "True".equals(stAb.getParam("RemoveCardTypes"))
-                    && stAb.hasParam("AddType") && Scripts.lists(stAb.getParam("Affected"), "Card.EnchantedBy")) {
-                return true;
-            }
-        }
-        return false;
+        return aura.getStaticAbilities().stream().anyMatch(TypeSettingAura::setsEnchantedCardType);
+    }
+
+    private static boolean setsEnchantedCardType(StaticAbility stAb) {
+        return "Continuous".equals(stAb.getParam("Mode")) && "True".equals(stAb.getParam("RemoveCardTypes"))
+                && stAb.hasParam("AddType") && Scripts.lists(stAb.getParam("Affected"), "Card.EnchantedBy");
     }
 }

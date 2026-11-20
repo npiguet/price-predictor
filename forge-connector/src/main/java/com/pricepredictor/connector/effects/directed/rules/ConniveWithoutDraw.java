@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -47,14 +48,18 @@ public final class ConniveWithoutDraw {
      */
     static final ForcedPlay.Line CONNIVING = Scan.acting("Connive");
 
+    private static final Role<Player> PLAYER = Role.player("player");
+    private static final Role<Card> CONNIVER = Role.card("conniver");
+    private static final Role<Player> OPPONENT = Role.player("opponent");
+
     private ConniveWithoutDraw() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, ConniveWithoutDraw::bind, SPIRIT_ADDED,
                 new Application(ForkOperation.ADD_PERMANENT,
-                        fork -> AddPermanentOperation.tapped(SPIRIT, fork.player("opponent")))
-                        .forcing(ForcedPlay.cast("player", "conniver").playing(CONNIVING)));
+                        fork -> AddPermanentOperation.tapped(SPIRIT, fork.player(OPPONENT)))
+                        .forcing(ForcedPlay.cast(PLAYER, CONNIVER).playing(CONNIVING)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -68,8 +73,8 @@ public final class ConniveWithoutDraw {
             return Optional.empty();
         }
         return active.getOpponents().stream().findFirst()
-                .map(opponent -> Binding.empty().with("player", active).with("conniver", conniver.get())
-                        .with("opponent", opponent));
+                .map(opponent -> Binding.empty().with(PLAYER, active).with(CONNIVER, conniver.get())
+                        .with(OPPONENT, opponent));
     }
 
     /**

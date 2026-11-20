@@ -11,7 +11,6 @@ import forge.game.combat.Combat;
 import forge.game.combat.CombatUtil;
 import forge.game.keyword.Keyword;
 import forge.game.phase.PhaseType;
-import forge.game.player.Player;
 
 import java.util.List;
 import java.util.Optional;
@@ -51,7 +50,7 @@ public final class SkulkBlocker {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, SkulkBlocker::bind, LESSER_POWER,
                 new Application(ForkOperation.REPLACE_CARD,
-                        fork -> new ReplaceCardOperation(fork.card("blocker"), ELVES)));
+                        fork -> new ReplaceCardOperation(fork.card(Combats.BLOCKER), ELVES)));
     }
 
     /**
@@ -70,24 +69,25 @@ public final class SkulkBlocker {
         if (!Boards.at(live, PhaseType.COMBAT_DECLARE_BLOCKERS) || combat == null) {
             return Optional.empty();
         }
-        for (Card attacker : combat.getAttackers()) {
-            int power = attacker.getNetPower();
-            if (!attacker.hasKeyword(Keyword.SKULK) || otherEvasions().stream().anyMatch(attacker::hasKeyword)) {
-                continue;
-            }
-            Player defender = combat.getDefenderPlayerByAttacker(attacker);
-            if (defender == null) {
-                continue;
-            }
-            for (Card creature : Boards.untappedCreatures(defender)) {
-                if (creature.getNetPower() > power && CombatUtil.canBlock(creature)
-                        && !CombatUtil.canBlock(attacker, creature)
-                        && ReplaceCardOperation.replacementPower(creature, ELVES) < power
-                        && Boards.replacementSurvives(creature, ELVES)) {
-                    return Optional.of(Binding.empty().with("attacker", attacker).with("blocker", creature));
-                }
-            }
-        }
-        return Optional.empty();
+        return Combats.blockersKeptOut(combat, SkulkBlocker::keptOutByOnlySkulk);
+    }
+
+    /**
+     * Whether the Elves' stand-in replaces {@code creature}, which the attacker
+     * could not be blocked by now: the attacker has skulk and no other evasion
+     * ({@link #otherEvasions}), the creature has more power and could block
+     * but for skulk, and the Elves in its place have less power than the
+     * attacker and survive the replacement.
+     */
+    private static boolean keptOutByOnlySkulk(Card attacker, Card creature) {
+        int power = attacker.getNetPower();
+        return hasOnlySkulk(attacker) && creature.getNetPower() > power && CombatUtil.canBlock(creature)
+                && !CombatUtil.canBlock(attacker, creature)
+                && ReplaceCardOperation.replacementPower(creature, ELVES) < power
+                && Boards.replacementSurvives(creature, ELVES);
+    }
+
+    private static boolean hasOnlySkulk(Card attacker) {
+        return attacker.hasKeyword(Keyword.SKULK) && otherEvasions().stream().noneMatch(attacker::hasKeyword);
     }
 }

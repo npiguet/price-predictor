@@ -6,6 +6,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
 import forge.game.Game;
 import forge.game.ability.ApiType;
@@ -41,14 +42,17 @@ public final class MutagenToken {
     static final String MANA_AVAILABLE = "mana_available";
     static final String ISLAND = Cards.ISLAND;
 
+    private static final Role<Player> PLAYER = Role.player("player");
+    private static final Role<Card> TOKEN = Role.card("token");
+
     private MutagenToken() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, MutagenToken::bind, MANA_AVAILABLE,
                 new Application(ForkOperation.ADD_PERMANENT,
-                        fork -> AddPermanentOperation.of(ISLAND, fork.player("player"), false))
-                        .forcing(ForcedPlay.activate("player", "token", ForcedPlay.Line.api("PutCounter"))));
+                        fork -> AddPermanentOperation.of(ISLAND, fork.player(PLAYER), false))
+                        .forcing(ForcedPlay.activate(PLAYER, TOKEN, ForcedPlay.Line.api("PutCounter"))));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -61,7 +65,7 @@ public final class MutagenToken {
                 .filter(card -> counterAbility(card).noneMatch(ability ->
                         PlayabilityVerdict.of(ability, active).affordable()))
                 .findFirst()
-                .map(token -> Binding.empty().with("player", active).with("token", token));
+                .map(token -> Binding.empty().with(PLAYER, active).with(TOKEN, token));
     }
 
     /** Whether the card is a Mutagen token with its counter ability. */

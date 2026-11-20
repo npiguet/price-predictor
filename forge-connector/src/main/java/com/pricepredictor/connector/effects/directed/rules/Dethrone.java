@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.BoardEdit;
 import com.pricepredictor.connector.effects.directed.operations.LifeOperation;
 import forge.game.Game;
@@ -14,7 +15,6 @@ import forge.game.keyword.Keyword;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
-import forge.game.trigger.Trigger;
 import forge.game.zone.ZoneType;
 
 import java.util.Optional;
@@ -52,6 +52,9 @@ public final class Dethrone {
     public static final String RULE = "702.105a";
     static final String SCENARIO = "702.105a-1";
     static final String TIED = "tied";
+    private static final Role<Player> PLAYER = Role.player("player");
+    private static final Role<Card> ATTACKER = Role.card("attacker");
+    private static final Role<Player> OPPONENT = Role.player("opponent");
 
     private Dethrone() {
     }
@@ -59,7 +62,7 @@ public final class Dethrone {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, Dethrone::bind, TIED,
                 new Application(ForkOperation.LIFE, Dethrone::tied)
-                        .forcing(ForcedPlay.attack("player", "attacker", "opponent")));
+                        .forcing(ForcedPlay.attack(PLAYER, ATTACKER, OPPONENT)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -70,23 +73,18 @@ public final class Dethrone {
         Optional<Card> attacker = Boards.untappedCreatures(active).stream()
                 .filter(creature -> creature.hasKeyword(Keyword.DETHRONE) && !creature.isSick())
                 .findFirst();
-        if (attacker.isEmpty()) {
-            return Optional.empty();
-        }
-        if (canGrowTheAttack(active)) {
+        if (attacker.isEmpty() || canGrowTheAttack(active)) {
             return Optional.empty();
         }
         int reach = attackReach(active);
-        for (Player opponent : active.getOpponents()) {
-            int most = Boards.mostLifeBesides(opponent);
-            if (opponent.getLife() > most && most > reach) {
-                return Optional.of(Binding.empty()
-                        .with("player", active)
-                        .with("attacker", attacker.get())
-                        .with("opponent", opponent));
-            }
-        }
-        return Optional.empty();
+        return active.getOpponents().stream()
+                .filter(opponent -> opponent.getLife() > Boards.mostLifeBesides(opponent)
+                        && Boards.mostLifeBesides(opponent) > reach)
+                .findFirst()
+                .map(opponent -> Binding.empty()
+                        .with(PLAYER, active)
+                        .with(ATTACKER, attacker.get())
+                        .with(OPPONENT, opponent));
     }
 
     /**
@@ -120,22 +118,24 @@ public final class Dethrone {
      * flash) with one.
      */
     static boolean canGrowTheAttack(Player active) {
-        for (Card permanent : active.getCardsIn(ZoneType.Battlefield)) {
-            for (Trigger trigger : permanent.getTriggers()) {
-                if (trigger.getMode().name().startsWith("Attack") && !trigger.isKeyword(Keyword.DETHRONE)) {
-                    return true;
-                }
-            }
-            for (SpellAbility ability : permanent.getSpellAbilities()) {
-                if (ability.isActivatedAbility() && !ability.isManaAbility() && grows(ability)) {
-                    return true;
-                }
-            }
-        }
-        return active.getCardsIn(ZoneType.Hand).stream()
-                .filter(card -> card.isInstant() || card.hasKeyword(Keyword.FLASH))
-                .filter(card -> Mana.affordable(active, card))
-                .anyMatch(card -> card.getSpells().stream().anyMatch(Dethrone::grows));
+        return active.getCardsIn(ZoneType.Battlefield).stream().anyMatch(Dethrone::growsAsItAttacks)
+                || Scan.handCard(active, Dethrone::flashGrower).isPresent();
+    }
+
+    /** Whether the permanent has an attack trigger other than dethrone's, or an activated pump, counter or damage ability. */
+    private static boolean growsAsItAttacks(Card permanent) {
+        return permanent.getTriggers().stream()
+                .anyMatch(trigger -> trigger.getMode().name().startsWith("Attack") && !trigger.isKeyword(Keyword.DETHRONE))
+                || permanent.getSpellAbilities().stream().anyMatch(Dethrone::growingActivation);
+    }
+
+    private static boolean growingActivation(SpellAbility ability) {
+        return ability.isActivatedAbility() && !ability.isManaAbility() && grows(ability);
+    }
+
+    /** Whether the card is an instant or has flash, and a spell of it has a {@link #GROWING} API. */
+    private static boolean flashGrower(Card card) {
+        return (card.isInstant() || card.hasKeyword(Keyword.FLASH)) && card.getSpells().stream().anyMatch(Dethrone::grows);
     }
 
     /** Whether a clause of the ability's chain has one of the {@link #GROWING} APIs. */
@@ -149,7 +149,7 @@ public final class Dethrone {
     }
 
     private static BoardEdit tied(Binding fork) {
-        Player opponent = fork.player("opponent");
+        Player opponent = fork.player(OPPONENT);
         return new LifeOperation(opponent, Boards.mostLifeBesides(opponent));
     }
 }

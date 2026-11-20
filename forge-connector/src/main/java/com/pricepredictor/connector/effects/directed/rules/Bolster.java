@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
 import forge.game.Game;
 import forge.game.ability.ApiType;
@@ -39,14 +40,17 @@ public final class Bolster {
     /** A spell of the card that bolsters ({@link #bolsters}): what the precondition finds and the fork casts. */
     static final ForcedPlay.Line BOLSTERING = ForcedPlay.Line.spell("bolster", Bolster::bolsters);
 
+    private static final Role<Player> PLAYER = Role.player("player");
+    private static final Role<Card> CARD = Role.card("card");
+
     private Bolster() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, Bolster::bind, HAS_CREATURE,
                 new Application(ForkOperation.ADD_PERMANENT,
-                        fork -> AddPermanentOperation.of(BEARS, fork.player("player"), true))
-                        .forcing(ForcedPlay.cast("player", "card").playing(BOLSTERING)));
+                        fork -> AddPermanentOperation.of(BEARS, fork.player(PLAYER), true))
+                        .forcing(ForcedPlay.cast(PLAYER, CARD).playing(BOLSTERING)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -58,7 +62,7 @@ public final class Bolster {
         if (!active.getCreaturesInPlay().isEmpty() || spells.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(Binding.empty().with("player", active).with("card", spells.get(0)));
+        return Optional.of(Binding.empty().with(PLAYER, active).with(CARD, spells.get(0)));
     }
 
     /** Whether the spell bolsters as its first act: a {@code PutCounter} root with {@code Bolster$}. */

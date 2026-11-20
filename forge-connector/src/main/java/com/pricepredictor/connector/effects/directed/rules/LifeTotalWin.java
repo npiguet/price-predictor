@@ -4,6 +4,7 @@ import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.BoardEdit;
 import com.pricepredictor.connector.effects.directed.operations.LifeOperation;
 import forge.game.Game;
@@ -12,7 +13,6 @@ import forge.game.card.Card;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.trigger.Trigger;
-import forge.game.trigger.TriggerType;
 import forge.game.zone.ZoneType;
 
 import java.util.Optional;
@@ -39,6 +39,8 @@ public final class LifeTotalWin {
     public static final String RULE = "104.2b";
     static final String SCENARIO = "104.2b-1";
     static final String FORTY = "forty";
+    private static final Role<Card> PERMANENT = Role.card("permanent");
+    private static final Role<Player> PLAYER = Role.player("player");
 
     private LifeTotalWin() {
     }
@@ -53,40 +55,35 @@ public final class LifeTotalWin {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        for (Card permanent : active.getCardsIn(ZoneType.Battlefield)) {
-            Optional<Integer> needed = winningLife(permanent);
-            if (needed.isPresent() && active.getLife() < needed.get() && active.getLife() > 0
-                    && active.canGainLife()) {
-                return Optional.of(Binding.empty().with("permanent", permanent).with("player", active));
-            }
+        if (active.getLife() <= 0 || !active.canGainLife()) {
+            return Optional.empty();
         }
-        return Optional.empty();
+        return active.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(permanent -> winningLife(permanent).filter(needed -> active.getLife() < needed).isPresent())
+                .findFirst()
+                .map(permanent -> Binding.empty().with(PERMANENT, permanent).with(PLAYER, active));
     }
 
     /** The life total at which the permanent's upkeep trigger wins its controller the game, if it has one. */
     static Optional<Integer> winningLife(Card permanent) {
-        for (Trigger trigger : permanent.getTriggers()) {
-            if (trigger.getMode() != TriggerType.Phase
-                    || !"Upkeep".equals(trigger.getParam("Phase"))
-                    || !"You".equals(trigger.getParam("ValidPlayer"))
-                    || !"You".equals(trigger.getParam("LifeTotal"))
-                    || !ApiType.WinsGame.name().equals(Scripts.api(Scripts.executed(trigger)))) {
-                continue;
-            }
-            String amount = trigger.getParam("LifeAmount");
-            if (amount != null && amount.startsWith("GE")) {
-                Optional<Integer> needed = Scripts.number(amount.substring(2));
-                if (needed.isPresent()) {
-                    return needed;
-                }
-            }
-        }
-        return Optional.empty();
+        return permanent.getTriggers().stream()
+                .filter(LifeTotalWin::winsAtLifeTotal)
+                .map(trigger -> trigger.getParam("LifeAmount"))
+                .filter(amount -> amount != null && amount.startsWith("GE"))
+                .flatMap(amount -> Scripts.number(amount.substring(2)).stream())
+                .findFirst();
+    }
+
+    /** Whether the trigger is its controller's upkeep trigger that wins the game on a life total. */
+    private static boolean winsAtLifeTotal(Trigger trigger) {
+        return Triggers.atUpkeep(trigger) && "You".equals(trigger.getParam("ValidPlayer"))
+                && "You".equals(trigger.getParam("LifeTotal"))
+                && ApiType.WinsGame.name().equals(Scripts.api(Scripts.executed(trigger)));
     }
 
     private static BoardEdit winning(Binding fork) {
-        int needed = winningLife(fork.card("permanent")).orElseThrow(
+        int needed = winningLife(fork.card(PERMANENT)).orElseThrow(
                 () -> new IllegalStateException("the fork's permanent wins no game"));
-        return new LifeOperation(fork.player("player"), needed);
+        return new LifeOperation(fork.player(PLAYER), needed);
     }
 }

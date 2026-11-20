@@ -4,6 +4,7 @@ import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.ReplaceCardOperation;
 import forge.game.Game;
 import forge.game.ability.ApiType;
@@ -12,7 +13,6 @@ import forge.game.keyword.Keyword;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.trigger.Trigger;
-import forge.game.trigger.TriggerType;
 import forge.game.zone.ZoneType;
 
 import java.util.List;
@@ -45,6 +45,7 @@ public final class SharedKeywords {
     static final String SCENARIO = "702.1c-1";
     static final String NO_KEYWORDS = "no_keywords";
     static final String GIANT = Cards.GIANT;
+    private static final Role<Card> CREATURE = Role.card("creature");
 
     private SharedKeywords() {
     }
@@ -52,37 +53,34 @@ public final class SharedKeywords {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, SharedKeywords::bind, NO_KEYWORDS,
                 new Application(ForkOperation.REPLACE_CARD,
-                        fork -> new ReplaceCardOperation(fork.card("creature"), GIANT)));
+                        fork -> new ReplaceCardOperation(fork.card(CREATURE), GIANT)));
     }
 
     static Optional<Binding> bind(Game live) {
         if (!Boards.at(live, PhaseType.UPKEEP)) {
             return Optional.empty();
         }
-        for (Player player : live.getPlayers()) {
-            for (Card permanent : player.getCardsIn(ZoneType.Battlefield)) {
-                for (Trigger trigger : permanent.getTriggers()) {
-                    Optional<Card> holder = sharedKeywords(trigger).flatMap(listed -> soleHolder(player, listed));
-                    if (holder.isPresent()) {
-                        return Optional.of(Binding.empty().with("creature", holder.get()));
-                    }
-                }
-            }
-        }
-        return Optional.empty();
+        return live.getPlayers().stream()
+                .flatMap(player -> player.getCardsIn(ZoneType.Battlefield).stream()
+                        .flatMap(permanent -> permanent.getTriggers().stream())
+                        .map(trigger -> sharedKeywords(trigger).flatMap(listed -> soleHolder(player, listed)))
+                        .flatMap(Optional::stream))
+                .findFirst()
+                .map(holder -> Binding.empty().with(CREATURE, holder));
     }
 
     /** The keywords a beginning-of-upkeep trigger shares among its controller's creatures, if it is one. */
     static Optional<Set<Keyword>> sharedKeywords(Trigger trigger) {
-        if (trigger.getMode() != TriggerType.Phase || !"Upkeep".equals(trigger.getParam("Phase"))) {
+        if (!Triggers.atUpkeep(trigger)) {
             return Optional.empty();
         }
         Map<String, String> pump = Scripts.executed(trigger);
-        if (!ApiType.PumpAll.name().equals(Scripts.api(pump)) || !pump.containsKey("SharedKeywordsZone")
-                || pump.get("KW") == null) {
-            return Optional.empty();
-        }
-        return Optional.of(Keyword.setValueOf(pump.get("KW")));
+        return sharesKeywords(pump) ? Optional.of(Keyword.setValueOf(pump.get("KW"))) : Optional.empty();
+    }
+
+    private static boolean sharesKeywords(Map<String, String> pump) {
+        return ApiType.PumpAll.name().equals(Scripts.api(pump)) && pump.containsKey("SharedKeywordsZone")
+                && pump.get("KW") != null;
     }
 
     /**

@@ -4,6 +4,7 @@ import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.TapOperation;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -40,13 +41,16 @@ public final class WebSlinging {
     static final String SCENARIO = "702.188a-1";
     static final String CREATURE_UNTAPPED = "creature_untapped";
 
+    private static final Role<Card> CREATURE = Role.card("creature");
+    private static final Role<Card> CARD = Role.card("card");
+
     private WebSlinging() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, WebSlinging::bind, CREATURE_UNTAPPED,
-                new Application(ForkOperation.TAP, fork -> new TapOperation(fork.card("creature"), false))
-                        .keepingCandidatesOf("card"));
+                new Application(ForkOperation.TAP, fork -> new TapOperation(fork.card(CREATURE), false))
+                        .keepingCandidatesOf(CARD));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -61,6 +65,6 @@ public final class WebSlinging {
         return active.getCardsIn(ZoneType.Hand).stream()
                 .filter(card -> Mana.canPayKeyword(active, card, Keyword.WEB_SLINGING))
                 .findFirst()
-                .map(card -> Binding.empty().with("creature", tapped.get(0)).with("card", card));
+                .map(card -> Binding.empty().with(CREATURE, tapped.get(0)).with(CARD, card));
     }
 }

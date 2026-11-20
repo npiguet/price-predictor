@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.RemovePermanentOperation;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -40,14 +41,18 @@ public final class Champion {
     static final String SCENARIO = "607.2k-1";
     static final String NO_CREATURE_TO_CHAMPION = "no_creature_to_champion";
 
+    private static final Role<Player> PLAYER = Role.player("player");
+    private static final Role<Card> CREATURE = Role.card("creature");
+    private static final Role<Card> CARD = Role.card("card");
+
     private Champion() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, Champion::bind, NO_CREATURE_TO_CHAMPION,
                 new Application(ForkOperation.REMOVE_PERMANENT,
-                        fork -> new RemovePermanentOperation(fork.card("creature")))
-                        .forcing(ForcedPlay.cast("player", "card")));
+                        fork -> new RemovePermanentOperation(fork.card(CREATURE)))
+                        .forcing(ForcedPlay.cast(PLAYER, CARD)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -55,16 +60,18 @@ public final class Champion {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        for (Card card : active.getCardsIn(ZoneType.Hand)) {
-            for (KeywordInterface champion : card.getKeywords(Keyword.CHAMPION)) {
-                List<Card> candidates = championable(champion, card, active);
-                if (candidates.size() == 1 && Mana.affordable(active, card)) {
-                    return Optional.of(Binding.empty().with("player", active)
-                            .with("creature", candidates.get(0)).with("card", card));
-                }
-            }
-        }
-        return Optional.empty();
+        return Scan.handCard(active, card -> soleCandidate(card, active).isPresent())
+                .flatMap(card -> soleCandidate(card, active).map(creature -> Binding.empty()
+                        .with(PLAYER, active).with(CREATURE, creature).with(CARD, card)));
+    }
+
+    /** The one permanent the first champion keyword of the card that has exactly one candidate could exile. */
+    private static Optional<Card> soleCandidate(Card card, Player active) {
+        return card.getKeywords(Keyword.CHAMPION).stream()
+                .map(champion -> championable(champion, card, active))
+                .filter(candidates -> candidates.size() == 1)
+                .map(candidates -> candidates.get(0))
+                .findFirst();
     }
 
     /**

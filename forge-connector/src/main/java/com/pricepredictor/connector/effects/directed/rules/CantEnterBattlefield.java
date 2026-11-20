@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
 import forge.game.Game;
 import forge.game.ability.ApiType;
@@ -45,6 +46,8 @@ public final class CantEnterBattlefield {
     public static final String RULE = "614.17d";
     static final String SCENARIO = "614.17d-1";
     static final String CAGE = "cage";
+    private static final Role<Player> PLAYER = Role.player("player");
+    private static final Role<Card> CARD = Role.card("card");
     static final String GRAFDIGGERS_CAGE = "Grafdigger's Cage";
     /** A spell of the card that reanimates ({@link #reanimates}): what the precondition finds and the fork casts. */
     static final ForcedPlay.Line REANIMATION = ForcedPlay.Line.spell("reanimation", CantEnterBattlefield::reanimates);
@@ -55,8 +58,8 @@ public final class CantEnterBattlefield {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, CantEnterBattlefield::bind, CAGE,
                 new Application(ForkOperation.ADD_PERMANENT,
-                        fork -> AddPermanentOperation.of(GRAFDIGGERS_CAGE, fork.player("player"), false))
-                        .forcing(ForcedPlay.cast("player", "card").playing(REANIMATION)));
+                        fork -> AddPermanentOperation.of(GRAFDIGGERS_CAGE, fork.player(PLAYER), false))
+                        .forcing(ForcedPlay.cast(PLAYER, CARD).playing(REANIMATION)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -70,7 +73,7 @@ public final class CantEnterBattlefield {
         return Scan.castableSpellsInHand(active, REANIMATION).stream()
                 .filter(spell -> returnsACreature(spell, active))
                 .findFirst()
-                .map(spell -> Binding.empty().with("player", active).with("card", spell.getHostCard()));
+                .map(spell -> Binding.empty().with(PLAYER, active).with(CARD, spell.getHostCard()));
     }
 
     /**
@@ -93,15 +96,13 @@ public final class CantEnterBattlefield {
 
     /** Whether one of the permanent's replacement effects stops a card entering the battlefield from a graveyard. */
     static boolean stopsEntering(Card permanent) {
-        for (ReplacementEffect replacement : permanent.getReplacementEffects()) {
-            if (replacement.getMode() == ReplacementType.Moved
-                    && Scripts.lists(replacement.getParam("Destination"), "Battlefield")
-                    && Scripts.lists(replacement.getParam("Origin"), "Graveyard")
-                    && "True".equals(replacement.getParam("Prevent"))) {
-                return true;
-            }
-        }
-        return false;
+        return permanent.getReplacementEffects().stream().anyMatch(CantEnterBattlefield::preventsReanimation);
+    }
+
+    private static boolean preventsReanimation(ReplacementEffect replacement) {
+        return replacement.getMode() == ReplacementType.Moved && "True".equals(replacement.getParam("Prevent"))
+                && Scripts.lists(replacement.getParam("Destination"), "Battlefield")
+                && Scripts.lists(replacement.getParam("Origin"), "Graveyard");
     }
 
     /** Whether the spell puts a card from a graveyard onto the battlefield. */

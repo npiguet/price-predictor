@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.EmptyLibraryOperation;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -44,14 +45,17 @@ public final class ExploreEmptyLibrary {
      */
     static final ForcedPlay.Line EXPLORING = Scan.acting("Explore");
 
+    private static final Role<Player> PLAYER = Role.player("player");
+    private static final Role<Card> CARD = Role.card("card");
+
     private ExploreEmptyLibrary() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, ExploreEmptyLibrary::bind, EMPTY_LIBRARY,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> new EmptyLibraryOperation(fork.player("player")))
-                        .forcing(ForcedPlay.cast("player", "card").playing(EXPLORING)));
+                        fork -> new EmptyLibraryOperation(fork.player(PLAYER)))
+                        .forcing(ForcedPlay.cast(PLAYER, CARD).playing(EXPLORING)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -64,6 +68,6 @@ public final class ExploreEmptyLibrary {
         if (active.getCardsIn(ZoneType.Library).isEmpty()) {
             return Optional.empty();
         }
-        return explorer.map(card -> Binding.empty().with("player", active).with("card", card));
+        return explorer.map(card -> Binding.empty().with(PLAYER, active).with(CARD, card));
     }
 }

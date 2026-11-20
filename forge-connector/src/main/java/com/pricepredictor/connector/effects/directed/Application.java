@@ -87,6 +87,11 @@ public record Application(
         }, more);
     }
 
+    /** {@link #making(String, BiFunction)} for a typed role. */
+    public Application making(Role<Card> role, BiFunction<Binding, Game, Card> find) {
+        return making(role.name(), find);
+    }
+
     /** The fork's binding once its edit is applied to {@code fork}: with the roles of the cards it made. */
     public Binding afterEdit(Binding forked, Game fork) {
         return Objects.requireNonNull(made.apply(forked, fork), "made");
@@ -95,6 +100,16 @@ public record Application(
     /** This variant, its fork keeping the decision candidates of the card bound as {@code role}. */
     public Application keepingCandidatesOf(String role) {
         return keeping(fork -> KeptRecords.candidatesOf(fork.card(role)));
+    }
+
+    /** This variant, its fork keeping the decision candidates of the card bound as {@code role}. */
+    public Application keepingCandidatesOf(Role<Card> role) {
+        return keepingCandidatesOf(role.name());
+    }
+
+    /** This variant, its fork keeping the not-fired evaluations of the triggers the card bound as {@code role} hosts. */
+    public Application keepingNegativesOf(Role<Card> role) {
+        return keepingNegativesOf(role.name());
     }
 
     /** This variant, its fork keeping the not-fired evaluations of the triggers the card bound as {@code role} hosts. */

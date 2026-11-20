@@ -4,8 +4,10 @@ import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.ReplaceCardOperation;
 import forge.game.Game;
+import forge.game.card.Card;
 
 import java.util.Optional;
 
@@ -47,6 +49,9 @@ public final class Meld {
     static final String PAIR_SCENARIO = "712.4a-2";
     static final String MELD_PAIR = "meld_pair";
 
+    private static final Role<Card> HOST = Role.card("host");
+    private static final Role<Card> STAND_IN = Role.card("stand-in");
+
     private Meld() {
     }
 
@@ -58,14 +63,14 @@ public final class Meld {
 
     /** The partner the host names, in the stand-in's place. */
     private static Application pairing() {
-        return new Application(ForkOperation.REPLACE_CARD, fork -> new ReplaceCardOperation(fork.card("stand-in"),
-                Melds.partnerName(fork.card("host")).orElseThrow(
+        return new Application(ForkOperation.REPLACE_CARD, fork -> new ReplaceCardOperation(fork.card(STAND_IN),
+                Melds.partnerName(fork.card(HOST)).orElseThrow(
                         () -> new IllegalStateException("the fork's host names no partner"))));
     }
 
     static Optional<Binding> bind(Game live) {
         return Melds.unpairedOfActivePlayer(live).stream()
                 .findFirst()
-                .map(unpaired -> Binding.empty().with("host", unpaired.host()).with("stand-in", unpaired.standIn()));
+                .map(unpaired -> Binding.empty().with(HOST, unpaired.host()).with(STAND_IN, unpaired.standIn()));
     }
 }

@@ -11,7 +11,6 @@ import forge.game.card.CounterEnumType;
 import forge.game.combat.Combat;
 import forge.game.keyword.Keyword;
 import forge.game.phase.PhaseType;
-import forge.game.player.Player;
 
 import java.util.Optional;
 
@@ -43,7 +42,7 @@ public final class UnleashCantBlock {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, UnleashCantBlock::bind, NO_COUNTER,
                 new Application(ForkOperation.COUNTERS,
-                        fork -> new CountersOperation(fork.card("blocker"), CounterEnumType.P1P1, 0)));
+                        fork -> new CountersOperation(fork.card(Combats.BLOCKER), CounterEnumType.P1P1, 0)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -51,27 +50,22 @@ public final class UnleashCantBlock {
         if (!Boards.at(live, PhaseType.COMBAT_DECLARE_BLOCKERS) || combat == null) {
             return Optional.empty();
         }
-        for (Card attacker : combat.getAttackers()) {
-            Player defender = combat.getDefenderPlayerByAttacker(attacker);
-            if (defender == null) {
-                continue;
-            }
-            for (Card creature : Boards.untappedCreatures(defender)) {
-                if (creature.hasKeyword(Keyword.UNLEASH) && creature.getCounters(CounterEnumType.P1P1) > 0
-                        && survivesWithoutItsCounters(creature)) {
-                    return Optional.of(Binding.empty()
-                            .with("attacker", attacker)
-                            .with("blocker", creature));
-                }
-            }
-        }
-        return Optional.empty();
+        return Combats.blockersKeptOut(combat, (attacker, creature) -> unleashedWithCounters(creature));
+    }
+
+    private static boolean unleashedWithCounters(Card creature) {
+        return creature.hasKeyword(Keyword.UNLEASH) && creature.getCounters(CounterEnumType.P1P1) > 0
+                && survivesWithoutItsCounters(creature);
     }
 
     /** Whether the creature, its +1/+1 counters taken away, is not put into a graveyard by the next check. */
     static boolean survivesWithoutItsCounters(Card creature) {
         int toughness = creature.getNetToughness() - creature.getCounters(CounterEnumType.P1P1);
         int damage = creature.getDamage();
-        return toughness > 0 && damage < toughness && !(damage > 0 && creature.hasBeenDealtDeathtouchDamage());
+        return toughness > 0 && damage < toughness && !deathtouchWounded(creature);
+    }
+
+    private static boolean deathtouchWounded(Card creature) {
+        return creature.getDamage() > 0 && creature.hasBeenDealtDeathtouchDamage();
     }
 }

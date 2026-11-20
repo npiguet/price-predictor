@@ -5,10 +5,9 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.CountersOperation;
 import forge.game.Game;
-import forge.game.zone.ZoneType;
-import forge.game.trigger.TriggerType;
 import forge.game.player.Player;
 import forge.game.card.Card;
 import forge.game.ability.ApiType;
@@ -45,14 +44,18 @@ public final class PoisonLoss {
     /** The poison counters one short of the ten that lose the game. */
     static final int ONE_SHORT = 9;
 
+    private static final Role<Player> PLAYER = Role.player("player");
+    private static final Role<Player> CASTER = Role.player("caster");
+    private static final Role<Card> CARD = Role.card("card");
+
     private PoisonLoss() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, PoisonLoss::bind, NINE,
                 new Application(ForkOperation.COUNTERS,
-                        fork -> new CountersOperation(fork.player("player"), CounterEnumType.POISON, ONE_SHORT))
-                        .forcing(ForcedPlay.cast("caster", "card")));
+                        fork -> new CountersOperation(fork.player(PLAYER), CounterEnumType.POISON, ONE_SHORT))
+                        .forcing(ForcedPlay.cast(CASTER, CARD)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -60,17 +63,15 @@ public final class PoisonLoss {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        Optional<Card> source = active.getCardsIn(ZoneType.Hand).stream()
-                .filter(card -> poisonsEachPlayer(card) && Mana.affordable(active, card))
-                .findFirst();
+        Optional<Card> source = Scan.handCard(active, PoisonLoss::poisonsEachPlayer);
         if (source.isEmpty()) {
             return Optional.empty();
         }
         return active.getOpponents().stream()
                 .filter(player -> player.getPoisonCounters() < ONE_SHORT)
                 .findFirst()
-                .map(player -> Binding.empty().with("player", player)
-                        .with("caster", active).with("card", source.get()));
+                .map(player -> Binding.empty().with(PLAYER, player)
+                        .with(CASTER, active).with(CARD, source.get()));
     }
 
     /**
@@ -81,11 +82,8 @@ public final class PoisonLoss {
     static boolean poisonsEachPlayer(Card card) {
         boolean spell = card.getSpells().stream()
                 .anyMatch(ability -> ability.getApi() == ApiType.Poison && "Player".equals(ability.getParam("Defined")));
-        boolean entering = card.getTriggers().stream()
-                .filter(Triggers::entersItself)
-                .map(Scripts::executed)
-                .anyMatch(script -> ApiType.Poison.name().equals(Scripts.api(script))
-                        && "Player".equals(script.get("Defined")));
+        boolean entering = Scan.entersTrigger(card, ApiType.Poison.name()).stream()
+                .anyMatch(script -> "Player".equals(script.get("Defined")));
         return spell || entering;
     }
 }

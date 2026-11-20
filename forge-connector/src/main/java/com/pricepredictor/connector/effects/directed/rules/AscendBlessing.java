@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -45,14 +46,17 @@ public final class AscendBlessing {
     static final String ISLAND = Cards.ISLAND;
     static final int NINE = 9;
 
+    private static final Role<Player> PLAYER = Role.player("player");
+    private static final Role<Card> SPELL = Role.card("spell");
+
     private AscendBlessing() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, AscendBlessing::bind, TEN_PERMANENTS,
                 new Application(ForkOperation.ADD_PERMANENT, fork -> new AddPermanentOperation(
-                        ISLAND, fork.player("player"), fork.player("player"), true, false, Map.of()))
-                        .forcing(ForcedPlay.cast("player", "spell")));
+                        ISLAND, fork.player(PLAYER), fork.player(PLAYER), true, false, Map.of()))
+                        .forcing(ForcedPlay.cast(PLAYER, SPELL)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -65,10 +69,8 @@ public final class AscendBlessing {
         if (active.getZone(ZoneType.Battlefield).size() != NINE || active.hasBlessing()) {
             return Optional.empty();
         }
-        Optional<Card> spell = active.getCardsIn(ZoneType.Hand).stream()
-                .filter(card -> (card.isSorcery() || card.isInstant()) && card.hasKeyword(Keyword.ASCEND))
-                .filter(card -> Mana.affordable(active, card))
-                .findFirst();
-        return spell.map(card -> Binding.empty().with("player", active).with("spell", card));
+        Optional<Card> spell = Scan.handCard(active,
+                card -> (card.isSorcery() || card.isInstant()) && card.hasKeyword(Keyword.ASCEND));
+        return spell.map(card -> Binding.empty().with(PLAYER, active).with(SPELL, card));
     }
 }

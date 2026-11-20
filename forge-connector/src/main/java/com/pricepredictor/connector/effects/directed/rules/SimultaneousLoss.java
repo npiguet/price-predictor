@@ -4,6 +4,7 @@ import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.BoardEdit;
 import com.pricepredictor.connector.effects.directed.operations.LifeOperation;
 import forge.game.Game;
@@ -12,7 +13,6 @@ import forge.game.card.Card;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.trigger.Trigger;
-import forge.game.trigger.TriggerType;
 import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
@@ -49,6 +49,9 @@ public final class SimultaneousLoss {
     public static final String RULE = "104.4a";
     static final String SCENARIO = "104.4a-2";
     static final String BOTH_AT_ONE = "both_at_one";
+    private static final Role<Card> PERMANENT = Role.card("permanent");
+    private static final Role<Player> PLAYER = Role.player("player");
+    private static final Role<Player> OPPONENT = Role.player("opponent");
 
     private SimultaneousLoss() {
     }
@@ -64,14 +67,15 @@ public final class SimultaneousLoss {
         }
         Player active = Boards.active(live);
         Player opponent = live.getPlayers().stream().filter(player -> player != active).findFirst().orElseThrow();
-        for (Card permanent : active.getCardsIn(ZoneType.Battlefield)) {
-            Optional<Integer> amount = lifeTakenFromEach(permanent);
-            if (amount.isPresent() && live.getPlayers().stream().anyMatch(player -> player.getLife() > amount.get())) {
-                return Optional.of(Binding.empty().with("permanent", permanent).with("player", active)
-                        .with("opponent", opponent));
-            }
-        }
-        return Optional.empty();
+        return active.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(permanent -> lifeTakenFromEach(permanent).filter(amount -> someoneAbove(live, amount)).isPresent())
+                .findFirst()
+                .map(permanent -> Binding.empty().with(PERMANENT, permanent).with(PLAYER, active)
+                        .with(OPPONENT, opponent));
+    }
+
+    private static boolean someoneAbove(Game live, int amount) {
+        return live.getPlayers().stream().anyMatch(player -> player.getLife() > amount);
     }
 
     /** Whether the game has two players, each of whose life can go down and who loses the game at 0 life. */
@@ -93,22 +97,16 @@ public final class SimultaneousLoss {
      * condition, an optional or unless part, or any other API in its chain.
      */
     static Optional<Integer> lifeTakenFromEach(Card permanent) {
-        for (Trigger trigger : permanent.getTriggers()) {
-            if (!plainUpkeepTrigger(trigger)) {
-                continue;
-            }
-            Optional<Integer> amount = amountOf(permanent, chain(permanent, Scripts.executed(trigger)));
-            if (amount.isPresent()) {
-                return amount;
-            }
-        }
-        return Optional.empty();
+        return permanent.getTriggers().stream()
+                .filter(SimultaneousLoss::plainUpkeepTrigger)
+                .map(trigger -> amountOf(permanent, chain(permanent, Scripts.executed(trigger))))
+                .flatMap(Optional::stream)
+                .findFirst();
     }
 
     /** Whether the trigger is its controller's beginning-of-upkeep trigger, with no condition or choice of its own. */
     private static boolean plainUpkeepTrigger(Trigger trigger) {
-        return trigger.getMode() == TriggerType.Phase && "Upkeep".equals(trigger.getParam("Phase"))
-                && "You".equals(trigger.getParam("ValidPlayer"))
+        return Triggers.atUpkeep(trigger) && "You".equals(trigger.getParam("ValidPlayer"))
                 && Stream.of("IsPresent", "CheckSVar", "OptionalDecider").noneMatch(trigger::hasParam);
     }
 
@@ -124,25 +122,39 @@ public final class SimultaneousLoss {
     private static Optional<Integer> amountOf(Card host, List<Map<String, String>> chain) {
         Optional<Integer> amount = Optional.empty();
         for (Map<String, String> segment : chain) {
-            String api = Scripts.api(segment);
-            if (!plainApis().contains(api) || segment.keySet().stream().anyMatch(name ->
-                    name.startsWith("Condition") || name.startsWith("Unless") || name.equals("Optional"))) {
+            if (!plainSegment(segment)) {
                 return Optional.empty();
             }
-            if (ApiType.DamageAll.name().equals(api) && "Player".equals(segment.get("ValidPlayers"))) {
-                amount = Scripts.number(segment.get("NumDmg"));
-            } else if (ApiType.LoseLife.name().equals(api) && "Player".equals(segment.get("Defined"))) {
-                amount = Scripts.number(segment.get("LifeAmount"));
+            if (takesFromEach(segment)) {
+                amount = Scripts.number(lossText(segment));
             }
         }
         return amount;
     }
 
+    /** Whether the segment has one of the {@link #plainApis} and no condition, unless part or optional. */
+    private static boolean plainSegment(Map<String, String> segment) {
+        return plainApis().contains(Scripts.api(segment)) && segment.keySet().stream().noneMatch(name ->
+                name.startsWith("Condition") || name.startsWith("Unless") || name.equals("Optional"));
+    }
+
+    /** Whether the segment is the chain's {@code DamageAll} or {@code LoseLife} on every player. */
+    private static boolean takesFromEach(Map<String, String> segment) {
+        String api = Scripts.api(segment);
+        return ApiType.DamageAll.name().equals(api) && "Player".equals(segment.get("ValidPlayers"))
+                || ApiType.LoseLife.name().equals(api) && "Player".equals(segment.get("Defined"));
+    }
+
+    /** The text of the number such a segment makes every player lose. */
+    private static String lossText(Map<String, String> segment) {
+        return segment.get(ApiType.DamageAll.name().equals(Scripts.api(segment)) ? "NumDmg" : "LifeAmount");
+    }
+
     /** The edit: each player of the fork above the trigger's amount at that amount. */
     private static BoardEdit inReach(Binding fork) {
-        int amount = lifeTakenFromEach(fork.card("permanent")).orElseThrow(
+        int amount = lifeTakenFromEach(fork.card(PERMANENT)).orElseThrow(
                 () -> new IllegalStateException("the fork's permanent takes no life from each player"));
-        return new EachPlayerAtMost(List.of(fork.player("player"), fork.player("opponent")), amount);
+        return new EachPlayerAtMost(List.of(fork.player(PLAYER), fork.player(OPPONENT)), amount);
     }
 
     /**

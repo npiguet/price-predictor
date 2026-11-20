@@ -3,10 +3,11 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
-import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
+import forge.game.card.Card;
 
 import java.util.Optional;
 
@@ -32,13 +33,15 @@ public final class AuraSwapCantEnchant {
     static final String CAN_ENCHANT = "can_enchant";
     static final String HOLY_STRENGTH = Cards.HOLY_STRENGTH;
 
+    private static final Role<Card> CARD = Role.card("card");
+
     private AuraSwapCantEnchant() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, AuraSwapCantEnchant::bind, CAN_ENCHANT,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.replace(fork.card("card"), HOLY_STRENGTH))
+                        fork -> MoveCardOperation.replace(fork.card(CARD), HOLY_STRENGTH))
                         .forcing(AuraSwap.swap()));
     }
 

@@ -4,10 +4,10 @@ import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.RemovePermanentOperation;
 import forge.game.Game;
 import forge.game.card.Card;
-import forge.game.cost.Cost;
 import forge.game.keyword.Keyword;
 import forge.game.player.Player;
 import forge.game.zone.ZoneType;
@@ -41,6 +41,8 @@ public final class Mayhem {
     public static final String RULE = "702.187b";
     static final String SCENARIO = "702.187b-1";
     static final String ONE_MOUNTAIN = "one_mountain";
+    private static final Role<Card> LAND = Role.card("land");
+    private static final Role<Card> CARD = Role.card("card");
 
     private Mayhem() {
     }
@@ -48,8 +50,8 @@ public final class Mayhem {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, Mayhem::bind, ONE_MOUNTAIN,
                 new Application(ForkOperation.REMOVE_PERMANENT,
-                        fork -> new RemovePermanentOperation(fork.card("land")))
-                        .keepingCandidatesOf("card"));
+                        fork -> new RemovePermanentOperation(fork.card(LAND)))
+                        .keepingCandidatesOf(CARD));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -61,16 +63,20 @@ public final class Mayhem {
             return Optional.empty();
         }
         for (Card card : active.getCardsIn(ZoneType.Graveyard)) {
-            if (!card.wasDiscarded() || !card.enteredThisTurn()) {
-                continue;
-            }
-            for (Cost cost : Mana.keywordCosts(card, Keyword.MAYHEM)) {
-                Optional<Card> land = Mana.lastLandFor(active, Mana.manaValue(cost));
-                if (land.isPresent()) {
-                    return Optional.of(Binding.empty().with("land", land.get()).with("card", card));
-                }
+            Optional<Card> land = card.wasDiscarded() && card.enteredThisTurn()
+                    ? lastLandForMayhem(active, card) : Optional.empty();
+            if (land.isPresent()) {
+                return Optional.of(Binding.empty().with(LAND, land.get()).with(CARD, card));
             }
         }
         return Optional.empty();
+    }
+
+    /** The land one mana short of paying one of the card's mayhem costs, the first cost's that has one. */
+    private static Optional<Card> lastLandForMayhem(Player active, Card card) {
+        return Mana.keywordCosts(card, Keyword.MAYHEM).stream()
+                .map(cost -> Mana.lastLandFor(active, Mana.manaValue(cost)))
+                .flatMap(Optional::stream)
+                .findFirst();
     }
 }

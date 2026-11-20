@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects.directed.rules;
 
 import com.pricepredictor.connector.effects.directed.Binding;
+import com.pricepredictor.connector.effects.directed.Role;
 import forge.game.card.Card;
 import forge.game.combat.Combat;
 import forge.game.player.Player;
@@ -11,6 +12,11 @@ import java.util.function.BiPredicate;
 
 /** What a precondition reads off a live combat: who strikes when, who is blocked, what is attacked. Read only. */
 final class Combats {
+
+    /** The role of the attacker a combat rule binds. */
+    static final Role<Card> ATTACKER = Role.card("attacker");
+    /** The role of the creature its attacker keeps from blocking. */
+    static final Role<Card> BLOCKER = Role.card("blocker");
 
     private Combats() {
     }
@@ -99,7 +105,7 @@ final class Combats {
                     .filter(creature -> kept.test(attacker, creature))
                     .findFirst();
             if (blocker.isPresent()) {
-                return Optional.of(Binding.empty().with("attacker", attacker).with("blocker", blocker.get()));
+                return Optional.of(Binding.empty().with(ATTACKER, attacker).with(BLOCKER, blocker.get()));
             }
         }
         return Optional.empty();

@@ -48,7 +48,7 @@ public final class TrampleOverPlaneswalkers {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, TrampleOverPlaneswalkers::bind, THRASTA_IN_PLACE,
                 new Application(ForkOperation.REPLACE_CARD,
-                        fork -> new ReplaceCardOperation(fork.card("attacker"), THRASTA)));
+                        fork -> new ReplaceCardOperation(fork.card(Combats.ATTACKER), THRASTA)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -67,7 +67,7 @@ public final class TrampleOverPlaneswalkers {
             int loyalty = planeswalker.get().getCounters(CounterEnumType.LOYALTY);
             if (ReplaceCardOperation.replacementPower(attacker, THRASTA) > loyalty
                     && Boards.replacementSurvives(attacker, THRASTA)) {
-                return Optional.of(Binding.empty().with("attacker", attacker));
+                return Optional.of(Binding.empty().with(Combats.ATTACKER, attacker));
             }
         }
         return Optional.empty();

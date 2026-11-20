@@ -4,6 +4,7 @@ import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.RemovePermanentOperation;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -42,14 +43,17 @@ public final class Prototype {
     static final String SCENARIO = "718.3a-1";
     static final String TWO_MOUNTAINS = "two_mountains";
 
+    private static final Role<Card> LAND = Role.card("land");
+    private static final Role<Card> CARD = Role.card("card");
+
     private Prototype() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, Prototype::bind, TWO_MOUNTAINS,
                 new Application(ForkOperation.REMOVE_PERMANENT,
-                        fork -> new RemovePermanentOperation(fork.card("land")))
-                        .keepingCandidatesOf("card"));
+                        fork -> new RemovePermanentOperation(fork.card(LAND)))
+                        .keepingCandidatesOf(CARD));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -65,7 +69,7 @@ public final class Prototype {
                 int value = Mana.manaValue(cost);
                 Optional<Card> land = Mana.lastLandFor(active, value);
                 if (land.isPresent() && card.getCMC() > value) {
-                    return Optional.of(Binding.empty().with("land", land.get()).with("card", card));
+                    return Optional.of(Binding.empty().with(LAND, land.get()).with(CARD, card));
                 }
             }
         }

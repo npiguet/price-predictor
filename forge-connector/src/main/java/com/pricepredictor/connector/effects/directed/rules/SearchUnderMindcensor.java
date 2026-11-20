@@ -5,12 +5,11 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.player.Player;
-import forge.game.spellability.SpellAbility;
-import forge.game.trigger.Trigger;
 import forge.game.trigger.TriggerType;
 import forge.game.zone.ZoneType;
 
@@ -42,6 +41,9 @@ public final class SearchUnderMindcensor {
     static final String SCENARIO = "701.23f-2";
     static final String MINDCENSOR_ADDED = "mindcensor_added";
     static final String MINDCENSOR = "Aven Mindcensor";
+    private static final Role<Player> WATCHER = Role.player("watcher");
+    private static final Role<Player> SEARCHER = Role.player("searcher");
+    private static final Role<Card> PERMANENT = Role.card("permanent");
 
     /** An activated ability that searches its controller's library. */
     static final ForcedPlay.Line LIBRARY_SEARCH = new ForcedPlay.Line("library search",
@@ -53,42 +55,36 @@ public final class SearchUnderMindcensor {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, SearchUnderMindcensor::bind, MINDCENSOR_ADDED,
                 new Application(ForkOperation.ADD_PERMANENT,
-                        fork -> AddPermanentOperation.of(MINDCENSOR, fork.player("watcher"), false))
-                        .forcing(ForcedPlay.activate("searcher", "permanent", LIBRARY_SEARCH)));
+                        fork -> AddPermanentOperation.of(MINDCENSOR, fork.player(WATCHER), false))
+                        .forcing(ForcedPlay.activate(SEARCHER, PERMANENT, LIBRARY_SEARCH)));
     }
 
     static Optional<Binding> bind(Game live) {
         if (!Boards.atMainPhase(live)) {
             return Optional.empty();
         }
-        for (Player watcher : live.getPlayers()) {
-            if (!watchesAnOpponentSearch(watcher)) {
-                continue;
-            }
-            for (Player searcher : watcher.getOpponents()) {
-                Optional<Card> permanent = searcher.getCardsIn(ZoneType.Battlefield).stream()
-                        .filter(card -> !card.isTapped() && searchesAtAnyPriority(searcher, card))
-                        .findFirst();
-                if (permanent.isPresent()) {
-                    return Optional.of(Binding.empty().with("watcher", watcher).with("searcher", searcher)
-                            .with("permanent", permanent.get()));
-                }
-            }
-        }
-        return Optional.empty();
+        return live.getPlayers().stream()
+                .filter(SearchUnderMindcensor::watchesAnOpponentSearch)
+                .flatMap(watcher -> watcher.getOpponents().stream().map(searcher -> binding(watcher, searcher)))
+                .flatMap(Optional::stream)
+                .findFirst();
+    }
+
+    /** The searcher's first untapped permanent that searches at any priority, bound with both players, or empty. */
+    private static Optional<Binding> binding(Player watcher, Player searcher) {
+        return searcher.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(card -> !card.isTapped() && searchesAtAnyPriority(searcher, card))
+                .findFirst()
+                .map(permanent -> Binding.empty().with(WATCHER, watcher).with(SEARCHER, searcher)
+                        .with(PERMANENT, permanent));
     }
 
     /** Whether a permanent {@code player} controls has a trigger on an opponent searching its library. */
     static boolean watchesAnOpponentSearch(Player player) {
-        for (Card card : player.getCardsIn(ZoneType.Battlefield)) {
-            for (Trigger trigger : card.getTriggers()) {
-                if (trigger.getMode() == TriggerType.SearchedLibrary
-                        && "Player.Opponent".equals(trigger.getParam("ValidPlayer"))) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        return player.getCardsIn(ZoneType.Battlefield).stream()
+                .flatMap(card -> card.getTriggers().stream())
+                .anyMatch(trigger -> trigger.getMode() == TriggerType.SearchedLibrary
+                        && "Player.Opponent".equals(trigger.getParam("ValidPlayer")));
     }
 
     /**
@@ -103,13 +99,8 @@ public final class SearchUnderMindcensor {
         int others = Mana.manaSources(player).stream()
                 .filter(source -> source != card || !card.isLand())
                 .mapToInt(Mana::manaUnits).sum();
-        for (SpellAbility ability : card.getSpellAbilities()) {
-            if (LIBRARY_SEARCH.matches(ability) && !ability.getRestrictions().isSorcerySpeed()
-                    && Mana.manaValue(ability.getPayCosts()) <= others
-                    && Mana.affordable(player, ability)) {
-                return true;
-            }
-        }
-        return false;
+        return card.getSpellAbilities().stream().anyMatch(ability -> LIBRARY_SEARCH.matches(ability)
+                && !ability.getRestrictions().isSorcerySpeed()
+                && Mana.manaValue(ability.getPayCosts()) <= others && Mana.affordable(player, ability));
     }
 }

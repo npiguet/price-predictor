@@ -4,6 +4,7 @@ import com.pricepredictor.connector.RandomSpellPlayer;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
+import com.pricepredictor.connector.effects.directed.Role;
 import forge.ai.AiCostDecision;
 import forge.ai.ComputerUtilCost;
 import forge.ai.PlayerControllerAi;
@@ -91,11 +92,11 @@ public final class ForcedPlayRun {
         this.game = game;
         this.unknown = unknown;
         this.actor = fork.player(play.actor());
-        this.sourceId = unknown.contains(play.source()) ? -1 : fork.card(play.source()).getId();
+        this.sourceId = unknown.contains(play.source().name()) ? -1 : fork.card(play.source()).getId();
         this.step = stepOf(play.kind(), game);
         this.turn = game.getPhaseHandler().getTurn();
         this.targets = new NamedTargets(actor, namedTargets(play, fork, unknown));
-        this.costs = play.costs().stream().filter(role -> !unknown.contains(role)).map(fork::card).toList();
+        this.costs = play.costs().stream().filter(role -> !unknown.contains(role.name())).map(fork::card).toList();
         this.defender = namedDefender(play, fork, unknown);
     }
 
@@ -111,19 +112,19 @@ public final class ForcedPlayRun {
     /** Per targeting clause, the named objects; a clause naming an unknown role is null: left unchecked. */
     private static List<List<GameEntity>> namedTargets(ForcedPlay play, Binding fork, Set<String> unknown) {
         List<List<GameEntity>> targets = new ArrayList<>();
-        for (List<String> clause : play.targets()) {
-            targets.add(clause.stream().anyMatch(unknown::contains) ? null
-                    : clause.stream().map(role -> entity(fork, role)).toList());
+        for (List<Role<?>> clause : play.targets()) {
+            targets.add(clause.stream().anyMatch(role -> unknown.contains(role.name())) ? null
+                    : clause.stream().map(role -> entity(fork, role.name())).toList());
         }
         return targets;
     }
 
     /** The named defender, or null when the play names none or names an unknown role. */
     private static GameEntity namedDefender(ForcedPlay play, Binding fork, Set<String> unknown) {
-        if (play.defender() == null || unknown.contains(play.defender())) {
+        if (play.defender() == null || unknown.contains(play.defender().name())) {
             return null;
         }
-        return entity(fork, play.defender());
+        return entity(fork, play.defender().name());
     }
 
     /**
@@ -199,7 +200,7 @@ public final class ForcedPlayRun {
      * named targets legal on a trial copy of the line, or the named attack.
      */
     private boolean possible() {
-        if (unknown.contains(play.source())) {
+        if (unknown.contains(play.source().name())) {
             return true;
         }
         Card source = source();
@@ -219,7 +220,7 @@ public final class ForcedPlayRun {
 
     /** Whether {@code attacker} may attack the named defender; an unknown one is left unchecked. */
     private boolean reachesDefender(Card attacker) {
-        return unknown.contains(play.defender())
+        return unknown.contains(play.defender().name())
                 || defender != null && CombatUtil.canAttack(attacker, defender);
     }
 

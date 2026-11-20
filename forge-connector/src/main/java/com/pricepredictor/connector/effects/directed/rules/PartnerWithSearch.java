@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -43,15 +44,19 @@ public final class PartnerWithSearch {
     static final String SCENARIO = "702.124j-1";
     static final String NAMED_CARD_IN_LIBRARY = "named_card_in_library";
 
+    private static final Role<Player> PLAYER = Role.player("player");
+    private static final Role<Card> PARTNER_WITH = Role.card("partner with");
+    private static final Role<Card> CARD = Role.card("card");
+
     private PartnerWithSearch() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, PartnerWithSearch::bind, NAMED_CARD_IN_LIBRARY,
-                new Application(ForkOperation.MOVE_CARD, fork -> MoveCardOperation.replace(fork.card("card"),
-                        partnerName(fork.card("partner with")).orElseThrow(
+                new Application(ForkOperation.MOVE_CARD, fork -> MoveCardOperation.replace(fork.card(CARD),
+                        partnerName(fork.card(PARTNER_WITH)).orElseThrow(
                                 () -> new IllegalStateException("the fork's card names no partner"))))
-                        .forcing(ForcedPlay.cast("player", "partner with")));
+                        .forcing(ForcedPlay.cast(PLAYER, PARTNER_WITH)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -63,14 +68,9 @@ public final class PartnerWithSearch {
         if (library.isEmpty()) {
             return Optional.empty();
         }
-        for (Card card : active.getCardsIn(ZoneType.Hand)) {
-            Optional<String> partner = partnerName(card);
-            if (partner.filter(name -> isNotIn(library, name)).isPresent() && Mana.affordable(active, card)) {
-                return Optional.of(Binding.empty().with("player", active)
-                        .with("partner with", card).with("card", library.get(0)));
-            }
-        }
-        return Optional.empty();
+        return Scan.handCard(active, card -> partnerName(card).filter(name -> isNotIn(library, name)).isPresent())
+                .map(card -> Binding.empty().with(PLAYER, active)
+                        .with(PARTNER_WITH, card).with(CARD, library.get(0)));
     }
 
     private static boolean isNotIn(List<Card> cards, String name) {

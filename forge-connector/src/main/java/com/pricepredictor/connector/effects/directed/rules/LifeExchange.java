@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.BoardEdit;
 import com.pricepredictor.connector.effects.directed.operations.LifeOperation;
 import forge.game.Game;
@@ -42,6 +43,9 @@ public final class LifeExchange {
     static final String OPPONENT_ABOVE = "opponent_above";
     /** The life total the scenario's variant gives the opponent. */
     static final int SCENARIO_LIFE = 20;
+    private static final Role<Player> PLAYER = Role.player("player");
+    private static final Role<Card> PERMANENT = Role.card("permanent");
+    private static final Role<Player> OPPONENT = Role.player("opponent");
 
     private LifeExchange() {
     }
@@ -49,8 +53,8 @@ public final class LifeExchange {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, LifeExchange::bind, OPPONENT_ABOVE,
                 new Application(ForkOperation.LIFE, LifeExchange::opponentAbove)
-                        .forcing(ForcedPlay.activate("player", "permanent",
-                                ForcedPlay.Line.api("ExchangeLifeVariant")).targeting("opponent")));
+                        .forcing(ForcedPlay.activate(PLAYER, PERMANENT,
+                                ForcedPlay.Line.api("ExchangeLifeVariant")).targeting(OPPONENT)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -58,37 +62,30 @@ public final class LifeExchange {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        for (Card permanent : active.getCardsIn(ZoneType.Battlefield)) {
-            if (permanent.isTapped() || permanent.isFirstTurnControlled() || !exchangesToughness(permanent)) {
-                continue;
-            }
-            for (Player opponent : active.getOpponents()) {
-                if (opponent.canLoseLife() && opponent.getLife() <= permanent.getNetToughness()) {
-                    return Optional.of(Binding.empty()
-                            .with("player", active)
-                            .with("permanent", permanent)
-                            .with("opponent", opponent));
-                }
-            }
-        }
-        return Optional.empty();
+        return active.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(permanent -> !permanent.isTapped() && !permanent.isFirstTurnControlled())
+                .filter(LifeExchange::exchangesToughness)
+                .flatMap(permanent -> active.getOpponents().stream()
+                        .filter(opponent -> opponent.canLoseLife() && opponent.getLife() <= permanent.getNetToughness())
+                        .map(opponent -> Binding.empty()
+                                .with(PLAYER, active)
+                                .with(PERMANENT, permanent)
+                                .with(OPPONENT, opponent)))
+                .findFirst();
     }
 
     /** Whether the card has an activated ability exchanging a targeted player's life with its toughness. */
     static boolean exchangesToughness(Card card) {
-        for (SpellAbility ability : card.getSpellAbilities()) {
-            if (ability.isActivatedAbility()
-                    && ability.getApi() == ApiType.ExchangeLifeVariant
-                    && "Toughness".equals(ability.getParam("Mode"))
-                    && ability.usesTargeting()) {
-                return true;
-            }
-        }
-        return false;
+        return card.getSpellAbilities().stream().anyMatch(LifeExchange::exchangesTargetedLife);
+    }
+
+    private static boolean exchangesTargetedLife(SpellAbility ability) {
+        return ability.isActivatedAbility() && ability.getApi() == ApiType.ExchangeLifeVariant
+                && "Toughness".equals(ability.getParam("Mode")) && ability.usesTargeting();
     }
 
     private static BoardEdit opponentAbove(Binding fork) {
-        int toughness = fork.card("permanent").getNetToughness();
-        return new LifeOperation(fork.player("opponent"), Math.max(SCENARIO_LIFE, toughness + 1));
+        int toughness = fork.card(PERMANENT).getNetToughness();
+        return new LifeOperation(fork.player(OPPONENT), Math.max(SCENARIO_LIFE, toughness + 1));
     }
 }

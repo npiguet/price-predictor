@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.EmptyLibraryOperation;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -45,14 +46,17 @@ public final class DiscoverNothingFound {
      */
     static final ForcedPlay.Line DISCOVERING = Scan.acting("Discover");
 
+    private static final Role<Player> PLAYER = Role.player("player");
+    private static final Role<Card> DISCOVERER = Role.card("discoverer");
+
     private DiscoverNothingFound() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, DiscoverNothingFound::bind, EMPTY_LIBRARY,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> new EmptyLibraryOperation(fork.player("player")))
-                        .forcing(ForcedPlay.cast("player", "discoverer").playing(DISCOVERING)));
+                        fork -> new EmptyLibraryOperation(fork.player(PLAYER)))
+                        .forcing(ForcedPlay.cast(PLAYER, DISCOVERER).playing(DISCOVERING)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -65,6 +69,6 @@ public final class DiscoverNothingFound {
         if (active.getCardsIn(ZoneType.Library).isEmpty()) {
             return Optional.empty();
         }
-        return discoverer.map(card -> Binding.empty().with("player", active).with("discoverer", card));
+        return discoverer.map(card -> Binding.empty().with(PLAYER, active).with(DISCOVERER, card));
     }
 }

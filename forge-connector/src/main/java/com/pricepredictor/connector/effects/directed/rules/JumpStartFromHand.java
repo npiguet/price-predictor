@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -36,14 +37,17 @@ public final class JumpStartFromHand {
     static final String SCENARIO = "702.133a-2";
     static final String CAST_FROM_HAND = "cast_from_hand";
 
+    private static final Role<Player> CASTER = Role.player("caster");
+    private static final Role<Card> CARD = Role.card("card");
+
     private JumpStartFromHand() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, JumpStartFromHand::bind, CAST_FROM_HAND,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.move(fork.card("card"), ZoneType.Hand, null))
-                        .forcing(ForcedPlay.cast("caster", "card")));
+                        fork -> MoveCardOperation.move(fork.card(CARD), ZoneType.Hand, null))
+                        .forcing(ForcedPlay.cast(CASTER, CARD)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -55,6 +59,6 @@ public final class JumpStartFromHand {
                 .filter(card -> card.hasKeyword(Keyword.JUMP_START) && Mana.affordable(active, card))
                 .filter(card -> card.getFirstSpellAbility() != null && !card.getFirstSpellAbility().usesTargeting())
                 .findFirst()
-                .map(card -> Binding.empty().with("caster", active).with("card", card));
+                .map(card -> Binding.empty().with(CASTER, active).with(CARD, card));
     }
 }

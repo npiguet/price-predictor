@@ -26,6 +26,11 @@ final class Triggers {
                 && trigger.getParam("ValidCard").startsWith("Card.Self");
     }
 
+    /** Whether {@code trigger} fires at the beginning of an upkeep ({@code Mode$ Phase}, {@code Phase$ Upkeep}). */
+    static boolean atUpkeep(Trigger trigger) {
+        return trigger.getMode() == TriggerType.Phase && "Upkeep".equals(trigger.getParam("Phase"));
+    }
+
     /**
      * Whether a permanent on the battlefield has a trigger of {@code mode}
      * (Explores, Connives, Discover) that {@code active}'s own action sets

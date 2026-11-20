@@ -49,7 +49,7 @@ public final class NoDamageToAGonePlaneswalker {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, NoDamageToAGonePlaneswalker::bind, TRAMPLE_OVER_PLANESWALKERS,
                 new Application(ForkOperation.REPLACE_CARD,
-                        fork -> new ReplaceCardOperation(fork.card("attacker"), THRASTA)));
+                        fork -> new ReplaceCardOperation(fork.card(Combats.ATTACKER), THRASTA)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -57,12 +57,14 @@ public final class NoDamageToAGonePlaneswalker {
         if (!Boards.at(live, PhaseType.COMBAT_DAMAGE) || combat == null) {
             return Optional.empty();
         }
-        for (Card attacker : Combats.attackersOfAGoneDefender(combat)) {
-            if (!Boards.tramplesOverPlaneswalkers(attacker) && Combats.anotherDealsRegularDamage(combat, attacker)
-                    && Boards.replacementSurvives(attacker, THRASTA)) {
-                return Optional.of(Binding.empty().with("attacker", attacker));
-            }
-        }
-        return Optional.empty();
+        return Combats.attackersOfAGoneDefender(combat).stream()
+                .filter(attacker -> canTramplePlaneswalkersInstead(combat, attacker))
+                .findFirst()
+                .map(attacker -> Binding.empty().with(Combats.ATTACKER, attacker));
+    }
+
+    private static boolean canTramplePlaneswalkersInstead(Combat combat, Card attacker) {
+        return !Boards.tramplesOverPlaneswalkers(attacker) && Combats.anotherDealsRegularDamage(combat, attacker)
+                && Boards.replacementSurvives(attacker, THRASTA);
     }
 }

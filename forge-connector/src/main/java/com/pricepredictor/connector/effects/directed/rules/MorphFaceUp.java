@@ -4,6 +4,7 @@ import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.TapOperation;
 import forge.card.CardStateName;
 import forge.game.Game;
@@ -46,13 +47,16 @@ public final class MorphFaceUp {
     static final String SCENARIO = "405.6d-1";
     static final String CANNOT_PAY = "cannot_pay";
 
+    private static final Role<Card> PERMANENT = Role.card("permanent");
+    private static final Role<Card> LAND = Role.card("land");
+
     private MorphFaceUp() {
     }
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, MorphFaceUp::bind, CANNOT_PAY,
-                new Application(ForkOperation.TAP, fork -> new TapOperation(fork.card("land"), true))
-                        .keepingCandidatesOf("permanent"));
+                new Application(ForkOperation.TAP, fork -> new TapOperation(fork.card(LAND), true))
+                        .keepingCandidatesOf(PERMANENT));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -74,7 +78,7 @@ public final class MorphFaceUp {
                     .filter(ability -> Mana.manaValue(ability.getPayCosts()) == mana)
                     .filter(ability -> Mana.affordable(active, ability));
             if (faceUp.isPresent()) {
-                return Optional.of(Binding.empty().with("permanent", permanent).with("land", land.get()));
+                return Optional.of(Binding.empty().with(PERMANENT, permanent).with(LAND, land.get()));
             }
         }
         return Optional.empty();

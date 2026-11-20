@@ -9,6 +9,7 @@ import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.DirectedRules;
 import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.LifeOperation;
 import com.pricepredictor.connector.effects.directed.operations.RemovePermanentOperation;
 import forge.game.Game;
@@ -59,6 +60,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 @ExtendWith(ForgeExtension.class)
 class ForcedPlayTest {
+    private static final Role<Player> R_PLAYER = Role.player("player");
+    private static final Role<Card> R_BOLT = Role.card("bolt");
+    private static final Role<Card> R_OUTLET = Role.card("outlet");
+    private static final Role<Card> R_SANCTUARY = Role.card("sanctuary");
+    private static final Role<Card> R_SELECTION = Role.card("selection");
+    private static final Role<Card> R_SPELL = Role.card("spell");
+    private static final Role<Card> R_BEARS = Role.card("bears");
+    private static final Role<Card> R_MADE = Role.card("made");
+    private static final Role<Player> R_OPPONENT = Role.player("opponent");
+    private static final Role<Card> R_WALKER = Role.card("walker");
+    private static final Role<Card> R_GIANT = Role.card("giant");
+    private static final Role<Card> R_VICTIM = Role.card("victim");
+    private static final Role<Card> R_FOREST = Role.card("forest");
+    private static final Role<Card> R_PROWLER = Role.card("prowler");
+
 
     @TempDir
     Path tempDir;
@@ -183,7 +199,7 @@ class ForcedPlayTest {
 
         List<String> fork = forkOf(played(game, PhaseType.MAIN1, rule(PhaseType.MAIN1,
                 live -> Binding.empty().with("bolt", bolt).with("giant", giant),
-                ForcedPlay.cast("player", "bolt").targeting("giant"))));
+                ForcedPlay.cast(R_PLAYER, R_BOLT).targeting(R_GIANT))));
 
         List<Map<String, Object>> damage = eventsOn(fork, "damage_dealt", ref(giant));
         assertEquals(1, damage.size(), "the Bolt hits the Giant in the fork: " + damage);
@@ -200,7 +216,7 @@ class ForcedPlayTest {
 
         List<String> fork = forkOf(played(game, PhaseType.MAIN1, rule(PhaseType.MAIN1,
                 live -> Binding.empty().with("outlet", bombardment).with("giant", giant),
-                ForcedPlay.activate("player", "outlet", ForcedPlay.Line.api("DealDamage")).paying("giant"))));
+                ForcedPlay.activate(R_PLAYER, R_OUTLET, ForcedPlay.Line.api("DealDamage")).paying(R_GIANT))));
 
         assertEquals(List.of(ref(giant)), costCards(fork, "sacrificed"), "the Giant is sacrificed in the fork");
         assertFalse(costCards(fork, "sacrificed").contains(ref(bears)), "the Bears stay");
@@ -215,7 +231,7 @@ class ForcedPlayTest {
 
             List<String> fork = forkOf(played(game, PhaseType.UPKEEP, rule(PhaseType.UPKEEP,
                     live -> Binding.empty().with("sanctuary", sanctuary),
-                    ForcedPlay.answer("player", "sanctuary", yes))));
+                    ForcedPlay.answer(R_PLAYER, R_SANCTUARY, yes))));
 
             boolean skipped = fork.stream().anyMatch(record -> RecordLines.eventTypes(record).contains("phase_skipped"));
             assertEquals(yes, skipped, "answered " + yes + ": " + fork.size() + " fork records");
@@ -231,7 +247,7 @@ class ForcedPlayTest {
 
         List<String> fork = forkOf(played(game, null, rule(PhaseType.COMBAT_DECLARE_ATTACKERS,
                 live -> Binding.empty().with("bears", bears),
-                ForcedPlay.attack("player", "bears", "opponent"))));
+                ForcedPlay.attack(R_PLAYER, R_BEARS, R_OPPONENT))));
 
         boolean dealt = false;
         for (String record : fork) {
@@ -257,7 +273,7 @@ class ForcedPlayTest {
 
         List<String> fork = forkOf(played(game, PhaseType.UPKEEP, rule(PhaseType.UPKEEP,
                 live -> Binding.empty().with("selection", selection),
-                ForcedPlay.answer("player", "selection", true))));
+                ForcedPlay.answer(R_PLAYER, R_SELECTION, true))));
 
         assertTrue(eventsOn(fork, "zone_change", ref(selection)).stream()
                         .anyMatch(move -> "graveyard".equals(move.get("to_zone"))),
@@ -277,7 +293,7 @@ class ForcedPlayTest {
         you.dangerouslySetController(seat);
         seat.attach(game, null, null, new Random(3L));
         ForcedPlayRun run = ForcedPlayRun.start(new Application(ForkOperation.LIFE,
-                        fork -> new LifeOperation(you, 20)).forcing(ForcedPlay.answer("player", "selection", true)),
+                        fork -> new LifeOperation(you, 20)).forcing(ForcedPlay.answer(R_PLAYER, R_SELECTION, true)),
                 Binding.empty().with("player", you).with("selection", selection), game);
         run.attach(new Random(5L));
         SpellAbility look = selection.getTriggers().get(0).ensureAbility();
@@ -301,7 +317,7 @@ class ForcedPlayTest {
         Player you = you(game);
         Card bombardment = permanent(game, you, "Goblin Bombardment");
         ForcedPlayRun run = ForcedPlayRun.start(new Application(ForkOperation.LIFE,
-                        fork -> new LifeOperation(you, 20)).forcing(ForcedPlay.answer("player", "outlet", true)),
+                        fork -> new LifeOperation(you, 20)).forcing(ForcedPlay.answer(R_PLAYER, R_OUTLET, true)),
                 Binding.empty().with("player", you).with("outlet", bombardment), game);
         SpellAbility activation = bombardment.getSpellAbilities().stream()
                 .filter(SpellAbility::isActivatedAbility).findFirst().orElseThrow();
@@ -319,7 +335,7 @@ class ForcedPlayTest {
         Card walker = permanent(game, opponent(game), "Ajani Goldmane");
         walker.setCounters(CounterEnumType.LOYALTY, 4);
         ForcedPlayRun run = ForcedPlayRun.start(new Application(ForkOperation.LIFE,
-                        fork -> new LifeOperation(you, 20)).forcing(ForcedPlay.attack("player", "bears", "walker")),
+                        fork -> new LifeOperation(you, 20)).forcing(ForcedPlay.attack(R_PLAYER, R_BEARS, R_WALKER)),
                 Binding.empty().with("player", you).with("bears", bears).with("walker", walker), game);
         Combat combat = new Combat(you);
         combat.addAttacker(bears, opponent(game));
@@ -343,7 +359,7 @@ class ForcedPlayTest {
 
         List<String> records = played(game, PhaseType.MAIN1, rule(PhaseType.MAIN1,
                 live -> Binding.empty().with("spell", disfigure),
-                ForcedPlay.cast("player", "spell").targeting("opponent")));
+                ForcedPlay.cast(R_PLAYER, R_SPELL).targeting(R_OPPONENT)));
 
         assertEquals(List.of(), forkOf(records));
         assertTrue(refusals(ForkRefusal.FORCED_NO_LINE) > before, "counted as a refusal");
@@ -366,7 +382,7 @@ class ForcedPlayTest {
                 live -> aimable[0]
                         ? Binding.empty().with("spell", disfigure).with("victim", bears)
                         : Binding.empty().with("spell", disfigure).with("victim", opponent(live)),
-                ForcedPlay.cast("player", "spell").targeting("victim"));
+                ForcedPlay.cast(R_PLAYER, R_SPELL).targeting(R_VICTIM));
         CollectionCaps caps = TestCaps.caps().interventions(0).probes(0).directed(1, 1.0, rule.name()).build();
         ForkBudget budget = new ForkBudget(caps);
         DirectedForkTally tally = new DirectedForkTally();
@@ -405,16 +421,16 @@ class ForcedPlayTest {
                 .making("made", (fork, copy) -> fork.card("bears"));
 
         assertEquals(Optional.of(ForkRefusal.FORCED_NO_LINE), ForcedPlayRun.dryRun(
-                        made.apply(ForcedPlay.cast("player", "spell").targeting("opponent").paying("made")), live, game),
+                        made.apply(ForcedPlay.cast(R_PLAYER, R_SPELL).targeting(R_OPPONENT).paying(R_MADE)), live, game),
                 "Disfigure cannot take a player, whatever card the edit makes");
         assertEquals(Optional.of(ForkRefusal.FORCED_NO_LINE), ForcedPlayRun.dryRun(
-                        made.apply(ForcedPlay.cast("player", "bears").targeting("made")), live, game),
+                        made.apply(ForcedPlay.cast(R_PLAYER, R_BEARS).targeting(R_MADE)), live, game),
                 "the Bears in play are no spell to cast");
         assertEquals(Optional.empty(), ForcedPlayRun.dryRun(
-                        made.apply(ForcedPlay.cast("player", "spell").targeting("made")), live, game),
+                        made.apply(ForcedPlay.cast(R_PLAYER, R_SPELL).targeting(R_MADE)), live, game),
                 "the made target is checked on the copy");
         assertEquals(Optional.empty(), ForcedPlayRun.dryRun(
-                        made.apply(ForcedPlay.cast("player", "made")), live, game),
+                        made.apply(ForcedPlay.cast(R_PLAYER, R_MADE)), live, game),
                 "the made source's line is checked on the copy");
     }
 
@@ -429,7 +445,7 @@ class ForcedPlayTest {
 
         List<String> records = played(game, PhaseType.MAIN1, rule(PhaseType.MAIN1,
                 live -> Binding.empty().with("spell", charm),
-                ForcedPlay.cast("player", "spell")));
+                ForcedPlay.cast(R_PLAYER, R_SPELL)));
 
         assertEquals(List.of(), forkOf(records));
         assertEquals(before + 1, refusals(ForkRefusal.FORCED_NO_LINE));
@@ -447,7 +463,7 @@ class ForcedPlayTest {
                 live -> Binding.empty().with("outlet", bombardment),
                 new Application(ForkOperation.REMOVE_PERMANENT,
                         fork -> new RemovePermanentOperation(fork.card("outlet")))
-                        .forcing(ForcedPlay.activate("player", "outlet", ForcedPlay.Line.api("DealDamage")))));
+                        .forcing(ForcedPlay.activate(R_PLAYER, R_OUTLET, ForcedPlay.Line.api("DealDamage")))));
 
         assertEquals(List.of(), forkOf(records));
         assertEquals(before + 1, refusals(ForkRefusal.FORCED_NO_LINE));
@@ -462,7 +478,7 @@ class ForcedPlayTest {
 
         List<String> records = played(game, PhaseType.MAIN1, rule(PhaseType.MAIN1,
                 live -> Binding.empty().with("spell", defenses),
-                ForcedPlay.cast("player", "spell")));
+                ForcedPlay.cast(R_PLAYER, R_SPELL)));
 
         assertEquals(List.of(), forkOf(records));
         assertEquals(before + 1, refusals(ForkRefusal.FORCED_NOT_MADE));
@@ -481,7 +497,7 @@ class ForcedPlayTest {
 
         List<String> records = played(game, PhaseType.MAIN1, rule(PhaseType.MAIN1,
                 live -> Binding.empty().with("sanctuary", sanctuary),
-                ForcedPlay.answer("player", "sanctuary", true)));
+                ForcedPlay.answer(R_PLAYER, R_SANCTUARY, true)));
 
         assertEquals(List.of(), forkOf(records));
         assertEquals(before + 1, refusals(ForkRefusal.FORCED_NOT_MADE));
@@ -503,7 +519,7 @@ class ForcedPlayTest {
 
         List<String> records = played(game, PhaseType.END_OF_TURN, rule(PhaseType.END_OF_TURN,
                 live -> Binding.empty().with("outlet", bombardment).with("forest", forest),
-                ForcedPlay.activate("opponent", "outlet", ForcedPlay.Line.api("DealDamage")).paying("forest")));
+                ForcedPlay.activate(R_OPPONENT, R_OUTLET, ForcedPlay.Line.api("DealDamage")).paying(R_FOREST)));
 
         assertEquals(List.of(), forkOf(records));
         assertEquals(before + 1, refusals(ForkRefusal.FORCED_COST_NOT_PAID));
@@ -521,7 +537,7 @@ class ForcedPlayTest {
 
         List<String> records = played(game, PhaseType.UPKEEP, rule(PhaseType.UPKEEP,
                 live -> Binding.empty().with("selection", selection),
-                ForcedPlay.answer("player", "selection", true)));
+                ForcedPlay.answer(R_PLAYER, R_SELECTION, true)));
 
         assertEquals(List.of(), forkOf(records));
         assertEquals(before + 1, refusals(ForkRefusal.FORCED_COST_NOT_PAID));
@@ -541,7 +557,7 @@ class ForcedPlayTest {
         Card prowler = permanent(game, opponent(game), "Cackling Prowler");
         ForcedPlayRun run = ForcedPlayRun.start(new Application(ForkOperation.LIFE,
                         fork -> new LifeOperation(you, 20))
-                        .forcing(ForcedPlay.cast("player", "spell").targeting("prowler")),
+                        .forcing(ForcedPlay.cast(R_PLAYER, R_SPELL).targeting(R_PROWLER)),
                 Binding.empty().with("player", you).with("spell", disfigure).with("prowler", prowler), game);
         run.attach(new Random(5L));
 
@@ -566,7 +582,7 @@ class ForcedPlayTest {
 
         List<String> records = played(game, PhaseType.MAIN1, rule(PhaseType.MAIN1,
                 live -> Binding.empty().with("outlet", bombardment).with("forest", forest),
-                ForcedPlay.activate("player", "outlet", ForcedPlay.Line.api("DealDamage")).paying("forest")));
+                ForcedPlay.activate(R_PLAYER, R_OUTLET, ForcedPlay.Line.api("DealDamage")).paying(R_FOREST)));
 
         assertEquals(List.of(), forkOf(records));
         assertEquals(before + 1, refusals(ForkRefusal.FORCED_COST_NOT_PAID));
@@ -593,8 +609,8 @@ class ForcedPlayTest {
         Binding binding = Binding.empty().with("player", you).with("outlet", bombardment).with("bears", bears);
         ForcedPlayRun run = ForcedPlayRun.start(new Application(ForkOperation.LIFE,
                         fork -> new LifeOperation(you, 20))
-                        .forcing(ForcedPlay.activate("player", "outlet", ForcedPlay.Line.api("DealDamage"))
-                                .paying("bears")),
+                        .forcing(ForcedPlay.activate(R_PLAYER, R_OUTLET, ForcedPlay.Line.api("DealDamage"))
+                                .paying(R_BEARS)),
                 binding, game);
         run.attach(new Random(5L));
         assertSame(seat, you.getController(), "a random seat takes the play itself");
@@ -617,7 +633,7 @@ class ForcedPlayTest {
         Card bears = permanent(game, you, "Grizzly Bears");
         ForcedPlayRun run = ForcedPlayRun.start(new Application(ForkOperation.LIFE,
                         fork -> new LifeOperation(you, 20))
-                        .forcing(ForcedPlay.attack("player", "bears", "opponent")),
+                        .forcing(ForcedPlay.attack(R_PLAYER, R_BEARS, R_OPPONENT)),
                 Binding.empty().with("player", you).with("bears", bears).with("opponent", opponent(game)), game);
         run.attach(new Random(5L));
         assertTrue(you.getController() instanceof ForcingSeatController, you.getController().toString());
