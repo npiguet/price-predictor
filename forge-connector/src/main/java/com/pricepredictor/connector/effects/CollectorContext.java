@@ -66,49 +66,50 @@ final class CollectorContext {
     CollectorContext(
             RecordShardWriter writer, String gameId, AttributionMode mode,
             String randomSeatPlayerId, List<String> aimedAt) {
-        this(writer, gameId, mode, randomSeatPlayerId,
-                aimedAt == null ? null : List.copyOf(aimedAt), record -> { },
-                // Not writer::write, which would dereference a writer a
-                // collector that never writes is built without.
-                line -> writer.write(line), line -> {
-                    writer.writeUncapped(line);
-                    return true;
-                }, false,
-                KeptRecords.NONE);
-    }
-
-    private CollectorContext(
-            RecordShardWriter writer, String gameId, AttributionMode mode,
-            String randomSeatPlayerId, List<String> aimedAt,
-            Consumer<EffectRecord> forkFlags, Predicate<String> out,
-            Predicate<String> endOfGameOut, boolean fork, KeptRecords kept) {
         this.writer = writer;
         this.gameId = gameId;
         this.mode = mode;
         this.randomSeatPlayerId = randomSeatPlayerId;
-        this.aimedAt = aimedAt;
-        this.forkFlags = forkFlags;
-        this.out = out;
-        this.endOfGameOut = endOfGameOut;
-        this.fork = fork;
-        this.kept = kept;
+        this.aimedAt = aimedAt == null ? null : List.copyOf(aimedAt);
+        this.forkFlags = record -> { };
+        // Not writer::write, which would dereference a writer a collector
+        // that never writes is built without.
+        this.out = line -> writer.write(line);
+        this.endOfGameOut = line -> {
+            writer.writeUncapped(line);
+            return true;
+        };
+        this.fork = false;
+        this.kept = KeptRecords.NONE;
+    }
+
+    /** The context of a fork of {@code parent}'s game, writing through {@code output}. */
+    private CollectorContext(CollectorContext parent, ForkOutput output) {
+        this.writer = parent.writer;
+        this.gameId = parent.gameId;
+        this.mode = parent.mode;
+        this.randomSeatPlayerId = parent.randomSeatPlayerId;
+        this.aimedAt = parent.aimedAt;
+        this.forkFlags = output.flags();
+        this.out = line -> {
+            output.held().accept(line);
+            return true;
+        };
+        this.endOfGameOut = this.out;
+        this.fork = true;
+        this.kept = output.kept();
     }
 
     /**
      * The context a fork played on from this game writes through: the same
      * game id, run, mode, random seat and aim, every record first given
-     * {@code flags}, and each finished line handed to {@code out} rather
-     * than the shard, so a fork that ends in a throw can be dropped whole;
-     * the records {@code kept} names are written whatever the fork's
+     * {@code output}'s flags, and each finished line handed to its held
+     * lines rather than the shard, so a fork that ends in a throw can be
+     * dropped whole; the records it keeps are written whatever the fork's
      * samplers draw (FR-010c).
      */
-    CollectorContext forFork(Consumer<EffectRecord> flags, Consumer<String> out, KeptRecords kept) {
-        Predicate<String> held = line -> {
-            out.accept(line);
-            return true;
-        };
-        return new CollectorContext(
-                writer, gameId, mode, randomSeatPlayerId, aimedAt, flags, held, held, true, kept);
+    CollectorContext forFork(ForkOutput output) {
+        return new CollectorContext(this, output);
     }
 
     /** The records written whatever the samplers draw: none but in a directed fork. */

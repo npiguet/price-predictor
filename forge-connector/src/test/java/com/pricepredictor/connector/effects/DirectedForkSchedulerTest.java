@@ -335,7 +335,9 @@ class DirectedForkSchedulerTest {
         RecordShardWriter writer = ShardRun.writer(tempDir);
         DirectedForkTally tally = new DirectedForkTally();
         int taken;
-        try (GameRecording recording = new GameRecording(game, writer, ShardRun.GAME_ID, caps, 7L, null)) {
+        try (GameRecording recording = new GameRecording(
+                GameRecordingRequest.of(game, writer, ShardRun.GAME_ID, caps)
+                        .seeded(7L))) {
             recording.open();
             DirectedFork fork = new DirectedFork(game, recording.playForward(), () -> active);
             taken = new DirectedForkScheduler(game, caps, DirectedRules.registered(), new ForkBudget(caps),
@@ -416,7 +418,9 @@ class DirectedForkSchedulerTest {
         boolean[] kept = new boolean[1];
         int retried;
         boolean budgetLeft;
-        try (GameRecording recording = new GameRecording(game, writer, ShardRun.GAME_ID, caps, 7L, null)) {
+        try (GameRecording recording = new GameRecording(
+                GameRecordingRequest.of(game, writer, ShardRun.GAME_ID, caps)
+                        .seeded(7L))) {
             recording.open();
             DirectedFork fork = new DirectedFork(game, recording.playForward(), perspective);
             DirectedForkScheduler scheduler = new DirectedForkScheduler(

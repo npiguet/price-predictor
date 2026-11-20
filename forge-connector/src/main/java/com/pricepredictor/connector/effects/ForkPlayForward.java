@@ -127,7 +127,7 @@ final class ForkPlayForward {
         // the next seeds of the sequence, shifted by one.
         Random forcing = forced == null ? null : new Random(forkSeeds.nextLong());
         List<String> held = new ArrayList<>();
-        GameRecording recording = live.forkRecording(fork, flags, held::add, sampling, kept);
+        GameRecording recording = live.forkRecording(fork, new ForkOutput(flags, held::add, kept), sampling);
         try {
             recording.open();
             seats.attach(fork, recording.priorityCandidates(), recording.fruitlessActivations(), seat);

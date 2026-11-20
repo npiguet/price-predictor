@@ -3,6 +3,7 @@ package com.pricepredictor.connector;
 import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.TestCaps;
 import com.pricepredictor.connector.effects.GameRecording;
+import com.pricepredictor.connector.effects.GameRecordingRequest;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 import com.pricepredictor.connector.effects.Refs;
 import com.pricepredictor.connector.effects.TestBoard;
@@ -515,8 +516,9 @@ class RandomSeatControllerTest {
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         RandomSeatController seat = seatOf(game);
         try (GameRecording recording = new GameRecording(
-                game, writer, "run.0-l1.0", TestCaps.caps().interventions(0).probes(0).build(),
-                1L, Refs.of(a))) {
+                GameRecordingRequest.of(game, writer, "run.0-l1.0", TestCaps.caps().interventions(0).probes(0).build())
+                        .seeded(1L)
+                        .withRandomSeat(Refs.of(a)))) {
             recording.open();
             seat.attach(game, recording.priorityCandidates(), recording.fruitlessActivations());
             for (int step = 0; step < 400 && game.getPhaseHandler().getTurn() <= 3
@@ -559,8 +561,9 @@ class RandomSeatControllerTest {
         int draws = 400;
         int[] attacks = new int[creatures.size()];
         try (GameRecording recording = new GameRecording(
-                game, writer, "run.0-l1.0", TestCaps.unprobed(), 1L,
-                Refs.of(a))) {
+                GameRecordingRequest.of(game, writer, "run.0-l1.0", TestCaps.unprobed())
+                        .seeded(1L)
+                        .withRandomSeat(Refs.of(a)))) {
             // Every collector live, so "no record" is the seat's doing and not
             // a recording that never listened.
             recording.open();
@@ -612,8 +615,9 @@ class RandomSeatControllerTest {
         boolean blockedOnce = false;
         boolean heldBackOnce = false;
         try (GameRecording recording = new GameRecording(
-                game, writer, "run.0-l1.0", TestCaps.unprobed(), 1L,
-                Refs.of(a))) {
+                GameRecordingRequest.of(game, writer, "run.0-l1.0", TestCaps.unprobed())
+                        .seeded(1L)
+                        .withRandomSeat(Refs.of(a)))) {
             // Every collector live, so "no record" is the seat's doing and not
             // a recording that never listened.
             recording.open();

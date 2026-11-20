@@ -159,7 +159,9 @@ final class ShardRun {
         assumeClauseHook(why);
         RecordShardWriter writer = writer(dir);
         try (GameRecording recording =
-                new GameRecording(game, writer, GAME_ID, caps, SEED, null)) {
+                new GameRecording(
+                        GameRecordingRequest.of(game, writer, GAME_ID, caps)
+                                .seeded(SEED))) {
             recording.open();
             body.run();
         } finally {
@@ -222,7 +224,9 @@ final class ShardRun {
             Path dir, Game game, CollectionCaps caps, java.util.function.Predicate<GameRecording> force) {
         RecordShardWriter writer = writer(dir);
         boolean wrote;
-        try (GameRecording live = new GameRecording(game, writer, GAME_ID, caps, SEED, null)) {
+        try (GameRecording live = new GameRecording(
+                GameRecordingRequest.of(game, writer, GAME_ID, caps)
+                        .seeded(SEED))) {
             wrote = force.test(live);
         } finally {
             writer.close();

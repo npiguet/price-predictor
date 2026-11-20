@@ -168,7 +168,9 @@ class ForkPlayForwardTest {
             throws Throwable {
         CollectionCaps caps = TestCaps.caps().interventions(0).probes(0).everyDecision().build();
         RecordShardWriter writer = ShardRun.writer(tempDir);
-        try (GameRecording recording = new GameRecording(game, writer, ShardRun.GAME_ID, caps, 7L, null)) {
+        try (GameRecording recording = new GameRecording(
+                GameRecordingRequest.of(game, writer, ShardRun.GAME_ID, caps)
+                        .seeded(7L))) {
             recording.open();
             Forker forker = new Forker(game, recording, phase, flags);
             out[0] = forker;
@@ -282,7 +284,9 @@ class ForkPlayForwardTest {
         RecordShardWriter writer = ShardRun.writer(tempDir);
         Forker forker;
         try (GameRecording recording = new GameRecording(
-                game, writer, ShardRun.GAME_ID, caps, 7L, null, throwing)) {
+                GameRecordingRequest.of(game, writer, ShardRun.GAME_ID, caps)
+                        .seeded(7L)
+                        .withForkSeats(throwing))) {
             recording.open();
             forker = new Forker(game, recording, PhaseType.COMBAT_DECLARE_ATTACKERS, counting);
             game.subscribeToEvents(forker);
@@ -380,7 +384,10 @@ class ForkPlayForwardTest {
         List<String> all;
         Forker forker;
         try (GameRecording recording = new GameRecording(
-                game, writer, ShardRun.GAME_ID, caps, 7L, Refs.of(game.getPlayers().get(0)), seats)) {
+                GameRecordingRequest.of(game, writer, ShardRun.GAME_ID, caps)
+                        .seeded(7L)
+                        .withRandomSeat(Refs.of(game.getPlayers().get(0)))
+                        .withForkSeats(seats))) {
             recording.open();
             liveSeat.attach(game, recording.priorityCandidates(), recording.fruitlessActivations());
             expected.nextLong();
@@ -446,7 +453,9 @@ class ForkPlayForwardTest {
         CollectionCaps caps = TestCaps.caps().interventions(0).probes(0).everyDecision().build();
         RecordShardWriter writer = ShardRun.writer(tempDir);
         Forker forker;
-        try (GameRecording recording = new GameRecording(game, writer, ShardRun.GAME_ID, caps, 7L, null)) {
+        try (GameRecording recording = new GameRecording(
+                GameRecordingRequest.of(game, writer, ShardRun.GAME_ID, caps)
+                        .seeded(7L))) {
             recording.open();
             game.getStack().addAndUnfreeze(growth);
             game.getStack().resolveStack();
@@ -511,7 +520,9 @@ class ForkPlayForwardTest {
         RecordShardWriter writer = ShardRun.writer(tempDir);
         Forker forker;
         try (GameRecording recording = new GameRecording(
-                game, writer, ShardRun.GAME_ID, caps, 7L, null, restarting)) {
+                GameRecordingRequest.of(game, writer, ShardRun.GAME_ID, caps)
+                        .seeded(7L)
+                        .withForkSeats(restarting))) {
             recording.open();
             forker = new Forker(game, recording, PhaseType.MAIN1, DIRECTED);
             game.subscribeToEvents(forker);
@@ -568,7 +579,9 @@ class ForkPlayForwardTest {
                 binding -> new PtOperation(binding.card("creature"), null, 0));
         DirectedRule rule = DirectedRule.of("704.5f", "704.5f-1", live -> Optional.empty(), "zero", zero);
         RecordShardWriter writer = ShardRun.writer(tempDir);
-        try (GameRecording recording = new GameRecording(game, writer, ShardRun.GAME_ID, caps, 7L, null)) {
+        try (GameRecording recording = new GameRecording(
+                GameRecordingRequest.of(game, writer, ShardRun.GAME_ID, caps)
+                        .seeded(7L))) {
             recording.open();
             assertTrue(new DirectedFork(game, recording.playForward(), () -> game.getPhaseHandler().getPlayerTurn())
                     .take(rule, "zero", zero, Binding.empty().with("creature", creature)), "the fork was kept");

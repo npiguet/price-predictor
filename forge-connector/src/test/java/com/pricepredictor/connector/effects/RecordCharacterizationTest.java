@@ -262,7 +262,9 @@ class RecordCharacterizationTest {
                 "../forge has no clause hook to split the modes");
         RecordShardWriter writer = ShardRun.writer(tempDir);
         try (GameRecording recording =
-                new GameRecording(board.game, writer, ShardRun.GAME_ID, CAPS, 1L, null)) {
+                new GameRecording(
+                        GameRecordingRequest.of(board.game, writer, ShardRun.GAME_ID, CAPS)
+                                .seeded(1L))) {
             recording.open();
             board.castAndResolve(charm);
             board.nextStep();
@@ -883,7 +885,9 @@ class RecordCharacterizationTest {
         CollectionCaps caps = TestCaps.caps().interventions(0).probes(0).build();
         RecordShardWriter writer = ShardRun.writer(tempDir);
         boolean kept;
-        try (GameRecording recording = new GameRecording(board.game, writer, ShardRun.GAME_ID, caps, 7L, null)) {
+        try (GameRecording recording = new GameRecording(
+                GameRecordingRequest.of(board.game, writer, ShardRun.GAME_ID, caps)
+                        .seeded(7L))) {
             recording.open();
             kept = new ProtectionFork(board.game, new ForkBudget(caps), recording.playForward(), 7L)
                     .take(new ProtectionFork.Grant(bears, "Protection:Goblin"));
@@ -920,7 +924,9 @@ class RecordCharacterizationTest {
                                         .PtOperation(binding.card("creature"), null, 5)));
         RecordShardWriter writer = ShardRun.writer(tempDir);
         boolean kept;
-        try (GameRecording recording = new GameRecording(board.game, writer, ShardRun.GAME_ID, caps, 7L, null)) {
+        try (GameRecording recording = new GameRecording(
+                GameRecordingRequest.of(board.game, writer, ShardRun.GAME_ID, caps)
+                        .seeded(7L))) {
             recording.open();
             kept = new DirectedFork(board.game, recording.playForward(), () -> board.you)
                     .take(rule, "tougher", rule.variants().get("tougher"),

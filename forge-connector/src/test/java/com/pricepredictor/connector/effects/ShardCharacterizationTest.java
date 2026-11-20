@@ -108,7 +108,8 @@ class ShardCharacterizationTest {
                 CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
                 board.opponent.setLife(3, null);
                 try (GameRecording recording = new GameRecording(
-                        board.game, writer, writer.nextGameId(), caps, 1L, null)) {
+                        GameRecordingRequest.of(board.game, writer, writer.nextGameId(), caps)
+                                .seeded(1L))) {
                     recording.open();
                     TestBoard.cast(board.game, board.card("Lightning Bolt", board.you),
                             board.you, board.opponent);

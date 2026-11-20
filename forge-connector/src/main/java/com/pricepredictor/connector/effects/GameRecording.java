@@ -1,8 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import com.google.common.eventbus.Subscribe;
-import com.pricepredictor.connector.effects.directed.DirectedRules;
-import com.pricepredictor.connector.effects.directed.KeptRecords;
 import forge.game.Game;
 import forge.game.event.GameEventTurnPhase;
 import forge.game.phase.PhaseType;
@@ -14,7 +12,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -61,121 +58,70 @@ public final class GameRecording implements AutoCloseable {
     private static final OnceWarning DROPPED_EVENTS_UNWRITABLE = new OnceWarning();
 
     /**
-     * Build one game's collectors, for a match whose seats need no attaching
-     * in a fork; see {@link #GameRecording(Game, RecordShardWriter, String,
-     * CollectionCaps, long, String, ForkSeats)}.
+     * Build one game's collectors from {@code request}: its game id, its
+     * seed and the rest of what the run decides ({@link GameRecordingRequest}).
      */
-    public GameRecording(
-            Game game, RecordShardWriter writer, String gameId, CollectionCaps caps,
-            long seed, String randomSeatPlayerId) {
-        this(game, writer, gameId, caps, seed, randomSeatPlayerId, ForkSeats.NONE);
-    }
-
-    /**
-     * Build one game's collectors.
-     *
-     * @param gameId             the game's own id: records join to a
-     *                           checkpoint's recorded split by it, so it
-     *                           changes when the game does
-     * @param seed               seeds the sampling and the forks' choices, so
-     *                           a worker's games sample independently of one
-     *                           another
-     * @param randomSeatPlayerId the match's random seat, as a player id, or
-     *                           null when it has none
-     * @param forkSeats          attaches a fork's seats when a fork of this
-     *                           game plays on
-     */
-    public GameRecording(
-            Game game, RecordShardWriter writer, String gameId, CollectionCaps caps,
-            long seed, String randomSeatPlayerId, ForkSeats forkSeats) {
-        this(game, writer, gameId, caps, seed, randomSeatPlayerId, forkSeats, DeckRules.NONE);
-    }
-
-    /**
-     * Build one game's collectors, for a game whose decks are aimed at
-     * {@code decks} (FR-058d): when either carries a rule, the game is
-     * steered, and every record it writes carries both decks' rules as
-     * {@code aimed_at} instead of the run's list.
-     */
-    public GameRecording(
-            Game game, RecordShardWriter writer, String gameId, CollectionCaps caps,
-            long seed, String randomSeatPlayerId, ForkSeats forkSeats, DeckRules decks) {
-        this(game, writer, gameId, caps, seed, randomSeatPlayerId, forkSeats, decks,
-                DirectedRules.registered(), DirectedForkTally.lifetime());
-    }
-
-    /**
-     * Build one game's collectors, directed forks taken for {@code
-     * directedRules} and counted in {@code tally}, for decks aimed at no rule.
-     */
-    GameRecording(
-            Game game, RecordShardWriter writer, String gameId, CollectionCaps caps,
-            long seed, String randomSeatPlayerId, ForkSeats forkSeats,
-            DirectedRules directedRules, DirectedForkTally tally) {
-        this(game, writer, gameId, caps, seed, randomSeatPlayerId, forkSeats, DeckRules.NONE,
-                directedRules, tally);
-    }
-
-    /**
-     * Build one game's collectors, directed forks taken for {@code
-     * directedRules} and counted in {@code tally}; the public constructors
-     * pass the registered rules and the JVM lifetime's tally.
-     */
-    GameRecording(
-            Game game, RecordShardWriter writer, String gameId, CollectionCaps caps,
-            long seed, String randomSeatPlayerId, ForkSeats forkSeats, DeckRules decks,
-            DirectedRules directedRules, DirectedForkTally tally) {
-        this.game = game;
+    public GameRecording(GameRecordingRequest request) {
+        this.game = request.game();
         this.fork = false;
+        CollectionCaps caps = request.caps();
+        long seed = request.seed();
         this.caps = caps;
         SeedStreams.register(game, seed);
         AttributionMode mode = AttributionMode.detect();
-        // The game's aim: the run's list, or a steered game's decks' rules.
-        List<String> aimedAt = decks.aimedAt(caps.aimedAt());
-        // One context per collector, because each counts its own records.
-        Supplier<CollectorContext> context =
-                () -> new CollectorContext(writer, gameId, mode, randomSeatPlayerId, aimedAt);
-        this.envelope = context.get();
+        this.envelope = request.newContext(mode);
         // Stage three. Nothing is copied unless a budget says so, because a
         // fork costs a game copy and a stack resolution, and nothing on a
         // stock checkout, where no fork could be attributed. Both kinds share
-        // one game's budget and one context.
+        // one game's budget.
         boolean forking = mode == AttributionMode.PATCHED
                 && (caps.interventionsPerGame() > 0 || caps.probesEnabled());
-        CollectorContext forkContext = forking ? context.get() : null;
         ForkBudget budget = new ForkBudget(caps);
-        this.playForward = new ForkPlayForward(this, forkSeats, seed);
-        // A protection fork (FR-058) is an intervention played on, so it is
-        // taken on a run taking interventions, and only there.
-        this.interventions = forking
-                ? Optional.of(new InterventionScheduler(
-                        game, new InterventionFork(game, this, budget, seed),
-                        caps.interventionsPerGame() > 0
-                                ? new ProtectionFork(game, budget, playForward, seed) : null,
-                        decks.steered(),
-                        InterventionScheduler.spreadOverTheGame(seed, caps.interventionsPerGame())))
-                : Optional.empty();
-        this.probes = forking
-                ? Optional.of(new ProbeScheduler(
-                        game, gameId, caps, new DamageStepProbe(game, forkContext, budget)))
-                : Optional.empty();
+        this.playForward = new ForkPlayForward(this, request.forkSeats(), seed);
+        this.interventions = when(forking, () -> interventionsOf(request, budget));
+        this.probes = when(forking, () -> new ProbeScheduler(
+                game, request.gameId(), caps,
+                new DamageStepProbe(game, request.newContext(mode), budget)));
         // A probe forks before the damage step and cannot know which combat
         // record it mirrors until that record is written.
-        this.bracket = new BusBracketCollector(game, context.get(),
+        this.bracket = new BusBracketCollector(game, request.newContext(mode),
                 recordId -> probes.ifPresent(probe -> probe.writeHeldProbes(recordId)));
-        this.patched = new PatchedCollectors(game, context.get(), caps, seed, bracket);
+        this.patched = new PatchedCollectors(
+                game, request.newContext(mode), caps, seed, bracket);
         // Forced at a step's first priority, after the decision records.
         interventions.map(InterventionScheduler::prioritySink).ifPresent(patched::alsoTell);
-        this.droppedEventsFile = caps.countDroppedEvents() ? droppedEventsFile(writer) : null;
+        this.droppedEventsFile = caps.countDroppedEvents()
+                ? droppedEventsFile(request.writer()) : null;
         // Directed forks, on a patched checkout as the other two kinds: the
         // fork plays on through the live game's hooks.
-        boolean directing = mode == AttributionMode.PATCHED && caps.directedForksEnabled();
-        this.directed = directing
-                ? Optional.of(new DirectedForkScheduler(
-                        game, caps, directedRules, budget, tally, seed,
-                        new DirectedFork(game, playForward,
-                                () -> game.getPhaseHandler().getPlayerTurn())::take))
-                : Optional.empty();
+        this.directed = when(mode == AttributionMode.PATCHED && caps.directedForksEnabled(),
+                () -> directedOf(request, budget));
+    }
+
+    private static <T> Optional<T> when(boolean wanted, Supplier<T> make) {
+        return wanted ? Optional.of(make.get()) : Optional.empty();
+    }
+
+    /**
+     * Forced resolutions and protection forks; a protection fork (FR-058) is
+     * an intervention played on, so it is taken on a run taking interventions,
+     * and only there.
+     */
+    private InterventionScheduler interventionsOf(GameRecordingRequest request, ForkBudget budget) {
+        long seed = request.seed();
+        int perGame = caps.interventionsPerGame();
+        return new InterventionScheduler(
+                game, new InterventionFork(game, this, budget, seed),
+                perGame > 0 ? new ProtectionFork(game, budget, playForward, seed) : null,
+                request.decks().steered(),
+                InterventionScheduler.spreadOverTheGame(seed, perGame));
+    }
+
+    private DirectedForkScheduler directedOf(GameRecordingRequest request, ForkBudget budget) {
+        return new DirectedForkScheduler(
+                game, caps, request.directedRules(), budget, request.tally(), request.seed(),
+                new DirectedFork(game, playForward,
+                        () -> game.getPhaseHandler().getPlayerTurn())::take);
     }
 
     /**
@@ -207,15 +153,11 @@ public final class GameRecording implements AutoCloseable {
     /**
      * The recording of a fork of this game played on to the end of the turn.
      *
-     * @param flags the flags every record of the fork carries
-     * @param held  where the fork's finished lines go until the fork is kept
-     * @param seed  seeds the fork's sampling stream
-     * @param kept  the records the fork writes whatever its samplers draw
-     *              (FR-010c)
+     * @param output where the fork's records go and what they carry
+     * @param seed   seeds the fork's sampling stream
      */
-    GameRecording forkRecording(
-            Game fork, Consumer<EffectRecord> flags, Consumer<String> held, long seed, KeptRecords kept) {
-        return new GameRecording(fork, envelope.forFork(flags, held, kept), caps, seed);
+    GameRecording forkRecording(Game fork, ForkOutput output, long seed) {
+        return new GameRecording(fork, envelope.forFork(output), caps, seed);
     }
 
     /** The link a cast or activated item's halves carry in this game's records. */

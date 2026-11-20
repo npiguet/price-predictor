@@ -4,6 +4,7 @@ import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.DeckRules;
 import com.pricepredictor.connector.effects.FruitlessActivations;
 import com.pricepredictor.connector.effects.GameRecording;
+import com.pricepredictor.connector.effects.GameRecordingRequest;
 import com.pricepredictor.connector.effects.SeedStreams;
 import com.pricepredictor.connector.effects.PriorityCandidates;
 import com.pricepredictor.connector.effects.RecordShardWriter;
@@ -383,9 +384,11 @@ public class GamePlayer {
             return null;
         }
         return new GameRecording(
-                game, effectRecords, effectRecords.nextGameId(), caps, gameSeed,
-                seat.map(s -> Refs.of(s.getPlayer())).orElse(null), GamePlayer::attachForkSeats,
-                rules);
+                GameRecordingRequest.of(game, effectRecords, effectRecords.nextGameId(), caps)
+                        .seeded(gameSeed)
+                        .withRandomSeat(seat.map(s -> Refs.of(s.getPlayer())).orElse(null))
+                        .withForkSeats(GamePlayer::attachForkSeats)
+                        .withDecks(rules));
     }
 
     /** Play the game to its end with its recording open, closing the recording whatever happens. */

@@ -119,7 +119,9 @@ class ProtectionForkRecordsTest {
             Game game, ProtectionFork.Grant grant, Consumer<GameRecording> after) throws Exception {
         CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(0).probes(0).build();
         RecordShardWriter shard = ShardRun.writer(tempDir);
-        try (GameRecording recording = new GameRecording(game, shard, ShardRun.GAME_ID, caps, 7L, null)) {
+        try (GameRecording recording = new GameRecording(
+                GameRecordingRequest.of(game, shard, ShardRun.GAME_ID, caps)
+                        .seeded(7L))) {
             recording.open();
             assertTrue(new ProtectionFork(game, new ForkBudget(caps), recording.playForward(), 7L).take(grant),
                     "the fork was kept");

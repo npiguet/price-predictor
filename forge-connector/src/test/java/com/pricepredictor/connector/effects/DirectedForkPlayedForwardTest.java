@@ -110,7 +110,9 @@ class DirectedForkPlayedForwardTest {
         // A directory of its own per game: one test may play several.
         RecordShardWriter shard = ShardRun.writer(
                 java.nio.file.Files.createDirectories(tempDir.resolve("game-" + DUMPED.incrementAndGet())));
-        try (GameRecording recording = new GameRecording(game, shard, ShardRun.GAME_ID, caps, 7L, null)) {
+        try (GameRecording recording = new GameRecording(
+                GameRecordingRequest.of(game, shard, ShardRun.GAME_ID, caps)
+                        .seeded(7L))) {
             recording.open();
             game.getTriggerHandler().resetActiveTriggers();
             if (step != null) {

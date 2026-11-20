@@ -66,8 +66,8 @@ class GameRecordingTest {
         Player producer = new Player("live-player", TestCards.game(), 93201);
         RecordShardWriter writer = ShardRun.writer(tempDir);
         GameRecording recording = new GameRecording(
-                TestCards.game(), writer, ShardRun.GAME_ID,
-                TestCaps.caps().everyDecision().interventions(0).probes(0).build(), 1L, null);
+                GameRecordingRequest.of(TestCards.game(), writer, ShardRun.GAME_ID, TestCaps.caps().everyDecision().interventions(0).probes(0).build())
+                        .seeded(1L));
 
         recording.open();
         Object manaListener = installed(AbilityManaPart.class, "MANA_HOOK");
@@ -155,9 +155,10 @@ class GameRecordingTest {
         Player producer = new Player("live-player", TestCards.game(), 93202);
         RecordShardWriter writer = ShardRun.writer(dir);
         GameRecording recording = new GameRecording(
-                TestCards.game(), writer, ShardRun.GAME_ID,
-                TestCaps.caps().everyDecision().interventions(0).probes(0).aimedAt().build(),
-                1L, null, ForkSeats.NONE, decks);
+                GameRecordingRequest.of(TestCards.game(), writer, ShardRun.GAME_ID, TestCaps.caps().everyDecision().interventions(0).probes(0).aimedAt().build())
+                        .seeded(1L)
+                        .withForkSeats(ForkSeats.NONE)
+                        .withDecks(decks));
         try {
             recording.open();
             Object paymentListener = installed(forge.game.cost.CostPayment.class, "PAYMENT_HOOK");
@@ -193,7 +194,8 @@ class GameRecordingTest {
                 "../forge has no mana or confirm hook");
         RecordShardWriter writer = ShardRun.writer(tempDir);
         GameRecording recording = new GameRecording(
-                TestCards.game(), writer, ShardRun.GAME_ID, CollectionCaps.defaults(), 1L, null);
+                GameRecordingRequest.of(TestCards.game(), writer, ShardRun.GAME_ID, CollectionCaps.defaults())
+                        .seeded(1L));
         // What an open() that threw after its first hook leaves behind.
         PatchHooks.CONFIRM_LISTENER.install((proxy, method, args) -> null);
         assertNotNull(installed(PlayerControllerAi.class, "CONFIRM_HOOK"));
@@ -260,8 +262,11 @@ class GameRecordingTest {
                 .directed(1, 1.0, "A").build();
         DirectedForkTally tally = new DirectedForkTally();
         RecordShardWriter writer = ShardRun.writer(tempDir);
-        try (GameRecording recording = new GameRecording(game, writer, ShardRun.GAME_ID, caps, 7L, null,
-                ForkSeats.NONE, com.pricepredictor.connector.effects.directed.DirectedRules.of(atUntap), tally)) {
+        try (GameRecording recording = new GameRecording(
+                GameRecordingRequest.of(game, writer, ShardRun.GAME_ID, caps)
+                        .seeded(7L)
+                        .withForkSeats(ForkSeats.NONE)
+                        .withDirected(com.pricepredictor.connector.effects.directed.DirectedRules.of(atUntap), tally))) {
             recording.open();
             // Enough untap boundaries, each in a game turn of its own, for
             // the forced resolutions' gate (drawn once a turn) to open at

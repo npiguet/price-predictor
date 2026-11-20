@@ -111,7 +111,9 @@ class GameOutcomeFilingTest {
         });
         CollectionCaps noForks = TestCaps.caps().interventions(0).probes(0).build();
         try (GameRecording recording =
-                new GameRecording(game, writer, ShardRun.GAME_ID, noForks, 1L, null)) {
+                new GameRecording(
+                        GameRecordingRequest.of(game, writer, ShardRun.GAME_ID, noForks)
+                                .seeded(1L))) {
             recording.open();
             for (int i = 0; i < RecordShardWriter.BLOCK_RECORDS - 1; i++) {
                 writer.write("{\"game_id\":\"" + ShardRun.GAME_ID + "\",\"n\":" + i + "}");

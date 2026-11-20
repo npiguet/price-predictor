@@ -47,7 +47,9 @@ class ForkDroppedEventsKindsTest {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(2).probes(0).build();
         RecordShardWriter shard = ShardRun.writer(tempDir);
-        try (GameRecording live = new GameRecording(game, shard, ShardRun.GAME_ID, caps, 1L, null)) {
+        try (GameRecording live = new GameRecording(
+                GameRecordingRequest.of(game, shard, ShardRun.GAME_ID, caps)
+                        .seeded(1L))) {
             new InterventionFork(game, live, new ForkBudget(caps), 1L).write(List.of(), oneDrop());
 
             assertEquals(expected("intervention"), live.droppedEvents().counts());
@@ -71,7 +73,9 @@ class ForkDroppedEventsKindsTest {
                 TestBoard.spellOf(TestBoard.inHand(game, holder, "Pacifism"), holder));
         CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(2).probes(0).build();
         RecordShardWriter shard = ShardRun.writer(tempDir);
-        try (GameRecording live = new GameRecording(game, shard, ShardRun.GAME_ID, caps, 1L, null)) {
+        try (GameRecording live = new GameRecording(
+                GameRecordingRequest.of(game, shard, ShardRun.GAME_ID, caps)
+                        .seeded(1L))) {
             for (SpellAbility line : refused) {
                 long before = ForkRefusals.counts().values().stream().mapToLong(Long::longValue).sum();
 

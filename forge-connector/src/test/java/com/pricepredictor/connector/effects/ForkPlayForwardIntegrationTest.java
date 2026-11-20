@@ -103,8 +103,10 @@ class ForkPlayForwardIntegrationTest {
         RecordShardWriter writer = ShardRun.writer(tempDir);
         Forker forker;
         try (GameRecording recording = new GameRecording(
-                game, writer, ShardRun.GAME_ID, caps, 11L, Refs.of(seat.getPlayer()),
-                GamePlayer::attachForkSeats)) {
+                GameRecordingRequest.of(game, writer, ShardRun.GAME_ID, caps)
+                        .seeded(11L)
+                        .withRandomSeat(Refs.of(seat.getPlayer()))
+                        .withForkSeats(GamePlayer::attachForkSeats))) {
             recording.open();
             seat.attach(game, recording.priorityCandidates(), recording.fruitlessActivations());
             forker = new Forker(game, recording);

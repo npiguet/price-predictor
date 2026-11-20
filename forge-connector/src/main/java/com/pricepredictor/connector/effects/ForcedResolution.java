@@ -76,7 +76,8 @@ final class ForcedResolution {
     ForcedResolution force(SpellAbility ability, Player actor) {
         Game fork = verified.fork();
         fork.copyLastState();
-        GameRecording recording = live.forkRecording(fork, this::keep, line -> { }, seed, KeptRecords.NONE);
+        GameRecording recording = live.forkRecording(
+                fork, new ForkOutput(this::keep, line -> { }, KeptRecords.NONE), seed);
         try {
             recording.open();
             live.routingTo(recording, () -> Forks.playingForward(fork, () -> {

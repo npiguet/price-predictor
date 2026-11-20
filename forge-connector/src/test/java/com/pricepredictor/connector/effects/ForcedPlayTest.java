@@ -130,8 +130,11 @@ class ForcedPlayTest {
         CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(0).probes(0)
                 .directed(1, 1.0, rule.name()).build();
         RecordShardWriter shard = ShardRun.writer(Files.createDirectories(tempDir.resolve("game-" + ++games)));
-        try (GameRecording recording = new GameRecording(game, shard, ShardRun.GAME_ID, caps, 7L, null,
-                ForkSeats.NONE, DirectedRules.of(rule), new DirectedForkTally())) {
+        try (GameRecording recording = new GameRecording(
+                GameRecordingRequest.of(game, shard, ShardRun.GAME_ID, caps)
+                        .seeded(7L)
+                        .withForkSeats(ForkSeats.NONE)
+                        .withDirected(DirectedRules.of(rule), new DirectedForkTally()))) {
             recording.open();
             game.getTriggerHandler().resetActiveTriggers();
             if (step != null) {

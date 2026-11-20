@@ -681,7 +681,9 @@ class ForkRecordsTest {
     private List<String> scheduled(Game game, CollectionCaps caps, int boundaries, Runnable... between)
             throws IOException {
         RecordShardWriter shard = ShardRun.writer(tempDir);
-        try (GameRecording live = new GameRecording(game, shard, ShardRun.GAME_ID, caps, 1L, null)) {
+        try (GameRecording live = new GameRecording(
+                GameRecordingRequest.of(game, shard, ShardRun.GAME_ID, caps)
+                        .seeded(1L))) {
             InterventionScheduler scheduler = new InterventionScheduler(game, new InterventionFork(
                     game, live, new ForkBudget(caps), 1L));
             scheduler.collect();
@@ -715,7 +717,9 @@ class ForkRecordsTest {
         CollectionCaps caps = forkCaps().interventions(0).probes(0).everyDecision().build();
         RecordShardWriter shard = ShardRun.writer(tempDir);
         boolean kept;
-        try (GameRecording recording = new GameRecording(game, shard, ShardRun.GAME_ID, caps, 7L, null)) {
+        try (GameRecording recording = new GameRecording(
+                GameRecordingRequest.of(game, shard, ShardRun.GAME_ID, caps)
+                        .seeded(7L))) {
             recording.open();
             kept = new ProtectionFork(game, new ForkBudget(caps), recording.playForward(), 7L)
                     .take(new ProtectionFork.Grant(bears, "Protection:Goblin"));
@@ -818,8 +822,10 @@ class ForkRecordsTest {
         ForkPlayForwardTest.sneakAttack(game);
         RecordShardWriter shard = ShardRun.writer(tempDir);
         try (GameRecording recording = new GameRecording(
-                game, shard, ShardRun.GAME_ID, caps, 7L, null, ForkSeats.NONE,
-                DirectedRules.of(tougherBears()), new DirectedForkTally())) {
+                GameRecordingRequest.of(game, shard, ShardRun.GAME_ID, caps)
+                        .seeded(7L)
+                        .withForkSeats(ForkSeats.NONE)
+                        .withDirected(DirectedRules.of(tougherBears()), new DirectedForkTally()))) {
             recording.open();
             ForkPlayForwardTest.playTheTurnOut(game);
         } finally {
@@ -918,7 +924,9 @@ class ForkRecordsTest {
         Card skeletons = TestBoard.inPlay(game, opponent, "Drudge Skeletons");
         CollectionCaps caps = forkCaps().interventions(0).probes(0).directed(1, 1.0, "704.5f").build();
         RecordShardWriter shard = ShardRun.writer(tempDir);
-        try (GameRecording recording = new GameRecording(game, shard, ShardRun.GAME_ID, caps, 7L, null)) {
+        try (GameRecording recording = new GameRecording(
+                GameRecordingRequest.of(game, shard, ShardRun.GAME_ID, caps)
+                        .seeded(7L))) {
             recording.open();
             // The main phase's boundary, before either seat has had priority
             // in it: given priority earlier, the AI casts Disfigure at once.
