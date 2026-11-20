@@ -17,7 +17,12 @@ from effects.domain.records import EffectRecord
 from effects.infrastructure.shard_io import read_records
 from price_predictor.infrastructure.forge_classpath import resolve_connector_jar
 from price_predictor.infrastructure.jvm_processes import kill_process_tree
-from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
+from sealed.infrastructure.match_worker_connector import (
+    MatchWorkerConnector,
+    WorkerLaunch,
+    WorkerRecords,
+    WorkerStopProtocol,
+)
 
 #: A worker needs to initialize Forge, build two decks and play a game before
 #: it writes anything; this is generous enough for a cold JVM on a slow disk.
@@ -90,14 +95,13 @@ def run_worker(
     asked fails the test.
     """
     stop_file = stop_file_for(records_dir)
-    process = MatchWorkerConnector().start(
+    process = MatchWorkerConnector().start(launch=WorkerLaunch(
         output_file,
         run_id=str(uuid.uuid4()),
         best_of=1,
-        effect_records_dir=records_dir,
-        worker_index=0,
-        stop_file=stop_file,
-    )
+        records=WorkerRecords(directory=records_dir, worker_index=0),
+        stop=WorkerStopProtocol(stop_file=stop_file),
+    ))
     try:
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:

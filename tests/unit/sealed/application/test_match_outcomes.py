@@ -185,10 +185,10 @@ class TestSupervisorSideDecks:
 
         proc = supervisor._start_worker(0)
 
-        kwargs = fake_connector.start.call_args.kwargs
-        assert kwargs.get("side_a_decks_path") == side_a
-        assert kwargs.get("side_b_decks_path") == side_b
-        assert kwargs.get("side_b_decks_weight") == 6
+        decks = fake_connector.start.call_args.kwargs["launch"].decks
+        assert decks.side_a == side_a
+        assert decks.side_b == side_b
+        assert decks.side_b_weight == 6
         assert proc.returncode == 0
 
 class TestSupervisorRunId:
@@ -213,7 +213,7 @@ class TestSupervisorRunId:
         supervisor._start_worker(1)
         supervisor._start_worker(2)
 
-        run_ids = [call.kwargs["run_id"] for call in fake_connector.start.call_args_list]
+        run_ids = [call.kwargs["launch"].run_id for call in fake_connector.start.call_args_list]
         assert len(set(run_ids)) == 1, "run_id must be identical across worker starts"
         assert run_ids[0] == supervisor.run_id
 
@@ -243,7 +243,7 @@ class TestSupervisorRunId:
         first, second = fake_connector.start.call_args_list
         assert first.kwargs == second.kwargs
         assert first.args == second.args
-        assert first.kwargs["worker_index"] == 0
+        assert first.kwargs["launch"].records.worker_index == 0
 
     def test_run_ids_differ_between_supervisor_instances(self, tmp_path):
         out1 = tmp_path / "out1.txt"
@@ -344,8 +344,7 @@ class TestSupervisorBestOf:
 
         supervisor._start_worker(0)
 
-        kwargs = fake_connector.start.call_args.kwargs
-        assert kwargs.get("best_of") == 17
+        assert fake_connector.start.call_args.kwargs["launch"].best_of == 17
 
 
 class TestSupervisorStatusLineFormat:
@@ -493,11 +492,11 @@ class TestTheRunReportsWhatItsWorkersLogged:
 
         supervisor._start_worker(1)
 
-        kwargs = supervisor._connector.start.call_args.kwargs
+        launch = supervisor._connector.start.call_args.kwargs["launch"]
         logs = tmp_path / "records" / "logs"
-        assert kwargs["stop_file"] == logs / f"{supervisor.run_id}.1.stop"
-        assert kwargs["recycle_seconds"] == 900
-        assert kwargs["progress_file"] == logs / f"{supervisor.run_id}.progress.txt"
+        assert launch.stop.stop_file == logs / f"{supervisor.run_id}.1.stop"
+        assert launch.stop.recycle_seconds == 900
+        assert launch.progress_file == logs / f"{supervisor.run_id}.progress.txt"
         assert supervisor._pool._graceful.settings.timeout == 30
 
     def test_without_effect_records_the_pool_kills_as_before(self, tmp_path):
@@ -511,8 +510,8 @@ class TestTheRunReportsWhatItsWorkersLogged:
 
         supervisor._start_worker(0)
 
-        kwargs = supervisor._connector.start.call_args.kwargs
-        assert (kwargs["stop_file"], kwargs["recycle_seconds"], kwargs["progress_file"]) == (
+        launch = supervisor._connector.start.call_args.kwargs["launch"]
+        assert (launch.stop.stop_file, launch.stop.recycle_seconds, launch.progress_file) == (
             None, None, None)
         assert supervisor._pool._graceful is None
 

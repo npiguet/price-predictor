@@ -22,7 +22,13 @@ from effects.infrastructure.deck_file import write_deck_file
 from effects.infrastructure.one_shot_workers import write_variant_sidecars
 from effects.infrastructure.shard_io import read_records
 from price_predictor.infrastructure.jvm_processes import kill_process_tree
-from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
+from sealed.infrastructure.match_worker_connector import (
+    MatchWorkerConnector,
+    WorkerDecks,
+    WorkerLaunch,
+    WorkerRecords,
+    WorkerStopProtocol,
+)
 from tests.integration.conftest import POLL_SECONDS, require_jar, stop_file_for, stop_worker
 
 pytestmark = pytest.mark.integration
@@ -77,21 +83,21 @@ def test_a_steered_games_records_carry_its_decks_rules(tmp_path: Path) -> None:
         assert write_variant_sidecars(variants_dir) == 0, "VariantSidecarMain failed"
         assert variant in (variants_dir / LOADABLE_FILE).read_text(encoding="utf-8").splitlines()
 
-        process = MatchWorkerConnector().start(
+        process = MatchWorkerConnector().start(launch=WorkerLaunch(
             None,
             run_id=str(uuid.uuid4()),
             best_of=1,
-            effect_records_dir=records_dir,
-            worker_index=0,
-            # A variant run aims at no rule of its own: the decks' rules replace it.
-            collection_caps={"effect.aimed.at": ""},
-            side_a_decks_path=decks_file,
-            side_b_decks_path=decks_file,
-            decks_only=True,
+            decks=WorkerDecks(side_a=decks_file, side_b=decks_file, decks_only=True),
+            records=WorkerRecords(
+                directory=records_dir,
+                worker_index=0,
+                # A variant run aims at no rule of its own: the decks' rules replace it.
+                collection_caps={"effect.aimed.at": ""},
+                variant_scripts=variants_dir,
+            ),
+            stop=WorkerStopProtocol(stop_file=stop_file),
             progress_file=progress_file,
-            variant_scripts=variants_dir,
-            stop_file=stop_file,
-        )
+        ))
         deadline = time.monotonic() + _GAME_SECONDS
         while time.monotonic() < deadline:
             time.sleep(POLL_SECONDS)

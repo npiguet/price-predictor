@@ -22,7 +22,12 @@ import pytest
 from effects.domain.records import is_game_end
 from effects.infrastructure.shard_io import read_records
 from price_predictor.infrastructure.jvm_processes import kill_process_tree
-from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
+from sealed.infrastructure.match_worker_connector import (
+    MatchWorkerConnector,
+    WorkerLaunch,
+    WorkerRecords,
+    WorkerStopProtocol,
+)
 from tests.integration.conftest import require_jar, stop_file_for, stop_worker
 
 pytestmark = pytest.mark.integration
@@ -50,14 +55,13 @@ def _require_patched(
     require_jar()
 
     stop_file = stop_file_for(records_dir)
-    process = MatchWorkerConnector().start(
+    process = MatchWorkerConnector().start(launch=WorkerLaunch(
         None,
         run_id=str(uuid.uuid4()),
         best_of=1,
-        effect_records_dir=records_dir,
-        worker_index=0,
-        stop_file=stop_file,
-    )
+        records=WorkerRecords(directory=records_dir, worker_index=0),
+        stop=WorkerStopProtocol(stop_file=stop_file),
+    ))
     try:
         deadline = time.monotonic() + _COLLECTION_SECONDS
         while time.monotonic() < deadline:

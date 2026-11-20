@@ -55,7 +55,7 @@ MAX_STOP_TIMEOUT = 3600
 #: Seconds of its JVM's life after which a worker stops itself at its next
 #: game end and the pool starts a fresh one (``worker.recycle.seconds``).
 #: Recycling bounds what Forge accumulates late in a JVM's life (heap growth,
-#: loops that do not end; ``MatchWorkerConnector.start``'s ``-Xmx``). The
+#: loops that do not end; ``match_worker_connector.WORKER_XMX``). The
 #: pool also kills its longest-running worker every 60 s
 #: (``ForgeWorkerPool._kill_oldest_worker``), cutting its game, so a JVM
 #: lives about ``workers × 60`` s, six to twelve minutes for 6 to 12 workers:

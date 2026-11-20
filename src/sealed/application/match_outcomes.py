@@ -30,6 +30,10 @@ from sealed.infrastructure.effect_collection_flags import (
 from sealed.infrastructure.match_worker_connector import (
     DEFAULT_SIDE_B_DECKS_WEIGHT,
     MatchWorkerConnector,
+    WorkerDecks,
+    WorkerLaunch,
+    WorkerRecords,
+    WorkerStopProtocol,
 )
 
 #: Under the run directory: every worker log.
@@ -331,31 +335,42 @@ class MatchOutcomeSupervisor:
             self._worker_logs.get(worker_id) if self._worker_logs is not None
             else None
         )
-        proc = self._connector.start(
+        proc = self._connector.start(launch=self._launch(worker_id), log_file=log_file)
+        print(f"Worker {worker_id} started (PID {proc.pid})")
+        return proc
+
+    def _launch(self, worker_id: int) -> WorkerLaunch:
+        """What the worker of slot ``worker_id`` is started with."""
+        return WorkerLaunch(
             self._output_path,
             run_id=self._run_id,
             best_of=self._best_of,
-            log_file=log_file,
-            side_a_decks_path=self._side_a_decks_path,
-            side_b_decks_path=self._side_b_decks_path,
-            side_b_decks_weight=self._side_b_decks_weight,
-            effect_records_dir=self._effect_records_dir,
-            # The slot, not the process: a respawn passes the same number, so
-            # this cannot be what makes a restarted worker's ids distinct.
-            worker_index=worker_id,
-            collection_caps=self._worker_caps(),
-            exclude_cards_path=self._exclude_cards_path,
+            decks=WorkerDecks(
+                side_a=self._side_a_decks_path,
+                side_b=self._side_b_decks_path,
+                side_b_weight=self._side_b_decks_weight,
+                exclude_cards=self._exclude_cards_path,
+            ),
+            records=WorkerRecords(
+                directory=self._effect_records_dir,
+                # The slot, not the process: a respawn passes the same number, so
+                # this cannot be what makes a restarted worker's ids distinct.
+                worker_index=worker_id,
+                collection_caps=self._worker_caps(),
+            ),
+            stop=self._stop_protocol(worker_id),
             progress_file=self._progress_path,
-            stop_file=(
-                self._worker_logs.stop_path_for(worker_id)
-                if self._worker_stop is not None else None
-            ),
-            recycle_seconds=(
-                self._worker_stop.recycle_seconds if self._worker_stop is not None else None
-            ),
         )
-        print(f"Worker {worker_id} started (PID {proc.pid})")
-        return proc
+
+    def _stop_protocol(self, worker_id: int) -> WorkerStopProtocol:
+        """The stop file and recycle age of slot ``worker_id``'s worker; none
+        without the stop protocol."""
+        if self._worker_stop is None:
+            return WorkerStopProtocol()
+        return WorkerStopProtocol(
+            stop_file=self._worker_logs.stop_path_for(worker_id),
+            recycle_seconds=self._worker_stop.recycle_seconds,
+        )
 
     def _worker_caps(self) -> Mapping[str, object] | None:
         """The caps a worker spawned now starts with: the run's, each listed

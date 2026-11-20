@@ -28,7 +28,13 @@ from price_predictor.infrastructure.worker_log_files import WorkerLogFiles
 from price_predictor.infrastructure.worker_log_scan import WorkerLogReport
 from price_predictor.infrastructure.worker_stops import WorkerStops, WorkerStopSettings
 from sealed.infrastructure.effect_collection_flags import dropped_events_report
-from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
+from sealed.infrastructure.match_worker_connector import (
+    MatchWorkerConnector,
+    WorkerDecks,
+    WorkerLaunch,
+    WorkerRecords,
+    WorkerStopProtocol,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -151,21 +157,26 @@ class CollectorSupervisor:
         """Spawn one records-only worker playing both sides from ``decks_file``:
         with no output file the JVM builds neither sealed writer, so a coverage
         run cannot reach the sealed corpus."""
+        log_file = self._worker_logs.get(worker_id)
         process = self._connector.start(
-            None,
-            run_id=self._run_id,
-            best_of=COVERAGE_BEST_OF,
-            log_file=self._worker_logs.get(worker_id),
-            effect_records_dir=self._effect_records,
-            worker_index=worker_id,
-            collection_caps=self._caps.as_system_properties(),
-            side_a_decks_path=decks_file,
-            side_b_decks_path=decks_file,
-            decks_only=True,
-            progress_file=self.progress_path,
-            variant_scripts=self._variant_scripts,
-            stop_file=self._graceful.stop_file_for(worker_id),
-            recycle_seconds=self._stop.recycle_seconds,
+            launch=WorkerLaunch(
+                None,
+                run_id=self._run_id,
+                best_of=COVERAGE_BEST_OF,
+                decks=WorkerDecks(side_a=decks_file, side_b=decks_file, decks_only=True),
+                records=WorkerRecords(
+                    directory=self._effect_records,
+                    worker_index=worker_id,
+                    collection_caps=self._caps.as_system_properties(),
+                    variant_scripts=self._variant_scripts,
+                ),
+                stop=WorkerStopProtocol(
+                    stop_file=self._graceful.stop_file_for(worker_id),
+                    recycle_seconds=self._stop.recycle_seconds,
+                ),
+                progress_file=self.progress_path,
+            ),
+            log_file=log_file,
         )
         logger.info("Coverage worker %d started (PID %d)", worker_id, process.pid)
         return process

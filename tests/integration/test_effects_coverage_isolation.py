@@ -21,7 +21,13 @@ import pytest
 from effects.infrastructure.deck_file import write_deck_file
 from effects.infrastructure.shard_io import read_records
 from price_predictor.infrastructure.jvm_processes import kill_process_tree
-from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
+from sealed.infrastructure.match_worker_connector import (
+    MatchWorkerConnector,
+    WorkerDecks,
+    WorkerLaunch,
+    WorkerRecords,
+    WorkerStopProtocol,
+)
 from tests.integration.conftest import POLL_SECONDS, require_jar, run_worker, stop_worker
 
 pytestmark = pytest.mark.integration
@@ -144,18 +150,15 @@ def test_a_named_deck_reaches_the_records(tmp_path: Path) -> None:
     stop_files = [tmp_path / f"worker-{index}.stop" for index in range(_WORKER_COUNT)]
 
     processes = [
-        MatchWorkerConnector().start(
+        MatchWorkerConnector().start(launch=WorkerLaunch(
             None,
             run_id=run_id,
             best_of=1,
-            effect_records_dir=records_dir,
-            worker_index=worker_index,
-            side_a_decks_path=decks_file,
-            side_b_decks_path=decks_file,
-            decks_only=True,
+            decks=WorkerDecks(side_a=decks_file, side_b=decks_file, decks_only=True),
+            records=WorkerRecords(directory=records_dir, worker_index=worker_index),
+            stop=WorkerStopProtocol(stop_file=stop_files[worker_index]),
             progress_file=progress_file,
-            stop_file=stop_files[worker_index],
-        )
+        ))
         for worker_index in range(_WORKER_COUNT)
     ]
     try:

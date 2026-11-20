@@ -628,7 +628,7 @@ class ForgeWorkerPool:
         every worker to finish its game).
 
         This is containment, not tuning, and it is one measure with the worker's
-        small ``-Xmx`` (see MatchWorkerConnector.start): Forge degrades late in a
+        small ``-Xmx`` (``match_worker_connector.WORKER_XMX``): Forge degrades late in a
         JVM's life, and a small heap plus a hard recycle bounds that instead of
         letting one worker consume a run. So restarts are the normal operating
         condition, not an accident: anything a worker counts from zero must be

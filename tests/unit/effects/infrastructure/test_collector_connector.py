@@ -163,18 +163,18 @@ class TestPlayRound:
         with patch.object(supervisor, "_connector") as connector:
             pool.call_args.kwargs["spawn_worker"](0)
 
-        kwargs = connector.start.call_args.kwargs
-        assert connector.start.call_args.args[0] is None, "records-only: no output file"
-        assert kwargs["side_a_decks_path"] == decks
-        assert kwargs["side_b_decks_path"] == decks
-        assert kwargs["decks_only"] is True
-        assert kwargs["run_id"] == "run"
-        assert kwargs["worker_index"] == 0
-        assert kwargs["best_of"] == 1
-        assert kwargs["effect_records_dir"] == tmp_path
-        assert kwargs["collection_caps"] == CollectionCaps().as_system_properties()
-        assert kwargs["variant_scripts"] is None
-        assert kwargs["progress_file"] == supervisor.progress_path
+        launch = connector.start.call_args.kwargs["launch"]
+        assert launch.output_file is None, "records-only: no output file"
+        assert launch.decks.side_a == decks
+        assert launch.decks.side_b == decks
+        assert launch.decks.decks_only is True
+        assert launch.run_id == "run"
+        assert launch.records.worker_index == 0
+        assert launch.best_of == 1
+        assert launch.records.directory == tmp_path
+        assert launch.records.collection_caps == CollectionCaps().as_system_properties()
+        assert launch.records.variant_scripts is None
+        assert launch.progress_file == supervisor.progress_path
 
     def test_the_progress_file_reaches_the_worker_without_becoming_output_file(
         self, tmp_path,
@@ -200,9 +200,9 @@ class TestPlayRound:
         with patch.object(supervisor, "_connector") as connector:
             supervisor.start_worker(0, tmp_path / "decks.txt")
 
-        call = connector.start.call_args
-        assert call.args[0] is None
-        assert call.kwargs["progress_file"] == supervisor.progress_path
+        launch = connector.start.call_args.kwargs["launch"]
+        assert launch.output_file is None
+        assert launch.progress_file == supervisor.progress_path
 
     def test_play_round_writes_the_decks_file_the_workers_read(self, tmp_path):
         supervisor = self._supervisor(tmp_path)
@@ -421,9 +421,9 @@ class TestTheWorkersStopAtAGameEnd:
 
         supervisor.start_worker(2, tmp_path / "decks.txt")
 
-        kwargs = connector.start.call_args.kwargs
-        assert kwargs["stop_file"] == tmp_path / "records" / "logs" / "r1.2.stop"
-        assert kwargs["recycle_seconds"] == 900
+        launch = connector.start.call_args.kwargs["launch"]
+        assert launch.stop.stop_file == tmp_path / "records" / "logs" / "r1.2.stop"
+        assert launch.stop.recycle_seconds == 900
         supervisor.stop()
 
     def test_the_round_s_pool_runs_the_protocol_on_the_same_files(self, tmp_path):
@@ -480,17 +480,17 @@ class TestTheWorkersStopAtAGameEnd:
             timeout=20, recycle_seconds=3600))
         started: list[subprocess.Popen] = []
 
-        def start(output_file, **kwargs):
+        def start(launch, log_file):
             properties = {
-                "worker.stop.file": kwargs["stop_file"],
-                "worker.recycle.seconds": kwargs["recycle_seconds"],
-                "sealed.progress.file": kwargs["progress_file"],
+                "worker.stop.file": launch.stop.stop_file,
+                "worker.recycle.seconds": launch.stop.recycle_seconds,
+                "sealed.progress.file": launch.progress_file,
                 "standin.game.seconds": 0.2,
             }
             started.append(subprocess.Popen(
                 [sys.executable, "-u", stand_in_worker.__file__,
                  *(f"-D{key}={value}" for key, value in properties.items())],
-                stdout=kwargs["log_file"], stderr=subprocess.STDOUT,
+                stdout=log_file, stderr=subprocess.STDOUT,
             ))
             return started[-1]
 

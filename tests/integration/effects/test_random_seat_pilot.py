@@ -47,7 +47,13 @@ from effects.infrastructure.shard_io import ended_games, iter_shard_lines, iter_
 from price_predictor.infrastructure.forge_classpath import resolve_connector_jar
 from price_predictor.infrastructure.jvm_processes import kill_process_tree
 from price_predictor.infrastructure.worker_stops import STOPPED_LINE
-from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
+from sealed.infrastructure.match_worker_connector import (
+    MatchWorkerConnector,
+    WorkerDecks,
+    WorkerLaunch,
+    WorkerRecords,
+    WorkerStopProtocol,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -125,18 +131,19 @@ def _run_pilot(tmp_path: Path) -> tuple[Path, Path, Path, list, int, str]:
     log_path = tmp_path / "worker.log"
     with open(log_path, "wb") as log:
         process = MatchWorkerConnector().start(
-            outcomes,
-            run_id=str(uuid.uuid4()),
-            best_of=1,
+            launch=WorkerLaunch(
+                outcomes,
+                run_id=str(uuid.uuid4()),
+                best_of=1,
+                decks=WorkerDecks(side_a=decks, side_b=decks, decks_only=True),
+                records=WorkerRecords(
+                    directory=records_dir, worker_index=0,
+                    collection_caps=caps.as_system_properties(),
+                ),
+                stop=WorkerStopProtocol(stop_file=stop_file),
+                progress_file=progress,
+            ),
             log_file=log,
-            side_a_decks_path=decks,
-            side_b_decks_path=decks,
-            decks_only=True,
-            effect_records_dir=records_dir,
-            worker_index=0,
-            collection_caps=caps.as_system_properties(),
-            progress_file=progress,
-            stop_file=stop_file,
         )
         try:
             deadline = time.monotonic() + _COLLECTION_SECONDS

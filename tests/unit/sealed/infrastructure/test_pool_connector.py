@@ -110,6 +110,8 @@ class TestDepletedCollection:
     def test_the_exclusion_reaches_the_match_worker(self, tmp_path):
         from sealed.infrastructure.match_worker_connector import (
             MatchWorkerConnector,
+            WorkerDecks,
+            WorkerLaunch,
         )
 
         listed = tmp_path / "holdout-cards.txt"
@@ -120,10 +122,10 @@ class TestDepletedCollection:
             "sealed.infrastructure.match_worker_connector.build_forge_classpath",
             return_value="cp",
         ), patch("subprocess.Popen"):
-            MatchWorkerConnector().start(
+            MatchWorkerConnector().start(launch=WorkerLaunch(
                 run_id="r", best_of=7, output_file=tmp_path / "out.txt",
-                exclude_cards_path=listed,
-            )
+                decks=WorkerDecks(exclude_cards=listed),
+            ))
 
         props = build.call_args.kwargs["options"].system_properties
         assert props["sealed.exclude.cards"] == str(listed)
@@ -131,6 +133,7 @@ class TestDepletedCollection:
     def test_an_ordinary_run_sets_no_exclusion_property(self, tmp_path):
         from sealed.infrastructure.match_worker_connector import (
             MatchWorkerConnector,
+            WorkerLaunch,
         )
 
         with patch(
@@ -140,8 +143,8 @@ class TestDepletedCollection:
             "sealed.infrastructure.match_worker_connector.build_forge_classpath",
             return_value="cp",
         ), patch("subprocess.Popen"):
-            MatchWorkerConnector().start(
+            MatchWorkerConnector().start(launch=WorkerLaunch(
                 run_id="r", best_of=7, output_file=tmp_path / "out.txt",
-            )
+            ))
 
         assert "sealed.exclude.cards" not in build.call_args.kwargs["options"].system_properties

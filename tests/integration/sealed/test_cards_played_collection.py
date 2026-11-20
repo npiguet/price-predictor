@@ -49,7 +49,7 @@ def test_cards_played_collection(tmp_path: Path) -> None:
             "forge-connector fat jar or sibling ../forge checkout not available",
         )
 
-    from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
+    from sealed.infrastructure.match_worker_connector import MatchWorkerConnector, WorkerLaunch
 
     output_file = tmp_path / "match-outcomes.txt"
     cards_played_file = tmp_path / "cards-played.txt"
@@ -59,9 +59,7 @@ def test_cards_played_collection(tmp_path: Path) -> None:
     log_path = tmp_path / "worker.log"
     with log_path.open("wb") as log:
         process = connector.start(
-            output_file=output_file,
-            run_id=run_id,
-            best_of=3,
+            launch=WorkerLaunch(output_file=output_file, run_id=run_id, best_of=3),
             log_file=log,
         )
         # Wait for ~2 matches (Bo3) — Forge takes a while; cap at 3 minutes.

@@ -56,10 +56,11 @@ def test_a_worker_spawned_after_a_scan_takes_the_recomputed_probabilities(tmp_pa
     supervisor._pool._on_status()  # the status line's log scan
     supervisor._start_worker(0)
 
-    first, second = supervisor._connector.start.call_args_list
-    assert first.kwargs["collection_caps"][PROPERTY] == "1.0"
-    assert second.kwargs["collection_caps"][PROPERTY] == "0.0"
-    assert second.kwargs["collection_caps"]["effect.directed.fork.rules"] == "118.12b,704.5f"
+    first, second = (call.kwargs["launch"].records.collection_caps
+                     for call in supervisor._connector.start.call_args_list)
+    assert first[PROPERTY] == "1.0"
+    assert second[PROPERTY] == "0.0"
+    assert second["effect.directed.fork.rules"] == "118.12b,704.5f"
 
 
 def test_without_a_scan_every_spawn_keeps_the_starting_probabilities(tmp_path):
@@ -68,7 +69,8 @@ def test_without_a_scan_every_spawn_keeps_the_starting_probabilities(tmp_path):
 
     supervisor._start_worker(0)
 
-    assert supervisor._connector.start.call_args.kwargs["collection_caps"][PROPERTY] == "1.0"
+    launch = supervisor._connector.start.call_args.kwargs["launch"]
+    assert launch.records.collection_caps[PROPERTY] == "1.0"
 
 
 def test_the_run_json_keeps_the_starting_and_the_final_probabilities(tmp_path):
