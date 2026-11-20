@@ -11,6 +11,7 @@ import forge.game.card.Card;
 import forge.game.card.CardCollectionView;
 import forge.game.card.CardTraitChanges;
 import forge.game.card.CounterType;
+import forge.game.combat.Combat;
 import forge.game.card.ICardTraitChanges;
 import forge.game.spellability.SpellAbility;
 
@@ -187,25 +188,8 @@ final class EntityJson {
         if (!CombatShape.isCombatant(combat, card)) {
             return "null";
         }
-        List<String> blockedBy = new ArrayList<>();
-        if (combat.isAttacking(card)) {
-            CardCollectionView blockers = combat.getBlockers(card);
-            if (blockers != null) {
-                for (Card blocker : blockers) {
-                    blockedBy.add(Refs.of(blocker));
-                }
-            }
-        }
-        List<String> blocking = new ArrayList<>();
-        if (combat.isBlocking(card)) {
-            // The other half of blocked_by. Without it a blocker's own entry
-            // says only that it is somewhere in a combat, so the flag the head
-            // reads for "is this creature blocking" would always be false — and the
-            // blocking relationship is what trample and deathtouch act through.
-            for (Card attacker : combat.getAttackersBlockedBy(card)) {
-                blocking.add(Refs.of(attacker));
-            }
-        }
+        List<String> blockedBy = blockedByRefs(combat, card);
+        List<String> blocking = blockingRefs(combat, card);
         // The defender's ref, as the attacks link names it: a player's P<id>,
         // a planeswalker's or battle's E<id>; E-1 for the placeholder an
         // attacker attacks once its planeswalker or battle has left (506.4c).
@@ -217,6 +201,34 @@ final class EntityJson {
                 .raw("blocked_by", Json.stringArray(blockedBy))
                 .value("became_blocked", combat.isBlocked(card))
                 .render();
+    }
+
+    private static List<String> blockedByRefs(Combat combat, Card card) {
+        List<String> blockedBy = new ArrayList<>();
+        if (!combat.isAttacking(card)) {
+            return blockedBy;
+        }
+        CardCollectionView blockers = combat.getBlockers(card);
+        if (blockers != null) {
+            for (Card blocker : blockers) {
+                blockedBy.add(Refs.of(blocker));
+            }
+        }
+        return blockedBy;
+    }
+
+    private static List<String> blockingRefs(Combat combat, Card card) {
+        List<String> blocking = new ArrayList<>();
+        if (combat.isBlocking(card)) {
+            // The other half of blocked_by. Without it a blocker's own entry
+            // says only that it is somewhere in a combat, so the flag the head
+            // reads for "is this creature blocking" would always be false — and the
+            // blocking relationship is what trample and deathtouch act through.
+            for (Card attacker : combat.getAttackersBlockedBy(card)) {
+                blocking.add(Refs.of(attacker));
+            }
+        }
+        return blocking;
     }
 
     private static String grantedTemporaryJson(Card card, StaticSuppression board) {
@@ -266,13 +278,20 @@ final class EntityJson {
         if (copied != null && copied.getId() != card.getId()) {
             return Refs.of(copied);
         }
-        if (card.isCloned() && card.getCloneStates()
-                instanceof java.util.NavigableMap<Long, forge.game.card.CardCloneStates> states
+        Card origin = cloneOrigin(card);
+        if (origin != null && origin.getId() != card.getId()) {
+            return Refs.of(origin);
+        }
+        return null;
+    }
+
+    private static Card cloneOrigin(Card card) {
+        if (!card.isCloned()) {
+            return null;
+        }
+        if (card.getCloneStates() instanceof java.util.NavigableMap<Long, forge.game.card.CardCloneStates> states
                 && !states.isEmpty()) {
-            Card origin = states.lastEntry().getValue().getOrigin();
-            if (origin != null && origin.getId() != card.getId()) {
-                return Refs.of(origin);
-            }
+            return states.lastEntry().getValue().getOrigin();
         }
         return null;
     }
