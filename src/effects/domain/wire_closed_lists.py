@@ -56,7 +56,7 @@ GAME_LOSS_REASONS: tuple[str, ...] = (
     "CommanderDamage", "OpponentWon", "IntentionalDraw",
 )
 #: A ``choice_made``'s ``choice_kind``, decided by the clause's API
-#: (``ApiEvents``' choice readings). Pinned to that source by a test.
+#: (``ChoiceApiRules``' choice readings). Pinned to that source by a test.
 CHOICE_KINDS: tuple[str, ...] = (
     "color", "type", "number", "card_name", "player", "cards", "direction",
     "even_odd", "mode",
