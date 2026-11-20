@@ -162,11 +162,7 @@ public class MatchWorkerMain {
     static WorkerConfig parseConfig(long startedNanos) {
         Optional<Path> outputFile = WorkerProperties.optionalPath(OUTPUT_FILE);
         Optional<Path> effectRecordsDir = WorkerProperties.optionalPath(EFFECT_RECORDS_DIR);
-        if (outputFile.isEmpty() && effectRecordsDir.isEmpty()) {
-            throw ToolMain.badConfig(
-                    "-D" + OUTPUT_FILE + " is required unless -D" + EFFECT_RECORDS_DIR
-                            + " is set (records-only mode)");
-        }
+        requireAnOutput(outputFile, effectRecordsDir);
 
         String runId = WorkerProperties.require(RUN_ID);
 
@@ -175,10 +171,7 @@ public class MatchWorkerMain {
         Optional<Path> sideADecks = WorkerProperties.optionalPath(SIDE_A_DECKS_FILE);
         Optional<Path> sideBDecks = WorkerProperties.optionalPath(SIDE_B_DECKS_FILE);
 
-        if (sideBDecks.isEmpty() && WorkerProperties.optional(SIDE_B_DECKS_WEIGHT).isPresent()) {
-            throw ToolMain.badConfig(
-                    "-D" + SIDE_B_DECKS_WEIGHT + " is only valid with -D" + SIDE_B_DECKS_FILE);
-        }
+        requireWeightOnlyWithSideBDecks(sideBDecks);
 
         int sideBWeight = WorkerProperties.intProperty(
                 SIDE_B_DECKS_WEIGHT, DEFAULT_SIDE_B_WEIGHT, WorkerProperties.OnMalformed.EXIT,
@@ -189,10 +182,7 @@ public class MatchWorkerMain {
         // Forge's booster/edition tables and throw. This forces the roll to
         // the decks file every time. See MatchGenerator.rollIsFileSample().
         boolean decksOnly = WorkerProperties.flag(DECKS_ONLY);
-        if (decksOnly && (sideADecks.isEmpty() || sideBDecks.isEmpty())) {
-            throw ToolMain.badConfig("-D" + DECKS_ONLY + " requires both -D"
-                    + SIDE_A_DECKS_FILE + " and -D" + SIDE_B_DECKS_FILE);
-        }
+        requireBothDecksFilesWhenDecksOnly(decksOnly, sideADecks, sideBDecks);
 
         int workerIndex = WorkerProperties.intProperty(
                 EFFECT_WORKER_INDEX, 0, WorkerProperties.OnMalformed.EXIT,
@@ -225,6 +215,30 @@ public class MatchWorkerMain {
                 outputFile, runId, bestOf, sideADecks, sideBDecks, sideBWeight,
                 effectRecordsDir, workerIndex, workerLifetime, decksOnly, progressFile, stop,
                 caps);
+    }
+
+    private static void requireAnOutput(Optional<Path> outputFile, Optional<Path> effectRecordsDir) {
+        if (outputFile.isEmpty() && effectRecordsDir.isEmpty()) {
+            throw ToolMain.badConfig(
+                    "-D" + OUTPUT_FILE + " is required unless -D" + EFFECT_RECORDS_DIR
+                            + " is set (records-only mode)");
+        }
+    }
+
+    private static void requireWeightOnlyWithSideBDecks(Optional<Path> sideBDecks) {
+        if (sideBDecks.isEmpty() && WorkerProperties.optional(SIDE_B_DECKS_WEIGHT).isPresent()) {
+            throw ToolMain.badConfig(
+                    "-D" + SIDE_B_DECKS_WEIGHT + " is only valid with -D" + SIDE_B_DECKS_FILE);
+        }
+    }
+
+    private static void requireBothDecksFilesWhenDecksOnly(
+            boolean decksOnly, Optional<Path> sideADecks, Optional<Path> sideBDecks) {
+        boolean bothGiven = sideADecks.isPresent() && sideBDecks.isPresent();
+        if (decksOnly && !bothGiven) {
+            throw ToolMain.badConfig("-D" + DECKS_ONLY + " requires both -D"
+                    + SIDE_A_DECKS_FILE + " and -D" + SIDE_B_DECKS_FILE);
+        }
     }
 
     private static void initializeForge(WorkerConfig config) {
@@ -269,8 +283,8 @@ public class MatchWorkerMain {
         // the worker before its first match, once Forge is initialised.
         WorkerStop stop = config.stop();
         stop.describe().ifPresent(System.out::println);
-        GamePlayer gamePlayer = new GamePlayer(
-                config.bestOf(), effectRecords, caps, stop, forge.game.Match::startGame);
+        GamePlayer gamePlayer = new GamePlayer(new GamePlayer.Config(
+                config.bestOf(), effectRecords, caps, stop, forge.game.Match::startGame));
         MatchGenerator generator = MatchGenerator.builder(eligibleSets, config.runId())
                 .gamePlayer(gamePlayer)
                 .sideA(sideA)

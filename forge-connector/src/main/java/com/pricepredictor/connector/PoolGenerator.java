@@ -95,53 +95,73 @@ public class PoolGenerator {
 
     /** {@link #openSinglePool}, with the count of slots left empty. */
     OpenedPool openPool(SealedTemplate boosterTemplate, HoldoutCards excluded) {
-        int dropped = 0;
-        List<PaperCard> pool = new ArrayList<>();
-        Map<CardRarity, Deque<PaperCard>> spares = new EnumMap<>(CardRarity.class);
-        int replacementBoosters = 0;
+        return new Opening(boosterTemplate, excluded).open();
+    }
 
-        for (int b = 0; b < BOOSTERS_PER_POOL; b++) {
-            for (PaperCard card : new UnOpenedProduct(boosterTemplate).get()) {
-                if (BasicLands.isBasic(card)) {
-                    continue;
+    /** The state of one pool being opened: its cards, its dropped slots and the spares of replacement boosters. */
+    private static final class Opening {
+        private final SealedTemplate boosterTemplate;
+        private final HoldoutCards excluded;
+        private final List<PaperCard> pool = new ArrayList<>();
+        private final Map<CardRarity, Deque<PaperCard>> spares = new EnumMap<>(CardRarity.class);
+        private int dropped = 0;
+        private int replacementBoosters = 0;
+
+        Opening(SealedTemplate boosterTemplate, HoldoutCards excluded) {
+            this.boosterTemplate = boosterTemplate;
+            this.excluded = excluded;
+        }
+
+        OpenedPool open() {
+            for (int b = 0; b < BOOSTERS_PER_POOL; b++) {
+                for (PaperCard card : new UnOpenedProduct(boosterTemplate).get()) {
+                    place(card);
                 }
-                if (!excluded.contains(card.getName())) {
-                    pool.add(card);
-                    continue;
-                }
-                PaperCard replacement = null;
-                while (replacement == null && replacementBoosters < MAX_REPLACEMENT_BOOSTERS) {
-                    replacement = takeSpare(spares, card.getRarity());
-                    if (replacement == null) {
-                        stockSpares(spares, boosterTemplate, excluded);
-                        replacementBoosters++;
-                    }
-                }
-                if (replacement != null) {
-                    pool.add(replacement);
-                } else {
-                    dropped++;
-                }
+            }
+            return new OpenedPool(pool, dropped);
+        }
+
+        private void place(PaperCard card) {
+            if (BasicLands.isBasic(card)) {
+                return;
+            }
+            if (!excluded.contains(card.getName())) {
+                pool.add(card);
+                return;
+            }
+            PaperCard replacement = replacementFor(card.getRarity());
+            if (replacement != null) {
+                pool.add(replacement);
+            } else {
+                dropped++;
             }
         }
-        return new OpenedPool(pool, dropped);
-    }
 
-    private PaperCard takeSpare(Map<CardRarity, Deque<PaperCard>> spares, CardRarity rarity) {
-        Deque<PaperCard> queue = spares.get(rarity);
-        return queue == null || queue.isEmpty() ? null : queue.poll();
-    }
-
-    /** Open one more booster and keep its usable cards, filed by rarity. */
-    private void stockSpares(
-            Map<CardRarity, Deque<PaperCard>> spares,
-            SealedTemplate boosterTemplate,
-            HoldoutCards excluded) {
-        for (PaperCard card : new UnOpenedProduct(boosterTemplate).get()) {
-            if (BasicLands.isBasic(card) || excluded.contains(card.getName())) {
-                continue;
+        private PaperCard replacementFor(CardRarity rarity) {
+            PaperCard replacement = null;
+            while (replacement == null && replacementBoosters < MAX_REPLACEMENT_BOOSTERS) {
+                replacement = takeSpare(rarity);
+                if (replacement == null) {
+                    stockSpares();
+                    replacementBoosters++;
+                }
             }
-            spares.computeIfAbsent(card.getRarity(), r -> new ArrayDeque<>()).add(card);
+            return replacement;
+        }
+
+        private PaperCard takeSpare(CardRarity rarity) {
+            Deque<PaperCard> queue = spares.get(rarity);
+            return queue == null || queue.isEmpty() ? null : queue.poll();
+        }
+
+        /** Open one more booster and keep its usable cards, filed by rarity. */
+        private void stockSpares() {
+            for (PaperCard card : new UnOpenedProduct(boosterTemplate).get()) {
+                if (BasicLands.isBasic(card) || excluded.contains(card.getName())) {
+                    continue;
+                }
+                spares.computeIfAbsent(card.getRarity(), r -> new ArrayDeque<>()).add(card);
+            }
         }
     }
 }
