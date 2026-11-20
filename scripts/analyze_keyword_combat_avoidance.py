@@ -43,6 +43,8 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter, defaultdict
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from _lib.markdown import md_table
@@ -53,6 +55,15 @@ from effects.infrastructure.shard_io import read_records
 from effects.infrastructure.sidecar_io import SidecarCache
 
 STRIKES_FIRST = {"first_strike", "double_strike"}
+
+#: What a block does when neither side's keyword turns it, by
+#: (the blocker kills the attacker, the attacker kills the blocker).
+_ORDINARY_BLOCKS = {
+    (True, True): "ordinary trade",
+    (True, False): "ordinary free kill for the blocker",
+    (False, True): "ordinary chump block",
+    (False, False): "ordinary, nobody dies",
+}
 
 
 def _is_creature(entity) -> bool:
@@ -76,9 +87,19 @@ def attack_class(attacker, blockers, kw) -> str:
         return "only blockers it survives"
     ordinary = [b for b in killers if not ({"deathtouch", "indestructible"} & kw(b))]
     if ordinary:
-        if any(not _kills(attacker, b, ka, kw(b)) for b in ordinary):
-            return "ordinary blocker kills it and survives"
-        return "ordinary blocker trades with it"
+        return _ordinary_attack_class(attacker, ordinary, ka, kw)
+    return _keyword_attack_class(attacker, killers, kw)
+
+
+def _ordinary_attack_class(attacker, ordinary, ka, kw) -> str:
+    """The worst block when keyword-less creatures can kill ``attacker``."""
+    if any(not _kills(attacker, b, ka, kw(b)) for b in ordinary):
+        return "ordinary blocker kills it and survives"
+    return "ordinary blocker trades with it"
+
+
+def _keyword_attack_class(attacker, killers, kw) -> str:
+    """The worst block when only deathtouch or indestructible creatures kill it."""
     if any("indestructible" in kw(b) for b in killers):
         return "indestructible blocker kills it"
     # Only deathtouch creatures can kill it. Split by whether it would have
@@ -92,28 +113,82 @@ def block_class(attacker, blocker, kw) -> str:
     ka, kb = kw(attacker), kw(blocker)
     blocker_kills = _kills(blocker, attacker, kb, ka)
     attacker_kills = _kills(attacker, blocker, ka, kb)
-    if "deathtouch" in ka and attacker_kills and attacker.power < blocker.remaining_toughness:
+    if _deathtouch_decides(attacker, blocker, ka, attacker_kills):
         return (
             "trade, only because the attacker has deathtouch" if blocker_kills
             else "chump, only because the attacker has deathtouch"
         )
-    if ("indestructible" in ka and not blocker_kills
-            and blocker.power >= attacker.remaining_toughness):
+    if _indestructible_saves(attacker, blocker, ka, blocker_kills):
         return (
             "blocker dies, attacker saved by indestructible" if attacker_kills
             else "nobody dies, attacker saved by indestructible"
         )
-    if blocker_kills and attacker_kills:
-        return "ordinary trade"
-    if blocker_kills:
-        return "ordinary free kill for the blocker"
-    if attacker_kills:
-        return "ordinary chump block"
-    return "ordinary, nobody dies"
+    return _ORDINARY_BLOCKS[(blocker_kills, attacker_kills)]
+
+
+def _deathtouch_decides(attacker, blocker, ka, attacker_kills) -> bool:
+    """The attacker kills the blocker, and would not without deathtouch."""
+    return "deathtouch" in ka and attacker_kills and attacker.power < blocker.remaining_toughness
+
+
+def _indestructible_saves(attacker, blocker, ka, blocker_kills) -> bool:
+    """The blocker's damage would kill the attacker but for indestructible."""
+    return ("indestructible" in ka and not blocker_kills
+            and blocker.power >= attacker.remaining_toughness)
 
 
 def _evades(attacker, blocker, kw) -> bool:
     return "flying" in kw(attacker) and not ({"flying", "reach"} & kw(blocker))
+
+
+def _unusable(entity, kw) -> bool:
+    """Missing from the snapshot, or striking first (left out on either side)."""
+    return entity is None or bool(STRIKES_FIRST & kw(entity))
+
+
+def _potential_blocker(entity, active, kw) -> bool:
+    """An untapped creature of the defending player's that does not strike first."""
+    return (_is_creature(entity) and entity.controller != active and not entity.tapped
+            and not (STRIKES_FIRST & kw(entity)))
+
+
+def _not_the_attack_decision(record) -> bool:
+    """The hook also fires while the AI simulates a combat it is only
+    considering; the real decision is the active player's, at
+    declare-attackers."""
+    state = record.state
+    return (
+        len(state.players) != 2
+        or state.global_.phase != "combat_declare_attackers"
+        or record.actor_player != state.global_.active
+    )
+
+
+def _not_declared(attacker, kw) -> bool:
+    """Only an attacker actually declared this turn is a real blocking
+    decision; the rest are the attacking AI's hypotheticals."""
+    return bool(
+        attacker is None or attacker.combat is None
+        or attacker.combat.attacking is None or STRIKES_FIRST & kw(attacker)
+    )
+
+
+@dataclass
+class _Fresh:
+    """The entities one game offers for the first time, the unusable left out."""
+
+    kw: Callable
+    seen: set = field(default_factory=set)
+
+    def entities(self, state, ids, prefix: tuple) -> Iterator[tuple]:
+        """``(id, entity)`` of each of ``ids`` whose key ``(*prefix, id)`` is new."""
+        for entity_id in ids:
+            key = (*prefix, entity_id)
+            entity = state.entity(entity_id)
+            if key in self.seen or _unusable(entity, self.kw):
+                continue
+            self.seen.add(key)
+            yield entity_id, entity
 
 
 class Tally:
@@ -126,65 +201,97 @@ class Tally:
 
     def game(self, decisions, blocks, combats, kw) -> None:
         # combats: turn -> (attacking ids, set of (blocker, attacker) pairs)
-        seen_attack, seen_block = set(), set()
+        fresh_attack, fresh_block = _Fresh(kw), _Fresh(kw)
         for record in decisions:
-            state = record.state
-            turn = state.global_.turn
-            g = state.global_
-            self.phases[("attackers", g.phase, record.actor_player == g.active)] += 1
-            # The hook also fires while the AI simulates a combat it is only
-            # considering; the real decision is the active player's, at
-            # declare-attackers.
-            if (
-                len(state.players) != 2
-                or state.global_.phase != "combat_declare_attackers"
-                or record.actor_player != state.global_.active
-            ):
-                continue
-            attacked, _pairs = combats.get(turn, (set(), set()))
-            self.turns_with_decision += 1
-            self.turns_with_combat += bool(attacked)
-            active = state.global_.active
-            potential = [
-                e for e in state.entities
-                if _is_creature(e) and e.controller != active and not e.tapped
-                and not (STRIKES_FIRST & kw(e))
-            ]
-            for attacker_id in record.payload.legal_attackers:
-                key = (turn, attacker_id)
-                attacker = state.entity(attacker_id)
-                if key in seen_attack or attacker is None or STRIKES_FIRST & kw(attacker):
-                    continue
-                seen_attack.add(key)
-                can_block = [b for b in potential if not _evades(attacker, b, kw)]
-                c = self.attack[attack_class(attacker, can_block, kw)]
-                c["n"] += 1
-                c["attacked"] += attacker_id in attacked
+            self._attack_decision(record, combats, fresh_attack)
         for record in blocks:
-            state = record.state
-            turn = state.global_.turn
-            g = state.global_
-            self.phases[("blockers", g.phase, record.actor_player == g.active)] += 1
-            if len(state.players) != 2 or state.global_.phase != "combat_declare_blockers":
-                continue
-            _attacked, pairs = combats.get(turn, (set(), set()))
-            attacker = state.entity(record.payload.anchor_attacker)
-            # Only an attacker actually declared this turn is a real blocking
-            # decision; the rest are the attacking AI's hypotheticals.
-            if (
-                attacker is None or attacker.combat is None
-                or attacker.combat.attacking is None or STRIKES_FIRST & kw(attacker)
-            ):
-                continue
-            for blocker_id in record.payload.legal_blockers:
-                key = (turn, attacker.id, blocker_id)
-                blocker = state.entity(blocker_id)
-                if key in seen_block or blocker is None or STRIKES_FIRST & kw(blocker):
-                    continue
-                seen_block.add(key)
-                c = self.block[block_class(attacker, blocker, kw)]
-                c["n"] += 1
-                c["blocked"] += (blocker_id, attacker.id) in pairs
+            self._block_decision(record, combats, fresh_block)
+
+    def _attack_decision(self, record, combats, fresh: _Fresh) -> None:
+        state = record.state
+        turn = state.global_.turn
+        g = state.global_
+        self.phases[("attackers", g.phase, record.actor_player == g.active)] += 1
+        if _not_the_attack_decision(record):
+            return
+        attacked, _pairs = combats.get(turn, (set(), set()))
+        self.turns_with_decision += 1
+        self.turns_with_combat += bool(attacked)
+        kw = fresh.kw
+        active = state.global_.active
+        potential = [e for e in state.entities if _potential_blocker(e, active, kw)]
+        for attacker_id, attacker in fresh.entities(
+                state, record.payload.legal_attackers, (turn,)):
+            can_block = [b for b in potential if not _evades(attacker, b, kw)]
+            c = self.attack[attack_class(attacker, can_block, kw)]
+            c["n"] += 1
+            c["attacked"] += attacker_id in attacked
+
+    def _block_decision(self, record, combats, fresh: _Fresh) -> None:
+        state = record.state
+        turn = state.global_.turn
+        g = state.global_
+        self.phases[("blockers", g.phase, record.actor_player == g.active)] += 1
+        if len(state.players) != 2 or state.global_.phase != "combat_declare_blockers":
+            return
+        _attacked, pairs = combats.get(turn, (set(), set()))
+        attacker = state.entity(record.payload.anchor_attacker)
+        if _not_declared(attacker, fresh.kw):
+            return
+        for blocker_id, blocker in fresh.entities(
+                state, record.payload.legal_blockers, (turn, attacker.id)):
+            c = self.block[block_class(attacker, blocker, fresh.kw)]
+            c["n"] += 1
+            c["blocked"] += (blocker_id, attacker.id) in pairs
+
+
+@dataclass
+class _Game:
+    """One game's decision records, and what its combat records chose."""
+
+    decisions: list = field(default_factory=list)
+    blocks: list = field(default_factory=list)
+    #: turn -> (attacking ids, set of (blocker, attacker) pairs)
+    combats: dict[int, tuple[set, set]] = field(default_factory=dict)
+
+    def add(self, record) -> None:
+        if record.kind is RecordKind.COMBAT:
+            self._add_combat(record)
+        elif record.kind is RecordKind.PLAYABILITY:
+            self._add_playability(record)
+
+    def _add_combat(self, record) -> None:
+        attacked, pairs = self.combats.setdefault(record.state.global_.turn, (set(), set()))
+        for e in record.state.entities:
+            _note_combatant(e, attacked, pairs)
+
+    def _add_playability(self, record) -> None:
+        if record.subkind is PlayabilitySubkind.ATTACKERS:
+            self.decisions.append(record)
+        elif record.subkind is PlayabilitySubkind.BLOCKERS:
+            self.blocks.append(record)
+
+
+def _note_combatant(e, attacked: set, pairs: set) -> None:
+    if e.combat is None:
+        return
+    if e.combat.attacking is not None:
+        attacked.add(e.id)
+    for target in e.combat.blocking or ():
+        pairs.add((e.id, target))
+
+
+def _games(records) -> Iterator[_Game]:
+    """``records`` cut into games, each game's records consecutive."""
+    current, game = None, _Game()
+    for record in records:
+        if record.game_id != current:
+            if current is not None:
+                yield game
+            current, game = record.game_id, _Game()
+        game.add(record)
+    if current is not None:
+        yield game
 
 
 def run(directories: list[Path], sidecar_roots: dict[str, Path]) -> Tally:
@@ -192,29 +299,8 @@ def run(directories: list[Path], sidecar_roots: dict[str, Path]) -> Tally:
     kw = resolver.keywords_of
     tally = Tally()
     for directory in directories:
-        current, decisions, blocks = None, [], []
-        combats: dict[int, tuple[set, set]] = {}
-        for record in read_records(directory):
-            if record.game_id != current:
-                if current is not None:
-                    tally.game(decisions, blocks, combats, kw)
-                current, decisions, blocks, combats = record.game_id, [], [], {}
-            if record.kind is RecordKind.COMBAT:
-                attacked, pairs = combats.setdefault(record.state.global_.turn, (set(), set()))
-                for e in record.state.entities:
-                    if e.combat is None:
-                        continue
-                    if e.combat.attacking is not None:
-                        attacked.add(e.id)
-                    for target in e.combat.blocking or ():
-                        pairs.add((e.id, target))
-            elif record.kind is RecordKind.PLAYABILITY:
-                if record.subkind is PlayabilitySubkind.ATTACKERS:
-                    decisions.append(record)
-                elif record.subkind is PlayabilitySubkind.BLOCKERS:
-                    blocks.append(record)
-        if current is not None:
-            tally.game(decisions, blocks, combats, kw)
+        for game in _games(read_records(directory)):
+            tally.game(game.decisions, game.blocks, game.combats, kw)
     return tally
 
 
