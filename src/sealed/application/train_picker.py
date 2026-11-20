@@ -51,7 +51,12 @@ from sealed.application.picker_resume import (
     _move_optimizer_state,
     _resume_or_build_picker,
 )
-from sealed.application.picker_sampling import _plackett_luce_log_prob, _sample_decks
+from sealed.application.picker_sampling import (
+    SampledDecks,
+    SamplingSpec,
+    _plackett_luce_log_prob,
+    _sample_decks,
+)
 from sealed.application.picker_scoring import _load_scorer, _score_sampled, _select_device
 from sealed.application.picker_training_loop import (
     _EntropySchedule,
@@ -299,13 +304,13 @@ class TrainPickerUseCase:
 
         pick_indices, picked_mask = _sample_decks(
             logits.detach(), is_land_mask, pool_mask,
-            config.n_samples, config.temperature,
+            SamplingSpec(config.n_samples, config.temperature),
         )
 
         norm_pool = scorer.normalize_features(pool_cards)
         rewards = _score_sampled(
-            scorer, norm_pool, pick_indices, picked_mask,
-            config.n_samples, device,
+            scorer, norm_pool, SampledDecks(pick_indices, picked_mask, config.n_samples),
+            device,
         )  # (B, S)
 
         # PL log-prob on temperature-scaled, padding-masked logits (B*S, N).

@@ -4,17 +4,37 @@ each sampled deck.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import torch
 
 from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE
+
+
+@dataclass(frozen=True)
+class SamplingSpec:
+    """How the sampler draws: ``n_samples`` decks per pool, from the logits
+    divided by ``temperature``."""
+
+    n_samples: int
+    temperature: float
+
+
+@dataclass(frozen=True)
+class SampledDecks:
+    """The decks drawn for a batch of pools: ``(B*S, K)`` pick indices, the
+    mask of their real picks, and ``n_samples`` (S)."""
+
+    pick_indices: torch.Tensor
+    picked_mask: torch.Tensor
+    n_samples: int
 
 
 def _sample_decks(
     logits: torch.Tensor,
     is_land_mask: torch.Tensor,
     pool_mask: torch.Tensor,
-    n_samples: int,
-    temperature: float,
+    spec: SamplingSpec,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """GPU-batched sequential without-replacement sampler (spec § 3.2, FR-013).
 
@@ -25,6 +45,7 @@ def _sample_decks(
     Returns ``(pick_indices (B*S, K), picked_mask (B*S, K))`` where ``K`` is the
     number of steps taken and ``picked_mask`` marks the real picks.
     """
+    n_samples, temperature = spec.n_samples, spec.temperature
     b, n = logits.shape
     device = logits.device
     bs = b * n_samples

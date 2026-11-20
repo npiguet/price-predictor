@@ -11,7 +11,11 @@ import torch
 from price_predictor.infrastructure.torch_training import kl_divergence, policy_entropy
 from sealed.application.picker_losses import _compute_losses
 from sealed.application.picker_pools import PreparedPool, _shuffle_train, _split_pools
-from sealed.application.picker_sampling import _plackett_luce_log_prob, _sample_decks
+from sealed.application.picker_sampling import (
+    SamplingSpec,
+    _plackett_luce_log_prob,
+    _sample_decks,
+)
 from sealed.application.picker_training_loop import _EntropySchedule, _should_stop
 from sealed.application.train_picker import RANDOM_SEED, TrainPickerConfig
 from sealed.domain.card_embedding_layout import FEATURE_COUNT
@@ -34,7 +38,9 @@ class TestSampler:
         torch.manual_seed(0)
         is_land, pool_mask = _pool(n_spells=30, n_lands=4)
         logits = torch.randn(1, 34)
-        picks, mask = _sample_decks(logits, is_land, pool_mask, n_samples=8, temperature=1.0)
+        picks, mask = _sample_decks(
+            logits, is_land, pool_mask, SamplingSpec(n_samples=8, temperature=1.0),
+        )
         assert picks.shape[0] == 8
         assert picks.shape == mask.shape
         for row in range(8):
@@ -47,7 +53,9 @@ class TestSampler:
         torch.manual_seed(1)
         is_land, pool_mask = _pool(n_spells=30, n_lands=5)
         logits = torch.randn(1, 35)
-        picks, mask = _sample_decks(logits, is_land, pool_mask, n_samples=16, temperature=1.0)
+        picks, mask = _sample_decks(
+            logits, is_land, pool_mask, SamplingSpec(n_samples=16, temperature=1.0),
+        )
         for row in range(16):
             real_idx = picks[row][mask[row]].tolist()
             assert len(real_idx) == len(set(real_idx))
@@ -58,7 +66,9 @@ class TestSampler:
         is_land, pool_mask = _pool(n_spells=25, n_lands=3)
         logits = torch.zeros(1, 28)
         logits[0, 25:] = 10.0  # lands ranked highest
-        picks, mask = _sample_decks(logits, is_land, pool_mask, n_samples=4, temperature=0.5)
+        picks, mask = _sample_decks(
+            logits, is_land, pool_mask, SamplingSpec(n_samples=4, temperature=0.5),
+        )
         for row in range(4):
             real_idx = picks[row][mask[row]]
             land_flags = is_land[0][real_idx]
@@ -71,7 +81,9 @@ class TestSampler:
         is_land[:, 25:] = True
         pool_mask = torch.ones(3, 30, dtype=torch.bool)
         logits = torch.randn(3, 30)
-        picks, mask = _sample_decks(logits, is_land, pool_mask, n_samples=5, temperature=1.0)
+        picks, mask = _sample_decks(
+            logits, is_land, pool_mask, SamplingSpec(n_samples=5, temperature=1.0),
+        )
         assert picks.shape[0] == 3 * 5
 
 

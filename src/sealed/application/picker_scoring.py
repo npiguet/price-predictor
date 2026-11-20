@@ -10,6 +10,7 @@ import numpy as np
 import torch
 
 from sealed.application.picker_pools import PreparedPool
+from sealed.application.picker_sampling import SampledDecks
 from sealed.domain.scorer_model import SetTransformerScorer
 from sealed.infrastructure.scorer_store import ScorerStore
 
@@ -32,12 +33,11 @@ def _load_scorer(path: Path, device: torch.device) -> SetTransformerScorer:
 def _score_sampled(
     scorer: SetTransformerScorer,
     norm_pool: torch.Tensor,
-    pick_indices: torch.Tensor,
-    picked_mask: torch.Tensor,
-    n_samples: int,
+    decks: SampledDecks,
     device: torch.device,
 ) -> torch.Tensor:
     """Score every sampled deck with the frozen scorer (FR-012). Returns (B, S)."""
+    pick_indices, picked_mask, n_samples = decks.pick_indices, decks.picked_mask, decks.n_samples
     b, max_n, dim = norm_pool.shape
     bs = b * n_samples
     k = pick_indices.shape[1]
