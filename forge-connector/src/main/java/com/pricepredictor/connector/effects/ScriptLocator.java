@@ -146,24 +146,29 @@ final class ScriptLocator {
      */
     static Optional<String> tokenScriptStem(Card host) {
         try {
-            IPaperCard paper = host.getPaperCard();
-            String image = null;
-            if (paper instanceof PaperToken token) {
-                image = token.getImageFilename(1);
-            } else if (host.isToken()) {
-                image = ImageKeys.getTokenImageName(host.getImageKey());
-            }
+            String image = tokenImageName(host);
             if (image == null || image.isEmpty()) {
                 return Optional.empty();
             }
             int bar = image.indexOf('|');
             String stem = (bar < 0 ? image : image.substring(0, bar)).replace(' ', '_');
-            if (stem.isEmpty() || !StaticData.instance().getAllTokens().containsRule(stem)) {
-                return Optional.empty();
-            }
-            return Optional.of(stem);
+            return namesATokenScript(stem) ? Optional.of(stem) : Optional.empty();
         } catch (RuntimeException e) {
             return Optional.empty();
         }
+    }
+
+    /** The image name a token carries: its paper token's, else its image key's, or null. */
+    private static String tokenImageName(Card host) {
+        IPaperCard paper = host.getPaperCard();
+        if (paper instanceof PaperToken token) {
+            return token.getImageFilename(1);
+        }
+        return host.isToken() ? ImageKeys.getTokenImageName(host.getImageKey()) : null;
+    }
+
+    /** Whether {@code stem} is non-empty and names a script in the token database. */
+    private static boolean namesATokenScript(String stem) {
+        return !stem.isEmpty() && StaticData.instance().getAllTokens().containsRule(stem);
     }
 }
