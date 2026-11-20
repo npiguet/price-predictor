@@ -868,6 +868,7 @@ def run_field_coverage(args: argparse.Namespace) -> int:
     from effects.application.field_coverage import field_coverage, report_lines
     from effects.infrastructure.shard_io import (
         read_shard,
+        require_generation,
         require_shards,
         reset_decode_tally,
         take_decode_tally,
@@ -875,6 +876,7 @@ def run_field_coverage(args: argparse.Namespace) -> int:
 
     root = args.effect_records
     shards = require_shards(root)
+    require_generation(shard.path(root) for shard in shards)
     reset_decode_tally()
     coverage = field_coverage(
         record for shard in shards for record in read_shard(shard.path(root))

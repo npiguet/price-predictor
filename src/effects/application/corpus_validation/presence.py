@@ -22,7 +22,7 @@ from effects.application.corpus_validation.findings import (
 )
 from effects.domain.gen3_members import ALWAYS, site_blocks
 from effects.domain.records import PlayabilitySubkind, RecordKind
-from effects.domain.shard_generation import UnacceptedGenerationError, require_gen3
+from effects.domain.shard_generation import require_gen3
 
 #: The member only ``build-corpus`` writes, on every record of a curated shard.
 CURATION_MEMBER = "curation"
@@ -43,15 +43,6 @@ def _owes_what_if(data: Mapping) -> bool:
     none, being one creature of the declaration made."""
     return (data.get("kind") == RecordKind.PLAYABILITY
             and data.get("subkind") == PlayabilitySubkind.BLOCKERS)
-
-
-def _require_gen3(shard: str, data: Mapping) -> None:
-    """Refuse a raw line of an older generation, naming its shard and record:
-    it is seen here before it is decoded."""
-    try:
-        require_gen3(data)
-    except UnacceptedGenerationError as exc:
-        raise type(exc)(f"{shard}, record {data.get('record_id')}: {exc}") from exc
 
 
 @dataclass(slots=True)
@@ -86,7 +77,7 @@ class FieldPresence:
     short_examples: list[str] = field(default_factory=list)
 
     def observe(self, shard: str, data: dict) -> None:
-        _require_gen3(shard, data)
+        require_gen3(data)
         counts = self.shards.setdefault(shard, _ShardPresence())
         counts.records += 1
         counts.curated += CURATION_MEMBER in data

@@ -55,6 +55,12 @@ class Thresholds:
         "before that reads as a game boundary; deferred mana-reservoir flushes "
         "are exempt (default: %(default)s)"
     )})
+    #: Healthy link-id halves never write a null outcome, so this guards only
+    #: the first minutes of a collection, whose few halves prove nothing.
+    min_outcome_evidence: int = field(default=20, metadata={"help": (
+        "Effect halves with a link_id a window needs before none carrying an "
+        "outcome fails the run (default: %(default)s)"
+    )})
     max_duplicate_event_rate: float = field(default=0.02, metadata={"help": (
         "Share of events that may repeat another event in the same record, "
         "which --max-duplicate-rate's whole-record comparison cannot see "
@@ -108,6 +114,16 @@ class Thresholds:
             "name it; unset, it is reported as [WATCH]"
         ),
     })
+    #: A mirror is missing from a whole read only in a game the per-game cap
+    #: or a lost block cut.
+    max_unfound_mirror_rate: float = field(default=0.05, metadata={"help": (
+        "Share of fork records whose mirrored record is nowhere in a directory "
+        "read whole (default: %(default)s)"
+    )})
+    max_unmarked_closed_game_rate: float = field(default=0.01, metadata={"help": (
+        "Share of the games a later game of their JVM lifetime follows that "
+        "may lack a game-end marker, so threw (default: %(default)s)"
+    )})
     #: A fork is taken at the moment it mirrors, so no disagreement is healthy.
     max_mirror_turn_disagreement_rate: float = field(default=0.0, metadata={"help": (
         "Share of fork records whose turn may differ from the record they "

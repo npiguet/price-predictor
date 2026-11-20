@@ -90,15 +90,20 @@ def validate_directory(
     without stopping, values outside the wire's closed lists and damaged last
     members (``shard_io.DecodeTally``), is reported as watched figures.
     """
-    from effects.infrastructure.shard_io import require_shards, reset_decode_tally
+    from effects.infrastructure.shard_io import (
+        require_generation,
+        require_shards,
+        reset_decode_tally,
+    )
 
     shards = require_shards(root)
+    require_generation(shard.path(root) for shard in shards)
     presence = FieldPresence()
     damage = ShardDamage()
     reset_decode_tally()
     findings = validate_corpus(
         damage.read(root, shards, limit, presence.observe), thresholds, sidecars, presence,
-        playability_rate=playability_rate_of(root),
+        playability_rate=playability_rate_of(root), window_cut=bool(limit),
     )
     findings.extend(damage.findings())
     return DirectoryReport(len(shards), findings)
@@ -183,6 +188,7 @@ def validate_corpus(
     presence: FieldPresence | None = None,
     *,
     playability_rate: float | None = None,
+    window_cut: bool = False,
 ) -> Findings:
     """Every invariant, measured over one pass of ``records``.
 
@@ -190,8 +196,10 @@ def validate_corpus(
     than as holding. ``presence`` is the per-shard member tally
     ``shard_io.read_window`` fills from the raw lines (FR-033, root § 8.13),
     since a parsed record cannot say whether a field was on the wire.
+    ``window_cut`` says ``--limit`` ended the read, so a record the window
+    does not hold may exist.
     """
-    checks = _checks(sidecars, playability_rate)
+    checks = _checks(sidecars, playability_rate, window_cut)
     for record in records:
         for check in checks:
             check.add(record)
@@ -203,8 +211,8 @@ def validate_corpus(
     return findings
 
 
-def _checks(sidecars: SidecarLookup | None,
-            playability_rate: float | None = None) -> tuple[Check, ...]:
+def _checks(sidecars: SidecarLookup | None, playability_rate: float | None = None,
+            window_cut: bool = False) -> tuple[Check, ...]:
     """Every invariant, in the order the report prints them."""
     record_ids = RecordIds()
     return (
@@ -236,7 +244,7 @@ def _checks(sidecars: SidecarLookup | None,
             floor_of=lambda limits: limits.min_fork_attributed_rate,
         ),
         CauseBearing(),
-        MirrorTurns(record_ids),
+        MirrorTurns(record_ids, window_cut),
         ProbeForks(),
         LossyForks(),
         EmptyMana(),

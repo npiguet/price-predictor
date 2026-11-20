@@ -495,7 +495,7 @@ def read_window(
         for number, line in _numbered_lines(path):
             data = _checked(path, number, line)
             if observe is not None:
-                observe(shard.name, data)
+                _decode(path, number, data, lambda raw: observe(shard.name, raw))
             yield _decode(path, number, data, record_from_dict)
             seen += 1
             if limit and seen >= limit:

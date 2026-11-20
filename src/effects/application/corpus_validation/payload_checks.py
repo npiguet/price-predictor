@@ -52,21 +52,24 @@ class Activations:
     vary, as a real game's do, and which cost channels the activation records
     ever populate.
 
-    The outcome is an effect half's (FR-042b); a half with no outcome (a mana
-    record, the rescue record) is not counted.
+    The outcome is an effect half's (FR-042b). A half with no outcome (a mana
+    record, the rescue record) is not in the distinct values, but it is in the
+    share of effect halves that carry none, and a half with a ``link_id``
+    (a cast item, which always resolves a stack item) must have one.
     """
 
     def __init__(self) -> None:
         self.activations = 0
+        self.halves = 0
+        self.linked_halves = 0
         self.with_outcome = 0
         self.outcomes: Counter[str] = Counter()
         self.cost_fields: Counter[str] = Counter()
         self.populated = 0
 
     def add(self, record: EffectRecord) -> None:
-        if isinstance(record.payload, ResolutionPayload) and record.payload.outcome:
-            self.with_outcome += 1
-            self.outcomes[record.payload.outcome.value] += 1
+        if isinstance(record.payload, ResolutionPayload):
+            self._add_half(record, record.payload)
         if not isinstance(record.payload, ActivationPayload):
             return
         self.activations += 1
@@ -77,24 +80,47 @@ class Activations:
             self.cost_fields[name] += filled
         self.populated += any(paid.values())
 
+    def _add_half(self, record: EffectRecord, payload: ResolutionPayload) -> None:
+        self.halves += 1
+        self.linked_halves += record.link_id is not None
+        if payload.outcome:
+            self.with_outcome += 1
+            self.outcomes[payload.outcome.value] += 1
+
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
-        yield self._outcome_finding()
+        yield self._outcome_finding(limits)
         yield self._cost_finding(limits)
 
-    def _outcome_finding(self) -> Finding:
+    def _outcome_finding(self, limits: Thresholds) -> Finding:
         shown = histogram(sorted(self.outcomes.items()))
-        return Finding(
-            name="outcome takes more than one value",
-            # A window with no activation records holds, as an absent kind does.
-            ok=len(self.outcomes) > 1 or self.with_outcome == 0,
-            measured=(
-                f"{len(self.outcomes)} distinct over {self.with_outcome} "
-                f"records carrying an outcome: {shown}"
-            ),
-            detail=() if len(self.outcomes) > 1 else (
+        null_share = share_of(self.halves - self.with_outcome, self.halves)
+        # A window with no effect halves holds, as an absent kind does; one
+        # with enough linked halves and no outcome among them is a writer
+        # that nulls it, which a literal-free window would otherwise pass.
+        none_written = (
+            self.with_outcome == 0 and self.linked_halves >= limits.min_outcome_evidence
+        )
+        detail: tuple[str, ...] = ()
+        if none_written:
+            detail = (
+                f"{self.linked_halves} effect halves carry a link_id, and a cast item "
+                "always resolves a stack item, so none carrying an outcome means the "
+                "collector writes it null",
+            )
+        elif len(self.outcomes) == 1:
+            detail = (
                 "a real game counters or fizzles something, so one value means "
                 "the collector is writing a literal",
+            )
+        return Finding(
+            name="outcome takes more than one value",
+            ok=len(self.outcomes) > 1 or (self.with_outcome == 0 and not none_written),
+            measured=(
+                f"{len(self.outcomes)} distinct over {self.with_outcome} "
+                f"records carrying an outcome: {shown}; {null_share:.1%} of the "
+                f"{self.halves} effect halves carry no outcome"
             ),
+            detail=detail,
         )
 
     def _cost_finding(self, limits: Thresholds) -> Finding:

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import NamedTuple
 
 from effects.application.corpus_validation.findings import (
@@ -17,6 +17,7 @@ from effects.application.corpus_validation.findings import (
     ceiling_finding,
     histogram,
     keep_example,
+    share_of,
 )
 from effects.domain.canonical_digest import canonical_digest
 from effects.domain.event_schema import EventType
@@ -313,9 +314,28 @@ class GameEnds:
                 "writes none (a connector built before the marker?)",))
         else:
             yield Finding.watch(name, measured)
+        if self.ended:
+            yield self._unmarked_closed_finding(limits, closed)
         yield Finding.watch(
             "records the per-game cap withheld",
             f"{self.withheld} record(s) withheld over {self.markers} game-end marker(s)")
+
+    def _unmarked_closed_finding(self, limits: Thresholds, closed: set[str]) -> Finding:
+        """Games a later game of their JVM lifetime follows cannot have been
+        killed (the kill ends the JVM), so one without a marker threw, or its
+        end-of-game writes did. Healthy at or near 0."""
+        unmarked = closed - self.ended
+        share = share_of(len(unmarked), len(closed))
+        return ceiling_finding(
+            name="closed games end with their game-end marker",
+            ceiling=limits.max_unmarked_closed_game_rate,
+            rate=share,
+            measured=lambda limit: (
+                f"{len(unmarked)} of {len(closed)} closed game(s) (a later game of their "
+                f"JVM lifetime follows) have no game-end marker ({share:.1%}, {limit})"
+            ),
+            detail=sorted(unmarked)[:EXAMPLES],
+        )
 
 
 def _all_labels() -> tuple[str, ...]:
@@ -633,11 +653,18 @@ class Duplicates:
 class MirrorTurns:
     """A fork's snapshot is of the moment it forked, so its turn must equal
     its mirror's; otherwise it surfaces as a backward turn jump blamed on a
-    game merge. Forks whose mirror fell outside the window (``--limit`` cuts
-    mid-game) are counted apart and not judged."""
+    game merge.
 
-    def __init__(self, record_ids: RecordIds) -> None:
+    A mirror no record names is the reader's doing only when ``--limit`` cut
+    the read (``window_cut``): then forks whose mirror fell outside the
+    window are counted apart and not judged, and a window with no comparison
+    at all is watched, never passed. Over a directory read whole the share of
+    forks whose mirror is nowhere is judged too (a probe held for a record a
+    throw dropped, an id built from the wrong counter)."""
+
+    def __init__(self, record_ids: RecordIds, window_cut: bool = False) -> None:
         self.record_ids = record_ids
+        self.window_cut = window_cut
         #: (fork record id, mirrored id, fork's turn), compared after the pass
         #: because a shard may carry the fork before its mirror.
         self.mirrors: list[tuple[str, str, int]] = []
@@ -648,7 +675,8 @@ class MirrorTurns:
                 (record.record_id, record.mirror_of, record.state.global_.turn)
             )
 
-    def findings(self, limits: Thresholds) -> Iterator[Finding]:
+    def _compare(self) -> tuple[Share, list[str]]:
+        """How many forks disagree with the turn of a mirror the window holds."""
         disagreed = Share()
         examples: list[str] = []
         for record_id, mirror_of, turn in self.mirrors:
@@ -662,18 +690,43 @@ class MirrorTurns:
                     f"{record_id} at turn {turn} mirrors {mirror_of} at turn "
                     f"{mirror_turn}",
                 )
+        return disagreed, examples
+
+    def _nothing_compared(self, compared: Share) -> bool:
+        return bool(self.mirrors) and not compared.seen
+
+    def findings(self, limits: Thresholds) -> Iterator[Finding]:
+        disagreed, examples = self._compare()
         uncomparable = len(self.mirrors) - disagreed.seen
-        yield ceiling_finding(
-            name="a fork's turn agrees with the record it mirrors",
+        name = "a fork's turn agrees with the record it mirrors"
+        if self.window_cut and self._nothing_compared(disagreed):
+            yield Finding.watch(
+                name,
+                f"no comparison made: all {uncomparable} mirrors fell outside the "
+                "window --limit cut",
+            )
+            return
+        unfound = share_of(uncomparable, len(self.mirrors))
+        tail = "" if self.window_cut else (
+            f" ({unfound:.1%}, limit {limits.max_unfound_mirror_rate:.1%})")
+        turns = ceiling_finding(
+            name=name,
             ceiling=limits.max_mirror_turn_disagreement_rate,
             rate=disagreed.rate,
             measured=lambda limit: (
                 f"{disagreed.hit}/{disagreed.seen} forks disagree with their "
                 f"mirror about the turn ({disagreed.rate:.1%}, {limit}); "
-                f"{uncomparable} mirrors fell outside the window"
+                f"{uncomparable} mirrors fell outside the window{tail}"
             ),
             detail=examples,
         )
+        if self.window_cut or unfound <= limits.max_unfound_mirror_rate:
+            yield turns
+            return
+        yield replace(turns, ok=False, detail=(
+            "mirrors named by forks are nowhere in the directory: a probe held "
+            "for a record never written", *turns.detail,
+        ))
 
 
 class ProbeForks:

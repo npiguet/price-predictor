@@ -1912,16 +1912,26 @@ class TestAForksTurnAgreesWithItsMirror:
             validate_corpus(records), "agrees with the record it mirrors"
         ).ok
 
-    def test_a_mirror_outside_the_window_is_counted_apart_and_judged_not_at_all(
+    def test_a_mirror_outside_a_cut_window_is_counted_apart_and_never_passed(
         self,
     ):
         """``--limit`` cuts the stream mid-game; the missing half is the
-        reader's doing, not the collector's."""
+        reader's doing, not the collector's, so with no comparison at all the
+        figure is watched rather than passed."""
+        records = _healthy() + [self._probe("run.0-L1.901", "run.0-L1.900", 8)]
+        finding = _named(validate_corpus(records, window_cut=True),
+                         "agrees with the record it mirrors")
+        assert finding.ok and finding.watched
+        assert "no comparison made: all 1 mirrors fell outside the window" in finding.measured
+
+    def test_a_mirror_nowhere_in_a_directory_read_whole_fails(self):
+        """Nothing can be outside the window then: a mirror no record carries
+        was never written, and 0/0 disagreements is no pass."""
         records = _healthy() + [self._probe("run.0-L1.901", "run.0-L1.900", 8)]
         finding = _named(validate_corpus(records), "agrees with the record it mirrors")
-        assert finding.ok, finding.detail
+        assert not finding.ok, finding.measured
         assert "0/0 forks disagree" in finding.measured
-        assert "1 mirrors fell outside the window" in finding.measured
+        assert "1 mirrors fell outside the window (100.0%" in finding.measured
 
     def test_a_fork_written_before_the_record_it_mirrors_still_joins(self):
         """A shard may carry either half first, so the comparison waits for the
@@ -2155,6 +2165,7 @@ _EVERY_CHECK = (
     "record_id is unique across the run's shards",
     'each game_id names one game',
     'games end with their game-end marker',
+    'closed games end with their game-end marker',
     'records the per-game cap withheld',
     'every record kind a game writes is present',
     ("every link_id joins one activation to its resolution(s): one, or one per chosen "
@@ -2418,7 +2429,7 @@ class TestGen3FieldPresence:
         for member in dropped:
             del rows[1][member]
         with pytest.raises(OlderGenerationError,
-                           match=rf"a\.jsonl, record .*: the record is {named} "):
+                           match=rf"a\.jsonl, line 2: the record is {named} "):
             self._findings(tmp_path, rows)
 
 
