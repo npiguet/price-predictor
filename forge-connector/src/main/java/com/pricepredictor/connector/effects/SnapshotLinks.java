@@ -119,25 +119,24 @@ final class SnapshotLinks {
     /**
      * The links of one snapshot.
      *
-     * @param cards    every card entity the snapshot renders, in order
-     * @param tiers    the cards of the four tiers, whose rows the global
-     *                 block's timestamped floating effects are read from
-     * @param acting   the acting spell ability and the targets its links name
-     * @param pending  the event a trait is about to handle, or null
-     * @param board    the board as it stands, or without one static: a
-     *                 {@code continuous} record's, which carries no
-     *                 {@code affects} from a static, whose answer it is,
-     *                 and names each card's controller on it
+     * @param request  what the snapshot is of: its acting spell ability and
+     *                 the targets its links name, the event a trait is about
+     *                 to handle, and the board as it stands or without one
+     *                 static
+     * @param entities the entities the snapshot renders: every card entity in
+     *                 order, and the cards of the four tiers, whose rows the
+     *                 global block's timestamped floating effects are read from
      * @param floating the clause notes the floating effects are read by
      */
-    static String render(Game game, Collection<Card> cards, Collection<Card> tiers,
-                         Acting acting, EffectEvent pending,
-                         StaticSuppression board, FloatingEffects floating) {
+    static String render(
+            Game game, SnapshotRequest request, SnapshotEntities entities, FloatingEffects floating) {
+        Collection<Card> cards = entities.cards();
         SnapshotLinks links = new SnapshotLinks(game, cards);
-        links.cardLinks(cards, board);
+        links.cardLinks(cards, request.board());
         links.combat(game.getCombat());
-        links.stack(acting);
-        links.commandZone(cards, tiers, floating);
+        links.stack(request.acting());
+        links.commandZone(cards, entities.tiers(), floating);
+        EffectEvent pending = request.pending();
         if (pending != null && pending.lastKnown() != null) {
             Card lastKnown = pending.lastKnown();
             links.add(LinkFamily.LAST_KNOWN_STATE_OF,
@@ -281,12 +280,15 @@ final class SnapshotLinks {
                 add(LinkFamily.BLOCKS, card(blocker), card(attacker));
             }
         }
-        for (AttackingBand band : combat.getAttackingBands()) {
-            List<Card> members = new ArrayList<>(band.getAttackers());
-            for (int i = 0; i < members.size(); i++) {
-                for (int j = i + 1; j < members.size(); j++) {
-                    pair(LinkFamily.IN_BAND_WITH, members.get(i), members.get(j));
-                }
+        combat.getAttackingBands().forEach(this::band);
+    }
+
+    /** Every pair of an attacking band's members. */
+    private void band(AttackingBand band) {
+        List<Card> members = new ArrayList<>(band.getAttackers());
+        for (int i = 0; i < members.size(); i++) {
+            for (int j = i + 1; j < members.size(); j++) {
+                pair(LinkFamily.IN_BAND_WITH, members.get(i), members.get(j));
             }
         }
     }
@@ -388,10 +390,15 @@ final class SnapshotLinks {
             add(LinkFamily.LINKED_BY_TEXT, maker(card, current(held)), card(held));
         }
         if (remembersLastingly(card)) {
-            for (Object remembered : card.getRemembered()) {
-                if (remembered instanceof Card || remembered instanceof Player) {
-                    add(LinkFamily.LINKED_BY_TEXT, maker(card, current(remembered)), entity(remembered));
-                }
+            remembered(card);
+        }
+    }
+
+    /** The cards and players a permanent lastingly remembers. */
+    private void remembered(Card card) {
+        for (Object remembered : card.getRemembered()) {
+            if (remembered instanceof Card || remembered instanceof Player) {
+                add(LinkFamily.LINKED_BY_TEXT, maker(card, current(remembered)), entity(remembered));
             }
         }
     }
@@ -447,32 +454,28 @@ final class SnapshotLinks {
      * Clone's copies (its latest clone state's origin).
      */
     private void copyOf(Card card) {
-        Card copied = card.getCopiedPermanent();
-        if (copied != null && copied.getId() != card.getId()) {
-            add(LinkFamily.COPY_OF, card(card), card(copied));
+        addCopyOf(card, card.getCopiedPermanent());
+        if (card.isCloned()) {
+            addCopyOf(card, cloneOrigin(card));
         }
-        if (card.isCloned() && card.getCloneStates() instanceof NavigableMap<Long, CardCloneStates> states
-                && !states.isEmpty()) {
-            Card origin = states.lastEntry().getValue().getOrigin();
-            if (origin != null && origin.getId() != card.getId()) {
-                add(LinkFamily.COPY_OF, card(card), card(origin));
-            }
+    }
+
+    /** The card a copy effect such as a Clone's copies: its latest clone state's origin, or null. */
+    private static Card cloneOrigin(Card card) {
+        return card.getCloneStates() instanceof NavigableMap<Long, CardCloneStates> states
+                && !states.isEmpty() ? states.lastEntry().getValue().getOrigin() : null;
+    }
+
+    /** {@code card} copies {@code original}, unless that is itself or nothing. */
+    private void addCopyOf(Card card, Card original) {
+        if (original != null && original.getId() != card.getId()) {
+            add(LinkFamily.COPY_OF, card(card), card(original));
         }
     }
 
     /** This turn's damage, blocks, crews and saddles. */
     private void thisTurn(Card card) {
-        if (card.getDamageHistory() != null) {
-            // The source's own history: Forge registers each damage there, and
-            // keys the (source, target) pair by the damage's identity.
-            for (Pair<Integer, Boolean> damage : card.getDamageHistory().getAllDmgInstances()) {
-                Pair<Card, GameEntity> sourceToTarget = game.getDamageLKI(damage);
-                if (sourceToTarget != null) {
-                    add(LinkFamily.DAMAGED_THIS_TURN, card(card),
-                            entity(sourceToTarget.getRight()));
-                }
-            }
-        }
+        damagedThisTurn(card);
         for (Card attacker : card.getBlockedThisTurn()) {
             add(LinkFamily.FOUGHT_THIS_TURN, card(card), card(attacker));
         }
@@ -490,33 +493,62 @@ final class SnapshotLinks {
     }
 
     /**
+     * What a card damaged this turn: the source's own history, where Forge
+     * registers each damage and keys the (source, target) pair by the
+     * damage's identity.
+     */
+    private void damagedThisTurn(Card card) {
+        if (card.getDamageHistory() == null) {
+            return;
+        }
+        for (Pair<Integer, Boolean> damage : card.getDamageHistory().getAllDmgInstances()) {
+            Pair<Card, GameEntity> sourceToTarget = game.getDamageLKI(damage);
+            if (sourceToTarget != null) {
+                add(LinkFamily.DAMAGED_THIS_TURN, card(card), entity(sourceToTarget.getRight()));
+            }
+        }
+    }
+
+    /**
      * Command-zone objects: what made each effect card, emblem, timestamped
      * floating effect and delayed trigger; what a floating effect applies to;
      * what a delayed trigger waits on.
      */
     private void commandZone(Collection<Card> cards, Collection<Card> tiers,
                              FloatingEffects floating) {
-        for (Card card : cards) {
-            if (card.isInZone(ZoneType.Command) && card.isImmutable()
-                    && !card.getType().isDungeon()) {
-                SpellAbility source = card.getEffectSourceAbility();
-                add(LinkFamily.CREATED_BY, card(card), source != null
-                        ? line(source.getHostCard(), source) : card(card.getEffectSource()));
-            }
+        cards.stream().filter(SnapshotLinks::madeByAnEffect).forEach(this::effectCard);
+        floating.timestamped(tiers).forEach(this::floatingEffect);
+        FloatingEffects.pendingDelayedTriggers(game).forEach(this::delayedTrigger);
+    }
+
+    /** What made an effect card: its line, or its card where it has none. */
+    private void effectCard(Card card) {
+        SpellAbility source = card.getEffectSourceAbility();
+        add(LinkFamily.CREATED_BY, card(card), source != null
+                ? line(source.getHostCard(), source) : card(card.getEffectSource()));
+    }
+
+    /** What a timestamped floating effect applies to, and what made it. */
+    private void floatingEffect(FloatingEffects.Timestamped row) {
+        for (String affected : row.affected()) {
+            add(LinkFamily.AFFECTS, Json.string(row.id()), Json.string(affected));
         }
-        for (FloatingEffects.Timestamped row : floating.timestamped(tiers)) {
-            for (String affected : row.affected()) {
-                add(LinkFamily.AFFECTS, Json.string(row.id()), Json.string(affected));
-            }
-            add(LinkFamily.CREATED_BY, Json.string(row.id()), lineOf(row.host(), row.line()));
-        }
-        for (FloatingEffects.Pending pending : FloatingEffects.pendingDelayedTriggers(game)) {
-            String id = Json.string(pending.id());
-            add(LinkFamily.CREATED_BY, id,
-                    line(pending.trigger().getHostCard(), pending.trigger()));
-            for (String held : pending.remembered()) {
-                add(LinkFamily.PENDING_ON, id, Json.string(held));
-            }
+        add(LinkFamily.CREATED_BY, Json.string(row.id()), lineOf(row.host(), row.line()));
+    }
+
+    /** An effect card or emblem in the command zone, which a line or a card made. */
+    private static boolean madeByAnEffect(Card card) {
+        return card.isInZone(ZoneType.Command) && card.isImmutable()
+                && !card.getType().isDungeon();
+    }
+
+    /** What made a delayed trigger, and what it waits on. */
+    private void delayedTrigger(FloatingEffects.Pending pending) {
+        String id = Json.string(pending.id());
+        add(LinkFamily.CREATED_BY, id,
+                line(pending.trigger().getHostCard(), pending.trigger()));
+        for (String held : pending.remembered()) {
+            add(LinkFamily.PENDING_ON, id, Json.string(held));
         }
     }
 
@@ -584,12 +616,17 @@ final class SnapshotLinks {
      * exiled card; the holder itself where Forge keeps no ability.
      */
     private static String maker(Card holder, Object object) {
-        if (object instanceof Card exiled && exiled.getExiledWith() != null
-                && exiled.getExiledWith().getId() == holder.getId()
-                && exiled.getExiledSA() != null) {
+        if (object instanceof Card exiled && isExiledBy(exiled, holder)) {
             return line(holder, exiled.getExiledSA());
         }
         return card(holder);
+    }
+
+    /** Whether Forge keeps the ability that exiled {@code exiled} with {@code holder}. */
+    private static boolean isExiledBy(Card exiled, Card holder) {
+        Card exiledWith = exiled.getExiledWith();
+        return exiledWith != null && exiledWith.getId() == holder.getId()
+                && exiled.getExiledSA() != null;
     }
 
     // ── writing ─────────────────────────────────────────────────────────
@@ -628,10 +665,14 @@ final class SnapshotLinks {
 
     /** A symmetric family's link, once per pair, from the lower card id. */
     private void pair(LinkFamily family, Card one, Card other) {
-        if (one == null || other == null || one.getId() == other.getId()) {
+        if (!arePair(one, other)) {
             return;
         }
         boolean oneFirst = one.getId() < other.getId();
         add(family, card(oneFirst ? one : other), card(oneFirst ? other : one));
+    }
+
+    private static boolean arePair(Card one, Card other) {
+        return one != null && other != null && one.getId() != other.getId();
     }
 }

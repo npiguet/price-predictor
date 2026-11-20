@@ -110,8 +110,7 @@ public final class SnapshotBuilder {
      *                   they sit in (tier 1)
      */
     Snapshot ofAbility(SpellAbility acting, Iterable<Card> referenced) {
-        return snapshot(referenced, StaticSuppression.NONE,
-                new SnapshotLinks.Acting(acting, true, null), null, null);
+        return snapshot(SnapshotRequest.of(referenced, new SnapshotLinks.Acting(acting, true, null)));
     }
 
     /**
@@ -127,8 +126,9 @@ public final class SnapshotBuilder {
      */
     Snapshot ofCandidate(SpellAbility candidate) {
         Card host = candidate.getHostCard();
-        return snapshot(host == null ? List.of() : List.of(host), StaticSuppression.NONE,
-                new SnapshotLinks.Acting(candidate, false, null), host, null);
+        return snapshot(SnapshotRequest.of(
+                host == null ? List.of() : List.of(host),
+                new SnapshotLinks.Acting(candidate, false, null)).withSource(host));
     }
 
     /**
@@ -161,8 +161,8 @@ public final class SnapshotBuilder {
                 referenced.add(card);
             }
         }
-        return snapshot(referenced, StaticSuppression.NONE,
-                new SnapshotLinks.Acting(acting, true, atCast), null, null);
+        return snapshot(SnapshotRequest.of(
+                referenced, new SnapshotLinks.Acting(acting, true, atCast)));
     }
 
     /**
@@ -171,7 +171,7 @@ public final class SnapshotBuilder {
      * block is the empty shape.
      */
     Snapshot ofBoard() {
-        return snapshot(List.of(), StaticSuppression.NONE, SnapshotLinks.Acting.NONE, null, null);
+        return snapshot(SnapshotRequest.of(List.of(), SnapshotLinks.Acting.NONE));
     }
 
     /**
@@ -180,7 +180,8 @@ public final class SnapshotBuilder {
      * the answer the record labels.
      */
     Snapshot ofBoardWithout(StaticAbility stat) {
-        return snapshot(List.of(), StaticSuppression.of(stat), SnapshotLinks.Acting.NONE, null, null);
+        return snapshot(SnapshotRequest.of(List.of(), SnapshotLinks.Acting.NONE)
+                .withBoard(StaticSuppression.of(stat)));
     }
 
     /**
@@ -202,8 +203,9 @@ public final class SnapshotBuilder {
      * @param pending the event as the trait received it
      */
     Snapshot ofTrait(Card source, EffectEvent pending) {
-        return snapshot(source == null ? List.of() : List.of(source), StaticSuppression.NONE,
-                SnapshotLinks.Acting.NONE, source, pending);
+        return snapshot(SnapshotRequest.of(
+                source == null ? List.of() : List.of(source), SnapshotLinks.Acting.NONE)
+                .withSource(source).withPending(pending));
     }
 
     /**
@@ -218,45 +220,35 @@ public final class SnapshotBuilder {
      * Each of its targets that ceased to exist or became a new object is an
      * {@code L<id>} entity of role {@code last_known}.
      *
-     * @param board   the board as it stands, or without one static
-     * @param acting  the acting spell ability, whether its targets and
-     *                announced values are its own, chosen for this record
+     * @param request what the snapshot is of: see {@link SnapshotRequest}. Where
+     *                its acting ability's targets are given (an effect half's,
+     *                as cast), they are not read off its clauses, and the
+     *                ability's {@code chosen} says whether they are its own
      *                (not for a playability candidate, whose refs name its
-     *                host alone and whose targets are no links), and its
-     *                targets as cast, or null to read its clauses
-     * @param source  the host of an acting line that is not a spell
-     *                ability, or null
-     * @param pending the event a trait is about to handle, or null
+     *                host alone and whose targets are no links)
      */
-    private Snapshot snapshot(
-            Iterable<Card> referenced, StaticSuppression board, SnapshotLinks.Acting acting,
-            Card source, EffectEvent pending) {
+    private Snapshot snapshot(SnapshotRequest request) {
+        SnapshotLinks.Acting acting = request.acting();
+        StaticSuppression board = request.board();
         Set<Card> ceased = new HashSet<>();
-        Set<Card> tiers = collectEntities(referenced, ceased);
-        List<String> entities = new ArrayList<>();
-        Set<String> present = new HashSet<>();
+        Set<Card> tiers = collectEntities(request.referenced(), ceased);
+        SnapshotEntities entities = new SnapshotEntities(game, board, tiers);
         for (Card card : tiers) {
-            entities.add(ceased.contains(card)
+            entities.addTier(card, ceased.contains(card)
                     ? renderCeased(card, acting, board)
                     : renderTier(card, acting, board));
-            present.add(Refs.of(card));
         }
-        for (Card gone : lastKnownOf(acting.targets())) {
-            // A target that ceased to exist or became a new object, as it was
-            // targeted: no zone holds that object any more.
-            if (present.add(ChainTargets.lastKnownRef(gone))) {
-                entities.add(EntityJson.render(game, gone, board, EntityJson.Beyond.lastKnown(
-                        ChainTargets.lastKnownRef(gone), ROLE_LAST_KNOWN)));
-            }
-        }
-        LibraryCapture libraries = LibraryCapture.of(game, board, present);
-        List<Card> cards = new ArrayList<>(tiers);
-        addBeyondTheTiers(entities, present, tiers, cards, board, libraries, pending);
+        // A target that ceased to exist or became a new object, as it was
+        // targeted: no zone holds that object any more.
+        lastKnownOf(acting.targets()).forEach(entities::addLastKnownTarget);
+        LibraryCapture libraries = LibraryCapture.of(game, board, entities.present());
+        addBeyondTheTiers(entities, libraries, request.pending());
+        EffectEvent pending = request.pending();
         String players = Json.array(game.getPlayers(), player -> PlayerJson.render(game, player, board));
         return new Snapshot(
-                globalToJson(tiers, board), players, "[" + String.join(",", entities) + "]",
-                SnapshotLinks.render(game, cards, tiers, acting, pending, board, floating),
-                RefsJson.render(acting.chosen() ? acting.ability() : null, source),
+                globalToJson(tiers, board), players, entities.toJson(),
+                SnapshotLinks.render(game, request, entities, floating),
+                RefsJson.render(acting.chosen() ? acting.ability() : null, request.source()),
                 pending == null ? "null" : pending.toJson(),
                 libraries);
     }
@@ -345,15 +337,32 @@ public final class SnapshotBuilder {
      * itself where it is not the acting host, is on the battlefield or the
      * stack, already shows that face, or the face cannot be shown.
      */
+    private static boolean showsActingFace(Card card, SpellAbility acting) {
+        return acting != null && acting.getCardState() != null && isActingHost(card, acting)
+                && !showsNoOtherFace(card);
+    }
+
+    private static boolean isActingHost(Card card, SpellAbility acting) {
+        return acting.getHostCard() != null && acting.getHostCard().getId() == card.getId();
+    }
+
+    /** Whether {@code card} is on the battlefield or the stack, or face down: where it shows no other face. */
+    private static boolean showsNoOtherFace(Card card) {
+        return card.isInZone(ZoneType.Battlefield) || card.isInZone(ZoneType.Stack)
+                || card.isFaceDown();
+    }
+
+    /** Whether {@code face} is a state {@code card} has and is not showing. */
+    private static boolean isAnotherFace(Card card, forge.card.CardStateName face) {
+        return face != null && face != card.getCurrentStateName() && card.hasState(face);
+    }
+
     private static Card actingFaceOf(Card card, SpellAbility acting) {
-        if (acting == null || acting.getHostCard() == null
-                || acting.getHostCard().getId() != card.getId()
-                || card.isInZone(ZoneType.Battlefield) || card.isInZone(ZoneType.Stack)
-                || card.isFaceDown() || acting.getCardState() == null) {
+        if (!showsActingFace(card, acting)) {
             return card;
         }
         forge.card.CardStateName face = acting.getCardState().getStateName();
-        if (face == null || face == card.getCurrentStateName() || !card.hasState(face)) {
+        if (!isAnotherFace(card, face)) {
             return card;
         }
         try {
@@ -378,77 +387,55 @@ public final class SnapshotBuilder {
      * its own. The library cards the record's later events name join at the
      * write ({@link Snapshot#withEventCards}).
      *
-     * @param cards the card entities rendered so far, which each added card
-     *              joins (a last-known copy is no card of the game, and does
-     *              not)
+     * @param entities the entities rendered so far, which each added card
+     *                 joins (a last-known copy is no card of the game, and
+     *                 does not)
      */
     private void addBeyondTheTiers(
-            List<String> entities, Set<String> present, Set<Card> tiers, List<Card> cards,
-            StaticSuppression board, LibraryCapture libraries, EffectEvent pending) {
+            SnapshotEntities entities, LibraryCapture libraries, EffectEvent pending) {
         for (var player : game.getPlayers()) {
-            Card top = player.getCardsIn(ZoneType.Library).isEmpty()
-                    ? null : player.getCardsIn(ZoneType.Library).get(0);
-            addLibraryCard(entities, present, cards, top, 0, board);
+            var library = player.getCardsIn(ZoneType.Library);
+            entities.addLibraryCard(library.isEmpty() ? null : library.get(0), 0);
         }
         if (pending != null) {
-            for (String subject : pending.subjects()) {
-                LibraryCapture.Slot slot = libraries.byId().get(subject);
-                if (slot != null) {
-                    addLibraryCard(entities, present, cards, slot.card(), slot.position(),
-                            board);
-                }
-            }
+            addPendingLibraryCards(entities, libraries, pending);
         }
-        for (Card card : tiers) {
-            if (card.isInPlay()) {
-                for (Card exiled : card.getExiledCards()) {
-                    addBeyond(entities, present, cards, exiled, board,
-                            ROLE_EXILED_WITH);
-                }
-            }
-        }
-        for (Card card : tiers) {
-            if (card.isInPlay() && card.isMutated()) {
-                for (Card component : card.getMergedCards()) {
-                    addBeyond(entities, present, cards, component, board,
-                            ROLE_MUTATE_COMPONENT);
-                }
-            }
-        }
+        addExiledWith(entities);
+        addMutateComponents(entities);
         Card lastKnown = pending == null ? null : pending.lastKnown();
         if (lastKnown != null) {
-            // A last-known copy is in no zone; it names the one it was in.
-            var zone = lastKnown.getZone() != null ? lastKnown.getZone() : lastKnown.getLastKnownZone();
-            entities.add(EntityJson.render(game, lastKnown, board, new EntityJson.Beyond(
-                    "L" + lastKnown.getId(),
-                    zone == null ? null : CardSpelling.zoneName(zone.getZoneType()),
-                    null, ROLE_LAST_KNOWN)));
+            entities.addLastKnown(lastKnown);
         }
     }
 
-    private void addBeyond(
-            List<String> entities, Set<String> present, List<Card> cards, Card card,
-            StaticSuppression board, String role) {
-        if (card != null && present.add(Refs.of(card))) {
-            cards.add(card);
-            entities.add(EntityJson.render(game, card, board,
-                    new EntityJson.Beyond(null, null, null, role)));
+    /** The library cards {@code pending} names, each at the position it held. */
+    private static void addPendingLibraryCards(
+            SnapshotEntities entities, LibraryCapture libraries, EffectEvent pending) {
+        for (String subject : pending.subjects()) {
+            LibraryCapture.Slot slot = libraries.byId().get(subject);
+            if (slot != null) {
+                entities.addLibraryCard(slot.card(), slot.position());
+            }
         }
     }
 
-    /**
-     * A library card, read as it is in the library (FR-042e), at its
-     * position: the same rendering whether the snapshot holds it as a
-     * library's top card or the record's events name it ({@link
-     * LibraryCapture}).
-     */
-    private void addLibraryCard(
-            List<String> entities, Set<String> present, List<Card> cards, Card card,
-            int position, StaticSuppression board) {
-        if (card != null && present.add(Refs.of(card))) {
-            cards.add(card);
-            entities.add(EntityJson.render(game, LibraryCapture.asInLibrary(card), board,
-                    new EntityJson.Beyond(null, "library", position, ROLE_LIBRARY_CARD)));
+    /** The cards each permanent of the tiers exiled, with role {@code exiled_with}. */
+    private static void addExiledWith(SnapshotEntities entities) {
+        for (Card card : entities.tiers()) {
+            if (card.isInPlay()) {
+                card.getExiledCards().forEach(
+                        exiled -> entities.addBeyond(exiled, ROLE_EXILED_WITH));
+            }
+        }
+    }
+
+    /** The components of each mutated permanent of the tiers, with role {@code mutate_component}. */
+    private static void addMutateComponents(SnapshotEntities entities) {
+        for (Card card : entities.tiers()) {
+            if (card.isInPlay() && card.isMutated()) {
+                card.getMergedCards().forEach(
+                        component -> entities.addBeyond(component, ROLE_MUTATE_COMPONENT));
+            }
         }
     }
 
