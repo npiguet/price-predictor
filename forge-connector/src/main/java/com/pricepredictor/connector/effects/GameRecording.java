@@ -119,7 +119,8 @@ public final class GameRecording implements AutoCloseable {
 
     private DirectedForkScheduler directedOf(GameRecordingRequest request, ForkBudget budget) {
         return new DirectedForkScheduler(
-                game, caps, request.directedRules(), budget, request.tally(), request.seed(),
+                game, new DirectedForkScheduler.Directing(caps, request.directedRules(), request.seed()),
+                budget, request.tally(),
                 new DirectedFork(game, playForward,
                         () -> game.getPhaseHandler().getPlayerTurn())::take);
     }

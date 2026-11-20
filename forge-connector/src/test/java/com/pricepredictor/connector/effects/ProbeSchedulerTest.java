@@ -13,6 +13,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -28,7 +29,7 @@ class ProbeSchedulerTest {
     private static DamageStepProbe.HeldProbe branch(DamageStep substep) {
         return new DamageStepProbe.HeldProbe(
                 "trample", "E1", "{}", List.of(), "P0", CombatShape.of(null), substep,
-                DamageStepProbe.TURN_UNKNOWN);
+                DamageStepProbe.TURN_UNKNOWN, Map.of());
     }
 
     private static ProbeScheduler probing(RecordShardWriter writer) {

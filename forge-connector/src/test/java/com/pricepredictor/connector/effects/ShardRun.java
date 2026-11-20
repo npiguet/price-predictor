@@ -125,9 +125,9 @@ final class ShardRun {
             BusBracketCollector bracket = new BusBracketCollector(
                     game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
                     recordId -> { });
-            try (Channels collectors = Channels.of(
-                    game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
-                    caps, SEED, bracket)) {
+            try (Channels collectors = Channels.of(game, new Channels.Setup(
+                    TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
+                    caps, SEED, bracket))) {
                 body.run(bracket, collectors);
             }
         } finally {

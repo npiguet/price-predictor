@@ -210,7 +210,7 @@ class ForkRecordsTest {
     private static DamageStepProbe.HeldProbe branch(int turn) {
         return new DamageStepProbe.HeldProbe(
                 "trample", "E1", "{}", List.of(), "P0", CombatShape.of(null),
-                DamageStep.REGULAR, turn);
+                DamageStep.REGULAR, turn, Map.of());
     }
 
     // ── a probe branch reads damage as the observed record does ─────────

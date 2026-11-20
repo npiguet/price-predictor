@@ -58,8 +58,9 @@ class DirectedForkSchedulerTest {
 
     private DirectedForkScheduler scheduler(
             CollectionCaps caps, DirectedForkTally tally, DirectedRule... rules) {
-        return new DirectedForkScheduler(TestCards.game(), caps, DirectedRules.of(rules),
-                new ForkBudget(caps), tally, 7L,
+        return new DirectedForkScheduler(TestCards.game(),
+                new DirectedForkScheduler.Directing(caps, DirectedRules.of(rules), 7L),
+                new ForkBudget(caps), tally,
                 (rule, variant, application, binding) -> forked.add(rule.name()));
     }
 
@@ -340,8 +341,9 @@ class DirectedForkSchedulerTest {
                         .seeded(7L))) {
             recording.open();
             DirectedFork fork = new DirectedFork(game, recording.playForward(), () -> active);
-            taken = new DirectedForkScheduler(game, caps, DirectedRules.registered(), new ForkBudget(caps),
-                    tally, 7L, fork::take).collect(PhaseType.MAIN1);
+            taken = new DirectedForkScheduler(game,
+                    new DirectedForkScheduler.Directing(caps, DirectedRules.registered(), 7L),
+                    new ForkBudget(caps), tally, fork::take).collect(PhaseType.MAIN1);
         } finally {
             writer.close();
         }
@@ -424,7 +426,8 @@ class DirectedForkSchedulerTest {
             recording.open();
             DirectedFork fork = new DirectedFork(game, recording.playForward(), perspective);
             DirectedForkScheduler scheduler = new DirectedForkScheduler(
-                    game, caps, DirectedRules.of(rule), budget, tally, 7L,
+                    game, new DirectedForkScheduler.Directing(caps, DirectedRules.of(rule), 7L),
+                    budget, tally,
                     (r, variant, application, binding) -> kept[0] = fork.take(r, variant, application, binding));
             scheduler.collect(PhaseType.END_OF_TURN);
             retried = scheduler.collect(PhaseType.CLEANUP);

@@ -255,9 +255,9 @@ final class HeldResolutionWindow {
     private static String refsOf(
             OpenResolution resolved, ModeSplit.ModeHalf half, int index, int halves,
             List<EffectEvent> events) {
-        Integer option = half.mode().option();
-        List<String> targets = resolved.targetsOfHalf(index, halves, option);
-        List<String> atCast = resolved.targetsAtCastOfHalf(index, halves, option);
+        ChainTargets.Half position = new ChainTargets.Half(index, halves, half.mode().option());
+        List<String> targets = resolved.targetsOfHalf(position);
+        List<String> atCast = resolved.targetsAtCastOfHalf(position);
         return RefsJson.renderHalf(resolved.ability, events, resolved.x(), targets, atCast,
                 resolved.onStackOf(targets, atCast));
     }

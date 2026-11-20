@@ -160,9 +160,9 @@ class RewriteTallyTest {
                 new RecordShardWriter(tempDir, "run", 0, "l1", cap);
         var game = TestCards.game();
         BusBracketCollector bracket = TestCollectors.bracket(game, writer, ShardRun.GAME_ID);
-        try (Channels collectors = Channels.of(
-                game, TestCollectors.context(writer, ShardRun.GAME_ID),
-                TestCaps.unprobed(), 1L, bracket)) {
+        try (Channels collectors = Channels.of(game, new Channels.Setup(
+                TestCollectors.context(writer, ShardRun.GAME_ID),
+                TestCaps.unprobed(), 1L, bracket))) {
             body.run(bracket, collectors);
         } finally {
             writer.close();

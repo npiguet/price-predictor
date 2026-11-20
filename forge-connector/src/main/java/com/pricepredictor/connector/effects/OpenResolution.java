@@ -145,10 +145,10 @@ final class OpenResolution {
      * One effect half's {@code targets}: what its links held as its
      * resolution started, or, where that was never told, what they hold now.
      */
-    java.util.List<String> targetsOfHalf(int half, int halves, Integer option) {
+    java.util.List<String> targetsOfHalf(ChainTargets.Half half) {
         ChainTargets targets = resolvingTargets != null
                 ? resolvingTargets : ChainTargets.now(ability);
-        return targets.ofHalf(half, halves, option);
+        return targets.ofHalf(half);
     }
 
     /**
@@ -177,8 +177,8 @@ final class OpenResolution {
     }
 
     /** One effect half's {@code targets_at_cast}, or null where they are unknown. */
-    java.util.List<String> targetsAtCastOfHalf(int half, int halves, Integer option) {
-        return castTargets == null ? null : castTargets.ofHalf(half, halves, option);
+    java.util.List<String> targetsAtCastOfHalf(ChainTargets.Half half) {
+        return castTargets == null ? null : castTargets.ofHalf(half);
     }
 
     private void readX() {

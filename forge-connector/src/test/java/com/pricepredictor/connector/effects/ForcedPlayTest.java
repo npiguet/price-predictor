@@ -390,8 +390,9 @@ class ForcedPlayTest {
         ForkBudget budget = new ForkBudget(caps);
         DirectedForkTally tally = new DirectedForkTally();
         List<String> forked = new ArrayList<>();
-        DirectedForkScheduler scheduler = new DirectedForkScheduler(game, caps, DirectedRules.of(rule), budget,
-                tally, 7L, (taken, variant, application, binding) -> forked.add(taken.name()));
+        DirectedForkScheduler scheduler = new DirectedForkScheduler(game,
+                new DirectedForkScheduler.Directing(caps, DirectedRules.of(rule), 7L), budget,
+                tally, (taken, variant, application, binding) -> forked.add(taken.name()));
         long before = refusals(ForkRefusal.FORCED_NO_LINE);
 
         assertEquals(0, scheduler.collect(PhaseType.MAIN1), "no fork where Disfigure cannot take its target");

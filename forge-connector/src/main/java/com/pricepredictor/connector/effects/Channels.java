@@ -30,17 +30,23 @@ record Channels(
         PhaseSignals phase) implements AutoCloseable {
 
     /**
+     * What the channels are assembled from, beside the game.
+     *
      * @param seed    seeds the game's sampling stream
      * @param bracket where the clause and outcome hooks file their events,
      *                and the state-based loop's signals go; the
      *                priority-settled signal goes to the candidates
      */
-    static Channels of(
-            Game game, CollectorContext context, CollectionCaps caps, long seed,
-            BusBracketCollector bracket) {
+    record Setup(CollectorContext context, CollectionCaps caps, long seed, BusBracketCollector bracket) {
+    }
+
+    static Channels of(Game game, Setup setup) {
+        CollectorContext context = setup.context();
+        CollectionCaps caps = setup.caps();
+        BusBracketCollector bracket = setup.bracket();
         LiveGame live = new LiveGame(game);
         RecordDedup dedup = new RecordDedup();
-        Random sampler = SeedStreams.random(seed, SeedStreams.Consumer.SAMPLER);
+        Random sampler = SeedStreams.random(setup.seed(), SeedStreams.Consumer.SAMPLER);
         PlayabilityChannel playability =
                 new PlayabilityChannel(live, context, dedup, sampler, caps);
         PriorityCandidates candidates = new PriorityCandidates(live, playability);

@@ -68,6 +68,17 @@ final class ChainTargets {
     record Link(SpellAbility ability, List<Target> targets) {
     }
 
+    /**
+     * One effect half of an item: its position among the item's halves and
+     * the {@code Choices$} position of its mode, null where it has none.
+     *
+     * @param index  the half's position among the item's halves
+     * @param count  how many halves the item writes
+     * @param option the half's {@code Choices$} position, or null
+     */
+    record Half(int index, int count, Integer option) {
+    }
+
     /** What a target is, which says how a link names it. */
     enum Kind {
         /** A card that is still the object targeted: {@code E<id>}. */
@@ -333,13 +344,9 @@ final class ChainTargets {
      * The targets of one effect half: the root's and its own mode's, or
      * every link's for a half that is no mode's (the item is not modal, or
      * its modes cannot be told apart).
-     *
-     * @param half   the half's position among the item's halves
-     * @param halves how many halves the item writes
-     * @param option the half's {@code Choices$} position, or null
      */
-    List<String> ofHalf(int half, int halves, Integer option) {
-        return refsOf(half(half, halves, option).linked);
+    List<String> ofHalf(Half half) {
+        return refsOf(half(half).linked);
     }
 
     /**
@@ -347,9 +354,9 @@ final class ChainTargets {
      * #ofHalf}): what that half's board links, in the order its refs list
      * them.
      */
-    ChainTargets half(int half, int halves, Integer option) {
-        ModeTargets mode = halves == modes.size() && half < halves
-                ? modes.get(half) : modeOf(option);
+    ChainTargets half(Half half) {
+        ModeTargets mode = half.count() == modes.size() && half.index() < half.count()
+                ? modes.get(half.index()) : modeOf(half.option());
         return new ChainTargets(this, distinct(root, mode == null ? modes : List.of(mode)));
     }
 
@@ -360,7 +367,7 @@ final class ChainTargets {
      * {@code begun}-th of as many halves as chosen modes.
      */
     ChainTargets beginningMode(int begun, Integer option) {
-        return half(begun, modes.size(), option);
+        return half(new Half(begun, modes.size(), option));
     }
 
     /** The first chosen mode at {@code option}, or null where none is or the option is unknown. */

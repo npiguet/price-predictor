@@ -73,22 +73,7 @@ final class DamageStepProbe {
                 () -> game.getPhaseHandler() == null
                         ? null : game.getPhaseHandler().getPlayerTurn());
         return run.take((verified, snapshots) -> {
-            Game fork = verified.fork();
-            Card forkCarrier = Forks.mappedCard(verified.copier(), carrier);
-            if (forkCarrier == null) {
-                throw new ForkRefusal(ForkRefusal.NO_COUNTERPART);
-            }
-            if (fork.getCombat() == null) {
-                throw new ForkRefusal(NO_COMBAT);
-            }
-            // A stripped keyword reaches combat states ordinary play does
-            // not; Forks.ForkRun discards the fork when one throws. Every
-            // spelling the carrier has of it (trample, and trample over
-            // planeswalkers): one left behind keeps the keyword working.
-            List<String> spellings = KeywordEdit.carried(forkCarrier, keyword);
-            for (String spelling : spellings.isEmpty() ? List.of(keyword) : spellings) {
-                KeywordEdit.remove(fork, forkCarrier, spelling);
-            }
+            Game fork = withoutKeyword(verified, carrier, keyword);
             // The state is the board as the step began, with the keyword
             // already gone: that is the input the counterfactual answers for.
             String state = snapshots.ofBoard().render();
@@ -104,6 +89,31 @@ final class DamageStepProbe {
                     // belongs to.
                     liveTurn(), verified.copyDropped());
         }, (verified, held) -> held);
+    }
+
+    /**
+     * The fork with {@code keyword} stripped from the copy of {@code carrier}.
+     *
+     * @throws ForkRefusal when the copy has no counterpart of the carrier or holds no combat
+     */
+    private static Game withoutKeyword(Forks.VerifiedFork verified, Card carrier, String keyword) {
+        Game fork = verified.fork();
+        Card forkCarrier = Forks.mappedCard(verified.copier(), carrier);
+        if (forkCarrier == null) {
+            throw new ForkRefusal(ForkRefusal.NO_COUNTERPART);
+        }
+        if (fork.getCombat() == null) {
+            throw new ForkRefusal(NO_COMBAT);
+        }
+        // A stripped keyword reaches combat states ordinary play does
+        // not; Forks.ForkRun discards the fork when one throws. Every
+        // spelling the carrier has of it (trample, and trample over
+        // planeswalkers): one left behind keeps the keyword working.
+        List<String> spellings = KeywordEdit.carried(forkCarrier, keyword);
+        for (String spelling : spellings.isEmpty() ? List.of(keyword) : spellings) {
+            KeywordEdit.remove(fork, forkCarrier, spelling);
+        }
+        return fork;
     }
 
     /**
@@ -223,13 +233,6 @@ final class DamageStepProbe {
             copyDropped = copyDropped == null ? Map.of() : Map.copyOf(copyDropped);
         }
 
-        /** A branch whose copy left nothing out. */
-        HeldProbe(String keyword, String carrier, String state,
-                  List<EffectEvent> events, String actor, CombatShape combat,
-                  DamageStep substep, int turn) {
-            this(keyword, carrier, state, events, actor, combat, substep, turn, Map.of());
-        }
-
         /**
          * The branch's payload, naming what was perturbed.
          *
@@ -282,8 +285,7 @@ final class DamageStepProbe {
             return false;
         }
         int now = liveTurn();
-        if (held.turn() != TURN_UNKNOWN && now != TURN_UNKNOWN
-                && held.turn() != now) {
+        if (isStale(held.turn(), now)) {
             System.err.println(
                     "Effect records: dropping a probe branch taken on turn "
                             + held.turn() + " that would mirror "
@@ -300,6 +302,11 @@ final class DamageStepProbe {
                 .state(held.state())
                 .payload(held.payload()));
         return true;
+    }
+
+    /** Whether a branch taken on {@code taken} no longer matches the live {@code now}, both known. */
+    private static boolean isStale(int taken, int now) {
+        return taken != TURN_UNKNOWN && now != TURN_UNKNOWN && taken != now;
     }
 
     /**

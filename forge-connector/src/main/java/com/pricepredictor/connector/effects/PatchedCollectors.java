@@ -109,7 +109,7 @@ final class PatchedCollectors implements AutoCloseable {
             BusBracketCollector bracket, boolean forkBound) {
         this.forkBound = forkBound;
         this.context = context;
-        this.channels = Channels.of(game, context, caps, seed, bracket);
+        this.channels = Channels.of(game, new Channels.Setup(context, caps, seed, bracket));
         this.everyMode = List.of(bracket.confirmHandler());
         this.patchedOnly = List.of(
                 bracket.castHandler(),

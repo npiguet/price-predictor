@@ -58,6 +58,18 @@ final class DirectedForkScheduler {
         boolean take(DirectedRule rule, String variant, Application application, Binding binding);
     }
 
+    /**
+     * What the run directs: the caps that list and weigh its rules, the
+     * registry that holds them, and the game's seed.
+     *
+     * @param registry the registered rules; a rule the run names and the
+     *                 registry lacks takes no fork (the supervisor refuses
+     *                 one before any worker starts)
+     * @param seed     the game's seed
+     */
+    record Directing(CollectionCaps caps, DirectedRules registry, long seed) {
+    }
+
     /** An enabled registration and the probability it forks with. */
     private record Candidate(DirectedRule rule, double probability) {
     }
@@ -71,20 +83,13 @@ final class DirectedForkScheduler {
     private final Fork fork;
     private final Set<DirectedRule> forkedThisGame = new HashSet<>();
 
-    /**
-     * @param registry the registered rules; a rule the run names and the
-     *                 registry lacks takes no fork (the supervisor refuses
-     *                 one before any worker starts)
-     * @param seed     the game's seed
-     */
     DirectedForkScheduler(
-            Game game, CollectionCaps caps, DirectedRules registry, ForkBudget budget,
-            DirectedForkTally tally, long seed, Fork fork) {
+            Game game, Directing directing, ForkBudget budget, DirectedForkTally tally, Fork fork) {
         this.game = game;
-        this.enabled = enabled(caps, registry);
+        this.enabled = enabled(directing.caps(), directing.registry());
         this.budget = budget;
         this.tally = tally;
-        this.random = SeedStreams.random(seed, SeedStreams.Consumer.DIRECTED_FORKS);
+        this.random = SeedStreams.random(directing.seed(), SeedStreams.Consumer.DIRECTED_FORKS);
         this.fork = fork;
     }
 

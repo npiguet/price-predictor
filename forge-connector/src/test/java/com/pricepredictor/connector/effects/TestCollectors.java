@@ -60,9 +60,9 @@ final class TestCollectors {
     static Channels recording(Path dir) {
         Game game = TestCards.game();
         RecordShardWriter writer = ShardRun.writer(dir);
-        return Channels.of(
-                game, context(writer, ShardRun.GAME_ID), TestCaps.unprobed(), 1L,
-                bracket(game, writer, ShardRun.GAME_ID));
+        return Channels.of(game, new Channels.Setup(
+                context(writer, ShardRun.GAME_ID), TestCaps.unprobed(), 1L,
+                bracket(game, writer, ShardRun.GAME_ID)));
     }
 
     /**
