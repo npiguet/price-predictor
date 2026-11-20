@@ -16,6 +16,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static com.pricepredictor.connector.effects.ApiEvents.put;
@@ -133,15 +134,15 @@ final class HealGrantAndRetargetApiRules {
      * a static rather than an activated ability; keywords are not among
      * them, being the keyword change's own event.
      */
-    private static EffectEvent grantedAbilities(
+    private static Optional<EffectEvent> grantedAbilities(
             EffectEvent event, SpellAbility sa, Card host, List<Card> animated) {
         List<String> granted = grantedTraits(sa);
         if (animated != null) {
             stillInPlay(event, host.getGame(), animated);
         }
-        return event
+        return Optional.of(event
                 .param(EventParam.ABILITIES, String.join(",", granted))
-                .param(EventParam.REMOVED, sa.hasParam("RemoveAllAbilities"));
+                .param(EventParam.REMOVED, sa.hasParam("RemoveAllAbilities")));
     }
 
     /** The trait names the animation's {@link #GRANT_LISTS} hold, in their order. */
@@ -220,7 +221,7 @@ final class HealGrantAndRetargetApiRules {
      * "retargeted at nothing." Mixed-entity targets are read through
      * {@link Refs#ofAny}.
      */
-    private static EffectEvent retargeted(SpellAbility sa) {
+    private static Optional<EffectEvent> retargeted(SpellAbility sa) {
         EffectEvent event = new EffectEvent(EventType.TARGETS_CHANGED);
         List<String> targets = new ArrayList<>();
         if (sa.getTargets() != null) {
@@ -229,7 +230,7 @@ final class HealGrantAndRetargetApiRules {
                 addTargets(changed, targets);
             }
         }
-        return event.param(EventParam.TARGETS, targets);
+        return Optional.of(event.param(EventParam.TARGETS, targets));
     }
 
     /** What {@code changed} targets now, as refs, onto {@code targets}. */

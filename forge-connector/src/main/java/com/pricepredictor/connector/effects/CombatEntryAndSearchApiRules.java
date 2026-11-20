@@ -12,6 +12,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static com.pricepredictor.connector.effects.ApiEvents.put;
@@ -72,19 +73,19 @@ final class CombatEntryAndSearchApiRules {
     /**
      * {@code state_flag_change} {@code entered_attacking} on the attackers
      * not in combat before the clause, else {@code entered_blocking} on such
-     * blockers; null when nobody joined.
+     * blockers; empty when nobody joined.
      */
-    private static EffectEvent enteredCombat(Card host, Set<Integer> before) {
+    private static Optional<EffectEvent> enteredCombat(Card host, Set<Integer> before) {
         Combat combat = host.getGame().getCombat();
         if (before == null || combat == null) {
-            return null;
+            return Optional.empty();
         }
-        EffectEvent attacking = joined(combat.getAttackers(), before, StateFlag.ENTERED_ATTACKING);
-        return attacking != null ? attacking
+        Optional<EffectEvent> attacking = joined(combat.getAttackers(), before, StateFlag.ENTERED_ATTACKING);
+        return attacking.isPresent() ? attacking
                 : joined(combat.getAllBlockers(), before, StateFlag.ENTERED_BLOCKING);
     }
 
-    private static EffectEvent joined(Iterable<Card> now, Set<Integer> before, StateFlag flag) {
+    private static Optional<EffectEvent> joined(Iterable<Card> now, Set<Integer> before, StateFlag flag) {
         EffectEvent event = new EffectEvent(EventType.STATE_FLAG_CHANGE)
                 .flag(flag, true);
         for (Card card : now) {
@@ -92,7 +93,7 @@ final class CombatEntryAndSearchApiRules {
                 event.subject(Refs.of(card));
             }
         }
-        return event.subjects().isEmpty() ? null : event;
+        return event.subjects().isEmpty() ? Optional.empty() : Optional.of(event);
     }
 
     /** What a zone change is read against: the combatants and every player's searches. */
@@ -107,12 +108,12 @@ final class CombatEntryAndSearchApiRules {
         return new BeforeChangeZone(combatants(sa, host), searches);
     }
 
-    private static EffectEvent changedZone(Card host, BeforeChangeZone before) {
+    private static Optional<EffectEvent> changedZone(Card host, BeforeChangeZone before) {
         if (before == null) {
-            return null;
+            return Optional.empty();
         }
-        EffectEvent entered = enteredCombat(host, before.combatants());
-        if (entered != null) {
+        Optional<EffectEvent> entered = enteredCombat(host, before.combatants());
+        if (entered.isPresent()) {
             return entered;
         }
         EffectEvent searched = new EffectEvent(EventType.CARD_LOOKED_AT)
@@ -123,7 +124,7 @@ final class CombatEntryAndSearchApiRules {
                 searched.subject(Refs.of(player));
             }
         });
-        return searched.subjects().isEmpty() ? null : searched;
+        return searched.subjects().isEmpty() ? Optional.empty() : Optional.of(searched);
     }
 
     /** The attackers not blocked before the clause. */
@@ -143,12 +144,12 @@ final class CombatEntryAndSearchApiRules {
     /**
      * {@code became_blocked} on every attacker the clause blocked, with the
      * blockers now blocking them ({@code BecomesBlocked} leaves none, a
-     * {@code Block} clause names its blocker); null when none became blocked.
+     * {@code Block} clause names its blocker); empty when none became blocked.
      */
-    private static EffectEvent becameBlocked(Card host, List<Card> before) {
+    private static Optional<EffectEvent> becameBlocked(Card host, List<Card> before) {
         Combat combat = host.getGame().getCombat();
         if (before == null || combat == null) {
-            return null;
+            return Optional.empty();
         }
         EffectEvent event = new EffectEvent(EventType.BECAME_BLOCKED);
         List<String> blockers = new ArrayList<>();
@@ -158,7 +159,8 @@ final class CombatEntryAndSearchApiRules {
                 addBlockers(combat.getBlockers(attacker), blockers);
             }
         }
-        return event.subjects().isEmpty() ? null : event.param(EventParam.BLOCKERS, blockers);
+        return event.subjects().isEmpty()
+                ? Optional.empty() : Optional.of(event.param(EventParam.BLOCKERS, blockers));
     }
 
     /** Each of {@code blocking}'s refs not already in {@code blockers}, onto it, in order. */

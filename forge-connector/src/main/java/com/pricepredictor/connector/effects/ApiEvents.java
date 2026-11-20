@@ -8,6 +8,7 @@ import forge.game.spellability.SpellAbility;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -44,14 +45,15 @@ final class ApiEvents {
     }
 
     /**
-     * The event, given the clause and whatever its memo captured.
+     * The event, given the clause and whatever its memo captured; empty when
+     * the clause did nothing its API promises.
      *
      * <p>The memo is null when the rule has none and when it threw, so an
      * emitter that reads one checks for null.
      */
     @FunctionalInterface
     interface Emitter<M> {
-        EffectEvent emit(SpellAbility sa, Card host, M memo);
+        Optional<EffectEvent> emit(SpellAbility sa, Card host, M memo);
     }
 
     /**
@@ -72,12 +74,10 @@ final class ApiEvents {
      */
     record Rule<M>(EventType eventType, Memo<M> memo, Emitters<M> emitters) {
 
-        /** A rule that writes at most one event per clause: {@code emitter}'s, unless null. */
+        /** A rule that writes at most one event per clause: {@code emitter}'s, unless empty. */
         static <M> Rule<M> one(EventType eventType, Memo<M> memo, Emitter<M> emitter) {
-            return new Rule<>(eventType, memo, (sa, host, taken) -> {
-                EffectEvent event = emitter.emit(sa, host, taken);
-                return event == null ? List.of() : List.of(event);
-            });
+            return new Rule<>(eventType, memo,
+                    (sa, host, taken) -> emitter.emit(sa, host, taken).stream().toList());
         }
 
         /** A rule whose emitter fills in a fresh event of {@code eventType}. */
@@ -98,7 +98,7 @@ final class ApiEvents {
      */
     @FunctionalInterface
     interface Shaper<M> {
-        EffectEvent shape(EffectEvent event, SpellAbility sa, Card host, M memo);
+        Optional<EffectEvent> shape(EffectEvent event, SpellAbility sa, Card host, M memo);
     }
 
     /**

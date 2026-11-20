@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static com.pricepredictor.connector.effects.ApiEvents.put;
@@ -111,10 +112,10 @@ final class CombatRemovalApiRules {
         return inCombat;
     }
 
-    /** Every memoized combatant no longer attacking or blocking, or {@code null} if none. */
-    private static EffectEvent noLongerInCombat(Card host, List<Card> before) {
+    /** Every memoized combatant no longer attacking or blocking, or empty if none. */
+    private static Optional<EffectEvent> noLongerInCombat(Card host, List<Card> before) {
         if (before == null || before.isEmpty()) {
-            return null;
+            return Optional.empty();
         }
         Combat combat = host.getGame().getCombat();
         EffectEvent event = new EffectEvent(EventType.REMOVED_FROM_COMBAT);
@@ -123,7 +124,7 @@ final class CombatRemovalApiRules {
                 event.subject(Refs.of(c));
             }
         }
-        return event.subjects().isEmpty() ? null : event;
+        return event.subjects().isEmpty() ? Optional.empty() : Optional.of(event);
     }
 
     /**
@@ -162,9 +163,9 @@ final class CombatRemovalApiRules {
      * replicated from the {@code Optional}-decline or
      * already-attacking-that-defender guards.
      */
-    private static EffectEvent reselectedAttackers(Card host, Map<Card, GameEntity> before) {
+    private static Optional<EffectEvent> reselectedAttackers(Card host, Map<Card, GameEntity> before) {
         if (before == null || before.isEmpty()) {
-            return null;
+            return Optional.empty();
         }
         Combat combat = host.getGame().getCombat();
         EffectEvent event = new EffectEvent(EventType.REMOVED_FROM_COMBAT);
@@ -178,7 +179,7 @@ final class CombatRemovalApiRules {
                 event.subject(Refs.of(c));
             }
         }
-        return event.subjects().isEmpty() ? null : event;
+        return event.subjects().isEmpty() ? Optional.empty() : Optional.of(event);
     }
 
     /**
@@ -193,8 +194,8 @@ final class CombatRemovalApiRules {
     }
 
     /** combat_ended: the attacking player whose combat phase ended, if one did. */
-    private static EffectEvent endedCombatOf(
+    private static Optional<EffectEvent> endedCombatOf(
             EffectEvent event, SpellAbility sa, Card host, Player attacker) {
-        return attacker == null ? null : event.subject(Refs.of(attacker));
+        return attacker == null ? Optional.empty() : Optional.of(event.subject(Refs.of(attacker)));
     }
 }

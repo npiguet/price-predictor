@@ -9,6 +9,7 @@ import forge.game.spellability.SpellAbility;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static com.pricepredictor.connector.effects.ApiEvents.amount;
 import static com.pricepredictor.connector.effects.ApiEvents.playerOf;
@@ -38,18 +39,19 @@ final class TurnAndPhaseApiRules {
     }
 
     /** How many turns are added or skipped, for each player affected. */
-    private static EffectEvent turns(
+    private static Optional<EffectEvent> turns(
             EffectEvent event, SpellAbility sa, Card host, List<Player> players) {
-        return withSubjects(event.param(EventParam.COUNT, amount(sa, host, "NumTurns", "1")), players);
+        return Optional.of(withSubjects(
+                event.param(EventParam.COUNT, amount(sa, host, "NumTurns", "1")), players));
     }
 
     /** The phase added, how many times, for the activating player. */
-    private static EffectEvent addedPhase(
+    private static Optional<EffectEvent> addedPhase(
             EffectEvent event, SpellAbility sa, Card host, Object memo) {
-        return event
+        return Optional.of(event
                 .subject(playerOf(sa))
                 .param(EventParam.PHASE, sa.getParamOrDefault("ExtraPhase", "?"))
-                .param(EventParam.COUNT, amount(sa, host, "NumPhases", "1"));
+                .param(EventParam.COUNT, amount(sa, host, "NumPhases", "1")));
     }
 
     /**
@@ -62,10 +64,10 @@ final class TurnAndPhaseApiRules {
      * {@code Phase$ Main} is both main phases, which Forge's replacement reads
      * it as, joined by a comma; a value Forge cannot read is {@code "?"}.
      */
-    private static EffectEvent skippedPhase(
+    private static Optional<EffectEvent> skippedPhase(
             EffectEvent event, SpellAbility sa, Card host, List<Player> players) {
         String named = sa.hasParam("Phase") ? sa.getParam("Phase") : sa.getParam("Step");
-        return withSubjects(event.param(EventParam.PHASE, phaseSpelling(named)), players);
+        return Optional.of(withSubjects(event.param(EventParam.PHASE, phaseSpelling(named)), players));
     }
 
     /** A script's phase or step as the snapshot's {@code phase}, members of a range joined by commas. */

@@ -5,6 +5,7 @@ import forge.game.card.Card;
 import forge.game.spellability.SpellAbility;
 
 import java.util.Map;
+import java.util.Optional;
 
 import static com.pricepredictor.connector.effects.ApiEvents.amount;
 import static com.pricepredictor.connector.effects.ApiEvents.put;
@@ -34,9 +35,9 @@ final class ScheduleAndReplacementApiRules {
      * neither effect reads {@code Defined$}/{@code ValidTgts$} for the trigger
      * itself, only for what the delayed trigger later acts on.
      */
-    private static EffectEvent scheduler(
+    private static Optional<EffectEvent> scheduler(
             EffectEvent event, SpellAbility sa, Card host, Object memo) {
-        return event.subject(Refs.of(host));
+        return Optional.of(event.subject(Refs.of(host)));
     }
 
     /**
@@ -56,9 +57,9 @@ final class ScheduleAndReplacementApiRules {
     }
 
     /** As {@link #scheduler}, for an immediate trigger that fires at least once. */
-    private static EffectEvent immediateTrigger(
+    private static Optional<EffectEvent> immediateTrigger(
             EffectEvent event, SpellAbility sa, Card host, Integer times) {
-        return times != null && times <= 0 ? null : scheduler(event, sa, host, times);
+        return times != null && times <= 0 ? Optional.empty() : scheduler(event, sa, host, times);
     }
 
     /**
@@ -75,8 +76,8 @@ final class ScheduleAndReplacementApiRules {
      * EventType.REPLACEMENT_APPLIED} in {@code event_schema.py} for why the two
      * must not be read as independent evidence of the same replacement.
      */
-    private static EffectEvent replacedBy(
+    private static Optional<EffectEvent> replacedBy(
             EffectEvent event, SpellAbility sa, Card host, Object memo) {
-        return event.subject(Refs.of(host));
+        return Optional.of(event.subject(Refs.of(host)));
     }
 }

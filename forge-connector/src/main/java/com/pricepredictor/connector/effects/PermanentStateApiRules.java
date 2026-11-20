@@ -8,6 +8,7 @@ import forge.game.zone.ZoneType;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -36,10 +37,10 @@ final class PermanentStateApiRules {
         put(rules, Rule.one(EventType.STATE_FLAG_CHANGE,
                         (sa, host) -> host.getClassLevel(),
                         (sa, host, before) -> before == null || host.getClassLevel() <= before
-                                ? null
-                                : new EffectEvent(EventType.STATE_FLAG_CHANGE)
+                                ? Optional.empty()
+                                : Optional.of(new EffectEvent(EventType.STATE_FLAG_CHANGE)
                                         .subject(Refs.of(host))
-                                        .flag(StateFlag.CLASS_LEVEL, host.getClassLevel())),
+                                        .flag(StateFlag.CLASS_LEVEL, host.getClassLevel()))),
                 "ClassLevelUp");
         put(rules, Rule.one(EventType.STATE_FLAG_CHANGE, PermanentStateApiRules::unlockedDoors,
                         (sa, host, before) -> doorsUnlocked(host, before)),
@@ -61,9 +62,9 @@ final class PermanentStateApiRules {
         return unlocked;
     }
 
-    private static EffectEvent doorsUnlocked(Card host, Map<Integer, Integer> before) {
+    private static Optional<EffectEvent> doorsUnlocked(Card host, Map<Integer, Integer> before) {
         if (before == null) {
-            return null;
+            return Optional.empty();
         }
         return flagged(host, StateFlag.DOOR_UNLOCKED,
                 card -> doors(card) > before.getOrDefault(card.getId(), 0));
@@ -71,9 +72,9 @@ final class PermanentStateApiRules {
 
     /**
      * {@code state_flag_change} {@code flag} on every permanent on the
-     * battlefield that {@code changed} holds for; null when it holds for none.
+     * battlefield that {@code changed} holds for; empty when it holds for none.
      */
-    private static EffectEvent flagged(Card host, StateFlag flag, Predicate<Card> changed) {
+    private static Optional<EffectEvent> flagged(Card host, StateFlag flag, Predicate<Card> changed) {
         EffectEvent event = new EffectEvent(EventType.STATE_FLAG_CHANGE)
                 .flag(flag, true);
         for (Card card : host.getGame().getCardsIn(ZoneType.Battlefield)) {
@@ -81,7 +82,7 @@ final class PermanentStateApiRules {
                 event.subject(Refs.of(card));
             }
         }
-        return event.subjects().isEmpty() ? null : event;
+        return event.subjects().isEmpty() ? Optional.empty() : Optional.of(event);
     }
 
     private static int doors(Card card) {
@@ -99,9 +100,9 @@ final class PermanentStateApiRules {
         return paired;
     }
 
-    private static EffectEvent newlyPaired(Card host, Set<Integer> before) {
+    private static Optional<EffectEvent> newlyPaired(Card host, Set<Integer> before) {
         if (before == null) {
-            return null;
+            return Optional.empty();
         }
         return flagged(host, StateFlag.PAIRED, card -> card.isPaired() && !before.contains(card.getId()));
     }
@@ -111,13 +112,13 @@ final class PermanentStateApiRules {
      * MutateEffect} sets the spell's {@code getMergedToCard} to it, the one
      * permanent the merge leaves, whichever card went on top.
      */
-    private static EffectEvent merged(Card host) {
+    private static Optional<EffectEvent> merged(Card host) {
         Card into = host == null ? null : host.getMergedToCard();
         if (into == null) {
-            return null;
+            return Optional.empty();
         }
-        return new EffectEvent(EventType.STATE_FLAG_CHANGE)
+        return Optional.of(new EffectEvent(EventType.STATE_FLAG_CHANGE)
                 .subject(Refs.of(into))
-                .flag(StateFlag.MERGED, true);
+                .flag(StateFlag.MERGED, true));
     }
 }

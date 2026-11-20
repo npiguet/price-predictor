@@ -6,6 +6,7 @@ import forge.game.card.Card;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 
 import static com.pricepredictor.connector.effects.ApiEvents.put;
@@ -85,24 +86,24 @@ final class ChoiceApiRules {
      * <p>There is no {@code getChosenSector()} reading, for the reason there
      * is no {@code ChooseSector} rule ({@link #choiceRules}).
      *
-     * @return the event, or null where the API's accessor holds nothing: a
+     * @return the event, or empty where the API's accessor holds nothing: a
      *         {@code choice_made} naming a kind it cannot read would train
      *         the head on a distinction the corpus cannot make
      */
-    private static EffectEvent choice(Card host, String kind) {
+    private static Optional<EffectEvent> choice(Card host, String kind) {
         if (host == null) {
-            return null;
+            return Optional.empty();
         }
         for (ChoiceReading reading : CHOICES) {
             if (!reading.kind().equals(kind)) {
                 continue;
             }
             String value = reading.read().apply(host);
-            return value == null ? null : new EffectEvent(EventType.CHOICE_MADE)
+            return value == null ? Optional.empty() : Optional.of(new EffectEvent(EventType.CHOICE_MADE)
                     .param(EventParam.CHOICE_KIND, kind)
-                    .param(EventParam.VALUE, value);
+                    .param(EventParam.VALUE, value));
         }
-        return null;
+        return Optional.empty();
     }
 
     /**

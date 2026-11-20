@@ -5,6 +5,7 @@ import forge.game.card.Card;
 import forge.game.spellability.SpellAbility;
 
 import java.util.Map;
+import java.util.Optional;
 
 import static com.pricepredictor.connector.effects.ApiEvents.put;
 
@@ -29,21 +30,21 @@ final class TextApiRules {
     }
 
     /**
-     * text_change: the card(s) whose text changed, or {@code null} when the
+     * text_change: the card(s) whose text changed, or empty when the
      * clause names no word to replace at all -- {@code
      * ChangeTextEffect.resolve()}'s target loop still fires {@code
      * GameEventCardStatsChanged} for every target even then, so the params
      * themselves, read directly with no post-resolution state needed, are the
      * only signal that anything textual actually changed.
      */
-    private static EffectEvent changeTextEvent(SpellAbility sa) {
+    private static Optional<EffectEvent> changeTextEvent(SpellAbility sa) {
         if (!sa.hasParam("ChangeColorWord") && !sa.hasParam("ChangeTypeWord")) {
-            return null;
+            return Optional.empty();
         }
         EffectEvent event = new EffectEvent(EventType.TEXT_CHANGE);
         for (Card c : ClauseTargets.cardsFromTargets(sa)) {
             event.subject(Refs.of(c));
         }
-        return event.subjects().isEmpty() ? null : event;
+        return event.subjects().isEmpty() ? Optional.empty() : Optional.of(event);
     }
 }

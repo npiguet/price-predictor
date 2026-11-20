@@ -7,6 +7,7 @@ import forge.game.spellability.SpellAbility;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static com.pricepredictor.connector.effects.ApiEvents.amount;
 import static com.pricepredictor.connector.effects.ApiEvents.playerOf;
@@ -23,7 +24,7 @@ final class ValueAndOwnershipApiRules {
 
     static void valueAndOwnershipRules(Map<String, Rule<?>> rules) {
         put(rules, Rule.shaped(EventType.X_CHANGED, null, (event, sa, host, memo) ->
-                        event.param(EventParam.VALUE, amount(sa, host, "Value", "0"))),
+                        Optional.of(event.param(EventParam.VALUE, amount(sa, host, "Value", "0")))),
                 "ChangeX");
         put(rules, Rule.shaped(EventType.OWNERSHIP_CHANGE,
                         (sa, host) -> ClauseTargets.affectedCards(sa), ValueAndOwnershipApiRules::ownershipChange),
@@ -35,12 +36,12 @@ final class ValueAndOwnershipApiRules {
      * OwnershipGainEffect.resolve} reads them ({@code getTargetCards}), and
      * their new owner.
      */
-    private static EffectEvent ownershipChange(
+    private static Optional<EffectEvent> ownershipChange(
             EffectEvent event, SpellAbility sa, Card host, List<Card> cards) {
         if (cards != null) {
             cards.forEach(card -> event.subject(Refs.of(card)));
         }
-        return event.param(EventParam.OWNER, ownerOf(sa));
+        return Optional.of(event.param(EventParam.OWNER, ownerOf(sa)));
     }
 
     /**

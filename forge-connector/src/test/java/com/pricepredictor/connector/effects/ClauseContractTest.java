@@ -19,6 +19,7 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -239,7 +240,7 @@ class ClauseContractTest {
                 (sa, host) -> {
                     throw new IllegalStateException("boom (memo)");
                 },
-                (sa, host, memo) -> new EffectEvent(EventType.TURN_SKIPPED));
+                (sa, host, memo) -> Optional.of(new EffectEvent(EventType.TURN_SKIPPED)));
 
         StringBuilder stderr = new StringBuilder();
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {

@@ -6,6 +6,7 @@ import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 
 import java.util.Map;
+import java.util.Optional;
 
 import static com.pricepredictor.connector.effects.ApiEvents.put;
 
@@ -44,13 +45,13 @@ final class TitleApiRules {
      *
      * @param before the monarch before the clause ran
      */
-    private static EffectEvent newMonarch(
+    private static Optional<EffectEvent> newMonarch(
             EffectEvent event, SpellAbility sa, Card host, Player before) {
         Player after = host.getGame().getMonarch();
         if (after == null || after.equals(before)) {
-            return null;
+            return Optional.empty();
         }
-        return event.subject(Refs.of(after));
+        return Optional.of(event.subject(Refs.of(after)));
     }
 
     /**
@@ -66,18 +67,18 @@ final class TitleApiRules {
      * controls no creatures, per {@code chooseSingleEntityForEffect}'s own
      * contract on an empty candidate list.
      */
-    private static EffectEvent tempted(
+    private static Optional<EffectEvent> tempted(
             EffectEvent event, SpellAbility sa, Card host, Object memo) {
         Player p = sa.getActivatingPlayer();
         if (p == null) {
-            return null;
+            return Optional.empty();
         }
         event.subject(Refs.of(p));
         Card ringBearer = p.getRingBearer();
         if (ringBearer != null) {
             event.subject(Refs.of(ringBearer));
         }
-        return event;
+        return Optional.of(event);
     }
 
     /**
@@ -103,12 +104,12 @@ final class TitleApiRules {
      * re-deriving {@code GameAction}'s own fall-through as a second copy of
      * it, which drifts the way any duplicated classification does.
      */
-    private static EffectEvent initiativeTaker(
+    private static Optional<EffectEvent> initiativeTaker(
             EffectEvent event, SpellAbility sa, Card host, Object memo) {
         Player holder = host.getGame().getHasInitiative();
         if (holder == null || !ClauseTargets.affectedPlayers(sa).contains(holder)) {
-            return null;
+            return Optional.empty();
         }
-        return event.subject(Refs.of(holder));
+        return Optional.of(event.subject(Refs.of(holder)));
     }
 }

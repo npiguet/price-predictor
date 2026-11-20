@@ -11,6 +11,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiConsumer;
@@ -158,7 +159,7 @@ class ApiEventsTest {
                 (s, host) -> {
                     throw new IllegalStateException("boom (memo)");
                 },
-                (s, host, memo) -> new EffectEvent(EventType.TURN_SKIPPED));
+                (s, host, memo) -> Optional.of(new EffectEvent(EventType.TURN_SKIPPED)));
 
         String output = StdStreams.captureStderr(() -> assertNull(
                 ApiEvents.observe(sa, api -> throwingMemo).memo(),
