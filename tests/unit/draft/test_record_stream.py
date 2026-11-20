@@ -279,10 +279,10 @@ def test_max_consecutive_faults_propagates_out_of_the_generator() -> None:
 
 class _RecordingConnector:
     def __init__(self) -> None:
-        self.kwargs: dict = {}
+        self.launch = None
 
-    def start(self, **kwargs):
-        self.kwargs = kwargs
+    def start(self, launch):
+        self.launch = launch
         return _FakeProc([])
 
 
@@ -296,7 +296,7 @@ def test_default_launch_forwards_required_agent(monkeypatch) -> None:
 
     supervisor._default_launch_worker(frozenset({"gen-3"}))()
 
-    assert connector.kwargs["required_agent"] == "gen-3"
+    assert connector.launch.required_agent == "gen-3"
 
 
 def test_default_launch_omits_required_agent_when_unset(monkeypatch) -> None:
@@ -310,7 +310,7 @@ def test_default_launch_omits_required_agent_when_unset(monkeypatch) -> None:
 
     supervisor._default_launch_worker(frozenset())()
 
-    assert "required_agent" not in connector.kwargs
+    assert connector.launch.required_agent is None
 
 
 def test_required_agent_defaults_to_none_on_the_config() -> None:

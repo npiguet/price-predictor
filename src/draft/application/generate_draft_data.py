@@ -23,7 +23,7 @@ import signal
 import threading
 import time
 import uuid
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -161,8 +161,17 @@ class PickRequest:
         Raises ``ValueError`` on a structurally invalid request (a protocol
         desync the supervisor treats as a pick fault).
         """
+        request = cls._parse(payload)
+        request._check_live_geometry()
+        request._check_pick()
+        return request
+
+    @classmethod
+    def _parse(cls, payload: dict[str, Any]) -> "PickRequest":
+        """Read every field of ``payload``; ``ValueError`` on a missing or
+        mistyped one."""
         try:
-            request = cls(
+            return cls(
                 draft_id=str(payload["draft_id"]),
                 seat=int(payload["seat"]),
                 agent=str(payload["agent"]),
@@ -174,19 +183,25 @@ class PickRequest:
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError(f"malformed pick request: {exc}") from exc
-        if request.pod_size != POD_SIZE:
+
+    def _check_live_geometry(self) -> None:
+        """Refuse a request outside the live pod size and pack count
+        (``ValueError``)."""
+        if self.pod_size != POD_SIZE:
             raise ValueError(
-                f"pick request pod_size {request.pod_size} != live pod size {POD_SIZE}"
+                f"pick request pod_size {self.pod_size} != live pod size {POD_SIZE}"
             )
-        if not 1 <= request.pack_number <= PACKS:
+        if not 1 <= self.pack_number <= PACKS:
             raise ValueError(
-                f"pick request pack_number {request.pack_number} out of range 1..{PACKS}"
+                f"pick request pack_number {self.pack_number} out of range 1..{PACKS}"
             )
-        if request.pick_number < 1:
-            raise ValueError(f"pick request pick_number {request.pick_number} < 1")
-        if not request.pack:
+
+    def _check_pick(self) -> None:
+        """Refuse a request with no pick number or no pack (``ValueError``)."""
+        if self.pick_number < 1:
+            raise ValueError(f"pick request pick_number {self.pick_number} < 1")
+        if not self.pack:
             raise ValueError("pick request has an empty pack")
-        return request
 
 
 def parse_pick_request(line: str) -> PickRequest | None:
@@ -373,6 +388,44 @@ def build_labeler(
     return _PickerLabeler(config.picker_checkpoint, scorer, locator, device)
 
 
+#: One pool a picker forward can take: its index in the pod, its embeddable
+#: card names and their embeddings.
+_PreparedPool = tuple[int, list[str], list]
+
+#: A deck built for the pool at this index of the pod.
+_BuiltDeck = tuple[int, list[str]]
+
+
+def _embeddable_pools(pools: list[list[str]], locator) -> list[_PreparedPool]:
+    """The pools with enough embeddable cards to build a deck from; the others
+    (< 23 cards) fail to ``([], None)``."""
+    from sealed.application.deck_assembly import load_pool_embeddings
+    from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE
+
+    prepared: list[_PreparedPool] = []
+    for i, pool in enumerate(pools):
+        embeddings, valid = load_pool_embeddings(pool, locator)
+        if len(valid) < NONLAND_DECK_SIZE:
+            continue
+        prepared.append((i, valid, [embeddings[n] for n in valid]))
+    return prepared
+
+
+def _scored_results(
+    scorer, locator, n_pools: int, built: list[_BuiltDeck],
+) -> list[tuple[list[str], float | None]]:
+    """One batched scorer forward over the ``built`` decks; every other pool of
+    the pod is a failed build."""
+    from sealed.application.evaluate_scorer import score_decks
+
+    results: list[tuple[list[str], float | None]] = [([], None) for _ in range(n_pools)]
+    if built:
+        scores = score_decks(scorer, [deck for _, deck in built], locator)
+        for j, (i, deck) in enumerate(built):
+            results[i] = (deck, float(scores[j]))
+    return results
+
+
 class _PickerLabeler:
     """Picker forward + § 1.1 pick walk + basics, then scorer (mirrors pick_decks)."""
 
@@ -405,52 +458,42 @@ class _PickerLabeler:
         of both batches; the rest are zero-padded to the pod's longest pool,
         run through the picker once, decomposed into decks, and scored once.
         """
-        import numpy as np
+        prepared = _embeddable_pools(pools, self._locator)
+        built = self._pick_decks(prepared)
+        return _scored_results(self._scorer, self._locator, len(pools), built)
 
-        from sealed.application.deck_assembly import (
-            assemble_full_deck,
-            load_pool_embeddings,
-        )
-        from sealed.application.evaluate_scorer import score_decks
-        from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE
+    def _pick_decks(self, prepared: list[_PreparedPool]) -> list[_BuiltDeck]:
+        """The decks the picker chooses for ``prepared`` pools."""
+        from sealed.application.deck_assembly import assemble_full_deck
         from sealed.domain.picker_model import decompose_picks
 
+        built: list[_BuiltDeck] = []
+        if not prepared:
+            return built
+        logits_cpu = self._picker_logits(prepared)
+        for row, (i, valid, embs) in enumerate(prepared):
+            chosen = decompose_picks(logits_cpu[row, : len(embs)], embs, valid)
+            built.append((i, assemble_full_deck(chosen, self._locator)))
+        return built
+
+    def _picker_logits(self, prepared: list[_PreparedPool]):
+        """One picker forward over ``prepared`` pools zero-padded to the longest."""
+        import numpy as np
+
         torch = self._torch
-        results: list[tuple[list[str], float | None] | None] = [None] * len(pools)
-        prepared: list[tuple[int, list[str], list]] = []
-        for i, pool in enumerate(pools):
-            embeddings, valid = load_pool_embeddings(pool, self._locator)
-            if len(valid) < NONLAND_DECK_SIZE:
-                results[i] = ([], None)
-                continue
-            prepared.append((i, valid, [embeddings[n] for n in valid]))
-
-        if prepared:
-            b = len(prepared)
-            max_n = max(len(embs) for _, _, embs in prepared)
-            dim = prepared[0][2][0].shape[0]
-            arr = np.zeros((b, max_n, dim), dtype=np.float32)
-            mask_np = np.zeros((b, max_n), dtype=bool)
-            for row, (_, _, embs) in enumerate(prepared):
-                arr[row, : len(embs)] = np.stack(embs)
-                mask_np[row, : len(embs)] = True
-            cards = torch.from_numpy(arr).to(self._device)
-            mask = torch.from_numpy(mask_np).to(self._device)
-            with torch.no_grad():
-                logits, _ = self._model(cards, mask)
-            logits_cpu = logits.cpu()  # single device->host sync for the pod
-
-            decks: list[list[str]] = []
-            deck_idx: list[int] = []
-            for row, (i, valid, embs) in enumerate(prepared):
-                chosen = decompose_picks(logits_cpu[row, : len(embs)], embs, valid)
-                decks.append(assemble_full_deck(chosen, self._locator))
-                deck_idx.append(i)
-            scores = score_decks(self._scorer, decks, self._locator)
-            for j, i in enumerate(deck_idx):
-                results[i] = (decks[j], float(scores[j]))
-
-        return [r if r is not None else ([], None) for r in results]
+        b = len(prepared)
+        max_n = max(len(embs) for _, _, embs in prepared)
+        dim = prepared[0][2][0].shape[0]
+        arr = np.zeros((b, max_n, dim), dtype=np.float32)
+        mask_np = np.zeros((b, max_n), dtype=bool)
+        for row, (_, _, embs) in enumerate(prepared):
+            arr[row, : len(embs)] = np.stack(embs)
+            mask_np[row, : len(embs)] = True
+        cards = torch.from_numpy(arr).to(self._device)
+        mask = torch.from_numpy(mask_np).to(self._device)
+        with torch.no_grad():
+            logits, _ = self._model(cards, mask)
+        return logits.cpu()  # single device->host sync for the pod
 
 
 class _GreedyLabeler:
@@ -471,28 +514,19 @@ class _GreedyLabeler:
             assemble_full_deck,
             load_pool_embeddings,
         )
-        from sealed.application.evaluate_scorer import score_decks
         from sealed.domain.greedy_deck_builder import (
             NONLAND_DECK_SIZE,
             GreedyDeckBuilder,
         )
 
-        results: list[tuple[list[str], float | None] | None] = [None] * len(pools)
-        decks: list[list[str]] = []
-        deck_idx: list[int] = []
+        built: list[_BuiltDeck] = []
         for i, pool in enumerate(pools):
             embeddings, valid = load_pool_embeddings(pool, self._locator)
             if len(valid) < NONLAND_DECK_SIZE:
-                results[i] = ([], None)
                 continue
             chosen = GreedyDeckBuilder(self._scorer, embeddings).build(valid)
-            decks.append(assemble_full_deck(chosen, self._locator))
-            deck_idx.append(i)
-        if decks:
-            scores = score_decks(self._scorer, decks, self._locator)
-            for j, i in enumerate(deck_idx):
-                results[i] = (decks[j], float(scores[j]))
-        return [r if r is not None else ([], None) for r in results]
+            built.append((i, assemble_full_deck(chosen, self._locator)))
+        return _scored_results(self._scorer, self._locator, len(pools), built)
 
 
 # --------------------------------------------------------------------------- #
@@ -509,6 +543,22 @@ class _WorkerRestart(Exception):
     Used for an unanswerable protocol desync (a malformed pick request leaves
     the worker blocked on stdin); restarting is the gen-1 crash path.
     """
+
+
+@dataclass(frozen=True)
+class _SupervisedRun:
+    """What :meth:`GenerateDraftDataSupervisor._supervise` consumes records
+    for: the worker launcher and labeler, the open output file, how many
+    records exist (``count``, of which ``start_count`` predate this run) and the
+    ``target``, and the monotonic time the run started."""
+
+    launch: Callable[[], Any]
+    labeler: DeckLabeler
+    out: Any
+    count: int
+    target: int
+    start_count: int
+    start_time: float
 
 
 class GenerateDraftDataSupervisor:
@@ -551,25 +601,24 @@ class GenerateDraftDataSupervisor:
         )
 
     def _default_launch_worker(self, external_labels: frozenset[str]) -> Callable[[], Any]:
-        from draft.infrastructure.draft_worker_connector import DraftWorkerConnector
+        from draft.infrastructure.draft_worker_connector import (
+            DraftWorkerConnector,
+            DraftWorkerLaunch,
+        )
 
         connector = DraftWorkerConnector()
         mix = format_agent_mix(self._config.agent_mix)
         run_id = self._run_id
 
-        required_agent = self._config.required_agent
+        launch_spec = DraftWorkerLaunch(
+            agent_mix=mix, set_code=self._config.set_code,
+            external_agents=external_labels, run_id=run_id,
+            required_agent=self._config.required_agent,
+            log_dir=self._config.worker_log_dir,
+        )
 
         def launch() -> Any:
-            kwargs: dict[str, Any] = {}
-            if required_agent is not None:
-                # Only pass it when set, so existing callers launch exactly the
-                # command line they always did.
-                kwargs["required_agent"] = required_agent
-            return connector.start(
-                agent_mix=mix, set_code=self._config.set_code,
-                external_agents=external_labels, run_id=run_id,
-                log_dir=self._config.worker_log_dir, **kwargs,
-            )
+            return connector.start(launch_spec)
 
         return launch
 
@@ -616,9 +665,10 @@ class GenerateDraftDataSupervisor:
         start_time = time.monotonic()
         open_mode = "a" if (self._config.resume or out_path.exists()) else "w"
         with open(out_path, open_mode, buffering=1, encoding="utf-8") as out:
-            count = self._supervise(
-                launch, labeler, out, count, target, start_count, start_time,
-            )
+            count = self._supervise(_SupervisedRun(
+                launch=launch, labeler=labeler, out=out, count=count,
+                target=target, start_count=start_count, start_time=start_time,
+            ))
 
         elapsed = time.monotonic() - start_time
         produced = count - start_count
@@ -652,54 +702,64 @@ class GenerateDraftDataSupervisor:
         record count, and any stopping condition. ``close()`` (or garbage
         collection) runs the ``finally`` that terminates the worker.
         """
-        from price_predictor.infrastructure.jvm_processes import kill_process_tree
-
         while not self._shutdown.is_set():
             proc = launch()
-            exited_cleanly = False
-            try:
-                for line in proc.stdout:
-                    if self._shutdown.is_set():
-                        break
-                    # Live pick side-channel (only when model seats are bound).
-                    if self._registry is not None:
-                        if self._route_pick_line(line, proc):
-                            continue  # answered a request / logged an abandonment
-                    transcript = parse_sentinel_line(line)
-                    if transcript is None:
-                        continue
-                    try:
-                        record = assemble_record(transcript, self._run_id, labeler)
-                    except Exception as exc:  # malformed transcript — skip, keep going
-                        _log(f"Skipping unparseable transcript: {exc}")
-                        continue
-                    # A completed draft resets the consecutive-fault counter and
-                    # discards that draft's trackers (FR-016).
-                    self._consecutive_faults = 0
-                    if self._registry is not None:
-                        self._registry.reset_draft(record.draft_id)
-                    yield record
-                exited_cleanly = True
-            except _WorkerRestart:
-                pass  # terminate + relaunch below (gen-1 crash path)
-            finally:
-                self._terminate(proc, kill_process_tree)
+            exited_cleanly = yield from self._serve_worker(proc, labeler)
             if not self._shutdown.is_set():
                 reason = "exited" if exited_cleanly else "crashed"
                 _log(f"Worker {reason} (code {self._returncode(proc)}); restarting...")
 
-    def _supervise(
-        self,
-        launch: Callable[[], Any],
-        labeler: DeckLabeler,
-        out: Any,
-        count: int,
-        target: int,
-        start_count: int,
-        start_time: float,
-    ) -> int:
-        """Consume :meth:`iter_records` until ``target`` records exist on disk."""
+    def _serve_worker(
+        self, proc: Any, labeler: DeckLabeler,
+    ) -> Generator[DraftRecord, None, bool]:
+        """Yield one worker's records, then terminate it. Returns whether its
+        stdout ended without a forced restart."""
+        from price_predictor.infrastructure.jvm_processes import kill_process_tree
+
+        try:
+            yield from self._records_of(proc, labeler)
+            return True
+        except _WorkerRestart:
+            return False  # terminate + relaunch (gen-1 crash path)
+        finally:
+            self._terminate(proc, kill_process_tree)
+
+    def _records_of(self, proc: Any, labeler: DeckLabeler) -> Iterator[DraftRecord]:
+        """The records one worker's stdout carries, until it ends or shutdown."""
+        for line in proc.stdout:
+            if self._shutdown.is_set():
+                break
+            record = self._record_of_line(line, proc, labeler)
+            if record is not None:
+                yield record
+
+    def _record_of_line(
+        self, line: str, proc: Any, labeler: DeckLabeler,
+    ) -> DraftRecord | None:
+        """The record a worker line completes, or ``None`` for any other line."""
+        # Live pick side-channel (only when model seats are bound).
+        if self._registry is not None and self._route_pick_line(line, proc):
+            return None  # answered a request / logged an abandonment
+        transcript = parse_sentinel_line(line)
+        if transcript is None:
+            return None
+        try:
+            record = assemble_record(transcript, self._run_id, labeler)
+        except Exception as exc:  # malformed transcript — skip, keep going
+            _log(f"Skipping unparseable transcript: {exc}")
+            return None
+        # A completed draft resets the consecutive-fault counter and
+        # discards that draft's trackers (FR-016).
+        self._consecutive_faults = 0
+        if self._registry is not None:
+            self._registry.reset_draft(record.draft_id)
+        return record
+
+    def _supervise(self, run: _SupervisedRun) -> int:
+        """Consume :meth:`iter_records` until ``run.target`` records exist on disk."""
         from collections import deque
+
+        count, target, start_time = run.count, run.target, run.start_time
 
         # (monotonic time, count) samples for the rolling-window rate.
         samples: deque[tuple[float, int]] = deque([(start_time, count)])
@@ -722,12 +782,12 @@ class GenerateDraftDataSupervisor:
 
         if count >= target:
             return count
-        records = self.iter_records(launch, labeler)
+        records = self.iter_records(run.launch, run.labeler)
         try:
             for record in records:
-                append_record(out, record)
+                append_record(run.out, record)
                 count += 1
-                produced = count - start_count
+                produced = count - run.start_count
                 # First draft confirms the pipeline is alive; then every
                 # STATUS_EVERY drafts report throughput + ETA.
                 if produced == 1 or count % self.STATUS_EVERY == 0:

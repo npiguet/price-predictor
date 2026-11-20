@@ -15,6 +15,7 @@ torch/Forge); the surrounding builder/scorer wiring reuses ``sealed``.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -217,45 +218,76 @@ def fresh_drafted_pools(set_code: str | None, limit: int) -> list[list[str]]:
     from the booster transcript until ``limit`` pools are collected.
     """
     from draft.application.agent_mix import format_agent_mix, parse_agent_mix
-    from draft.application.generate_draft_data import parse_sentinel_line
-    from draft.domain.draft_geometry import Booster, DraftGeometry, DraftRecord, Seat
-    from draft.infrastructure.draft_worker_connector import DraftWorkerConnector
+    from draft.infrastructure.draft_worker_connector import (
+        DraftWorkerConnector,
+        DraftWorkerLaunch,
+    )
     from price_predictor.infrastructure.jvm_processes import kill_process_tree
 
     mix = format_agent_mix(parse_agent_mix("forge-full:6,forge-r30:1,forge-r100:1"))
     connector = DraftWorkerConnector()
-    pools: list[list[str]] = []
-    drafts = 0
+    collector = _FreshPools(limit)
     attempts = 0
     max_attempts = 50  # bound restarts so a broken Forge can't loop forever
     _log(f"Drafting fresh pools (target {limit}, set={set_code or 'random per draft'})...")
-    while len(pools) < limit and attempts < max_attempts:
+    while len(collector.pools) < limit and attempts < max_attempts:
         attempts += 1
-        proc = connector.start(agent_mix=mix, set_code=set_code)
+        proc = connector.start(DraftWorkerLaunch(agent_mix=mix, set_code=set_code))
         try:
-            for line in proc.stdout:
-                transcript = parse_sentinel_line(line)
-                if transcript is None:
-                    continue
-                boosters = [
-                    Booster(b["set_code"], list(b["picks"]))
-                    for b in transcript["boosters"]
-                ]
-                agents = [s["agent"] for s in transcript["seats"]]
-                record = DraftRecord(
-                    transcript["draft_id"], "", "",
-                    [Seat(a, [], None) for a in agents], boosters,
-                )
-                geo = DraftGeometry.from_record(record)
-                for seat_idx in range(geo.pod_size):
-                    pools.append(geo.drafted_pool(record, seat_idx))
-                    if len(pools) >= limit:
-                        _log(f"  collected {len(pools)} pools from {drafts + 1} drafts")
-                        return pools
-                drafts += 1
-                if drafts % 5 == 0:
-                    _log(f"  {drafts} drafts -> {len(pools)} pools")
+            if collector.read_worker(proc):
+                return collector.pools
         finally:
             kill_process_tree(proc)
-    _log(f"  collected {len(pools)} pools from {drafts} drafts")
-    return pools
+    _log(f"  collected {len(collector.pools)} pools from {collector.drafts} drafts")
+    return collector.pools
+
+
+def _seat_pools(transcript: dict) -> Iterator[list[str]]:
+    """Each seat's drafted pool, rebuilt from a worker transcript's boosters."""
+    from draft.domain.draft_geometry import Booster, DraftGeometry, DraftRecord, Seat
+
+    boosters = [
+        Booster(b["set_code"], list(b["picks"]))
+        for b in transcript["boosters"]
+    ]
+    agents = [s["agent"] for s in transcript["seats"]]
+    record = DraftRecord(
+        transcript["draft_id"], "", "",
+        [Seat(a, [], None) for a in agents], boosters,
+    )
+    geo = DraftGeometry.from_record(record)
+    for seat_idx in range(geo.pod_size):
+        yield geo.drafted_pool(record, seat_idx)
+
+
+class _FreshPools:
+    """The pools :func:`fresh_drafted_pools` has collected so far, and the
+    number of drafts they came from."""
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        self.pools: list[list[str]] = []
+        self.drafts = 0
+
+    def read_worker(self, proc) -> bool:
+        """Take the pools of every draft ``proc`` streams; True once ``limit``
+        pools are collected."""
+        from draft.application.generate_draft_data import parse_sentinel_line
+
+        for line in proc.stdout:
+            transcript = parse_sentinel_line(line)
+            if transcript is not None and self._add_draft(transcript):
+                return True
+        return False
+
+    def _add_draft(self, transcript: dict) -> bool:
+        """Take one draft's seat pools; True when that reached ``limit``."""
+        for pool in _seat_pools(transcript):
+            self.pools.append(pool)
+            if len(self.pools) >= self.limit:
+                _log(f"  collected {len(self.pools)} pools from {self.drafts + 1} drafts")
+                return True
+        self.drafts += 1
+        if self.drafts % 5 == 0:
+            _log(f"  {self.drafts} drafts -> {len(self.pools)} pools")
+        return False

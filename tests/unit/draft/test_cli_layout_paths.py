@@ -179,13 +179,13 @@ class TestGenerateDraftDataWorkerLogs:
 
         started = []
         monkeypatch.setattr(DraftWorkerConnector, "start",
-                            lambda _self, **kwargs: started.append(kwargs))
+                            lambda _self, launch: started.append(launch))
         config = GenerateDraftDataConfig(
             n_drafts=1, agent_mix=[("draft-agent", 1)], scorer_checkpoint=Path("s.pt"),
             cards_path=Path("cards"), output_path=tmp_path / "d.jsonl",
             worker_log_dir=tmp_path / "logs")
         GenerateDraftDataSupervisor(config)._default_launch_worker(frozenset({"draft-agent"}))()
-        assert started[0]["log_dir"] == tmp_path / "logs"
+        assert started[0].log_dir == tmp_path / "logs"
 
 
 # --------------------------------------------------------------------------- #
