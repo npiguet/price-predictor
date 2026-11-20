@@ -7,7 +7,7 @@ import gzip
 import json
 
 from effects.infrastructure.record_codec import record_to_dict
-from tests.unit.effects.infrastructure.test_record_codec import (
+from tests.unit.effects.infrastructure.record_codec_support import (
     _record,
 )
 

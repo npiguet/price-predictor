@@ -19,7 +19,7 @@ from effects.infrastructure.shard_io import (
     read_window,
 )
 from tests.unit.effects.builders import RawShardWriter
-from tests.unit.effects.infrastructure.test_record_codec import (
+from tests.unit.effects.infrastructure.record_codec_support import (
     _record,
 )
 

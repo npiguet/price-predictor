@@ -108,7 +108,7 @@ GEN3_SIDECAR_FOLDERS = (
 )
 #: What the fixture holds, its game-end markers included (one per game), and
 #: the SHA-256 of its decompressed lines, pinned by
-#: ``test_record_codec.py::TestTheGen3Fixture``: a regeneration moves the
+#: ``test_record_codec_fixture.py::TestTheGen3Fixture``: a regeneration moves the
 #: three together, and with them every count a test pins on the fixture.
 GEN3_FIXTURE_RECORDS = 314
 GEN3_FIXTURE_GAMES = 57

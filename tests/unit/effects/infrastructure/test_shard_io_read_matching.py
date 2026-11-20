@@ -15,7 +15,7 @@ from effects.infrastructure.shard_io import (
     read_window,
 )
 from tests.unit.effects.builders import GEN3_RECORDS, RawShardWriter
-from tests.unit.effects.infrastructure.test_record_codec import (
+from tests.unit.effects.infrastructure.record_codec_support import (
     ALL_KINDS,
     _record,
 )
