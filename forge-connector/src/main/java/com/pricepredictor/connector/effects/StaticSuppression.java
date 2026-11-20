@@ -4,6 +4,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Table;
 import forge.card.CardTypeView;
 import forge.card.ColorSet;
+import forge.card.mana.ManaCost;
 import forge.game.CardTraitBase;
 import forge.game.card.Card;
 import forge.game.card.CardState;
@@ -98,23 +99,27 @@ final class StaticSuppression {
      * Forge keeps them apart from its keyword list: a resolved {@code KW$
      * HIDDEN} grant and a static's {@code AddHiddenKeyword$}.
      */
-    java.util.List<String> hiddenKeywords(Card card) {
-        java.util.List<String> hidden = new java.util.ArrayList<>();
-        Table<?, ?, ?> table = ForgeFields.hiddenExtrinsicKeywords(card);
+    List<String> hiddenKeywords(Card card) {
+        List<String> hidden = new ArrayList<>();
+        var table = ForgeFields.hiddenExtrinsicKeywords(card);
         if (table == null) {
             return hidden;
         }
-        for (Table.Cell<?, ?, ?> cell : table.cellSet()) {
-            if (cell.getColumnKey() instanceof Long column && wrote(column)) {
-                continue;
-            }
-            if (cell.getValue() instanceof Iterable<?> keywords) {
-                for (Object keyword : keywords) {
-                    hidden.add(String.valueOf(keyword));
-                }
+        for (var cell : table.cellSet()) {
+            if (!suppressed(cell)) {
+                addKeywords(cell.getValue(), hidden);
             }
         }
         return hidden;
+    }
+
+    /** One hidden-keyword entry's keywords, each as Forge spells it. */
+    private static void addKeywords(Object entry, List<String> into) {
+        if (entry instanceof Iterable<?> keywords) {
+            for (Object keyword : keywords) {
+                into.add(String.valueOf(keyword));
+            }
+        }
     }
 
     /**
@@ -123,55 +128,83 @@ final class StaticSuppression {
      * the other changes still applied in order.
      */
     String name(Card card) {
-        Table<?, ?, ?> names = PatchHooks.CHANGED_NAMES.read(card) instanceof Table<?, ?, ?> table
-                ? table : null;
-        if (staticId == null || names == null || !names.containsColumn(staticId)) {
+        var names = changedNames(card);
+        if (keepsForgeReading(names)) {
             return card.getName();
         }
         String name = card.getCurrentState().getName();
-        for (Table.Cell<?, ?, ?> cell : names.cellSet()) {
-            if (!(cell.getColumnKey() instanceof Long column && wrote(column))
-                    && cell.getValue() instanceof Card.CardChangedName change
-                    && change.isOverwrite()) {
+        for (var cell : names.cellSet()) {
+            Card.CardChangedName change = overwriteIn(cell);
+            if (change != null) {
                 name = change.newName();
             }
         }
         return name;
     }
 
+    /** The card's name changes ({@code Card.changedCardNames}), or null where unread. */
+    private static Table<?, ?, ?> changedNames(Card card) {
+        return PatchHooks.CHANGED_NAMES.read(card) instanceof Table<?, ?, ?> table ? table : null;
+    }
+
+    /** A name-table entry's overwriting name change, or null: the suppressed static's, or none. */
+    private Card.CardChangedName overwriteIn(Table.Cell<?, ?, ?> cell) {
+        if (suppressed(cell)) {
+            return null;
+        }
+        return cell.getValue() instanceof Card.CardChangedName change && change.isOverwrite()
+                ? change : null;
+    }
+
     /**
      * The card's mana cost on this board: without the suppressed static's
      * change ({@code ManaCost$}, {@code Incorporate$}), else Forge's own.
      */
-    forge.card.mana.ManaCost manaCost(Card card) {
-        Table<?, ?, ?> changes = ForgeFields.changedCardManaCost(card);
-        if (staticId == null || changes == null || !changes.containsColumn(staticId)) {
+    ManaCost manaCost(Card card) {
+        var changes = ForgeFields.changedCardManaCost(card);
+        if (keepsForgeReading(changes)) {
             return card.getManaCost();
         }
-        forge.card.mana.ManaCost cost = card.getOriginalManaCost();
-        for (Table.Cell<?, ?, ?> cell : changes.cellSet()) {
-            if (cell.getColumnKey() instanceof Long column && wrote(column)) {
+        ManaCost cost = card.getOriginalManaCost();
+        for (var cell : changes.cellSet()) {
+            if (suppressed(cell)) {
                 continue;
             }
-            java.util.Map.Entry<forge.card.mana.ManaCost, Boolean> change =
-                    ForgeFields.manaCostChange(cell.getValue());
+            Map.Entry<ManaCost, Boolean> change = ForgeFields.manaCostChange(cell.getValue());
             if (change == null) {
                 return card.getManaCost();
             }
-            cost = change.getValue() ? forge.card.mana.ManaCost.combine(cost, change.getKey())
-                    : change.getKey();
+            cost = applied(cost, change);
         }
         return cost;
     }
 
+    /** {@code cost} after one mana-cost change: added to it, or in its place. */
+    private static ManaCost applied(ManaCost cost, Map.Entry<ManaCost, Boolean> change) {
+        return change.getValue() ? ManaCost.combine(cost, change.getKey()) : change.getKey();
+    }
+
     /** The card's mana value on this board: Forge's own unless the static changed its cost. */
     int manaValue(Card card) {
-        Table<?, ?, ?> changes = ForgeFields.changedCardManaCost(card);
-        if (staticId == null || changes == null || !changes.containsColumn(staticId)) {
+        if (keepsForgeReading(ForgeFields.changedCardManaCost(card))) {
             return card.getCMC();
         }
-        forge.card.mana.ManaCost cost = manaCost(card);
+        ManaCost cost = manaCost(card);
         return cost == null ? 0 : cost.getCMC();
+    }
+
+    /**
+     * Whether Forge's own reading is this board's for a characteristic kept
+     * in {@code changes}: no static is suppressed, the table is unread, or
+     * the suppressed static wrote nothing in it.
+     */
+    private boolean keepsForgeReading(Table<?, ?, ?> changes) {
+        return staticId == null || changes == null || !changes.containsColumn(staticId);
+    }
+
+    /** Whether a layer-table cell is the suppressed static's. */
+    private boolean suppressed(Table.Cell<?, ?, ?> cell) {
+        return cell.getColumnKey() instanceof Long column && wrote(column);
     }
 
     /** Whether the card is a creature on this board: whether it has power and toughness. */
