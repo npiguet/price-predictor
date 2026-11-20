@@ -433,12 +433,6 @@ final class FaceParser {
          */
         LAND_MANA,
         ACTIVATED,
-        /**
-         * A spell ability that is also a trigger (ImmediateTrigger) or a
-         * replacement effect (ETBReplacement), and is rendered by that phase
-         * rather than twice.
-         */
-        DUPLICATE_TRAIT,
         SPELL,
         /** Anything else: it renders no line, but is still attributed. */
         UNRENDERED;
@@ -469,7 +463,7 @@ final class FaceParser {
     /** Send {@code sa}, declared under {@code key}, where {@code route} says. */
     private void addRouted(SpellRoute route, SpellAbility sa, ProvenanceKey key) {
         switch (route) {
-            case KEYWORD_SPELL, OTHER_FACE, DUPLICATE_TRAIT -> { }
+            case KEYWORD_SPELL, OTHER_FACE -> { }
             case LAND_MANA -> landManaTraits.add(new KeyedSpell(sa, key));
             case ALT_COST -> addAlternateCost(sa, key);
             case SPELL -> addSpell(sa, key);
@@ -580,9 +574,7 @@ final class FaceParser {
     /** The route of a spell that is neither a keyword's, another face's nor a charm. */
     private static SpellRoute castRoute(SpellAbility sa) {
         if ("True".equals(sa.getParam("NonBasicSpell"))) return SpellRoute.ALT_COST;
-        boolean anotherTrait = sa.getApi() == ApiType.ImmediateTrigger
-                || "ETBReplacement".equals(sa.getParam("Mode"));
-        return anotherTrait ? SpellRoute.DUPLICATE_TRAIT : SpellRoute.SPELL;
+        return SpellRoute.SPELL;
     }
 
     /**

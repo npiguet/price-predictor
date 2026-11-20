@@ -473,7 +473,7 @@ class BusBracketCollectorTest {
 
         collector.beginBracket(bolt);
         collector.noteDeclined();
-        collector.resolutionStarting(bolt, false);
+        collector.resolutionStarting(bolt, false, null);
         collector.endBracket(bolt.getId(), false);
         collector.onNextAction();
 

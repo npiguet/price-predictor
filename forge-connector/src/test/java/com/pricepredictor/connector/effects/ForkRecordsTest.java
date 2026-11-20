@@ -104,8 +104,8 @@ class ForkRecordsTest {
         // the whole budget: two counterfactuals for it are already both worth
         // having, and a third costs a game's simulation for a third variation.
         InterventionFork collector = interventions(forkCaps().interventions(100).probes(2).build());
-        DiscardedCopies.expectOne("intervention", () -> collector.intervene(null, 7));
-        DiscardedCopies.expectOne("intervention", () -> collector.intervene(null, 7));
+        DiscardedCopies.expectOne("intervention", () -> collector.intervene(null, 7, null));
+        DiscardedCopies.expectOne("intervention", () -> collector.intervene(null, 7, null));
         assertFalse(collector.mayIntervene(7));
         assertTrue(collector.mayIntervene(8));
     }
@@ -115,14 +115,14 @@ class ForkRecordsTest {
         // Otherwise a systematically failing copy would retry until the game
         // ended. A null game makes every copy fail.
         InterventionFork collector = interventions(forkCaps().interventions(1).probes(2).build());
-        DiscardedCopies.expectOne("intervention", () -> assertFalse(collector.intervene(null, 1)));
+        DiscardedCopies.expectOne("intervention", () -> assertFalse(collector.intervene(null, 1, null)));
         assertFalse(collector.mayIntervene(1));
     }
 
     @Test
     void aFailedForkWritesNoRecord() throws Throwable {
         InterventionFork collector = interventions(forkCaps().interventions(2).probes(2).build());
-        DiscardedCopies.expectOne("intervention", () -> collector.intervene(null, 1));
+        DiscardedCopies.expectOne("intervention", () -> collector.intervene(null, 1, null));
         assertFalse(Files.exists(ShardRun.closed(writer)));
     }
 

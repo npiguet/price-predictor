@@ -174,7 +174,7 @@ class FirstStatChangeTest {
             bears.set(TestBoard.onBattlefield(game, caster, "Grizzly Bears"));
             game.getStack().add(bolt);
             game.getStack().setResolving(true);
-            bracket.resolutionStarting(bolt, false);
+            bracket.resolutionStarting(bolt, false, null);
             // Applied now, published later, as Forge applies a static.
             bears.get().addPTBoost(3, 3, game.getNextTimestamp(), 0);
             bracket.castStarting(shock);

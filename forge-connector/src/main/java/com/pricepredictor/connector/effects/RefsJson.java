@@ -48,22 +48,11 @@ final class RefsJson {
     }
 
     /**
-     * The refs block read at the resolution's end, with the die results and
-     * coin flips the resolution's own events report ({@code random}), and
-     * the X read before the resolution: at the cast for a cast item, at the
-     * resolution's start otherwise. An X computed now would count the board
-     * the resolution has already changed.
-     *
-     * @param resolved the events of the resolution (or of one mode's half)
-     * @param x        the X read before the resolution, or null
-     */
-    static String renderResolved(SpellAbility acting, List<EffectEvent> resolved, Integer x) {
-        return renderNow(acting, null, x, randomJson(resolved));
-    }
-
-    /**
-     * One effect half's refs block, read at the resolution's end as
-     * {@link #renderResolved} reads it, with the half's own targets: the ones
+     * One effect half's refs block, read at the resolution's end,
+     * with the die results and coin flips the resolution's own events report
+     * ({@code random}) and the X read before the resolution (at the cast for
+     * a cast item, at the resolution's start otherwise: an X computed now would
+     * count the board the resolution has already changed), with the half's own targets: the ones
      * its links held as its resolution started, after Forge's check for
      * illegal targets removed the illegal ones ({@code targets}), and the ones
      * they held before that check ({@code targets_at_cast}, null where they

@@ -79,7 +79,7 @@ class ForkDroppedEventsKindsTest {
             for (SpellAbility line : refused) {
                 long before = ForkRefusals.counts().values().stream().mapToLong(Long::longValue).sum();
 
-                assertFalse(new InterventionFork(game, live, new ForkBudget(caps), 1L).intervene(line, 1),
+                assertFalse(new InterventionFork(game, live, new ForkBudget(caps), 1L).intervene(line, 1, holder),
                         line + " is refused");
 
                 assertEquals(before + 1, ForkRefusals.counts().values().stream().mapToLong(Long::longValue).sum(),

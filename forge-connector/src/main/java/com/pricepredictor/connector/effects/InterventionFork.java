@@ -138,17 +138,9 @@ final class InterventionFork implements InterventionScheduler.Forcing {
      *
      * @param realResolutionId the real resolution this fork varies, for the
      *                         per-resolution cap
+     * @param holder the player whose hand holds the ability, who need not be
+     *               the player whose turn it is (FR-057)
      * @return whether a record was written
-     */
-    boolean intervene(SpellAbility ability, int realResolutionId) {
-        return intervene(ability, realResolutionId, () -> ability.getActivatingPlayer() != null
-                ? ability.getActivatingPlayer()
-                : game.getPhaseHandler().getPlayerTurn());
-    }
-
-    /**
-     * The same, the ability resolved for {@code holder}: the player whose hand
-     * holds it, who need not be the player whose turn it is (FR-057).
      */
     @Override
     public boolean intervene(SpellAbility ability, int realResolutionId, Player holder) {

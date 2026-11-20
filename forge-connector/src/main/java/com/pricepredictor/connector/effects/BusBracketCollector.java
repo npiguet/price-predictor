@@ -282,15 +282,9 @@ public final class BusBracketCollector extends BusEventReader {
      *
      * @param fizzled whether Forge found no legal target left, in which case
      *                none of the item's clauses will run
-     */
-    void resolutionStarting(SpellAbility item, boolean fizzled) {
-        resolutionStarting(item, fizzled, null);
-    }
-
-    /**
-     * The same with the hook's third argument: each link's targets before
-     * Forge's check for illegal targets, root first (null where the hook
-     * could not copy them, or an older Forge did not pass them).
+     * @param targetsAtCast each link's targets before Forge's check for
+     *                illegal targets, root first (null where the hook could
+     *                not copy them, or an older Forge did not pass them)
      */
     void resolutionStarting(SpellAbility item, boolean fizzled, Object targetsAtCast) {
         stepTakenOver = false;

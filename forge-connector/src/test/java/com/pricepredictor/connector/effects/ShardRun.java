@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import forge.game.Game;
+import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import org.junit.jupiter.api.Assumptions;
 
@@ -191,6 +192,13 @@ final class ShardRun {
 
     // ── forced resolutions ──────────────────────────────────────────────
 
+    /** The player a forced resolution of {@code ability} is for: its activator, else the turn's player. */
+    private static Player holderOf(Game game, SpellAbility ability) {
+        return ability.getActivatingPlayer() != null
+                ? ability.getActivatingPlayer()
+                : game.getPhaseHandler().getPlayerTurn();
+    }
+
     /**
      * Fork {@code game} once and force {@code ability} to resolve, with no
      * hook installed: the game's recording is never opened, so the fork's
@@ -198,7 +206,8 @@ final class ShardRun {
      */
     static Fork forked(Path dir, Game game, CollectionCaps caps, long seed, SpellAbility ability) {
         return forkedUnder(dir, game, caps,
-                live -> new InterventionFork(game, live, new ForkBudget(caps), seed).intervene(ability, 1));
+                live -> new InterventionFork(game, live, new ForkBudget(caps), seed)
+                        .intervene(ability, 1, holderOf(game, ability)));
     }
 
     /**
@@ -215,7 +224,8 @@ final class ShardRun {
         assumeClauseHook(why);
         return forkedUnder(dir, game, caps, live -> {
             live.open();
-            return new InterventionFork(game, live, new ForkBudget(caps), seed).intervene(ability, 1);
+            return new InterventionFork(game, live, new ForkBudget(caps), seed)
+                        .intervene(ability, 1, holderOf(game, ability));
         });
     }
 

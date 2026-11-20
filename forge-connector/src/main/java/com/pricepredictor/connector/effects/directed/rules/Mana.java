@@ -92,16 +92,6 @@ final class Mana {
     }
 
     /**
-     * The one untapped permanent {@code player} controls that can make mana
-     * now, or empty when it controls none or several: the last mana it has
-     * for a cost.
-     */
-    static Optional<Card> soleManaSource(Player player) {
-        List<Card> sources = manaSources(player);
-        return sources.size() == 1 ? Optional.of(sources.get(0)) : Optional.empty();
-    }
-
-    /**
      * A land {@code player} needs every one of for a cost of {@code value}
      * mana: when the permanents it can make mana with now ({@link #manaSources})
      * are all lands and number exactly {@code value}, the first of them; else
