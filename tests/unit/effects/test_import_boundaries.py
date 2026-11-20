@@ -90,7 +90,11 @@ _ALLOWED: dict[str, set[str] | None] = {
         "random_seat_error", "candidate_rate_error", "add_directed_fork_flags",
         "rule_list", "directed_fork_error",
     },
-    "sealed.infrastructure.match_worker_connector": {"MatchWorkerConnector"},
+    # The connector and the launch its ``start`` takes, with its three parts.
+    "sealed.infrastructure.match_worker_connector": {
+        "MatchWorkerConnector", "WorkerLaunch", "WorkerDecks", "WorkerRecords",
+        "WorkerStopProtocol",
+    },
     "sealed.infrastructure.pool_file_reader": {"format_generated_deck"},
 }
 
