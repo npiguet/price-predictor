@@ -42,6 +42,11 @@ final class TriggerChannel {
      */
     private final boolean runsAreTold;
 
+    /** One evaluated condition: its trigger and run parameters, its line, mode and the key its caps are kept under. */
+    private record Evaluation(
+            Object trait, ProvenanceKey.Resolved line, Object runParams, String mode, String key) {
+    }
+
     /** An evaluation that fired, waiting for its run. */
     private record Firing(
             Object trigger, Object runParams, String key, String mode, int slot,
@@ -88,6 +93,11 @@ final class TriggerChannel {
             }
             return;
         }
+        evaluationReported(args);
+    }
+
+    /** One trigger condition evaluated: drawn against its mode's balance, then filed as a firing or a negative. */
+    private void evaluationReported(PatchHooks.Args args) {
         // Checked first, before this evaluation can spend any of the
         // mode's negative-sampling budget (offer/keep below) -- a fork's
         // trigger evaluations must not skew the live game's ratio
@@ -110,17 +120,25 @@ final class TriggerChannel {
             return;
         }
         ProvenanceKey.Resolved line = LiveGame.lineOf(trait);
-        String key = lineKey(trait, line, mode);
+        Evaluation evaluation =
+                new Evaluation(trait, line, args.get(1), mode, lineKey(trait, line, mode));
         if (fired) {
-            evaluatedFiring(trait, line, args.get(1), mode, key);
-            return;
+            evaluatedFiring(evaluation);
+        } else {
+            evaluatedNegative(evaluation, kept);
         }
+    }
+
+    /** A not-fired evaluation the sampler took: written unless its line is full or it repeats a record. */
+    private void evaluatedNegative(Evaluation evaluation, boolean kept) {
         // The line's flood cap is asked before the snapshot is built, so
         // a line at its cap costs a key lookup rather than a whole board.
-        if (!negatives.lineHasRoomForNegative(key)) {
+        if (!negatives.lineHasRoomForNegative(evaluation.key())) {
             return;
         }
-        if (!context.emitDistinct(record(trait, line, args.get(1), fired), dedup)) {
+        EffectRecord record =
+                record(evaluation.trait(), evaluation.line(), evaluation.runParams(), false);
+        if (!context.emitDistinct(record, dedup)) {
             return;
         }
         // Counted only for a record that reaches the shard, so a
@@ -128,9 +146,9 @@ final class TriggerChannel {
         // neither the negatives' quota nor the line's cap, and the ratio
         // holds over what reaches the shard.
         if (kept) {
-            negatives.keepOutsideTheBalance(key);
+            negatives.keepOutsideTheBalance(evaluation.key());
         } else {
-            negatives.keep(mode, key, fired);
+            negatives.keep(evaluation.mode(), evaluation.key(), false);
         }
     }
 
@@ -158,15 +176,14 @@ final class TriggerChannel {
      * takes a slot; counted in the reservoir only once Forge runs it, so an
      * evaluation that never runs leaves the count alone.
      */
-    private void evaluatedFiring(
-            Object trait, ProvenanceKey.Resolved line, Object runParams, String mode,
-            String key) {
-        int slot = positives.drawFor(key);
+    private void evaluatedFiring(Evaluation evaluation) {
+        int slot = positives.drawFor(evaluation.key());
         unconfirmed.add(new Firing(
-                trait, runParams, key, mode, slot,
-                slot < 0 ? null : record(trait, line, runParams, true)));
+                evaluation.trait(), evaluation.runParams(), evaluation.key(), evaluation.mode(), slot,
+                slot < 0 ? null : record(
+                        evaluation.trait(), evaluation.line(), evaluation.runParams(), true)));
         if (!runsAreTold) {
-            ran(trait, runParams);
+            ran(evaluation.trait(), evaluation.runParams());
         }
     }
 

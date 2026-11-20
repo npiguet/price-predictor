@@ -138,9 +138,7 @@ public final class TargetingClauses {
     public static <T> T withNoneChosenOnModes(List<AbilitySub> modes, Supplier<T> body) {
         List<SpellAbility> clauses = new ArrayList<>();
         for (AbilitySub mode : modes) {
-            for (SpellAbility link = mode; link != null; link = link.getSubAbility()) {
-                clauses.add(link);
-            }
+            addChain(mode, clauses);
         }
         return withNoneChosenOn(clauses, body);
     }
@@ -170,14 +168,18 @@ public final class TargetingClauses {
             clauses.add(clause);
             if (clause.getApi() == ApiType.Charm) {
                 for (AbilitySub mode : clause.getAdditionalAbilityList("Choices")) {
-                    for (SpellAbility link = mode; link != null; link = link.getSubAbility()) {
-                        clauses.add(link);
-                    }
+                    addChain(mode, clauses);
                 }
                 break;
             }
         }
         return clauses;
+    }
+
+    private static void addChain(SpellAbility chain, List<SpellAbility> into) {
+        for (SpellAbility link = chain; link != null; link = link.getSubAbility()) {
+            into.add(link);
+        }
     }
 
     /**
@@ -231,18 +233,23 @@ public final class TargetingClauses {
     public static List<SpellAbility> chosen(SpellAbility ability) {
         List<SpellAbility> clauses = new ArrayList<>();
         if (ability.getApi() == ApiType.Charm) {
-            if (ability.usesTargeting()) {
-                clauses.add(ability);
-            }
-            if (ability.getChosenList() != null) {
-                for (AbilitySub mode : ability.getChosenList()) {
-                    addTargeting(mode, clauses);
-                }
-            }
-            return clauses;
+            addCharmTargeting(ability, clauses);
+        } else {
+            addTargeting(ability, clauses);
         }
-        addTargeting(ability, clauses);
         return clauses;
+    }
+
+    /** The charm's own clause, if it targets, then each chosen mode's targeting clauses. */
+    private static void addCharmTargeting(SpellAbility charm, List<SpellAbility> into) {
+        if (charm.usesTargeting()) {
+            into.add(charm);
+        }
+        if (charm.getChosenList() != null) {
+            for (AbilitySub mode : charm.getChosenList()) {
+                addTargeting(mode, into);
+            }
+        }
     }
 
     private static void addTargeting(SpellAbility chain, List<SpellAbility> into) {
