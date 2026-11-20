@@ -161,13 +161,13 @@ final class EventAttribution {
      * applies to the resolving clause's API: end of turn for a pump,
      * permanent for a counter.
      */
-    static EventDuration duration(SpellAbility root, Object pointer, EventType eventType) {
+    static EventDuration duration(SpellAbility root, SpellAbility pointer, EventType eventType) {
         String declared = declaredDuration(root, pointer);
         if (declared == null) {
             if (eventType == null || !LASTING_STATE.contains(eventType)) {
                 return EventDuration.INSTANT;
             }
-            String api = apiOf(pointer instanceof SpellAbility resolving ? resolving : root);
+            String api = apiOf(pointer != null ? pointer : root);
             return api != null && END_OF_TURN_BY_DEFAULT.contains(api)
                     ? EventDuration.END_OF_TURN : EventDuration.PERMANENT;
         }
@@ -196,8 +196,8 @@ final class EventAttribution {
      * the bus itself named on a damage event, passes it to {@link #stamp} and
      * it wins.
      */
-    static String cause(SpellAbility root, Object pointer) {
-        Card host = hostOf(pointer instanceof SpellAbility resolving ? resolving : null);
+    static String cause(SpellAbility root, SpellAbility pointer) {
+        Card host = hostOf(pointer);
         if (host == null) {
             host = hostOf(root);
         }
@@ -218,8 +218,8 @@ final class EventAttribution {
      * none gets its API's default, not the line's. The root's is read only
      * when no clause is named.
      */
-    private static String declaredDuration(SpellAbility root, Object pointer) {
-        SpellAbility clause = pointer instanceof SpellAbility resolving ? resolving : root;
+    private static String declaredDuration(SpellAbility root, SpellAbility pointer) {
+        SpellAbility clause = pointer != null ? pointer : root;
         if (clause == null) {
             return null;
         }
@@ -299,7 +299,7 @@ final class EventAttribution {
         // Read once: all three fields answer the same question about the same
         // instant, and reading the hook twice could straddle a clause boundary
         // in a nested resolution.
-        return stampAt(event, root, PatchHooks.currentSubAbility(), namedCause);
+        return stampAt(event, root, resolvingClause(), namedCause);
     }
 
     /**
@@ -321,11 +321,16 @@ final class EventAttribution {
      */
     static EffectEvent stamp(
             EffectEvent event, SpellAbility root, SpellAbility lastRan, String namedCause) {
-        Object pointer = PatchHooks.currentSubAbility();
+        SpellAbility pointer = resolvingClause();
         if (pointer == null && lastRan != null) {
             return stampAfter(event, root, lastRan, namedCause);
         }
         return stampAt(event, root, pointer, namedCause);
+    }
+
+    /** The clause resolving now, or null when none is (the hook's pointer is no ability). */
+    private static SpellAbility resolvingClause() {
+        return PatchHooks.currentSubAbility() instanceof SpellAbility clause ? clause : null;
     }
 
     private static EffectEvent stampAfter(
@@ -333,18 +338,17 @@ final class EventAttribution {
         if (event == null) {
             return null;
         }
-        return stampWith(event, root, lastRan, attributedTo(lastRan))
+        return stampWith(event, root, lastRan)
+                .attributedTo(attributedTo(lastRan))
                 .cause(causeOf(namedCause, root, lastRan));
     }
 
     private static EffectEvent stampWith(
-            EffectEvent event, SpellAbility root, Object pointer, String attribution) {
-        return event
-                .duration(duration(root, pointer, event.type()))
-                .attributedTo(attribution);
+            EffectEvent event, SpellAbility root, SpellAbility pointer) {
+        return event.duration(duration(root, pointer, event.type()));
     }
 
-    private static String causeOf(String namedCause, SpellAbility root, Object pointer) {
+    private static String causeOf(String namedCause, SpellAbility root, SpellAbility pointer) {
         return namedCause != null ? namedCause : cause(root, pointer);
     }
 
@@ -356,11 +360,12 @@ final class EventAttribution {
      * from {@code root} alone.
      */
     static EffectEvent stampAt(
-            EffectEvent event, SpellAbility root, Object pointer, String namedCause) {
+            EffectEvent event, SpellAbility root, SpellAbility pointer, String namedCause) {
         if (event == null) {
             return null;
         }
-        return stampWith(event, root, pointer, damageLink(event, pointer, attributedTo(pointer)))
+        return stampWith(event, root, pointer)
+                .attributedTo(damageLink(event, pointer, attributedTo(pointer)))
                 .cause(causeOf(namedCause, root, pointer));
     }
 
@@ -376,11 +381,11 @@ final class EventAttribution {
      *
      * @param byPointer the attribution the resolving clause gives
      */
-    static String damageLink(EffectEvent event, Object pointer, String byPointer) {
-        if (event.subjects().isEmpty() || !(pointer instanceof SpellAbility clause)
-                || clause.getApi() != forge.game.ability.ApiType.DamageResolve) {
+    static String damageLink(EffectEvent event, SpellAbility pointer, String byPointer) {
+        if (event.subjects().isEmpty() || !isDamageResolve(pointer)) {
             return byPointer;
         }
+        SpellAbility clause = pointer;
         String subject = event.subjects().get(0);
         if (targets(clause, subject)) {
             return byPointer;
@@ -391,6 +396,10 @@ final class EventAttribution {
             }
         }
         return byPointer;
+    }
+
+    private static boolean isDamageResolve(SpellAbility clause) {
+        return clause != null && clause.getApi() == forge.game.ability.ApiType.DamageResolve;
     }
 
     /** Whether {@code clause} targets the object {@code ref} names. */
