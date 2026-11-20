@@ -60,9 +60,13 @@ public interface BoardEdit {
 
     /** {@code card}, failing when it is not on the battlefield. */
     static Card onBattlefield(Card card) {
-        if (card == null || card.getZone() == null || !card.getZone().is(ZoneType.Battlefield)) {
+        if (!isOnBattlefield(card)) {
             throw new IllegalStateException("not on the battlefield: " + card);
         }
         return card;
+    }
+
+    private static boolean isOnBattlefield(Card card) {
+        return card != null && card.getZone() != null && card.getZone().is(ZoneType.Battlefield);
     }
 }
