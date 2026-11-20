@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from statistics import mean, median
 
@@ -66,6 +67,17 @@ from draft_corpus_common import (
 QUALITY_COLUMN = "shrunk_score_play"
 
 
+def _count_corpus(path: Path, references: tuple[str, ...], seen: Counter,
+                  taken: Counter) -> None:
+    for record, geometry in read_records(path):
+        for index, seat in enumerate(record.seats):
+            if seat.agent not in references:
+                continue
+            for decision in seat_decisions(record, geometry, index):
+                taken[decision.taken] += 1
+                seen.update(decision.legal)
+
+
 def build_pickrate_quality(
     corpora: list[tuple[str, Path]], references: tuple[str, ...], min_obs: int
 ) -> dict[str, float]:
@@ -73,70 +85,91 @@ def build_pickrate_quality(
     seen: Counter = Counter()
     taken: Counter = Counter()
     for _, path in corpora:
-        for record, geometry in read_records(path):
-            for index, seat in enumerate(record.seats):
-                if seat.agent not in references:
-                    continue
-                for decision in seat_decisions(record, geometry, index):
-                    taken[decision.taken] += 1
-                    seen.update(decision.legal)
+        _count_corpus(path, references, seen, taken)
     return {c: taken[c] / n for c, n in seen.items() if n >= min_obs}
 
 
-def analyze(
-    label: str,
-    path: Path,
-    colours: ColourResolver,
-    quality: dict[str, float],
-    agents: tuple[str, ...] | None,
-) -> None:
-    best_hit: Counter = Counter()
-    best_total: Counter = Counter()
-    premiums: dict[str, list[float]] = defaultdict(list)
-    scored_slots = [0, 0]
+@dataclass(frozen=True)
+class Setup:
+    """What every corpus is analysed against: colours, the quality scale, the agents."""
 
-    for record, geometry in read_records(path):
+    colours: ColourResolver
+    quality: dict[str, float]
+    agents: tuple[str, ...] | None
+
+
+class QualityTally:
+    """Best-card hits and off-lane premiums, accumulated over one corpus."""
+
+    def __init__(self, setup: Setup) -> None:
+        self.setup = setup
+        self.best_hit: Counter = Counter()
+        self.best_total: Counter = Counter()
+        self.premiums: dict[str, list[float]] = defaultdict(list)
+        self.scored_slots = [0, 0]
+
+    def add_record(self, record, geometry) -> None:
+        quality = self.setup.quality
         for booster in record.boosters:
-            scored_slots[1] += len(booster.picks)
-            scored_slots[0] += sum(card in quality for card in booster.picks)
+            self.scored_slots[1] += len(booster.picks)
+            self.scored_slots[0] += sum(card in quality for card in booster.picks)
+        agents = self.setup.agents
         for index, seat in enumerate(record.seats):
-            if agents is not None and seat.agent not in agents:
-                continue
-            lane = Lane(frozenset(top_two_colours(geometry.drafted_pool(record, index),
-                                                  colours)), colours)
-            for decision in seat_decisions(record, geometry, index):
-                got = decision.taken
-                if got not in quality:
-                    continue
-                scored = [quality[c] for c in decision.legal if c in quality]
-                if len(scored) >= 2:
-                    best_total[seat.agent] += 1
-                    if quality[got] >= max(scored):
-                        best_hit[seat.agent] += 1
-                if not lane.off(got):
-                    continue
-                on_lane = [quality[card] for card in decision.legal[1:]
-                           if card in quality and lane.on(card)]
-                if on_lane:
-                    premiums[seat.agent].append(quality[got] - max(on_lane))
+            if agents is None or seat.agent in agents:
+                self._add_seat(record, geometry, index)
 
-    coverage = 100 * scored_slots[0] / scored_slots[1] if scored_slots[1] else 0
+    def _add_seat(self, record, geometry, index: int) -> None:
+        colours = self.setup.colours
+        agent = record.seats[index].agent
+        lane = Lane(frozenset(top_two_colours(geometry.drafted_pool(record, index),
+                                              colours)), colours)
+        for decision in seat_decisions(record, geometry, index):
+            if decision.taken in self.setup.quality:
+                self._add_decision(agent, lane, decision)
+
+    def _add_decision(self, agent: str, lane: Lane, decision) -> None:
+        quality = self.setup.quality
+        got = decision.taken
+        scored = [quality[c] for c in decision.legal if c in quality]
+        if len(scored) >= 2:
+            self.best_total[agent] += 1
+            if quality[got] >= max(scored):
+                self.best_hit[agent] += 1
+        if not lane.off(got):
+            return
+        on_lane = [quality[card] for card in decision.legal[1:]
+                   if card in quality and lane.on(card)]
+        if on_lane:
+            self.premiums[agent].append(quality[got] - max(on_lane))
+
+    def row(self, agent: str) -> str:
+        """One agent's line of the report."""
+        values = self.premiums[agent]
+        total = self.best_total[agent]
+        rate = 100 * self.best_hit[agent] / total if total else 0
+        if not values:
+            return f"     {agent:<12} {rate:9.1f}% {0:8d} {'-':>11} {'-':>9} {'-':>9}"
+        above = 100 * sum(1 for v in values if v > 0) / len(values)
+        return (
+            f"     {agent:<12} {rate:9.1f}% {len(values):8d} "
+            f"{mean(values):+11.4f} {median(values):+9.4f} {above:8.1f}%"
+        )
+
+
+def analyze(label: str, path: Path, setup: Setup) -> None:
+    tally = QualityTally(setup)
+    for record, geometry in read_records(path):
+        tally.add_record(record, geometry)
+
+    slots = tally.scored_slots
+    coverage = 100 * slots[0] / slots[1] if slots[1] else 0
     banner(f"{label}   ({coverage:.1f}% of drafted card slots carry a quality label)", width=96)
     print(
         f"     {'agent':<12} {'best-card':>10} {'n':>8} {'mean prem':>11} "
         f"{'median':>9} {'share>0':>9}"
     )
-    for agent in sorted(set(best_total) | set(premiums)):
-        values = premiums[agent]
-        rate = 100 * best_hit[agent] / best_total[agent] if best_total[agent] else 0
-        if values:
-            above = 100 * sum(1 for v in values if v > 0) / len(values)
-            print(
-                f"     {agent:<12} {rate:9.1f}% {len(values):8d} "
-                f"{mean(values):+11.4f} {median(values):+9.4f} {above:8.1f}%"
-            )
-        else:
-            print(f"     {agent:<12} {rate:9.1f}% {0:8d} {'-':>11} {'-':>9} {'-':>9}")
+    for agent in sorted(set(tally.best_total) | set(tally.premiums)):
+        print(tally.row(agent))
     print()
 
 
@@ -146,6 +179,27 @@ def _require_winrates(winrates: Path | None) -> None:
             f"--winrates PATH ({winrates}) not found — pass it, or use "
             f"--quality pickrate to derive a scale from the corpus itself"
         )
+
+
+def _quality_scale(args: argparse.Namespace, corpora: list[tuple[str, Path]]) -> dict[str, float]:
+    """The card -> quality map the chosen ``--quality`` names, announced on stdout."""
+    if args.quality == "winrates":
+        _require_winrates(args.winrates)
+        quality = score_play(args.winrates)
+        values = sorted(quality.values())
+        print(
+            f"quality: {QUALITY_COLUMN} for {len(quality)} cards "
+            f"(range {values[0]:+.3f} .. {values[-1]:+.3f}, "
+            f"median {values[len(values) // 2]:+.3f})\n"
+        )
+        return quality
+    references = tuple(a.strip() for a in args.reference_agents.split(","))
+    quality = build_pickrate_quality(corpora, references, args.min_obs)
+    print(
+        f"quality: P(taken | available) over {'/'.join(references)} seats, "
+        f"{len(quality)} cards with >={args.min_obs} observations\n"
+    )
+    return quality
 
 
 def main() -> None:
@@ -174,26 +228,11 @@ def main() -> None:
     corpora = [parse_drafts_arg(raw) for raw in args.drafts]
     agents = tuple(a.strip() for a in args.agents.split(",")) if args.agents else None
 
-    if args.quality == "winrates":
-        _require_winrates(args.winrates)
-        quality = score_play(args.winrates)
-        values = sorted(quality.values())
-        print(
-            f"quality: {QUALITY_COLUMN} for {len(quality)} cards "
-            f"(range {values[0]:+.3f} .. {values[-1]:+.3f}, "
-            f"median {values[len(values) // 2]:+.3f})\n"
-        )
-    else:
-        references = tuple(a.strip() for a in args.reference_agents.split(","))
-        quality = build_pickrate_quality(corpora, references, args.min_obs)
-        print(
-            f"quality: P(taken | available) over {'/'.join(references)} seats, "
-            f"{len(quality)} cards with >={args.min_obs} observations\n"
-        )
+    quality = _quality_scale(args, corpora)
 
     colours = ColourResolver(args.cards_path)
     for label, path in corpora:
-        analyze(label, path, colours, quality, agents)
+        analyze(label, path, Setup(colours, quality, agents))
 
 
 if __name__ == "__main__":
