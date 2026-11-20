@@ -132,25 +132,8 @@ class Activations:
             if not self.cost_fields[name]
         ]
         enough = self.activations >= limits.min_cost_evidence
-        # Nothing paid anywhere is a defect at any size; one dead channel only
-        # once the window is big enough to blame the collector, not the pool.
-        broken = bool(self.activations and (
-            not self.populated or (enough and dead)
-        ))
-        detail: tuple[str, ...] = ()
-        if broken:
-            detail = (
-                f"never populated over {self.activations} activation records: "
-                + ", ".join(dead or _COST_FIELDS),
-                "reading a Cost object whose parts were never the ones paid "
-                "looks exactly like this",
-            )
-        elif dead and not enough:
-            detail = (
-                f"{', '.join(dead)} unexercised, but {self.activations} "
-                f"activation records is under the {limits.min_cost_evidence} "
-                "this would need to mean anything",
-            )
+        broken = self._costs_broken(dead, enough)
+        detail = self._cost_detail(limits, dead, enough, broken)
         return Finding(
             name="cost fields are not all empty",
             ok=not broken,
@@ -160,6 +143,31 @@ class Activations:
             ),
             detail=detail,
         )
+
+    def _costs_broken(self, dead: list[str], enough: bool) -> bool:
+        """Nothing paid anywhere is a defect at any size; one dead channel only
+        once the window is big enough to blame the collector, not the pool."""
+        return bool(self.activations and (
+            not self.populated or (enough and dead)
+        ))
+
+    def _cost_detail(
+        self, limits: Thresholds, dead: list[str], enough: bool, broken: bool,
+    ) -> tuple[str, ...]:
+        if broken:
+            return (
+                f"never populated over {self.activations} activation records: "
+                + ", ".join(dead or _COST_FIELDS),
+                "reading a Cost object whose parts were never the ones paid "
+                "looks exactly like this",
+            )
+        if dead and not enough:
+            return (
+                f"{', '.join(dead)} unexercised, but {self.activations} "
+                f"activation records is under the {limits.min_cost_evidence} "
+                "this would need to mean anything",
+            )
+        return ()
 
 
 _GAME_END = frozenset({EventType.PLAYER_WON, EventType.PLAYER_LOST})
@@ -436,13 +444,36 @@ def _disagrees(payload: RewritePayload) -> bool:
     in the event's place and Forge set that ability's sub-ability aside
     (Forcefield): one resolver keys a sub-ability to its root's line, so
     ``replaced_by`` and ``buffered`` then hold the same keys."""
-    if payload.result in REWRITE_RESULTS_WITHOUT_ABILITY and (
-        payload.outgoing is not None or payload.replaced_by
-    ):
-        return True
-    if payload.buffered is not None and (
-        (payload.replaced_by and payload.replaced_by != payload.buffered)
-        or (not payload.buffered_ran and payload.buffered_events)
-    ):
-        return True
+    return (
+        _result_carries_a_payload(payload)
+        or _buffered_contradicts(payload)
+        or _outgoing_beside_unknown_incoming(payload)
+    )
+
+
+def _result_carries_a_payload(payload: RewritePayload) -> bool:
+    """A ``prevented`` or ``skipped`` result with an ``outgoing`` or a
+    ``replaced_by``."""
+    if payload.result not in REWRITE_RESULTS_WITHOUT_ABILITY:
+        return False
+    return payload.outgoing is not None or bool(payload.replaced_by)
+
+
+def _buffered_contradicts(payload: RewritePayload) -> bool:
+    """An ability set aside beside another line run instead, or beside events
+    of a run that never came."""
+    if payload.buffered is None:
+        return False
+    return _runs_another_line(payload) or _buffered_events_never_ran(payload)
+
+
+def _runs_another_line(payload: RewritePayload) -> bool:
+    return bool(payload.replaced_by) and payload.replaced_by != payload.buffered
+
+
+def _buffered_events_never_ran(payload: RewritePayload) -> bool:
+    return not payload.buffered_ran and bool(payload.buffered_events)
+
+
+def _outgoing_beside_unknown_incoming(payload: RewritePayload) -> bool:
     return payload.incoming_unknown and payload.outgoing is not None
