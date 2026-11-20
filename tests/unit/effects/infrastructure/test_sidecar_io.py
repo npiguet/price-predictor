@@ -303,22 +303,11 @@ class TestSidecarCache:
         from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS
 
         cache = SidecarCache({folder.name: folder for folder in GEN3_SIDECAR_FOLDERS})
-        sidecars = [read_sidecar(path) for folder in GEN3_SIDECAR_FOLDERS
-                    for path in sorted(folder.rglob("*.provenance.json"))]
-        by_shape: dict[tuple, list] = {}
-        for sidecar in sidecars:
-            for line in sidecar.lines:
-                for key in line.provenance:
-                    shape = (key.face, key.trait_kind, key.index_within_kind, key.option)
-                    by_shape.setdefault(shape, []).append((key, line))
-        shared = [pairs for pairs in by_shape.values()
-                  if len({key.script_file for key, _ in pairs}) > 1]
+        shared = _keys_shared_across_files(GEN3_SIDECAR_FOLDERS)
         assert len(shared) > 10
         for pairs in shared:
-            for key, line in pairs:
-                joined = cache.line_for(key)
-                assert key in joined.provenance, key
-                assert joined in cache.get(key.script_file).lines, key
+            for key, _ in pairs:
+                _check_joins_its_own_line(cache, key)
 
     def test_a_saga_s_chapter_trigger_joins_its_own_chapter_line(self):
         """Over the converter's own sidecars of every saga the fixture names:
@@ -334,6 +323,27 @@ class TestSidecarCache:
         assert len(sagas) >= 2, sagas
         shared = [_check_saga_chapters(cache, script) for script in sagas]
         assert any(shared), "no saga of the fixture prints two chapters on one line"
+
+
+def _keys_shared_across_files(folders) -> list[list]:
+    """``(key, line)`` pairs grouped by the key's shape (face, trait kind,
+    index, option), keeping the shapes that more than one script file holds."""
+    sidecars = [read_sidecar(path) for folder in folders
+                for path in sorted(folder.rglob("*.provenance.json"))]
+    by_shape: dict[tuple, list] = {}
+    for sidecar in sidecars:
+        for line in sidecar.lines:
+            for key in line.provenance:
+                shape = (key.face, key.trait_kind, key.index_within_kind, key.option)
+                by_shape.setdefault(shape, []).append((key, line))
+    return [pairs for pairs in by_shape.values()
+            if len({key.script_file for key, _ in pairs}) > 1]
+
+
+def _check_joins_its_own_line(cache: SidecarCache, key: ProvenanceKey) -> None:
+    joined = cache.line_for(key)
+    assert key in joined.provenance, key
+    assert joined in cache.get(key.script_file).lines, key
 
 
 def _check_saga_chapters(cache: SidecarCache, script: str) -> bool:
