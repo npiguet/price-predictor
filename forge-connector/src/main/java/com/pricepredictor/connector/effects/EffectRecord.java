@@ -28,10 +28,7 @@ public final class EffectRecord {
      */
     public static final int GENERATION = 3;
 
-    private final String recordId;
-    private final String runId;
-    private final String timestamp;
-    private final String gameId;
+    private final RecordHeader header;
     private final RecordKind kind;
     private final Moment moment;
     /** A {@link PlayabilitySubkind} or a {@link TurnActionSubkind}; null on every other kind. */
@@ -95,25 +92,18 @@ public final class EffectRecord {
      * other two their subkind, and taking them at construction is what makes
      * a record missing one impossible to build rather than merely wrong.
      */
-    public EffectRecord(
-            String recordId, String runId, String timestamp, String gameId,
-            RecordKind kind, AttributionMode mode) {
-        this(recordId, runId, timestamp, gameId, kind, null, null, mode);
-        if (kind == RecordKind.RESOLUTION || kind == RecordKind.PLAYABILITY
-                || kind == RecordKind.TURN_ACTION) {
+    public EffectRecord(RecordHeader header, RecordKind kind, AttributionMode mode) {
+        this(header, kind, null, null, mode);
+        if (kind.isQualified()) {
             throw new IllegalArgumentException(
                     "a " + kind.wireName() + " record is made with its moment or subkind");
         }
     }
 
     private EffectRecord(
-            String recordId, String runId, String timestamp, String gameId,
-            RecordKind kind, Moment moment, WireNamed subkind,
+            RecordHeader header, RecordKind kind, Moment moment, WireNamed subkind,
             AttributionMode mode) {
-        this.recordId = recordId;
-        this.runId = runId;
-        this.timestamp = timestamp;
-        this.gameId = gameId;
+        this.header = header;
         this.kind = Objects.requireNonNull(kind, "kind");
         this.moment = moment;
         this.subkind = subkind;
@@ -122,25 +112,22 @@ public final class EffectRecord {
 
     /** A {@code resolution} record: one half of a resolution pair. */
     public static EffectRecord resolution(
-            String recordId, String runId, String timestamp, String gameId,
-            Moment moment, AttributionMode mode) {
-        return new EffectRecord(recordId, runId, timestamp, gameId, RecordKind.RESOLUTION,
+            RecordHeader header, Moment moment, AttributionMode mode) {
+        return new EffectRecord(header, RecordKind.RESOLUTION,
                 Objects.requireNonNull(moment, "moment"), null, mode);
     }
 
     /** A {@code playability} record: one rules verdict. */
     public static EffectRecord playability(
-            String recordId, String runId, String timestamp, String gameId,
-            PlayabilitySubkind subkind, AttributionMode mode) {
-        return new EffectRecord(recordId, runId, timestamp, gameId, RecordKind.PLAYABILITY,
+            RecordHeader header, PlayabilitySubkind subkind, AttributionMode mode) {
+        return new EffectRecord(header, RecordKind.PLAYABILITY,
                 null, Objects.requireNonNull(subkind, "subkind"), mode);
     }
 
     /** A {@code turn_action} record: the events of one turn-based action (FR-036). */
     public static EffectRecord turnAction(
-            String recordId, String runId, String timestamp, String gameId,
-            TurnActionSubkind subkind, AttributionMode mode) {
-        return new EffectRecord(recordId, runId, timestamp, gameId, RecordKind.TURN_ACTION,
+            RecordHeader header, TurnActionSubkind subkind, AttributionMode mode) {
+        return new EffectRecord(header, RecordKind.TURN_ACTION,
                 null, Objects.requireNonNull(subkind, "subkind"), mode);
     }
 
@@ -275,7 +262,7 @@ public final class EffectRecord {
     }
 
     public String recordId() {
-        return recordId;
+        return header.recordId();
     }
 
     /** Whether this is an effect half under {@code link}: one of the halves its item's resolution wrote. */
@@ -327,11 +314,11 @@ public final class EffectRecord {
                     "a directed fork is a non-interventional fork naming the rule it aimed at");
         }
         Json.ObjectWriter json = Json.object()
-                .value("record_id", recordId)
+                .value("record_id", header.recordId())
                 .value("generation", GENERATION)
-                .value("run_id", runId)
-                .value("timestamp", timestamp)
-                .value("game_id", gameId)
+                .value("run_id", header.runId())
+                .value("timestamp", header.timestamp())
+                .value("game_id", header.gameId())
                 .value("kind", kind)
                 .value("moment", moment)
                 .value("subkind", subkind)
@@ -377,7 +364,7 @@ public final class EffectRecord {
      */
     RecordFacts facts() {
         boolean outcome = state.pendingOutcome() || payload.namesOutcome();
-        return new RecordFacts(gameId, state.turn(), actingScript(), forkKind == null && outcome);
+        return new RecordFacts(header.gameId(), state.turn(), actingScript(), forkKind == null && outcome);
     }
 
     /** The acting line's script file, else the line the payload names; null for neither. */

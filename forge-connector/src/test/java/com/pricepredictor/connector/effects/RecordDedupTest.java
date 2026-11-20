@@ -19,9 +19,7 @@ class RecordDedupTest {
     /** A fresh id and timestamp every time, so only what the record says can match. */
     static EffectRecord playability(PlayabilitySubkind subkind, String payload, String state) {
         nextId++;
-        return EffectRecord.playability(
-                        "r" + nextId, "run", "t" + nextId, "game-1", subkind,
-                        AttributionMode.PATCHED)
+        return EffectRecord.playability(freshHeader(), subkind, AttributionMode.PATCHED)
                 .state(new RecordState(state, null, false)).payload(RecordPayload.withoutEvents(payload));
     }
 
@@ -29,11 +27,14 @@ class RecordDedupTest {
     static EffectRecord ofKind(
             RecordKind kind, ProvenanceKey line, String payload, String state) {
         nextId++;
-        return new EffectRecord(
-                        "r" + nextId, "run", "t" + nextId, "game-1", kind,
-                        AttributionMode.PATCHED)
+        return new EffectRecord(freshHeader(), kind, AttributionMode.PATCHED)
                 .ability(new ProvenanceKey.Resolved(line, null))
                 .state(new RecordState(state, null, false)).payload(RecordPayload.withoutEvents(payload));
+    }
+
+    /** The header of record {@code nextId}: its own id and timestamp, the one game. */
+    private static RecordHeader freshHeader() {
+        return new RecordHeader("r" + nextId, "run", "t" + nextId, "game-1");
     }
 
     /** One of Garruk's Uprising's two {@code ChangesZone} triggers. */

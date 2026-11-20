@@ -610,7 +610,8 @@ class RecordCharacterizationTest {
         board.battlefield("Serra Angel", board.opponent);
 
         String record = EffectRecord.playability(
-                "run.0-l1.0", "run", RecordShardWriter.timestamp(), ShardRun.GAME_ID,
+                new RecordHeader(
+                        "run.0-l1.0", "run", RecordShardWriter.timestamp(), ShardRun.GAME_ID),
                 PlayabilitySubkind.BLOCKERS, AttributionMode.detect())
                 .actor(Refs.of(board.opponent))
                 .whatIf(true)

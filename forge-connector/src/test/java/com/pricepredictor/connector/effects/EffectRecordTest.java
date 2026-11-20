@@ -24,22 +24,19 @@ class EffectRecordTest {
 
     // ── the record envelope ─────────────────────────────────────────────
 
+    private static final RecordHeader HEADER =
+            new RecordHeader("run.0.1", "run", "2026-09-07T00:00:00Z", "run.0.0");
+
     private EffectRecord record(RecordKind kind) {
-        return new EffectRecord(
-                "run.0.1", "run", "2026-09-07T00:00:00Z", "run.0.0", kind,
-                AttributionMode.DEGRADED);
+        return new EffectRecord(HEADER, kind, AttributionMode.DEGRADED);
     }
 
     private EffectRecord resolution(Moment moment) {
-        return EffectRecord.resolution(
-                "run.0.1", "run", "2026-09-07T00:00:00Z", "run.0.0", moment,
-                AttributionMode.DEGRADED);
+        return EffectRecord.resolution(HEADER, moment, AttributionMode.DEGRADED);
     }
 
     private EffectRecord playability(PlayabilitySubkind subkind) {
-        return EffectRecord.playability(
-                "run.0.1", "run", "2026-09-07T00:00:00Z", "run.0.0", subkind,
-                AttributionMode.DEGRADED);
+        return EffectRecord.playability(HEADER, subkind, AttributionMode.DEGRADED);
     }
 
     /**
@@ -201,8 +198,7 @@ class EffectRecordTest {
                 "\"kind\":\"combat\",\"moment\":null,\"subkind\":null"), combat);
 
         String draw = EffectRecord.turnAction(
-                "run.0.1", "run", "2026-09-07T00:00:00Z", "run.0.0", TurnActionSubkind.DRAW,
-                AttributionMode.DEGRADED).toJson();
+                HEADER, TurnActionSubkind.DRAW, AttributionMode.DEGRADED).toJson();
         assertTrue(draw.contains(
                 "\"kind\":\"turn_action\",\"moment\":null,\"subkind\":\"draw\""), draw);
 

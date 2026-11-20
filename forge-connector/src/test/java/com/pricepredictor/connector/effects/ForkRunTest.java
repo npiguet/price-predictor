@@ -155,7 +155,8 @@ class ForkRunTest {
 
         assertEquals(Map.of("remembered", 1), verified.copyDropped());
         String stamped = verified.stamp(new EffectRecord(
-                "r", "run", "t", "g", RecordKind.COMBAT, AttributionMode.PATCHED)).toJson();
+                new RecordHeader("r", "run", "t", "g"), RecordKind.COMBAT,
+                AttributionMode.PATCHED)).toJson();
         assertTrue(stamped.contains("\"copy_dropped\":{\"remembered\":1}"), stamped);
     }
 
@@ -170,7 +171,8 @@ class ForkRunTest {
 
         assertTrue(verified.copyDropped().isEmpty(), verified.copyDropped().toString());
         assertFalse(verified.stamp(new EffectRecord(
-                "r", "run", "t", "g", RecordKind.COMBAT, AttributionMode.PATCHED))
+                new RecordHeader("r", "run", "t", "g"), RecordKind.COMBAT,
+                AttributionMode.PATCHED))
                 .toJson().contains("copy_dropped"));
     }
 

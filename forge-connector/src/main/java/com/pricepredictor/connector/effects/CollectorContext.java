@@ -159,14 +159,12 @@ final class CollectorContext {
      * {@link #newPlayability} and {@link #newTurnAction}.
      */
     EffectRecord newRecord(RecordKind kind) {
-        return new EffectRecord(
-                writer.nextRecordId(), writer.runId(), RecordShardWriter.timestamp(),
-                gameId, kind, mode);
+        return new EffectRecord(headerNow(), kind, mode);
     }
 
     /** A resolution half at {@code moment}, with an id and a timestamp taken now. */
     EffectRecord newResolution(Moment moment) {
-        return newResolution(moment, writer.nextRecordId(), RecordShardWriter.timestamp());
+        return EffectRecord.resolution(headerNow(), moment, mode);
     }
 
     /**
@@ -178,21 +176,27 @@ final class CollectorContext {
      * spell was cast rather than when it was written.
      */
     EffectRecord newResolution(Moment moment, String recordId, String timestamp) {
-        return EffectRecord.resolution(recordId, writer.runId(), timestamp, gameId, moment, mode);
+        return EffectRecord.resolution(header(recordId, timestamp), moment, mode);
     }
 
     /** A playability verdict of {@code subkind}, with an id and a timestamp taken now. */
     EffectRecord newPlayability(PlayabilitySubkind subkind) {
-        return EffectRecord.playability(
-                writer.nextRecordId(), writer.runId(), RecordShardWriter.timestamp(),
-                gameId, subkind, mode);
+        return EffectRecord.playability(headerNow(), subkind, mode);
     }
 
     /** A turn-based action of {@code subkind}, with an id and a timestamp taken now. */
     EffectRecord newTurnAction(TurnActionSubkind subkind) {
-        return EffectRecord.turnAction(
-                writer.nextRecordId(), writer.runId(), RecordShardWriter.timestamp(),
-                gameId, subkind, mode);
+        return EffectRecord.turnAction(headerNow(), subkind, mode);
+    }
+
+    /** This game's header for a record with an id and a timestamp taken now. */
+    private RecordHeader headerNow() {
+        return header(writer.nextRecordId(), RecordShardWriter.timestamp());
+    }
+
+    /** This game's header for a record with {@code recordId}, taken at {@code timestamp}. */
+    private RecordHeader header(String recordId, String timestamp) {
+        return new RecordHeader(recordId, writer.runId(), timestamp, gameId);
     }
 
     /** An id for a record built later, by {@link #newResolution(Moment, String, String)}. */

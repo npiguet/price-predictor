@@ -30,6 +30,15 @@ public enum RecordKind implements WireNamed {
         this.wireName = wireName;
     }
 
+    /**
+     * Whether a record of this kind is made with its moment or subkind:
+     * {@link #RESOLUTION} with its {@link Moment}, {@link #PLAYABILITY} and
+     * {@link #TURN_ACTION} with their subkind.
+     */
+    public boolean isQualified() {
+        return this == RESOLUTION || this == PLAYABILITY || this == TURN_ACTION;
+    }
+
     /** The {@code kind} a record carries. */
     @Override
     public String wireName() {
