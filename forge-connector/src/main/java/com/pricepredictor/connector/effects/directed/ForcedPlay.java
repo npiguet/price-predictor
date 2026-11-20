@@ -20,12 +20,11 @@ import java.util.function.Predicate;
  * the card bound as {@link #source}, chosen by {@link Line}, its targets named
  * by role clause by clause (a clause named by no role drawn from its legal
  * targets by the fork's own random stream), X drawn, its cost paid through the
- * engine's own payment, what the cost sacrifices, discards or exiles named by
- * role ({@link #costs}, else the seat's choice). A modal line (a charm) is no
+ * engine's own payment with the seat's choices. A modal line (a charm) is no
  * line a forced play makes: the engine's cast asks its modes afresh. An
- * {@link Kind#ANSWER} answers yes or no the "you may" or "you may pay" a line
- * of the source asks, the line chosen by {@link Line} (by default the source's
- * triggered abilities). An {@link Kind#ATTACK} adds the source's attack on the
+ * {@link Kind#ANSWER} answers yes or no the "you may" a line of the source
+ * asks, the line chosen by {@link Line} (by default the source's triggered
+ * abilities). An {@link Kind#ATTACK} adds the source's attack on the
  * object bound as {@link #defender} to the seat's own declaration.
  *
  * <p>A value of the registry, built when the registry is: a keyword is named
@@ -42,14 +41,12 @@ import java.util.function.Predicate;
  *                 whose question an answer answers; null for an attack
  * @param targets  per targeting clause of the line, in chain order, the roles
  *                 of its targets; an empty list draws that clause's targets
- * @param costs    the roles of the cards the cost sacrifices, discards or
- *                 exiles; empty leaves those choices to the seat
  * @param answer   an answer's yes or no
  * @param defender the role of the attacked player or permanent, for an attack
  */
 public record ForcedPlay(
         Kind kind, Role<Player> actor, Role<Card> source, Line line,
-        List<List<Role<?>>> targets, List<Role<Card>> costs, boolean answer, Role<?> defender) {
+        List<List<Role<?>>> targets, boolean answer, Role<?> defender) {
 
     /** What a variant forces. */
     public enum Kind {
@@ -57,7 +54,7 @@ public record ForcedPlay(
         CAST,
         /** Activate a line of the source. */
         ACTIVATE,
-        /** Answer a "you may" or a "you may pay" a line of the source asks. */
+        /** Answer a "you may" a line of the source asks. */
         ANSWER,
         /** Add the source's attack to the seat's declaration. */
         ATTACK
@@ -131,31 +128,30 @@ public record ForcedPlay(
             throw new IllegalArgumentException("a defender belongs to an attack, and only there");
         }
         targets = targets.stream().map(List::copyOf).toList();
-        costs = List.copyOf(costs);
     }
 
     /** {@code actor} casts the spell bound as {@code card}. */
     public static ForcedPlay cast(Role<Player> actor, Role<Card> card) {
-        return new ForcedPlay(Kind.CAST, actor, card, Line.SPELL, List.of(), List.of(), false, null);
+        return new ForcedPlay(Kind.CAST, actor, card, Line.SPELL, List.of(), false, null);
     }
 
     /** {@code actor} activates {@code line} of the card bound as {@code permanent}. */
     public static ForcedPlay activate(Role<Player> actor, Role<Card> permanent, Line line) {
-        return new ForcedPlay(Kind.ACTIVATE, actor, permanent, line, List.of(), List.of(), false, null);
+        return new ForcedPlay(Kind.ACTIVATE, actor, permanent, line, List.of(), false, null);
     }
 
     /**
-     * {@code actor} answers {@code yes} to the "you may" or "you may pay" a
-     * triggered ability of the card bound as {@code source} asks; another of
-     * its lines with {@link #playing}.
+     * {@code actor} answers {@code yes} to the "you may" a triggered ability
+     * of the card bound as {@code source} asks; another of its lines with
+     * {@link #playing}.
      */
     public static ForcedPlay answer(Role<Player> actor, Role<Card> source, boolean yes) {
-        return new ForcedPlay(Kind.ANSWER, actor, source, Line.TRIGGER, List.of(), List.of(), yes, null);
+        return new ForcedPlay(Kind.ANSWER, actor, source, Line.TRIGGER, List.of(), yes, null);
     }
 
     /** {@code actor}'s creature bound as {@code attacker} attacks what is bound as {@code defender}. */
     public static ForcedPlay attack(Role<Player> actor, Role<Card> attacker, Role<?> defender) {
-        return new ForcedPlay(Kind.ATTACK, actor, attacker, null, List.of(), List.of(), false,
+        return new ForcedPlay(Kind.ATTACK, actor, attacker, null, List.of(), false,
                 Objects.requireNonNull(defender, "defender"));
     }
 
@@ -166,13 +162,7 @@ public record ForcedPlay(
     public ForcedPlay targeting(Role<?>... roles) {
         List<List<Role<?>>> more = new ArrayList<>(targets);
         more.add(List.of(roles));
-        return new ForcedPlay(kind, actor, source, line, more, costs, answer, defender);
-    }
-
-    /** This play, its cost sacrificing, discarding or exiling the cards bound as {@code roles}. */
-    @SafeVarargs
-    public final ForcedPlay paying(Role<Card>... roles) {
-        return new ForcedPlay(kind, actor, source, line, targets, List.of(roles), answer, defender);
+        return new ForcedPlay(kind, actor, source, line, more, answer, defender);
     }
 
     /** This cast, activation or answer, of {@code other} rather than the line it named. */
@@ -180,8 +170,8 @@ public record ForcedPlay(
         if (line == null) {
             throw new IllegalStateException("only a cast, an activation or an answer names a line");
         }
-        return new ForcedPlay(kind, actor, source, Objects.requireNonNull(other, "line"), targets, costs,
-                answer, defender);
+        return new ForcedPlay(kind, actor, source, Objects.requireNonNull(other, "line"), targets, answer,
+                defender);
     }
 
     /** Whether this play is a cast or an activation, played at a priority. */

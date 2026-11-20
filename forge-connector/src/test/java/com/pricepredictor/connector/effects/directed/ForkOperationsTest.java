@@ -118,16 +118,6 @@ class ForkOperationsTest {
     }
 
     @Test
-    void typeAddedChangesTheTypesAlone() {
-        Board board = Board.main();
-        Card bears = board.creature(board.you, "Grizzly Bears");
-        assertEquals(Set.of(id(bears) + ".types"),
-                board.edit(ColourTypeOperation.addingType(bears, "Artifact")));
-        assertTrue(bears.isArtifact());
-        assertTrue(bears.isCreature());
-    }
-
-    @Test
     void countersOnACardChangeItsCountersAndTheBoostTheyGive() {
         Board board = Board.main();
         Card bears = board.creature(board.you, "Grizzly Bears");

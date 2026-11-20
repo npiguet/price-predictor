@@ -4,12 +4,10 @@ import forge.ai.PlayerControllerAi;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.combat.Combat;
-import forge.game.cost.Cost;
 import forge.game.player.Player;
 import forge.game.player.PlayerActionConfirmMode;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.WrappedAbility;
-import forge.util.collect.FCollectionView;
 
 import java.util.List;
 import java.util.Map;
@@ -64,17 +62,5 @@ final class ForcingSeatController extends PlayerControllerAi {
                                  List<String> options, Card cardToShow, Map<String, Object> params) {
         Boolean answer = forced.answer(player, sa);
         return answer != null ? answer : super.confirmAction(sa, mode, message, options, cardToShow, params);
-    }
-
-    /**
-     * A "you may pay": a forced no declines; a forced yes pays whenever the
-     * cost can be paid, whatever the AI would choose
-     * ({@link ForcedPlayRun#pay}).
-     */
-    @Override
-    public boolean payCostToPreventEffect(Cost cost, SpellAbility sa, boolean alreadyPaid,
-                                          FCollectionView<Player> allPayers) {
-        Boolean paid = forced.pay(player, cost, sa);
-        return paid != null ? paid : super.payCostToPreventEffect(cost, sa, alreadyPaid, allPayers);
     }
 }

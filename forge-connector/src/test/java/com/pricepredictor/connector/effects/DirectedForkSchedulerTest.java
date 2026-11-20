@@ -20,7 +20,10 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -49,8 +52,12 @@ class DirectedForkSchedulerTest {
     private static final BoardPrecondition NEVER = live -> Optional.empty();
 
     private static DirectedRule rule(String id, BoardPrecondition precondition) {
-        return DirectedRule.of(id, id + "-1", precondition, new DirectedRule.Variant("tapped",
-                new Application(ForkOperation.TAP, binding -> new TapOperation(binding.card("creature"), true))));
+        return DirectedRule.of(id, id + "-1", precondition, new DirectedRule.Variant("tapped", tapping(true)));
+    }
+
+    /** The edit that taps, or untaps, the creature the binding holds. */
+    private static Application tapping(boolean tapped) {
+        return new Application(ForkOperation.TAP, binding -> new TapOperation(binding.card("creature"), tapped));
     }
 
     /** The rules a stand-in fork was handed, in order. */
@@ -119,6 +126,43 @@ class DirectedForkSchedulerTest {
             }
         }
         return at;
+    }
+
+    /**
+     * A registration with two variants forks one of them, drawn from the
+     * game's generator: over sixteen game seeds both are drawn, and each
+     * seed draws the same variant again.
+     */
+    @Test
+    void aRuleWithTwoVariantsDrawsOneFromTheGamesGenerator() {
+        Map<String, Application> variants = new LinkedHashMap<>();
+        variants.put("tapped", tapping(true));
+        variants.put("untapped", tapping(false));
+        DirectedRule rule = new DirectedRule(Map.of("A", "A-1"), ALWAYS, variants);
+        Set<String> drawn = new HashSet<>();
+
+        for (long seed = 0; seed < 16; seed++) {
+            String variant = variantForked(rule, seed);
+            assertEquals(variant, variantForked(rule, seed), "game seed " + seed + " draws its variant again");
+            drawn.add(variant);
+        }
+
+        assertEquals(Set.of("tapped", "untapped"), drawn);
+    }
+
+    /** The variant the one fork of a game seeded {@code seed} is handed. */
+    private static String variantForked(DirectedRule rule, long seed) {
+        CollectionCaps caps = TestCaps.caps().directed(1, 1.0, "A").build();
+        List<String> variants = new ArrayList<>();
+        DirectedForkScheduler scheduler = new DirectedForkScheduler(TestCards.game(),
+                new DirectedForkScheduler.Directing(caps, DirectedRules.of(rule), seed),
+                new ForkBudget(caps), new DirectedForkTally(),
+                (taken, variant, application, binding) -> variants.add(variant));
+
+        scheduler.collect(PhaseType.MAIN1);
+
+        assertEquals(1, variants.size(), "the rule forks once");
+        return variants.get(0);
     }
 
     @Test

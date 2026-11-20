@@ -12,27 +12,15 @@ import forge.game.Game;
 import forge.game.GameEntity;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
-import forge.game.card.CardCollection;
-import forge.game.card.CardCollectionView;
-import forge.game.card.CardLists;
-import forge.game.card.CardPredicates;
 import forge.game.combat.Combat;
 import forge.game.combat.CombatUtil;
-import forge.game.cost.Cost;
-import forge.game.cost.CostDiscard;
-import forge.game.cost.CostExile;
-import forge.game.cost.CostPayment;
-import forge.game.cost.CostSacrifice;
-import forge.game.cost.PaymentDecision;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.player.PlayerController;
 import forge.game.spellability.SpellAbility;
-import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
@@ -47,10 +35,10 @@ import java.util.Set;
  * the line is playable by the rules ({@link PlayabilityVerdict}) and its named
  * targets are legal, the line; when the line is played, its X and targets,
  * and its cost paid through the engine's own cast path
- * ({@link RandomSpellPlayer#play}) with the named cards as what it sacrifices,
- * discards or exiles; a confirmation or a "you may pay" the source's named
- * line asks, the play's answer; a declaration of attackers, the named attack
- * added to the seat's own. Every other decision is the seat's.
+ * ({@link RandomSpellPlayer#play}) with the AI's choices; a confirmation the
+ * source's named line asks, the play's answer; a declaration of attackers,
+ * the named attack added to the seat's own. Every other decision is the
+ * seat's.
  *
  * <p>It never throws inside the engine: a play that cannot be made flags its
  * refusal, and {@code ForkPlayForward} throws it between main-loop steps
@@ -68,7 +56,6 @@ public final class ForcedPlayRun {
     private final PhaseType step;
     private final int turn;
     private final NamedTargets targets;
-    private final List<Card> costs;
     private final GameEntity defender;
     /**
      * The roles the binding cannot hold yet, a dry run's made roles
@@ -96,7 +83,6 @@ public final class ForcedPlayRun {
         this.step = stepOf(play.kind(), game);
         this.turn = game.getPhaseHandler().getTurn();
         this.targets = new NamedTargets(actor, namedTargets(play, fork, unknown));
-        this.costs = play.costs().stream().filter(role -> !unknown.contains(role.name())).map(fork::card).toList();
         this.defender = namedDefender(play, fork, unknown);
     }
 
@@ -154,7 +140,7 @@ public final class ForcedPlayRun {
      * clauses named by no role), the named attack is legal. Mana is not
      * asked: a variant may give the mana the play needs. A role the edit
      * makes ({@link Application#makes}) has no live card: what names it (the
-     * line, when it is the source; a targeting clause; a cost; the defender)
+     * line, when it is the source; a targeting clause; the defender)
      * is checked on the copy only, and the rest of the play here.
      */
     public static Optional<String> dryRun(Application application, Binding live, Game game) {
@@ -344,7 +330,7 @@ public final class ForcedPlayRun {
             refusal = ForkRefusal.FORCED_NO_LINE;
             return false;
         }
-        if (!affordable(ability) || !RandomSpellPlayer.play(actor, ability, new RoleCostDecision(actor, ability, costs), null)) {
+        if (!affordable(ability) || !RandomSpellPlayer.play(actor, ability, new AiCostDecision(actor, ability, false), null)) {
             refusal = ForkRefusal.FORCED_COST_NOT_PAID;
             return false;
         }
@@ -376,44 +362,6 @@ public final class ForcedPlayRun {
         }
         made = true;
         return noted(ability, play.answer());
-    }
-
-    /**
-     * The play's answer to a "you may pay" {@code ability} asks of
-     * {@code player}, or null when the question is not the play's. A no
-     * declines. A yes pays {@code cost} whenever it can be paid, whatever the
-     * AI would have chosen: the AI's own payment, the named cards as what it
-     * sacrifices, discards or exiles; one that cannot be paid, or whose
-     * payment fails, flags {@link ForkRefusal#FORCED_COST_NOT_PAID}. Not
-     * reported through the confirm hook, which the AI's own payment does not
-     * report either.
-     *
-     * @return whether the cost was paid
-     */
-    public Boolean pay(Player player, Cost cost, SpellAbility ability) {
-        if (!asks(player, ability)) {
-            return null;
-        }
-        made = true;
-        if (!play.answer()) {
-            return false;
-        }
-        boolean paid = paidAsNamed(cost, ability);
-        if (!paid) {
-            refusal = ForkRefusal.FORCED_COST_NOT_PAID;
-        }
-        return paid;
-    }
-
-    /** Pay {@code cost} with the named cards when it can be paid; whether it was. */
-    private boolean paidAsNamed(Cost cost, SpellAbility ability) {
-        try {
-            return ComputerUtilCost.canPayCost(cost, ability, actor, true)
-                    && new CostPayment(cost, ability).payComputerCosts(
-                            new RoleCostDecision(actor, ability, costs, true));
-        } catch (RuntimeException e) {
-            return false;
-        }
     }
 
     /**
@@ -526,73 +474,5 @@ public final class ForcedPlayRun {
      */
     static boolean noted(SpellAbility ability, boolean answer) {
         return (Boolean) PatchHooks.NOTE_CONFIRM.call(ability, answer);
-    }
-
-    // ── the cost ────────────────────────────────────────────────────────
-
-    /**
-     * The AI's cost decision with what a sacrifice, discard or exile takes
-     * named by role: the named cards the part may legally take, as many as
-     * it takes; a part of the source itself, or with no card named, is the
-     * AI's. A part the named cards cannot pay is not paid, so the play is
-     * refused rather than made with another card. Mana stays the AI's.
-     */
-    static final class RoleCostDecision extends AiCostDecision {
-
-        private final List<Card> named;
-
-        RoleCostDecision(Player ai, SpellAbility sa, List<Card> named) {
-            this(ai, sa, named, false);
-        }
-
-        /** @param effect whether the cost is an effect's ("unless ... pays"), not a play's */
-        RoleCostDecision(Player ai, SpellAbility sa, List<Card> named, boolean effect) {
-            super(ai, sa, effect);
-            this.named = Objects.requireNonNull(named, "named");
-        }
-
-        @Override
-        public PaymentDecision visit(CostSacrifice cost) {
-            if (named.isEmpty() || cost.payCostFromSource()) {
-                return super.visit(cost);
-            }
-            CardCollection valid = CardLists.getValidCards(player.getCardsIn(ZoneType.Battlefield),
-                    cost.getType().split(";"), player, source, ability);
-            return pick(CardLists.filter(valid, CardPredicates.canBeSacrificedBy(ability, isEffect())),
-                    cost.getAbilityAmount(ability));
-        }
-
-        @Override
-        public PaymentDecision visit(CostDiscard cost) {
-            if (named.isEmpty() || cost.payCostFromSource()) {
-                return super.visit(cost);
-            }
-            CardCollectionView hand = player.getCardsIn(ZoneType.Hand);
-            CardCollection valid = CardLists.getValidCards(hand, cost.getType().split(";"), player, source, ability);
-            return pick(CardLists.filter(valid, c -> c.canBeDiscardedBy(ability, isEffect())),
-                    cost.getAbilityAmount(ability));
-        }
-
-        @Override
-        public PaymentDecision visit(CostExile cost) {
-            if (named.isEmpty() || cost.payCostFromSource()) {
-                return super.visit(cost);
-            }
-            CardCollection valid = CardLists.getValidCards(player.getGame().getCardsIn(cost.getFrom()),
-                    cost.getType().split(";"), player, source, ability);
-            return pick(CardLists.filter(valid, CardPredicates.canExiledBy(ability, isEffect())),
-                    cost.getAbilityAmount(ability));
-        }
-
-        /** {@code count} of the named cards {@code valid} holds, or null when it holds fewer. */
-        private PaymentDecision pick(CardCollection valid, int count) {
-            List<Card> chosen = named.stream()
-                    .map(card -> player.getGame().getCardState(card))
-                    .filter(valid::contains).limit(count).toList();
-            if (count < 0 || chosen.size() < count) {
-                return null;
-            }
-            return PaymentDecision.card(new CardCollection(chosen));
-        }
     }
 }

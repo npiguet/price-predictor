@@ -299,7 +299,7 @@ two.
   |---|---|
   | `pt` | change a creature's power or toughness |
   | `keyword` | add or remove a keyword |
-  | `colour_type` | change a colour or type |
+  | `colour_type` | change a colour |
   | `counters` | add or remove counters |
   | `tap` | tap or untap a permanent |
   | `life` | change a life total |
@@ -339,7 +339,7 @@ two.
   lines of that card's script (under `../forge/forge-gui/res/cardsfolder/`) the edit takes out,
   each compared without surrounding spaces; `add` lists the lines it puts in, in Forge's script
   syntax. The edit is the smallest change that makes the variant's `delta` true of the card: a
-  `PT:` line for `pt`, a `K:` line for `keyword`, `Colors:` or `Types:` for `colour_type`,
+  `PT:` line for `pt`, a `K:` line for `keyword`, `Colors:` for `colour_type`,
   `K:etbCounter:<type>:<n>` for counters the card enters with, and for `replace_card` the base
   card's lines that differ from the replacement's in what the rule reads. An optional `note` says
   what the edit stands for where the script cannot say it alone, for example that the

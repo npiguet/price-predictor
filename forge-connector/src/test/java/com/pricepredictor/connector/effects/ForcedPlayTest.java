@@ -13,15 +13,12 @@ import com.pricepredictor.connector.effects.directed.Role;
 import com.pricepredictor.connector.effects.directed.operations.LifeOperation;
 import com.pricepredictor.connector.effects.directed.operations.RemovePermanentOperation;
 import forge.game.Game;
-import forge.game.ability.AbilityUtils;
 import forge.game.card.Card;
 import forge.game.card.CounterEnumType;
 import forge.game.combat.Combat;
-import forge.game.cost.Cost;
 import forge.game.event.GameEventGameFinished;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
-import forge.game.player.PlayerCollection;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
@@ -64,7 +61,6 @@ class ForcedPlayTest {
     private static final Role<Card> R_BOLT = Role.card("bolt");
     private static final Role<Card> R_OUTLET = Role.card("outlet");
     private static final Role<Card> R_SANCTUARY = Role.card("sanctuary");
-    private static final Role<Card> R_SELECTION = Role.card("selection");
     private static final Role<Card> R_SPELL = Role.card("spell");
     private static final Role<Card> R_BEARS = Role.card("bears");
     private static final Role<Card> R_MADE = Role.card("made");
@@ -72,7 +68,6 @@ class ForcedPlayTest {
     private static final Role<Card> R_WALKER = Role.card("walker");
     private static final Role<Card> R_GIANT = Role.card("giant");
     private static final Role<Card> R_VICTIM = Role.card("victim");
-    private static final Role<Card> R_FOREST = Role.card("forest");
     private static final Role<Card> R_PROWLER = Role.card("prowler");
 
 
@@ -189,7 +184,7 @@ class ForcedPlayTest {
         return ForkRefusals.counts().getOrDefault("directed " + reason, 0L);
     }
 
-    // ── targets, costs, answers and attacks by role ─────────────────────
+    // ── targets, answers and attacks by role ────────────────────────────
 
     /** A cast's target named by role: the Bolt the AI would aim at the Bears goes at the Giant. */
     @Test
@@ -207,22 +202,6 @@ class ForcedPlayTest {
         List<Map<String, Object>> damage = eventsOn(fork, "damage_dealt", ref(giant));
         assertEquals(1, damage.size(), "the Bolt hits the Giant in the fork: " + damage);
         assertEquals(3, ((Number) damage.get(0).get("amount")).intValue());
-    }
-
-    /** A cost's sacrifice named by role: the Giant, not the Bears the AI would pick. */
-    @Test
-    void aCostSacrificesTheNamedCard() throws Throwable {
-        Game game = bare(PhaseType.MAIN1);
-        Card bombardment = permanent(game, you(game), "Goblin Bombardment");
-        Card bears = permanent(game, you(game), "Grizzly Bears");
-        Card giant = permanent(game, you(game), "Hill Giant");
-
-        List<String> fork = forkOf(played(game, PhaseType.MAIN1, rule(PhaseType.MAIN1,
-                live -> Binding.empty().with("outlet", bombardment).with("giant", giant),
-                ForcedPlay.activate(R_PLAYER, R_OUTLET, ForcedPlay.Line.api("DealDamage")).paying(R_GIANT))));
-
-        assertEquals(List.of(ref(giant)), costCards(fork, "sacrificed"), "the Giant is sacrificed in the fork");
-        assertFalse(costCards(fork, "sacrificed").contains(ref(bears)), "the Bears stay");
     }
 
     /** Elfhame Sanctuary's "you may search", answered: yes skips the draw step, no does not. */
@@ -259,54 +238,6 @@ class ForcedPlayTest {
             }
         }
         assertTrue(dealt, "the Bears attack in the fork and deal combat damage");
-    }
-
-    /**
-     * Preferred Selection's "you may sacrifice it and pay {2}{G}{G}", which
-     * Forge's AI never pays, answered yes: the fork pays it, the Selection is
-     * sacrificed.
-     */
-    @Test
-    void aForcedYesToAYouMayPayIsPaidWhateverTheAiWouldChoose() throws Throwable {
-        Game game = bare(PhaseType.UPKEEP);
-        Card selection = permanent(game, you(game), "Preferred Selection");
-        for (int i = 0; i < 4; i++) {
-            permanent(game, you(game), "Forest");
-        }
-
-        List<String> fork = forkOf(played(game, PhaseType.UPKEEP, rule(PhaseType.UPKEEP,
-                live -> Binding.empty().with("selection", selection),
-                ForcedPlay.answer(R_PLAYER, R_SELECTION, true))));
-
-        assertTrue(eventsOn(fork, "zone_change", ref(selection)).stream()
-                        .anyMatch(move -> "graveyard".equals(move.get("to_zone"))),
-                "the Selection is sacrificed in the fork: " + fork.size() + " fork records");
-    }
-
-    /** A random seat pays a forced yes to a "you may pay" too, where its AI would not. */
-    @Test
-    void aRandomSeatPaysAForcedYes() {
-        Game game = bare(PhaseType.UPKEEP);
-        Player you = you(game);
-        Card selection = permanent(game, you, "Preferred Selection");
-        for (int i = 0; i < 4; i++) {
-            permanent(game, you, "Forest");
-        }
-        RandomSeatController seat = new RandomSeatController(game, you, you.getLobbyPlayer(), 1.0, Random::new);
-        you.dangerouslySetController(seat);
-        seat.attach(game, null, null, new Random(3L));
-        ForcedPlayRun run = ForcedPlayRun.start(new Application(ForkOperation.LIFE,
-                        fork -> new LifeOperation(you, 20)).forcing(ForcedPlay.answer(R_PLAYER, R_SELECTION, true)),
-                Binding.empty().with("player", you).with("selection", selection), game);
-        run.attach(new Random(5L));
-        SpellAbility look = selection.getTriggers().get(0).ensureAbility();
-        look.setActivatingPlayer(you);
-        SpellAbility bottom = look.getSubAbility();
-        Cost cost = AbilityUtils.calculateUnlessCost(bottom, bottom.getParam("UnlessCost"), true);
-
-        assertTrue(seat.payCostToPreventEffect(cost, bottom, false, new PlayerCollection(you)), "paid");
-        assertTrue(run.made());
-        assertTrue(game.getCardState(selection).isInZone(ZoneType.Graveyard), "the Selection was sacrificed");
     }
 
     /**
@@ -408,8 +339,8 @@ class ForcedPlayTest {
 
     /**
      * A role the edit makes ({@link Application#making}) is on the copy only:
-     * the live dry run skips what names it, a targeting clause, a cost or the
-     * whole line when it is the source, and still checks the rest of the
+     * the live dry run skips what names it, a targeting clause or the whole
+     * line when it is the source, and still checks the rest of the
      * play: the source, its line and the other named targets.
      */
     @Test
@@ -425,7 +356,7 @@ class ForcedPlayTest {
                 .making("made", (fork, copy) -> fork.card("bears"));
 
         assertEquals(Optional.of(ForkRefusal.FORCED_NO_LINE), ForcedPlayRun.dryRun(
-                        made.apply(ForcedPlay.cast(R_PLAYER, R_SPELL).targeting(R_OPPONENT).paying(R_MADE)), live, game),
+                        made.apply(ForcedPlay.cast(R_PLAYER, R_SPELL).targeting(R_OPPONENT)), live, game),
                 "Disfigure cannot take a player, whatever card the edit makes");
         assertEquals(Optional.of(ForkRefusal.FORCED_NO_LINE), ForcedPlayRun.dryRun(
                         made.apply(ForcedPlay.cast(R_PLAYER, R_BEARS).targeting(R_MADE)), live, game),
@@ -509,39 +440,21 @@ class ForcedPlayTest {
 
     /**
      * A refusal flagged in the turn's last main-loop step (the opponent's
-     * forced activation at its last priority of the end step, its named cost
-     * card one the cost cannot take), after which the fork steps no more:
-     * thrown once the turn is over, nothing written.
+     * forced Disfigure in the end step, at a creature whose ward {2} its one
+     * Swamp leaves the AI unable to pay), after which the fork steps no
+     * more: thrown once the turn is over, nothing written.
      */
     @Test
     void aRefusalFlaggedInTheLastStepIsThrownOnceTheTurnIsOver() throws Throwable {
         Game game = bare(PhaseType.END_OF_TURN);
-        Card bombardment = permanent(game, opponent(game), "Goblin Bombardment");
-        permanent(game, opponent(game), "Grizzly Bears");
-        Card forest = permanent(game, opponent(game), "Forest");
+        permanent(game, opponent(game), "Swamp");
+        Card disfigure = TestBoard.inHand(game, opponent(game), "Disfigure");
+        Card prowler = permanent(game, you(game), "Cackling Prowler");
         long before = refusals(ForkRefusal.FORCED_COST_NOT_PAID);
 
         List<String> records = played(game, PhaseType.END_OF_TURN, rule(PhaseType.END_OF_TURN,
-                live -> Binding.empty().with("outlet", bombardment).with("forest", forest),
-                ForcedPlay.activate(R_OPPONENT, R_OUTLET, ForcedPlay.Line.api("DealDamage")).paying(R_FOREST)));
-
-        assertEquals(List.of(), forkOf(records));
-        assertEquals(before + 1, refusals(ForkRefusal.FORCED_COST_NOT_PAID));
-    }
-
-    /**
-     * A forced yes to a "you may pay" whose cost cannot be paid (Preferred
-     * Selection with no land): refused, nothing written.
-     */
-    @Test
-    void aForcedYesThatCannotBePaidIsRefused() throws Throwable {
-        Game game = bare(PhaseType.UPKEEP);
-        Card selection = permanent(game, you(game), "Preferred Selection");
-        long before = refusals(ForkRefusal.FORCED_COST_NOT_PAID);
-
-        List<String> records = played(game, PhaseType.UPKEEP, rule(PhaseType.UPKEEP,
-                live -> Binding.empty().with("selection", selection),
-                ForcedPlay.answer(R_PLAYER, R_SELECTION, true)));
+                live -> Binding.empty().with("spell", disfigure).with("prowler", prowler),
+                ForcedPlay.cast(R_OPPONENT, R_SPELL).targeting(R_PROWLER)));
 
         assertEquals(List.of(), forkOf(records));
         assertEquals(before + 1, refusals(ForkRefusal.FORCED_COST_NOT_PAID));
@@ -575,29 +488,13 @@ class ForcedPlayTest {
         assertTrue(game.getStack().isEmpty());
     }
 
-    /** A named cost card the cost cannot take (a land for a creature's sacrifice): the cost is not paid. */
-    @Test
-    void aNamedCostCardTheCostCannotTakeLeavesTheCostUnpaid() throws Throwable {
-        Game game = bare(PhaseType.MAIN1);
-        Card bombardment = permanent(game, you(game), "Goblin Bombardment");
-        permanent(game, you(game), "Grizzly Bears");
-        Card forest = permanent(game, you(game), "Forest");
-        long before = refusals(ForkRefusal.FORCED_COST_NOT_PAID);
-
-        List<String> records = played(game, PhaseType.MAIN1, rule(PhaseType.MAIN1,
-                live -> Binding.empty().with("outlet", bombardment).with("forest", forest),
-                ForcedPlay.activate(R_PLAYER, R_OUTLET, ForcedPlay.Line.api("DealDamage")).paying(R_FOREST)));
-
-        assertEquals(List.of(), forkOf(records));
-        assertEquals(before + 1, refusals(ForkRefusal.FORCED_COST_NOT_PAID));
-    }
-
     // ── the random seat ─────────────────────────────────────────────────
 
     /**
      * A random seat that draws every decision consults the forced play first:
-     * at its priority it plays the forced line, cost paid, and is a random
-     * seat again once the play is made.
+     * at its priority it plays the forced line, cost paid by the AI's own
+     * choice (the Bears, its one creature, which the line does not target),
+     * and is a random seat again once the play is made.
      */
     @Test
     void aRandomSeatPlaysTheForcedLineFirst() {
@@ -610,11 +507,12 @@ class ForcedPlayTest {
         RandomSeatController seat = new RandomSeatController(game, you, you.getLobbyPlayer(), 1.0, Random::new);
         you.dangerouslySetController(seat);
         seat.attach(game, null, null, new Random(3L));
-        Binding binding = Binding.empty().with("player", you).with("outlet", bombardment).with("bears", bears);
+        Binding binding = Binding.empty().with("player", you).with("outlet", bombardment)
+                .with("opponent", opponent(game));
         ForcedPlayRun run = ForcedPlayRun.start(new Application(ForkOperation.LIFE,
                         fork -> new LifeOperation(you, 20))
                         .forcing(ForcedPlay.activate(R_PLAYER, R_OUTLET, ForcedPlay.Line.api("DealDamage"))
-                                .paying(R_BEARS)),
+                                .targeting(R_OPPONENT)),
                 binding, game);
         run.attach(new Random(5L));
         assertSame(seat, you.getController(), "a random seat takes the play itself");
