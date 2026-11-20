@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Random;
 
 /**
@@ -70,25 +71,28 @@ public final class RandomChoices {
      * clause is read here, and a draw never lands on a mode set the targets
      * draw would then fail on.
      *
-     * @return the modes, possibly empty where the charm's minimum is zero;
-     *         null when the ability is not a charm or has no legal mode set
+     * @return the modes, present and possibly empty where the charm's minimum
+     *         is zero; empty when the ability is not a charm or has no legal
+     *         mode set (no caller tells the two apart: both guard on the charm
+     *         first, so only the no-legal-set case reaches them)
      */
-    public List<AbilitySub> drawModes(SpellAbility charm) {
+    public Optional<List<AbilitySub>> drawModes(SpellAbility charm) {
         if (charm.getApi() != ApiType.Charm) {
-            return null;
+            return Optional.empty();
         }
         List<AbilitySub> printed = CharmEffect.makePossibleOptions(charm);
         if (printed == null || printed.isEmpty()) {
-            return null;
+            return Optional.empty();
         }
         List<AbilitySub> options = reachableModes(printed);
         if (charm.isEntwine()) {
-            return options.size() == printed.size() ? new ArrayList<>(options) : null;
+            return options.size() == printed.size()
+                    ? Optional.of(new ArrayList<>(options)) : Optional.empty();
         }
         Card host = charm.getHostCard();
         boolean repeat = charm.hasParam("CanRepeatModes");
         if (charm.hasParam("Pawprint")) {
-            return drawPawprintModes(charm, options, repeat);
+            return Optional.of(drawPawprintModes(charm, options, repeat));
         }
         int max = AbilityUtils.calculateAmount(
                 host, charm.getParamOrDefault("CharmNum", "1"), charm);
@@ -97,25 +101,25 @@ public final class RandomChoices {
             // A mode set of the printed size needs that many distinct legal
             // modes: fewer legal than the charm's minimum is no legal set.
             if (Math.min(min, printed.size()) > options.size()) {
-                return null;
+                return Optional.empty();
             }
             max = Math.min(max, options.size());
         } else if (options.isEmpty() && min > 0) {
-            return null;
+            return Optional.empty();
         }
         min = Math.max(0, Math.min(min, max));
         if (max < 0) {
-            return null;
+            return Optional.empty();
         }
         int count = between(min, max);
         if (!repeat) {
-            return drawDistinct(options, count, random);
+            return Optional.of(drawDistinct(options, count, random));
         }
         List<AbilitySub> chosen = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
             chosen.add(options.get(random.nextInt(options.size())));
         }
-        return chosen;
+        return Optional.of(chosen);
     }
 
     /**
@@ -180,15 +184,15 @@ public final class RandomChoices {
         if (ability.getApi() != ApiType.Charm || ability.getChosenList() != null) {
             return true;
         }
-        List<AbilitySub> chosen = drawModes(ability);
-        if (chosen == null) {
+        Optional<List<AbilitySub>> drawn = drawModes(ability);
+        if (drawn.isEmpty()) {
             return false;
         }
         // Always set, even where chainAbilities alone would do: the chosen
         // list is how the per-mode collector maps a resolving clone back to
         // its Choices$ position when two modes share a fingerprint.
-        ability.setChosenList(chosen);
-        CharmEffect.chainAbilities(ability, chosen);
+        ability.setChosenList(drawn.get());
+        CharmEffect.chainAbilities(ability, drawn.get());
         return true;
     }
 

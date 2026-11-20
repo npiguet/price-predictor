@@ -64,7 +64,7 @@ class RandomChoicesTest {
 
         Set<Integer> seen = new HashSet<>();
         for (int seed = 0; seed < SEEDS; seed++) {
-            List<AbilitySub> modes = drawsFor(seed).drawModes(charm);
+            List<AbilitySub> modes = drawsFor(seed).drawModes(charm).orElseThrow();
             assertEquals(1, modes.size(), "CharmNum 1: " + modes);
             seen.add(choices.indexOf(modes.get(0)));
         }
@@ -85,7 +85,7 @@ class RandomChoicesTest {
 
         Set<Integer> seen = new HashSet<>();
         for (int seed = 0; seed < SEEDS; seed++) {
-            for (AbilitySub mode : drawsFor(seed).drawModes(charm)) {
+            for (AbilitySub mode : drawsFor(seed).drawModes(charm).orElseThrow()) {
                 seen.add(choices.indexOf(mode));
             }
         }
@@ -94,7 +94,7 @@ class RandomChoicesTest {
         TestBoard.inPlay(game, game.getPlayers().get(1), "Hill Giant");
         seen.clear();
         for (int seed = 0; seed < SEEDS; seed++) {
-            for (AbilitySub mode : drawsFor(seed).drawModes(charm)) {
+            for (AbilitySub mode : drawsFor(seed).drawModes(charm).orElseThrow()) {
                 seen.add(choices.indexOf(mode));
             }
         }
@@ -138,11 +138,11 @@ class RandomChoicesTest {
         SpellAbility charm = AbilityFactory.getAbility("SP$ Charm | Choices$ A,B", host);
         charm.setActivatingPlayer(caster);
 
-        assertNull(drawsFor(1).drawModes(charm));
+        assertTrue(drawsFor(1).drawModes(charm).isEmpty());
         assertFalse(new InterventionFork(null, null, null, 0L).hasChoices(charm, caster));
 
         TestBoard.inPlay(game, caster, "Grizzly Bears");
-        assertNotNull(drawsFor(1).drawModes(charm));
+        assertTrue(drawsFor(1).drawModes(charm).isPresent());
         assertTrue(new InterventionFork(null, null, null, 0L).hasChoices(charm, caster));
     }
 
@@ -168,7 +168,7 @@ class RandomChoicesTest {
 
         Set<Integer> seen = new HashSet<>();
         for (int seed = 0; seed < SEEDS; seed++) {
-            for (AbilitySub mode : drawsFor(seed).drawModes(charm)) {
+            for (AbilitySub mode : drawsFor(seed).drawModes(charm).orElseThrow()) {
                 seen.add(choices.indexOf(mode));
             }
         }
@@ -203,7 +203,7 @@ class RandomChoicesTest {
 
         boolean drawn = false;
         for (int seed = 0; seed < SEEDS && !drawn; seed++) {
-            drawn = drawsFor(seed).drawModes(charm).contains(mode);
+            drawn = drawsFor(seed).drawModes(charm).orElseThrow().contains(mode);
         }
         assertTrue(drawn, "the mode is a legal choice");
         assertSame(leftover, mode.getTargets());
@@ -226,7 +226,7 @@ class RandomChoicesTest {
 
         boolean drawn = false;
         for (int seed = 0; seed < SEEDS && !drawn; seed++) {
-            drawn = drawsFor(seed).drawModes(charm).contains(counter);
+            drawn = drawsFor(seed).drawModes(charm).orElseThrow().contains(counter);
         }
         assertTrue(drawn, "the counter mode is a legal choice");
         assertTrue(drawsFor(0).chooseTargetsFor(counter));
@@ -249,7 +249,7 @@ class RandomChoicesTest {
         Set<Integer> counts = new TreeSet<>();
         boolean repeated = false;
         for (int seed = 0; seed < SEEDS; seed++) {
-            List<AbilitySub> modes = drawsFor(seed).drawModes(charm);
+            List<AbilitySub> modes = drawsFor(seed).drawModes(charm).orElseThrow();
             counts.add(modes.size());
             repeated |= new HashSet<>(modes).size() < modes.size();
         }
@@ -260,7 +260,7 @@ class RandomChoicesTest {
                 "SP$ Charm | Choices$ A,B | CharmNum$ 2", host);
         noRepeat.setActivatingPlayer(caster);
         for (int seed = 0; seed < SEEDS; seed++) {
-            List<AbilitySub> modes = drawsFor(seed).drawModes(noRepeat);
+            List<AbilitySub> modes = drawsFor(seed).drawModes(noRepeat).orElseThrow();
             assertEquals(2, modes.size());
             assertEquals(2, new HashSet<>(modes).size(), "no repeat without CanRepeatModes");
         }
@@ -277,7 +277,7 @@ class RandomChoicesTest {
 
         Set<Integer> spent = new TreeSet<>();
         for (int seed = 0; seed < SEEDS; seed++) {
-            List<AbilitySub> modes = drawsFor(seed).drawModes(charm);
+            List<AbilitySub> modes = drawsFor(seed).drawModes(charm).orElseThrow();
             int total = 0;
             for (AbilitySub mode : modes) {
                 total += Integer.parseInt(mode.getParam("Pawprint"));
@@ -309,7 +309,7 @@ class RandomChoicesTest {
         SpellAbility gain = AbilityFactory.getAbility(
                 "AB$ GainLife | Cost$ 1 | Defined$ You | LifeAmount$ 1",
                 TestCards.build("Fountain of Youth"));
-        assertNull(new RandomChoices(new Random(1)).drawModes(gain));
+        assertTrue(new RandomChoices(new Random(1)).drawModes(gain).isEmpty());
         assertTrue(new RandomChoices(new Random(1)).chooseModes(gain));
     }
 

@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.function.BiPredicate;
 import java.util.function.BooleanSupplier;
@@ -447,11 +448,11 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
         if (sa.getApi() == ApiType.Charm) {
             sa.setChosenList(null);
             sa.setSubAbility(null);
-            List<AbilitySub> modes = choices.drawModes(sa);
-            if (modes == null) {
+            Optional<List<AbilitySub>> modes = choices.drawModes(sa);
+            if (modes.isEmpty()) {
                 return false;
             }
-            sa.setChosenList(modes);
+            sa.setChosenList(modes.get());
         }
         // X before the targets (601.2b, 601.2c): a divided amount of X, and
         // a bound across the targets that reads X (MaxTotalTargetCMC), are
