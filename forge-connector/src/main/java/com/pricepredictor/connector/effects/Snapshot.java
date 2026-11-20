@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.json.Json;
 import forge.game.card.Card;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -20,7 +21,8 @@ import java.util.List;
  *
  * @param global       the {@code global} block
  * @param players      the {@code players} array
- * @param entities     the {@code entities} array, every inclusion tier
+ * @param entities     the {@code entities} array's elements, each rendered, every
+ *                     inclusion tier; joined into the array once, at {@link #render}
  * @param links        the {@code links} array ({@link SnapshotLinks})
  * @param refs         the {@code refs} block for the acting line
  * @param pendingEvent the {@code pending_event} a trait is about to handle, or
@@ -31,11 +33,11 @@ import java.util.List;
  *                     the snapshot was not built from a game
  */
 record Snapshot(
-        String global, String players, String entities, String links, String refs,
+        String global, String players, List<String> entities, String links, String refs,
         String pendingEvent, LibraryCapture libraries) {
 
     /** A snapshot assembled from rendered blocks alone, with no library capture. */
-    Snapshot(String global, String players, String entities, String links, String refs,
+    Snapshot(String global, String players, List<String> entities, String links, String refs,
              String pendingEvent) {
         this(global, players, entities, links, refs, pendingEvent, null);
     }
@@ -80,13 +82,16 @@ record Snapshot(
         if (named.isEmpty()) {
             return this;
         }
-        String rendered = libraries.render(named);
-        String joined = entities.equals("[]")
-                ? "[" + rendered + "]"
-                : entities.substring(0, entities.length() - 1) + "," + rendered + "]";
+        List<String> joined = new ArrayList<>(entities);
+        joined.addAll(libraries.render(named));
         List<Card> cards = named.stream().map(LibraryCapture.Slot::card).toList();
         return new Snapshot(global, players, joined, SnapshotLinks.withLibraryCards(links, cards),
                 refs, pendingEvent, libraries);
+    }
+
+    /** The {@code entities} array as written. */
+    String entitiesJson() {
+        return "[" + String.join(",", entities) + "]";
     }
 
     /** The state as a record writes it, its blocks in the order the schema fixes. */
@@ -94,7 +99,7 @@ record Snapshot(
         return Json.object()
                 .raw("global", global)
                 .raw("players", players)
-                .raw("entities", entities)
+                .raw("entities", entitiesJson())
                 .raw("links", links)
                 .raw("refs", refs)
                 .raw("pending_event", pendingEvent)

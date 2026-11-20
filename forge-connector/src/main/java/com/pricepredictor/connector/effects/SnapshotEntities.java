@@ -58,9 +58,9 @@ final class SnapshotEntities {
         return present;
     }
 
-    /** The entities as a JSON array. */
-    String toJson() {
-        return "[" + String.join(",", rendered) + "]";
+    /** The entities rendered so far, each as one JSON element, in order. */
+    List<String> elements() {
+        return List.copyOf(rendered);
     }
 
     /** A tier's card, already rendered as {@code json}. */

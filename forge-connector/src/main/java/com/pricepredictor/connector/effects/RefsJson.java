@@ -65,39 +65,6 @@ final class RefsJson {
     }
 
     /**
-     * A refs block already rendered at the resolution's end, with its
-     * {@code random} filled from the resolution's events; for a caller that
-     * holds the rendered block rather than the ability.
-     */
-    static String withRandom(String refs, List<EffectEvent> resolved) {
-        String unread = "\"random\":null}";
-        if (refs == null || !refs.endsWith(unread)) {
-            return refs;
-        }
-        return refs.substring(0, refs.length() - unread.length())
-                + "\"random\":" + randomJson(resolved) + "}";
-    }
-
-    /**
-     * A refs block already rendered, with its {@code targets} and {@code
-     * targets_at_cast} replaced by one effect half's; for a caller that holds
-     * the rendered block rather than the ability (a forced resolution's).
-     */
-    static String withTargets(
-            String refs, List<String> targets, List<String> targetsAtCast, List<String> onStack) {
-        String opening = "{\"targets\":";
-        int rest = refs == null ? -1 : refs.indexOf(",\"source\":");
-        if (rest < 0 || !refs.startsWith(opening)) {
-            return refs;
-        }
-        return "{\"targets\":" + Json.stringArray(targets)
-                + ",\"targets_at_cast\":"
-                + (targetsAtCast == null ? "null" : Json.stringArray(targetsAtCast))
-                + ",\"targets_on_stack\":" + Json.stringArray(onStack)
-                + refs.substring(rest);
-    }
-
-    /**
      * The random results a resolution came to, taken as given like a
      * decision ({@code in.random_results}): every die's final value in the
      * order rolled, and the coin flips won and lost (heads counts as won on an

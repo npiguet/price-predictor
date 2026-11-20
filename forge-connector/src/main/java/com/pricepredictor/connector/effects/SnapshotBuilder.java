@@ -246,7 +246,7 @@ public final class SnapshotBuilder {
         EffectEvent pending = request.pending();
         String players = Json.array(game.getPlayers(), player -> PlayerJson.render(game, player, board));
         return new Snapshot(
-                globalToJson(tiers, board), players, entities.toJson(),
+                globalToJson(tiers, board), players, entities.elements(),
                 SnapshotLinks.render(game, request, entities, floating),
                 RefsJson.render(acting.chosen() ? acting.ability() : null, request.source()),
                 pending == null ? "null" : pending.toJson(),
@@ -312,7 +312,7 @@ public final class SnapshotBuilder {
      * stack and its costs were paid.
      */
     Snapshot withTargetsChosen(Snapshot board, SpellAbility acting) {
-        List<String> entities = new ArrayList<>(JsonParts.elements(board.entities()));
+        List<String> entities = new ArrayList<>(board.entities());
         Set<String> present = new HashSet<>();
         entities.forEach(entity -> present.add(JsonParts.fields(entity).get("id")));
         List<Card> added = new ArrayList<>();
@@ -322,7 +322,7 @@ public final class SnapshotBuilder {
                 entities.add(renderTier(card, SnapshotLinks.Acting.NONE, StaticSuppression.NONE));
             }
         }
-        return new Snapshot(board.global(), board.players(), "[" + String.join(",", entities) + "]",
+        return new Snapshot(board.global(), board.players(), List.copyOf(entities),
                 SnapshotLinks.withTargetsNow(board.links(), game, added, acting),
                 board.refs(), board.pendingEvent(), board.libraries());
     }

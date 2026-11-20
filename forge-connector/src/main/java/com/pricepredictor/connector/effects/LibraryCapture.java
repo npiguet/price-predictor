@@ -74,15 +74,15 @@ record LibraryCapture(
         return named;
     }
 
-    /** The entities of {@code slots}, comma-joined, each where it sat. */
-    String render(List<Slot> slots) {
+    /** The entities of {@code slots}, each where it sat. */
+    List<String> render(List<Slot> slots) {
         List<String> rendered = new ArrayList<>();
         for (Slot slot : slots) {
             rendered.add(EntityJson.render(game, asInLibrary(slot.card()), board,
                     new EntityJson.Beyond(null, "library", slot.position(),
                             EntityRole.LIBRARY_CARD)));
         }
-        return String.join(",", rendered);
+        return rendered;
     }
 
     /**

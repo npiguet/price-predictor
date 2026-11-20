@@ -59,7 +59,7 @@ final class ForkFidelity {
         List<String> out = new ArrayList<>();
         compareFields("global", JsonParts.fields(real.global()), JsonParts.fields(copy.global()), out);
         out.addAll(differencesById("player", real.players(), copy.players()));
-        out.addAll(differencesById("entity", real.entities(), copy.entities()));
+        out.addAll(differencesById("entity", real.entitiesJson(), copy.entitiesJson()));
         compareMultiset("link", real.links(), copy.links(), out);
         return out;
     }
