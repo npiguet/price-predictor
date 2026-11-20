@@ -104,7 +104,7 @@ class EffectRecordTest {
      */
     private List<String> aimedAtWritten(List<String> runAimedAt, String forkRule)
             throws Exception {
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        RecordShardWriter writer = new RecordShardWriter(tempDir, new ShardId("run", 0, "l1"));
         try {
             CollectorContext context = new CollectorContext(
                     writer, "run.0-l1.0", AttributionMode.DEGRADED, null, runAimedAt);

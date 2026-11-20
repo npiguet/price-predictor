@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.TestCaps;
 import com.pricepredictor.connector.effects.GameRecording;
 import com.pricepredictor.connector.effects.GameRecordingRequest;
 import com.pricepredictor.connector.effects.RecordShardWriter;
+import com.pricepredictor.connector.effects.ShardId;
 import com.pricepredictor.connector.effects.Refs;
 import com.pricepredictor.connector.effects.TestBoard;
 import forge.ai.LobbyPlayerAi;
@@ -513,7 +514,7 @@ class RandomSeatControllerTest {
                         + " | Duration$ Permanent | SpellDescription$ Base 2/2.", bears));
         ResolutionsOf resolutions = new ResolutionsOf(game, bears);
         game.subscribeToEvents(resolutions);
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        RecordShardWriter writer = new RecordShardWriter(tempDir, new ShardId("run", 0, "l1"));
         RandomSeatController seat = seatOf(game);
         try (GameRecording recording = new GameRecording(
                 GameRecordingRequest.of(game, writer, "run.0-l1.0", TestCaps.caps().interventions(0).probes(0).build())
@@ -555,7 +556,7 @@ class RandomSeatControllerTest {
                 TestBoard.inPlay(game, a, "Runeclaw Bear"),
                 TestBoard.inPlay(game, a, "Hill Giant"),
                 TestBoard.inPlay(game, a, "Grizzly Bears"));
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        RecordShardWriter writer = new RecordShardWriter(tempDir, new ShardId("run", 0, "l1"));
         Path path = writer.path();
         RandomSeatController seat = seatOf(game);
         int draws = 400;
@@ -609,7 +610,7 @@ class RandomSeatControllerTest {
         List<Card> blockers = List.of(
                 TestBoard.inPlay(game, a, "Grizzly Bears"),
                 TestBoard.inPlay(game, a, "Runeclaw Bear"));
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        RecordShardWriter writer = new RecordShardWriter(tempDir, new ShardId("run", 0, "l1"));
         Path path = writer.path();
         RandomSeatController seat = seatOf(game);
         boolean blockedOnce = false;

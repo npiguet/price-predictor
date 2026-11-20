@@ -157,7 +157,7 @@ class RewriteTallyTest {
     private Capped capped(int cap, ShardRun.Body body) throws Throwable {
         long before = RewriteChannel.JVM_REWRITES.records();
         RecordShardWriter writer =
-                new RecordShardWriter(tempDir, "run", 0, "l1", cap);
+                new RecordShardWriter(tempDir, new ShardId("run", 0, "l1"), cap);
         var game = TestCards.game();
         BusBracketCollector bracket = TestCollectors.bracket(game, writer, ShardRun.GAME_ID);
         try (Channels collectors = Channels.of(game, new Channels.Setup(

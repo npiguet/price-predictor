@@ -8,5 +8,5 @@ package com.pricepredictor.connector.effects;
  * @param json  the rendered record
  * @param facts what the cap reads of it
  */
-record ShardLine(String json, RecordFacts facts) {
+public record ShardLine(String json, RecordFacts facts) {
 }

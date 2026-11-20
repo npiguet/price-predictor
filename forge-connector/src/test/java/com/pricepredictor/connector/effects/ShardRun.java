@@ -40,7 +40,7 @@ final class ShardRun {
 
     /** A writer for a test's shard, under the run, worker and lifetime {@link #GAME_ID} names. */
     static RecordShardWriter writer(Path dir) {
-        return new RecordShardWriter(dir, RUN, 0, LIFETIME);
+        return new RecordShardWriter(dir, new ShardId(RUN, 0, LIFETIME));
     }
 
     /**

@@ -2,6 +2,7 @@ package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.RecordShardWriter;
+import com.pricepredictor.connector.effects.ShardId;
 import com.pricepredictor.connector.effects.TestCaps;
 import forge.deck.Deck;
 import forge.game.Match;
@@ -54,7 +55,7 @@ class GameOutcomeRecordingTest {
 
     @Test
     void aSeatPayingLifeToZeroStillWritesTheOutcomeOnceAndTheMarkerLast() throws IOException {
-        RecordShardWriter writer = new RecordShardWriter(dir, "run", 0, "l1");
+        RecordShardWriter writer = new RecordShardWriter(dir, new ShardId("run", 0, "l1"));
         CollectionCaps randomSeat = TestCaps.caps().interventions(0).probes(0)
                 .randomSeat(1.0, 1.0).build();
         GamePlayer player = new GamePlayer(new GamePlayer.Config(

@@ -108,19 +108,18 @@ public final class RecordShardWriter implements AutoCloseable {
     /** Each game's records written and withheld, until its recording ends ({@link #endGame}). */
     private final Map<String, GameRecords> games = new HashMap<>();
 
-    public RecordShardWriter(Path directory, String runId, int worker, String lifetime) {
-        this(directory, runId, worker, lifetime, CollectionCaps.DEFAULT_MAX_RECORDS_PER_GAME);
+    public RecordShardWriter(Path directory, ShardId id) {
+        this(directory, id, CollectionCaps.DEFAULT_MAX_RECORDS_PER_GAME);
     }
 
     /**
      * @param maxRecordsPerGame the records one game may write, its forks'
      *                          included; the rest are withheld and counted
      */
-    public RecordShardWriter(
-            Path directory, String runId, int worker, String lifetime, int maxRecordsPerGame) {
+    public RecordShardWriter(Path directory, ShardId id, int maxRecordsPerGame) {
         this.maxRecordsPerGame = maxRecordsPerGame;
-        this.runId = runId;
-        this.shard = worker + "-" + lifetime;
+        this.runId = id.runId();
+        this.shard = id.token();
         this.path = directory.resolve(runId + "." + shard + SUFFIX);
         this.appender = new ShardAppender(path);
         try {
@@ -205,17 +204,18 @@ public final class RecordShardWriter implements AutoCloseable {
      * withholds it as any other record, rather than write it while the live
      * record it mirrors is withheld.
      *
-     * @param facts what the record's maker held of it: its game, turn,
+     * @param line the rendered record and what its maker held of it: its game, turn,
      *              acting script and whether it holds the game's outcome
      * @return whether the line was written, false for one the cap withheld
      */
-    public synchronized boolean write(String recordJson, RecordFacts facts) {
+    public synchronized boolean write(ShardLine line) {
+        RecordFacts facts = line.facts();
         requireWritable();
         if (facts.gameId() != null && !games.computeIfAbsent(facts.gameId(), id -> new GameRecords())
                 .admit(facts, maxRecordsPerGame)) {
             return false;
         }
-        block.append(recordJson).append('\n');
+        block.append(line.json()).append('\n');
         if (++blockRecords >= BLOCK_RECORDS) {
             flushBlock();
         }
@@ -238,9 +238,9 @@ public final class RecordShardWriter implements AutoCloseable {
      * game-end marker), each kept by a per-key bound of its own, are written
      * last and so would be the first a cap withheld (V3 #5).
      */
-    public synchronized void writeUncapped(String recordJson) {
+    public synchronized void writeUncapped(ShardLine line) {
         requireWritable();
-        block.append(recordJson).append('\n');
+        block.append(line.json()).append('\n');
         if (++blockRecords >= BLOCK_RECORDS) {
             flushBlock();
         }
@@ -317,50 +317,6 @@ public final class RecordShardWriter implements AutoCloseable {
             if (records != null && records.withheld > 0) {
                 System.err.println(records.report(gameId, maxRecordsPerGame));
             }
-        }
-    }
-
-    /** One game's records written, and those withheld past the cap by turn and acting card. */
-    private static final class GameRecords {
-        private int written;
-        private int withheld;
-        private boolean flushFailed;
-        private final Map<String, Integer> byTurnAndCard = new HashMap<>();
-
-        /**
-         * Count a record against the game: written while under {@code cap},
-         * or holding the game's outcome; else withheld.
-         *
-         * @return whether it is written
-         */
-        boolean admit(RecordFacts facts, int cap) {
-            if (written >= cap && !facts.holdsOutcome()) {
-                withhold(facts);
-                return false;
-            }
-            written++;
-            return true;
-        }
-
-        private void withhold(RecordFacts facts) {
-            withheld++;
-            Integer turn = facts.turn();
-            String card = facts.actingScript();
-            byTurnAndCard.merge("turn " + (turn == null ? "?" : turn) + ", acting card "
-                    + (card == null ? "none" : card), 1, Integer::sum);
-        }
-
-        String report(String gameId, int cap) {
-            // The most records; of two as many, the first by turn and card.
-            Map.Entry<String, Integer> most = null;
-            for (Map.Entry<String, Integer> entry : new java.util.TreeMap<>(byTurnAndCard).entrySet()) {
-                if (most == null || entry.getValue() > most.getValue()) {
-                    most = entry;
-                }
-            }
-            return "Effect records: game " + gameId + " reached --max-records-per-game " + cap
-                    + "; withheld " + withheld + " more records, most often (" + most.getValue()
-                    + ") on " + most.getKey();
         }
     }
 

@@ -66,7 +66,7 @@ class ForkKindRecordsTest {
      */
     @Test
     void aCappedGamesProbeBranchHoldingTheOutcomeIsWithheld() throws Throwable {
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1", 0);
+        RecordShardWriter writer = new RecordShardWriter(tempDir, new ShardId("run", 0, "l1"), 0);
         int withheld = lifelinkCombat(writer);
 
         assertEquals(2, withheld, "the real record and its branch are withheld");

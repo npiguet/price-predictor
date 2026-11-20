@@ -116,12 +116,12 @@ class GameOutcomeFilingTest {
                                 .seeded(1L))) {
             recording.open();
             for (int i = 0; i < RecordShardWriter.BLOCK_RECORDS - 1; i++) {
-                writer.write("{\"game_id\":\"" + ShardRun.GAME_ID + "\",\"n\":" + i + "}",
-                        new RecordFacts(ShardRun.GAME_ID, null, null, false));
+                writer.write(new ShardLine("{\"game_id\":\"" + ShardRun.GAME_ID + "\",\"n\":" + i + "}",
+                        new RecordFacts(ShardRun.GAME_ID, null, null, false)));
             }
             org.junit.jupiter.api.Assertions.assertThrows(java.io.UncheckedIOException.class,
-                    () -> writer.write("{\"game_id\":\"" + ShardRun.GAME_ID + "\",\"n\":-1}",
-                            new RecordFacts(ShardRun.GAME_ID, null, null, false)));
+                    () -> writer.write(new ShardLine("{\"game_id\":\"" + ShardRun.GAME_ID + "\",\"n\":-1}",
+                            new RecordFacts(ShardRun.GAME_ID, null, null, false))));
             payLifeToZero(game, game.getPlayers().get(0));
             game.fireEvent(new GameEventGameFinished());
         } finally {

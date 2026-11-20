@@ -75,9 +75,9 @@ final class CollectorContext {
         this.forkFlags = record -> { };
         // Not writer::write, which would dereference a writer a collector
         // that never writes is built without.
-        this.out = line -> writer.write(line.json(), line.facts());
+        this.out = line -> writer.write(line);
         this.endOfGameOut = line -> {
-            writer.writeUncapped(line.json());
+            writer.writeUncapped(line);
             return true;
         };
         this.fork = false;
@@ -142,7 +142,7 @@ final class CollectorContext {
 
     /** Write lines a {@link #forFork fork's} context held, to this context's shard. */
     void writeHeld(List<ShardLine> lines) {
-        lines.forEach(line -> writer.write(line.json(), line.facts()));
+        lines.forEach(line -> writer.write(line));
     }
 
     AttributionMode mode() {

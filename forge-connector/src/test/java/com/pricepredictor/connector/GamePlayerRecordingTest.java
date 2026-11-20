@@ -3,7 +3,9 @@ package com.pricepredictor.connector;
 import com.google.common.eventbus.Subscribe;
 import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.RecordFacts;
+import com.pricepredictor.connector.effects.ShardLine;
 import com.pricepredictor.connector.effects.RecordShardWriter;
+import com.pricepredictor.connector.effects.ShardId;
 import com.pricepredictor.connector.effects.TestCaps;
 import forge.ai.PlayerControllerAi;
 import forge.deck.Deck;
@@ -63,7 +65,7 @@ class GamePlayerRecordingTest {
     }
 
     private RecordShardWriter writer() {
-        return new RecordShardWriter(dir, "run", 0, "l1");
+        return new RecordShardWriter(dir, new ShardId("run", 0, "l1"));
     }
 
     /** Every line of a closed shard, read through each gzip member: a cut one throws. */
@@ -211,7 +213,7 @@ class GamePlayerRecordingTest {
      */
     @Test
     void aGameAtTheCapKeepsItsOutcomeAndItsMarker() throws IOException {
-        RecordShardWriter writer = new RecordShardWriter(dir, "run", 0, "l1", 12);
+        RecordShardWriter writer = new RecordShardWriter(dir, new ShardId("run", 0, "l1"), 12);
         GamePlayer player = new GamePlayer(new GamePlayer.Config(3, writer, caps(), WorkerStop.NEVER, Match::startGame));
 
         player.playMatch(burn(), burn());
@@ -258,8 +260,8 @@ class GamePlayerRecordingTest {
     @Test
     void aStoppedWorkerClosesItsShardAndSaysSoWithoutAFailureLine() throws IOException {
         RecordShardWriter writer = writer();
-        writer.write("{\"record_id\":\"r\",\"game_id\":\"run.0-l1.0\"}",
-                new RecordFacts("run.0-l1.0", null, null, false));
+        writer.write(new ShardLine("{\"record_id\":\"r\",\"game_id\":\"run.0-l1.0\"}",
+                new RecordFacts("run.0-l1.0", null, null, false)));
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         WorkerLoop.Progress progress = new WorkerLoop.Progress(
                 new PrintStream(out, true, StandardCharsets.UTF_8), 10, "matches generated",

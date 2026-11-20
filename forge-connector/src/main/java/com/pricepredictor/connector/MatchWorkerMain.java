@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.AttributionMode;
 import com.pricepredictor.connector.effects.GameRecording;
 import com.pricepredictor.connector.effects.PatchHooks;
 import com.pricepredictor.connector.effects.RecordShardWriter;
+import com.pricepredictor.connector.effects.ShardId;
 import com.pricepredictor.connector.effects.directed.DirectedRules;
 
 import java.nio.file.Path;
@@ -374,8 +375,9 @@ public class MatchWorkerMain {
             return null;
         }
         RecordShardWriter effectRecords = new RecordShardWriter(
-                config.effectRecordsDir().orElseThrow(), config.runId(), config.workerIndex(),
-                config.workerLifetime(), caps.maxRecordsPerGame());
+                config.effectRecordsDir().orElseThrow(),
+                new ShardId(config.runId(), config.workerIndex(), config.workerLifetime()),
+                caps.maxRecordsPerGame());
         System.out.println(
                 "Effect records: " + effectRecords.path()
                         + " [mode=" + AttributionMode.detect().wireName() + "]");

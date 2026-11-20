@@ -2,6 +2,7 @@ package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.RecordShardWriter;
+import com.pricepredictor.connector.effects.ShardId;
 import com.pricepredictor.connector.effects.TestCaps;
 import com.pricepredictor.connector.effects.TestInterventions;
 import forge.deck.Deck;
@@ -101,7 +102,7 @@ class InterventionSpreadTest {
                         line.getHostCard().getName()));
             });
             Path out = Files.createDirectory(dir.resolve(name + seed));
-            RecordShardWriter writer = new RecordShardWriter(out, "run", 0, "l1");
+            RecordShardWriter writer = new RecordShardWriter(out, new ShardId("run", 0, "l1"));
             Random was = MyRandom.getRandom();
             MyRandom.setRandom(new Random(seed));
             List<Game> games = new ArrayList<>();
