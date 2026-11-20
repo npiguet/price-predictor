@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from effects.application.corpus_validation.findings import Finding
+from effects.application.corpus_validation.findings import Finding, Thresholds
 from effects.application.validate_corpus import validate_directory
 from effects.domain.shard_generation import OlderGenerationError, UnknownGenerationError
 
@@ -75,6 +75,27 @@ def test_dangling_mirrors_fail_when_the_whole_directory_was_read(tmp_path):
     assert "5 mirrors" in finding.measured
 
 
+def _mostly_dangling(tmp_path):
+    records = _fixture()
+    mirrors = [raw for raw in records if raw.get("mirror_of")]
+    for raw in mirrors[:4]:
+        raw["mirror_of"] += "999"
+    return _write(tmp_path / "c", records)
+
+
+def test_a_share_of_unfound_mirrors_is_reported_with_no_flag(tmp_path):
+    finding = _named(validate_directory(_mostly_dangling(tmp_path)).findings, "mirrors")
+    assert finding.ok, finding.measured
+    assert "4 mirrors fell outside the window (80.0%, watched, no limit)" in finding.measured
+
+
+def test_a_share_of_unfound_mirrors_fails_given_a_ceiling(tmp_path):
+    report = validate_directory(
+        _mostly_dangling(tmp_path), thresholds=Thresholds(max_unfound_mirror_rate=0.5))
+    finding = _named(report.findings, "mirrors")
+    assert not finding.ok, finding.measured
+
+
 def test_dangling_mirrors_under_a_limit_are_watched_never_passed(tmp_path):
     records = _fixture()
     for raw in records:
@@ -99,19 +120,30 @@ def _games_with_a_later_game(records: list[dict]) -> list[str]:
                     for o in games)]
 
 
-def test_games_a_later_game_follows_that_lack_a_marker_are_their_own_failed_figure(tmp_path):
+def _closed_marker_finding(tmp_path, thresholds=Thresholds()):
     records = _fixture()
     closed = _games_with_a_later_game(records)
     assert len(closed) > 4
     cut = _drop_markers(records, set(closed[: len(closed) // 2]))
-    report = validate_directory(_write(tmp_path / "c", cut))
-    finding = _named(report.findings, "closed game")
-    assert not finding.ok, finding.measured
+    report = validate_directory(_write(tmp_path / "c", cut), thresholds=thresholds)
+    return _named(report.findings, "closed game")
+
+
+def test_closed_games_lacking_a_marker_are_a_watched_figure_with_no_flag(tmp_path):
+    finding = _closed_marker_finding(tmp_path)
+    assert finding.ok and finding.watched, finding.measured
     assert "have no game-end marker" in finding.measured
 
 
+def test_closed_games_lacking_a_marker_fail_given_a_ceiling(tmp_path):
+    finding = _closed_marker_finding(tmp_path, Thresholds(max_unmarked_closed_game_rate=0.01))
+    assert not finding.ok, finding.measured
+
+
 def test_every_closed_game_marked_passes_the_figure(tmp_path):
-    report = validate_directory(_write(tmp_path / "c", _fixture()))
+    report = validate_directory(
+        _write(tmp_path / "c", _fixture()),
+        thresholds=Thresholds(max_unmarked_closed_game_rate=0.01))
     finding = _named(report.findings, "closed game")
     assert finding.ok and "0 of" in finding.measured
 

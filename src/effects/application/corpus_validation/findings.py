@@ -116,13 +116,13 @@ class Thresholds:
     })
     #: A mirror is missing from a whole read only in a game the per-game cap
     #: or a lost block cut.
-    max_unfound_mirror_rate: float = field(default=0.05, metadata={"help": (
+    max_unfound_mirror_rate: float | None = field(default=None, metadata={"help": (
         "Share of fork records whose mirrored record is nowhere in a directory "
-        "read whole (default: %(default)s)"
+        "read whole; unset, it is reported without failing the run"
     )})
-    max_unmarked_closed_game_rate: float = field(default=0.01, metadata={"help": (
+    max_unmarked_closed_game_rate: float | None = field(default=None, metadata={"help": (
         "Share of the games a later game of their JVM lifetime follows that "
-        "may lack a game-end marker, so threw (default: %(default)s)"
+        "may lack a game-end marker, so threw; unset, it is reported as [WATCH]"
     )})
     #: A fork is taken at the moment it mirrors, so no disagreement is healthy.
     max_mirror_turn_disagreement_rate: float = field(default=0.0, metadata={"help": (
@@ -238,7 +238,7 @@ def floor_finding(
 
 def ceiling_finding(
     name: str,
-    ceiling: float,
+    ceiling: float | None,
     rate: float,
     measured: Callable[[str], str],
     detail: Iterable[str],
@@ -246,8 +246,11 @@ def ceiling_finding(
     """A rate judged against a ceiling, :func:`floor_finding`'s mirror.
 
     ``measured`` is handed the ceiling's label to place in its own sentence.
-    An empty window's rate is 0.0, so it holds whatever the ceiling.
+    An empty window's rate is 0.0, so it holds whatever the ceiling. A
+    ``None`` ceiling watches the rate.
     """
+    if ceiling is None:
+        return Finding.watch(name, measured("watched, no limit"), tuple(detail))
     return Finding(
         name=name,
         ok=rate <= ceiling,

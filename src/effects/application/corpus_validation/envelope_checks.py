@@ -695,6 +695,20 @@ class MirrorTurns:
     def _nothing_compared(self, compared: Share) -> bool:
         return bool(self.mirrors) and not compared.seen
 
+    @staticmethod
+    def _unfound_tail(limits: Thresholds, unfound: float) -> str:
+        limit = limits.max_unfound_mirror_rate
+        label = "watched, no limit" if limit is None else f"limit {limit:.1%}"
+        return f" ({unfound:.1%}, {label})"
+
+    def _unfound_breaks(self, limits: Thresholds, compared: Share, unfound: float) -> bool:
+        """Over a directory read whole, no comparison at all while mirrors exist
+        is a defect whatever the limit; a share is judged once given one."""
+        if self.window_cut:
+            return False
+        limit = limits.max_unfound_mirror_rate
+        return self._nothing_compared(compared) or (limit is not None and unfound > limit)
+
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
         disagreed, examples = self._compare()
         uncomparable = len(self.mirrors) - disagreed.seen
@@ -707,8 +721,7 @@ class MirrorTurns:
             )
             return
         unfound = share_of(uncomparable, len(self.mirrors))
-        tail = "" if self.window_cut else (
-            f" ({unfound:.1%}, limit {limits.max_unfound_mirror_rate:.1%})")
+        tail = "" if self.window_cut else self._unfound_tail(limits, unfound)
         turns = ceiling_finding(
             name=name,
             ceiling=limits.max_mirror_turn_disagreement_rate,
@@ -720,7 +733,7 @@ class MirrorTurns:
             ),
             detail=examples,
         )
-        if self.window_cut or unfound <= limits.max_unfound_mirror_rate:
+        if not self._unfound_breaks(limits, disagreed, unfound):
             yield turns
             return
         yield replace(turns, ok=False, detail=(
