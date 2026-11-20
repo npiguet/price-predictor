@@ -2,7 +2,6 @@ package com.pricepredictor.connector.effects;
 
 import com.google.common.eventbus.Subscribe;
 import forge.game.Game;
-import forge.game.card.Card;
 import forge.game.event.GameEvent;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCombatEnded;
@@ -73,6 +72,8 @@ import java.util.Set;
 public final class BusBracketCollector extends BusEventReader {
 
     private final CollectorContext context;
+    /** The game this collector records, asked whether an ability a hook hands over is its own. */
+    private final LiveGame live;
     private final SnapshotBuilder snapshots;
 
     /** What this game's records never took, by event type and engine phase. */
@@ -146,7 +147,8 @@ public final class BusBracketCollector extends BusEventReader {
             java.util.function.Consumer<String> onCombatRecord) {
         super(game);
         this.context = context;
-        this.snapshots = new SnapshotBuilder(game);
+        this.live = new LiveGame(game);
+        this.snapshots = live.snapshots();
         this.fruitless = new FruitlessActivations(game);
         this.payments = new PaymentLedger(game);
         this.heldResolution = new HeldResolutionWindow(context, fruitless);
@@ -191,7 +193,7 @@ public final class BusBracketCollector extends BusEventReader {
     PatchHooks.Listener castHandler() {
         return PatchHooks.CAST_LISTENER.listener((callback, args) -> {
             SpellAbility cast = args.get(0, SpellAbility.class);
-            if (cast != null && owns(cast)) {
+            if (cast != null && live.ownsStackAbility(cast)) {
                 castStarting(cast);
             }
         });
@@ -230,7 +232,7 @@ public final class BusBracketCollector extends BusEventReader {
             if (item == null) {
                 return;
             }
-            if (owns(item)) {
+            if (live.ownsStackAbility(item)) {
                 resolutionStarting(item, Boolean.TRUE.equals(args.get(1)), args.optional(2));
             }
         });
@@ -289,23 +291,35 @@ public final class BusBracketCollector extends BusEventReader {
         resolving.modes.close();
     }
 
-    /** Whether an ability a hook hands over is this game's. */
-    private boolean owns(SpellAbility ability) {
-        Card host = ability.getHostCard();
-        return host != null && game != null && host.getGame() == game;
-    }
-
     /**
-     * Everything a cast does once the ability has been found on the stack.
+     * Everything a cast does once the ability has been found on the stack:
+     * end the previous action's consequences, place the item's bracket, and
+     * write its cost half.
      *
      * <p>Split from {@link #onCast} at the one line that reads the stack, so the
      * rules that decide what a cost record says can be exercised against a
      * real ability without a game in progress.
      */
     void beginBracket(SpellAbility ability) {
+        endPreviousConsequences();
+        if (ability != null) {
+            brackets.writeOff(ability.getId());
+        }
+        CastTracker.PendingCast started = castTracker.startedCast(ability);
+        OpenResolution cast = ability == null ? null : castTracker.openResolution(ability, started);
+        placeBracket(cast, started);
+        writeCostHalf(ability, cast, started);
+    }
+
+    /**
+     * The first step of {@link #beginBracket}: an item reaching the stack
+     * ends whatever the last action set off, unless the state-based loop or
+     * a finishing resolution is still running.
+     */
+    private void endPreviousConsequences() {
         if (inStateBasedLoop) {
             // A trigger reaching the stack between two passes of the
-            // state-based check (FR-028). It opens its own bracket below, and
+            // state-based check (FR-028). It opens its own bracket next, and
             // the check goes on: the held half and the damage step's record
             // take its deaths until the loop's end signal.
             stackUsedInLoop = true;
@@ -323,35 +337,61 @@ public final class BusBracketCollector extends BusEventReader {
             // before anything goes on the stack.
             combatStep.closeWindow();
         }
-        if (ability != null) {
-            brackets.writeOff(ability.getId());
-        }
-        CastTracker.PendingCast started = castTracker.startedCast(ability);
-        OpenResolution cast = ability == null ? null : castTracker.openResolution(ability, started);
+    }
+
+    /**
+     * The second step of {@link #beginBracket}: the item's bracket follows
+     * the resolving ability that cast it, or opens as the cast's own.
+     *
+     * @param cast    the item's bracket, or null for an item none is opened for
+     * @param started the cast's start the cast hook told, or null
+     */
+    private void placeBracket(OpenResolution cast, CastTracker.PendingCast started) {
         if (game.getStack().isResolving()) {
             // Cast by the resolving ability itself, which keeps the bracket
             // until it ends (StackBrackets).
-            brackets.followResolving(router::idsOnStack);
-            if (cast != null) {
-                brackets.waitForResolution(cast);
-            }
+            followResolving(cast);
         } else {
-            if (cast != null && started == null && !inStateBasedLoop) {
-                // Its board was read just now, at the cast event, where no
-                // hook told the cast's start: its stat changes are measured
-                // from here. Not while an ability resolves, whose bracket
-                // keeps the events, and whose snapshot is older; nor for a
-                // trigger the state-based loop puts on the stack between
-                // two passes, where the loop has applied statics it
-                // publishes only at its end, which a damage step's record
-                // still takes (FR-028): the trigger's effect half reads the
-                // board again when its resolution starts.
-                rebaselineAtSnapshot();
-            }
-            brackets.openCast(cast);
-            // Any other card still on its way was given up: one cast at a time.
-            castsUnderWay.abandonAll();
+            openCast(cast, started);
         }
+    }
+
+    private void followResolving(OpenResolution cast) {
+        brackets.followResolving(router::idsOnStack);
+        if (cast != null) {
+            brackets.waitForResolution(cast);
+        }
+    }
+
+    private void openCast(OpenResolution cast, CastTracker.PendingCast started) {
+        if (measuredFromTheCastEvent(cast, started)) {
+            // Its board was read just now, at the cast event, where no
+            // hook told the cast's start: its stat changes are measured
+            // from here. Not while an ability resolves, whose bracket
+            // keeps the events, and whose snapshot is older; nor for a
+            // trigger the state-based loop puts on the stack between
+            // two passes, where the loop has applied statics it
+            // publishes only at its end, which a damage step's record
+            // still takes (FR-028): the trigger's effect half reads the
+            // board again when its resolution starts.
+            rebaselineAtSnapshot();
+        }
+        brackets.openCast(cast);
+        // Any other card still on its way was given up: one cast at a time.
+        castsUnderWay.abandonAll();
+    }
+
+    /** Whether a cast opened outside a resolution measures its stat changes from its cast event. */
+    private boolean measuredFromTheCastEvent(OpenResolution cast, CastTracker.PendingCast started) {
+        return cast != null && started == null && !inStateBasedLoop;
+    }
+
+    /**
+     * The third step of {@link #beginBracket}: a cast's or an activation's
+     * cost half, and a free activation noted as possibly fruitless. An item
+     * nobody cast (a trigger, a copy) has no link and writes none.
+     */
+    private void writeCostHalf(SpellAbility ability, OpenResolution cast, CastTracker.PendingCast started) {
         if (cast == null || cast.linkId == null) {
             return;
         }
@@ -692,21 +732,29 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     private void fileOutcome(EffectEvent event, String namedCause, EventRouter.Filing filing) {
-        if (event.type() == EventType.UNATTACHED && heldResolution.isHolding()
-                && (inStateBasedLoop || game.getTracker().isFrozen())
-                && !event.subjects().isEmpty()) {
+        if (detachedByTheHeldCheck(event)) {
             // An Aura or Equipment the state-based check takes off a
             // permanent the held resolution killed or changed: part of that
             // check's moves, as the Aura's own move to the graveyard is,
-            // filed with the half that names the permanent it left. The
-            // check is told as fileMove tells it: the loop's signals, or a
-            // frozen tracker without them.
+            // filed with the half that names the permanent it left.
             Object host = event.params().get("detached_from");
             heldResolution.fileConsequence(
                     event, host instanceof String left ? left : event.subjects().get(0));
             return;
         }
         router.route(event, namedCause, filing);
+    }
+
+    /**
+     * Whether {@code event} is an unattachment, naming the permanent left,
+     * made by the state-based check while a resolution's half is held. The
+     * check is told as fileMove tells it: the loop's signals, or a frozen
+     * tracker without them.
+     */
+    private boolean detachedByTheHeldCheck(EffectEvent event) {
+        return event.type() == EventType.UNATTACHED && heldResolution.isHolding()
+                && (inStateBasedLoop || game.getTracker().isFrozen())
+                && !event.subjects().isEmpty();
     }
 
     /**
@@ -787,11 +835,17 @@ public final class BusBracketCollector extends BusEventReader {
     void beginMode(SpellAbility clause, Integer option) {
         EventRouter.Cause cause = router.classifyNow().cause();
         OpenResolution open = brackets.open();
-        if (open == null || !EventRouter.fromOpenBracket(cause) || !open.hosts(clause)) {
+        if (!cutsTheOpenBracket(open, cause, clause)) {
             return;
         }
         open.modes.begin(option, snapshots.ofResolving(open.ability, open.castTargetsOfMode(option)));
         rebaselineAtSnapshot();
+    }
+
+    /** Whether a mode's clause, resolving for {@code cause}, is the open bracket's own. */
+    private static boolean cutsTheOpenBracket(
+            OpenResolution open, EventRouter.Cause cause, SpellAbility clause) {
+        return open != null && EventRouter.fromOpenBracket(cause) && open.hosts(clause);
     }
 
     /**
@@ -985,32 +1039,11 @@ public final class BusBracketCollector extends BusEventReader {
                 return;
             }
             SpellAbility offered = args.get(0, SpellAbility.class);
-            boolean ours = offered != null ? belongsToLiveGame(offered) : ownsNullConfirm();
+            boolean ours = offered != null ? live.owns(offered) : live.ownsNullAbilityRefusal();
             if (ours) {
                 noteDeclined();
             }
         });
-    }
-
-    /**
-     * Whether a refusal naming no ability is this game's: not while a fork
-     * runs on this thread, unless it is the fork played on that this
-     * collector records.
-     */
-    private boolean ownsNullConfirm() {
-        return !Forks.isForkRunningOnThisThread() || Forks.playingForwardOnThisThread() == game;
-    }
-
-    /**
-     * As {@link LiveGame#owns(forge.game.CardTraitBase)}, kept as this class's
-     * own copy rather than shared: this one needs only the
-     * {@code SpellAbility} shape {@link #confirmHandler()} calls it with, not
-     * the wider {@code CardTraitBase} {@code LiveGame} also takes for the
-     * rewrite and trigger hooks.
-     */
-    private boolean belongsToLiveGame(SpellAbility ability) {
-        Card host = ability.getHostCard();
-        return host != null && host.getGame() == game;
     }
 
     /**

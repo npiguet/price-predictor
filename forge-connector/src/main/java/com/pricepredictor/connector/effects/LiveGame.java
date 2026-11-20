@@ -116,6 +116,40 @@ final class LiveGame {
     }
 
     /**
+     * Whether an ability the cast or resolution hook hands over is this
+     * game's: as {@link #owns(CardTraitBase)}, for an ability the hook has
+     * already found non-null, except that a {@code LiveGame} with no game
+     * owns none, not even an ability whose host has no game either (a
+     * collector exercised against a real ability without a game in
+     * progress).
+     */
+    boolean ownsStackAbility(SpellAbility ability) {
+        Card host = ability.getHostCard();
+        return host != null && game != null && host.getGame() == game;
+    }
+
+    /**
+     * Whether a refusal the confirm hook reports naming no ability is this
+     * game's: not while a fork runs on this thread, unless it is the fork
+     * played on that this game's recording records.
+     *
+     * <p>Not {@link #ownsNullAbilityOutcome}: a refusal carries no params to
+     * name a game, and the resolving-clause pointer is not asked.
+     */
+    boolean ownsNullAbilityRefusal() {
+        return !anotherGameForksHere();
+    }
+
+    /**
+     * Whether a fork other than this game is running on this thread: one
+     * the thread's fork flag marks, and not this game played on with
+     * collectors of its own.
+     */
+    private boolean anotherGameForksHere() {
+        return Forks.isForkRunningOnThisThread() && Forks.playingForwardOnThisThread() != game;
+    }
+
+    /**
      * Whether a hook's argument is a trait positively identified as another
      * game's — the one case a trait-handing hook drops.
      *
@@ -221,7 +255,7 @@ final class LiveGame {
         // A fork played on to the end of the turn is a game of its own for
         // the span: its collectors own its turn-based outcomes, the live
         // game's own none.
-        if (Forks.isForkRunningOnThisThread() && Forks.playingForwardOnThisThread() != game) {
+        if (anotherGameForksHere()) {
             return false;
         }
         if (PatchHooks.currentSubAbility() instanceof SpellAbility resolving) {
