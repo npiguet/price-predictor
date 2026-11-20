@@ -26,7 +26,11 @@ from pathlib import Path
 import pytest
 
 from price_predictor.infrastructure import worker_stops
-from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool, WorkerStartError
+from price_predictor.infrastructure.forge_worker_pool import (
+    ForgeWorkerPool,
+    PoolOptions,
+    WorkerStartError,
+)
 from price_predictor.infrastructure.worker_log_files import WorkerLogFiles
 from price_predictor.infrastructure.worker_log_mark import stop_line_of
 from price_predictor.infrastructure.worker_stops import (
@@ -127,10 +131,12 @@ class _Run:
         self.started: list[subprocess.Popen] = []
         self.pool = ForgeWorkerPool(
             worker_count=workers, spawn_worker=self.spawn, output_path=self.progress,
-            should_stop=None if target is None else (lambda count: count >= target),
-            graceful=self.graceful, status_interval=status_interval,
-            quick_exit_seconds=quick_exit_seconds, max_failed_starts=max_failed_starts,
-            restart_backoff=0.01,
+            options=PoolOptions(
+                should_stop=None if target is None else (lambda count: count >= target),
+                graceful=self.graceful, status_interval=status_interval,
+                quick_exit_seconds=quick_exit_seconds, max_failed_starts=max_failed_starts,
+                restart_backoff=0.01,
+            ),
         )
         self.pool.STOP_POLL_INTERVAL = 0.05
 

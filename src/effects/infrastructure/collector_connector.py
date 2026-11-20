@@ -22,7 +22,7 @@ from price_predictor.domain.worker_status import (
     render_fork_refusals,
     render_hook_failures,
 )
-from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
+from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool, PoolOptions
 from price_predictor.infrastructure.run_manifest import annotate_run
 from price_predictor.infrastructure.worker_log_files import WorkerLogFiles
 from price_predictor.infrastructure.worker_log_scan import WorkerLogReport
@@ -220,9 +220,11 @@ class CollectorSupervisor:
             worker_count=self._worker_count,
             spawn_worker=functools.partial(self.start_worker, decks_file=Path(decks_file)),
             output_path=self.progress_path,
-            should_stop=lambda completed: completed >= matches,
-            on_status=self._scan_logs,
-            graceful=self._graceful,
+            options=PoolOptions(
+                should_stop=lambda completed: completed >= matches,
+                on_status=self._scan_logs,
+                graceful=self._graceful,
+            ),
         )
         logger.info("Playing %d matches from %d decks", matches, deck_count)
         try:

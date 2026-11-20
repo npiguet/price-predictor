@@ -14,7 +14,12 @@ from unittest.mock import patch
 
 import pytest
 
-from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool, WorkerStartError
+from price_predictor.infrastructure.forge_worker_pool import (
+    ForgeWorkerPool,
+    LastStatus,
+    PoolOptions,
+    WorkerStartError,
+)
 from price_predictor.infrastructure.worker_log_mark import LogMark
 from price_predictor.infrastructure.worker_stops import STARTUP_LINE, GracefulStop
 from tests.unit.infrastructure.real_processes import SLEEPER
@@ -39,7 +44,7 @@ def _pool(output_path, worker_count=12, **kw):
         worker_count=worker_count,
         spawn_worker=kw.pop("spawn_worker", lambda i: None),
         output_path=output_path,
-        **kw,
+        options=PoolOptions(**kw),
     )
 
 
@@ -49,7 +54,7 @@ class TestStatusLine:
         out.write_text("a\nb\nc\n", encoding="utf-8")
         pool = _pool(out, worker_count=12)
 
-        pool._report_status(0.0, 120.0, 0, 60.0)
+        pool._report_status(LastStatus(start_time=0.0, count=0, time=60.0), 120.0)
 
         line = capsys.readouterr().out.strip()
         assert line == "[120s] 3 matches completed | 3.0 matches/min | 0/12 workers alive"
@@ -58,7 +63,7 @@ class TestStatusLine:
         out = tmp_path / "out.txt"
         out.write_text("a\nb\n", encoding="utf-8")
 
-        count, when = _pool(out)._report_status(0.0, 60.0, 0, 0.0)
+        count, when = _pool(out)._report_status(LastStatus(start_time=0.0, count=0, time=0.0), 60.0)
 
         assert (count, when) == (2, 60.0)
 
@@ -67,7 +72,9 @@ class TestStatusLine:
         out.write_text("\n" * 105, encoding="utf-8")
 
         # 100 rows were there when the run began; 5 are this run's
-        count, _ = _pool(out)._report_status(0.0, 60.0, 100, 0.0, baseline=100)
+        count, _ = _pool(out)._report_status(
+            LastStatus(start_time=0.0, count=100, time=0.0, baseline=100), 60.0,
+        )
 
         assert capsys.readouterr().out.startswith("[60s] 5 matches completed | 5.0 matches/min")
         assert count == 105
@@ -77,19 +84,22 @@ class TestStatusLine:
         out.write_text("\n" * 10, encoding="utf-8")
 
         # 6 new lines in 30s -> 12 per minute
-        _pool(out)._report_status(0.0, 30.0, 4, 0.0)
+        _pool(out)._report_status(LastStatus(start_time=0.0, count=4, time=0.0), 30.0)
 
         assert "12.0 matches/min" in capsys.readouterr().out
 
     def test_rate_is_zero_when_interval_is_zero(self, tmp_path, capsys):
-        _pool(tmp_path / "out.txt")._report_status(0.0, 0.0, 0, 0.0)
+        _pool(tmp_path / "out.txt")._report_status(
+            LastStatus(start_time=0.0, count=0, time=0.0), 0.0,
+        )
         assert "0.0 matches/min" in capsys.readouterr().out
 
     def test_alive_count_reflects_live_processes(self, tmp_path, capsys):
         pool = _pool(tmp_path / "out.txt", worker_count=3)
-        pool._processes = [_FakeProc(1), _FakeProc(2, alive=False), _FakeProc(3)]
+        for proc in (_FakeProc(1), _FakeProc(2, alive=False), _FakeProc(3)):
+            pool._books.track(proc, slot=-1, started=0.0)
 
-        pool._report_status(0.0, 60.0, 0, 0.0)
+        pool._report_status(LastStatus(start_time=0.0, count=0, time=0.0), 60.0)
 
         assert "2/3 workers alive" in capsys.readouterr().out
 
@@ -110,7 +120,8 @@ class TestRecycle:
     def test_oldest_alive_worker_is_killed(self, tmp_path):
         pool = _pool(tmp_path / "out.txt", worker_count=3)
         oldest, middle, newest = _FakeProc(1), _FakeProc(2), _FakeProc(3)
-        pool._start_times = {oldest: 10.0, middle: 20.0, newest: 30.0}
+        for proc, started in {oldest: 10.0, middle: 20.0, newest: 30.0}.items():
+            pool._books.track(proc, slot=-1, started=started)
 
         with patch(KILL) as killer:
             pool._kill_oldest_worker()
@@ -120,7 +131,8 @@ class TestRecycle:
     def test_dead_workers_are_not_selected(self, tmp_path):
         pool = _pool(tmp_path / "out.txt", worker_count=2)
         dead, alive = _FakeProc(1, alive=False), _FakeProc(2)
-        pool._start_times = {dead: 10.0, alive: 20.0}
+        for proc, started in {dead: 10.0, alive: 20.0}.items():
+            pool._books.track(proc, slot=-1, started=started)
 
         with patch(KILL) as killer:
             pool._kill_oldest_worker()
@@ -157,9 +169,7 @@ class TestRecycleUnderTheStopProtocol:
             log = logs / f"run.{slot}.log"
             log.write_text(f"{STARTUP_LINE}...\n" if past_start else "Forge loading\n",
                            encoding="utf-8")
-            pool._start_times[proc] = started
-            pool._slots[proc] = slot
-            pool._log_marks[proc] = LogMark(log, None, 0)
+            pool._books.track(proc, slot=slot, started=started, mark=LogMark(log, None, 0))
         return pool
 
     def test_the_oldest_worker_past_its_forge_start_is_killed(self, tmp_path, capsys):
@@ -172,8 +182,9 @@ class TestRecycleUnderTheStopProtocol:
             pool._kill_oldest_worker()
 
         killer.assert_called_once_with(oldest)
-        assert pool._killed == {oldest}
-        assert pool._killed_starting == set()
+        workers = pool._books.workers.values()
+        assert {w.process for w in workers if w.killed} == {oldest}
+        assert {w.process for w in workers if w.killed_starting} == set()
         out = capsys.readouterr().out
         assert "Recycled longest-running worker 1 (PID 2, age " in out
         assert "the game it was playing is cut" in out
@@ -193,7 +204,7 @@ class TestRecycleUnderTheStopProtocol:
     def test_a_worker_asked_to_stop_is_left_to_finish_its_game(self, tmp_path):
         asked, other = _FakeProc(1), _FakeProc(2)
         pool = self._graceful_pool(tmp_path, {asked: (10.0, True), other: (20.0, True)})
-        pool._deadlines[asked] = time.monotonic() + 600
+        pool._books.workers[asked].deadline = time.monotonic() + 600
 
         with patch(KILL) as killer:
             pool._kill_oldest_worker()
@@ -277,7 +288,8 @@ class TestStopCondition:
             return next(answers)
 
         pool = _pool(out, worker_count=1, status_interval=0, should_stop=should_stop)
-        pool._start_times = {_FakeProc(1): 1.0}
+        pool._books.track(_FakeProc(1), slot=-1, started=1.0)
+        pool._terminate_all = lambda: None
 
         with patch(KILL) as killer:
             pool._supervisor_loop()
@@ -381,7 +393,7 @@ class TestAWorkerThatCannotStart:
     def test_a_recycled_worker_is_no_failed_start(self, tmp_path):
         pool = _pool(tmp_path / "out.txt", worker_count=1)
         young = _FakeProc(1)
-        pool._start_times = {young: time.monotonic()}
+        pool._books.track(young, slot=-1, started=time.monotonic())
 
         with patch(KILL):
             pool._kill_oldest_worker()
@@ -463,7 +475,7 @@ class TestSurvivors:
 
     def test_a_worker_the_kill_cannot_end_is_reported(self, tmp_path):
         pool = _pool(tmp_path / "out.txt", worker_count=1)
-        pool._processes = [_FakeProc(77)]
+        pool._books.track(_FakeProc(77), slot=-1, started=0.0)
 
         with patch(KILL, return_value=False):
             pool._terminate_all()
@@ -474,7 +486,7 @@ class TestSurvivors:
         """The kill timed out, but the process ended before anyone asked."""
         pool = _pool(tmp_path / "out.txt", worker_count=1)
         slow = _FakeProc(77)
-        pool._processes = [slow]
+        pool._books.track(slow, slot=-1, started=0.0)
 
         with patch(KILL, return_value=False):
             pool._terminate_all()
@@ -487,7 +499,7 @@ class TestSurvivors:
         survivor's 20 s kill ran twice."""
         pool = _pool(tmp_path / "out.txt", worker_count=1)
         worker = _FakeProc(77)
-        pool._processes = [worker]
+        pool._books.track(worker, slot=-1, started=0.0)
 
         with patch(KILL, return_value=False) as killer:
             pool._terminate_all()
@@ -527,7 +539,7 @@ class TestSurvivors:
         with patch(KILL, return_value=True):
             pool._monitor_worker(0)
 
-        assert pool._kill_attempted == []
+        assert pool._books.kill_attempted == []
         assert pool.survivors == []
 
 

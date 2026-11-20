@@ -14,6 +14,7 @@ from pathlib import Path
 from price_predictor.infrastructure.job_objects import bind_to_this_process
 from price_predictor.infrastructure.jvm_processes import kill_process_tree
 from price_predictor.infrastructure.worker_log_mark import LogMark, past_forge_start, stop_line_of
+from price_predictor.infrastructure.worker_pool_books import PoolWorker, WorkerBooks
 from price_predictor.infrastructure.worker_stops import GracefulStop, WorkerStops
 
 #: The most workers a pool may run: the machine runs at most twelve CPU-busy
@@ -49,6 +50,61 @@ _LOG_TAIL_BYTES = 64 * 1024
 def _seconds(value: float) -> str:
     """A duration as a report prints it: ``600s``, ``0.5s``."""
     return f"{value:g}s"
+
+
+def _or_default(value, default):
+    """``value``, or ``default`` when it is None."""
+    return default if value is None else value
+
+
+@dataclasses.dataclass(frozen=True)
+class PoolOptions:
+    """How a :class:`ForgeWorkerPool` runs, beyond which workers it starts.
+    A field left None takes the pool's class constant (or nothing).
+
+    Attributes:
+        status_interval: seconds between status lines (default 60).
+        should_stop: called with the current line count after each status
+            line; returning True ends the run. None means run until signalled.
+        on_status: called after each status line (a log scan); what it
+            raises is printed and the run goes on.
+        graceful: the workers' stop protocol; None kills them instead.
+        max_failed_starts, restart_backoff, quick_exit_seconds: the
+            failed-start rule (:class:`ForgeWorkerPool`'s docstring).
+    """
+
+    status_interval: int | None = None
+    should_stop: Callable[[int], bool] | None = None
+    on_status: Callable[[], None] | None = None
+    graceful: GracefulStop | None = None
+    max_failed_starts: int | None = None
+    restart_backoff: float | None = None
+    quick_exit_seconds: float | None = None
+
+
+@dataclasses.dataclass(frozen=True)
+class LastStatus:
+    """Where the last status line left off: when the run started and how
+    many lines the output held then (``baseline``), and the line count and
+    time of the last line."""
+
+    start_time: float
+    count: int
+    time: float
+    baseline: int = 0
+
+
+@dataclasses.dataclass(frozen=True)
+class _Ended:
+    """How a worker ended, as its monitor reads it: its :class:`WorkerStops`
+    field, the matches and games of one that printed the stop line, its
+    lifetime and whether it failed to start."""
+
+    ending: str
+    matches: int | None
+    games: int | None
+    lifetime: float
+    failed: bool
 
 
 class ForgeWorkerPool:
@@ -121,73 +177,38 @@ class ForgeWorkerPool:
         worker_count: int,
         spawn_worker: Callable[[int], subprocess.Popen],
         output_path: Path,
-        status_interval: int | None = None,
-        should_stop: Callable[[int], bool] | None = None,
-        on_status: Callable[[], None] | None = None,
-        max_failed_starts: int | None = None,
-        restart_backoff: float | None = None,
-        quick_exit_seconds: float | None = None,
-        graceful: GracefulStop | None = None,
+        options: PoolOptions | None = None,
     ) -> None:
         """
         Args:
             worker_count: how many workers to keep alive.
             spawn_worker: called with a worker index, returns a started process.
-                Under ``graceful`` it must give the worker
+                Under ``options.graceful`` it must give the worker
                 ``graceful.system_properties(index)``.
             output_path: the file workers append to; its line count is progress.
-            status_interval: seconds between status lines (default 60).
-            should_stop: called with the current line count after each status
-                line; returning True ends the run. None means run until signalled.
-            on_status: called after each status line (a log scan); what it
-                raises is printed and the run goes on.
-            max_failed_starts, restart_backoff, quick_exit_seconds: the
-                failed-start rule (class docstring); default the class constants.
-            graceful: the workers' stop protocol; None kills them instead.
+            options: the status interval, stop condition, status hook, stop
+                protocol and failed-start rule (:class:`PoolOptions`).
         """
+        options = options or PoolOptions()
         self._worker_count = worker_count
         self._spawn_worker = spawn_worker
         self._output_path = Path(output_path)
-        self._status_interval = (
-            self.STATUS_INTERVAL if status_interval is None else status_interval
-        )
-        self._should_stop = should_stop
-        self._on_status = on_status
-        self._graceful = graceful
+        self._status_interval = _or_default(options.status_interval, self.STATUS_INTERVAL)
+        self._should_stop = options.should_stop
+        self._on_status = options.on_status
+        self._graceful = options.graceful
         self._shutdown_event = threading.Event()
         #: Set by a second interrupt: every worker still asked to stop is
         #: killed at once.
         self._hurry = threading.Event()
         self._interrupted = False
-        self._processes: list[subprocess.Popen] = []
-        self._start_times: dict[subprocess.Popen, float] = {}
-        self._processes_lock = threading.Lock()
-        self._max_failed_starts = (
-            self.MAX_FAILED_STARTS if max_failed_starts is None else max_failed_starts
+        self._books = WorkerBooks()
+        self._max_failed_starts = _or_default(options.max_failed_starts, self.MAX_FAILED_STARTS)
+        self._restart_backoff = _or_default(options.restart_backoff, self.RESTART_BACKOFF)
+        self._quick_exit_seconds = _or_default(
+            options.quick_exit_seconds, self.QUICK_EXIT_SECONDS,
         )
-        self._restart_backoff = (
-            self.RESTART_BACKOFF if restart_backoff is None else restart_backoff
-        )
-        self._quick_exit_seconds = (
-            self.QUICK_EXIT_SECONDS if quick_exit_seconds is None else quick_exit_seconds
-        )
-        #: Processes the pool killed itself: their exit is no failure.
-        self._killed: set[subprocess.Popen] = set()
-        #: Of those, the ones killed at a stop while still starting Forge.
-        self._killed_starting: set[subprocess.Popen] = set()
-        self._failed_starts: dict[int, int] = {}
         self._start_failure: str | None = None
-        #: Every worker the pool has killed or tried to, in order: each is
-        #: killed once, however often the pool terminates.
-        self._kill_attempted: list[subprocess.Popen] = []
-        #: Under ``graceful``: each running worker's slot and where its log
-        #: stood at its spawn, and when each worker was asked to stop and by
-        #: when it must have ended.
-        self._slots: dict[subprocess.Popen, int] = {}
-        self._log_marks: dict[subprocess.Popen, LogMark] = {}
-        self._deadlines: dict[subprocess.Popen, float] = {}
-        #: How the workers ended so far.
-        self._stops = WorkerStops()
 
     @property
     def interrupted(self) -> bool:
@@ -207,15 +228,12 @@ class ForgeWorkerPool:
         started with, so a caller counting either as final should say so. A
         kill that timed out on a process that ended later leaves no survivor.
         """
-        with self._processes_lock:
-            attempted = list(self._kill_attempted)
-        return [proc.pid for proc in attempted if proc.poll() is None]
+        return self._books.survivors()
 
     @property
     def stops(self) -> WorkerStops:
         """How the run's workers ended, by how, so far."""
-        with self._processes_lock:
-            return dataclasses.replace(self._stops)
+        return self._books.stops_so_far()
 
     def run(self) -> None:
         """Start all workers and block until shutdown.
@@ -325,86 +343,81 @@ class ForgeWorkerPool:
                 self._shutdown_event.set()
                 return
             first = False
-            mark = self._prepare_slot(worker_id)
-            try:
-                proc = self._spawn_worker(worker_id)
-            except Exception as exc:
-                if self._shutdown_event.is_set():
-                    return
-                print(f"Monitor error for worker {worker_id}: {exc}")
-                self._note_failed_start(worker_id, f"{type(exc).__name__}: {exc}")
+            worker = self._spawn(worker_id)
+            if worker is None:
                 continue
-
-            started = time.monotonic()
-            bind_to_this_process(proc)
-            with self._processes_lock:
-                self._processes.append(proc)
-                self._start_times[proc] = started
-                self._slots[proc] = worker_id
-                if mark is not None:
-                    self._log_marks[proc] = mark
-            # _terminate_all may have taken its snapshot before the append; a
-            # worker spawned while the pool shuts down is killed here, or it
-            # outlives the run. It is still starting Forge: no game is cut.
-            if self._shutdown_event.is_set():
-                self._kill(proc, starting=self._graceful is not None)
-
-            try:
-                proc.wait()
-            except Exception as exc:
-                print(f"Monitor error for worker {worker_id}: {exc}")
-
-            lifetime = time.monotonic() - started
-            ending, matches, games = self._ending(proc)
-            # A worker that recycled itself played until its recycle time,
-            # however short: it failed to start only if it played no game (a
-            # best-of-N match spanning the recycle time finishes no match).
-            failed = (
-                games == 0 if ending == "recycled"
-                else self._failed_start(proc, lifetime=lifetime)
-            )
-            with self._processes_lock:
-                if proc in self._processes:
-                    self._processes.remove(proc)
-                # A killed worker that has exited is no survivor; holding its
-                # Popen for the pool's life would hold a process handle per
-                # recycle. One still running stays, to be reported.
-                if proc.poll() is not None:
-                    self._kill_attempted = [
-                        attempted for attempted in self._kill_attempted
-                        if attempted is not proc
-                    ]
-                self._start_times.pop(proc, None)
-                self._killed.discard(proc)
-                self._killed_starting.discard(proc)
-                self._slots.pop(proc, None)
-                self._log_marks.pop(proc, None)
-                self._deadlines.pop(proc, None)
-                if proc.poll() is not None:
-                    setattr(self._stops, ending, getattr(self._stops, ending) + 1)
-
+            ended = self._wait_out(worker)
             if self._shutdown_event.is_set():
                 return
+            self._restart_after(worker, ended)
 
-            if ending == "recycled":
-                print(
-                    f"Worker {worker_id} recycled itself at a game end after "
-                    f"{lifetime:.0f}s ({matches} matches, {games} games), restarting..."
-                )
-            else:
-                print(f"Worker {worker_id} exited (code {proc.returncode}), restarting...")
-            if failed:
-                self._note_failed_start(
-                    worker_id,
-                    f"worker recycled itself {lifetime:.0f}s after starting without "
-                    "playing a game (is --recycle-seconds shorter than a Forge start?)"
-                    if ending == "recycled" else
-                    f"worker exited (code {proc.returncode}) {lifetime:.0f}s "
-                    "after starting",
-                )
-            else:
-                with self._processes_lock:
-                    self._failed_starts[worker_id] = 0
+    def _spawn(self, worker_id: int) -> PoolWorker | None:
+        """Spawn a worker in slot ``worker_id``, bind it to this process and
+        keep it; None when the spawn raised, which counts as a failed start
+        unless the pool shuts down."""
+        mark = self._prepare_slot(worker_id)
+        try:
+            proc = self._spawn_worker(worker_id)
+        except Exception as exc:
+            if not self._shutdown_event.is_set():
+                print(f"Monitor error for worker {worker_id}: {exc}")
+                self._note_failed_start(worker_id, f"{type(exc).__name__}: {exc}")
+            return None
+        started = time.monotonic()
+        bind_to_this_process(proc)
+        worker = self._books.track(proc, slot=worker_id, started=started, mark=mark)
+        # _terminate_all may have taken its snapshot before the worker was
+        # kept; a worker spawned while the pool shuts down is killed here, or
+        # it outlives the run. It is still starting Forge: no game is cut.
+        if self._shutdown_event.is_set():
+            self._kill(worker, starting=self._graceful is not None)
+        return worker
+
+    def _wait_out(self, worker: PoolWorker) -> _Ended:
+        """Wait for ``worker`` to end, read how it ended and drop it."""
+        try:
+            worker.process.wait()
+        except Exception as exc:
+            print(f"Monitor error for worker {worker.slot}: {exc}")
+
+        lifetime = time.monotonic() - worker.started
+        ending, matches, games = self._ending(worker)
+        # A worker that recycled itself played until its recycle time,
+        # however short: it failed to start only if it played no game (a
+        # best-of-N match spanning the recycle time finishes no match).
+        failed = (
+            games == 0 if ending == "recycled"
+            else self._failed_start(worker.process, lifetime=lifetime)
+        )
+        self._books.drop(worker, ending)
+        return _Ended(ending, matches, games, lifetime, failed)
+
+    def _restart_after(self, worker: PoolWorker, ended: _Ended) -> None:
+        """Say why a slot's worker is restarted, and count a failed start or
+        clear the slot's count."""
+        proc = worker.process
+        if ended.ending == "recycled":
+            print(
+                f"Worker {worker.slot} recycled itself at a game end after "
+                f"{ended.lifetime:.0f}s ({ended.matches} matches, {ended.games} games), "
+                "restarting..."
+            )
+        else:
+            print(f"Worker {worker.slot} exited (code {proc.returncode}), restarting...")
+        if ended.failed:
+            self._note_failed_start(worker.slot, self._failure_reason(proc, ended))
+            return
+        self._books.clear_failed_starts(worker.slot)
+
+    @staticmethod
+    def _failure_reason(proc: subprocess.Popen, ended: _Ended) -> str:
+        """What a failed start's error says, should it end the run."""
+        if ended.ending == "recycled":
+            return (
+                f"worker recycled itself {ended.lifetime:.0f}s after starting without "
+                "playing a game (is --recycle-seconds shorter than a Forge start?)"
+            )
+        return f"worker exited (code {proc.returncode}) {ended.lifetime:.0f}s after starting"
 
     def _prepare_slot(self, worker_id: int) -> LogMark | None:
         """Under the protocol, before a slot's worker is spawned: delete its
@@ -420,7 +433,7 @@ class ForgeWorkerPool:
             print(f"Could not delete worker {worker_id}'s stop file {stop_file}: {exc}")
         return LogMark.of(Path(self._graceful.log_path_for(worker_id)))
 
-    def _ending(self, proc: subprocess.Popen) -> tuple[str, int | None, int | None]:
+    def _ending(self, worker: PoolWorker) -> tuple[str, int | None, int | None]:
         """How an ended worker ended (a :class:`WorkerStops` field) and, for
         one that printed the stop line, the matches its JVM finished and the
         games it played.
@@ -430,38 +443,36 @@ class ForgeWorkerPool:
         without the line, or any other code, is no stop: ``killed_starting``
         or ``killed`` when the pool killed it, ``ended_otherwise`` when the
         pool had asked, else ``crashed``."""
-        with self._processes_lock:
-            asked = proc in self._deadlines
-            killed = proc in self._killed
-            starting = proc in self._killed_starting
-            mark = self._log_marks.get(proc)
-        if getattr(proc, "returncode", None) == 0 and mark is not None:
-            line = stop_line_of(mark.written_since(tail=_LOG_TAIL_BYTES))
-            if line is not None:
-                return (("stopped" if asked else "recycled"), int(line.group("matches")),
-                        int(line.group("games")))
+        asked, killed, starting = self._books.kills_of(worker)
+        line = self._stop_line(worker)
+        if line is not None:
+            return (("stopped" if asked else "recycled"), int(line.group("matches")),
+                    int(line.group("games")))
         if killed:
             return ("killed_starting" if starting else "killed"), None, None
         return ("ended_otherwise" if asked else "crashed"), None, None
 
+    @staticmethod
+    def _stop_line(worker: PoolWorker):
+        """The stop line an ended worker printed since its spawn, if it
+        exited 0 under the protocol; else None."""
+        if getattr(worker.process, "returncode", None) != 0 or worker.mark is None:
+            return None
+        return stop_line_of(worker.mark.written_since(tail=_LOG_TAIL_BYTES))
+
     def _failed_start(self, proc: subprocess.Popen, *, lifetime: float) -> bool:
         """Whether a worker that exited after ``lifetime`` seconds failed to
         start: it exited that soon and the pool did not kill it."""
-        with self._processes_lock:
-            killed = proc in self._killed
+        killed = self._books.was_killed(proc)
         return not killed and lifetime < self._quick_exit_seconds
 
     def _note_failed_start(self, worker_id: int, reason: str) -> None:
         """Count one failed start of ``worker_id``. Once every slot has failed
         ``max_failed_starts`` in a row the run ends; otherwise wait out the
         backoff."""
-        with self._processes_lock:
-            failures = self._failed_starts.get(worker_id, 0) + 1
-            self._failed_starts[worker_id] = failures
-            every_slot_failed = all(
-                self._failed_starts.get(slot, 0) >= self._max_failed_starts
-                for slot in range(self._worker_count)
-            )
+        failures, every_slot_failed = self._books.note_failed_start(
+            worker_id, limit=self._max_failed_starts, slots=self._worker_count,
+        )
         if every_slot_failed:
             self._start_failure = reason
             self._shutdown_event.set()
@@ -500,42 +511,60 @@ class ForgeWorkerPool:
         # the status line counts this run's, and the first rate is not inflated
         # by the whole file.
         baseline = self.output_line_count()
-        last_count = baseline
-        last_time = start_time
+        last = LastStatus(start_time, baseline, start_time, baseline)
         next_status = start_time + self._status_interval
 
         while not self._shutdown_event.is_set():
-            if self._should_stop is not None and self._should_stop(
-                self.output_line_count()
-            ):
-                self._shutdown_event.set()
+            if self._stop_polled():
                 break
-
-            timeout = self._sleep_slice(next_status)
-            self._shutdown_event.wait(timeout=timeout)
+            self._shutdown_event.wait(timeout=self._sleep_slice(next_status))
             if self._shutdown_event.is_set():
                 break
-
             now = time.monotonic()
             if now < next_status:
                 continue  # a stop-poll slice, not a status tick
-
-            last_count, last_time = self._report_status(
-                start_time, now, last_count, last_time, baseline,
-            )
-            if self._on_status is not None:
-                try:
-                    self._on_status()
-                except Exception as exc:  # noqa: BLE001 — a report never stops a run
-                    print(f"Status report failed: {exc}")
+            last = self._status_tick(last, now)
             next_status = now + self._status_interval
-            if self._should_stop is not None and self._should_stop(last_count):
-                self._shutdown_event.set()
+            if self._stops_at(last.count):
                 break
-            if self._graceful is not None:
-                self._kill_overdue_workers()
-            self._kill_oldest_worker()
+            self._recycle()
 
+        self._announce_shutdown()
+        self._terminate_all()
+
+    def _stop_polled(self) -> bool:
+        """:meth:`_stops_at` the output's line count now, the file read only
+        when there is a stop condition."""
+        return self._should_stop is not None and self._stops_at(self.output_line_count())
+
+    def _stops_at(self, count: int) -> bool:
+        """Whether the stop condition holds at line count ``count``; sets
+        the shutdown when it does. What the condition raises ends the run."""
+        if self._should_stop is None or not self._should_stop(count):
+            return False
+        self._shutdown_event.set()
+        return True
+
+    def _status_tick(self, last: LastStatus, now: float) -> LastStatus:
+        """Print the status line and run the status hook; where this line
+        left off."""
+        count, when = self._report_status(last, now)
+        if self._on_status is not None:
+            try:
+                self._on_status()
+            except Exception as exc:  # noqa: BLE001 — a report never stops a run
+                print(f"Status report failed: {exc}")
+        return LastStatus(last.start_time, count, when, last.baseline)
+
+    def _recycle(self) -> None:
+        """A status tick's kills: under the protocol the overdue workers,
+        then, always, the oldest."""
+        if self._graceful is not None:
+            self._kill_overdue_workers()
+        self._kill_oldest_worker()
+
+    def _announce_shutdown(self) -> None:
+        """Say how the run's workers are ended."""
         if self._graceful is None:
             print(f"Shutting down, terminating {self._worker_count} workers...")
         else:
@@ -543,7 +572,6 @@ class ForgeWorkerPool:
                 f"Shutting down, asking {self._worker_count} workers to stop at "
                 "their game's end..."
             )
-        self._terminate_all()
 
     def _sleep_slice(self, next_status: float) -> float:
         """How long to wait next: the stop-poll slice, or the rest of the interval."""
@@ -552,32 +580,24 @@ class ForgeWorkerPool:
             return max(0.0, remaining)
         return max(0.0, min(float(self.STOP_POLL_INTERVAL), remaining))
 
-    def _report_status(
-        self,
-        start_time: float,
-        now: float,
-        last_count: int,
-        last_time: float,
-        baseline: int = 0,
-    ) -> tuple[int, float]:
+    def _report_status(self, last: LastStatus, now: float) -> tuple[int, float]:
         """Print one status line and return the file's line count and ``now``.
 
-        ``baseline`` is the line count when the run started; the line reports
-        the matches completed since, while the returned count stays the whole
-        file's, which is what ``should_stop`` is handed.
+        ``last.baseline`` is the line count when the run started; the line
+        reports the matches completed since, while the returned count stays
+        the whole file's, which is what ``should_stop`` is handed.
         """
-        elapsed = now - start_time
-        interval = now - last_time
+        elapsed = now - last.start_time
+        interval = now - last.time
 
         count = self.output_line_count()
-        delta = count - last_count
+        delta = count - last.count
         rate = delta / interval * 60 if interval > 0 else 0.0
 
-        with self._processes_lock:
-            alive = sum(1 for p in self._processes if p.poll() is None)
+        alive = self._books.alive_count()
 
         print(
-            f"[{elapsed:.0f}s] {count - baseline} matches completed"
+            f"[{elapsed:.0f}s] {count - last.baseline} matches completed"
             f" | {rate:.1f} matches/min"
             f" | {alive}/{self._worker_count} workers alive"
         )
@@ -620,43 +640,29 @@ class ForgeWorkerPool:
         if self._graceful is not None:
             self._kill_oldest_playing_worker()
             return
-        with self._processes_lock:
-            alive = [(p, t) for p, t in self._start_times.items() if p.poll() is None]
-            if not alive:
-                return
-            oldest_proc, oldest_time = min(alive, key=lambda x: x[1])
-            age = time.monotonic() - oldest_time
-            self._killed.add(oldest_proc)
-
-        self._kill(oldest_proc)
-        print(f"Recycled longest-running worker (PID {oldest_proc.pid}, age {age:.0f}s)")
+        found = self._books.oldest_alive()
+        if found is None:
+            return
+        oldest, age = found
+        self._kill(oldest)
+        print(f"Recycled longest-running worker (PID {oldest.process.pid}, age {age:.0f}s)")
 
     def _kill_oldest_playing_worker(self) -> None:
         """:meth:`_kill_oldest_worker` under the stop protocol: the oldest
         worker past its Forge start, neither asked to stop nor already killed."""
         if self._shutdown_event.is_set():
             return
-        with self._processes_lock:
-            candidates = sorted(
-                (
-                    (started, proc, self._slots.get(proc, -1), self._log_marks.get(proc))
-                    for proc, started in self._start_times.items()
-                    if proc.poll() is None and proc not in self._deadlines
-                    and not any(proc is attempted for attempted in self._kill_attempted)
-                ),
-                key=lambda candidate: candidate[0],
-            )
-        for started, proc, slot, mark in candidates:
-            if not past_forge_start(mark):
-                continue
-            age = time.monotonic() - started
-            self._kill(proc)
-            print(
-                f"Recycled longest-running worker {slot} (PID {proc.pid}, age "
-                f"{age:.0f}s); the game it was playing is cut (no game-end "
-                "marker: build-corpus drops it)"
-            )
+        candidates = sorted(self._books.recyclable(), key=lambda w: w.started)
+        oldest = next((w for w in candidates if past_forge_start(w.mark)), None)
+        if oldest is None:
             return
+        age = time.monotonic() - oldest.started
+        self._kill(oldest)
+        print(
+            f"Recycled longest-running worker {oldest.slot} (PID {oldest.process.pid}, age "
+            f"{age:.0f}s); the game it was playing is cut (no game-end "
+            "marker: build-corpus drops it)"
+        )
 
     def _kill_overdue_workers(self) -> None:
         """Kill every worker still running ``recycle + timeout`` seconds after
@@ -671,37 +677,30 @@ class ForgeWorkerPool:
         settings = self._graceful.settings
         limit = settings.recycle_seconds + settings.timeout
         now = time.monotonic()
-        with self._processes_lock:
-            overdue = [
-                (proc, self._slots.get(proc, -1), now - started)
-                for proc, started in self._start_times.items()
-                if proc.poll() is None and now - started > limit
-                and proc not in self._deadlines
-                and not any(proc is attempted for attempted in self._kill_attempted)
-            ]
-        for proc, slot, age in overdue:
+        overdue = [
+            (w, now - w.started) for w in self._books.recyclable() if now - w.started > limit
+        ]
+        for worker, age in overdue:
             print(
-                f"Killing worker {slot} (PID {proc.pid}), {age:.0f}s old: its game "
-                f"has not ended {_seconds(settings.timeout)} past its "
+                f"Killing worker {worker.slot} (PID {worker.process.pid}), {age:.0f}s old: "
+                f"its game has not ended {_seconds(settings.timeout)} past its "
                 f"{_seconds(settings.recycle_seconds)} recycle time; the game it "
                 "was playing is cut (no game-end marker: build-corpus drops it)"
             )
-            self._kill(proc)
+            self._kill(worker)
 
     def _terminate_all(self) -> None:
         """End every running worker: without the protocol, kill it; with it,
         ask it to stop at its game's end and wait (:meth:`_stop_all`)."""
-        with self._processes_lock:
-            procs = list(self._processes)
-
+        workers = self._books.running()
         if self._graceful is None:
-            for proc in procs:
-                self._kill(proc)
+            for worker in workers:
+                self._kill(worker)
             return
-        self._stop_all(procs)
+        self._stop_all(workers)
 
-    def _stop_all(self, procs: list[subprocess.Popen]) -> None:
-        """Ask every running worker of ``procs`` to stop at its game's end,
+    def _stop_all(self, workers: list[PoolWorker]) -> None:
+        """Ask every running worker of ``workers`` to stop at its game's end,
         then wait until each has ended, killing one ``timeout`` seconds after
         the request. A worker whose log shows it still starting Forge (no
         startup line since its spawn) is killed at once, counted as
@@ -710,74 +709,78 @@ class ForgeWorkerPool:
         none has a game to cut. One that has already ended is not waited
         for; one asked before keeps its deadline, so a second call waits out
         no timeout twice; a second interrupt kills at once."""
-        settings = self._graceful.settings
-        now = time.monotonic()
-        asked: list[tuple[subprocess.Popen, int]] = []
-        with self._processes_lock:
-            for proc in procs:
-                if proc.poll() is not None or proc in self._deadlines:
-                    continue
-                self._deadlines[proc] = now + settings.timeout
-                asked.append((proc, self._slots.get(proc, -1)))
-        for proc, slot in asked:
-            stop_file = Path(self._graceful.stop_file_for(slot))
+        timeout = self._graceful.settings.timeout
+        asked = self._books.ask_to_stop(workers, deadline=time.monotonic() + timeout)
+        self._create_stop_files(asked)
+        starting = self._kill_starting(asked)
+        if len(asked) > len(starting):
+            print(
+                f"Asked {len(asked) - len(starting)} worker(s) to stop at their game's "
+                f"end; each is killed {_seconds(timeout)} after the request"
+            )
+        self._wait_for_stops(asked)
+
+    def _create_stop_files(self, asked: list[PoolWorker]) -> None:
+        """Create each asked worker's stop file; kill one whose file cannot be."""
+        for worker in asked:
+            stop_file = Path(self._graceful.stop_file_for(worker.slot))
             try:
                 stop_file.parent.mkdir(parents=True, exist_ok=True)
                 stop_file.touch()
             except OSError as exc:
-                print(f"Could not ask worker PID {proc.pid} to stop ({stop_file}: {exc}); "
-                      "killing it")
-                self._kill(proc)
+                print(f"Could not ask worker PID {worker.process.pid} to stop "
+                      f"({stop_file}: {exc}); killing it")
+                self._kill(worker)
+
+    def _kill_starting(self, asked: list[PoolWorker]) -> list[PoolWorker]:
+        """Kill every asked worker still starting Forge; those."""
         starting = []
-        for proc, slot in asked:
-            with self._processes_lock:
-                mark = self._log_marks.get(proc)
-            if not past_forge_start(mark):
-                starting.append(proc)
-                print(f"Killing worker {slot} (PID {proc.pid}): still starting Forge, "
-                      "no game to cut")
-                self._kill(proc, starting=True)
-        if len(asked) > len(starting):
-            print(
-                f"Asked {len(asked) - len(starting)} worker(s) to stop at their game's "
-                f"end; each is killed {_seconds(settings.timeout)} after the request"
-            )
+        for worker in asked:
+            if not past_forge_start(worker.mark):
+                starting.append(worker)
+                print(f"Killing worker {worker.slot} (PID {worker.process.pid}): "
+                      "still starting Forge, no game to cut")
+                self._kill(worker, starting=True)
+        return starting
+
+    def _wait_for_stops(self, asked: list[PoolWorker]) -> None:
+        """Poll the workers asked to stop until none is left running and
+        unkilled, killing each past its deadline, or every one on a second
+        interrupt."""
+        timeout = self._graceful.settings.timeout
         while True:
-            with self._processes_lock:
-                waiting = [
-                    (proc, deadline) for proc, deadline in self._deadlines.items()
-                    if proc.poll() is None
-                    and not any(proc is attempted for attempted in self._kill_attempted)
-                ]
+            waiting = self._books.still_waiting(asked)
             if not waiting:
                 return
             now = time.monotonic()
-            for proc, deadline in waiting:
-                if self._hurry.is_set():
-                    print(f"Killing worker PID {proc.pid}: interrupted again")
-                    self._kill(proc)
-                elif now >= deadline:
-                    print(
-                        f"Killing worker PID {proc.pid}: it did not stop within "
-                        f"{_seconds(settings.timeout)} of the request; its game is cut"
-                    )
-                    self._kill(proc)
+            for worker, deadline in waiting:
+                self._kill_if_due(worker, deadline=deadline, now=now, timeout=timeout)
             self._hurry.wait(timeout=self.STOP_POLL_SECONDS)
 
-    def _kill(self, proc: subprocess.Popen, *, starting: bool = False) -> None:
+    def _kill_if_due(
+        self, worker: PoolWorker, *, deadline: float, now: float, timeout: float,
+    ) -> None:
+        """Kill a worker asked to stop on a second interrupt, or once its
+        ``deadline`` has passed."""
+        pid = worker.process.pid
+        if self._hurry.is_set():
+            print(f"Killing worker PID {pid}: interrupted again")
+            self._kill(worker)
+        elif now >= deadline:
+            print(
+                f"Killing worker PID {pid}: it did not stop within "
+                f"{_seconds(timeout)} of the request; its game is cut"
+            )
+            self._kill(worker)
+
+    def _kill(self, worker: PoolWorker, *, starting: bool = False) -> None:
         """Kill one worker's tree, once: a second call for the same worker
         (the loop's shutdown, then ``run``'s ``finally``) does nothing, so a
         survivor's timed-out kill is not waited out twice. The single kill
         path of the pool. ``starting``: a worker still starting Forge, whose
         kill cuts no game (``killed_starting``)."""
-        with self._processes_lock:
-            if any(proc is attempted for attempted in self._kill_attempted):
-                return
-            self._kill_attempted.append(proc)
-            self._killed.add(proc)
-            if starting:
-                self._killed_starting.add(proc)
-        kill_process_tree(proc)
+        if self._books.claim_kill(worker, starting=starting):
+            kill_process_tree(worker.process)
 
     def _handle_signal(self, signum, frame) -> None:
         """Signal handler: set shutdown event to stop workers. A signal while

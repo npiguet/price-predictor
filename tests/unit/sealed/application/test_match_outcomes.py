@@ -139,10 +139,8 @@ class TestSupervisorRecycleOldest:
         old_proc = FakeProcess(pid=100, hang=True)
         new_proc = FakeProcess(pid=200, hang=True)
 
-        with supervisor._processes_lock:
-            supervisor._processes.extend([old_proc, new_proc])
-            supervisor._start_times[old_proc] = 1000.0
-            supervisor._start_times[new_proc] = 2000.0
+        supervisor._pool._books.track(old_proc, slot=-1, started=1000.0)
+        supervisor._pool._books.track(new_proc, slot=-1, started=2000.0)
 
         supervisor._kill_oldest_worker()
 

@@ -15,7 +15,7 @@ from price_predictor.domain.worker_status import (
     render_hook_failures,
 )
 from price_predictor.infrastructure.append_only import has_shard_record
-from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
+from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool, PoolOptions
 from price_predictor.infrastructure.run_manifest import annotate_run
 from price_predictor.infrastructure.worker_log_files import WorkerLogFiles
 from price_predictor.infrastructure.worker_log_scan import WorkerLogReport
@@ -140,10 +140,12 @@ class MatchOutcomeSupervisor:
             worker_count=worker_count,
             spawn_worker=lambda worker_id: self._start_worker(worker_id),
             output_path=output_path,
-            on_status=self._report_worker_logs if self._log_report is not None else None,
-            graceful=(
-                self._worker_logs.graceful_stop(self._worker_stop)
-                if self._worker_stop is not None else None
+            options=PoolOptions(
+                on_status=self._report_worker_logs if self._log_report is not None else None,
+                graceful=(
+                    self._worker_logs.graceful_stop(self._worker_stop)
+                    if self._worker_stop is not None else None
+                ),
             ),
         )
 
@@ -365,18 +367,6 @@ class MatchOutcomeSupervisor:
 
     # ── Pool state, exposed under the names this class published before the
     # extraction so callers and tests keep working. ──────────────────────────
-
-    @property
-    def _processes(self) -> list[subprocess.Popen]:
-        return self._pool._processes
-
-    @property
-    def _start_times(self) -> dict[subprocess.Popen, float]:
-        return self._pool._start_times
-
-    @property
-    def _processes_lock(self) -> threading.Lock:
-        return self._pool._processes_lock
 
     @property
     def _shutdown_event(self) -> threading.Event:

@@ -25,7 +25,7 @@ from draft.domain.seat_table import (
 )
 from draft.infrastructure.draft_game_connector import DraftGameConnector
 from draft.infrastructure.draft_record_io import read_records
-from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
+from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool, PoolOptions
 
 DEFAULT_WORKERS = 12
 DEFAULT_BEST_OF = 3
@@ -173,7 +173,7 @@ class PlayDraftGamesUseCase:
             worker_count=config.workers,
             spawn_worker=spawn,
             output_path=config.output_path,
-            should_stop=should_stop,
+            options=PoolOptions(should_stop=should_stop),
         )
 
 
