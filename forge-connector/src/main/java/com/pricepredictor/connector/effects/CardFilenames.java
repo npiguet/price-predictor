@@ -133,4 +133,16 @@ public final class CardFilenames {
     public static ScriptFile scriptFile(SourceTree tree, String cardName) {
         return scriptFileForStem(tree, stemOf(cardName));
     }
+
+    /**
+     * The script a staged variant is filed under: {@code sanitize(name)} in
+     * the flat variant tree, with no {@code a-} case. The Python writer
+     * ({@code write_variant}) names the file the same way, so a variant of
+     * "A-Acererak the Archlich" is {@code a_acererak_...txt} on both sides,
+     * unlike its ordinary rebalanced source, which keeps {@link #stemOf}'s
+     * {@code a-} as Forge's own file does.
+     */
+    public static ScriptFile variantScriptFile(String variantName) {
+        return scriptFileForStem(SourceTree.VARIANT_SCRIPTS, sanitize(variantName));
+    }
 }

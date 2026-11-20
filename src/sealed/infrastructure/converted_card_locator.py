@@ -246,7 +246,13 @@ class ConvertedCardLocator:
         # under cardsfolder/rebalanced/ as "a-akki_ronin.txt" — the literal
         # "a-" prefix is kept (the general sanitizer would turn it into
         # "a_"), and the directory is "rebalanced" rather than first-letter.
-        rebalanced = card_name[:2].upper() == "A-" and len(card_name) > 2
+        # A variant tree is the exception: a variant is filed under its
+        # sanitized name alone (``a_acererak_...``), as ``write_variant``
+        # writes it and ``CardFilenames.variantScriptFile`` keys it.
+        rebalanced = (
+            card_name[:2].upper() == "A-" and len(card_name) > 2
+            and self._tree != "variant-scripts"
+        )
         if rebalanced:
             stem = sanitize_card_name(card_name[2:], FILENAME_CORRECTIONS)
             filename, first_letter = f"a-{stem}", self._REBALANCED_DIR

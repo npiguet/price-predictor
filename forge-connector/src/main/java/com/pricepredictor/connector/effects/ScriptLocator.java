@@ -112,7 +112,7 @@ final class ScriptLocator {
                 .filter(VariantRegistry::isVariant)
                 .or(() -> Optional.ofNullable(rules).map(CardRules::getName)
                         .filter(VariantRegistry::isVariant))
-                .map(name -> CardFilenames.scriptFile(SourceTree.VARIANT_SCRIPTS, name));
+                .map(CardFilenames::variantScriptFile);
     }
 
     /** The card-tree file the card reader actually opened, when it says so. */

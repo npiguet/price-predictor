@@ -103,7 +103,8 @@ How a key resolves, by case:
 
 ## Variant scripts
 
-- The variant tree (`--variant-scripts`, one `inputs` run directory every variant run of a generation extends) holds the perturbed Forge source scripts, flat. The filename is the path a variant's provenance key resolves to, so it cannot be derived from the source file's stem. `loadable.lst` is the only file in the tree that is not a variant script.
+- The variant tree (`--variant-scripts`, one `inputs` run directory every variant run of a generation extends) holds the perturbed Forge source scripts, flat. The filename is the path a variant's provenance key resolves to, so it cannot be derived from the source file's stem. The name is `sanitize(card name)` alone, with no `a-` case: a variant of `A-Acererak the Archlich` is `a_acererak_the_archlich_variant_<digest>.txt`, as `write_variant` writes it, `ConvertedCardLocator(tree="variant-scripts")` reads it and `CardFilenames.variantScriptFile` keys it (an ordinary rebalanced card keeps Forge's `a-` stem). `loadable.lst` is the only file in the tree that is not a variant script.
+- A script with more than one face is not eligible: `is_multi_face` tests both separators, `ALTERNATE` and `SPECIALIZE:` (Specialize cards), and `renamed_script` rewrites only the first `Name:` line.
 - Each variant gets its sidecar from `VariantSidecarMain`, which runs the ordinary converter with the text output suppressed. A key's `index_within_kind` is the trait's position in Forge's runtime trait list, so only the parser that builds that list can number it the way a record will.
 - The tree has no prose surface: `SidecarCache.prose_for` returns None for it, and the prose surface falls back to the script.
 - Variants are staged into Forge's custom-cards directory before `FModel.initialize`. The card database is read once at startup, and a script that appears afterwards is invisible for the life of the JVM.

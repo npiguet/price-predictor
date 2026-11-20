@@ -55,6 +55,25 @@ class CardFilenamesTest {
                 CardFilenames.scriptFile(SourceTree.TOKENSCRIPTS, "Ajani's Pridemate").key());
     }
 
+    /**
+     * The same table as {@code VARIANT_FILE_STEMS} in
+     * {@code tests/unit/effects/application/test_variant_file_names.py}: the
+     * Python writer's file stem is the Java key's. A variant is never a split
+     * {@code //} card (a multi-faced source is not eligible), so no such row.
+     */
+    @ParameterizedTest
+    @CsvSource({
+            "A-Acererak the Archlich Variant 1a2b3c4d, a_acererak_the_archlich_variant_1a2b3c4d",
+            "Ajani's Pridemate Variant 0badf00d,       ajanis_pridemate_variant_0badf00d",
+            "'Borborygmos, Enraged Variant 12345678',  borborygmos_enraged_variant_12345678",
+            "Lim-Dûl's Vault Variant deadbeef,         lim_duls_vault_variant_deadbeef",
+            "Serra Angel Variant 00ff00ff,             serra_angel_variant_00ff00ff",
+    })
+    void variantFileStemsMatchThePythonTable(String variantName, String stem) {
+        assertEquals("variant-scripts/" + stem + ".txt",
+                CardFilenames.variantScriptFile(variantName).key());
+    }
+
     @Test
     void aVariantPathIsFlatToo() {
         assertEquals("variant-scripts/serra_angel.txt",

@@ -251,19 +251,35 @@ def script_mana_cost(lines: list[str]) -> str | None:
 
 
 def renamed_script(lines: list[str], name: str) -> list[str]:
-    """Give the variant its own name so Forge files it as a separate card."""
-    return [
-        f"Name:{name}" if line.startswith("Name:") else line for line in lines
-    ]
+    """Give the variant its own name so Forge files it as a separate card.
+
+    Only the first ``Name:`` line is rewritten; a later one belongs to another
+    face, which :func:`is_multi_face` keeps out of a variant anyway.
+    """
+    renamed = list(lines)
+    first = next(
+        (index for index, line in enumerate(renamed) if line.startswith("Name:")),
+        None,
+    )
+    if first is not None:
+        renamed[first] = f"Name:{name}"
+    return renamed
+
+
+#: The lines that open another face of a script: ``ALTERNATE`` (every
+#: double-faced, split, adventure, modal, flip, omen, prepare and meld-result
+#: card) and ``SPECIALIZE:<COLOR>`` (the five faces of a Specialize card).
+_FACE_SEPARATORS = ("ALTERNATE", "SPECIALIZE:")
 
 
 def is_multi_face(source_lines: list[str]) -> bool:
-    """Whether a Forge script declares more than one card face.
+    """Whether a Forge script declares more than one card face, behind
+    ``ALTERNATE`` or ``SPECIALIZE:``.
 
     Such a card is never varied: renaming rewrites only the first ``Name:``
     line, and faces that disagree make ``StaticData`` throw while building the
     whole card database, killing every Forge startup that sees the script.
     """
     return any(
-        line.strip().startswith("ALTERNATE") for line in source_lines
+        line.strip().startswith(_FACE_SEPARATORS) for line in source_lines
     )
