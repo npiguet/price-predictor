@@ -79,7 +79,9 @@ LINES = {
     WorkerFailure.STAGING_FAILED: "Could not stage custom cards from x: denied; variant cards",
     WorkerFailure.VARIANT_NAMES_UNREADABLE: "Could not read variant names from x: gone",
     WorkerFailure.DROPPED_EVENTS_UNWRITABLE: "cannot append dropped-event counts to x: full",
-    WorkerFailure.STACK_UNREADABLE: "effect records: MagicStack.primaryAbility cannot be read (x)",
+    WorkerFailure.STACK_UNREADABLE: (
+        "effect records: MagicStack.getEffectRecordPrimaryAbility is absent; a special action"
+    ),
     WorkerFailure.JVM_ERROR: 'Exception in thread "main" java.lang.OutOfMemoryError: heap',
 }
 

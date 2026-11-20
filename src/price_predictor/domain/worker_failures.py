@@ -146,8 +146,8 @@ FAILURE_PATTERNS: tuple[FailurePattern, ...] = (
     _pattern(WorkerFailure.DROPPED_EVENTS_UNWRITABLE, r"cannot append dropped-event counts",
              "cannot append dropped-event counts to "),
     _pattern(WorkerFailure.STACK_UNREADABLE,
-             r"effect records: MagicStack\.primaryAbility cannot be read",
-             "effect records: MagicStack.primaryAbility cannot be read ("),
+             r"effect records: MagicStack\.getEffectRecordPrimaryAbility is absent",
+             "effect records: MagicStack.getEffectRecordPrimaryAbility is absent;"),
     _pattern(WorkerFailure.JVM_ERROR,
              r"(Exception in thread |java\.lang\.OutOfMemoryError|# There is insufficient memory"
              r"|# A fatal error has been detected by the Java Runtime Environment)",
