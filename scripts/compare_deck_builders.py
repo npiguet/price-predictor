@@ -42,7 +42,7 @@ from price_predictor.infrastructure.run_manifest import ScriptRun, run_script
 from sealed.application.build_decks import BuildDecksConfig, BuildDecksUseCase
 from sealed.application.deck_assembly import load_pool_embeddings
 from sealed.application.evaluate_scorer import format_decks_for_display, score_decks
-from sealed.application.pick_decks import PickDecksUseCase
+from sealed.application.pick_decks import LoadedPicker, PickDecksUseCase
 from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 from sealed.infrastructure.evaluation_connector import EvaluationConnector
@@ -152,14 +152,14 @@ def _build_picker_decks(kept: list[list[str]], setup: PickerSetup) -> list[list[
     decks: list[list[str]] = []
     step = max(1, len(kept) // 20)
     width_checked = False
+    picker = LoadedPicker(setup.picker, setup.picker_dim, setup.locator, setup.device)
     for i, names in enumerate(kept, 1):
         embs, valid = load_pool_embeddings(names, setup.locator)
         if not width_checked:
             setup.use_case._check_width(setup.picker_dim, embs[valid[0]].shape[0],
                                         setup.picker_checkpoint, setup.cards_path)
             width_checked = True
-        decks.append(list(setup.use_case._build_one_deck(
-            setup.picker, embs, valid, setup.locator, setup.device).cards))
+        decks.append(list(setup.use_case._build_one_deck(picker, embs, valid).cards))
         _log_progress("deck-picker", i, len(kept), step)
     return decks
 

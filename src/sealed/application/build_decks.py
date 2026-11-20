@@ -59,6 +59,67 @@ class BuildDecksConfig:
     deck. With this flag off (the default), ``output`` is overwritten."""
 
 
+@dataclass(frozen=True)
+class _ResumePoint:
+    skip: int
+    open_mode: str
+    pools: list
+
+
+def _resume_point(config: BuildDecksConfig, pools: list) -> _ResumePoint:
+    """Where the run starts: after the decks already written when resuming."""
+    if not config.resume:
+        return _ResumePoint(0, "w", pools)
+    skip = count_complete_lines_and_truncate_partial(config.output)
+    if skip > 0:
+        _log(
+            f"Resume: {skip} decks already in {config.output}, "
+            f"skipping pools 1..{skip}."
+        )
+        pools = pools[skip:]
+    return _ResumePoint(skip, "a", pools)
+
+
+def _log_start(config: BuildDecksConfig, total: int) -> None:
+    if config.sa_temperature > 0:
+        _log(
+            f"Building decks for {total} pools with simulated annealing "
+            f"(label={config.label}, T0={config.sa_temperature}, "
+            f"cooling={config.sa_cooling}, "
+            f"max_iter={config.sa_max_iterations}, "
+            f"restarts={config.restarts})..."
+        )
+    else:
+        _log(
+            f"Building decks for {total} pools (label={config.label}, "
+            f"pure greedy, restarts={config.restarts})..."
+        )
+
+
+@dataclass(frozen=True)
+class _BuildRun:
+    """What one ``execute`` call builds with and where it writes."""
+
+    model: SetTransformerScorer
+    locator: ConvertedCardLocator
+    config: BuildDecksConfig
+    total: int
+    skip: int
+    open_mode: str
+
+
+class _DeckSink:
+    """The decks written so far, and the progress log over them."""
+
+    def __init__(self) -> None:
+        self.written = 0
+        self.built_decks: list[list[str]] = []
+
+    def log_progress(self, i: int, total: int, interval: int) -> None:
+        if i % interval == 0 or i == total:
+            _log(f"  {i}/{total} pools processed ({self.written} decks written)")
+
+
 class BuildDecksUseCase:
     """Build one scorer-guided 40-card deck per pool and write the result file.
 
@@ -79,61 +140,47 @@ class BuildDecksUseCase:
         config.output.parent.mkdir(parents=True, exist_ok=True)
 
         total = len(pools)
-        if config.resume:
-            skip = count_complete_lines_and_truncate_partial(config.output)
-            open_mode = "a"
-            if skip > 0:
-                _log(
-                    f"Resume: {skip} decks already in {config.output}, "
-                    f"skipping pools 1..{skip}."
-                )
-                pools = pools[skip:]
-        else:
-            skip = 0
-            open_mode = "w"
-        if config.sa_temperature > 0:
-            _log(
-                f"Building decks for {total} pools with simulated annealing "
-                f"(label={config.label}, T0={config.sa_temperature}, "
-                f"cooling={config.sa_cooling}, "
-                f"max_iter={config.sa_max_iterations}, "
-                f"restarts={config.restarts})..."
-            )
-        else:
-            _log(
-                f"Building decks for {total} pools (label={config.label}, "
-                f"pure greedy, restarts={config.restarts})..."
-            )
-        written = 0
-        built_decks: list[list[str]] = []
+        resume = _resume_point(config, pools)
+        _log_start(config, total)
+        run = _BuildRun(model, locator, config, total, resume.skip, resume.open_mode)
+        sink = self._write_decks(run, resume.pools)
+        _log(f"Done: {sink.written} decks written to {config.output}")
+
+        if config.print_decks and sink.built_decks:
+            scores = score_decks(model, sink.built_decks, locator)
+            print(format_decks_for_display(sink.built_decks, locator, scores))
+        return sink.written
+
+    def _write_decks(self, run: _BuildRun, pools: list) -> _DeckSink:
+        sink = _DeckSink()
         # Log progress at each ~1% of total (so a 1500-pool run prints ~100
         # lines of progress, ~15 pools apart). Floor to 1 so smaller runs
         # still log every pool rather than only at the end. ``total`` is the
-        # original full pool count so the progress milestones (135, 150, …)
+        # original full pool count so the progress milestones (135, 150, ...)
         # match what a fresh run would have logged.
-        progress_interval = max(1, total // 100)
+        progress_interval = max(1, run.total // 100)
         # buffering=1 is line buffering: every "\n" forces a flush to disk so
         # an interrupted run keeps the decks built so far, and `tail -f` on
         # the output file stays current with the loop.
-        with open(config.output, open_mode, buffering=1, encoding="utf-8") as out:
-            for i, pool in enumerate(pools, start=skip + 1):
-                deck = self._build_one_deck(model, pool.cards, locator, config)
-                if deck is not None:
-                    out.write(
-                        format_generated_deck(config.label, pool.set_code, deck.cards),
-                    )
-                    out.write("\n")
-                    written += 1
-                    if config.print_decks:
-                        built_decks.append(list(deck.cards))
-                if i % progress_interval == 0 or i == total:
-                    _log(f"  {i}/{total} pools processed ({written} decks written)")
-        _log(f"Done: {written} decks written to {config.output}")
+        with open(
+            run.config.output, run.open_mode, buffering=1, encoding="utf-8",
+        ) as out:
+            for i, pool in enumerate(pools, start=run.skip + 1):
+                self._write_pool_deck(run, out, pool, sink)
+                sink.log_progress(i, run.total, progress_interval)
+        return sink
 
-        if config.print_decks and built_decks:
-            scores = score_decks(model, built_decks, locator)
-            print(format_decks_for_display(built_decks, locator, scores))
-        return written
+    def _write_pool_deck(self, run: _BuildRun, out, pool, sink: _DeckSink) -> None:
+        deck = self._build_one_deck(run.model, pool.cards, run.locator, run.config)
+        if deck is None:
+            return
+        out.write(
+            format_generated_deck(run.config.label, pool.set_code, deck.cards),
+        )
+        out.write("\n")
+        sink.written += 1
+        if run.config.print_decks:
+            sink.built_decks.append(list(deck.cards))
 
     def _load_model(self, checkpoint_path: Path) -> SetTransformerScorer:
         store = ScorerStore()

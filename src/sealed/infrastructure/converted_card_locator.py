@@ -249,22 +249,27 @@ class ConvertedCardLocator:
         # A variant tree is the exception: a variant is filed under its
         # sanitized name alone (``a_acererak_...``), as ``write_variant``
         # writes it and ``CardFilenames.variantScriptFile`` keys it.
-        rebalanced = (
-            card_name[:2].upper() == "A-" and len(card_name) > 2
-            and self._tree != "variant-scripts"
-        )
-        if rebalanced:
+        if self._is_rebalanced(card_name):
             stem = sanitize_card_name(card_name[2:], FILENAME_CORRECTIONS)
             filename, first_letter = f"a-{stem}", self._REBALANCED_DIR
         else:
-            resolved = sanitize_card_name(card_name, FILENAME_CORRECTIONS)
-            if "/" in resolved:
-                first_letter, filename = resolved.split("/", 1)
-            else:
-                filename = resolved
-                first_letter = filename[0] if filename else "_"
+            filename, first_letter = self._plain_split(card_name)
         # A flat tree has no per-letter directories, so everything sits at the
         # root; the sanitized filename is unchanged either way.
         if self._layout == _FLAT:
             return filename, ""
         return filename, first_letter
+
+    def _is_rebalanced(self, card_name: str) -> bool:
+        return (
+            card_name[:2].upper() == "A-" and len(card_name) > 2
+            and self._tree != "variant-scripts"
+        )
+
+    @staticmethod
+    def _plain_split(card_name: str) -> tuple[str, str]:
+        resolved = sanitize_card_name(card_name, FILENAME_CORRECTIONS)
+        if "/" in resolved:
+            first_letter, filename = resolved.split("/", 1)
+            return filename, first_letter
+        return resolved, resolved[0] if resolved else "_"

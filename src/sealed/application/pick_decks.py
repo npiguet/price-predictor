@@ -50,6 +50,60 @@ class PickDecksConfig:
     resume: bool = False
 
 
+@dataclass(frozen=True)
+class _ResumePoint:
+    skip: int
+    open_mode: str
+    pools: list
+
+
+def _resume_point(config: PickDecksConfig, pools: list) -> _ResumePoint:
+    """Where the run starts: after the decks already written when resuming."""
+    if not config.resume:
+        return _ResumePoint(0, "w", pools)
+    skip = count_complete_lines_and_truncate_partial(config.output)
+    if skip > 0:
+        _log(
+            f"Resume: {skip} decks already in {config.output}, "
+            f"skipping pools 1..{skip}."
+        )
+        pools = pools[skip:]
+    return _ResumePoint(skip, "a", pools)
+
+
+@dataclass(frozen=True)
+class LoadedPicker:
+    """The loaded picker with what it runs against."""
+
+    model: PickerModel
+    embedding_dim: int
+    locator: ConvertedCardLocator
+    device: torch.device
+
+
+@dataclass(frozen=True)
+class _PickRun:
+    """What one ``execute`` call picks with and where it writes."""
+
+    picker: LoadedPicker
+    config: PickDecksConfig
+    total: int
+    skip: int
+    open_mode: str
+
+
+class _PickProgress:
+    """The decks written so far, whether the cache width was checked, the log."""
+
+    def __init__(self) -> None:
+        self.written = 0
+        self.width_checked = False
+
+    def log(self, i: int, total: int, interval: int) -> None:
+        if i % interval == 0 or i == total:
+            _log(f"  {i}/{total} pools processed ({self.written} decks written)")
+
+
 class PickDecksUseCase:
     """Build one picker-guided 40-card deck per pool and write the result file."""
 
@@ -64,45 +118,45 @@ class PickDecksUseCase:
         config.output.parent.mkdir(parents=True, exist_ok=True)
 
         total = len(pools)
-        if config.resume:
-            skip = count_complete_lines_and_truncate_partial(config.output)
-            open_mode = "a"
-            if skip > 0:
-                _log(
-                    f"Resume: {skip} decks already in {config.output}, "
-                    f"skipping pools 1..{skip}."
-                )
-                pools = pools[skip:]
-        else:
-            skip = 0
-            open_mode = "w"
+        resume = _resume_point(config, pools)
 
         _log(f"Building decks for {total} pools (label={config.label})...")
-        written = 0
-        progress_interval = max(1, total // 100)
-        width_checked = False
-        with open(config.output, open_mode, buffering=1, encoding="utf-8") as out:
-            for i, pool in enumerate(pools, start=skip + 1):
-                embeddings, valid_names = load_pool_embeddings(pool.cards, locator)
-                if len(valid_names) >= NONLAND_DECK_SIZE:
-                    if not width_checked:
-                        self._check_width(
-                            embedding_dim, embeddings[valid_names[0]].shape[0],
-                            config.picker_checkpoint, locator.embeddings_root,
-                        )
-                        width_checked = True
-                    deck = self._build_one_deck(
-                        model, embeddings, valid_names, locator, device,
-                    )
-                    out.write(
-                        format_generated_deck(config.label, pool.set_code, deck.cards)
-                        + "\n",
-                    )
-                    written += 1
-                if i % progress_interval == 0 or i == total:
-                    _log(f"  {i}/{total} pools processed ({written} decks written)")
+        picker = LoadedPicker(model, embedding_dim, locator, device)
+        run = _PickRun(picker, config, total, resume.skip, resume.open_mode)
+        written = self._write_decks(run, resume.pools)
         _log(f"Done: {written} decks written to {config.output}")
         return written
+
+    def _write_decks(self, run: _PickRun, pools: list) -> int:
+        progress = _PickProgress()
+        progress_interval = max(1, run.total // 100)
+        with open(
+            run.config.output, run.open_mode, buffering=1, encoding="utf-8",
+        ) as out:
+            for i, pool in enumerate(pools, start=run.skip + 1):
+                self._write_pool_deck(run, out, pool, progress)
+                progress.log(i, run.total, progress_interval)
+        return progress.written
+
+    def _write_pool_deck(
+        self, run: _PickRun, out, pool, progress: _PickProgress,
+    ) -> None:
+        locator = run.picker.locator
+        embeddings, valid_names = load_pool_embeddings(pool.cards, locator)
+        if len(valid_names) < NONLAND_DECK_SIZE:
+            return
+        if not progress.width_checked:
+            self._check_width(
+                run.picker.embedding_dim, embeddings[valid_names[0]].shape[0],
+                run.config.picker_checkpoint, locator.embeddings_root,
+            )
+            progress.width_checked = True
+        deck = self._build_one_deck(run.picker, embeddings, valid_names)
+        out.write(
+            format_generated_deck(run.config.label, pool.set_code, deck.cards)
+            + "\n",
+        )
+        progress.written += 1
 
     def _load_picker(
         self, checkpoint_path: Path, device: torch.device,
@@ -128,17 +182,16 @@ class PickDecksUseCase:
 
     def _build_one_deck(
         self,
-        model: PickerModel,
+        picker: LoadedPicker,
         embeddings: dict[str, np.ndarray],
         valid_names: list[str],
-        locator: ConvertedCardLocator,
-        device: torch.device,
     ) -> Deck:
+        device = picker.device
         embs = [embeddings[name] for name in valid_names]
         arr = np.stack(embs).astype(np.float32)
         cards = torch.from_numpy(arr).unsqueeze(0).to(device)
         mask = torch.ones(1, arr.shape[0], dtype=torch.bool, device=device)
         with torch.no_grad():
-            logits, _ = model(cards, mask)
+            logits, _ = picker.model(cards, mask)
         chosen = decompose_picks(logits[0].cpu(), embs, valid_names)
-        return Deck.of(assemble_full_deck(chosen, locator))
+        return Deck.of(assemble_full_deck(chosen, picker.locator))

@@ -38,6 +38,37 @@ def _timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
 
 
+def _check_encoder_keys(saved_state: dict[str, torch.Tensor], path: Path) -> None:
+    unexpected = [
+        key for key in saved_state
+        if not any(key.startswith(prefix) for prefix in _ENCODER_PREFIXES)
+    ]
+    if not unexpected:
+        return
+    head = sorted(unexpected)[:5]
+    extra = (
+        f" (and {len(unexpected) - 5} more)"
+        if len(unexpected) > 5 else ""
+    )
+    raise RuntimeError(
+        f"Encoder checkpoint at {path} contains non-encoder keys "
+        f"{head}{extra}. Per FR-020 the saved file must contain "
+        f"only {sorted(_ENCODER_PREFIXES)} prefixes; "
+        f"regression_heads.* and mlm_head.* are filtered out at "
+        f"save time."
+    )
+
+
+def _prefixed_state(
+    saved_state: dict[str, torch.Tensor], prefix: str,
+) -> dict[str, torch.Tensor]:
+    return {
+        key.removeprefix(prefix): value
+        for key, value in saved_state.items()
+        if key.startswith(prefix)
+    }
+
+
 class SealedEncoderStore:
     """Save and load sealed encoder checkpoints in a training run directory."""
 
@@ -91,34 +122,10 @@ class SealedEncoderStore:
         model = SealedEncoderModel(config)
         saved_state: dict[str, torch.Tensor] = raw["model_state_dict"]
 
-        unexpected = [
-            key for key in saved_state
-            if not any(key.startswith(prefix) for prefix in _ENCODER_PREFIXES)
-        ]
-        if unexpected:
-            head = sorted(unexpected)[:5]
-            extra = (
-                f" (and {len(unexpected) - 5} more)"
-                if len(unexpected) > 5 else ""
-            )
-            raise RuntimeError(
-                f"Encoder checkpoint at {path} contains non-encoder keys "
-                f"{head}{extra}. Per FR-020 the saved file must contain "
-                f"only {sorted(_ENCODER_PREFIXES)} prefixes; "
-                f"regression_heads.* and mlm_head.* are filtered out at "
-                f"save time."
-            )
+        _check_encoder_keys(saved_state, path)
 
-        token_state = {
-            key.removeprefix("token_encoder."): value
-            for key, value in saved_state.items()
-            if key.startswith("token_encoder.")
-        }
-        card_state = {
-            key.removeprefix("card_encoder."): value
-            for key, value in saved_state.items()
-            if key.startswith("card_encoder.")
-        }
+        token_state = _prefixed_state(saved_state, "token_encoder.")
+        card_state = _prefixed_state(saved_state, "card_encoder.")
         model.token_encoder.load_state_dict(token_state, strict=True)
         model.card_encoder.load_state_dict(card_state, strict=True)
         return model, config
