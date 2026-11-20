@@ -48,7 +48,7 @@ import java.util.function.BiPredicate;
  * call's result and the ability that ran, and the board read before the
  * call with that {@code incoming} as its pending event.
  */
-final class RewriteChannel implements BusBracketCollector.EventTap {
+final class RewriteChannel implements EventRouter.EventTap {
 
     /** The worker's rewrite tally, shared by every game it plays. */
     static final RewriteTally JVM_REWRITES = new RewriteTally();

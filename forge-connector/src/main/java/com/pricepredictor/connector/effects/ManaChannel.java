@@ -35,7 +35,7 @@ import java.util.Map;
  * being built; with no such record, its mana reaches none.
  *
  * <p>A mana ability's own other effects are its record's too, taken from the
- * bracket ({@link BusBracketCollector.EventTap}) rather than dropped as a
+ * bracket ({@link EventRouter.EventTap}) rather than dropped as a
  * payment's: what its cost did beyond the taps (a creature sacrificed for
  * mana: its {@code sacrificed} and {@code zone_change}), before
  * {@code mana_produced}, and what its sub-abilities did (a pain land's
@@ -44,7 +44,7 @@ import java.util.Map;
  * <p>Capped at {@code --mana-cap} records per unique mana-ability text, by a
  * reservoir that holds the sampled records until the game ends.
  */
-final class ManaChannel implements BusBracketCollector.EventTap {
+final class ManaChannel implements EventRouter.EventTap {
 
     private final LiveGame live;
     private final CollectorContext context;

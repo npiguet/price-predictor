@@ -25,7 +25,7 @@ import java.util.List;
  * stack (a state trigger the edit makes true, a "when this is put into a
  * graveyard") are the fork's to record as it plays on.
  */
-final class ForkPremise implements BusBracketCollector.EventTap {
+final class ForkPremise implements EventRouter.EventTap {
 
     private final Game fork;
     private final CollectorContext context;

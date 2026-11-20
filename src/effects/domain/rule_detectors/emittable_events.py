@@ -24,7 +24,7 @@ and ``test_emittable_events`` reads the sources to keep it so:
   half of the resolution it belongs to. A clause a replacement runs while no
   resolution is open (a regeneration shield used by lethal combat damage, a
   replacement run in the cleanup's discard) is filed as any consequence is
-  (``BusBracketCollector.route``): on the open combat damage step's record,
+  (``EventRouter.route``): on the open combat damage step's record,
   else in the turn-based action's window. So a combat or turn-action record
   can list a clause-hook event too;
 - :data:`CHOKE_POINTS`: the two outcome-hook events Forge reports at an
@@ -32,7 +32,7 @@ and ``test_emittable_events`` reads the sources to keep it so:
 - :data:`RUN_PARAMS`: built by ``RunParamNormalizer`` through ``RunParamRows`` from a trigger's or a
   replacement's run parameters, the trigger record's ``event`` and the rewrite
   record's ``incoming``/``outgoing``;
-- :data:`TAPPED`: what the bracket routes (``BusBracketCollector.route``:
+- :data:`TAPPED`: what the bracket routes (``EventRouter.route``:
   the bus's events and the choke points'), which three taps take before it
   files them (``EventTap``). ``ForkPremise`` takes, in a fork, everything the
   state-based check after the fork's edit publishes, into a ``turn_action`` /
@@ -109,7 +109,7 @@ RUN_PARAMS: frozenset[E] = frozenset({
     E.STATE_FLAG_CHANGE,
 })
 #: What the bracket routes and a channel's ``EventTap`` may take first: the
-#: bus's events and the choke points' (``BusBracketCollector.route``).
+#: bus's events and the choke points' (``EventRouter.route``).
 TAPPED: frozenset[E] = BUS | CHOKE_POINTS
 #: The events a rewrite record's ``buffered_events`` can hold: the set-aside
 #: ability's run, taken by ``RewriteChannel``'s tap.

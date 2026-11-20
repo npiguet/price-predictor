@@ -104,10 +104,10 @@ def test_the_bracket_s_taps_are_the_mana_and_rewrite_channels_and_the_fork_premi
     damage, moves and outcomes) and the choke points', asked of the taps first.
     The fork premise's record is a turn action, whose kind lists all of them."""
     taps = {path.stem for path in _SOURCES.glob("*.java")
-            if re.search(r"implements\s+BusBracketCollector\.EventTap", _source(path.stem))}
+            if re.search(r"implements\s+EventRouter\.EventTap", _source(path.stem))}
     assert taps == {"ManaChannel", "RewriteChannel", "ForkPremise"}
     assert TAPPED <= EMITTABLE[RecordKind.TURN_ACTION]
-    route = _source("BusBracketCollector").split("private void route(", 1)[1]
+    route = _source("EventRouter").split("void route(", 1)[1]
     assert route.index("tap.take(") < route.index("classifyNow()")
     assert TAPPED == BUS | CHOKE_POINTS
 
@@ -136,12 +136,12 @@ def test_a_set_aside_ability_s_run_is_a_place_of_its_own():
 
 
 def test_a_clause_a_replacement_runs_in_a_window_files_its_events_on_that_window_s_record():
-    """With no resolution bracket open, ``BusBracketCollector.route`` files a
+    """With no resolution bracket open, ``EventRouter.route`` files a
     clause's events (``Filing.CLAUSE``) on the open combat damage step's
     record, else in the turn-based action's window: a regeneration shield
     used by lethal combat damage writes its clause events on the combat record
     (``CombatReplacementClauseTest``)."""
-    route = _source("BusBracketCollector").split("case CONSEQUENCE -> {", 1)[1]
+    route = _source("EventRouter").split("private void fileConsequence(", 1)[1]
     assert route.index("combatStep.file(") < route.index("turnActions.take(")
     assert "filing != Filing.NON_COMBAT_DAMAGE" in route
     for kind in ("combat", "turn_action"):
