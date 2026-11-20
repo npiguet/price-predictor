@@ -25,7 +25,7 @@ class DraftWorkerRequiredAgentTest {
                 "forge-full", "forge-full", "gen-1", "forge-r30",
                 "gen-1", "forge-full", "forge-r100", "gen-1");
 
-        List<String> agents = DraftWorkerMain.withRequiredAgent(before, "gen-3", new Random(7));
+        List<String> agents = PodDraft.withRequiredAgent(before, "gen-3", new Random(7));
 
         assertEquals(1, agents.stream().filter("gen-3"::equals).count(),
                 "exactly one seat should be forced to the learner");
@@ -46,7 +46,7 @@ class DraftWorkerRequiredAgentTest {
                 "forge-full", "gen-3", "gen-1", "forge-r30",
                 "gen-1", "forge-full", "forge-r100", "gen-1");
 
-        assertEquals(before, DraftWorkerMain.withRequiredAgent(before, "gen-3", new Random(7)));
+        assertEquals(before, PodDraft.withRequiredAgent(before, "gen-3", new Random(7)));
     }
 
     @Test
@@ -57,7 +57,7 @@ class DraftWorkerRequiredAgentTest {
             // A fresh Random with the same seed must be left un-advanced, so a
             // run without the property draws exactly the sequence it always did.
             Random random = new Random(99);
-            assertEquals(before, DraftWorkerMain.withRequiredAgent(before, label, random),
+            assertEquals(before, PodDraft.withRequiredAgent(before, label, random),
                     "seats unchanged for label " + label);
             assertEquals(new Random(99).nextInt(1000), random.nextInt(1000),
                     "the random stream must not be advanced for label " + label);
@@ -72,7 +72,7 @@ class DraftWorkerRequiredAgentTest {
                 "forge-full", "forge-full", "forge-full", "forge-full",
                 "forge-full", "forge-full", "forge-full", "forge-full");
         for (int trial = 0; trial < 400; trial++) {
-            seatsHit.add(DraftWorkerMain.withRequiredAgent(pod, "gen-3", random).indexOf("gen-3"));
+            seatsHit.add(PodDraft.withRequiredAgent(pod, "gen-3", random).indexOf("gen-3"));
         }
         assertEquals(8, seatsHit.size(), "every seat index should be reachable");
     }
