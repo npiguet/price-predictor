@@ -163,7 +163,7 @@ public final class GameRecording implements AutoCloseable {
 
     /** The link a cast or activated item's halves carry in this game's records. */
     String linkOf(SpellAbility item) {
-        return BusBracketCollector.linkOf(envelope.gameId(), item);
+        return CastTracker.linkOf(envelope.gameId(), item);
     }
 
     /** Plays forks of this game on to the end of the turn (D4). */
