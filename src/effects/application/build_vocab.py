@@ -16,12 +16,12 @@ from __future__ import annotations
 
 import logging
 import re
-import statistics
 import tempfile
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from effects.application.build_vocab_report import KEY_RE, report_script_lines
 from effects.domain import default_paths
 from effects.domain.ability_tokenizer import (
     AbilityTokenizer,
@@ -53,12 +53,8 @@ SEEDED_SPECIALS: tuple[str, ...] = (
 _FREQ_THRESHOLD = 2
 
 _LABEL_RE = re.compile(r"(?<![A-Za-z0-9])SV(\d+)(?![A-Za-z0-9])")
-#: A parameter key, or a ``$``-prefix glued to its value (``Count$Valid``).
-_KEY_RE = re.compile(r"([A-Za-z]+)\$")
 #: An API name, a trigger's or static's mode, or a replacement's event.
 _API_RE = re.compile(r"(?<![A-Za-z])(?:SP|AB|DB|Mode|Event)\$[ \t]*([A-Za-z]+)")
-#: Free prose, so left out of the script coverage figure (FR-011).
-_DESCRIPTION_PARAM_RE = re.compile(r"\w*Description\$[^|\[]*")
 
 
 @dataclass
@@ -105,13 +101,17 @@ class SeededTokens:
 def _scan_sources(config: BuildVocabConfig) -> list[Path]:
     """Existing directories to scan, in the order they were given."""
     present = [Path(folder) for folder in config.cards_folders if Path(folder).is_dir()]
-    if not present or not any(any(p.rglob("*.txt")) for p in present):
+    if not any(_holds_cards(folder) for folder in present):
         raise EmptyCardsFolderError(
             "No converted cards under "
             + ", ".join(str(f) for f in config.cards_folders)
             + ". Run python -m price_predictor convert first."
         )
     return present
+
+
+def _holds_cards(folder: Path) -> bool:
+    return any(folder.rglob("*.txt"))
 
 
 def _keyword_corpus_text(definitions: dict) -> str:
@@ -167,10 +167,13 @@ def template_texts(
         for name, definition in definitions.items()
         if definition.reminder_template
     ]
-    for line in staged:
-        keyword = tokenizer.keywords.line_of(line.removeprefix(f"{SCRIPT_READING} "))
-        if keyword is not None and definitions[keyword.name].reminder_template:
-            texts.append(tokenizer.keywords.line_text(keyword.name, keyword.details))
+    keyword_lines = (tokenizer.keywords.line_of(line.removeprefix(f"{SCRIPT_READING} "))
+                     for line in staged)
+    texts.extend(
+        tokenizer.keywords.line_text(keyword.name, keyword.details)
+        for keyword in keyword_lines
+        if keyword is not None and definitions[keyword.name].reminder_template
+    )
     return texts
 
 
@@ -187,7 +190,7 @@ def seed_tokens(
     seeded.template_words = list(dict.fromkeys(words))
     longest = max((int(n) for line in staged for n in _LABEL_RE.findall(line)), default=0)
     seeded.labels = [f"sv{n}" for n in range(1, longest + 1)]
-    seeded.key_parts = _camel_parts_of(_KEY_RE, staged)
+    seeded.key_parts = _camel_parts_of(KEY_RE, staged)
     seeded.api_parts = _camel_parts_of(_API_RE, staged)
     return seeded
 
@@ -297,16 +300,20 @@ def _frequent(staged_tokens: list[list[Token]]) -> list[str]:
     return [token for token, _ in frequent]
 
 
+def _unknown_in_expansion(tokenizer: AbilityTokenizer, name: str) -> list[str]:
+    """The sorted texts of a keyword's generic expansion that read as ``[UNK]``."""
+    tokens = tokenizer.tokenize(tokenizer.keywords.line_text(name))
+    return sorted({t.text for t in tokens if t.token_id == tokenizer.unk_id})
+
+
 def _check_expansions(tokenizer: AbilityTokenizer, definitions: dict) -> None:
     """Fail when a definition's generic expansion reads as ``[UNK]`` (FR-019)."""
-    broken = []
-    for name, definition in definitions.items():
-        if not definition.reminder_template:
-            continue
-        tokens = tokenizer.tokenize(tokenizer.keywords.line_text(name))
-        unknown = sorted({t.text for t in tokens if t.token_id == tokenizer.unk_id})
-        if unknown:
-            broken.append(f"{name}: {', '.join(unknown)}")
+    broken = [
+        f"{name}: {', '.join(unknown)}"
+        for name, definition in definitions.items()
+        if definition.reminder_template
+        if (unknown := _unknown_in_expansion(tokenizer, name))
+    ]
     if broken:
         raise KeywordExpansionUnknownError(
             f"{len(broken)} keyword definition(s) expand to [UNK]: "
@@ -329,50 +336,4 @@ def _report(
     )
     if not staged:
         return
-    _report_lengths(staged, staged_tokens)
-    _report_unknown_rate(staged, final)
-    _report_camel_parts(staged)
-
-
-def _report_lengths(staged: list[str], staged_tokens: list[list[Token]]) -> None:
-    """The script lines' token-length quantiles, and how many truncate."""
-    from effects.domain.ability_encoder import MAX_ABILITY_TOKENS
-
-    lengths = sorted(
-        len(tokens) for line, tokens in zip(staged, staged_tokens, strict=True)
-        if _KEY_RE.search(line)
-    )
-    if not lengths:
-        return
-    # [CLS] takes one position, so a line truncates past MAX - 1 tokens.
-    over = sum(1 for n in lengths if n > MAX_ABILITY_TOKENS - 1)
-    quantiles = statistics.quantiles(lengths, n=100, method="inclusive")
-    logger.info(
-        "Script-line length in tokens over %d lines: min %d, p50 %.0f, "
-        "p90 %.0f, p99 %.0f, max %d; %d over %d (truncated)",
-        len(lengths), lengths[0], quantiles[49], quantiles[89],
-        quantiles[98], lengths[-1], over, MAX_ABILITY_TOKENS,
-    )
-
-
-def _report_unknown_rate(staged: list[str], final: AbilityTokenizer) -> None:
-    total = unknown = 0
-    for line in staged:
-        stripped = _DESCRIPTION_PARAM_RE.sub("", line)
-        for token in final.tokenize(stripped):
-            total += 1
-            unknown += token.token_id == final.unk_id
-    logger.info(
-        "Unknown-token rate over script parameters (descriptions removed): "
-        "%.3f%% (%d of %d)", 100.0 * unknown / max(total, 1), unknown, total,
-    )
-
-
-def _report_camel_parts(staged: list[str]) -> None:
-    parts: set[str] = set()
-    for line in staged:
-        for word in re.findall(r"[A-Za-z]+", line):
-            split = camel_parts(word)
-            if len(split) > 1:
-                parts.update(word[a:b].lower() for a, b in split)
-    logger.info("Camel-case split produces %d distinct parts", len(parts))
+    report_script_lines(staged, staged_tokens, final)

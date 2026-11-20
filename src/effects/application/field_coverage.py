@@ -131,30 +131,38 @@ def event_param_lines(coverage: dict[str, FieldCoverage]) -> list[str]:
     wrote it, ``const`` where it never varied, ``varies`` otherwise. A
     parameter some type writes only at one site (a combat's, a rewrite's)
     reads by its whole."""
-    found: dict[tuple[str, str], list[FieldCoverage]] = {}
-    for path, row in coverage.items():
-        head, marker, name = path.rpartition(".")
-        if ".params<" not in head or not head.endswith(">"):
-            continue
-        event = head.rsplit(".params<", 1)[1][:-1]
-        found.setdefault((event, name), []).append(row)
+    found = _event_param_cells(coverage)
     if not found:
         return []
     rows, tally = [], {"varies": 0, "const": 0, "absent": 0}
     for (event, name), cells in sorted(found.items()):
         written = sum(cell.populated for cell in cells)
         seen = sum(cell.seen for cell in cells)
-        if not written:
-            status = "absent"
-        elif any(cell.varied for cell in cells):
-            status = "varies"
-        else:
-            status = "const"
+        status = _param_status(written, cells)
         tally[status] += 1
         rows.append(f"  [{status:<6}] {event}.{name}   ({written}/{seen})")
     head = (f"event parameters: {tally['varies']} vary, {tally['const']} constant, "
             f"{tally['absent']} never written")
     return ["", head, *rows]
+
+
+def _event_param_cells(
+    coverage: dict[str, FieldCoverage],
+) -> dict[tuple[str, str], list[FieldCoverage]]:
+    """Every ``params<event>.name`` cell, grouped by (event type, parameter)."""
+    found: dict[tuple[str, str], list[FieldCoverage]] = {}
+    for path, row in coverage.items():
+        head, _, name = path.rpartition(".")
+        if ".params<" in head and head.endswith(">"):
+            event = head.rsplit(".params<", 1)[1][:-1]
+            found.setdefault((event, name), []).append(row)
+    return found
+
+
+def _param_status(written: int, cells: list[FieldCoverage]) -> str:
+    if not written:
+        return "absent"
+    return "varies" if any(cell.varied for cell in cells) else "const"
 
 
 def gen3_report_lines(coverage: dict[str, FieldCoverage]) -> list[str]:
