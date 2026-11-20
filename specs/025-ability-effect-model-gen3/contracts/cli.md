@@ -310,7 +310,7 @@ game-end marker, and its shard is closed whole. The request is a file, not a con
   within the supervisor's timeout after the request is killed (`taskkill /F /T`) as before, and the
   game it was playing has no marker.
 
-What the supervisor does (`ForgeWorkerPool` under a `GracefulStop`, `price_predictor.infrastructure.forge_jvm`;
+What the supervisor does (`ForgeWorkerPool` under a `GracefulStop`, `price_predictor.infrastructure.forge_worker_pool` and `worker_stops`;
 `collect-coverage`, `collect-variants`, and `match-outcomes` with `--effect-records`):
 
 | Flag | Default | Bound | Meaning |
