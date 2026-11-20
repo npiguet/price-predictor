@@ -63,7 +63,7 @@ final class DirectedFork {
         Consumer<EffectRecord> flags = flags(
                 rule.rules(), new DirectedTag(variant, application.operation()));
         Forks.ForkRun run = new Forks.ForkRun(KIND, game, () -> { }, perspective);
-        ForkPlayForward.Played played = run.take((verified, snapshots) -> {
+        Optional<ForkPlayForward.Played> played = run.take((verified, snapshots) -> {
             Game fork = verified.fork();
             Binding forked = binding.inFork(verified.copier());
             // Named before the edit, which may move a named card: it keeps its id.
@@ -74,7 +74,7 @@ final class DirectedFork {
             ForcedPlayRun forced = ForcedPlayRun.start(application, application.afterEdit(forked, fork), fork);
             return Optional.of(playForward.play(fork, flags.andThen(verified::stamp), kept, forced));
         }, (verified, result) -> playForward.countDropped(KIND, result));
-        return played != null;
+        return played.isPresent();
     }
 
     /**

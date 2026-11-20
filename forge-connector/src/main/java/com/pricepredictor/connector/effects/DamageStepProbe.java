@@ -62,11 +62,11 @@ final class DamageStepProbe {
      * on two identical-looking combats in one turn.
      *
      * @param step the damage step about to be dealt, which the fork deals too
-     * @return the held branch, or null when the fork could not be taken
+     * @return the held branch, or empty when the fork could not be taken
      */
-    HeldProbe probe(String keyword, Card carrier, DamageStep step) {
+    Optional<HeldProbe> probe(String keyword, Card carrier, DamageStep step) {
         if (!budget.mayProbe(keyword) || carrier == null) {
-            return null;
+            return Optional.empty();
         }
         Forks.ForkRun run = new Forks.ForkRun(
                 KIND, game,

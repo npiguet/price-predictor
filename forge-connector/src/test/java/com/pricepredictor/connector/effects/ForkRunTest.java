@@ -2,7 +2,6 @@ package com.pricepredictor.connector.effects;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -49,11 +48,11 @@ class ForkRunTest {
         AtomicInteger spent = new AtomicInteger();
         long before = count("fork run-test-throws body");
 
-        Object written = run("run-test-throws", live, spent).take((verified, snapshots) -> {
+        Optional<?> written = run("run-test-throws", live, spent).take((verified, snapshots) -> {
             throw new IllegalStateException("a card this fork cannot describe");
         }, (verified, produced) -> "written");
 
-        assertNull(written);
+        assertTrue(written.isEmpty());
         assertEquals(1, spent.get(), "a discarded fork still counts against its budget");
         assertEquals(before + 1, count("fork run-test-throws body"));
     }
@@ -64,11 +63,11 @@ class ForkRunTest {
         Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         long before = count("fork run-test-overflow body");
 
-        Object written = run("run-test-overflow", live, new AtomicInteger()).take((verified, snapshots) -> {
+        Optional<?> written = run("run-test-overflow", live, new AtomicInteger()).take((verified, snapshots) -> {
             throw new StackOverflowError();
         }, (verified, produced) -> "written");
 
-        assertNull(written);
+        assertTrue(written.isEmpty());
         assertEquals(before + 1, count("fork run-test-overflow body"));
     }
 
@@ -77,7 +76,7 @@ class ForkRunTest {
     void aForkWhoseCopyThrowsIsCounted() throws Throwable {
         long before = count("fork run-test-copy copy");
         AtomicInteger ran = new AtomicInteger();
-        Object[] written = new Object[1];
+        Optional<?>[] written = new Optional<?>[1];
 
         // Its first failure prints a line with the stack: captured, not shown.
         String printed = StdStreams.captureStderr(() -> written[0] = run("run-test-copy", null, new AtomicInteger())
@@ -86,7 +85,7 @@ class ForkRunTest {
                     return Optional.of("ran");
                 }, (verified, produced) -> produced));
 
-        assertNull(written[0]);
+        assertTrue(written[0].isEmpty());
         assertTrue(printed.isEmpty() || printed.contains("fork run-test-copy copy threw"), printed);
         assertEquals(0, ran.get());
         assertEquals(before + 1, count("fork run-test-copy copy"));
@@ -106,7 +105,7 @@ class ForkRunTest {
         try {
             Object drawn = run("directed", live, new AtomicInteger()).take(
                     (verified, snapshots) -> Optional.of(MyRandom.getRandom().nextInt(1000)),
-                    (verified, produced) -> produced);
+                    (verified, produced) -> produced).orElse(null);
 
             assertTrue(drawn instanceof Integer, "the body did not run: " + drawn);
             assertSame(stream, MyRandom.getRandom(), "the live stream was not put back");
@@ -121,7 +120,8 @@ class ForkRunTest {
         TestBoard.inPlay(live, live.getPlayers().get(0), "Grizzly Bears");
         SeedStreams.register(live, gameSeed);
         Object drawn = run("directed", live, new AtomicInteger()).take(
-                (verified, snapshots) -> Optional.of(MyRandom.getRandom().nextLong()), (verified, produced) -> produced);
+                (verified, snapshots) -> Optional.of(MyRandom.getRandom().nextLong()), (verified, produced) -> produced)
+                .orElse(null);
         assertTrue(drawn instanceof Long, "the body did not run: " + drawn);
         return (Long) drawn;
     }
@@ -152,7 +152,7 @@ class ForkRunTest {
         token.getZone().remove(token);
 
         Forks.VerifiedFork verified = run("directed", live, new AtomicInteger()).take(
-                (fork, snapshots) -> Optional.of(fork), (fork, produced) -> produced);
+                (fork, snapshots) -> Optional.of(fork), (fork, produced) -> produced).orElseThrow();
 
         assertEquals(Map.of("remembered", 1), verified.copyDropped());
         String stamped = verified.stamp(new EffectRecord(
@@ -168,7 +168,7 @@ class ForkRunTest {
         TestBoard.inPlay(live, live.getPlayers().get(0), "Hill Giant");
 
         Forks.VerifiedFork verified = run("directed", live, new AtomicInteger()).take(
-                (fork, snapshots) -> Optional.of(fork), (fork, produced) -> produced);
+                (fork, snapshots) -> Optional.of(fork), (fork, produced) -> produced).orElseThrow();
 
         assertTrue(verified.copyDropped().isEmpty(), verified.copyDropped().toString());
         assertFalse(verified.stamp(new EffectRecord(
@@ -188,7 +188,8 @@ class ForkRunTest {
         long before = count("fork run-test-leak moved the live game");
 
         Object written = run("run-test-leak", live, new AtomicInteger()).take(
-                (verified, snapshots) -> Optional.of(live.getNextTimestamp()), (verified, produced) -> produced);
+                (verified, snapshots) -> Optional.of(live.getNextTimestamp()), (verified, produced) -> produced)
+                .orElse(null);
 
         assertTrue(written instanceof Long, "the fork ran: " + written);
         assertEquals(before + 1, count("fork run-test-leak moved the live game"));
@@ -220,7 +221,7 @@ class ForkRunTest {
                 restart.setActivatingPlayer(karn.getController());
                 forge.game.ability.AbilityUtils.resolve(restart);
                 return Optional.of(verified.fork().getAge());
-            }, (verified, produced) -> produced);
+            }, (verified, produced) -> produced).orElse(null);
 
             assertEquals(forge.game.GameStage.RestartedByKarn, written, "the fork's game restarted");
             assertTrue(Forks.LiveMarks.currentTriggerIds() < ids, "the counter went down");
@@ -249,7 +250,7 @@ class ForkRunTest {
         long before = count("fork run-test-check moved the live game");
 
         Object written = run("run-test-check", live, new AtomicInteger()).take(
-                (verified, snapshots) -> Optional.of("checked"), (verified, produced) -> produced);
+                (verified, snapshots) -> Optional.of("checked"), (verified, produced) -> produced).orElse(null);
 
         assertEquals("checked", written);
         assertEquals(stamp, live.getTimestamp());
@@ -265,11 +266,11 @@ class ForkRunTest {
         Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         long refused = ForkRefusals.counts().getOrDefault("run-test-refuse no choices", 0L);
 
-        Object written = run("run-test-refuse", live, new AtomicInteger()).take((verified, snapshots) -> {
+        Optional<?> written = run("run-test-refuse", live, new AtomicInteger()).take((verified, snapshots) -> {
             throw new ForkRefusal(ForkRefusal.NO_CHOICES);
         }, (verified, produced) -> "written");
 
-        assertNull(written);
+        assertTrue(written.isEmpty());
         assertEquals(refused + 1, ForkRefusals.counts().get("run-test-refuse no choices"));
         assertEquals(0, count("fork run-test-refuse body"));
     }
@@ -281,13 +282,13 @@ class ForkRunTest {
         AtomicInteger spent = new AtomicInteger();
         boolean[] written = {false};
 
-        Object result = run("run-test-nothing", live, spent).take(
+        Optional<?> result = run("run-test-nothing", live, spent).take(
                 (verified, snapshots) -> Optional.empty(), (verified, produced) -> {
                     written[0] = true;
                     return "written";
                 });
 
-        assertNull(result);
+        assertTrue(result.isEmpty());
         assertFalse(written[0], "the writer never ran");
         assertEquals(1, spent.get(), "a discarded fork still counts against its budget");
         assertEquals(0, count("fork run-test-nothing body"));
@@ -299,12 +300,12 @@ class ForkRunTest {
         Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         long before = count("fork run-test-write write");
 
-        Object written = run("run-test-write", live, new AtomicInteger()).take(
+        Optional<?> written = run("run-test-write", live, new AtomicInteger()).take(
                 (verified, snapshots) -> Optional.of("ran"), (verified, produced) -> {
                     throw new IllegalStateException("a record that cannot be written");
                 });
 
-        assertNull(written);
+        assertTrue(written.isEmpty());
         assertEquals(before + 1, count("fork run-test-write write"));
     }
 

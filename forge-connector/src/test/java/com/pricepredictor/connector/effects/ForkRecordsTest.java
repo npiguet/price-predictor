@@ -35,7 +35,6 @@ import static com.pricepredictor.connector.effects.RecordLines.records;
 import static com.pricepredictor.connector.effects.RecordLines.stateOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -146,15 +145,15 @@ class ForkRecordsTest {
     void theProbeBudgetIsSpentByTakingProbes() throws Throwable {
         // Spent even by a fork that fails: a null game makes every copy fail.
         DamageStepProbe collector = probes(forkCaps().interventions(2).probes(1).probeKeywords("wither").build());
-        DiscardedCopies.expectOne("probe", () -> assertNull(
-                collector.probe("wither", TestCards.build("Grizzly Bears"), DamageStep.REGULAR)));
+        DiscardedCopies.expectOne("probe", () -> assertTrue(
+                collector.probe("wither", TestCards.build("Grizzly Bears"), DamageStep.REGULAR).isEmpty()));
         assertFalse(budget.mayProbe("wither"));
     }
 
     @Test
     void aProbeForAnUnnamedKeywordSpendsNothing() {
         DamageStepProbe collector = probes(forkCaps().interventions(2).probes(1).probeKeywords("wither").build());
-        assertNull(collector.probe("lifelink", TestCards.build("Grizzly Bears"), DamageStep.REGULAR));
+        assertTrue(collector.probe("lifelink", TestCards.build("Grizzly Bears"), DamageStep.REGULAR).isEmpty());
         assertTrue(budget.mayProbe("wither"));
         assertFalse(Files.exists(ShardRun.closed(writer)));
     }
@@ -239,8 +238,8 @@ class ForkRecordsTest {
             DamageStepProbe forks = new DamageStepProbe(
                     game, TestCollectors.context(writer, ShardRun.GAME_ID),
                     new ForkBudget(forkCaps().interventions(0).probes(1).probeKeywords("trample").build()));
-            held = forks.probe("Trample", dreadmaw, DamageStep.REGULAR);
-            assertNotNull(held, "the probe fork was discarded");
+            held = forks.probe("Trample", dreadmaw, DamageStep.REGULAR)
+                    .orElseThrow(() -> new AssertionError("the probe fork was discarded"));
 
             BusBracketCollector observed = TestCollectors.bracket(game, writer, ShardRun.GAME_ID);
             game.subscribeToEvents(observed);

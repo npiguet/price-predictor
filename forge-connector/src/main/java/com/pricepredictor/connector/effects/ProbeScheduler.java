@@ -10,6 +10,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -162,9 +163,9 @@ final class ProbeScheduler {
         int taken = 0;
         for (Map.Entry<String, String> keyword : probedKeywords(card, pass).entrySet()) {
             pass.tried(card, keyword.getKey());
-            DamageStepProbe.HeldProbe held = forks.probe(keyword.getValue(), card, pass.step());
-            if (held != null) {
-                hold(held);
+            Optional<DamageStepProbe.HeldProbe> held = forks.probe(keyword.getValue(), card, pass.step());
+            if (held.isPresent()) {
+                hold(held.get());
                 taken++;
             }
         }

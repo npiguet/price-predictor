@@ -446,10 +446,11 @@ final class Forks {
         /**
          * Take the fork.
          *
-         * @return what {@code write} returned, or null when the copy failed
-         *         its check, the body threw, or the body produced nothing
+         * @return what {@code write} returned, or empty when the copy failed
+         *         its check, the body threw or refused, the body produced
+         *         nothing or the writer threw: the fork was discarded unwritten
          */
-        <R, W> W take(ForkBody<R> body, BiFunction<VerifiedFork, R, W> write) {
+        <R, W> Optional<W> take(ForkBody<R> body, BiFunction<VerifiedFork, R, W> write) {
             LiveMarks before = LiveMarks.of(live);
             Game[] forked = {null};
             try {
@@ -459,7 +460,7 @@ final class Forks {
                     spend.run();
                     Optional<VerifiedFork> verified = copyAndVerify(kind, live, perspective);
                     if (verified.isEmpty()) {
-                        return null;
+                        return Optional.<W>empty();
                     }
                     forked[0] = verified.get().fork();
                     Optional<R> produced;
@@ -473,19 +474,19 @@ final class Forks {
                         produced = body.run(verified.get(), snapshots);
                     } catch (ForkRefusal refusal) {
                         ForkRefusals.count(kind, refusal.reason());
-                        return null;
+                        return Optional.<W>empty();
                     } catch (RuntimeException | StackOverflowError e) {
                         HookFailures.countContained(new HookFailures.FailureKey("fork " + kind + " body"), e);
-                        return null;
+                        return Optional.<W>empty();
                     }
                     if (produced.isEmpty()) {
-                        return null;
+                        return Optional.<W>empty();
                     }
                     try {
-                        return write.apply(verified.get(), produced.get());
+                        return Optional.ofNullable(write.apply(verified.get(), produced.get()));
                     } catch (RuntimeException | StackOverflowError e) {
                         HookFailures.countContained(new HookFailures.FailureKey("fork " + kind + " write"), e);
-                        return null;
+                        return Optional.<W>empty();
                     }
                 }));
             } finally {

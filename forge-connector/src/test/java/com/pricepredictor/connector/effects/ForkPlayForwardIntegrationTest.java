@@ -74,7 +74,8 @@ class ForkPlayForwardIntegrationTest {
             played = new Forks.ForkRun("directed", live, () -> { }, () -> live.getPhaseHandler().getPlayerTurn())
                     .take((verified, snapshots) -> Optional.of(recording.playForward().play(
                                     verified.fork(), record -> record.fork(ForkKind.DIRECTED).interventional(false))),
-                            (verified, result) -> result);
+                            (verified, result) -> result)
+                    .orElse(null);
         }
     }
 

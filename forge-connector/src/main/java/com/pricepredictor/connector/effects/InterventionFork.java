@@ -163,7 +163,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
         }
         Forks.ForkRun run = new Forks.ForkRun(
                 KIND, game, () -> budget.spendIntervention(realResolutionId), perspective);
-        Boolean written = run.take((verified, snapshots) -> {
+        Optional<Boolean> written = run.take((verified, snapshots) -> {
             SpellAbility forked = Forks.mappedAbility(verified.copier(), ability);
             Player actor = forked == null
                     ? null : Forks.mappedPlayer(verified.copier(), verified.perspective());
@@ -175,7 +175,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
             return write(resolution.outcome().stream().map(EffectRecord::toLine).toList(),
                     resolution.droppedEvents());
         });
-        return Boolean.TRUE.equals(written);
+        return written.isPresent();
     }
 
     /**

@@ -146,7 +146,7 @@ class ForkPlayForwardTest {
                     "directed", live, () -> { }, () -> live.getPhaseHandler().getPlayerTurn());
             played = run.take(
                     (verified, snapshots) -> Optional.of(recording.playForward().play(verified.fork(), flags)),
-                    (verified, result) -> result);
+                    (verified, result) -> result).orElse(null);
             liveTurnAfterFork = live.getPhaseHandler().getTurn();
             livePhaseAfterFork = live.getPhaseHandler().getPhase();
             liveBoardAfter = BoardStates.of(live);

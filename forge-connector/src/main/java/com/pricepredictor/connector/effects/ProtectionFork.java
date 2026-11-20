@@ -113,7 +113,7 @@ final class ProtectionFork {
     boolean take(Grant grant) {
         Forks.ForkRun run = new Forks.ForkRun(
                 KIND, game, () -> { }, () -> game.getPhaseHandler().getPlayerTurn());
-        ForkPlayForward.Played played = run.take((verified, snapshots) -> {
+        Optional<ForkPlayForward.Played> played = run.take((verified, snapshots) -> {
             Card forked = Forks.mappedCard(verified.copier(), grant.creature());
             if (forked == null) {
                 throw new ForkRefusal(ForkRefusal.NO_COUNTERPART);
@@ -125,7 +125,7 @@ final class ProtectionFork {
             KeywordOperation.adding(forked, grant.quality()).apply(verified.fork());
             return Optional.of(playForward.play(verified.fork(), FLAGS.andThen(verified::stamp)));
         }, (verified, result) -> playForward.countDropped(KIND, result));
-        return played != null;
+        return played.isPresent();
     }
 
     /** The creatures on the battlefield, in card-id order. */

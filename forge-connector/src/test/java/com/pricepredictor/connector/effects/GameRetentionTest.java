@@ -116,14 +116,14 @@ class GameRetentionTest {
         int noted = FloatingEffects.gamesHeld();
         boolean[] ran = {false};
 
-        Object written = new Forks.ForkRun("probe", game, () -> { }, () -> null).take(
+        Optional<?> written = new Forks.ForkRun("probe", game, () -> { }, () -> null).take(
                 (verified, snapshots) -> {
                     ran[0] = true;
                     return Optional.of(verified);
                 },
                 (verified, produced) -> produced);
 
-        assertNull(written, "a fork with no perspective writes nothing");
+        assertTrue(written.isEmpty(), "a fork with no perspective writes nothing");
         assertFalse(ran[0], "a fork with no perspective never runs its body");
         int liveBuilt = LibraryCapture.holds(game) ? 1 : 0;
         int liveNoted = FloatingEffects.holds(game) ? 1 : 0;
