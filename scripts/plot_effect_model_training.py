@@ -47,6 +47,7 @@ Usage
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -99,59 +100,88 @@ def style_axis(ax) -> None:
     ax.set_axisbelow(True)
 
 
-def chart_losses(runs: dict[str, list[EpochSummary]], out_stub: Path) -> None:
-    """Chart 1: train / card-disjoint / game-disjoint loss, one panel per variant."""
-    fig, axes = plt.subplots(
-        1, len(VARIANTS), figsize=(15.2, 4.4), sharey=True, facecolor=BG,
+@dataclass(frozen=True)
+class Heading:
+    """A chart's bold title and the grey note under it, and where they sit."""
+
+    title: str
+    note: str
+    x: float
+    title_y: float
+    note_y: float
+
+
+def _heading(fig, heading: Heading) -> None:
+    fig.suptitle(
+        heading.title,
+        x=heading.x,
+        y=heading.title_y,
+        ha="left",
+        fontsize=13,
+        color=INK,
+        fontweight="bold",
     )
-    fig.subplots_adjust(top=0.74, bottom=0.20, left=0.06, right=0.985, wspace=0.08)
-    all_vals = [
-        getattr(r, s)
-        for rows in runs.values()
-        for r in rows
-        if r.epoch >= 2
-        for s in ("train", "card_disjoint", "game_disjoint")
-    ] + [r.card_disjoint for rows in runs.values() for r in rows if r.epoch == 1] + [
-        r.game_disjoint for rows in runs.values() for r in rows if r.epoch == 1
+    fig.text(
+        heading.x,
+        heading.note_y,
+        heading.note,
+        fontsize=9,
+        color=INK2,
+        va="top",
+    )
+
+
+def _loss_range(runs: dict[str, list[EpochSummary]]) -> tuple[float, float]:
+    """The shared y-range of chart 1: every loss from epoch 2, and the
+    validation losses of epoch 1 (its training loss is off-scale)."""
+    rows = [r for run in runs.values() for r in run]
+    later = [getattr(r, s) for r in rows if r.epoch >= 2 for s, _l, _c in STRATA]
+    first = [r.card_disjoint for r in rows if r.epoch == 1] + [
+        r.game_disjoint for r in rows if r.epoch == 1
     ]
-    y_lo, y_hi = min(all_vals) - 0.25, max(all_vals) + 0.4
+    values = later + first
+    return min(values) - 0.25, max(values) + 0.4
 
-    for ax, (key, title, _color) in zip(axes, VARIANTS):
-        rows = runs[key]
-        style_axis(ax)
-        ax.set_title(title, fontsize=11.5, color=INK, fontweight="bold", loc="left")
-        for skey, _slabel, color in STRATA:
-            xs = [r.epoch for r in rows]
-            ys = [getattr(r, skey) for r in rows]
-            ax.plot(xs, ys, color=color, linewidth=2, solid_capstyle="round", zorder=3)
-        ax.axvline(CURRICULUM_EPOCH, color=MUTED, linewidth=1, linestyle=(0, (3, 3)), zorder=1)
-        ax.set_ylim(y_lo, y_hi)
-        ax.set_xlim(0.5, max(r.epoch for r in rows) + 0.5)
-        ax.xaxis.set_major_locator(MultipleLocator(10))
-        ax.set_xlabel("epoch", fontsize=9.5, color=INK2)
 
-        # Epoch-1 train loss is far off this scale (~15-16); the line is
-        # clipped at the axis top, and an offset, arrowed annotation gives
-        # the real value instead of stretching the axis to fit it.
-        e1 = rows[0]
-        ax.annotate(
-            f"train {e1.train:.1f}",
-            xy=(1, y_hi),
-            xytext=(7, y_hi - 0.55),
-            fontsize=8,
-            color=BLUE,
-            ha="left",
-            va="top",
-            arrowprops={
-                "arrowstyle": "-",
-                "color": BLUE,
-                "linewidth": 0.8,
-                "shrinkA": 0,
-                "shrinkB": 2,
-            },
-        )
+def _annotate_epoch_one(ax, first: EpochSummary, y_hi: float) -> None:
+    """Epoch-1 train loss is far off this scale (~15-16); the line is
+    clipped at the axis top, and an offset, arrowed annotation gives
+    the real value instead of stretching the axis to fit it."""
+    ax.annotate(
+        f"train {first.train:.1f}",
+        xy=(1, y_hi),
+        xytext=(7, y_hi - 0.55),
+        fontsize=8,
+        color=BLUE,
+        ha="left",
+        va="top",
+        arrowprops={
+            "arrowstyle": "-",
+            "color": BLUE,
+            "linewidth": 0.8,
+            "shrinkA": 0,
+            "shrinkB": 2,
+        },
+    )
 
-    axes[0].set_ylabel("loss", fontsize=9.5, color=INK2)
+
+def _loss_panel(ax, rows: list[EpochSummary], title: str, y_range: tuple[float, float]) -> None:
+    y_lo, y_hi = y_range
+    style_axis(ax)
+    ax.set_title(title, fontsize=11.5, color=INK, fontweight="bold", loc="left")
+    for skey, _slabel, color in STRATA:
+        xs = [r.epoch for r in rows]
+        ys = [getattr(r, skey) for r in rows]
+        ax.plot(xs, ys, color=color, linewidth=2, solid_capstyle="round", zorder=3)
+    ax.axvline(CURRICULUM_EPOCH, color=MUTED, linewidth=1, linestyle=(0, (3, 3)), zorder=1)
+    ax.set_ylim(y_lo, y_hi)
+    ax.set_xlim(0.5, max(r.epoch for r in rows) + 0.5)
+    ax.xaxis.set_major_locator(MultipleLocator(10))
+    ax.set_xlabel("epoch", fontsize=9.5, color=INK2)
+    _annotate_epoch_one(ax, rows[0], y_hi)
+
+
+def _loss_legend(fig) -> None:
     handles = [
         Line2D([0], [0], color=color, linewidth=2, label=slabel) for _k, slabel, color in STRATA
     ]
@@ -164,25 +194,59 @@ def chart_losses(runs: dict[str, list[EpochSummary]], out_stub: Path) -> None:
         labelcolor=INK2,
         bbox_to_anchor=(0.5, 0.01),
     )
-    fig.suptitle(
-        "Loss by stratum, per training run",
-        x=0.03,
-        y=0.965,
-        ha="left",
-        fontsize=13,
-        color=INK,
-        fontweight="bold",
+
+
+def chart_losses(runs: dict[str, list[EpochSummary]], out_stub: Path) -> None:
+    """Chart 1: train / card-disjoint / game-disjoint loss, one panel per variant."""
+    fig, axes = plt.subplots(
+        1, len(VARIANTS), figsize=(15.2, 4.4), sharey=True, facecolor=BG,
     )
-    fig.text(
-        0.03,
-        0.88,
+    fig.subplots_adjust(top=0.74, bottom=0.20, left=0.06, right=0.985, wspace=0.08)
+    y_range = _loss_range(runs)
+    for ax, (key, title, _color) in zip(axes, VARIANTS):
+        _loss_panel(ax, runs[key], title, y_range)
+    axes[0].set_ylabel("loss", fontsize=9.5, color=INK2)
+    _loss_legend(fig)
+    _heading(fig, Heading(
+        "Loss by stratum, per training run",
         "Dashed line: sparse-field curriculum turns on at epoch 3, so loss is not comparable\n"
         "across it. Epoch-1 training loss is off-scale; annotated instead of stretching the axis.",
-        fontsize=9,
-        color=INK2,
-        va="top",
-    )
+        x=0.03, title_y=0.965, note_y=0.88,
+    ))
     _save(fig, out_stub)
+
+
+def _field_series(rows: list[EpochSummary], fname: str) -> tuple[list[int], list[float]]:
+    """The epochs a field has an explained-% in, and those values."""
+    xs, ys = [], []
+    for r in rows:
+        v = r.fields.get(fname)
+        if v is None or v[1] is None:
+            continue
+        xs.append(r.epoch)
+        ys.append(v[1])
+    return xs, ys
+
+
+def _field_panel(ax, rows: list[EpochSummary], fname: str, max_epoch: int) -> None:
+    style_axis(ax)
+    xs, ys = _field_series(rows, fname)
+    ax.plot(xs, ys, color=BLUE, linewidth=2, solid_capstyle="round", zorder=3)
+    ax.axvline(CURRICULUM_EPOCH, color=MUTED, linewidth=1, linestyle=(0, (3, 3)), zorder=1)
+    ax.set_title(fname, fontsize=10.5, color=INK, fontweight="bold", loc="left")
+    ax.set_ylim(-10, 100)
+    ax.set_xlim(0.5, max_epoch + 0.5)
+    ax.xaxis.set_major_locator(MultipleLocator(10))
+    ax.axhline(0, color=RULE, linewidth=0.8, zorder=1)
+    if ys:
+        ax.annotate(
+            f"{ys[-1]:g}%",
+            xy=(xs[-1], ys[-1]),
+            xytext=(2, 2),
+            textcoords="offset points",
+            fontsize=8.5,
+            color=INK2,
+        )
 
 
 def chart_per_field(full_rows: list[EpochSummary], out_stub: Path) -> None:
@@ -191,53 +255,17 @@ def chart_per_field(full_rows: list[EpochSummary], out_stub: Path) -> None:
     fig.subplots_adjust(top=0.80, bottom=0.09, left=0.035, right=0.965, hspace=0.45, wspace=0.12)
     max_epoch = max(r.epoch for r in full_rows)
     for ax, fname in zip(axes.flat, TOP_FIELDS):
-        style_axis(ax)
-        xs, ys = [], []
-        for r in full_rows:
-            v = r.fields.get(fname)
-            if v is None or v[1] is None:
-                continue
-            xs.append(r.epoch)
-            ys.append(v[1])
-        ax.plot(xs, ys, color=BLUE, linewidth=2, solid_capstyle="round", zorder=3)
-        ax.axvline(CURRICULUM_EPOCH, color=MUTED, linewidth=1, linestyle=(0, (3, 3)), zorder=1)
-        ax.set_title(fname, fontsize=10.5, color=INK, fontweight="bold", loc="left")
-        ax.set_ylim(-10, 100)
-        ax.set_xlim(0.5, max_epoch + 0.5)
-        ax.xaxis.set_major_locator(MultipleLocator(10))
-        ax.axhline(0, color=RULE, linewidth=0.8, zorder=1)
-        final = ys[-1] if ys else None
-        if final is not None:
-            ax.annotate(
-                f"{final:g}%",
-                xy=(xs[-1], final),
-                xytext=(2, 2),
-                textcoords="offset points",
-                fontsize=8.5,
-                color=INK2,
-            )
+        _field_panel(ax, full_rows, fname, max_epoch)
     for ax in axes[-1]:
         ax.set_xlabel("epoch", fontsize=9, color=INK2)
     for ax in axes[:, 0]:
         ax.set_ylabel("explained %", fontsize=9, color=INK2)
-    fig.suptitle(
+    _heading(fig, Heading(
         "Per-field explained %, full model (card-disjoint validation)",
-        x=0.02,
-        y=0.97,
-        ha="left",
-        fontsize=13,
-        color=INK,
-        fontweight="bold",
-    )
-    fig.text(
-        0.02,
-        0.885,
         "explained % = 1 - loss / constant-predictor loss, per output field. Fields ordered\n"
         "by loss mass at epoch 39, largest first. Dashed line: curriculum turns on at epoch 3.",
-        fontsize=9,
-        color=INK2,
-        va="top",
-    )
+        x=0.02, title_y=0.97, note_y=0.885,
+    ))
     _save(fig, out_stub)
 
 
