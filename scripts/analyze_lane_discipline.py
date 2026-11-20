@@ -55,6 +55,7 @@ from __future__ import annotations
 import argparse
 import statistics as st
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 
 from draft_corpus_common import (
@@ -69,6 +70,7 @@ from draft_corpus_common import (
 )
 
 from draft.application.draft_training_common import leave_one_out_rewards
+from draft.domain.draft_geometry import DraftGeometry, DraftRecord
 
 AGENTS = ("forge-full", "gen1", "gen4")
 # Gap buckets on shrunk_score_play: best off-lane card minus best on-lane card.
@@ -92,6 +94,55 @@ def running_lane(counts: Counter, min_pool: int, min_second: int) -> set[str] | 
     if len(ranked) > 2 and ranked[2][1] == ranked[1][1]:
         return None
     return {ranked[0][0], ranked[1][0]}
+
+
+@dataclass(frozen=True)
+class SeatView:
+    """One seat of one draft, with its pod-relative reward (None without a baseline)."""
+
+    record: DraftRecord
+    geometry: DraftGeometry
+    index: int
+    reward: float | None
+
+
+@dataclass
+class SeatState:
+    """What a seat's walk through its picks has accumulated so far."""
+
+    agent: str
+    width: int
+    counts: Counter
+    played_forced: int = 0
+
+
+@dataclass(frozen=True)
+class PickView:
+    """One pick taken inside a running lane: the cards on offer, split by lane."""
+
+    agent: str
+    decision: Decision
+    lane: Lane
+    in_deck: bool
+    scored_legal: list[str]
+    on: list[str]
+    off: list[str]
+
+    @property
+    def broke(self) -> bool:
+        return self.lane.off(self.decision.taken)
+
+    @property
+    def gap_offered(self) -> bool:
+        """Both kinds on offer, and a pack still worth choosing from."""
+        return bool(self.on and self.off) and self.decision.pick <= GAP_PICK_CAP
+
+
+def scope_kind(on: list[str], off: list[str]) -> str:
+    """Does this pick offer a colour choice at all?"""
+    return ("both available" if on and off else
+            "no on-lane card (forced)" if off else
+            "no off-lane card" if on else "nothing scored")
 
 
 class Walk:
@@ -118,92 +169,105 @@ class Walk:
                 rewards = leave_one_out_rewards(record)
                 # A seat whose pod has no other scored seat has no baseline.
                 scored = sum(s.deck_score is not None for s in record.seats)
-                for i, seat in enumerate(record.seats):
-                    self._seat(record, geo, i, seat, rewards[i] if scored > 1 else None)
+                for i in range(len(record.seats)):
+                    self._seat(SeatView(record, geo, i, rewards[i] if scored > 1 else None))
 
-    def _seat(self, record, geo, i, seat, reward) -> None:
+    def _seat(self, view: SeatView) -> None:
+        seat = view.record.seats[view.index]
         a = seat.agent
         deck = Counter(seat.deck)
-        counts: Counter = Counter()
         self.seats[a] += 1
-        width = mana_base_width(seat.deck)
-        self.width[a].append(width)
-        played_forced = 0
+        state = SeatState(a, mana_base_width(seat.deck), Counter())
+        self.width[a].append(state.width)
 
-        for decision in seat_decisions(record, geo, i):
-            card = decision.taken
-            in_deck = deck[card] > 0
+        for decision in seat_decisions(view.record, view.geometry, view.index):
+            in_deck = deck[decision.taken] > 0
             if in_deck:
-                deck[card] -= 1
-            lane_colours = running_lane(counts, self.args.min_pool, self.args.min_second)
-            if lane_colours is not None:
-                lane = Lane(frozenset(lane_colours), self.colours)
-                self._pick(a, decision, lane, in_deck)
-                if lane.off(card) and not self._has_on_lane(decision.legal[1:], lane):
-                    played_forced += in_deck
-                    if width == 2:
-                        c = self.conv2[a]
-                        c[0] += in_deck
-                        c[1] += 1
-            for c2 in self.colours(card):
-                counts[c2] += 1
+                deck[decision.taken] -= 1
+            self._decision(state, decision, in_deck)
 
-        if reward is not None:
-            self.by_forced[a][min(played_forced, 2)].append(reward)
+        if view.reward is not None:
+            self.by_forced[a][min(state.played_forced, 2)].append(view.reward)
+
+    def _decision(self, state: SeatState, decision: Decision, in_deck: bool) -> None:
+        lane_colours = running_lane(state.counts, self.args.min_pool, self.args.min_second)
+        if lane_colours is not None:
+            lane = Lane(frozenset(lane_colours), self.colours)
+            self._pick(state.agent, decision, lane, in_deck)
+            self._forced(state, decision, lane, in_deck)
+        for c2 in self.colours(decision.taken):
+            state.counts[c2] += 1
+
+    def _forced(self, state: SeatState, decision: Decision, lane: Lane, in_deck: bool) -> None:
+        if not lane.off(decision.taken) or self._has_on_lane(decision.legal[1:], lane):
+            return
+        state.played_forced += in_deck
+        if state.width == 2:
+            c = self.conv2[state.agent]
+            c[0] += in_deck
+            c[1] += 1
 
     def _has_on_lane(self, cards, lane: Lane) -> bool:
         return any(lane.on(x) and x in self.scores for x in cards)
 
     def _pick(self, a, decision: Decision, lane: Lane, in_deck) -> None:
-        card, legal, pack, pick = decision.taken, decision.legal, decision.pack, decision.pick
-        scored_legal = [x for x in legal if x in self.scores]
+        scored_legal = [x for x in decision.legal if x in self.scores]
         on = [x for x in scored_legal if lane.on(x)]
         off = [x for x in scored_legal if lane.off(x)]
-
-        # 1. scope: does this pick offer a colour choice at all?
-        kind = ("both available" if on and off else
-                "no on-lane card (forced)" if off else
-                "no off-lane card" if on else "nothing scored")
-        self.scope[a][kind] += 1
-
-        broke = lane.off(card)
-
-        # 2. the gap reports need both kinds on offer, and a pack still worth choosing from
-        if on and off and pick <= GAP_PICK_CAP:
-            gap = max(self.scores[x] for x in off) - max(self.scores[x] for x in on)
-            b = next(k for k, (lo, hi, _) in enumerate(BUCKETS) if lo <= gap < hi)
-            cell = self.gap[(a, pack, b)]
-            cell[0] += broke
-            cell[1] += 1
-            if broke:
-                if gap < -0.01:
-                    self.breaks[a] += 1
-                    c = self.break_conv[(a, "worse")]
-                    c[0] += in_deck
-                    c[1] += 1
-                elif gap > 0.01:
-                    c = self.break_conv[(a, "better")]
-                    c[0] += in_deck
-                    c[1] += 1
-
+        view = PickView(a, decision, lane, in_deck, scored_legal, on, off)
+        self.scope[a][scope_kind(on, off)] += 1
+        if view.gap_offered:
+            self._gap(view)
         # 3-5. every pick with a lane, classified on-lane / chosen / forced
-        if not self.colours(card):
-            return
-        if not broke:
-            k = "on lane"
+        if self.colours(decision.taken):
+            self._classify(view)
+
+    def _gap(self, view: PickView) -> None:
+        """Reports 1-2's gap cell, and where a break reaches the deck."""
+        a, decision = view.agent, view.decision
+        gap = max(self.scores[x] for x in view.off) - max(self.scores[x] for x in view.on)
+        b = next(k for k, (lo, hi, _) in enumerate(BUCKETS) if lo <= gap < hi)
+        cell = self.gap[(a, decision.pack, b)]
+        cell[0] += view.broke
+        cell[1] += 1
+        if view.broke:
+            self._break_conversion(a, gap, view.in_deck)
+
+    def _break_conversion(self, a: str, gap: float, in_deck: bool) -> None:
+        if gap < -0.01:
+            self.breaks[a] += 1
+            side = "worse"
+        elif gap > 0.01:
+            side = "better"
         else:
-            k = "chosen" if self._has_on_lane(legal[1:], lane) else "forced"
-            if card in self.scores:
-                self.qual[(a, k)].append(self.scores[card])
-                scored = [self.scores[x] for x in scored_legal]
-                if len(scored) >= 2:
-                    bc = self.best[(a, k)]
-                    bc[0] += self.scores[card] >= max(scored)
-                    bc[1] += 1
-        self.kind_n[(a, k)] += 1
-        c = self.conv[(a, k)]
+            return
+        c = self.break_conv[(a, side)]
         c[0] += in_deck
         c[1] += 1
+
+    def _classify(self, view: PickView) -> None:
+        a, decision = view.agent, view.decision
+        if not view.broke:
+            k = "on lane"
+        else:
+            k = "chosen" if self._has_on_lane(decision.legal[1:], view.lane) else "forced"
+            self._record_quality(view, k)
+        self.kind_n[(a, k)] += 1
+        c = self.conv[(a, k)]
+        c[0] += view.in_deck
+        c[1] += 1
+
+    def _record_quality(self, view: PickView, k: str) -> None:
+        card = view.decision.taken
+        if card not in self.scores:
+            return
+        a = view.agent
+        self.qual[(a, k)].append(self.scores[card])
+        scored = [self.scores[x] for x in view.scored_legal]
+        if len(scored) >= 2:
+            bc = self.best[(a, k)]
+            bc[0] += self.scores[card] >= max(scored)
+            bc[1] += 1
 
 
 def pct(cell) -> str:
@@ -222,18 +286,22 @@ def report_scope(w) -> None:
     print("   (second figure in each pair = picks per draft)")
 
 
+def _leave_row(w, a: str, pack: int) -> str:
+    cells = "".join(f"{pct(w.gap[(a, pack, k)]):>13}" for k in range(len(BUCKETS)))
+    good = [sum(w.gap[(a, pack, k)][j] for k in (3, 4)) for j in (0, 1)]
+    bad = [sum(w.gap[(a, pack, k)][j] for k in (0, 1)) for j in (0, 1)]
+    ratio = ((good[0] / good[1]) / (bad[0] / bad[1])
+             if good[1] and bad[1] and bad[0] else float("nan"))
+    return f"{a + ', pack ' + str(pack):<22}{cells}{ratio:>8.1f}x"
+
+
 def report_leave_lane(w) -> None:
     print(f"\n2. P(leave the lane) by the gap, per pack   (picks 1-{GAP_PICK_CAP})\n")
     head = "".join(f"{n:>13}" for _, _, n in BUCKETS)
     print(f"{'agent and pack':<22}{head}{'ratio':>9}")
     for a in AGENTS:
         for pack in (1, 2, 3):
-            cells = "".join(f"{pct(w.gap[(a, pack, k)]):>13}" for k in range(len(BUCKETS)))
-            good = [sum(w.gap[(a, pack, k)][j] for k in (3, 4)) for j in (0, 1)]
-            bad = [sum(w.gap[(a, pack, k)][j] for k in (0, 1)) for j in (0, 1)]
-            ratio = ((good[0] / good[1]) / (bad[0] / bad[1])
-                     if good[1] and bad[1] and bad[0] else float("nan"))
-            print(f"{a + ', pack ' + str(pack):<22}{cells}{ratio:>8.1f}x")
+            print(_leave_row(w, a, pack))
     print("\n   breaks on a worse card per draft, and how often they reach the deck:")
     for a in AGENTS:
         conv_w, conv_b = w.break_conv[(a, "worse")], w.break_conv[(a, "better")]
