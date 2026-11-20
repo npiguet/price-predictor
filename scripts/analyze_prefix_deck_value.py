@@ -55,6 +55,8 @@ import random
 import statistics as st
 import time
 from collections import Counter
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 from _lib.markdown import banner
@@ -94,19 +96,26 @@ def load_raw(path: Path, want: str = "greedy") -> set[tuple[str, int, int]]:
     return done
 
 
-def build_missing(corpus: Path, raw_path: Path, args) -> None:
-    from sealed.application.evaluate_scorer import score_decks
+def _seat_jobs(record, geo, index: int, done: set[tuple[str, int, int]]) -> Iterator[tuple]:
+    """The not-yet-scored prefixes of one seat's pool, shortest first."""
+    pool = geo.drafted_pool(record, index)
+    agent = record.seats[index].agent
+    for t in range(1, len(pool) + 1):
+        if (record.draft_id, index, t) not in done:
+            yield (record.draft_id, index, agent, t, pool[:t])
 
-    done = load_raw(raw_path, args.build_method)
+
+def _pending_jobs(corpus: Path, done: set[tuple[str, int, int]]) -> tuple[list, list]:
+    """The prefixes of ``corpus`` not yet scored: ``(early, late)``, below and at/above DECK."""
     early, late = [], []
     for record, geo in read_records(corpus):
-        for i, seat in enumerate(record.seats):
-            pool = geo.drafted_pool(record, i)
-            for t in range(1, len(pool) + 1):
-                if (record.draft_id, i, t) in done:
-                    continue
-                job = (record.draft_id, i, seat.agent, t, pool[:t])
-                (late if t >= DECK else early).append(job)
+        for i in range(len(record.seats)):
+            for job in _seat_jobs(record, geo, i, done):
+                (late if job[3] >= DECK else early).append(job)
+    return early, late
+
+
+def _announce_pending(done: set[tuple[str, int, int]], early: list, late: list) -> None:
     # Spell out the split: "already scored" counts BOTH regimes, so on a resume it
     # sits confusingly close to the build total and reads as though nothing resumed.
     done_direct = sum(1 for _, _, t in done if t < DECK)
@@ -115,6 +124,56 @@ def build_missing(corpus: Path, raw_path: Path, args) -> None:
           f"({done_direct} direct + {done_built} built); "
           f"remaining: {len(early)} to score directly, {len(late)} to build "
           f"(of {done_built + len(late)} builds for this corpus)", flush=True)
+
+
+@dataclass(frozen=True)
+class Phase:
+    """One scoring phase: its jobs, the batch size and how a chunk of jobs is scored."""
+
+    label: str
+    jobs: list
+    batch: int
+    score: Callable[[list], list[float]]
+
+
+def _write_chunk(out, build_method: str, chunk: list, scores: list[float]) -> None:
+    for (draft_id, seat, agent, t, _), score in zip(chunk, scores):
+        out.write(json.dumps({"draft_id": draft_id, "seat": seat, "agent": agent,
+                              "n_picks": t, "deck_score": score,
+                              "build_method": build_method}) + "\n")
+    out.flush()          # a kill mid-run costs one batch, not the run
+
+
+def _progress_line(label: str, n: int, total: int, elapsed: float) -> str:
+    rate = n / max(elapsed, 1e-9)
+    eta = (total - n) / rate if rate else 0.0
+    return (f"  {label} {n}/{total} ({100 * n / total:.1f} %)  "
+            f"{rate:.1f}/s  elapsed {_hms(elapsed)}  eta {_hms(eta)}")
+
+
+def _run_phase(phase: Phase, out, args) -> None:
+    jobs = phase.jobs
+    if not jobs:
+        return
+    # Time-based, not batch-based: greedy builds run at a few per second,
+    # so a fixed batch stride would go quiet for many minutes at a time.
+    phase_start = last_tick = time.time()
+    for s in range(0, len(jobs), phase.batch):
+        chunk = jobs[s:s + phase.batch]
+        _write_chunk(out, args.build_method, chunk, phase.score(chunk))
+        n = s + len(chunk)
+        now = time.time()
+        if now - last_tick >= args.progress_every or n == len(jobs):
+            last_tick = now
+            print(_progress_line(phase.label, n, len(jobs), now - phase_start), flush=True)
+
+
+def build_missing(corpus: Path, raw_path: Path, args) -> None:
+    from sealed.application.evaluate_scorer import score_decks
+
+    done = load_raw(raw_path, args.build_method)
+    early, late = _pending_jobs(corpus, done)
+    _announce_pending(done, early, late)
     if not early and not late:
         return
 
@@ -128,66 +187,46 @@ def build_missing(corpus: Path, raw_path: Path, args) -> None:
     labeler, scorer, locator = load_labeler_and_scorer(
         args.cards_path, args.scorer, args.picker, args.build_method)
     raw_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def pools_of(chunk: list) -> list:
+        return [p for *_, p in chunk]
+
+    def score_direct(chunk: list) -> list[float]:
+        return score_decks(scorer, pools_of(chunk), locator)
+
+    def score_built(chunk: list) -> list[float]:
+        return [sc for _, sc in labeler.build_and_score_many(pools_of(chunk))]
+
     with raw_path.open("a", encoding="utf-8") as out:
-        def flush(chunk, scores):
-            for (draft_id, seat, agent, t, _), score in zip(chunk, scores):
-                out.write(json.dumps({"draft_id": draft_id, "seat": seat, "agent": agent,
-                                      "n_picks": t, "deck_score": score,
-                                      "build_method": args.build_method}) + "\n")
-            out.flush()          # a kill mid-run costs one batch, not the run
-
-        for label, jobs, batch in (("direct", early, args.score_batch),
-                                   ("build", late, args.batch)):
-            if not jobs:
-                continue
-            # Time-based, not batch-based: greedy builds run at a few per second,
-            # so a fixed batch stride would go quiet for many minutes at a time.
-            phase_start = last_tick = time.time()
-            for s in range(0, len(jobs), batch):
-                chunk = jobs[s:s + batch]
-                pools = [p for *_, p in chunk]
-                if label == "direct":
-                    flush(chunk, score_decks(scorer, pools, locator))
-                else:
-                    flush(chunk, [sc for _, sc in labeler.build_and_score_many(pools)])
-                n = s + len(chunk)
-                now = time.time()
-                if now - last_tick >= args.progress_every or n == len(jobs):
-                    last_tick = now
-                    elapsed = now - phase_start
-                    rate = n / max(elapsed, 1e-9)
-                    eta = (len(jobs) - n) / rate if rate else 0.0
-                    print(f"  {label} {n}/{len(jobs)} ({100 * n / len(jobs):.1f} %)  "
-                          f"{rate:.1f}/s  elapsed {_hms(elapsed)}  eta {_hms(eta)}",
-                          flush=True)
+        _run_phase(Phase("direct", early, args.score_batch, score_direct), out, args)
+        _run_phase(Phase("build", late, args.batch, score_built), out, args)
 
 
-def report(raw_paths: list[Path], title: str, cap: int | None) -> None:
-    rows, agent_of = read_prefix_scores(raw_paths)
-    level, delta = prefix_curves(rows, agent_of)
+@dataclass(frozen=True)
+class Curves:
+    """The per-prefix curves a report reads: levels, steps and the agents present."""
 
-    present = [a for a in AGENTS if any(level[(a, t)] for t in range(1, 200))]
-    refs = [a for a in present if a != "gen4"]
-    lengths = Counter(max(by_t) for by_t in rows.values())
-    modal = lengths.most_common(1)[0][0]
-    if cap is None:
-        cap = modal
-    last = max(lengths)
+    level: dict
+    delta: dict
+    present: list[str]
 
-    def table(lo: int, hi: int) -> None:
-        print(f"{'picks':>6}" + "".join(f"{a:>29}" for a in present))
-        print(f"{'':>6}" + "".join(f"{'level':>11}{'added':>11}{'seats':>7}" for _ in present))
+    def cell(self, a: str, t: int) -> str:
+        lv, dv = self.level[(a, t)], self.delta[(a, t)]
+        row = f"{st.fmean(lv):>+11.3f}" if lv else f"{'-':>11}"
+        row += f"{st.fmean(dv):>+11.3f}" if dv else f"{'-':>11}"
+        return row + f"{len(lv):>7}"
+
+    def print_table(self, lo: int, hi: int) -> None:
+        print(f"{'picks':>6}" + "".join(f"{a:>29}" for a in self.present))
+        print(f"{'':>6}" + "".join(f"{'level':>11}{'added':>11}{'seats':>7}"
+                                   for _ in self.present))
         for t in range(lo, hi + 1):
-            row = ""
-            for a in present:
-                lv, dv = level[(a, t)], delta[(a, t)]
-                row += f"{st.fmean(lv):>+11.3f}" if lv else f"{'-':>11}"
-                row += f"{st.fmean(dv):>+11.3f}" if dv else f"{'-':>11}"
-                row += f"{len(lv):>7}"
+            row = "".join(self.cell(a, t) for a in self.present)
             mark = "   <- pool reaches deck size" if t == DECK else ""
             print(f"{t:>6}{row}{mark}")
 
-    banner(f"{title}   {len(rows)} seats over {len(raw_paths)} corpora")
+
+def _print_preamble() -> None:
     print("")
     print("level = score of the deck the builder makes from the first t picks.")
     print("added = level(t) - level(t-1), the same seat against itself.")
@@ -201,39 +240,66 @@ def report(raw_paths: list[Path], title: str, cap: int | None) -> None:
     print("Watch the seats column. It falls as the shorter drafts run out, so late rows")
     print("average a different, smaller population than early ones.")
     print("")
-    table(1, cap)
 
+
+def _print_beyond(curves: Curves, lengths: Counter, n_seats: int, cap: int) -> None:
     beyond = sum(n for L, n in lengths.items() if L > cap)
-    if beyond:
-        print("")
-        print(f"Picks past {cap} exist only for {beyond} of {len(rows)} seats "
-              f"({100 * beyond / len(rows):.1f} %), drafted from sets with more or larger")
-        print("packs. Levels and gaps below are a different population from the table above,")
-        print("not a continuation of it: the jump at the boundary is the sample changing.")
-        print("Only the added column stays within-seat and comparable.")
-        print("")
-        table(cap + 1, last)
+    if not beyond:
+        return
+    print("")
+    print(f"Picks past {cap} exist only for {beyond} of {n_seats} seats "
+          f"({100 * beyond / n_seats:.1f} %), drafted from sets with more or larger")
+    print("packs. Levels and gaps below are a different population from the table above,")
+    print("not a continuation of it: the jump at the boundary is the sample changing.")
+    print("Only the added column stays within-seat and comparable.")
+    print("")
+    curves.print_table(cap + 1, max(lengths))
 
-    if refs:
-        print("")
-        print(f"gen-4's lead at the same prefix length, picks 1-{cap}")
-        print(f"{'picks':>6}" + "".join(f"{'vs ' + a:>16}" for a in refs))
-        for t in range(1, cap + 1, 4):
-            row = ""
-            for a in refs:
-                g, o = level[("gen4", t)], level[(a, t)]
-                row += f"{st.fmean(g) - st.fmean(o):>+16.3f}" if g and o else f"{'-':>16}"
-            print(f"{t:>6}{row}")
 
+def _print_lead(level: dict, refs: list[str], cap: int) -> None:
+    if not refs:
+        return
+    print("")
+    print(f"gen-4's lead at the same prefix length, picks 1-{cap}")
+    print(f"{'picks':>6}" + "".join(f"{'vs ' + a:>16}" for a in refs))
+    for t in range(1, cap + 1, 4):
+        row = ""
+        for a in refs:
+            g, o = level[("gen4", t)], level[(a, t)]
+            row += f"{st.fmean(g) - st.fmean(o):>+16.3f}" if g and o else f"{'-':>16}"
+        print(f"{t:>6}{row}")
+
+
+def _print_marginal(curves: Curves, cap: int) -> None:
     print("")
     print(f"marginal value over picks {DECK + 1}-{cap}, where deck size is fixed")
-    for a in present:
-        allv = [x for t in range(DECK + 1, cap + 1) for x in delta[(a, t)]]
+    for a in curves.present:
+        allv = [x for t in range(DECK + 1, cap + 1) for x in curves.delta[(a, t)]]
         pos = [x for x in allv if x > 0]
         if not allv:
             continue
         print(f"  {a:<12} mean {st.fmean(allv):+.4f}  improves {100*len(pos)/len(allv):.0f}% "
               f"of the time by {st.fmean(pos):+.3f} when it does  n={len(allv)}")
+
+
+def report(raw_paths: list[Path], title: str, cap: int | None) -> None:
+    rows, agent_of = read_prefix_scores(raw_paths)
+    level, delta = prefix_curves(rows, agent_of)
+
+    present = [a for a in AGENTS if any(level[(a, t)] for t in range(1, 200))]
+    refs = [a for a in present if a != "gen4"]
+    lengths = Counter(max(by_t) for by_t in rows.values())
+    modal = lengths.most_common(1)[0][0]
+    if cap is None:
+        cap = modal
+    curves = Curves(level, delta, present)
+
+    banner(f"{title}   {len(rows)} seats over {len(raw_paths)} corpora")
+    _print_preamble()
+    curves.print_table(1, cap)
+    _print_beyond(curves, lengths, len(rows), cap)
+    _print_lead(level, refs, cap)
+    _print_marginal(curves, cap)
 
 
 def main() -> None:
