@@ -16,6 +16,7 @@ import forge.game.spellability.SpellAbility;
 import forge.util.MyRandom;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
@@ -82,7 +83,7 @@ class ForkRunTest {
         String printed = StdStreams.captureStderr(() -> written[0] = run("run-test-copy", null, new AtomicInteger())
                 .take((verified, snapshots) -> {
                     ran.incrementAndGet();
-                    return "ran";
+                    return Optional.of("ran");
                 }, (verified, produced) -> produced));
 
         assertNull(written[0]);
@@ -104,7 +105,7 @@ class ForkRunTest {
         MyRandom.setRandom(stream);
         try {
             Object drawn = run("directed", live, new AtomicInteger()).take(
-                    (verified, snapshots) -> MyRandom.getRandom().nextInt(1000),
+                    (verified, snapshots) -> Optional.of(MyRandom.getRandom().nextInt(1000)),
                     (verified, produced) -> produced);
 
             assertTrue(drawn instanceof Integer, "the body did not run: " + drawn);
@@ -120,7 +121,7 @@ class ForkRunTest {
         TestBoard.inPlay(live, live.getPlayers().get(0), "Grizzly Bears");
         SeedStreams.register(live, gameSeed);
         Object drawn = run("directed", live, new AtomicInteger()).take(
-                (verified, snapshots) -> MyRandom.getRandom().nextLong(), (verified, produced) -> produced);
+                (verified, snapshots) -> Optional.of(MyRandom.getRandom().nextLong()), (verified, produced) -> produced);
         assertTrue(drawn instanceof Long, "the body did not run: " + drawn);
         return (Long) drawn;
     }
@@ -151,7 +152,7 @@ class ForkRunTest {
         token.getZone().remove(token);
 
         Forks.VerifiedFork verified = run("directed", live, new AtomicInteger()).take(
-                (fork, snapshots) -> fork, (fork, produced) -> produced);
+                (fork, snapshots) -> Optional.of(fork), (fork, produced) -> produced);
 
         assertEquals(Map.of("remembered", 1), verified.copyDropped());
         String stamped = verified.stamp(new EffectRecord(
@@ -167,7 +168,7 @@ class ForkRunTest {
         TestBoard.inPlay(live, live.getPlayers().get(0), "Hill Giant");
 
         Forks.VerifiedFork verified = run("directed", live, new AtomicInteger()).take(
-                (fork, snapshots) -> fork, (fork, produced) -> produced);
+                (fork, snapshots) -> Optional.of(fork), (fork, produced) -> produced);
 
         assertTrue(verified.copyDropped().isEmpty(), verified.copyDropped().toString());
         assertFalse(verified.stamp(new EffectRecord(
@@ -187,7 +188,7 @@ class ForkRunTest {
         long before = count("fork run-test-leak moved the live game");
 
         Object written = run("run-test-leak", live, new AtomicInteger()).take(
-                (verified, snapshots) -> live.getNextTimestamp(), (verified, produced) -> produced);
+                (verified, snapshots) -> Optional.of(live.getNextTimestamp()), (verified, produced) -> produced);
 
         assertTrue(written instanceof Long, "the fork ran: " + written);
         assertEquals(before + 1, count("fork run-test-leak moved the live game"));
@@ -218,7 +219,7 @@ class ForkRunTest {
                         .filter(sa -> sa.getApi() == forge.game.ability.ApiType.RestartGame).findFirst().orElseThrow();
                 restart.setActivatingPlayer(karn.getController());
                 forge.game.ability.AbilityUtils.resolve(restart);
-                return verified.fork().getAge();
+                return Optional.of(verified.fork().getAge());
             }, (verified, produced) -> produced);
 
             assertEquals(forge.game.GameStage.RestartedByKarn, written, "the fork's game restarted");
@@ -248,7 +249,7 @@ class ForkRunTest {
         long before = count("fork run-test-check moved the live game");
 
         Object written = run("run-test-check", live, new AtomicInteger()).take(
-                (verified, snapshots) -> "checked", (verified, produced) -> produced);
+                (verified, snapshots) -> Optional.of("checked"), (verified, produced) -> produced);
 
         assertEquals("checked", written);
         assertEquals(stamp, live.getTimestamp());
@@ -273,6 +274,25 @@ class ForkRunTest {
         assertEquals(0, count("fork run-test-refuse body"));
     }
 
+    /** A body that produces nothing writes nothing, and is neither a failure nor a refusal. */
+    @Test
+    void aBodyThatProducesNothingIsDiscardedUnwritten() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        AtomicInteger spent = new AtomicInteger();
+        boolean[] written = {false};
+
+        Object result = run("run-test-nothing", live, spent).take(
+                (verified, snapshots) -> Optional.empty(), (verified, produced) -> {
+                    written[0] = true;
+                    return "written";
+                });
+
+        assertNull(result);
+        assertFalse(written[0], "the writer never ran");
+        assertEquals(1, spent.get(), "a discarded fork still counts against its budget");
+        assertEquals(0, count("fork run-test-nothing body"));
+    }
+
     /** A writer that throws is counted under the fork's kind, not the boundary step's. */
     @Test
     void aWriterThatThrowsIsCountedUnderTheFork() {
@@ -280,7 +300,7 @@ class ForkRunTest {
         long before = count("fork run-test-write write");
 
         Object written = run("run-test-write", live, new AtomicInteger()).take(
-                (verified, snapshots) -> "ran", (verified, produced) -> {
+                (verified, snapshots) -> Optional.of("ran"), (verified, produced) -> {
                     throw new IllegalStateException("a record that cannot be written");
                 });
 

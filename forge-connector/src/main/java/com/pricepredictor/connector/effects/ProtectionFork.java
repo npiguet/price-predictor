@@ -10,6 +10,7 @@ import forge.game.zone.ZoneType;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.Random;
 import java.util.TreeSet;
 import java.util.function.Consumer;
@@ -122,7 +123,7 @@ final class ProtectionFork {
             // premise, not something its turn did. What the grant makes true
             // (an Aura falling off) is recorded, as the premise's record.
             KeywordOperation.adding(forked, grant.quality()).apply(verified.fork());
-            return playForward.play(verified.fork(), FLAGS.andThen(verified::stamp));
+            return Optional.of(playForward.play(verified.fork(), FLAGS.andThen(verified::stamp)));
         }, (verified, result) -> playForward.countDropped(KIND, result));
         return played != null;
     }

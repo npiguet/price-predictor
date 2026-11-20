@@ -23,6 +23,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 
 import static com.pricepredictor.connector.effects.RecordLines.parse;
@@ -71,8 +72,8 @@ class ForkPlayForwardIntegrationTest {
             }
             forkedOnTurn = live.getPhaseHandler().getTurn();
             played = new Forks.ForkRun("directed", live, () -> { }, () -> live.getPhaseHandler().getPlayerTurn())
-                    .take((verified, snapshots) -> recording.playForward().play(
-                                    verified.fork(), record -> record.fork(ForkKind.DIRECTED).interventional(false)),
+                    .take((verified, snapshots) -> Optional.of(recording.playForward().play(
+                                    verified.fork(), record -> record.fork(ForkKind.DIRECTED).interventional(false))),
                             (verified, result) -> result);
         }
     }

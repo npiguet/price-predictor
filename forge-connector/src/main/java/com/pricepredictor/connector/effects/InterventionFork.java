@@ -6,6 +6,7 @@ import forge.game.spellability.SpellAbility;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Random;
 import java.util.function.Supplier;
 
@@ -169,7 +170,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
             if (forked == null || actor == null) {
                 throw new ForkRefusal(ForkRefusal.NO_COUNTERPART);
             }
-            return forceResolution(verified, forked, actor);
+            return Optional.of(forceResolution(verified, forked, actor));
         }, (verified, resolution) -> {
             return write(resolution.outcome().stream().map(EffectRecord::toLine).toList(),
                     resolution.droppedEvents());

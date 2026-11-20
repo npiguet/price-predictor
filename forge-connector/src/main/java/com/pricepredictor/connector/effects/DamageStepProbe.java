@@ -8,6 +8,7 @@ import forge.game.spellability.SpellAbility;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * A <b>damage-step probe</b>: a fork that re-runs one combat with a keyword
@@ -78,7 +79,7 @@ final class DamageStepProbe {
             // already gone: that is the input the counterfactual answers for.
             RecordState state = snapshots.ofBoard().state();
             ProbedStep dealt = runDamageSteps(fork, stepsDealt(keyword, step));
-            return new HeldProbe(
+            return Optional.of(new HeldProbe(
                     KeywordEdit.normalize(keyword),
                     Refs.of(carrier), state, dealt.events(),
                     Refs.of(verified.perspective()), dealt.combat(),
@@ -87,7 +88,7 @@ final class DamageStepProbe {
                     // carries the counter across (GameCopier hands it to
                     // devModeSet). Read here so the branch remembers the step it
                     // belongs to.
-                    liveTurn(), verified.copyDropped());
+                    liveTurn(), verified.copyDropped()));
         }, (verified, held) -> held);
     }
 

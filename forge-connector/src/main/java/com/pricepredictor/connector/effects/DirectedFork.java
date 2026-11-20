@@ -9,6 +9,7 @@ import forge.game.Game;
 import forge.game.player.Player;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -71,7 +72,7 @@ final class DirectedFork {
             // Its line looked for on the edited copy, which may have given it
             // the line or made the card that holds it.
             ForcedPlayRun forced = ForcedPlayRun.start(application, application.afterEdit(forked, fork), fork);
-            return playForward.play(fork, flags.andThen(verified::stamp), kept, forced);
+            return Optional.of(playForward.play(fork, flags.andThen(verified::stamp), kept, forced));
         }, (verified, result) -> playForward.countDropped(KIND, result));
         return played != null;
     }

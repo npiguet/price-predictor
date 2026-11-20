@@ -387,11 +387,12 @@ final class Forks {
     interface ForkBody<R> {
         /**
          * @param snapshots reads the copy's state, the live game beside it
-         * @return what the run produced, or null when the fork has nothing
+         * @return what the run produced, or empty when the fork has nothing
          *         to write: an object the copy could not map, or a run that
-         *         observed nothing
+         *         observed nothing (the one consumer, {@link ForkRun#take},
+         *         treats the two alike: the fork is discarded unwritten)
          */
-        R run(VerifiedFork verified, SnapshotBuilder snapshots);
+        Optional<R> run(VerifiedFork verified, SnapshotBuilder snapshots);
     }
 
     /**
@@ -461,7 +462,7 @@ final class Forks {
                         return null;
                     }
                     forked[0] = verified.get().fork();
-                    R produced;
+                    Optional<R> produced;
                     try {
                         // A copy whose stack already holds a restart is refused
                         // before its body can resolve it (FR-010d): a belt, as
@@ -477,11 +478,11 @@ final class Forks {
                         HookFailures.countContained(new HookFailures.FailureKey("fork " + kind + " body"), e);
                         return null;
                     }
-                    if (produced == null) {
+                    if (produced.isEmpty()) {
                         return null;
                     }
                     try {
-                        return write.apply(verified.get(), produced);
+                        return write.apply(verified.get(), produced.get());
                     } catch (RuntimeException | StackOverflowError e) {
                         HookFailures.countContained(new HookFailures.FailureKey("fork " + kind + " write"), e);
                         return null;

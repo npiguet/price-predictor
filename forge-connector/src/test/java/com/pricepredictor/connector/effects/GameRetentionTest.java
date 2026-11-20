@@ -13,6 +13,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.lang.ref.WeakReference;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 
 import static com.pricepredictor.connector.effects.TestBoard.castAndResolve;
 import static com.pricepredictor.connector.effects.TestBoard.spellOf;
@@ -118,7 +119,7 @@ class GameRetentionTest {
         Object written = new Forks.ForkRun("probe", game, () -> { }, () -> null).take(
                 (verified, snapshots) -> {
                     ran[0] = true;
-                    return verified;
+                    return Optional.of(verified);
                 },
                 (verified, produced) -> produced);
 
