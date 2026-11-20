@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader
 from price_predictor.infrastructure.torch_training import clip_per_group
 from sealed.application.scorer_log import _log
 from sealed.application.scorer_pairwise_loss import (
+    PairScoring,
     _batch_to_device,
     _BatchStats,
     _compute_margin_weights,
@@ -20,7 +21,6 @@ from sealed.application.scorer_pairwise_loss import (
 from sealed.application.scorer_phase_b import _phase_b_inject_encoder
 from sealed.application.scorer_training_context import _TrainingContext
 from sealed.domain.scorer_model import SetTransformerScorer
-from sealed.infrastructure.match_data_loader import EmbeddingTable
 
 
 @dataclass
@@ -96,19 +96,17 @@ def _train_one_epoch(ctx: _TrainingContext) -> EpochStats:
 
 def _validate(
     model: SetTransformerScorer,
-    embedding_table: EmbeddingTable,
     val_loader: DataLoader,
-    device: torch.device,
-    margin_weighting: str = "none",
+    scoring: PairScoring,
 ) -> ValidationResult:
     """Compute validation loss, accuracy, and score statistics."""
     model.eval()
     stats = _BatchStats()
     with torch.no_grad():
         for batch in val_loader:
-            batch = _batch_to_device(batch, device)
-            score_winner, score_loser = _score_batch(model, embedding_table, batch)
-            weights = _compute_margin_weights(batch.margins, margin_weighting)
+            batch = _batch_to_device(batch, scoring.device)
+            score_winner, score_loser = _score_batch(model, scoring.embedding_table, batch)
+            weights = _compute_margin_weights(batch.margins, scoring.margin_weighting)
             loss = _pairwise_bce(score_winner, score_loser, weights)
             stats.add(loss, score_winner, score_loser)
 

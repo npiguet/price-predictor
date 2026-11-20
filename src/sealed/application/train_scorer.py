@@ -15,6 +15,7 @@ from typing import Literal
 
 from sealed.application.scorer_checkpoints import _persist_checkpoint
 from sealed.application.scorer_log import _log
+from sealed.application.scorer_pairwise_loss import PairScoring
 from sealed.application.scorer_phase_b import _embedding_drift
 from sealed.application.scorer_training_loop import (
     TrainingMetrics,
@@ -129,8 +130,8 @@ class TrainScorerUseCase:
             metrics.train_losses.append(train_stats.loss)
 
             val = _validate(
-                ctx.model, ctx.embedding_table, ctx.val_loader, ctx.device,
-                margin_weighting=ctx.margin_weighting,
+                ctx.model, ctx.val_loader,
+                PairScoring(ctx.embedding_table, ctx.device, ctx.margin_weighting),
             )
             metrics.val_losses.append(val.loss)
             metrics.val_accuracies.append(val.accuracy)

@@ -5,11 +5,24 @@ epoch accumulates over its batches."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import torch
 import torch.nn.functional as F
 
 from sealed.domain.scorer_model import SetTransformerScorer
 from sealed.infrastructure.match_data_loader import EmbeddingTable, TrainingBatch
+
+
+@dataclass(frozen=True)
+class PairScoring:
+    """How a batch's decks are scored and their loss weighed: the embedding
+    table the card indices read, the device the batch moves to, and the
+    margin weighting of the pairwise loss."""
+
+    embedding_table: EmbeddingTable
+    device: torch.device
+    margin_weighting: str = "none"
 
 
 class _BatchStats:
