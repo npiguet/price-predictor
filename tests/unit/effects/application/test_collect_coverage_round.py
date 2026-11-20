@@ -3,6 +3,7 @@ its report, and a Ctrl-C ends the run."""
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -14,6 +15,26 @@ from tests.unit.effects.builders import (
     write_plain_shard,
 )
 from tests.unit.effects.domain.test_coverage import _record
+
+
+def _one_card_run(
+    tmp_path: Path, *, target_records: int, no_progress_rounds: int,
+) -> CollectCoverageConfig:
+    """A run over a ``cardsfolder`` under ``tmp_path`` holding the one card
+    ``aa``, two decks a round on one worker, its records in ``records``."""
+    cards = tmp_path / "cardsfolder"
+    cards.mkdir()
+    (cards / "aa.txt").write_text(
+        "name: aa\nmana cost: {G}\ntypes: creature\n", encoding="utf-8",
+    )
+    return CollectCoverageConfig(
+        effect_records=tmp_path / "records",
+        cards_folders=(cards,),
+        target_records=target_records,
+        decks_per_round=2,
+        no_progress_rounds=no_progress_rounds,
+        workers=1,
+    )
 
 
 class TestTheRoundPlaysTheComputedDecks:
@@ -112,22 +133,10 @@ class TestARoundEndsInItsReport:
     would otherwise spawn real JVMs.
     """
 
-    def _one_card_config(self, tmp_path, **overrides):
-        cards = tmp_path / "cardsfolder"
-        cards.mkdir()
-        (cards / "aa.txt").write_text(
-            "name: aa\nmana cost: {G}\ntypes: creature\n", encoding="utf-8",
-        )
+    def _one_card_config(self, tmp_path):
+        config = _one_card_run(tmp_path, target_records=1, no_progress_rounds=1)
         (tmp_path / "records").mkdir(exist_ok=True)
-        return CollectCoverageConfig(
-            effect_records=tmp_path / "records",
-            cards_folders=(cards,),
-            target_records=1,
-            decks_per_round=2,
-            no_progress_rounds=1,
-            workers=1,
-            **overrides,
-        )
+        return config
 
     def _run(self, tmp_path, caplog, pool_run):
         import logging
@@ -224,19 +233,7 @@ class TestCtrlCEndsTheRun:
     """
 
     def _two_round_config(self, tmp_path):
-        cards = tmp_path / "cardsfolder"
-        cards.mkdir()
-        (cards / "aa.txt").write_text(
-            "name: aa\nmana cost: {G}\ntypes: creature\n", encoding="utf-8",
-        )
-        return CollectCoverageConfig(
-            effect_records=tmp_path / "records",
-            cards_folders=(cards,),
-            target_records=50,
-            decks_per_round=2,
-            no_progress_rounds=5,
-            workers=1,
-        )
+        return _one_card_run(tmp_path, target_records=50, no_progress_rounds=5)
 
     def _run_with(self, tmp_path, supervisor, *, interrupted: bool):
         from effects.application import collect_coverage
