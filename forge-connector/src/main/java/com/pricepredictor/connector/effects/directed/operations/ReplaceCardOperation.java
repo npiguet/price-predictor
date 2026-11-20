@@ -1,6 +1,5 @@
 package com.pricepredictor.connector.effects.directed.operations;
 
-import com.google.common.collect.HashMultiset;
 import com.google.common.collect.Table;
 import com.pricepredictor.connector.effects.ForkRefusal;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
@@ -25,7 +24,6 @@ import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
@@ -47,7 +45,7 @@ import java.util.stream.Stream;
  * removed until end of turn), who controls it and since when (a gain-control
  * effect's controller included), its soulbond pair, its damage history (what
  * it attacked, blocked and dealt damage to this turn), what is attached to it
- * and what it is attached to, and its place in combat. The static abilities
+ * and what it is attached to, and its place in combat ({@link CarriedState} holds the board state). The static abilities
  * that applied to the old card are handed the new one in its place, so the
  * static check the edit ends with takes theirs off it and applies them anew
  * where they still apply. Attachments are relinked directly rather than
@@ -139,11 +137,10 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
         Zone battlefield = old.getZone();
         int index = battlefield.getCards(false).indexOf(old);
         Card replacement = NewCards.create(fork, cardName, old.getOwner());
-        UnaryOperator<GameCommand> rewrite = command -> GameCommandCopier.replacing(command, old, replacement);
-        if (!rewriteCommands(fork, old, command -> rewrite.apply(command) == null ? null : command)) {
+        if (!canRewrite(fork, old, replacement)) {
             throw new ForkRefusal(UNREWRITABLE_COMMAND);
         }
-
+        UnaryOperator<GameCommand> rewrite = rewriting(old, replacement);
         rewriteCommands(fork, old, rewrite);
         replacement.copyCommandsFrom(old, rewrite);
         relinkDelayedTriggers(fork, old, replacement);
@@ -154,7 +151,7 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
         swapInStaticEffects(fork, old, replacement);
         RemovePermanentOperation.takeOff(fork, old);
         AddPermanentOperation.put(fork, replacement, controller, index);
-        carryState(old, replacement);
+        new CarriedState(old, replacement).carry();
         BoardEdit.settle(fork);
         if (diesAtTheFirstCheck(replacement)) {
             throw new ForkRefusal(DIES);
@@ -292,21 +289,52 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
         return card.hasRemembered() || card.hasImprintedCard() || card.hasExiledCard();
     }
 
+    /** {@code old} replaced by {@code replacement} in a command, or null when the command cannot be rewritten. */
+    private static UnaryOperator<GameCommand> rewriting(Card old, Card replacement) {
+        return command -> GameCommandCopier.replacing(command, old, replacement);
+    }
+
+    /**
+     * Whether every pending command of the fork can be rewritten onto
+     * {@code replacement}: the same walk as {@link #rewriteCommands} with a
+     * rewrite that hands each command back itself (or null when the real one
+     * would refuse it), so the lists are cleared and refilled with the same
+     * commands in the same order and the board is as it was. Forge's command
+     * lists are private and offer no read-only walk.
+     */
+    private static boolean canRewrite(Game fork, Card old, Card replacement) {
+        UnaryOperator<GameCommand> rewrite = rewriting(old, replacement);
+        return rewriteCommands(fork, old, command -> rewrite.apply(command) == null ? null : command);
+    }
+
     /**
      * Every pending command of the fork but the old card's own put through
      * {@code rewrite}: each phase's, the state-based check's, each other
      * card's. Each list is left whole when {@code rewrite} refuses one of its
-     * commands, so a dry run returning a command itself or null tells whether
-     * the real one can go through.
+     * commands.
      *
      * @return whether every command was rewritten
      */
     private static boolean rewriteCommands(Game fork, Card old, UnaryOperator<GameCommand> rewrite) {
+        boolean all = rewritePhases(fork, rewrite);
+        if (!rewriteChecked(fork, rewrite)) {
+            return false;
+        }
+        all &= rewriteOtherCards(fork, old, rewrite);
+        return old.rewriteCommands(command -> rewrite.apply(command) == null ? null : command) && all;
+    }
+
+    private static boolean rewritePhases(Game fork, UnaryOperator<GameCommand> rewrite) {
         boolean all = true;
         for (Phase phase : List.of(fork.getUntap(), fork.getUpkeep(), fork.getBeginOfCombat(),
                 fork.getEndOfCombat(), fork.getEndOfTurn(), fork.getCleanup())) {
             all &= phase.rewriteCommands(rewrite);
         }
+        return all;
+    }
+
+    /** The state-based check's commands, all or none: false at the first {@code rewrite} refuses. */
+    private static boolean rewriteChecked(Game fork, UnaryOperator<GameCommand> rewrite) {
         List<GameCommand> checked = new ArrayList<>();
         for (GameCommand command : fork.sbaCheckedCommandList) {
             GameCommand rewritten = rewrite.apply(command);
@@ -317,15 +345,17 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
         }
         fork.sbaCheckedCommandList.clear();
         fork.sbaCheckedCommandList.addAll(checked);
+        return true;
+    }
+
+    private static boolean rewriteOtherCards(Game fork, Card old, UnaryOperator<GameCommand> rewrite) {
+        boolean all = true;
         for (Card card : fork.getCardsInGame()) {
             if (card != old) {
                 all &= card.rewriteCommands(rewrite);
             }
         }
-        if (old.rewriteCommands(command -> rewrite.apply(command) == null ? null : command)) {
-            return all;
-        }
-        return false;
+        return all;
     }
 
     /** The delayed triggers hosted by or remembering {@code old}, on {@code replacement} instead. */
@@ -337,15 +367,20 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
             if (trigger.getHostCard() == old) {
                 trigger.setHostCard(replacement);
             }
-            List<Object> remembered = trigger.getTriggerRemembered();
-            if (remembered.stream().anyMatch(o -> o == old)) {
-                List<Object> relinked = new ArrayList<>();
-                for (Object o : remembered) {
-                    relinked.add(o == old ? replacement : o);
-                }
-                trigger.setTriggerRemembered(relinked);
-            }
+            relinkTriggerRemembered(trigger, old, replacement);
         }
+    }
+
+    private static void relinkTriggerRemembered(Trigger trigger, Card old, Card replacement) {
+        List<Object> remembered = trigger.getTriggerRemembered();
+        if (remembered.stream().noneMatch(o -> o == old)) {
+            return;
+        }
+        List<Object> relinked = new ArrayList<>();
+        for (Object o : remembered) {
+            relinked.add(o == old ? replacement : o);
+        }
+        trigger.setTriggerRemembered(relinked);
     }
 
     /** Every card remembering {@code old} remembers {@code replacement} instead. */
@@ -356,70 +391,6 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
                 card.addRemembered(replacement);
             }
         }
-    }
-
-    /** The old card's board state, onto the card that replaced it. */
-    private static void carryState(Card old, Card replacement) {
-        replacement.setGameTimestamp(old.getGameTimestamp());
-        replacement.setLayerTimestamp(old.getLayerTimestamp());
-        replacement.setTurnInZone(old.getTurnInZone());
-        replacement.setTurnInController(old.getTurnInController());
-        replacement.copyControllersFrom(old, player -> player);
-        replacement.setTapped(old.isTapped());
-        replacement.setSickness(old.isFirstTurnControlled());
-        replacement.setCounters(HashMultiset.create(old.getCounters()));
-        replacement.setDamage(old.getDamage());
-        replacement.setHasBeenDealtDeathtouchDamage(old.hasBeenDealtDeathtouchDamage());
-        replacement.setDamageHistory(old.getDamageHistory());
-        // Every layer row, as GameCopier carries a card's: a resolved
-        // effect's (static id 0) stays; a static's is taken off and put
-        // back by the static check the edit ends with (swapInStaticEffects).
-        replacement.setPTTable(old.getSetPTTable());
-        replacement.setPTBoost(old.getPTBoostTable());
-        replacement.copyFrom(old);
-        replacement.copyResolvedRowsFrom(old);
-        // The permanent's designations, which stay with it whatever card it is.
-        for (Map.Entry<Long, Player> goad : old.getGoadMap().entrySet()) {
-            replacement.addGoad(goad.getKey(), goad.getValue());
-        }
-        replacement.setMonstrous(old.isMonstrous());
-        replacement.setRenowned(old.isRenowned());
-        carryDesignations(old, replacement);
-        replacement.updateKeywordsCache();
-    }
-
-    /** Suspected as {@code old} was, its menace static stamped with the old one's timestamp. */
-    private static void carrySuspected(Card old, Card replacement) {
-        if (!old.isSuspected()) {
-            return;
-        }
-        replacement.setSuspected(true);
-        if (replacement.isSuspected()) {
-            replacement.getSuspectedStatic().putParam("Timestamp", old.getSuspectedStatic().getParam("Timestamp"));
-        }
-    }
-
-    /**
-     * The designations that are plain flags: the Ring-bearer (701.54, the
-     * player's pointer repointed as {@code Card.copyStateFrom} leaves it to
-     * the copier), suspected (701.60, its menace static stamped as it was) and
-     * saddled (702.171b, with how many times and by whom this turn). Detained
-     * and encoded are refused instead ({@link #REFUSALS}).
-     */
-    private static void carryDesignations(Card old, Card replacement) {
-        for (Player player : old.getGame().getPlayers()) {
-            if (player.getRingBearer() == old) {
-                player.setRingBearer(replacement);
-            }
-        }
-        carrySuspected(old, replacement);
-        for (int i = 0; i < old.getTimesSaddledThisTurn(); i++) {
-            replacement.setSaddled(true);
-        }
-        if (!old.isSaddled()) {
-            replacement.setSaddled(false);
-        }
-        replacement.setSaddledByThisTurn(old.getSaddledByThisTurn());
     }
 
     /** {@code old}'s soulbond partner, paired with {@code replacement} instead. */
@@ -474,8 +445,7 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
     /** The fork's combat with {@code replacement} wherever {@code old} stood. */
     private static void swapInCombat(Game fork, Card old, Card replacement) {
         Combat combat = fork.getCombat();
-        if (combat == null || !(combat.isAttacking(old) || combat.isBlocking(old)
-                || combat.getDefenders().contains(old))) {
+        if (combat == null || !standsIn(combat, old)) {
             // Left alone otherwise: the copy does not carry which creatures
             // already dealt first-strike damage.
             return;
@@ -491,5 +461,9 @@ public record ReplaceCardOperation(Card permanent, String cardName) implements B
                 return old.equals(o) ? replacement : o;
             }
         }));
+    }
+
+    private static boolean standsIn(Combat combat, Card card) {
+        return combat.isAttacking(card) || combat.isBlocking(card) || combat.getDefenders().contains(card);
     }
 }
