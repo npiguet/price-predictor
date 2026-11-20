@@ -67,7 +67,7 @@ public final class CantEnterBattlefield {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        return Boards.castableSpellsInHand(active, REANIMATION).stream()
+        return Scan.castableSpellsInHand(active, REANIMATION).stream()
                 .filter(spell -> returnsACreature(spell, active))
                 .findFirst()
                 .map(spell -> Binding.empty().with("player", active).with("card", spell.getHostCard()));
@@ -81,7 +81,7 @@ public final class CantEnterBattlefield {
      * (itself, a remembered card) returns none this board can tell.
      */
     static boolean returnsACreature(SpellAbility spell, Player caster) {
-        SpellAbility cast = Boards.asPlayedBy(spell, caster);
+        SpellAbility cast = Mana.asPlayedBy(spell, caster);
         if (cast.usesTargeting()) {
             return caster.getGame().getCardsIn(ZoneType.Graveyard).stream()
                     .anyMatch(card -> card.isCreature() && cast.canTarget(card));
@@ -95,8 +95,8 @@ public final class CantEnterBattlefield {
     static boolean stopsEntering(Card permanent) {
         for (ReplacementEffect replacement : permanent.getReplacementEffects()) {
             if (replacement.getMode() == ReplacementType.Moved
-                    && Boards.lists(replacement.getParam("Destination"), "Battlefield")
-                    && Boards.lists(replacement.getParam("Origin"), "Graveyard")
+                    && Scripts.lists(replacement.getParam("Destination"), "Battlefield")
+                    && Scripts.lists(replacement.getParam("Origin"), "Graveyard")
                     && "True".equals(replacement.getParam("Prevent"))) {
                 return true;
             }
@@ -107,7 +107,7 @@ public final class CantEnterBattlefield {
     /** Whether the spell puts a card from a graveyard onto the battlefield. */
     static boolean reanimates(SpellAbility spell) {
         return spell.getApi() == ApiType.ChangeZone
-                && Boards.lists(spell.getParam("Origin"), "Graveyard")
-                && Boards.lists(spell.getParam("Destination"), "Battlefield");
+                && Scripts.lists(spell.getParam("Origin"), "Graveyard")
+                && Scripts.lists(spell.getParam("Destination"), "Battlefield");
     }
 }

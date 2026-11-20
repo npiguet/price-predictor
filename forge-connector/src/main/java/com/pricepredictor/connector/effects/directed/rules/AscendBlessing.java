@@ -42,7 +42,7 @@ public final class AscendBlessing {
     public static final String RULE = "702.131a";
     static final String SCENARIO = "702.131a-1";
     static final String TEN_PERMANENTS = "ten_permanents";
-    static final String ISLAND = "Island";
+    static final String ISLAND = Cards.ISLAND;
     static final int NINE = 9;
 
     private AscendBlessing() {
@@ -67,7 +67,7 @@ public final class AscendBlessing {
         }
         Optional<Card> spell = active.getCardsIn(ZoneType.Hand).stream()
                 .filter(card -> (card.isSorcery() || card.isInstant()) && card.hasKeyword(Keyword.ASCEND))
-                .filter(card -> Boards.affordable(active, card))
+                .filter(card -> Mana.affordable(active, card))
                 .findFirst();
         return spell.map(card -> Binding.empty().with("player", active).with("spell", card));
     }

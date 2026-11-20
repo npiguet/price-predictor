@@ -67,7 +67,7 @@ public final class BestowIllegalTarget {
             return Optional.empty();
         }
         return active.getCardsIn(ZoneType.Hand).stream()
-                .filter(card -> Boards.canPayKeyword(active, card, Keyword.BESTOW))
+                .filter(card -> Mana.canPayKeyword(active, card, Keyword.BESTOW))
                 .findFirst()
                 .map(card -> Binding.empty().with("player", active).with("card", card)
                         .with("creature", creatures.get(0)));

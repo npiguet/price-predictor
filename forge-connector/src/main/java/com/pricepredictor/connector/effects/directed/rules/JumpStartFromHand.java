@@ -52,7 +52,7 @@ public final class JumpStartFromHand {
         }
         Player active = Boards.active(live);
         return active.getCardsIn(ZoneType.Graveyard).stream()
-                .filter(card -> card.hasKeyword(Keyword.JUMP_START) && Boards.affordable(active, card))
+                .filter(card -> card.hasKeyword(Keyword.JUMP_START) && Mana.affordable(active, card))
                 .filter(card -> card.getFirstSpellAbility() != null && !card.getFirstSpellAbility().usesTargeting())
                 .findFirst()
                 .map(card -> Binding.empty().with("caster", active).with("card", card));

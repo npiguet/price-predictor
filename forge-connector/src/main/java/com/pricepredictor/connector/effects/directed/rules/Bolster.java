@@ -35,7 +35,7 @@ public final class Bolster {
     public static final String RULE = "701.39a";
     static final String SCENARIO = "701.39a-2";
     static final String HAS_CREATURE = "has_creature";
-    static final String BEARS = "Grizzly Bears";
+    static final String BEARS = Cards.BEARS;
     /** A spell of the card that bolsters ({@link #bolsters}): what the precondition finds and the fork casts. */
     static final ForcedPlay.Line BOLSTERING = ForcedPlay.Line.spell("bolster", Bolster::bolsters);
 
@@ -54,7 +54,7 @@ public final class Bolster {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        List<Card> spells = Boards.castableInHand(active, BOLSTERING);
+        List<Card> spells = Scan.castableInHand(active, BOLSTERING);
         if (!active.getCreaturesInPlay().isEmpty() || spells.isEmpty()) {
             return Optional.empty();
         }

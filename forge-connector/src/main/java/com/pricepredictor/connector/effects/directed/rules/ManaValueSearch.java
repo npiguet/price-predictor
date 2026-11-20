@@ -52,10 +52,10 @@ public final class ManaValueSearch {
 
     public static final String TRANSMUTE_RULE = "702.53a";
     public static final String TRANSFIGURE_RULE = "702.71a";
-    static final String COURSER = "Centaur Courser";
-    static final String BEARS = "Grizzly Bears";
-    static final String WURM = "Craw Wurm";
-    static final String GIANT = "Hill Giant";
+    static final String COURSER = Cards.COURSER;
+    static final String BEARS = Cards.BEARS;
+    static final String WURM = Cards.WURM;
+    static final String GIANT = Cards.GIANT;
 
     /**
      * The card the fork puts in the found card's place: {@code name}, or
@@ -93,7 +93,7 @@ public final class ManaValueSearch {
             }
             Player active = Boards.active(live);
             for (Card source : sources.apply(active)) {
-                if (!Boards.canPayKeyword(active, source, Keyword.valueOf(keyword))) {
+                if (!Mana.canPayKeyword(active, source, Keyword.valueOf(keyword))) {
                     continue;
                 }
                 List<Card> matching = active.getCardsIn(ZoneType.Library).stream()

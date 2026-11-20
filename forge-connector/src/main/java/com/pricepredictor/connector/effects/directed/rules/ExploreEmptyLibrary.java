@@ -42,7 +42,7 @@ public final class ExploreEmptyLibrary {
      * A spell of the card that explores as it resolves or as its permanent
      * enters: what the precondition finds and the fork casts.
      */
-    static final ForcedPlay.Line EXPLORING = Boards.acting("Explore");
+    static final ForcedPlay.Line EXPLORING = Scan.acting("Explore");
 
     private ExploreEmptyLibrary() {
     }
@@ -59,7 +59,7 @@ public final class ExploreEmptyLibrary {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        Optional<Card> explorer = Boards.acting(active, EXPLORING)
+        Optional<Card> explorer = Scan.acting(active, EXPLORING)
                 .filter(card -> Boards.watched(live, TriggerType.Explores, active, card));
         if (active.getCardsIn(ZoneType.Library).isEmpty()) {
             return Optional.empty();

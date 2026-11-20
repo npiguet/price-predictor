@@ -134,7 +134,7 @@ public final class Dethrone {
         }
         return active.getCardsIn(ZoneType.Hand).stream()
                 .filter(card -> card.isInstant() || card.hasKeyword(Keyword.FLASH))
-                .filter(card -> Boards.affordable(active, card))
+                .filter(card -> Mana.affordable(active, card))
                 .anyMatch(card -> card.getSpells().stream().anyMatch(Dethrone::grows));
     }
 

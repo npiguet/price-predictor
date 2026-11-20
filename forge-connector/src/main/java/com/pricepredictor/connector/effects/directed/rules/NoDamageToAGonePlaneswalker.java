@@ -25,7 +25,7 @@ import java.util.Optional;
  * (first-strike damage, a removal spell, a sacrifice): Forge keeps it
  * attacking a placeholder (506.4c), and its damage reaches nothing; and
  * another combatant deals combat damage in the step
- * ({@link Boards#anotherDealsRegularDamage}), since a step dealing none
+ * ({@link Combats#anotherDealsRegularDamage}), since a step dealing none
  * writes no combat record. Its damage is the step's turn-based action, which
  * no seat's choice decides beyond the attacker's assignment. It binds the
  * attacker.
@@ -41,7 +41,7 @@ public final class NoDamageToAGonePlaneswalker {
     public static final String RULE = "702.19f";
     static final String SCENARIO = "702.19f-1";
     static final String TRAMPLE_OVER_PLANESWALKERS = "trample_over_planeswalkers";
-    static final String THRASTA = "Thrasta, Tempest's Roar";
+    static final String THRASTA = Cards.THRASTA;
 
     private NoDamageToAGonePlaneswalker() {
     }
@@ -57,8 +57,8 @@ public final class NoDamageToAGonePlaneswalker {
         if (!Boards.at(live, PhaseType.COMBAT_DAMAGE) || combat == null) {
             return Optional.empty();
         }
-        for (Card attacker : Boards.attackersOfAGoneDefender(combat)) {
-            if (!Boards.tramplesOverPlaneswalkers(attacker) && Boards.anotherDealsRegularDamage(combat, attacker)
+        for (Card attacker : Combats.attackersOfAGoneDefender(combat)) {
+            if (!Boards.tramplesOverPlaneswalkers(attacker) && Combats.anotherDealsRegularDamage(combat, attacker)
                     && Boards.replacementSurvives(attacker, THRASTA)) {
                 return Optional.of(Binding.empty().with("attacker", attacker));
             }

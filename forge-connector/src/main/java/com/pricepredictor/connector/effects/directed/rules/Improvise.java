@@ -24,12 +24,12 @@ import java.util.Optional;
  * other sources make ({@link #otherMana}) and its untapped nonland artifacts,
  * none of which makes mana itself, pay exactly, the artifacts no more than
  * the card's generic mana, and which the player can pay, colours included
- * ({@link Boards#affordable(Player, Card)}: every untapped artifact
+ * ({@link Mana#affordable(Player, Card)}: every untapped artifact
  * improvises, as the rules allow, whatever the AI would tap). It binds one
  * of those artifacts and the card.
  *
  * <p>The active player cannot add a land to its mana this turn
- * ({@link Boards#noLandToPlay}): it holds no land, or its land drop is
+ * ({@link Mana#noLandToPlay}): it holds no land, or its land drop is
  * used, so the turn's land drop cannot undo the mana the variant takes.
  *
  * <p>Variant {@code one_artifact_tapped} ({@code tap}): that artifact is
@@ -61,34 +61,34 @@ public final class Improvise {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        if (!Boards.noLandToPlay(active)) {
+        if (!Mana.noLandToPlay(active)) {
             return Optional.empty();
         }
         List<Card> artifacts = active.getCardsIn(ZoneType.Battlefield).stream()
                 .filter(card -> card.isArtifact() && !card.isLand() && !card.isTapped())
                 .toList();
-        if (artifacts.isEmpty() || artifacts.stream().anyMatch(artifact -> Boards.manaUnits(artifact) > 0)) {
+        if (artifacts.isEmpty() || artifacts.stream().anyMatch(artifact -> Mana.manaUnits(artifact) > 0)) {
             return Optional.empty();
         }
         int mana = otherMana(active, artifacts);
         return active.getCardsIn(ZoneType.Hand).stream()
                 .filter(card -> card.hasKeyword(Keyword.IMPROVISE) && card.getCMC() == mana + artifacts.size())
                 .filter(card -> card.getManaCost().getGenericCost() >= artifacts.size())
-                .filter(card -> Boards.affordable(active, card))
+                .filter(card -> Mana.affordable(active, card))
                 .findFirst()
                 .map(card -> Binding.empty().with("artifact", artifacts.get(0)).with("card", card));
     }
 
     /**
      * The mana {@code player}'s sources other than {@code artifacts} make now
-     * ({@link Boards#manaSources}), each one activation of its most
-     * productive mana ability ({@link Boards#manaUnits}): a bounce land
+     * ({@link Mana#manaSources}), each one activation of its most
+     * productive mana ability ({@link Mana#manaUnits}): a bounce land
      * counts two, a mana creature one.
      */
     static int otherMana(Player player, List<Card> artifacts) {
-        return Boards.manaSources(player).stream()
+        return Mana.manaSources(player).stream()
                 .filter(source -> !artifacts.contains(source))
-                .mapToInt(Boards::manaUnits)
+                .mapToInt(Mana::manaUnits)
                 .sum();
     }
 }

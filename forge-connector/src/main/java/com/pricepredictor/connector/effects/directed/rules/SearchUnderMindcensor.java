@@ -45,7 +45,7 @@ public final class SearchUnderMindcensor {
 
     /** An activated ability that searches its controller's library. */
     static final ForcedPlay.Line LIBRARY_SEARCH = new ForcedPlay.Line("library search",
-            ability -> ability.isActivatedAbility() && !ability.isManaAbility() && Boards.searches(ability));
+            ability -> ability.isActivatedAbility() && !ability.isManaAbility() && Scan.searches(ability));
 
     private SearchUnderMindcensor() {
     }
@@ -94,19 +94,19 @@ public final class SearchUnderMindcensor {
     /**
      * Whether {@code card} has an activated ability searching its
      * controller's library that it may activate at any priority (no sorcery
-     * timing) and that {@code player} can pay ({@link Boards#affordable}). The
+     * timing) and that {@code player} can pay ({@link Mana#affordable}). The
      * card taps for its own cost when it is an untapped land, so its mana is
      * not counted toward the mana cost: that cost is covered by the other
-     * sources, counted per source ({@link Boards#manaUnits}).
+     * sources, counted per source ({@link Mana#manaUnits}).
      */
     static boolean searchesAtAnyPriority(Player player, Card card) {
-        int others = Boards.manaSources(player).stream()
+        int others = Mana.manaSources(player).stream()
                 .filter(source -> source != card || !card.isLand())
-                .mapToInt(Boards::manaUnits).sum();
+                .mapToInt(Mana::manaUnits).sum();
         for (SpellAbility ability : card.getSpellAbilities()) {
             if (LIBRARY_SEARCH.matches(ability) && !ability.getRestrictions().isSorcerySpeed()
-                    && Boards.manaValue(ability.getPayCosts()) <= others
-                    && Boards.affordable(player, ability)) {
+                    && Mana.manaValue(ability.getPayCosts()) <= others
+                    && Mana.affordable(player, ability)) {
                 return true;
             }
         }

@@ -26,7 +26,7 @@ import java.util.Optional;
  * those lands and the card.
  *
  * <p>The active player cannot add a land to its mana this turn
- * ({@link Boards#noLandToPlay}): it holds no land, or its land drop is
+ * ({@link Mana#noLandToPlay}): it holds no land, or its land drop is
  * used, so the turn's land drop cannot undo the mana the variant takes.
  *
  * <p>Variant {@code two_mountains} ({@code remove_permanent}): that land is
@@ -57,13 +57,13 @@ public final class Prototype {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        if (!Boards.noLandToPlay(active)) {
+        if (!Mana.noLandToPlay(active)) {
             return Optional.empty();
         }
         for (Card card : active.getCardsIn(ZoneType.Hand)) {
-            for (Cost cost : Boards.keywordCosts(card, Keyword.PROTOTYPE)) {
-                int value = Boards.manaValue(cost);
-                Optional<Card> land = Boards.lastLandFor(active, value);
+            for (Cost cost : Mana.keywordCosts(card, Keyword.PROTOTYPE)) {
+                int value = Mana.manaValue(cost);
+                Optional<Card> land = Mana.lastLandFor(active, value);
                 if (land.isPresent() && card.getCMC() > value) {
                     return Optional.of(Binding.empty().with("land", land.get()).with("card", card));
                 }

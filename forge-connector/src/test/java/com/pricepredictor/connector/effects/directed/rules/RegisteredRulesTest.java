@@ -273,7 +273,7 @@ class RegisteredRulesTest {
 
     @Test
     void simultaneousDamageBindsNothingWhenTheBlockerStrikesFirst() {
-        assertTrue(SimultaneousDamage.bind(blockedBoard("Youthful Knight").game).isEmpty());
+        assertTrue(SimultaneousDamage.bind(blockedBoard(SimultaneousDamage.KNIGHT).game).isEmpty());
     }
 
     @Test
@@ -417,7 +417,7 @@ class RegisteredRulesTest {
         Board board = mutagenBoard(true);
         Twin twin = board.twin(MutagenToken.rule());
         Card island = twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Battlefield).stream()
-                .filter(card -> card.getName().equals(MutagenToken.ISLAND) && !card.isTapped())
+                .filter(card -> card.getName().equals(Cards.ISLAND) && !card.isTapped())
                 .findFirst().orElseThrow();
         for (String change : twin.changes()) {
             assertTrue(change.equals("+" + id(island)) || change.startsWith("+link ") && change.contains("=" + id(island))
@@ -580,7 +580,7 @@ class RegisteredRulesTest {
         Board board = new Board(PhaseType.MAIN1);
         board.card(board.you, "Plains");
         board.card(board.opponent, "Grizzly Bears");
-        TestBoard.inHand(board.game, board.you, "Holy Strength");
+        TestBoard.inHand(board.game, board.you, Cards.HOLY_STRENGTH);
         assertTrue(TypeSettingAura.bind(board.game).isEmpty());
     }
 
@@ -725,7 +725,7 @@ class RegisteredRulesTest {
         Board board = new Board(PhaseType.MAIN1);
         board.subject = board.card(board.you, "Tree of Redemption");
         if (leyline) {
-            board.card(board.you, "Leyline of Punishment");
+            board.card(board.you, CantGainLifeExchange.LEYLINE_OF_PUNISHMENT);
         }
         board.you.setLife(5, null);
         return board;
@@ -880,7 +880,7 @@ class RegisteredRulesTest {
     void distinctTargetsForksASecondCreature() {
         Board board = undoBoard();
         Twin twin = board.twin(DistinctTargets.rule());
-        assertOnlyAdded(twin, twin.fork().player("opponent"), DistinctTargets.WURM);
+        assertOnlyAdded(twin, twin.fork().player("opponent"), Cards.WURM);
     }
 
     // ── 607.2k, champion: remove_permanent ──────────────────────────────
@@ -1037,7 +1037,7 @@ class RegisteredRulesTest {
         Board board = auraSwapBoard("Giant Growth");
         Twin twin = board.twin(AuraSwap.rule());
         List<Card> hand = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Hand));
-        assertEquals(List.of(AuraSwap.HOLY_STRENGTH), hand.stream().map(Card::getName).toList());
+        assertEquals(List.of(Cards.HOLY_STRENGTH), hand.stream().map(Card::getName).toList());
         assertOnlySwapped(twin, board.subject, hand.get(0));
     }
 
@@ -1121,7 +1121,7 @@ class RegisteredRulesTest {
     void bolsterForksGrizzlyBearsUnderThePlayer() {
         Board board = bolsterBoard();
         Twin twin = board.twin(Bolster.rule());
-        assertOnlyAdded(twin, twin.fork().player("player"), Bolster.BEARS);
+        assertOnlyAdded(twin, twin.fork().player("player"), Cards.BEARS);
     }
 
     // ── 701.42a, 712.4a and 712.14c, meld: replace_card ─────────────────
@@ -1192,7 +1192,7 @@ class RegisteredRulesTest {
     private static Board branchwalkerBoard(String... library) {
         Board board = new Board(PhaseType.MAIN1);
         board.cards(board.you, "Forest", 2);
-        return watchedCast(board, "Wildgrowth Walker", "Merfolk Branchwalker", library);
+        return watchedCast(board, "Wildgrowth Walker", SeveralExplore.BRANCHWALKER, library);
     }
 
     /**
@@ -1250,7 +1250,7 @@ class RegisteredRulesTest {
     /** Two Merfolk already explore two at a time, the side the counts hold, whatever else is there. */
     @Test
     void severalExploreBindsNothingWithTwoMerfolk() {
-        Board board = hakbalBoard("Merfolk Branchwalker");
+        Board board = hakbalBoard(SeveralExplore.BRANCHWALKER);
         assertTrue(SeveralExplore.bind(board.game).isEmpty());
         board.card(board.you, "Grizzly Bears");
         assertTrue(SeveralExplore.bind(board.game).isEmpty(), "beside a creature the Branchwalker could replace");
@@ -1407,14 +1407,14 @@ class RegisteredRulesTest {
 
     @Test
     void sharedKeywordsBindsNothingWithTwoHoldersOrNoOtherCreature() {
-        assertTrue(SharedKeywords.bind(concertedBoard("White Knight", "Youthful Knight").game).isEmpty());
+        assertTrue(SharedKeywords.bind(concertedBoard("White Knight", SimultaneousDamage.KNIGHT).game).isEmpty());
         assertTrue(SharedKeywords.bind(concertedBoard("White Knight").game).isEmpty());
     }
 
     @Test
     void sharedKeywordsForksHillGiantInTheKnightsPlace() {
         Board board = concertedBoard("White Knight", "Grizzly Bears");
-        assertOnlyReplaced(board.twin(SharedKeywords.rule()), board.subject, SharedKeywords.GIANT);
+        assertOnlyReplaced(board.twin(SharedKeywords.rule()), board.subject, Cards.GIANT);
     }
 
     // ── 702.53a, transmute: move_card ───────────────────────────────────
@@ -1449,7 +1449,7 @@ class RegisteredRulesTest {
         Board board = infiltratorBoard("Forest", "Shock", "Grizzly Bears", "Island");
         Twin twin = board.twin(ManaValueSearch.transmute());
         List<Card> library = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library));
-        assertEquals(List.of("Forest", "Shock", ManaValueSearch.COURSER, "Island"),
+        assertEquals(List.of("Forest", "Shock", Cards.COURSER, "Island"),
                 library.stream().map(Card::getName).toList());
         // A library card the board shows by count alone: the swap the list
         // above shows changes no visible member.
@@ -1469,7 +1469,7 @@ class RegisteredRulesTest {
 
     @Test
     void auraSwapBindsNothingWithTheAuraTheExchangeWaitsFor() {
-        assertTrue(AuraSwap.rule().precondition(auraSwapBoard("Holy Strength").game).isEmpty());
+        assertTrue(AuraSwap.rule().precondition(auraSwapBoard(Cards.HOLY_STRENGTH).game).isEmpty());
     }
 
     @Test
@@ -1477,7 +1477,7 @@ class RegisteredRulesTest {
         Board board = auraSwapBoard("Grizzly Bears");
         Twin twin = board.twin(AuraSwap.rule());
         List<Card> hand = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Hand));
-        assertEquals(List.of(AuraSwap.HOLY_STRENGTH), hand.stream().map(Card::getName).toList());
+        assertEquals(List.of(Cards.HOLY_STRENGTH), hand.stream().map(Card::getName).toList());
         assertOnlySwapped(twin, board.subject, hand.get(0));
     }
 
@@ -1493,7 +1493,7 @@ class RegisteredRulesTest {
 
     @Test
     void auraSwapCantEnchantBindsNothingForAnAuraThatCanEnchant() {
-        assertTrue(AuraSwapCantEnchant.bind(auraSwapBoard("Holy Strength").game).isEmpty());
+        assertTrue(AuraSwapCantEnchant.bind(auraSwapBoard(Cards.HOLY_STRENGTH).game).isEmpty());
     }
 
     @Test
@@ -1501,7 +1501,7 @@ class RegisteredRulesTest {
         Board board = auraSwapBoard("Wild Growth");
         Twin twin = board.twin(AuraSwapCantEnchant.rule());
         List<Card> hand = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Hand));
-        assertEquals(List.of(AuraSwapCantEnchant.HOLY_STRENGTH), hand.stream().map(Card::getName).toList());
+        assertEquals(List.of(Cards.HOLY_STRENGTH), hand.stream().map(Card::getName).toList());
         assertOnlySwapped(twin, board.subject, hand.get(0));
     }
 
@@ -1536,7 +1536,7 @@ class RegisteredRulesTest {
         Board board = fleshwritherBoard("Hill Giant", "Grizzly Bears");
         Twin twin = board.twin(ManaValueSearch.transfigure());
         List<Card> library = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library));
-        assertEquals(List.of(ManaValueSearch.WURM, "Grizzly Bears"), library.stream().map(Card::getName).toList());
+        assertEquals(List.of(Cards.WURM, "Grizzly Bears"), library.stream().map(Card::getName).toList());
         assertOnlyChanged(twin, board.subject, library.get(0));
     }
 
@@ -1957,7 +1957,7 @@ class RegisteredRulesTest {
     /** Thrasta's own attack is the side the counts hold already. */
     @Test
     void trampleOverPlaneswalkersBindsNothingWithTheKeyword() {
-        assertTrue(TrampleOverPlaneswalkers.bind(planeswalkerBoard("Thrasta, Tempest's Roar", 3).game).isEmpty());
+        assertTrue(TrampleOverPlaneswalkers.bind(planeswalkerBoard(Cards.THRASTA, 3).game).isEmpty());
     }
 
     /** A granted trample over planeswalkers is the keyword already, and stays on the Thrasta in its place. */
@@ -2016,7 +2016,7 @@ class RegisteredRulesTest {
         Board board = planeswalkerBoard("Colossal Dreadmaw", 3);
         Twin twin = board.twin(TrampleOverPlaneswalkers.rule());
         Card thrasta = twin.forkGame().getCardsIn(ZoneType.Battlefield).stream()
-                .filter(card -> card.getName().equals(TrampleOverPlaneswalkers.THRASTA)).findFirst().orElseThrow();
+                .filter(card -> card.getName().equals(Cards.THRASTA)).findFirst().orElseThrow();
         for (String change : changes(renamed(twin.real(), id(board.subject), id(thrasta)), twin.forked())) {
             assertTrue(change.startsWith(id(thrasta) + ".") || change.contains(id(thrasta)),
                     "replacing changed " + change);
@@ -2057,7 +2057,7 @@ class RegisteredRulesTest {
     /** Thrasta's own attack is the side 702.19f's counts hold already. */
     @Test
     void aGoneWalkersTramplerBindsNothing() {
-        assertTrue(NoDamageToAGonePlaneswalker.bind(goneWalkerBoard("Thrasta, Tempest's Roar").game).isEmpty());
+        assertTrue(NoDamageToAGonePlaneswalker.bind(goneWalkerBoard(Cards.THRASTA).game).isEmpty());
     }
 
     @Test
@@ -2116,7 +2116,7 @@ class RegisteredRulesTest {
     void aGoneWalkersAttackerForksThrasta() {
         Board board = goneWalkerBoard("Craw Wurm");
         assertReplacedAttackingTheGoneWalker(board, board.twin(NoDamageToAGonePlaneswalker.rule()),
-                NoDamageToAGonePlaneswalker.THRASTA);
+                Cards.THRASTA);
     }
 
     // ── 702.118b, skulk: replace_card ───────────────────────────────────
@@ -2327,7 +2327,7 @@ class RegisteredRulesTest {
         assertEquals(10, battlefield.size());
         Card tenth = battlefield.stream().filter(card -> !board.game.getCardsIn(ZoneType.Battlefield).contains(card))
                 .findFirst().orElseThrow();
-        assertEquals(AscendBlessing.ISLAND, tenth.getName());
+        assertEquals(Cards.ISLAND, tenth.getName());
         assertTrue(tenth.isTapped(), "the tenth makes no mana");
         for (String change : twin.changes()) {
             assertTrue(change.equals("+" + id(tenth)) || change.startsWith("+link ") && change.contains("=" + id(tenth)),
@@ -2407,7 +2407,7 @@ class RegisteredRulesTest {
         Board board = kellanBoard("Hill Giant");
         Twin twin = board.twin(PlottedFromHand.rule());
         Card bears = twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Hand).stream()
-                .filter(card -> card.getName().equals(PlottedFromHand.BEARS)).findFirst().orElseThrow();
+                .filter(card -> card.getName().equals(Cards.BEARS)).findFirst().orElseThrow();
         assertOnlyChanged(twin, board.subject, bears);
     }
 

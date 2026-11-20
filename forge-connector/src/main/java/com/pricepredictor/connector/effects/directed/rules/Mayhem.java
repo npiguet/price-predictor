@@ -26,7 +26,7 @@ import java.util.Optional;
  * many as that cost's mana value. It binds one of those lands and the card.
  *
  * <p>The active player cannot add a land to its mana this turn
- * ({@link Boards#noLandToPlay}): it holds no land, or its land drop is
+ * ({@link Mana#noLandToPlay}): it holds no land, or its land drop is
  * used, so the turn's land drop cannot undo the mana the variant takes.
  *
  * <p>Variant {@code one_mountain} ({@code remove_permanent}): that land is
@@ -57,15 +57,15 @@ public final class Mayhem {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        if (!Boards.noLandToPlay(active)) {
+        if (!Mana.noLandToPlay(active)) {
             return Optional.empty();
         }
         for (Card card : active.getCardsIn(ZoneType.Graveyard)) {
             if (!card.wasDiscarded() || !card.enteredThisTurn()) {
                 continue;
             }
-            for (Cost cost : Boards.keywordCosts(card, Keyword.MAYHEM)) {
-                Optional<Card> land = Boards.lastLandFor(active, Boards.manaValue(cost));
+            for (Cost cost : Mana.keywordCosts(card, Keyword.MAYHEM)) {
+                Optional<Card> land = Mana.lastLandFor(active, Mana.manaValue(cost));
                 if (land.isPresent()) {
                     return Optional.of(Binding.empty().with("land", land.get()).with("card", card));
                 }

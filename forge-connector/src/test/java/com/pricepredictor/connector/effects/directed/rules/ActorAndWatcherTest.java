@@ -93,7 +93,7 @@ class ActorAndWatcherTest {
     void anOpponentsWatcherAloneDoesNotBindAnExplorer() {
         permanents(you, "Forest", 2);
         permanent(opponent, "Wildgrowth Walker");
-        TestBoard.inHand(game, you, "Merfolk Branchwalker");
+        TestBoard.inHand(game, you, SeveralExplore.BRANCHWALKER);
         library("Forest", "Grizzly Bears");
         assertTrue(ExploreEmptyLibrary.bind(game).isEmpty());
     }
@@ -121,7 +121,7 @@ class ActorAndWatcherTest {
     void theActivePlayersOwnWatcherBindsTheExplorer() {
         permanents(you, "Forest", 2);
         permanent(you, "Wildgrowth Walker");
-        Card branchwalker = TestBoard.inHand(game, you, "Merfolk Branchwalker");
+        Card branchwalker = TestBoard.inHand(game, you, SeveralExplore.BRANCHWALKER);
         library("Forest", "Grizzly Bears");
         assertEquals(branchwalker, ExploreEmptyLibrary.bind(game).orElseThrow().card("card"));
     }

@@ -43,7 +43,7 @@ public final class DiscoverNothingFound {
      * A spell of the card that discovers as it resolves or as its permanent
      * enters: what the precondition finds and the fork casts.
      */
-    static final ForcedPlay.Line DISCOVERING = Boards.acting("Discover");
+    static final ForcedPlay.Line DISCOVERING = Scan.acting("Discover");
 
     private DiscoverNothingFound() {
     }
@@ -60,7 +60,7 @@ public final class DiscoverNothingFound {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        Optional<Card> discoverer = Boards.acting(active, DISCOVERING)
+        Optional<Card> discoverer = Scan.acting(active, DISCOVERING)
                 .filter(card -> Boards.watched(live, TriggerType.Discover, active, card));
         if (active.getCardsIn(ZoneType.Library).isEmpty()) {
             return Optional.empty();

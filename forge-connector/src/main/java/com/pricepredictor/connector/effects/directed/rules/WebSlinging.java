@@ -59,7 +59,7 @@ public final class WebSlinging {
             return Optional.empty();
         }
         return active.getCardsIn(ZoneType.Hand).stream()
-                .filter(card -> Boards.canPayKeyword(active, card, Keyword.WEB_SLINGING))
+                .filter(card -> Mana.canPayKeyword(active, card, Keyword.WEB_SLINGING))
                 .findFirst()
                 .map(card -> Binding.empty().with("creature", tapped.get(0)).with("card", card));
     }

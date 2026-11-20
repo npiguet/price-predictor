@@ -97,7 +97,7 @@ public final class SimultaneousLoss {
             if (!plainUpkeepTrigger(trigger)) {
                 continue;
             }
-            Optional<Integer> amount = amountOf(permanent, chain(permanent, Boards.executed(trigger)));
+            Optional<Integer> amount = amountOf(permanent, chain(permanent, Scripts.executed(trigger)));
             if (amount.isPresent()) {
                 return amount;
             }
@@ -115,7 +115,7 @@ public final class SimultaneousLoss {
     private static List<Map<String, String>> chain(Card host, Map<String, String> root) {
         List<Map<String, String>> found = new ArrayList<>();
         for (Map<String, String> segment = root; !segment.isEmpty() && found.size() < 8;
-                segment = Boards.script(host, segment.get("SubAbility"))) {
+                segment = Scripts.script(host, segment.get("SubAbility"))) {
             found.add(segment);
         }
         return found;
@@ -124,15 +124,15 @@ public final class SimultaneousLoss {
     private static Optional<Integer> amountOf(Card host, List<Map<String, String>> chain) {
         Optional<Integer> amount = Optional.empty();
         for (Map<String, String> segment : chain) {
-            String api = Boards.api(segment);
+            String api = Scripts.api(segment);
             if (!plainApis().contains(api) || segment.keySet().stream().anyMatch(name ->
                     name.startsWith("Condition") || name.startsWith("Unless") || name.equals("Optional"))) {
                 return Optional.empty();
             }
             if (ApiType.DamageAll.name().equals(api) && "Player".equals(segment.get("ValidPlayers"))) {
-                amount = Boards.number(segment.get("NumDmg"));
+                amount = Scripts.number(segment.get("NumDmg"));
             } else if (ApiType.LoseLife.name().equals(api) && "Player".equals(segment.get("Defined"))) {
-                amount = Boards.number(segment.get("LifeAmount"));
+                amount = Scripts.number(segment.get("LifeAmount"));
             }
         }
         return amount;

@@ -30,7 +30,7 @@ public final class AuraSwapCantEnchant {
     public static final String RULE = "702.65b";
     static final String SCENARIO = "702.65b-1";
     static final String CAN_ENCHANT = "can_enchant";
-    static final String HOLY_STRENGTH = "Holy Strength";
+    static final String HOLY_STRENGTH = Cards.HOLY_STRENGTH;
 
     private AuraSwapCantEnchant() {
     }

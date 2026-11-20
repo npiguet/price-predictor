@@ -120,7 +120,7 @@ class PlayablePreconditionsTest {
         TestBoard.inHand(game, you, "Reverse Engineer");
         assertTrue(Improvise.bind(game).isPresent());
 
-        permanent(you, "Llanowar Elves");
+        permanent(you, SkulkBlocker.ELVES);
         assertTrue(Improvise.bind(game).isEmpty());
     }
 

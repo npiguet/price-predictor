@@ -73,7 +73,7 @@ final class Melds {
 
     /** The host's trigger as an {@link Unpaired} meld, or empty when it melds nothing the fork could pair. */
     private static Optional<Unpaired> unpaired(Player active, Card host, Trigger trigger) {
-        Map<String, String> meld = Boards.executed(trigger);
+        Map<String, String> meld = Scripts.executed(trigger);
         if (!meldsHost(host, meld) || !firesLaterThisTurn(trigger)) {
             return Optional.empty();
         }
@@ -91,7 +91,7 @@ final class Melds {
 
     /** Whether the meld script melds {@code host}, as its primary, with a partner it names. */
     private static boolean meldsHost(Card host, Map<String, String> meld) {
-        return ApiType.Meld.name().equals(Boards.api(meld)) && host.getName().equals(meld.get("Primary"))
+        return ApiType.Meld.name().equals(Scripts.api(meld)) && host.getName().equals(meld.get("Primary"))
                 && meld.get("Secondary") != null;
     }
 
@@ -136,8 +136,8 @@ final class Melds {
     /** The partner the host's meld trigger names, if it has one. */
     static Optional<String> partnerName(Card host) {
         for (Trigger trigger : host.getTriggers()) {
-            Map<String, String> meld = Boards.executed(trigger);
-            if (ApiType.Meld.name().equals(Boards.api(meld)) && meld.get("Secondary") != null) {
+            Map<String, String> meld = Scripts.executed(trigger);
+            if (ApiType.Meld.name().equals(Scripts.api(meld)) && meld.get("Secondary") != null) {
                 return Optional.of(meld.get("Secondary"));
             }
         }

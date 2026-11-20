@@ -68,9 +68,9 @@ public final class SeveralExplore {
         }
         for (Card host : active.getCardsIn(ZoneType.Battlefield)) {
             for (Trigger trigger : host.getTriggers()) {
-                Map<String, String> explore = Boards.executed(trigger);
+                Map<String, String> explore = Scripts.executed(trigger);
                 String defined = explore.getOrDefault("Defined", "");
-                if (trigger.getMode() != TriggerType.Phase || !ApiType.Explore.name().equals(Boards.api(explore))
+                if (trigger.getMode() != TriggerType.Phase || !ApiType.Explore.name().equals(Scripts.api(explore))
                         || !defined.startsWith(VALID)) {
                     continue;
                 }

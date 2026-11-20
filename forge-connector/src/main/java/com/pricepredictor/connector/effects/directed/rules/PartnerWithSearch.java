@@ -65,7 +65,7 @@ public final class PartnerWithSearch {
         }
         for (Card card : active.getCardsIn(ZoneType.Hand)) {
             Optional<String> partner = partnerName(card);
-            if (partner.filter(name -> isNotIn(library, name)).isPresent() && Boards.affordable(active, card)) {
+            if (partner.filter(name -> isNotIn(library, name)).isPresent() && Mana.affordable(active, card)) {
                 return Optional.of(Binding.empty().with("player", active)
                         .with("partner with", card).with("card", library.get(0)));
             }

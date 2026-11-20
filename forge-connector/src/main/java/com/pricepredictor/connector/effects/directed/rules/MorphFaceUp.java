@@ -23,13 +23,13 @@ import java.util.Optional;
  * <p>The base board, read at a boundary: a main phase of the active player
  * begins, it controls a face-down permanent whose morph cost is mana alone and
  * that it can pay now, colours included, and the mana its sources make now
- * ({@link Boards#manaSources}, each one activation of its most productive
+ * ({@link Mana#manaSources}, each one activation of its most productive
  * mana ability: a bounce land counts two) is exactly that cost's mana value,
  * so the cost takes every mana it can make. It binds the face-down permanent
  * and one of its untapped lands.
  *
  * <p>The active player cannot add a land to its mana this turn
- * ({@link Boards#noLandToPlay}): it holds no land, or its land drop is
+ * ({@link Mana#noLandToPlay}): it holds no land, or its land drop is
  * used, so the turn's land drop cannot undo the mana the variant takes.
  *
  * <p>Variant {@code cannot_pay} ({@code tap}): the land is already tapped, so
@@ -60,19 +60,19 @@ public final class MorphFaceUp {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        if (!Boards.noLandToPlay(active)) {
+        if (!Mana.noLandToPlay(active)) {
             return Optional.empty();
         }
-        List<Card> sources = Boards.manaSources(active);
+        List<Card> sources = Mana.manaSources(active);
         Optional<Card> land = sources.stream().filter(Card::isLand).findFirst();
         if (land.isEmpty()) {
             return Optional.empty();
         }
-        int mana = sources.stream().mapToInt(Boards::manaUnits).sum();
+        int mana = sources.stream().mapToInt(Mana::manaUnits).sum();
         for (Card permanent : active.getCardsIn(ZoneType.Battlefield)) {
             Optional<SpellAbility> faceUp = morphUp(permanent)
-                    .filter(ability -> Boards.manaValue(ability.getPayCosts()) == mana)
-                    .filter(ability -> Boards.affordable(active, ability));
+                    .filter(ability -> Mana.manaValue(ability.getPayCosts()) == mana)
+                    .filter(ability -> Mana.affordable(active, ability));
             if (faceUp.isPresent()) {
                 return Optional.of(Binding.empty().with("permanent", permanent).with("land", land.get()));
             }
@@ -87,7 +87,7 @@ public final class MorphFaceUp {
         }
         return permanent.getState(CardStateName.Original).getNonManaAbilities().stream()
                 .filter(MorphFaceUp::isMorphUp)
-                .filter(ability -> Boards.manaValue(ability.getPayCosts()) > 0)
+                .filter(ability -> Mana.manaValue(ability.getPayCosts()) > 0)
                 .findFirst();
     }
 

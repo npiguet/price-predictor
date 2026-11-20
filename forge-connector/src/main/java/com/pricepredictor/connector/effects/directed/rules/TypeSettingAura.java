@@ -56,7 +56,7 @@ public final class TypeSettingAura {
         }
         Player active = Boards.active(live);
         for (Card aura : active.getCardsIn(ZoneType.Hand)) {
-            if (!aura.isAura() || !setsCardType(aura) || !Boards.affordable(active, aura)) {
+            if (!aura.isAura() || !setsCardType(aura) || !Mana.affordable(active, aura)) {
                 continue;
             }
             SpellAbility spell = aura.getFirstSpellAbility();
@@ -86,7 +86,7 @@ public final class TypeSettingAura {
     static boolean setsCardType(Card aura) {
         for (StaticAbility stAb : aura.getStaticAbilities()) {
             if ("Continuous".equals(stAb.getParam("Mode")) && "True".equals(stAb.getParam("RemoveCardTypes"))
-                    && stAb.hasParam("AddType") && Boards.lists(stAb.getParam("Affected"), "Card.EnchantedBy")) {
+                    && stAb.hasParam("AddType") && Scripts.lists(stAb.getParam("Affected"), "Card.EnchantedBy")) {
                 return true;
             }
         }

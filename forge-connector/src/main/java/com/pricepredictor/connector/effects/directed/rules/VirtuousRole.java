@@ -63,7 +63,7 @@ public final class VirtuousRole {
         }
         return active.getCardsIn(ZoneType.Hand).stream()
                 .filter(Card::isCreature)
-                .filter(card -> makesAVirtuousRoleAsItEnters(card) && Boards.affordable(active, card))
+                .filter(card -> makesAVirtuousRoleAsItEnters(card) && Mana.affordable(active, card))
                 .findFirst()
                 .map(card -> Binding.empty().with("caster", active).with("card", card));
     }
@@ -79,12 +79,12 @@ public final class VirtuousRole {
                 .filter(trigger -> trigger.getMode() == TriggerType.ChangesZone
                         && "Battlefield".equals(trigger.getParam("Destination"))
                         && "Card.Self".equals(trigger.getParam("ValidCard")))
-                .map(Boards::executed)
+                .map(Scripts::executed)
                 .anyMatch(VirtuousRole::createsAnAttachedVirtuousRole);
     }
 
     private static boolean createsAnAttachedVirtuousRole(Map<String, String> script) {
-        return ApiType.Token.name().equals(Boards.api(script))
+        return ApiType.Token.name().equals(Scripts.api(script))
                 && VIRTUOUS_ROLE.equals(script.get("TokenScript"))
                 && "Targeted".equals(script.get("AttachedTo"));
     }

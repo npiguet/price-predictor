@@ -58,7 +58,7 @@ public final class Champion {
         for (Card card : active.getCardsIn(ZoneType.Hand)) {
             for (KeywordInterface champion : card.getKeywords(Keyword.CHAMPION)) {
                 List<Card> candidates = championable(champion, card, active);
-                if (candidates.size() == 1 && Boards.affordable(active, card)) {
+                if (candidates.size() == 1 && Mana.affordable(active, card)) {
                     return Optional.of(Binding.empty().with("player", active)
                             .with("creature", candidates.get(0)).with("card", card));
                 }

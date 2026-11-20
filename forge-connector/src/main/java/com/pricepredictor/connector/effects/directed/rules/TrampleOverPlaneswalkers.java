@@ -40,7 +40,7 @@ public final class TrampleOverPlaneswalkers {
     public static final String RULE = "702.19c";
     static final String SCENARIO = "702.19c-2";
     static final String THRASTA_IN_PLACE = "thrasta_in_the_dreadmaws_place";
-    static final String THRASTA = "Thrasta, Tempest's Roar";
+    static final String THRASTA = Cards.THRASTA;
 
     private TrampleOverPlaneswalkers() {
     }
@@ -56,11 +56,11 @@ public final class TrampleOverPlaneswalkers {
         if (!Boards.at(live, PhaseType.COMBAT_DAMAGE) || combat == null) {
             return Optional.empty();
         }
-        for (Card attacker : Boards.unblockedRegularStrikers(combat)) {
+        for (Card attacker : Combats.unblockedRegularStrikers(combat)) {
             if (Boards.tramplesOverPlaneswalkers(attacker)) {
                 continue;
             }
-            Optional<Card> planeswalker = Boards.attackedPlaneswalker(combat, attacker);
+            Optional<Card> planeswalker = Combats.attackedPlaneswalker(combat, attacker);
             if (planeswalker.isEmpty()) {
                 continue;
             }

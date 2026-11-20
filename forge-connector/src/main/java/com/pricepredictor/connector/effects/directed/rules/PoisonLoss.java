@@ -61,7 +61,7 @@ public final class PoisonLoss {
         }
         Player active = Boards.active(live);
         Optional<Card> source = active.getCardsIn(ZoneType.Hand).stream()
-                .filter(card -> poisonsEachPlayer(card) && Boards.affordable(active, card))
+                .filter(card -> poisonsEachPlayer(card) && Mana.affordable(active, card))
                 .findFirst();
         if (source.isEmpty()) {
             return Optional.empty();
@@ -83,8 +83,8 @@ public final class PoisonLoss {
                 .anyMatch(ability -> ability.getApi() == ApiType.Poison && "Player".equals(ability.getParam("Defined")));
         boolean entering = card.getTriggers().stream()
                 .filter(Triggers::entersItself)
-                .map(Boards::executed)
-                .anyMatch(script -> ApiType.Poison.name().equals(Boards.api(script))
+                .map(Scripts::executed)
+                .anyMatch(script -> ApiType.Poison.name().equals(Scripts.api(script))
                         && "Player".equals(script.get("Defined")));
         return spell || entering;
     }

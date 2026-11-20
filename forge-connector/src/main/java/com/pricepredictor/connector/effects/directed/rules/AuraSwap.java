@@ -47,7 +47,7 @@ public final class AuraSwap {
     static final String SCENARIO = "701.12e-1";
     static final String EXCHANGE_SCENARIO = "702.65a-1";
     static final String AURA_IN_HAND = "aura_in_hand";
-    static final String HOLY_STRENGTH = "Holy Strength";
+    static final String HOLY_STRENGTH = Cards.HOLY_STRENGTH;
 
     private AuraSwap() {
     }
@@ -131,8 +131,8 @@ public final class AuraSwap {
                 .map(aura -> Binding.empty().with("player", active).with("card", card).with("aura", aura));
     }
 
-    /** Whether the Aura has Aura swap and {@code player} can pay its cost now ({@link Boards#canPayKeyword}). */
+    /** Whether the Aura has Aura swap and {@code player} can pay its cost now ({@link Mana#canPayKeyword}). */
     static boolean swappable(Card aura, Player player) {
-        return Boards.canPayKeyword(player, aura, Keyword.AURA_SWAP);
+        return Mana.canPayKeyword(player, aura, Keyword.AURA_SWAP);
     }
 }

@@ -44,7 +44,7 @@ public final class SharedKeywords {
     public static final String RULE = "702.1c";
     static final String SCENARIO = "702.1c-1";
     static final String NO_KEYWORDS = "no_keywords";
-    static final String GIANT = "Hill Giant";
+    static final String GIANT = Cards.GIANT;
 
     private SharedKeywords() {
     }
@@ -77,8 +77,8 @@ public final class SharedKeywords {
         if (trigger.getMode() != TriggerType.Phase || !"Upkeep".equals(trigger.getParam("Phase"))) {
             return Optional.empty();
         }
-        Map<String, String> pump = Boards.executed(trigger);
-        if (!ApiType.PumpAll.name().equals(Boards.api(pump)) || !pump.containsKey("SharedKeywordsZone")
+        Map<String, String> pump = Scripts.executed(trigger);
+        if (!ApiType.PumpAll.name().equals(Scripts.api(pump)) || !pump.containsKey("SharedKeywordsZone")
                 || pump.get("KW") == null) {
             return Optional.empty();
         }

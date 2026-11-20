@@ -68,7 +68,7 @@ public final class ToughnessZero {
             return Optional.empty();
         }
         for (Player holder : live.getPlayers()) {
-            for (SpellAbility spell : Boards.castableSpellsInHand(holder, SHRINKING)) {
+            for (SpellAbility spell : Scan.castableSpellsInHand(holder, SHRINKING)) {
                 Optional<Binding> binding = Boards.castableAtItsSpeed(holder, spell.getHostCard())
                         ? killing(holder, spell) : Optional.empty();
                 if (binding.isPresent()) {
@@ -86,7 +86,7 @@ public final class ToughnessZero {
      */
     private static Optional<Binding> killing(Player holder, SpellAbility spell) {
         int loss = toughnessLoss(spell);
-        SpellAbility cast = Boards.asPlayedBy(spell, holder);
+        SpellAbility cast = Mana.asPlayedBy(spell, holder);
         List<Card> killed = holder.getOpponents().stream()
                 .flatMap(opponent -> opponent.getCreaturesInPlay().stream())
                 .filter(creature -> creature.getNetToughness() >= 1 && creature.getNetToughness() <= loss)
@@ -118,7 +118,7 @@ public final class ToughnessZero {
         if (spell.getApi() != ApiType.Pump || !spell.usesTargeting()) {
             return 0;
         }
-        return Boards.number(spell.getParam("NumDef")).map(def -> Math.max(0, -def)).orElse(0);
+        return Scripts.number(spell.getParam("NumDef")).map(def -> Math.max(0, -def)).orElse(0);
     }
 
     private static BoardEdit tougher(Binding fork) {

@@ -51,7 +51,7 @@ public final class Unearth {
         }
         Player active = Boards.active(live);
         return active.getCardsIn(ZoneType.Graveyard).stream()
-                .filter(card -> Boards.canPayKeyword(active, card, Keyword.UNEARTH))
+                .filter(card -> Mana.canPayKeyword(active, card, Keyword.UNEARTH))
                 .findFirst()
                 .map(card -> Binding.empty().with("card", card));
     }

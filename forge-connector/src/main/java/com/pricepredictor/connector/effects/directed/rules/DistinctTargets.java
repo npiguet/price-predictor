@@ -44,7 +44,7 @@ public final class DistinctTargets {
     public static final String RULE = "601.2c";
     static final String SCENARIO = "601.2c-1";
     static final String TWO_CREATURES = "two-creatures";
-    static final String WURM = "Craw Wurm";
+    static final String WURM = Cards.WURM;
 
     private DistinctTargets() {
     }
@@ -65,7 +65,7 @@ public final class DistinctTargets {
         if (opponent.isEmpty()) {
             return Optional.empty();
         }
-        return Boards.castableInHand(active,
+        return Scan.castableInHand(active,
                         ForcedPlay.Line.spell("sole target", spell -> soleTarget(spell, active))).stream()
                 .findFirst()
                 .map(card -> Binding.empty().with("spell", card).with("opponent", opponent.get()));

@@ -70,12 +70,12 @@ public final class LifeTotalWin {
                     || !"Upkeep".equals(trigger.getParam("Phase"))
                     || !"You".equals(trigger.getParam("ValidPlayer"))
                     || !"You".equals(trigger.getParam("LifeTotal"))
-                    || !ApiType.WinsGame.name().equals(Boards.api(Boards.executed(trigger)))) {
+                    || !ApiType.WinsGame.name().equals(Scripts.api(Scripts.executed(trigger)))) {
                 continue;
             }
             String amount = trigger.getParam("LifeAmount");
             if (amount != null && amount.startsWith("GE")) {
-                Optional<Integer> needed = Boards.number(amount.substring(2));
+                Optional<Integer> needed = Scripts.number(amount.substring(2));
                 if (needed.isPresent()) {
                     return needed;
                 }

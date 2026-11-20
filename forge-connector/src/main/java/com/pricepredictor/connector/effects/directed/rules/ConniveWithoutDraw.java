@@ -45,7 +45,7 @@ public final class ConniveWithoutDraw {
      * A spell of the card that connives as it resolves or as its permanent
      * enters: what the precondition finds and the fork casts.
      */
-    static final ForcedPlay.Line CONNIVING = Boards.acting("Connive");
+    static final ForcedPlay.Line CONNIVING = Scan.acting("Connive");
 
     private ConniveWithoutDraw() {
     }
@@ -62,7 +62,7 @@ public final class ConniveWithoutDraw {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        Optional<Card> conniver = Boards.acting(active, CONNIVING)
+        Optional<Card> conniver = Scan.acting(active, CONNIVING)
                 .filter(card -> Boards.watched(live, TriggerType.Connives, active, card));
         if (conniver.isEmpty() || !spiritWouldStopTheDraw(active)) {
             return Optional.empty();

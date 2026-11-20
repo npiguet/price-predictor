@@ -26,7 +26,7 @@ import java.util.Optional;
  * card of mana value 3 or less, so the enters trigger would find nothing to
  * exile, but holds another nonland card, of mana value 4 or more; and it
  * could not cast Kellan beside a card of Grizzly Bears' mana value, having
- * fewer permanents that make mana now ({@link Boards#manaSources}) than the
+ * fewer permanents that make mana now ({@link Mana#manaSources}) than the
  * two mana values: one that could would cast the Bears beside Kellan, and the
  * trigger would find nothing to exile. It binds the first such card.
  *
@@ -43,7 +43,7 @@ public final class PlottedFromHand {
     static final String SCENARIO = "702.170c-1";
     static final String SMALL_CARD_IN_HAND = "small_card_in_hand";
     static final String KELLAN = "Kellan Joins Up";
-    static final String BEARS = "Grizzly Bears";
+    static final String BEARS = Cards.BEARS;
     /** Grizzly Bears' mana value. */
     static final int BEARS_MANA_VALUE = 2;
     static final int MOST_MANA_VALUE = 3;
@@ -65,13 +65,13 @@ public final class PlottedFromHand {
         Player active = Boards.active(live);
         CardCollectionView hand = active.getCardsIn(ZoneType.Hand);
         Optional<Card> kellan = hand.stream()
-                .filter(card -> KELLAN.equals(card.getName()) && Boards.affordable(active, card)).findFirst();
+                .filter(card -> KELLAN.equals(card.getName()) && Mana.affordable(active, card)).findFirst();
         if (kellan.isEmpty()) {
             return Optional.empty();
         }
         List<Card> others = hand.stream().filter(card -> card != kellan.get() && !card.isLand()).toList();
         if (others.isEmpty() || others.stream().anyMatch(card -> card.getCMC() <= MOST_MANA_VALUE)
-                || Boards.manaSources(active).size() >= kellan.get().getCMC() + BEARS_MANA_VALUE) {
+                || Mana.manaSources(active).size() >= kellan.get().getCMC() + BEARS_MANA_VALUE) {
             return Optional.empty();
         }
         return Optional.of(Binding.empty().with("player", active)

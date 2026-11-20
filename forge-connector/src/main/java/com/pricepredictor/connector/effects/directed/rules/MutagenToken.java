@@ -39,7 +39,7 @@ public final class MutagenToken {
     public static final String RULE = "111.10v";
     static final String SCENARIO = "111.10v-1";
     static final String MANA_AVAILABLE = "mana_available";
-    static final String ISLAND = "Island";
+    static final String ISLAND = Cards.ISLAND;
 
     private MutagenToken() {
     }

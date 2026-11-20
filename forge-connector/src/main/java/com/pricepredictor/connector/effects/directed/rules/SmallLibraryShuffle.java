@@ -29,7 +29,7 @@ import java.util.Optional;
  * controls a permanent that triggers when an opponent shuffles their library
  * (Cosi's Trickster), and an opponent of theirs with a card in their library
  * holds a card they have the mana for whose spell searches their library and
- * that they can cast now ({@link Boards#searchersInHand}: a sorcery only as
+ * that they can cast now ({@link Scan#searchersInHand}: a sorcery only as
  * the active player): the common board, whose library holds cards. It binds
  * the searcher and its spell, whose cast the fork forces (FR-010b).
  *
@@ -51,7 +51,7 @@ public final class SmallLibraryShuffle {
         return DirectedRule.of(RULE, SCENARIO, SmallLibraryShuffle::bind, EMPTY_LIBRARY,
                 new Application(ForkOperation.MOVE_CARD,
                         fork -> new EmptyLibraryOperation(fork.player("searcher")))
-                        .forcing(ForcedPlay.cast("searcher", "spell").playing(Boards.LIBRARY_SEARCH_SPELL)));
+                        .forcing(ForcedPlay.cast("searcher", "spell").playing(Scan.LIBRARY_SEARCH_SPELL)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -64,7 +64,7 @@ public final class SmallLibraryShuffle {
             }
             for (Player searcher : watcher.getOpponents()) {
                 boolean hasLibrary = !searcher.getCardsIn(ZoneType.Library).isEmpty();
-                List<Card> spells = Boards.searchersInHand(searcher);
+                List<Card> spells = Scan.searchersInHand(searcher);
                 if (hasLibrary && !spells.isEmpty()) {
                     return Optional.of(Binding.empty().with("searcher", searcher)
                             .with("spell", spells.get(0)));
