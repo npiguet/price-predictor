@@ -25,7 +25,7 @@ public class ValidationWorkerMain {
     /** The worker itself; an exit it requests ends the process through {@link ToolMain#guard}. */
     static void work(String[] args) {
         String matchesFileProp = WorkerProperties.require("matches.file");
-        int bestOf = WorkerProperties.bestOf("best.of", 3);
+        int bestOf = NumericProperties.bestOf(NumericProperties.IntSetting.bestOf("best.of", 3));
 
         Path matchesFile = Path.of(matchesFileProp);
         Path outcomesFile = Path.of(matchesFileProp + "-outcomes.txt");

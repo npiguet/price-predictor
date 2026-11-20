@@ -37,9 +37,9 @@ class WorkerPropertiesTest {
         for (String value : new String[]{null, "", " "}) {
             set(value);
             try {
-                assertEquals(7, WorkerProperties.intProperty(NAME, 7, policy),
+                assertEquals(7, NumericProperties.intProperty(NumericProperties.IntSetting.of(NAME, 7), policy),
                         "'" + value + "'");
-                assertEquals(0.5, WorkerProperties.doubleProperty(NAME, 0.5, policy),
+                assertEquals(0.5, NumericProperties.doubleProperty(new NumericProperties.DoubleSetting(NAME, 0.5), policy),
                         "'" + value + "'");
             } finally {
                 System.clearProperty(NAME);
@@ -86,7 +86,8 @@ class WorkerPropertiesTest {
     void aWellFormedValueIsReadTrimmed() {
         System.setProperty(NAME, " 12 ");
         try {
-            assertEquals(12, WorkerProperties.intProperty(NAME, 7, OnMalformed.WARN_AND_DEFAULT));
+            assertEquals(12, NumericProperties.intProperty(
+                    NumericProperties.IntSetting.of(NAME, 7), OnMalformed.WARN_AND_DEFAULT));
         } finally {
             System.clearProperty(NAME);
         }
@@ -96,8 +97,10 @@ class WorkerPropertiesTest {
     void aValueFailingItsConstraintKeepsTheDefaultWhenWarning() {
         System.setProperty(NAME, "-3");
         try {
-            assertEquals(7, WorkerProperties.intProperty(
-                    NAME, 7, OnMalformed.WARN_AND_DEFAULT, v -> v >= 0, "must be >= 0"));
+            assertEquals(7, NumericProperties.intProperty(
+                    new NumericProperties.IntSetting(NAME, 7,
+                            NumericProperties.IntConstraint.atLeast(0)),
+                    OnMalformed.WARN_AND_DEFAULT));
         } finally {
             System.clearProperty(NAME);
         }

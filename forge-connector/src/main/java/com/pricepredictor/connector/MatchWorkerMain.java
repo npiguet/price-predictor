@@ -167,16 +167,18 @@ public class MatchWorkerMain {
 
         String runId = WorkerProperties.require(RUN_ID);
 
-        int bestOf = WorkerProperties.bestOf(BEST_OF, DEFAULT_BEST_OF);
+        int bestOf = NumericProperties.bestOf(
+                NumericProperties.IntSetting.bestOf(BEST_OF, DEFAULT_BEST_OF));
 
         Optional<Path> sideADecks = WorkerProperties.optionalPath(SIDE_A_DECKS_FILE);
         Optional<Path> sideBDecks = WorkerProperties.optionalPath(SIDE_B_DECKS_FILE);
 
         requireWeightOnlyWithSideBDecks(sideBDecks);
 
-        int sideBWeight = WorkerProperties.intProperty(
-                SIDE_B_DECKS_WEIGHT, DEFAULT_SIDE_B_WEIGHT, WorkerProperties.OnMalformed.EXIT,
-                v -> v >= 1, "must be >= 1");
+        int sideBWeight = NumericProperties.intProperty(
+                new NumericProperties.IntSetting(SIDE_B_DECKS_WEIGHT, DEFAULT_SIDE_B_WEIGHT,
+                        NumericProperties.IntConstraint.atLeast(1)),
+                WorkerProperties.OnMalformed.EXIT);
 
         // A coverage or variant deck belongs to no set, so the roll's
         // Forge-method branch would resolve its sentinel set code against
@@ -185,9 +187,10 @@ public class MatchWorkerMain {
         boolean decksOnly = WorkerProperties.flag(DECKS_ONLY);
         requireBothDecksFilesWhenDecksOnly(decksOnly, sideADecks, sideBDecks);
 
-        int workerIndex = WorkerProperties.intProperty(
-                EFFECT_WORKER_INDEX, 0, WorkerProperties.OnMalformed.EXIT,
-                v -> v >= 0, "must be >= 0");
+        int workerIndex = NumericProperties.intProperty(
+                new NumericProperties.IntSetting(EFFECT_WORKER_INDEX, 0,
+                        NumericProperties.IntConstraint.atLeast(0)),
+                WorkerProperties.OnMalformed.EXIT);
 
         // The supervisor recycles the longest-running worker every status interval
         // and restarts anything that crashes, so one run is hundreds of JVM

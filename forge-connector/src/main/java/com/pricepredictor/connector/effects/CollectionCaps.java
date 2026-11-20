@@ -1,5 +1,8 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.NumericProperties;
+import com.pricepredictor.connector.NumericProperties.DoubleSetting;
+import com.pricepredictor.connector.NumericProperties.IntSetting;
 import com.pricepredictor.connector.WorkerProperties;
 import com.pricepredictor.connector.WorkerProperties.OnMalformed;
 
@@ -120,17 +123,24 @@ public record CollectionCaps(
         // supervisor started, no rule is named and none is taken.
         List<String> directedRules = WorkerProperties.listProperty(DIRECTED_FORK_RULES);
         return new CollectionCaps(
-                WorkerProperties.intProperty(MANA_CAP, defaults.manaCap(), policy),
-                WorkerProperties.doubleProperty(
-                        PLAYABILITY_RATE, defaults.playabilityRate(), policy),
-                WorkerProperties.doubleProperty(
-                        ZONE_CANDIDATE_RATE, defaults.zoneCandidateRate(), policy),
-                WorkerProperties.doubleProperty(
-                        PLAIN_CANDIDATE_RATE, defaults.plainCandidateRate(), policy),
-                WorkerProperties.intProperty(
-                        INTERVENTIONS_PER_GAME, defaults.interventionsPerGame(), policy),
-                WorkerProperties.intProperty(
-                        PROBES_PER_GAME, defaults.probesPerGame(), policy),
+                NumericProperties.intProperty(
+                        IntSetting.of(MANA_CAP,
+                                defaults.manaCap()), policy),
+                NumericProperties.doubleProperty(
+                        new DoubleSetting(PLAYABILITY_RATE,
+                                defaults.playabilityRate()), policy),
+                NumericProperties.doubleProperty(
+                        new DoubleSetting(ZONE_CANDIDATE_RATE,
+                                defaults.zoneCandidateRate()), policy),
+                NumericProperties.doubleProperty(
+                        new DoubleSetting(PLAIN_CANDIDATE_RATE,
+                                defaults.plainCandidateRate()), policy),
+                NumericProperties.intProperty(
+                        IntSetting.of(INTERVENTIONS_PER_GAME,
+                                defaults.interventionsPerGame()), policy),
+                NumericProperties.intProperty(
+                        IntSetting.of(PROBES_PER_GAME,
+                                defaults.probesPerGame()), policy),
                 // Unset, the default eight; set blank, as a run emptying
                 // --probe-keywords sends it, none.
                 WorkerProperties.presentListProperty(PROBE_KEYWORDS)
@@ -140,25 +150,30 @@ public record CollectionCaps(
                 // supervisor can only name them. The Python side refuses a
                 // share without a P before any worker starts (FR-026); a
                 // worker reads what it is given and defaults the rest.
-                WorkerProperties.doubleProperty(
-                        RANDOM_SEAT_SHARE, defaults.randomSeatShare(), policy),
-                WorkerProperties.doubleProperty(
-                        RANDOM_SEAT_PROBABILITY, defaults.randomSeatProbability(), policy),
+                NumericProperties.doubleProperty(
+                        new DoubleSetting(RANDOM_SEAT_SHARE,
+                                defaults.randomSeatShare()), policy),
+                NumericProperties.doubleProperty(
+                        new DoubleSetting(RANDOM_SEAT_PROBABILITY,
+                                defaults.randomSeatProbability()), policy),
                 // Present, even blank, on every coverage and variant run and
                 // on no other: its presence is what marks the run's records
                 // aimed (FR-009a), its value the rules they were aimed at.
                 WorkerProperties.presentListProperty(AIMED_AT),
                 WorkerProperties.flag(COUNT_DROPPED_EVENTS),
                 directedRules,
-                WorkerProperties.intProperty(
-                        DIRECTED_FORKS_PER_GAME, defaults.directedForksPerGame(), policy),
-                WorkerProperties.doubleProperty(
-                        DIRECTED_FORK_PROBABILITY, defaults.directedForkProbability(), policy),
+                NumericProperties.intProperty(
+                        IntSetting.of(DIRECTED_FORKS_PER_GAME,
+                                defaults.directedForksPerGame()), policy),
+                NumericProperties.doubleProperty(
+                        new DoubleSetting(DIRECTED_FORK_PROBABILITY,
+                                defaults.directedForkProbability()), policy),
                 directedRuleProbabilities(directedRules),
                 // A game whose AIs loop (Chain of Smog's copies, a free
                 // ability re-activated forever) is cut off at the cap.
-                WorkerProperties.intProperty(
-                        MAX_RECORDS_PER_GAME, defaults.maxRecordsPerGame(), policy));
+                NumericProperties.intProperty(
+                        IntSetting.of(MAX_RECORDS_PER_GAME,
+                                defaults.maxRecordsPerGame()), policy));
     }
 
     /**
@@ -172,7 +187,7 @@ public record CollectionCaps(
     static Map<String, Double> directedRuleProbabilities(List<String> rules) {
         Map<String, Double> probabilities = new HashMap<>();
         for (String rule : rules) {
-            WorkerProperties.probability(DIRECTED_RULE_PROBABILITY + rule)
+            NumericProperties.probability(DIRECTED_RULE_PROBABILITY + rule)
                     .ifPresent(probability -> probabilities.put(rule, probability));
         }
         return probabilities;

@@ -36,7 +36,7 @@ public class DraftGameWorkerMain {
         String seatsFileProp = WorkerProperties.require("seats.file");
         String outputFileProp = WorkerProperties.require("output.file");
         String runId = WorkerProperties.require("run.id");
-        int bestOf = WorkerProperties.bestOf("best.of", 3);
+        int bestOf = NumericProperties.bestOf(NumericProperties.IntSetting.bestOf("best.of", 3));
         boolean includeMirrors = WorkerProperties.flag("include.mirrors");
 
         Path seatsFile = Path.of(seatsFileProp);

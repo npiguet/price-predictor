@@ -4,9 +4,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Function;
-import java.util.function.IntPredicate;
-import java.util.function.Predicate;
 
 /**
  * The {@code -D} system properties the worker mains are configured by.
@@ -57,53 +54,6 @@ public final class WorkerProperties {
         return optional(name).map(Path::of);
     }
 
-    /**
-     * An integer property, {@code defaultValue} when unset; a value that does
-     * not parse or fails {@code isValid} is handled per {@code policy}.
-     *
-     * @param constraintMsg what {@code isValid} demands, e.g. {@code "must be >= 1"}
-     */
-    static int intProperty(
-            String name, int defaultValue, OnMalformed policy,
-            IntPredicate isValid, String constraintMsg) {
-        return read(name, defaultValue, policy, Integer::valueOf, "an integer",
-                isValid::test, constraintMsg);
-    }
-
-    /** An integer property with no constraint beyond parsing. */
-    public static int intProperty(String name, int defaultValue, OnMalformed policy) {
-        return intProperty(name, defaultValue, policy, v -> true, "");
-    }
-
-    /** A decimal property with no constraint beyond parsing. */
-    public static double doubleProperty(String name, double defaultValue, OnMalformed policy) {
-        return read(name, defaultValue, policy, Double::valueOf, "a number", v -> true, "");
-    }
-
-    /**
-     * A probability, in [0, 1]; empty when unset or blank. Anything else,
-     * a value that does not parse included, is refused as
-     * {@link OnMalformed#EXIT} refuses: there is no default to fall back on.
-     */
-    public static Optional<Double> probability(String name) {
-        return Optional.ofNullable(read(name, (Double) null, OnMalformed.EXIT, Double::valueOf,
-                "a number", value -> value >= 0.0 && value <= 1.0, "must be in [0, 1]"));
-    }
-
-    /**
-     * Games per match. Odd because Forge plays first to {@code N/2 + 1} wins:
-     * an even {@code N} can run past {@code N} games, and a match row's
-     * winner sequence is promised to be at most {@code N} long.
-     */
-    static int bestOf(String name, int defaultValue) {
-        return intProperty(name, defaultValue, OnMalformed.EXIT,
-                WorkerProperties::isValidBestOf, "must be a positive odd integer");
-    }
-
-    static boolean isValidBestOf(int gamesPerMatch) {
-        return gamesPerMatch >= 1 && gamesPerMatch % 2 == 1;
-    }
-
     /** A comma-separated property as trimmed, non-empty items; empty when unset. */
     public static List<String> listProperty(String name) {
         return csv(System.getProperty(name));
@@ -143,32 +93,5 @@ public final class WorkerProperties {
      */
     public static boolean flag(String name) {
         return Boolean.parseBoolean(System.getProperty(name, "false"));
-    }
-
-    private static <T> T read(
-            String name, T defaultValue, OnMalformed policy, Function<String, T> parse,
-            String expected, Predicate<T> isValid, String constraintMsg) {
-        String raw = System.getProperty(name);
-        if (raw == null || raw.isBlank()) {
-            return defaultValue;
-        }
-        T value;
-        try {
-            value = parse.apply(raw.trim());
-        } catch (NumberFormatException e) {
-            return malformed(name, "must be " + expected + ", got: " + raw, defaultValue, policy);
-        }
-        if (!isValid.test(value)) {
-            return malformed(name, constraintMsg + ", got: " + value, defaultValue, policy);
-        }
-        return value;
-    }
-
-    private static <T> T malformed(String name, String problem, T defaultValue, OnMalformed policy) {
-        if (policy == OnMalformed.EXIT) {
-            throw ToolMain.badConfig("-D" + name + " " + problem);
-        }
-        System.err.println("Warning: -D" + name + " " + problem + "; using default " + defaultValue);
-        return defaultValue;
     }
 }

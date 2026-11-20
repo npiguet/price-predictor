@@ -64,8 +64,10 @@ final class WorkerStop {
     static WorkerStop fromSystemProperties(long startedNanos) {
         Path file = WorkerProperties.optionalPath(STOP_FILE).orElse(null);
         long seconds = WorkerProperties.optional(RECYCLE_SECONDS).isEmpty() ? -1
-                : WorkerProperties.intProperty(RECYCLE_SECONDS, -1,
-                        WorkerProperties.OnMalformed.EXIT, v -> v >= 1, "must be >= 1");
+                : NumericProperties.intProperty(
+                        new NumericProperties.IntSetting(RECYCLE_SECONDS, -1,
+                                new NumericProperties.IntConstraint(v -> v >= 1, "must be >= 1")),
+                        WorkerProperties.OnMalformed.EXIT);
         return new WorkerStop(file, seconds, System::nanoTime, startedNanos);
     }
 
