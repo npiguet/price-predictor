@@ -26,7 +26,11 @@ from effects.application.build_corpus import BuildCorpusConfig, BuildCorpusError
 from effects.application.build_vocab import DEFAULT_TARGET_SIZE, EmptyCardsFolderError
 from effects.application.collect_coverage import CollectCoverageConfig
 from effects.application.collect_variants import CollectVariantsConfig
-from effects.application.collector_common import HOLDOUT_LIST_NAME, collection_target
+from effects.application.collector_common import (
+    HOLDOUT_LIST_NAME,
+    CollectionFlags,
+    collection_target,
+)
 from effects.application.corpus_validation.findings import Thresholds
 from effects.application.evaluation_context import CorpusMismatchError
 from effects.application.extract_keyword_definitions import ExtractKeywordDefinitionsConfig
@@ -499,13 +503,13 @@ def collector_config(
     """A collector's config, with its corpus location, deck holdout and
     holdout rule resolved; raises ValueError on a contradictory holdout,
     before any worker starts."""
-    effect_records, deck_holdout = collection_target(
+    effect_records, deck_holdout = collection_target(CollectionFlags(
         effect_records=args.effect_records,
         exclude_cards=args.exclude_cards,
         split_from=args.split_from,
         training_corpus=args.training_corpus,
         only_cards=getattr(args, "only_cards", None),
-    )
+    ))
     return config_from_args(
         config_type, args,
         effect_records=effect_records, deck_holdout=deck_holdout,

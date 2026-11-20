@@ -414,9 +414,7 @@ def _collect(config: CollectVariantsConfig) -> int:
         units = {variant.name: variant.games_unit() for variant in variants}
         candidates = {variant.name: variant.deck_candidate() for variant in variants}
         with collector_supervisor(
-            workers=config.workers, effect_records=config.effect_records,
-            caps=config.caps, variant_scripts=config.variant_scripts,
-            stop=config.worker_stop, allow_degraded=config.allow_degraded,
+            config, variant_scripts=config.variant_scripts,
         ) as supervisor:
             counter = VariantGameCounter(
                 config.effect_records, supervisor.run_id, config.workers,

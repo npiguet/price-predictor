@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from effects.application.collector_common import collector_supervisor
+from effects.application.collector_common import CollectorConfig, collector_supervisor
 from effects.domain.collection_caps import CollectionCaps
 
 
@@ -16,9 +16,9 @@ class TestTheSupervisorIsAlwaysStopped:
     """
 
     def _open(self, tmp_path):
-        return collector_supervisor(
-            workers=1, effect_records=tmp_path, caps=CollectionCaps(),
-        )
+        return collector_supervisor(CollectorConfig(
+            effect_records=tmp_path, workers=1, caps=CollectionCaps(),
+        ))
 
     def test_stop_runs_when_the_rounds_end(self, tmp_path, fake_supervisor):
         with self._open(tmp_path) as supervisor:

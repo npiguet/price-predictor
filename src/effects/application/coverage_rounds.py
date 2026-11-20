@@ -159,10 +159,7 @@ class CoverageRounds(ABC):
 def play_to_completion(rounds: CoverageRounds, config: CollectCoverageConfig) -> int:
     """Play ``rounds`` under a supervisor and report what they left; 130 when
     Ctrl-C ended them, 1 when they played and wrote no record at all."""
-    with collector_supervisor(
-        workers=config.workers, effect_records=config.effect_records, caps=config.caps,
-        stop=config.worker_stop, allow_degraded=config.allow_degraded,
-    ) as supervisor:
+    with collector_supervisor(config) as supervisor:
         if rounds.unresolved.pool:
             supervisor.record(**rounds.unresolved.fields())
         record_damaged_shards(supervisor, rounds.counter.damaged)

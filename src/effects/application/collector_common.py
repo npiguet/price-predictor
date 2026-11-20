@@ -171,14 +171,18 @@ TWO_HOLDOUT_SOURCES = (
 HOLDOUT_LIST_NAME = "holdout-cards.txt"
 
 
-def collection_target(
-    *,
-    effect_records: Path | None,
-    exclude_cards: Path | None,
-    split_from: Path | None,
-    training_corpus: Path | None = None,
-    only_cards: Path | None = None,
-) -> tuple[Path, DeckHoldout]:
+@dataclass(frozen=True)
+class CollectionFlags:
+    """A collector's corpus and holdout flags as given, each None when unset."""
+
+    effect_records: Path | None
+    exclude_cards: Path | None
+    split_from: Path | None
+    training_corpus: Path | None = None
+    only_cards: Path | None = None
+
+
+def collection_target(flags: CollectionFlags) -> tuple[Path, DeckHoldout]:
     """Where a collector's flags write and the holdout they name, refused
     before any worker starts.
 
@@ -192,27 +196,28 @@ def collection_target(
     default ``--effect-records`` included) or its directory holds no depletion
     list, or when two sources name the held-out cards.
     """
-    if only_cards is not None:
+    if flags.only_cards is not None:
         _refuse_holdout_beside_only_cards(
-            exclude_cards=exclude_cards, training_corpus=training_corpus,
-            split_from=split_from,
+            exclude_cards=flags.exclude_cards, training_corpus=flags.training_corpus,
+            split_from=flags.split_from,
         )
-    if training_corpus is None:
-        if effect_records is None:
+    if flags.training_corpus is None:
+        if flags.effect_records is None:
             raise ValueError(
                 "name the corpus: pass --effect-records DIR, or --training-corpus DIR"
             )
-        return effect_records, DeckHoldout(
-            exclude_cards=exclude_cards, split_from=split_from, only_cards=only_cards,
+        return flags.effect_records, DeckHoldout(
+            exclude_cards=flags.exclude_cards, split_from=flags.split_from,
+            only_cards=flags.only_cards,
         )
-    if effect_records is not None or exclude_cards is not None:
+    if flags.effect_records is not None or flags.exclude_cards is not None:
         raise ValueError(
             "pass one source of the corpus location, not both: "
             "--training-corpus DIR means --effect-records DIR with its own "
             f"{HOLDOUT_LIST_NAME}"
         )
-    return training_corpus, DeckHoldout(
-        exclude_cards=_depletion_list(training_corpus), split_from=split_from,
+    return flags.training_corpus, DeckHoldout(
+        exclude_cards=_depletion_list(flags.training_corpus), split_from=flags.split_from,
     )
 
 
@@ -295,44 +300,50 @@ def build_coverage_decks(
     then basics from ``compute_basic_lands``. A weighted card that is no
     candidate has no cost to read and is skipped.
     """
-    pool = [(name, w) for name, w in weights.items() if name in candidates and w > 0]
+    pool = _drawable(weights, candidates)
     if not pool:
         return []
     names = [name for name, _ in pool]
     ws = [w for _, w in pool]
+    return [
+        _with_basics(rng.choices(names, weights=ws, k=NONLANDS_PER_DECK), candidates)
+        for _ in range(count)
+    ]
 
-    decks: list[list[str]] = []
-    for _ in range(count):
-        nonlands = rng.choices(names, weights=ws, k=NONLANDS_PER_DECK)
-        basics = compute_basic_lands([candidates[n] for n in nonlands])
-        deck = list(nonlands)
-        for land, n in basics.items():
-            deck.extend([land] * n)
-        decks.append(deck)
-    return decks
+
+def _drawable(
+    weights: dict[str, float], candidates: Mapping[str, DeckCandidate],
+) -> list[tuple[str, float]]:
+    """The weighted cards a deck can hold: a candidate with a positive weight."""
+    return [(name, w) for name, w in weights.items() if name in candidates and w > 0]
+
+
+def _with_basics(nonlands: list[str], candidates: Mapping[str, DeckCandidate]) -> list[str]:
+    """``nonlands`` and the basics ``compute_basic_lands`` gives them."""
+    basics = compute_basic_lands([candidates[n] for n in nonlands])
+    deck = list(nonlands)
+    for land, n in basics.items():
+        deck.extend([land] * n)
+    return deck
 
 
 
 @contextmanager
 def collector_supervisor(
-    *,
-    workers: int,
-    effect_records: Path,
-    caps: CollectionCaps,
-    variant_scripts: Path | None = None,
-    stop: WorkerStopSettings | None = None,
-    allow_degraded: bool = False,
+    config: CollectorConfig, *, variant_scripts: Path | None = None,
 ) -> Iterator[CollectorSupervisor]:
-    """A records-only supervisor under a fresh run id, stopped however its
-    rounds end: without ``stop()`` the worker logs holding the latched failure
-    reports stay unflushed until the interpreter exits. ``allow_degraded``:
-    ``--allow-degraded``, the run goes on over an engine that is not whole."""
+    """A records-only supervisor of ``config``'s workers, writing to its
+    corpus under its caps and a fresh run id, stopped however its rounds end:
+    without ``stop()`` the worker logs holding the latched failure reports
+    stay unflushed until the interpreter exits. ``--allow-degraded`` lets the
+    run go on over an engine that is not whole; ``variant_scripts`` is the
+    variant tree the workers stage."""
     from effects.infrastructure.collector_connector import CollectorSupervisor
 
     supervisor = CollectorSupervisor(
-        worker_count=workers, effect_records=effect_records,
-        run_id=str(uuid.uuid4()), caps=caps, variant_scripts=variant_scripts,
-        stop=stop, allow_degraded=allow_degraded,
+        worker_count=config.workers, effect_records=config.effect_records,
+        run_id=str(uuid.uuid4()), caps=config.caps, variant_scripts=variant_scripts,
+        stop=config.worker_stop, allow_degraded=config.allow_degraded,
     )
     try:
         yield supervisor
