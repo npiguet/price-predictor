@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import torch
@@ -108,45 +109,58 @@ def _keep_buildable(
             if len(load_pool_embeddings(pool.cards, locator)[1]) >= NONLAND_DECK_SIZE]
 
 
-def _build_builder_decks(
-    kept: list[list[str]],
-    builder: BuildDecksUseCase,
-    scorer,
-    locator: ConvertedCardLocator,
-    config: BuildDecksConfig,
-) -> list[list[str]]:
+@dataclass(frozen=True)
+class BuilderSetup:
+    """What the deck-builder method needs to build one deck per pool."""
+
+    use_case: BuildDecksUseCase
+    scorer: object
+    locator: ConvertedCardLocator
+    config: BuildDecksConfig
+
+
+@dataclass(frozen=True)
+class PickerSetup:
+    """What the deck-picker method needs to build one deck per pool."""
+
+    use_case: PickDecksUseCase
+    picker: object
+    picker_dim: int
+    locator: ConvertedCardLocator
+    device: torch.device
+    picker_checkpoint: Path
+    cards_path: Path
+
+
+def _log_progress(label: str, i: int, total: int, step: int) -> None:
+    if i % step == 0 or i == total:
+        _log(f"  {label} {i}/{total}")
+
+
+def _build_builder_decks(kept: list[list[str]], setup: BuilderSetup) -> list[list[str]]:
     decks: list[list[str]] = []
     step = max(1, len(kept) // 20)
     for i, names in enumerate(kept, 1):
-        deck = builder._build_one_deck(scorer, names, locator, config)
+        deck = setup.use_case._build_one_deck(
+            setup.scorer, names, setup.locator, setup.config)
         decks.append(list(deck.cards) if deck is not None else [])
-        if i % step == 0 or i == len(kept):
-            _log(f"  deck-builder {i}/{len(kept)}")
+        _log_progress("deck-builder", i, len(kept), step)
     return decks
 
 
-def _build_picker_decks(
-    kept: list[list[str]],
-    picker_uc: PickDecksUseCase,
-    picker,
-    picker_dim: int,
-    locator: ConvertedCardLocator,
-    device: torch.device,
-    picker_checkpoint: Path,
-    cards_path: Path,
-) -> list[list[str]]:
+def _build_picker_decks(kept: list[list[str]], setup: PickerSetup) -> list[list[str]]:
     decks: list[list[str]] = []
     step = max(1, len(kept) // 20)
     width_checked = False
     for i, names in enumerate(kept, 1):
-        embs, valid = load_pool_embeddings(names, locator)
+        embs, valid = load_pool_embeddings(names, setup.locator)
         if not width_checked:
-            picker_uc._check_width(picker_dim, embs[valid[0]].shape[0], picker_checkpoint,
-                                   cards_path)
+            setup.use_case._check_width(setup.picker_dim, embs[valid[0]].shape[0],
+                                        setup.picker_checkpoint, setup.cards_path)
             width_checked = True
-        decks.append(list(picker_uc._build_one_deck(picker, embs, valid, locator, device).cards))
-        if i % step == 0 or i == len(kept):
-            _log(f"  deck-picker {i}/{len(kept)}")
+        decks.append(list(setup.use_case._build_one_deck(
+            setup.picker, embs, valid, setup.locator, setup.device).cards))
+        _log_progress("deck-picker", i, len(kept), step)
     return decks
 
 
