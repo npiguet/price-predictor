@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -61,40 +62,67 @@ def _pick_device(arg: str) -> torch.device:
     return torch.device(arg)
 
 
-def _encode_corpus(model, tokenizer, max_seq_len, txt_paths, device, batch_size):
+@dataclass(frozen=True)
+class EncodeSettings:
+    """How the cards are tokenized and batched for the encoder."""
+
+    max_seq_len: int
+    device: torch.device
+    batch_size: int
+
+
+class _PooledBatches:
+    """Token batches waiting for the encoder, and the pooled vectors so far."""
+
+    def __init__(self, model, device: torch.device) -> None:
+        self.model, self.device = model, device
+        self.vecs: list[np.ndarray] = []
+        self.ids: list[list[int]] = []
+        self.mask: list[list[int]] = []
+
+    def add(self, input_ids: list[int], attention_mask: list[int]) -> None:
+        self.ids.append(input_ids)
+        self.mask.append(attention_mask)
+
+    def flush(self) -> None:
+        if not self.ids:
+            return
+        ids = torch.tensor(self.ids, dtype=torch.long, device=self.device)
+        mask = torch.tensor(self.mask, dtype=torch.long, device=self.device)
+        with torch.no_grad():
+            pooled = self.model.encode(ids, mask)
+        self.vecs.append(pooled.cpu().numpy().astype(np.float64))
+        self.ids.clear()
+        self.mask.clear()
+
+
+def _read_converted(path: Path):
+    """The converted card at ``path``, or ``None`` when it cannot be read."""
+    try:
+        return ConvertedCardText.from_file(path)
+    except Exception:
+        return None
+
+
+def _encode_corpus(model, tokenizer, txt_paths, settings: EncodeSettings):
     """Encode every card; return ``(stems: list[str], X: (N, pooled_dim) f64)``."""
     stems: list[str] = []
-    vecs: list[np.ndarray] = []
-    buf_ids: list[list[int]] = []
-    buf_mask: list[list[int]] = []
-
-    def flush() -> None:
-        if not buf_ids:
-            return
-        ids = torch.tensor(buf_ids, dtype=torch.long, device=device)
-        mask = torch.tensor(buf_mask, dtype=torch.long, device=device)
-        with torch.no_grad():
-            pooled = model.encode(ids, mask)
-        vecs.append(pooled.cpu().numpy().astype(np.float64))
-        buf_ids.clear()
-        buf_mask.clear()
-
+    batches = _PooledBatches(model, settings.device)
     for i, p in enumerate(txt_paths):
-        try:
-            converted = ConvertedCardText.from_file(p)
-        except Exception:
+        converted = _read_converted(p)
+        if converted is None:
             continue
         input_ids, attention_mask = tokenizer.encode(
-            converted.without_name_line(), max_seq_len,
+            converted.without_name_line(), settings.max_seq_len,
         )
         stems.append(p.stem)
-        buf_ids.append(input_ids)
-        buf_mask.append(attention_mask)
-        if len(buf_ids) >= batch_size:
-            flush()
+        batches.add(input_ids, attention_mask)
+        if len(batches.ids) >= settings.batch_size:
+            batches.flush()
         if (i + 1) % 5000 == 0:
             print(f"  encoded {i + 1} / {len(txt_paths)} ...", flush=True)
-    flush()
+    batches.flush()
+    vecs = batches.vecs
     X = np.concatenate(vecs, axis=0) if vecs else np.zeros((0, model.config.pooled_dim))
     return stems, X
 
@@ -129,22 +157,24 @@ def _spectrum_report(X: np.ndarray, *, standardize: bool) -> None:
     print("  top-10 explained-variance ratios: " + " ".join(f"{v:.3f}" for v in head))
 
 
-def _label_r2_report(
-    X: np.ndarray, stems: list[str], cards_played_path: Path,
-    cards_folder: Path, shrinkage_k: float,
-) -> None:
-    from sealed.application.train_encoder import (
-        _ALL_HEAD_NAMES,
-        _aggregate,
-        _build_label_map,
-        _label_value,
-    )
+@dataclass(frozen=True)
+class LabelSources:
+    """Where the per-card labels come from."""
+
+    cards_played_path: Path
+    cards_folder: Path
+    shrinkage_k: float
+
+
+def _label_maps(sources: LabelSources):
+    """The shrunk label map, and the canonical name of each card file stem."""
+    from sealed.application.train_encoder import _aggregate, _build_label_map
     from sealed.infrastructure.cards_played_reader import iter_rows
     from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
-    locator = ConvertedCardLocator(cards_folder)
+    locator = ConvertedCardLocator(sources.cards_folder)
     labels = _build_label_map(
-        _aggregate(iter_rows(cards_played_path), locator), shrinkage_k,
+        _aggregate(iter_rows(sources.cards_played_path), locator), sources.shrinkage_k,
     )
     # Embeddings are keyed by file stem; the label map by canonical name —
     # ConvertedCardLocator.text_path(name).stem bridges the two.
@@ -153,51 +183,79 @@ def _label_r2_report(
         path = locator.text_path(name)
         if path is not None:
             stem_to_name[path.stem] = name
-    stem_to_row = {stem: i for i, stem in enumerate(stems)}
+    return labels, stem_to_name
 
-    # PCA once over all encoded cards (centered, unstandardized).
+
+def _pc_scores(X: np.ndarray) -> np.ndarray:
+    """PCA once over all encoded cards (centered, unstandardized)."""
     Xc = X - X.mean(axis=0, keepdims=True)
     # right singular vectors -> PC scores Z = Xc @ Vt.T  (= U * s)
     _u, _s, vt = np.linalg.svd(Xc, full_matrices=False)
-    scores = Xc @ vt.T  # (N, d)
-    d = scores.shape[1]
-    k_grid = [k for k in _K_GRID if k <= d] + ([d] if d not in _K_GRID else [])
-    k_grid = sorted(set(k_grid))
+    return Xc @ vt.T  # (N, d)
 
-    matched = sum(1 for st in stems if st in stem_to_name)
+
+def _head_targets(h: int, stem_to_row: dict[str, int], labels: dict, stem_to_name: dict):
+    """The rows of the encoded cards labelled on head ``h``, and their values."""
+    from sealed.application.train_encoder import _label_value
+
+    rows: list[int] = []
+    ys: list[float] = []
+    for st, row in stem_to_row.items():
+        name = stem_to_name.get(st)
+        if name is None:
+            continue
+        v = _label_value(labels[name], h)
+        if v is None:
+            continue
+        rows.append(row)
+        ys.append(float(v))
+    return rows, ys
+
+
+def _r2_cells(Zsub: np.ndarray, ys: list[float], k_grid: list[int]) -> list[str]:
+    """R² of the labels against the top-k PCs, one cell per ``k``."""
+    y = np.asarray(ys, dtype=np.float64)
+    y = y - y.mean()
+    ss_tot = float(y @ y)
+    cells: list[str] = []
+    for k in k_grid:
+        Zk = Zsub[:, :k]
+        # least-squares fit y ≈ Zk @ beta (no orthogonality assumed)
+        beta, *_ = np.linalg.lstsq(Zk, y, rcond=None)
+        resid = y - Zk @ beta
+        r2 = 1.0 - float(resid @ resid) / ss_tot if ss_tot > 0 else 0.0
+        cells.append(f"{r2:+.3f} ")
+    return cells
+
+
+def _k_grid(d: int) -> list[int]:
+    """The numbers of top PCs the R² is read at, ``d`` among them."""
+    return sorted(set([k for k in _K_GRID if k <= d] + ([d] if d not in _K_GRID else [])))
+
+
+def _print_r2_header(matched: int, total: int, k_grid: list[int]) -> None:
     print(
         f"\n--- per-head R²(shrunk label ~ top-k PCs) ---"
-        f"\n  matched {matched} / {len(stems)} encoded cards to a labelled card"
+        f"\n  matched {matched} / {total} encoded cards to a labelled card"
         f"   (k grid: {k_grid})"
     )
     print(f"  {'head':<16}" + "".join(f"k={k:<7d}" for k in k_grid))
+
+
+def _label_r2_report(X: np.ndarray, stems: list[str], sources: LabelSources) -> None:
+    from sealed.application.train_encoder import _ALL_HEAD_NAMES
+
+    labels, stem_to_name = _label_maps(sources)
+    stem_to_row = {stem: i for i, stem in enumerate(stems)}
+    scores = _pc_scores(X)
+    k_grid = _k_grid(scores.shape[1])
+    _print_r2_header(sum(1 for st in stems if st in stem_to_name), len(stems), k_grid)
     for h, head_name in enumerate(_ALL_HEAD_NAMES):
-        rows: list[int] = []
-        ys: list[float] = []
-        for st, row in stem_to_row.items():
-            name = stem_to_name.get(st)
-            if name is None:
-                continue
-            v = _label_value(labels[name], h)
-            if v is None:
-                continue
-            rows.append(row)
-            ys.append(float(v))
+        rows, ys = _head_targets(h, stem_to_row, labels, stem_to_name)
         if len(rows) < 2:
             print(f"  {head_name:<16}" + "".join("  --   " for _ in k_grid))
             continue
-        Zsub = scores[rows]
-        y = np.asarray(ys, dtype=np.float64)
-        y = y - y.mean()
-        ss_tot = float(y @ y)
-        cells: list[str] = []
-        for k in k_grid:
-            Zk = Zsub[:, :k]
-            # least-squares fit y ≈ Zk @ beta (no orthogonality assumed)
-            beta, *_ = np.linalg.lstsq(Zk, y, rcond=None)
-            resid = y - Zk @ beta
-            r2 = 1.0 - float(resid @ resid) / ss_tot if ss_tot > 0 else 0.0
-            cells.append(f"{r2:+.3f} ")
+        cells = _r2_cells(scores[rows], ys, k_grid)
         print(f"  {head_name:<16}" + "".join(f"{c:<8}" for c in cells))
 
 
@@ -241,7 +299,8 @@ def main() -> int:
     txt_paths = sorted(args.cards_folder.rglob("*.txt"))
     print(f"Encoding {len(txt_paths)} card files ...")
     stems, X = _encode_corpus(
-        model, tokenizer, config.max_seq_len, txt_paths, device, args.batch_size,
+        model, tokenizer, txt_paths,
+        EncodeSettings(config.max_seq_len, device, args.batch_size),
     )
     if X.shape[0] == 0:
         print("error: no cards encoded", file=sys.stderr)
@@ -255,7 +314,7 @@ def main() -> int:
             print(f"error: {args.cards_played} not found", file=sys.stderr)
             return 1
         _label_r2_report(
-            X, stems, args.cards_played, args.cards_folder, args.shrinkage_k,
+            X, stems, LabelSources(args.cards_played, args.cards_folder, args.shrinkage_k),
         )
 
     print(
