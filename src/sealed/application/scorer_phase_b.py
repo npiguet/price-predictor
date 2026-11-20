@@ -5,11 +5,22 @@ measured against it each epoch."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import torch
 
 from sealed.application.scorer_log import _log
 from sealed.application.scorer_training_context import ReferenceBatch, _TrainingContext
 from sealed.infrastructure.match_data_loader import TrainingBatch
+
+
+@dataclass(frozen=True)
+class TokenizedCards:
+    """A stack of tokenized cards, one row each: the token ids and the
+    attention mask that marks the real tokens among the padding."""
+
+    input_ids: torch.Tensor
+    attention_mask: torch.Tensor
 
 
 def _phase_b_inject_encoder(ctx: _TrainingContext, batch: TrainingBatch) -> None:
@@ -42,7 +53,7 @@ def _phase_b_inject_encoder(ctx: _TrainingContext, batch: TrainingBatch) -> None
     input_ids = torch.stack(input_ids_list).to(ctx.device)
     attention_mask = torch.stack(attention_mask_list).to(ctx.device)
     text_vectors = _encode_chunked(
-        ctx.encoder, input_ids, attention_mask,
+        ctx.encoder, TokenizedCards(input_ids, attention_mask),
         chunk_size=ctx.encoder_chunk_size, training=True,
     )
     ctx.embedding_table.set_text_vectors(unique.to(ctx.device), text_vectors)
@@ -64,8 +75,7 @@ def _phase_b_inject_encoder(ctx: _TrainingContext, batch: TrainingBatch) -> None
 
 def _encode_chunked(
     encoder: torch.nn.Module,
-    input_ids: torch.Tensor,
-    attention_mask: torch.Tensor,
+    cards: TokenizedCards,
     *,
     chunk_size: int,
     training: bool,
@@ -85,6 +95,7 @@ def _encode_chunked(
     drops activations after each chunk and recomputes them during backward,
     trading ~1.5× compute for ~10× less memory.
     """
+    input_ids, attention_mask = cards.input_ids, cards.attention_mask
     n = input_ids.size(0)
     if n <= chunk_size or not training:
         return encoder._encode_and_pool(input_ids, attention_mask)
@@ -136,8 +147,10 @@ def _embedding_drift(ctx: _TrainingContext) -> float:
         with torch.no_grad():
             current = _encode_chunked(
                 ctx.encoder,
-                ctx.reference_batch.input_ids,
-                ctx.reference_batch.attention_mask,
+                TokenizedCards(
+                    ctx.reference_batch.input_ids,
+                    ctx.reference_batch.attention_mask,
+                ),
                 chunk_size=ctx.encoder_chunk_size,
                 training=False,
             )

@@ -439,7 +439,7 @@ class TestEncoderChunking:
     equivalent to the non-chunked path and keeps gradient flow intact."""
 
     def test_chunked_matches_unchunked(self):
-        from sealed.application.scorer_phase_b import _encode_chunked
+        from sealed.application.scorer_phase_b import TokenizedCards, _encode_chunked
 
         encoder_cfg = _tiny_transformer_config()
         encoder = CardPriceTransformerModel(encoder_cfg)
@@ -450,15 +450,15 @@ class TestEncoderChunking:
         attention_mask = torch.ones_like(input_ids)
 
         full = _encode_chunked(
-            encoder, input_ids, attention_mask, chunk_size=64, training=False,
+            encoder, TokenizedCards(input_ids, attention_mask), chunk_size=64, training=False,
         )
         chunked = _encode_chunked(
-            encoder, input_ids, attention_mask, chunk_size=3, training=False,
+            encoder, TokenizedCards(input_ids, attention_mask), chunk_size=3, training=False,
         )
         torch.testing.assert_close(full, chunked)
 
     def test_gradient_flows_through_chunked_path(self):
-        from sealed.application.scorer_phase_b import _encode_chunked
+        from sealed.application.scorer_phase_b import TokenizedCards, _encode_chunked
 
         encoder_cfg = _tiny_transformer_config()
         encoder = CardPriceTransformerModel(encoder_cfg)
@@ -469,7 +469,7 @@ class TestEncoderChunking:
         attention_mask = torch.ones_like(input_ids)
 
         out = _encode_chunked(
-            encoder, input_ids, attention_mask, chunk_size=4, training=True,
+            encoder, TokenizedCards(input_ids, attention_mask), chunk_size=4, training=True,
         )
         loss = out.sum()
         loss.backward()
