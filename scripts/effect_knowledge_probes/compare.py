@@ -53,14 +53,38 @@ def digest_warning(cards: list[Scorecard]) -> str | None:
     return None
 
 
+def _entry_cells(family: str, target: str, entry: dict):
+    for stratum, result in entry.get("strata", {}).items():
+        for rung, scores in result.get("rungs", {}).items():
+            for probe_type, value in scores.items():
+                yield (family, target, stratum, rung, probe_type), value
+
+
 def _cells(card: Scorecard):
     """``(family, target, stratum, rung, probe_type) -> score`` of one card."""
     for family, body in card.families.items():
         for target, entry in body.get("targets", {}).items():
-            for stratum, result in entry.get("strata", {}).items():
-                for rung, scores in result.get("rungs", {}).items():
-                    for probe_type, value in scores.items():
-                        yield (family, target, stratum, rung, probe_type), value
+            yield from _entry_cells(family, target, entry)
+
+
+def _board_dependent(entry: dict, kind: str) -> bool:
+    return entry.get("scope") in ("act", "entity") and entry.get("kind") == kind
+
+
+def _comparable(one, width) -> bool:
+    if one is None or width is None:
+        return False
+    return not (math.isnan(one) or math.isnan(width))
+
+
+def _stratum_gains(entry: dict, probe_type: str):
+    """Rung 1 − rung 1w of each stratum of ``entry`` where both are real numbers."""
+    for result in entry.get("strata", {}).values():
+        rungs = result.get("rungs", {})
+        one = rungs.get("1", {}).get(probe_type)
+        width = rungs.get("1w", {}).get(probe_type)
+        if _comparable(one, width):
+            yield one - width
 
 
 def width_gain(card: Scorecard, probe_type: str, kind: str) -> float:
@@ -69,17 +93,10 @@ def width_gain(card: Scorecard, probe_type: str, kind: str) -> float:
     One kind at a time: a gain in AUC and a gain in R² are not on one scale.
     """
     gains = []
-    for family, body in card.families.items():
+    for body in card.families.values():
         for entry in body.get("targets", {}).values():
-            if entry.get("scope") not in ("act", "entity") or entry.get("kind") != kind:
-                continue
-            for result in entry.get("strata", {}).values():
-                rungs = result.get("rungs", {})
-                one = rungs.get("1", {}).get(probe_type)
-                width = rungs.get("1w", {}).get(probe_type)
-                if one is not None and width is not None and not (
-                        math.isnan(one) or math.isnan(width)):
-                    gains.append(one - width)
+            if _board_dependent(entry, kind):
+                gains.extend(_stratum_gains(entry, probe_type))
     return sum(gains) / len(gains) if gains else float("nan")
 
 
@@ -96,6 +113,39 @@ def ranking(cards: list[Scorecard]) -> dict[str, list[tuple[str, float]]]:
     return out
 
 
+def _probe_scored(item: dict, kind: str) -> bool:
+    if item.get("kind") != kind or item.get("score") is None:
+        return False
+    return not math.isnan(item["score"])
+
+
+def _mean_probe_score(body: dict, kind: str) -> float | None:
+    values = [item["score"] for item in body.get("probes", {}).values()
+              if _probe_scored(item, kind)]
+    return sum(values) / len(values) if values else None
+
+
+def _mean_grid_score(body: dict) -> float | None:
+    grids = [item["score"] for item in body.get("grids", {}).values()
+             if not math.isnan(item["score"])]
+    return sum(grids) / len(grids) if grids else None
+
+
+def _one_half_scores(where: str, body: dict) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for kind, metric in METRICS.items():
+        mean = _mean_probe_score(body, kind)
+        if mean is not None:
+            out[f"{where} probes {metric}"] = mean
+    grids = _mean_grid_score(body)
+    if grids is not None:
+        out[f"{where} grids"] = grids
+    component = (body.get("rule_tests") or {}).get("component")
+    if component is not None and not math.isnan(component):
+        out[f"{where} rule tests"] = component
+    return out
+
+
 def half_scores(card: Scorecard) -> dict[str, float]:
     """``"<stratum>/<half> <score>" -> value`` of one card: the mean rung-3
     AUC of its yes/no probe types and the mean R² of its amount ones, apart,
@@ -103,20 +153,7 @@ def half_scores(card: Scorecard) -> dict[str, float]:
     out: dict[str, float] = {}
     for stratum, by_half in card.halves.items():
         for half, body in by_half.items():
-            where = f"{stratum}/{half}"
-            for kind, metric in METRICS.items():
-                values = [item["score"] for item in body.get("probes", {}).values()
-                          if item.get("kind") == kind and item.get("score") is not None
-                          and not math.isnan(item["score"])]
-                if values:
-                    out[f"{where} probes {metric}"] = sum(values) / len(values)
-            grids = [item["score"] for item in body.get("grids", {}).values()
-                     if not math.isnan(item["score"])]
-            if grids:
-                out[f"{where} grids"] = sum(grids) / len(grids)
-            component = (body.get("rule_tests") or {}).get("component")
-            if component is not None and not math.isnan(component):
-                out[f"{where} rule tests"] = component
+            out.update(_one_half_scores(f"{stratum}/{half}", body))
     return out
 
 
@@ -131,6 +168,46 @@ def half_ranking(cards: list[Scorecard]) -> dict[str, list[tuple[str, float]]]:
     return out
 
 
+def _gather_tables(cards: list[Scorecard]) -> dict[str, dict[tuple, dict[int, float]]]:
+    tables: dict[str, dict[tuple, dict[int, float]]] = {}
+    for column, card in enumerate(cards):
+        for (family, target, stratum, rung, probe_type), value in _cells(card):
+            tables.setdefault(family, {}).setdefault(
+                (target, stratum, rung), {})[(column, probe_type)] = value
+    return tables
+
+
+def _family_lines(family: str, table: dict, names: list[str], n_cards: int) -> list[str]:
+    header = ["target", "stratum", "rung"] + [
+        f"{name} {probe_type}" for name in names for probe_type in (*PROBE_MODELS, "model")
+    ]
+    rows = [[target, stratum, rung] + [
+                fmt(values.get((column, probe_type)))
+                for column in range(n_cards)
+                for probe_type in (*PROBE_MODELS, "model")]
+            for (target, stratum, rung), values in sorted(table.items())]
+    return [f"## {family}", "", md_table(header, rows, "lll" + "r" * (len(header) - 3)), ""]
+
+
+def _ranking_lines(cards: list[Scorecard]) -> list[str]:
+    lines = ["## Ranking on rung 1 − rung 1w", ""]
+    for probe_type, ranked in ranking(cards).items():
+        lines.append(f"- {probe_type}: " + ", ".join(
+            f"{Path(name).parent.name or name} ({fmt(gain)})" for name, gain in ranked))
+    return lines
+
+
+def _half_lines(cards: list[Scorecard]) -> list[str]:
+    by_half = half_ranking(cards)
+    if not by_half:
+        return []
+    lines = ["", "## Ranking per stratum and half", ""]
+    for name, ranked in by_half.items():
+        lines.append(f"- {name}: " + ", ".join(
+            f"{Path(card).parent.name or card} ({fmt(value)})" for card, value in ranked))
+    return lines
+
+
 def render(cards: list[Scorecard]) -> str:
     names = [Path(card.checkpoint or f"#{i}").parent.name or card.checkpoint
              for i, card in enumerate(cards)]
@@ -138,32 +215,11 @@ def render(cards: list[Scorecard]) -> str:
     warning = digest_warning(cards)
     if warning:
         lines += [warning, ""]
-    tables: dict[str, dict[tuple, dict[int, float]]] = {}
-    for column, card in enumerate(cards):
-        for (family, target, stratum, rung, probe_type), value in _cells(card):
-            tables.setdefault(family, {}).setdefault(
-                (target, stratum, rung), {})[(column, probe_type)] = value
+    tables = _gather_tables(cards)
     for family in sorted(tables):
-        lines += [f"## {family}", ""]
-        header = ["target", "stratum", "rung"] + [
-            f"{name} {probe_type}" for name in names for probe_type in (*PROBE_MODELS, "model")
-        ]
-        rows = [[target, stratum, rung] + [
-                    fmt(values.get((column, probe_type)))
-                    for column in range(len(cards))
-                    for probe_type in (*PROBE_MODELS, "model")]
-                for (target, stratum, rung), values in sorted(tables[family].items())]
-        lines += [md_table(header, rows, "lll" + "r" * (len(header) - 3)), ""]
-    lines += ["## Ranking on rung 1 − rung 1w", ""]
-    for probe_type, ranked in ranking(cards).items():
-        lines.append(f"- {probe_type}: " + ", ".join(
-            f"{Path(name).parent.name or name} ({fmt(gain)})" for name, gain in ranked))
-    by_half = half_ranking(cards)
-    if by_half:
-        lines += ["", "## Ranking per stratum and half", ""]
-        for name, ranked in by_half.items():
-            lines.append(f"- {name}: " + ", ".join(
-                f"{Path(card).parent.name or card} ({fmt(value)})" for card, value in ranked))
+        lines += _family_lines(family, tables[family], names, len(cards))
+    lines += _ranking_lines(cards)
+    lines += _half_lines(cards)
     return "\n".join(lines) + "\n"
 
 
