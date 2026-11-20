@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from enum import Enum
 
 from effects.domain.event_schema import Event, EventType
 from effects.domain.keyword_names import normalize_keyword
@@ -59,18 +60,18 @@ def _reader_spellings(value):
     """A collector's JSON with exactly the spellings the reader normalizes:
     the overlay keywords of an entity and every event's counter type."""
     if isinstance(value, dict):
-        out = {}
-        for k, v in value.items():
-            if k == "granted_temporary" and isinstance(v, dict):
-                out[k] = {**v, "keywords": [normalize_keyword(x) for x in v["keywords"]]}
-            elif k == "counter_type" and isinstance(v, str):
-                out[k] = normalize_counter_type(v)
-            else:
-                out[k] = _reader_spellings(v)
-        return out
+        return {k: _member_reader_spelling(k, v) for k, v in value.items()}
     if isinstance(value, list):
         return [_reader_spellings(v) for v in value]
     return value
+
+
+def _member_reader_spelling(k, v):
+    if k == "granted_temporary" and isinstance(v, dict):
+        return {**v, "keywords": [normalize_keyword(x) for x in v["keywords"]]}
+    if k == "counter_type" and isinstance(v, str):
+        return normalize_counter_type(v)
+    return _reader_spellings(v)
 
 
 class TestTheGen3EntityShape:
@@ -109,39 +110,19 @@ class TestTheGen3EntityShape:
     def test_the_gen3_blocks_read_into_their_fields(self):
         records = [record_from_dict(raw) for raw in java_golden_records()]
         states = [record.state for record in records]
-        assert all(state.links is not None for state in states)
-        assert any(link.type == "targets" and isinstance(link.from_, LineRef)
-                   and link.index == 0 for state in states for link in state.links)
-        assert all(player.turn_counts is not None
-                   for state in states for player in state.players)
-        assert any(made.source_lines for state in states
-                   for made in state.global_.floating_effects)
-        assert any(state.refs.random == RandomResults() for state in states)
-        entities = [entity for state in states for entity in state.entities]
-        assert all(entity.owner in ("P0", "P1") and entity.history is not None
-                   and entity.chosen == CardChoices() for entity in entities)
-        assert any(entity.mana_cost == {"generic": 1, "G": 1} for entity in entities)
+        _assert_the_links_read(states)
+        _assert_the_players_and_global_blocks_read(states)
+        _assert_the_entity_blocks_read(states)
 
     def test_the_gen3_payload_members_read_into_their_fields(self):
         records = [record_from_dict(raw) for raw in java_golden_records()]
-        halves = [r.payload for r in records if isinstance(r.payload, ResolutionPayload)]
-        assert halves and all(payload.conditions_met == () for payload in halves)
-        candidates = [c for r in records if isinstance(r.payload, PlayabilityDecisionPayload)
-                      for c in r.payload.candidates]
-        assert candidates and all(c.timing is True and c.failed_checks == ()
-                                  and c.land_play is False for c in candidates)
+        _assert_every_resolution_half_meets_no_condition(records)
+        _assert_every_candidate_is_timely_and_no_land_play(records)
         # The live goldens' attackers; a fork played on to the turn's end
         # writes its own (a summoning-sick creature that may not attack).
-        attackers = [r.payload for r in records
-                     if isinstance(r.payload, PlayabilityAttackersPayload) and not r.fork]
-        assert {(a.anchor_attacker, a.legal_defenders, a.must_attack, a.tapped_by_attack)
-                for a in attackers} == {("E2", ("P1",), False, True), ("E3", (), False, None)}
-        forked = [r.payload for r in records
-                  if isinstance(r.payload, PlayabilityAttackersPayload) and r.fork]
-        assert forked and all(a.legal_attackers == () for a in forked)
-        blockers = [r.payload for r in records
-                    if isinstance(r.payload, PlayabilityBlockersPayload)]
-        assert blockers and all(b.must_block == () for b in blockers)
+        _assert_the_live_attackers_read(records)
+        _assert_every_forked_attackers_record_has_none_legal(records)
+        _assert_every_blockers_record_must_block_none(records)
 
     def test_every_golden_payload_member_reads_into_the_field_of_its_name(self):
         """Per kind, each payload member the collector wrote is the value of
@@ -150,45 +131,9 @@ class TestTheGen3EntityShape:
         again would pass the write-back test. Events compare by their parts;
         members holding records of their own (costs, candidates, forbidden
         entries, contributions) are left to their own tests."""
-        from enum import Enum
-
-        def plain(value):
-            if isinstance(value, Event):
-                return {"type": value.type.value, "subjects": list(value.subjects),
-                        "params": plain(value.params), "duration": value.duration,
-                        "attributed_to": value.attributed_to}
-            if isinstance(value, Enum):
-                return value.value
-            if isinstance(value, (tuple, list)):
-                return [plain(v) for v in value]
-            if isinstance(value, dict):
-                return {k: plain(v) for k, v in value.items()}
-            return value
-
-        def event_parts(raw: dict) -> dict:
-            return {"type": raw["type"], "subjects": raw.get("subjects", []),
-                    "params": raw.get("params", {}), "duration": raw.get("duration"),
-                    "attributed_to": raw.get("attributed_to")}
-
-        nested = {"costs", "candidates", "forbidden", "contributions"}
         checked: set[tuple[str, str]] = set()
         for raw in java_golden_records():
-            payload = record_from_dict(raw).payload
-            for member, value in _reader_spellings(raw["payload"]).items():
-                if member in nested:
-                    continue
-                if member in ("events", "buffered_events"):
-                    value = [event_parts(e) for e in value]
-                elif member in ("incoming", "outgoing", "event") and value is not None:
-                    value = event_parts(value)
-                elif member in ("replaced_by", "buffered"):
-                    value = [{k: v for k, v in key.items()} for key in value]
-                    assert [k.as_dict() for k in getattr(payload, member)] == value, (
-                        raw["record_id"], member)
-                    checked.add((raw["kind"], member))
-                    continue
-                assert plain(getattr(payload, member)) == value, (raw["record_id"], member)
-                checked.add((raw["kind"], member))
+            checked |= _checked_payload_members(raw)
         assert {("resolution", "outcome"), ("resolution", "conditions_met"),
                 ("resolution", "events"), ("trigger", "fired"), ("trigger", "event"),
                 ("combat", "blocks"), ("combat", "assignment_choices"),
@@ -199,73 +144,7 @@ class TestTheGen3EntityShape:
     def test_every_gen3_member_round_trips_where_set(self):
         """The members the goldens leave at their empty value, each set."""
         key = ProvenanceKey("cardsfolder/s/shock.txt", 0, "spell", 0)
-        entity = EntityState(
-            id="E3", name="Morph", zone="battlefield", controller="P1", lines=(
-                CardLine(keys=(key,), kind="static", granted=False, active=True,
-                         affected=("E1", "E2", "P0")),),
-            owner="P0", face_state="face_down", mana_cost={"generic": 2, "W/U": 1},
-            printed_loyalty=3, printed_defense=5,
-            real_face=RealFace(name="Akroma", types=("creature",), subtypes=("angel",),
-                               colors=("W",), mana_value=8, base_pt=(6, 6)),
-            designations=("goaded", "monstrous"), x_paid=4,
-            chosen=CardChoices(colors=("R",), type="Goblin", number=3, player="P1",
-                               cards=("E9",), names=("Shock",), direction="left",
-                               stored_rolls=(4, 6)),
-            costs_paid=CostsPaid(mana={"W": 1, "U": 1}, cast_from="hand", mana_rider=True),
-            history=CardHistory(entered_this_turn=True, loyalty_activated=True),
-            order_rank=2, role="exiled_with",
-        )
-        state = replace(_record().state, entities=(entity,), links=(
-            Link(from_=LineRef("E3", key), to="P1", type="targets", index=1),
-            Link(from_="P0", to="E3", type="owns"),
-            Link(from_=LineRef("E3", key), to="P0", type="affects"),
-        ), global_=replace(_record().state.global_, day_night="night",
-                           floating_effects=(CommandZoneObject(
-                               id="F17", source_lines=(key,), affected=("E3",),
-                               duration="end_of_turn", shield_left=2), CommandZoneObject(
-                               id="E41", source_lines=(key,), affected=("E3", "P0"),
-                               duration="end_of_turn")),
-                           delayed_triggers=(CommandZoneObject(
-                               id="D4", source_lines=(key,), remembered=("E3", "P1")),),
-                           dungeons=(Dungeon(player="P0", dungeon="E40",
-                                             room="Yawning Portal"),)),
-            players=(PlayerState(id="P0", life=20, hand=7, library=40, graveyard=0,
-                                 max_land_plays=3,
-                                 speed=2, city_blessing=True, rad=3, monarch=True,
-                                 initiative=True, turn_counts=TurnCounts(cards_drawn=2,
-                                                                         descended=1)),
-                     PlayerState(id="P1", life=20, hand=7, library=40, graveyard=0,
-                                 land_plays_unlimited=True,
-                                 turn_counts=TurnCounts())),
-            refs=Refs(targets_on_stack=(), random=RandomResults(dice=(4, 17), coin_flips_won=1,
-                                                                coin_flips_lost=2)))
-        records = [
-            _record(state=state, payload=ResolutionPayload(conditions_met=(
-                ConditionMet("root", True), ConditionMet("1", False)))),
-            _record(kind=RecordKind.PLAYABILITY, moment=None, ability=None, link_id=None,
-                    subkind=PlayabilitySubkind.DECISION, state=state,
-                    payload=PlayabilityDecisionPayload(candidates=(Candidate(
-                        ability=(key,), can_play=False, affordable=True,
-                        has_legal_target=True, responsible_static=(key,), timing=False,
-                        failed_checks=(FailedCheck("casting_speed"),
-                                       FailedCheck("static_prohibition", (key,))),
-                        land_play=False), Candidate(
-                        ability=(key,), can_play=False, affordable=True,
-                        has_legal_target=True, timing=True,
-                        failed_checks=(FailedCheck("land_play_limit"),),
-                        land_play=True)))),
-            _record(kind=RecordKind.PLAYABILITY, moment=None, ability=None, link_id=None,
-                    subkind=PlayabilitySubkind.ATTACKERS, state=state,
-                    payload=PlayabilityAttackersPayload(
-                        legal_attackers=("E3",), anchor_attacker="E3",
-                        legal_defenders=("P1", "E40"), must_attack=True,
-                        tapped_by_attack=False)),
-            _record(kind=RecordKind.PLAYABILITY, moment=None, ability=None, link_id=None,
-                    subkind=PlayabilitySubkind.BLOCKERS, state=state, what_if=False,
-                    payload=PlayabilityBlockersPayload(
-                        anchor_attacker="E3", legal_blockers=("E5",), must_block=("E5",),
-                        min_blockers=1)),
-        ]
+        records = _records_with_every_gen3_member_set(key)
         for record in records:
             assert record_from_dict(json.loads(json.dumps(record_to_dict(record)))) == record
         assert list(record_to_dict(records[2])["payload"]) == [
@@ -377,3 +256,209 @@ class TestALinesGrant:
 def _entity_dict(entity: EntityState) -> dict:
     record = _record(state=replace(_record().state, entities=(entity,)))
     return record_to_dict(record)["state"]["entities"][0]
+
+
+def _assert_the_links_read(states) -> None:
+    assert all(state.links is not None for state in states)
+    assert any(_is_a_first_target_link(link) for state in states for link in state.links)
+
+
+def _is_a_first_target_link(link: Link) -> bool:
+    return link.type == "targets" and isinstance(link.from_, LineRef) and link.index == 0
+
+
+def _assert_the_players_and_global_blocks_read(states) -> None:
+    assert all(player.turn_counts is not None
+               for state in states for player in state.players)
+    assert any(made.source_lines for state in states
+               for made in state.global_.floating_effects)
+    assert any(state.refs.random == RandomResults() for state in states)
+
+
+def _assert_the_entity_blocks_read(states) -> None:
+    entities = [entity for state in states for entity in state.entities]
+    assert all(_entity_blocks_read_empty(entity) for entity in entities)
+    assert any(entity.mana_cost == {"generic": 1, "G": 1} for entity in entities)
+
+
+def _entity_blocks_read_empty(entity: EntityState) -> bool:
+    """Owned by a seat, with a history and no choice made."""
+    return (entity.owner in ("P0", "P1") and entity.history is not None
+            and entity.chosen == CardChoices())
+
+
+def _payloads_of(records, payload_type) -> list:
+    return [r.payload for r in records if isinstance(r.payload, payload_type)]
+
+
+def _attackers_payloads(records, *, fork: bool) -> list:
+    """The attackers payloads of forks, or of live records."""
+    return [r.payload for r in records
+            if isinstance(r.payload, PlayabilityAttackersPayload) and bool(r.fork) is fork]
+
+
+def _assert_every_resolution_half_meets_no_condition(records) -> None:
+    halves = _payloads_of(records, ResolutionPayload)
+    assert halves and all(payload.conditions_met == () for payload in halves)
+
+
+def _assert_every_candidate_is_timely_and_no_land_play(records) -> None:
+    candidates = [c for payload in _payloads_of(records, PlayabilityDecisionPayload)
+                  for c in payload.candidates]
+    assert candidates and all(_is_timely_and_no_land_play(c) for c in candidates)
+
+
+def _is_timely_and_no_land_play(candidate) -> bool:
+    return (candidate.timing is True and candidate.failed_checks == ()
+            and candidate.land_play is False)
+
+
+def _assert_the_live_attackers_read(records) -> None:
+    attackers = _attackers_payloads(records, fork=False)
+    assert {(a.anchor_attacker, a.legal_defenders, a.must_attack, a.tapped_by_attack)
+            for a in attackers} == {("E2", ("P1",), False, True), ("E3", (), False, None)}
+
+
+def _assert_every_forked_attackers_record_has_none_legal(records) -> None:
+    forked = _attackers_payloads(records, fork=True)
+    assert forked and all(a.legal_attackers == () for a in forked)
+
+
+def _assert_every_blockers_record_must_block_none(records) -> None:
+    blockers = _payloads_of(records, PlayabilityBlockersPayload)
+    assert blockers and all(b.must_block == () for b in blockers)
+
+
+_NESTED_MEMBERS = frozenset({"costs", "candidates", "forbidden", "contributions"})
+
+
+def _checked_payload_members(raw: dict) -> set[tuple[str, str]]:
+    """Checks each payload member of one golden record against the decoded
+    field of its name; the (kind, member) pairs checked."""
+    payload = record_from_dict(raw).payload
+    checked: set[tuple[str, str]] = set()
+    for member, value in _reader_spellings(raw["payload"]).items():
+        if member in _NESTED_MEMBERS:
+            continue
+        _check_payload_member(raw, payload, member, value)
+        checked.add((raw["kind"], member))
+    return checked
+
+
+def _check_payload_member(raw: dict, payload, member: str, value) -> None:
+    if member in ("replaced_by", "buffered"):
+        value = [{k: v for k, v in key.items()} for key in value]
+        assert [k.as_dict() for k in getattr(payload, member)] == value, (
+            raw["record_id"], member)
+        return
+    value = _member_event_parts(member, value)
+    assert _plain(getattr(payload, member)) == value, (raw["record_id"], member)
+
+
+def _member_event_parts(member: str, value):
+    """A member holding events, as the parts an event compares by."""
+    if member in ("events", "buffered_events"):
+        return [_event_parts(e) for e in value]
+    if member in ("incoming", "outgoing", "event") and value is not None:
+        return _event_parts(value)
+    return value
+
+
+def _plain(value):
+    if isinstance(value, Event):
+        return {"type": value.type.value, "subjects": list(value.subjects),
+                "params": _plain(value.params), "duration": value.duration,
+                "attributed_to": value.attributed_to}
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, (tuple, list)):
+        return [_plain(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _plain(v) for k, v in value.items()}
+    return value
+
+
+def _event_parts(raw: dict) -> dict:
+    return {"type": raw["type"], "subjects": raw.get("subjects", []),
+            "params": raw.get("params", {}), "duration": raw.get("duration"),
+            "attributed_to": raw.get("attributed_to")}
+
+
+def _an_entity_with_every_gen3_member_set(key: ProvenanceKey) -> EntityState:
+    return EntityState(
+        id="E3", name="Morph", zone="battlefield", controller="P1", lines=(
+            CardLine(keys=(key,), kind="static", granted=False, active=True,
+                     affected=("E1", "E2", "P0")),),
+        owner="P0", face_state="face_down", mana_cost={"generic": 2, "W/U": 1},
+        printed_loyalty=3, printed_defense=5,
+        real_face=RealFace(name="Akroma", types=("creature",), subtypes=("angel",),
+                           colors=("W",), mana_value=8, base_pt=(6, 6)),
+        designations=("goaded", "monstrous"), x_paid=4,
+        chosen=CardChoices(colors=("R",), type="Goblin", number=3, player="P1",
+                           cards=("E9",), names=("Shock",), direction="left",
+                           stored_rolls=(4, 6)),
+        costs_paid=CostsPaid(mana={"W": 1, "U": 1}, cast_from="hand", mana_rider=True),
+        history=CardHistory(entered_this_turn=True, loyalty_activated=True),
+        order_rank=2, role="exiled_with",
+    )
+
+
+def _a_state_with_every_gen3_member_set(key: ProvenanceKey):
+    entity = _an_entity_with_every_gen3_member_set(key)
+    return replace(_record().state, entities=(entity,), links=(
+        Link(from_=LineRef("E3", key), to="P1", type="targets", index=1),
+        Link(from_="P0", to="E3", type="owns"),
+        Link(from_=LineRef("E3", key), to="P0", type="affects"),
+    ), global_=replace(_record().state.global_, day_night="night",
+                       floating_effects=(CommandZoneObject(
+                           id="F17", source_lines=(key,), affected=("E3",),
+                           duration="end_of_turn", shield_left=2), CommandZoneObject(
+                           id="E41", source_lines=(key,), affected=("E3", "P0"),
+                           duration="end_of_turn")),
+                       delayed_triggers=(CommandZoneObject(
+                           id="D4", source_lines=(key,), remembered=("E3", "P1")),),
+                       dungeons=(Dungeon(player="P0", dungeon="E40",
+                                         room="Yawning Portal"),)),
+        players=(PlayerState(id="P0", life=20, hand=7, library=40, graveyard=0,
+                             max_land_plays=3,
+                             speed=2, city_blessing=True, rad=3, monarch=True,
+                             initiative=True, turn_counts=TurnCounts(cards_drawn=2,
+                                                                     descended=1)),
+                 PlayerState(id="P1", life=20, hand=7, library=40, graveyard=0,
+                             land_plays_unlimited=True,
+                             turn_counts=TurnCounts())),
+        refs=Refs(targets_on_stack=(), random=RandomResults(dice=(4, 17), coin_flips_won=1,
+                                                            coin_flips_lost=2)))
+
+
+def _records_with_every_gen3_member_set(key: ProvenanceKey) -> list:
+    """A resolution half, a decision, an attackers and a blockers record
+    over one state with every gen-3 member set."""
+    state = _a_state_with_every_gen3_member_set(key)
+    return [
+        _record(state=state, payload=ResolutionPayload(conditions_met=(
+            ConditionMet("root", True), ConditionMet("1", False)))),
+        _record(kind=RecordKind.PLAYABILITY, moment=None, ability=None, link_id=None,
+                subkind=PlayabilitySubkind.DECISION, state=state,
+                payload=PlayabilityDecisionPayload(candidates=(Candidate(
+                    ability=(key,), can_play=False, affordable=True,
+                    has_legal_target=True, responsible_static=(key,), timing=False,
+                    failed_checks=(FailedCheck("casting_speed"),
+                                   FailedCheck("static_prohibition", (key,))),
+                    land_play=False), Candidate(
+                    ability=(key,), can_play=False, affordable=True,
+                    has_legal_target=True, timing=True,
+                    failed_checks=(FailedCheck("land_play_limit"),),
+                    land_play=True)))),
+        _record(kind=RecordKind.PLAYABILITY, moment=None, ability=None, link_id=None,
+                subkind=PlayabilitySubkind.ATTACKERS, state=state,
+                payload=PlayabilityAttackersPayload(
+                    legal_attackers=("E3",), anchor_attacker="E3",
+                    legal_defenders=("P1", "E40"), must_attack=True,
+                    tapped_by_attack=False)),
+        _record(kind=RecordKind.PLAYABILITY, moment=None, ability=None, link_id=None,
+                subkind=PlayabilitySubkind.BLOCKERS, state=state, what_if=False,
+                payload=PlayabilityBlockersPayload(
+                    anchor_attacker="E3", legal_blockers=("E5",), must_block=("E5",),
+                    min_blockers=1)),
+    ]

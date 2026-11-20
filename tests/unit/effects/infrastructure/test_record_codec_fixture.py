@@ -122,14 +122,9 @@ class TestTheGen3Fixture:
         assert all(r.ability is None for r in actions)
         # The game-end marker alone holds no event (WP7): its payload is
         # ``{events: [], records_withheld}``.
-        played = [r for r in actions if r.subkind is not TurnActionSubkind.GAME_END]
-        assert all(r.payload.events and r.payload.records_withheld is None for r in played)
-        markers = [r for r in actions if r.subkind is TurnActionSubkind.GAME_END]
-        assert all(r.payload.events == () and r.payload.records_withheld is not None
-                   for r in markers)
-        draws = [r for r in actions if r.subkind is TurnActionSubkind.DRAW]
-        assert all({EventType.CARD_DRAWN, EventType.ZONE_CHANGE}
-                   <= {e.type for e in r.payload.events} for r in draws)
+        _assert_every_played_action_holds_events(actions)
+        _assert_every_game_end_marker_holds_none(actions)
+        _assert_every_draw_draws_and_moves(actions)
 
     def test_a_sorcery_off_turn_fails_its_casting_speed(self):
         """Story 2 acceptance 8: timing false, can_play false, casting_speed failed."""
@@ -165,13 +160,7 @@ class TestTheGen3Fixture:
         records = [r for r in self._records()
                    if isinstance(r.payload, PlayabilityAttackersPayload)]
         assert records and all(r.payload.anchor_attacker for r in records)
-        declared = {}
-        for r in records:
-            if r.payload.tapped_by_attack is None:
-                continue
-            anchor = next(e for e in r.state.entities if e.id == r.payload.anchor_attacker)
-            vigilant = any(line.keyword == "vigilance" for line in anchor.keyword_lines)
-            declared[r.record_id] = (vigilant, r.payload.tapped_by_attack)
+        declared = _vigilance_and_tapping_of_declared_anchors(records)
         assert set(declared.values()) == {(False, True), (True, False)}
         assert any(r.payload.legal_defenders == () for r in records)
         assert any(r.payload.must_attack for r in records)
@@ -180,15 +169,63 @@ class TestTheGen3Fixture:
         """SC-004 on the burn kills the fixture holds: the dies trigger's
         resolution, when present, holds no death of a creature its snapshot
         no longer shows on the battlefield."""
-        for r in self._records():
-            if not (isinstance(r.payload, ResolutionPayload) and r.moment is Moment.RESOLUTION
-                    and r.ability and r.ability[0].trait_kind == "trigger" and not r.fork):
-                continue
+        for r in filter(_is_a_live_trigger_resolution, self._records()):
             zones = {e.id: e.zone for e in r.state.entities}
-            for event in r.payload.events:
-                if (event.type is EventType.ZONE_CHANGE
-                        and event.params.get("from_zone") == "battlefield"
-                        and event.params.get("to_zone") == "graveyard"
-                        and event.attributed_to == "unresolved"):
-                    assert all(zones.get(s, "battlefield") == "battlefield"
-                               for s in event.subjects), r.record_id
+            for event in filter(_is_an_unresolved_death, r.payload.events):
+                assert all(zones.get(s, "battlefield") == "battlefield"
+                           for s in event.subjects), r.record_id
+
+
+def _assert_every_played_action_holds_events(actions: list[EffectRecord]) -> None:
+    played = [r for r in actions if r.subkind is not TurnActionSubkind.GAME_END]
+    assert all(r.payload.events and r.payload.records_withheld is None for r in played)
+
+
+def _assert_every_game_end_marker_holds_none(actions: list[EffectRecord]) -> None:
+    markers = [r for r in actions if r.subkind is TurnActionSubkind.GAME_END]
+    assert all(r.payload.events == () and r.payload.records_withheld is not None
+               for r in markers)
+
+
+def _assert_every_draw_draws_and_moves(actions: list[EffectRecord]) -> None:
+    draws = [r for r in actions if r.subkind is TurnActionSubkind.DRAW]
+    assert all({EventType.CARD_DRAWN, EventType.ZONE_CHANGE}
+               <= {e.type for e in r.payload.events} for r in draws)
+
+
+def _vigilance_and_tapping_of_declared_anchors(
+        records: list[EffectRecord]) -> dict[str, tuple[bool, bool]]:
+    """Per attackers record that declared its anchor (``tapped_by_attack``
+    set): whether the anchor has vigilance, and whether the attack tapped it."""
+    declared = {}
+    for r in records:
+        if r.payload.tapped_by_attack is None:
+            continue
+        declared[r.record_id] = (_anchor_is_vigilant(r), r.payload.tapped_by_attack)
+    return declared
+
+
+def _anchor_is_vigilant(record: EffectRecord) -> bool:
+    anchor = next(e for e in record.state.entities if e.id == record.payload.anchor_attacker)
+    return any(line.keyword == "vigilance" for line in anchor.keyword_lines)
+
+
+def _is_a_live_trigger_resolution(record: EffectRecord) -> bool:
+    """A trigger's resolution half, not a fork's."""
+    if not isinstance(record.payload, ResolutionPayload):
+        return False
+    if record.moment is not Moment.RESOLUTION:
+        return False
+    return _resolves_a_trigger(record) and not record.fork
+
+
+def _resolves_a_trigger(record: EffectRecord) -> bool:
+    return bool(record.ability) and record.ability[0].trait_kind == "trigger"
+
+
+def _is_an_unresolved_death(event) -> bool:
+    """A move from the battlefield to the graveyard no resolution caused."""
+    if event.type is not EventType.ZONE_CHANGE:
+        return False
+    moved = (event.params.get("from_zone"), event.params.get("to_zone"))
+    return moved == ("battlefield", "graveyard") and event.attributed_to == "unresolved"
