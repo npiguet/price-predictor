@@ -13,8 +13,8 @@ import java.util.function.Predicate;
  * attribution mode, the random seat, the rules the run aimed at — and the
  * stamp applied at the write, so
  * the three collectors build and emit a record the same way rather than each
- * keeping a copy that can drift. Each collector has its own context: they
- * count their records separately.
+ * keeping a copy that can drift. Each collector has its own context, because
+ * each notes whether a record it wrote held the game's outcome.
  */
 final class CollectorContext {
 
