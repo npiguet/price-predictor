@@ -37,7 +37,7 @@ from pathlib import Path
 
 import torch
 
-from price_predictor.infrastructure.run_manifest import run_script
+from price_predictor.infrastructure.run_manifest import ScriptRun, run_script
 from sealed.application.build_decks import BuildDecksConfig, BuildDecksUseCase
 from sealed.application.deck_assembly import load_pool_embeddings
 from sealed.application.evaluate_scorer import format_decks_for_display, score_decks
@@ -154,9 +154,12 @@ def main(argv: list[str]) -> int:
     args = _parse_args(argv)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     return run_script(
-        args.output_dir, lambda: _run(args), script=__file__, argv=argv,
-        inputs=[args.scorer_checkpoint, args.picker_checkpoint, args.cards_path,
-                args.pools_path],
+        args.output_dir, lambda: _run(args),
+        ScriptRun(
+            script=__file__, argv=argv,
+            inputs=[args.scorer_checkpoint, args.picker_checkpoint, args.cards_path,
+                    args.pools_path],
+        ),
     )
 
 

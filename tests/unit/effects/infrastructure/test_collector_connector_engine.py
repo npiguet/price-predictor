@@ -21,7 +21,7 @@ from effects.domain.collection_caps import CollectionCaps
 from effects.infrastructure.collector_connector import CollectorRun, CollectorSupervisor, RoundSpec
 from price_predictor.domain.worker_status import WorkerEngineRefused
 from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
-from price_predictor.infrastructure.run_manifest import run_recorded
+from price_predictor.infrastructure.run_manifest import RunCommand, run_recorded
 from price_predictor.infrastructure.worker_stops import WorkerStopSettings
 from tests.unit.worker_status_line import PINNED_PREFERENCES, status_line
 
@@ -72,7 +72,7 @@ def _recorded(tmp_path, body) -> dict:
         return 0
 
     try:
-        run_recorded(tmp_path, wrapped, command="python -m effects collect-coverage")
+        run_recorded(tmp_path, wrapped, RunCommand("python -m effects collect-coverage"))
     except WorkerEngineRefused:
         pass
     return _entry(tmp_path)

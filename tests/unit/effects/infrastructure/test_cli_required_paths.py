@@ -209,14 +209,15 @@ def test_the_keyword_extraction_s_refusal_reaches_run_json(tmp_path: Path, monke
 def test_the_trainer_records_its_seed_and_device_in_run_json(tmp_path: Path):
     """A seed drawn from the OS is in ``run.json``, not in ``console.log`` alone."""
     from effects.application.train_effect_model import TrainEffectModelConfig
-    from price_predictor.infrastructure.run_manifest import run_recorded
+    from price_predictor.infrastructure.run_manifest import RunCommand, run_recorded
     from tests.unit.effects.builders import make_training_loop
 
     model_output = tmp_path / "model"
     config = TrainEffectModelConfig.unpathed(corpus=str(tmp_path), model_output=model_output)
 
     run_recorded(
-        model_output, lambda: make_training_loop(config) and 0, command="train-effect-model",
+        model_output, lambda: make_training_loop(config) and 0,
+        RunCommand("train-effect-model"),
     )
 
     entry = json.loads((model_output / "run.json").read_text(encoding="utf-8"))["invocations"][-1]

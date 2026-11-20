@@ -12,7 +12,10 @@ import pytest
 from price_predictor.infrastructure import run_manifest
 from price_predictor.infrastructure.run_manifest import (
     MANIFEST_NAME,
+    ManifestOptions,
+    RunCommand,
     RunManifest,
+    ScriptRun,
     annotate_run,
     command_line,
     read_commits,
@@ -48,7 +51,7 @@ def fixed_commits(monkeypatch):
 
 
 def manifest(run_dir: Path, repo: Path) -> RunManifest:
-    return RunManifest(run_dir, repo_root=repo, cwd=repo, clock=Clock())
+    return RunManifest(run_dir, ManifestOptions(repo_root=repo, cwd=repo, clock=Clock()))
 
 
 def read(run_dir: Path) -> dict:
@@ -239,7 +242,9 @@ class TestResume:
         monkeypatch.setattr(run_manifest, "read_commits", lambda *_a, **_k: dict(later))
         an_hour_later = Clock()
         an_hour_later.now += timedelta(hours=1)
-        resume = RunManifest(repo / "run", repo_root=repo, cwd=repo, clock=an_hour_later)
+        resume = RunManifest(
+            repo / "run", ManifestOptions(repo_root=repo, cwd=repo, clock=an_hour_later),
+        )
         resume.start(
             command="python -m effects train-effect-model --resume", inputs=["a.txt", "b.txt"],
         )
@@ -350,7 +355,8 @@ class TestAtomicWrite:
 class TestRunRecorded:
     def test_returns_the_body_s_exit_code_and_finishes(self, repo: Path):
         code = run_recorded(
-            repo / "run", lambda: 0, command="c", inputs=[], repo_root=repo, clock=Clock(),
+            repo / "run", lambda: 0,
+            RunCommand("c", inputs=[], options=ManifestOptions(repo_root=repo, clock=Clock())),
         )
         assert code == 0
         assert read(repo / "run")["status"] == "finished"
@@ -360,7 +366,10 @@ class TestRunRecorded:
             raise RuntimeError("worker pool gave up")
 
         with pytest.raises(RuntimeError):
-            run_recorded(repo / "run", body, command="c", inputs=[], repo_root=repo)
+            run_recorded(
+                repo / "run", body,
+                RunCommand("c", inputs=[], options=ManifestOptions(repo_root=repo)),
+            )
         document = read(repo / "run")
         assert document["status"] == "failed"
         assert document["outcome"] == "exit 1: RuntimeError: worker pool gave up"
@@ -370,7 +379,10 @@ class TestRunRecorded:
             raise KeyboardInterrupt
 
         with pytest.raises(KeyboardInterrupt):
-            run_recorded(repo / "run", body, command="c", inputs=[], repo_root=repo)
+            run_recorded(
+                repo / "run", body,
+                RunCommand("c", inputs=[], options=ManifestOptions(repo_root=repo)),
+            )
         document = read(repo / "run")
         assert (document["status"], document["outcome"]) == ("failed", "interrupted")
 
@@ -385,7 +397,10 @@ class TestRunRecorded:
             raise SystemExit(code)
 
         with pytest.raises(SystemExit):
-            run_recorded(repo / "run", body, command="c", inputs=[], repo_root=repo)
+            run_recorded(
+                repo / "run", body,
+                RunCommand("c", inputs=[], options=ManifestOptions(repo_root=repo)),
+            )
         document = read(repo / "run")
         assert (document["status"], document["outcome"]) == (status, outcome)
 
@@ -393,13 +408,15 @@ class TestRunRecorded:
 class TestRunScript:
     def test_records_the_script_s_command(self, repo: Path, monkeypatch):
         monkeypatch.setattr(run_manifest, "repository_root", lambda: repo)
-        code = run_script(repo / "run", lambda: 0, script=repo / "scripts" / "probe.py",
-                          argv=["--output", "x"])
+        code = run_script(
+            repo / "run", lambda: 0,
+            ScriptRun(script=repo / "scripts" / "probe.py", argv=["--output", "x"]),
+        )
         assert code == 0
         assert read(repo / "run")["commands"] == ["python scripts/probe.py --output x"]
 
     def test_no_run_directory_runs_the_body_bare(self, repo: Path):
-        assert run_script(None, lambda: 3, script="s.py", argv=[]) == 3
+        assert run_script(None, lambda: 3, ScriptRun(script="s.py", argv=[])) == 3
 
 
 class TestCommandLine:
@@ -482,7 +499,10 @@ class TestAnnotateRun:
             assert annotate_run(repo / "run", worker_failures={"match_error": 2})
             return 0
 
-        run_recorded(repo / "run", body, command="c", inputs=[], repo_root=repo, clock=Clock())
+        run_recorded(
+            repo / "run", body,
+            RunCommand("c", inputs=[], options=ManifestOptions(repo_root=repo, clock=Clock())),
+        )
 
         invocation = read(repo / "run")["invocations"][0]
         assert invocation["run_id"] == "u-1"
@@ -494,7 +514,10 @@ class TestAnnotateRun:
         for run_id in ("u-1", "u-2"):
             run_recorded(
                 repo / "run", lambda run_id=run_id: annotate_run(repo / "run", run_id=run_id) and 0,
-                command=f"c {run_id}", inputs=[], repo_root=repo, clock=Clock(),
+                RunCommand(
+                    f"c {run_id}", inputs=[],
+                    options=ManifestOptions(repo_root=repo, clock=Clock()),
+                ),
             )
 
         assert [entry["run_id"] for entry in read(repo / "run")["invocations"]] == ["u-1", "u-2"]
@@ -510,7 +533,10 @@ class TestAnnotateRun:
             assert annotate_run(other, run_id="u") is False
             return 0
 
-        run_recorded(repo / "run", body, command="c", inputs=[], repo_root=repo, clock=Clock())
+        run_recorded(
+            repo / "run", body,
+            RunCommand("c", inputs=[], options=ManifestOptions(repo_root=repo, clock=Clock())),
+        )
 
         assert not (other / MANIFEST_NAME).exists()
         assert "run_id" not in read(repo / "run")["invocations"][0]

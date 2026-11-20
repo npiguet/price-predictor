@@ -30,6 +30,7 @@ import subprocess
 import sys
 import threading
 from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -128,19 +129,59 @@ def _outcome(exit_code: int, error: BaseException | None, message: str | None) -
     return f"exit {exit_code}"
 
 
+@dataclass(frozen=True)
+class ManifestOptions:
+    """Where a :class:`RunManifest` finds what it records, each defaulting to
+    the running process's own: the ``repo_root`` checkout (else the one this
+    package runs from), its ``forge_dir`` sibling checkout, the ``cwd`` a
+    relative run directory is under, and the ``clock`` the timestamps read."""
+
+    repo_root: Path | None = None
+    forge_dir: Path | None = None
+    cwd: Path | None = None
+    clock: Callable[[], datetime] | None = None
+
+
+@dataclass(frozen=True)
+class RunCommand:
+    """One command's run, as :func:`run_recorded` records it: its ``command``
+    line and the ``inputs`` it reads (paths, ``None`` ones left out);
+    ``create`` false leaves a run directory that does not exist yet without a
+    manifest; ``reason``, a function called once the body has returned, gives
+    why a nonzero code was a refusal (the outcome carries it); ``options``
+    go to the :class:`RunManifest`."""
+
+    command: str
+    inputs: Iterable[PathLike | None] = ()
+    create: bool = True
+    reason: Callable[[], str | None] | None = None
+    options: ManifestOptions = field(default_factory=ManifestOptions)
+
+
+@dataclass(frozen=True)
+class ScriptRun:
+    """One script's run, as :func:`run_script` records it: the ``script`` path,
+    its ``argv`` (``sys.argv[1:]`` when None), the ``inputs`` it reads and
+    whether ``create`` makes the run directory."""
+
+    script: PathLike
+    argv: Sequence[str] | None = None
+    inputs: Iterable[PathLike | None] = ()
+    create: bool = True
+
+
 class RunManifest:
     """The ``run.json`` of one run directory, opened at a command's start and
     closed at its end. Neither call raises."""
 
     def __init__(
-        self, run_dir: PathLike, *, repo_root: Path | None = None,
-        forge_dir: Path | None = None, cwd: Path | None = None,
-        clock: Callable[[], datetime] | None = None,
+        self, run_dir: PathLike, options: ManifestOptions = ManifestOptions(),
     ) -> None:
+        repo_root, cwd = options.repo_root, options.cwd
         self._repo_root = Path(repo_root) if repo_root is not None else repository_root()
         self._cwd = Path(cwd) if cwd is not None else Path.cwd()
-        self._forge_dir = forge_dir
-        self._clock = clock or (lambda: datetime.now().astimezone())
+        self._forge_dir = options.forge_dir
+        self._clock = options.clock or (lambda: datetime.now().astimezone())
         run_dir = Path(run_dir)
         self.run_dir = run_dir if run_dir.is_absolute() else self._cwd / run_dir
         self.path = self.run_dir / MANIFEST_NAME
@@ -176,17 +217,22 @@ class RunManifest:
             if not ok and self._wrote_nothing():
                 self._remove()
                 return
-            document = self._read() or self._document
-            if document.get("status") in COMMAND_STATUSES or "status" not in document:
-                document["status"] = "finished" if ok else "failed"
-            document["ended"] = self._now()
-            document["outcome"] = _outcome(exit_code, error, message)
-            entry = self._entry(document)
-            if entry is not None:
-                entry["ended"], entry["outcome"] = document["ended"], document["outcome"]
-            self._write(document)
+            self._complete(ok, _outcome(exit_code, error, message))
         except Exception as failure:  # noqa: BLE001 — bookkeeping never stops a run
             logger.warning("%s not completed: %s", self._label(), failure)
+
+    def _complete(self, ok: bool, outcome: str) -> None:
+        """Write the end of the run into the manifest as it is on disk now."""
+        assert self._document is not None
+        document = self._read() or self._document
+        if document.get("status") in COMMAND_STATUSES or "status" not in document:
+            document["status"] = "finished" if ok else "failed"
+        document["ended"] = self._now()
+        document["outcome"] = outcome
+        entry = self._entry(document)
+        if entry is not None:
+            entry["ended"], entry["outcome"] = document["ended"], document["outcome"]
+        self._write(document)
 
     def annotate(self, **fields: Any) -> bool:
         """Add ``fields`` to this command's invocation entry; True when written.
@@ -241,44 +287,56 @@ class RunManifest:
         self.run_dir.mkdir(parents=True, exist_ok=True)
         listed = self._relative_all(inputs)
         if self.path.exists():
-            document = self._read()
+            document = self._extended(command, listed)
             if document is None:
-                logger.warning(
-                    "%s is unreadable; left as it is and not updated by this run",
-                    self._label(),
-                )
                 return None
-            commands = document.setdefault("commands", [])
-            invocations = document.setdefault("invocations", [])
-            # A manifest older than ``invocations``: one bare entry per command.
-            invocations.extend(
-                {"command": earlier} for earlier in commands[len(invocations):]
-            )
-            commands.append(command)
-            invocations.append(self._new_invocation(command, self._commits(), self._now()))
-            self._invocation = len(invocations) - 1
-            document["status"] = "running"
-            known = document.setdefault("inputs", [])
-            known.extend(path for path in listed if path not in known)
         else:
-            commits, started = self._commits(), self._now()
-            document = {
-                "run": self._relative(self.run_dir),
-                "purpose": None,
-                "status": "running",
-                "superseded_by": None,
-                "commands": [command],
-                "commits": commits,
-                "inputs": listed,
-                "continues": [],
-                "started": started,
-                "ended": None,
-                "outcome": None,
-                "invocations": [self._new_invocation(command, commits, started)],
-            }
-            self._invocation = 0
+            document = self._fresh(command, listed)
         self._write(document)
         return document
+
+    def _extended(self, command: str, listed: list[str]) -> dict[str, Any] | None:
+        """The manifest already there with this command added, or None when
+        it cannot be read."""
+        document = self._read()
+        if document is None:
+            logger.warning(
+                "%s is unreadable; left as it is and not updated by this run",
+                self._label(),
+            )
+            return None
+        commands = document.setdefault("commands", [])
+        invocations = document.setdefault("invocations", [])
+        # A manifest older than ``invocations``: one bare entry per command.
+        invocations.extend(
+            {"command": earlier} for earlier in commands[len(invocations):]
+        )
+        commands.append(command)
+        invocations.append(self._new_invocation(command, self._commits(), self._now()))
+        self._invocation = len(invocations) - 1
+        document["status"] = "running"
+        known = document.setdefault("inputs", [])
+        known.extend(path for path in listed if path not in known)
+        return document
+
+    def _fresh(self, command: str, listed: list[str]) -> dict[str, Any]:
+        """The manifest of a run directory that has none."""
+        commits, started = self._commits(), self._now()
+        self._invocation = 0
+        return {
+            "run": self._relative(self.run_dir),
+            "purpose": None,
+            "status": "running",
+            "superseded_by": None,
+            "commands": [command],
+            "commits": commits,
+            "inputs": listed,
+            "continues": [],
+            "started": started,
+            "ended": None,
+            "outcome": None,
+            "invocations": [self._new_invocation(command, commits, started)],
+        }
 
     def _wrote_nothing(self) -> bool:
         """Whether this run made the run directory and put nothing but the manifest in it."""
@@ -366,23 +424,21 @@ def annotate_run(run_dir: PathLike, **fields: Any) -> bool:
 
 
 def run_recorded(
-    run_dir: PathLike, body: Callable[[], int | None], *, command: str,
-    inputs: Iterable[PathLike | None] = (), create: bool = True, **manifest_options: Any,
+    run_dir: PathLike, body: Callable[[], int | None], recording: RunCommand,
 ) -> int | None:
     """Run ``body`` with ``run_dir``'s manifest open around it, closed on
     every way out — a return, an exception, ``sys.exit`` and Ctrl-C — and
     hand back whatever ``body`` returned or raised. While ``body`` runs,
     :func:`annotate_run` on ``run_dir`` writes into this command's entry.
-    The option ``reason``, a function called once ``body`` has returned,
-    gives why a nonzero code was a refusal; the outcome carries it. Any other
-    option goes to :class:`RunManifest`."""
-    reason = manifest_options.pop("reason", None)
-    manifest = RunManifest(run_dir, **manifest_options)
-    manifest.start(command=command, inputs=inputs, create=create)
+    ``recording`` says what the manifest records of the command."""
+    manifest = RunManifest(run_dir, recording.options)
+    manifest.start(
+        command=recording.command, inputs=recording.inputs, create=recording.create,
+    )
     with _active_lock:
         _active.append(manifest)
     try:
-        return _run_body(manifest, body, reason)
+        return _run_body(manifest, body, recording.reason)
     finally:
         with _active_lock:
             _active.remove(manifest)
@@ -398,17 +454,22 @@ def _run_body(
         manifest.finish(exit_code=INTERRUPTED_EXIT, error=interrupt)
         raise
     except SystemExit as exit_:
-        # Python exits 0 on None, the code on an int, and 1 printing anything else.
-        if exit_.code is None or isinstance(exit_.code, int):
-            manifest.finish(exit_code=exit_.code or 0)
-        else:
-            manifest.finish(exit_code=1, message=str(exit_.code))
+        _finish_exited(manifest, exit_)
         raise
     except BaseException as error:
         manifest.finish(exit_code=1, error=error)
         raise
     _finish_returned(manifest, code, reason)
     return code
+
+
+def _finish_exited(manifest: RunManifest, exit_: SystemExit) -> None:
+    """Close the run ``body`` left by ``sys.exit``."""
+    # Python exits 0 on None, the code on an int, and 1 printing anything else.
+    if exit_.code is None or isinstance(exit_.code, int):
+        manifest.finish(exit_code=exit_.code or 0)
+    else:
+        manifest.finish(exit_code=1, message=str(exit_.code))
 
 
 def _finish_returned(
@@ -419,15 +480,17 @@ def _finish_returned(
 
 
 def run_script(
-    run_dir: PathLike | None, body: Callable[[], int | None], *, script: PathLike,
-    argv: Sequence[str] | None = None, inputs: Iterable[PathLike | None] = (),
-    create: bool = True,
+    run_dir: PathLike | None, body: Callable[[], int | None], script: ScriptRun,
 ) -> int | None:
     """:func:`run_recorded` for a script run by path (``python scripts/….py``):
-    ``argv`` its arguments (``sys.argv[1:]`` when None); a ``run_dir`` of
-    None, an invocation writing nothing, runs ``body`` bare."""
+    ``script`` names it and its arguments; a ``run_dir`` of None, an
+    invocation writing nothing, runs ``body`` bare."""
     if run_dir is None:
         return body()
     return run_recorded(
-        run_dir, body, command=command_line(argv, script=script), inputs=inputs, create=create,
+        run_dir, body,
+        RunCommand(
+            command_line(script.argv, script=script.script),
+            inputs=script.inputs, create=script.create,
+        ),
     )

@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from price_predictor.domain.worker_status import WorkerEngineRefused
-from price_predictor.infrastructure.run_manifest import run_recorded
+from price_predictor.infrastructure.run_manifest import RunCommand, run_recorded
 from sealed.application.match_outcomes import MatchOutcomeSupervisor, MatchRunOptions
 from tests.unit.sealed.conftest import FakeProcess
 from tests.unit.worker_status_line import PINNED_PREFERENCES, status_line
@@ -93,7 +93,7 @@ def test_the_refused_run_still_records_its_totals_and_engine(tmp_path):
         return 0
 
     with pytest.raises(WorkerEngineRefused):
-        run_recorded(tmp_path / "records", body, command="python -m sealed match-outcomes")
+        run_recorded(tmp_path / "records", body, RunCommand("python -m sealed match-outcomes"))
 
     entry = _entry(tmp_path)
     assert entry["worker_engine"] == {
@@ -107,7 +107,7 @@ def test_allow_degraded_lets_it_run_and_run_json_records_the_engine(tmp_path, ca
         _run(tmp_path, line, allow_degraded=True)
         return 0
 
-    run_recorded(tmp_path / "records", body, command="python -m sealed match-outcomes")
+    run_recorded(tmp_path / "records", body, RunCommand("python -m sealed match-outcomes"))
 
     assert _entry(tmp_path)["worker_engine"]["gaps"] == list(
         json.loads(line.partition(": status: ")[2])["hooks"]["gaps"])

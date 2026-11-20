@@ -196,13 +196,13 @@ def main(argv: list[str] | None = None) -> int:
     if refusal is not None:
         print(refusal, file=sys.stderr)
         return 2
-    from price_predictor.infrastructure.run_manifest import run_script
+    from price_predictor.infrastructure.run_manifest import ScriptRun, run_script
 
     # Every step's command writes into this directory too and appends itself
     # to the same manifest: the arm is one run.
     return run_script(
-        run_dir, lambda: _run(args, train_args, argv), script=__file__, argv=argv,
-        inputs=[args.corpus, args.probe_set_dir],
+        run_dir, lambda: _run(args, train_args, argv),
+        ScriptRun(script=__file__, argv=argv, inputs=[args.corpus, args.probe_set_dir]),
     )
 
 

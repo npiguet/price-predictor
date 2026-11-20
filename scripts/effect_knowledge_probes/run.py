@@ -57,7 +57,7 @@ from effect_knowledge_probes.freeze_run import freeze_selection  # noqa: E402
 from effect_knowledge_probes.probe_stages import HALF_CHOICES  # noqa: E402
 from effect_knowledge_probes.probing import probe  # noqa: E402
 from effect_knowledge_probes.tables import write_tables  # noqa: E402
-from price_predictor.infrastructure.run_manifest import run_script  # noqa: E402
+from price_predictor.infrastructure.run_manifest import ScriptRun, run_script  # noqa: E402
 
 #: Training shards read for the observed-outcome line labels.
 PROFILE_SHARDS = 4
@@ -165,17 +165,23 @@ def main(argv: list[str] | None = None) -> int:
         # Its output is the selection set, in the probe-set directory.
         return run_script(
             args.probe_set_dir or args.reports_dir, lambda: freeze_selection(args),
-            script=__file__, argv=argv, inputs=[args.corpus, *(args.cards_folder or ())],
+            ScriptRun(
+                script=__file__, argv=argv,
+                inputs=[args.corpus, *(args.cards_folder or ())],
+            ),
         )
     # The report directory is named for today, as the scorecard is dated.
     today = datetime.now(UTC).strftime("%Y-%m-%d")
     return run_script(
         output_dir(args, today), lambda: _probe_run(args),
-        script=__file__, argv=argv,
-        inputs=[
-            args.checkpoint, args.corpus, *(args.cards_folder or ()), args.abilities_root,
-            args.vocab_path, args.keyword_definitions, args.probe_set_dir or args.reports_dir,
-        ],
+        ScriptRun(
+            script=__file__, argv=argv,
+            inputs=[
+                args.checkpoint, args.corpus, *(args.cards_folder or ()), args.abilities_root,
+                args.vocab_path, args.keyword_definitions,
+                args.probe_set_dir or args.reports_dir,
+            ],
+        ),
     )
 
 

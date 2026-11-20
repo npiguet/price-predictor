@@ -77,7 +77,7 @@ def test_without_a_scan_every_spawn_keeps_the_starting_probabilities(tmp_path):
 
 
 def test_the_run_json_keeps_the_starting_and_the_final_probabilities(tmp_path):
-    from price_predictor.infrastructure.run_manifest import run_recorded
+    from price_predictor.infrastructure.run_manifest import RunCommand, run_recorded
 
     records = tmp_path / "records"
 
@@ -87,7 +87,7 @@ def test_the_run_json_keeps_the_starting_and_the_final_probabilities(tmp_path):
         supervisor.run()
         return 0
 
-    run_recorded(records, body, command="python -m sealed match-outcomes")
+    run_recorded(records, body, RunCommand("python -m sealed match-outcomes"))
 
     entry = json.loads((records / "run.json").read_text(encoding="utf-8"))["invocations"][0]
     assert entry["caps"]["directed_rule_probabilities"] == {"118.12b": 1.0, "704.5f": 0.0}
@@ -95,7 +95,7 @@ def test_the_run_json_keeps_the_starting_and_the_final_probabilities(tmp_path):
 
 
 def test_a_run_given_no_counts_keeps_its_caps_probabilities_to_the_end(tmp_path):
-    from price_predictor.infrastructure.run_manifest import run_recorded
+    from price_predictor.infrastructure.run_manifest import RunCommand, run_recorded
 
     records = tmp_path / "records"
     caps = _effect_collection_caps(argparse.Namespace(
@@ -113,7 +113,7 @@ def test_a_run_given_no_counts_keeps_its_caps_probabilities_to_the_end(tmp_path)
         supervisor.run()
         return 0
 
-    run_recorded(records, body, command="python -m sealed match-outcomes")
+    run_recorded(records, body, RunCommand("python -m sealed match-outcomes"))
 
     entry = json.loads((records / "run.json").read_text(encoding="utf-8"))["invocations"][0]
     assert entry["final_directed_rule_probabilities"] == {"118.12b": 0.5}

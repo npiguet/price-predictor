@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from price_predictor.infrastructure.run_manifest import command_line, run_recorded
+from price_predictor.infrastructure.run_manifest import RunCommand, command_line, run_recorded
 
 logger = logging.getLogger(__name__)
 
@@ -93,12 +93,16 @@ def _paths(value: Any) -> Iterator[Path]:
     if value is None:
         return
     if isinstance(value, (str, os.PathLike)):
-        if str(value):
-            yield Path(value)
-        return
-    if isinstance(value, Iterable):
+        yield from _named_path(value)
+    elif isinstance(value, Iterable):
         for item in value:
             yield from _paths(item)
+
+
+def _named_path(value: str | os.PathLike[str]) -> Iterator[Path]:
+    """The path ``value`` names, none when it is the empty string."""
+    if str(value):
+        yield Path(value)
 
 
 def labelled_paths(specs: Iterable[str] | None) -> list[Path]:
@@ -113,21 +117,36 @@ def _subparser_actions(parser: argparse.ArgumentParser) -> list[argparse._SubPar
     ]
 
 
+def _distinct_choices(
+    action: argparse._SubParsersAction,
+) -> Iterator[tuple[str, argparse.ArgumentParser]]:
+    """``action``'s subparsers by name, an alias of one already named left out."""
+    seen: set[int] = set()
+    for name, child in action.choices.items():
+        if id(child) in seen:  # an alias names a parser already walked
+            continue
+        seen.add(id(child))
+        yield name, child
+
+
 def _leaves(
     parser: argparse.ArgumentParser, path: tuple[str, ...] = (),
 ) -> Iterator[tuple[str, argparse.ArgumentParser]]:
     actions = _subparser_actions(parser)
     if not actions:
-        if path:
-            yield " ".join(path), parser
+        yield from _leaf(parser, path)
         return
     for action in actions:
-        seen: set[int] = set()
-        for name, child in action.choices.items():
-            if id(child) in seen:  # an alias names a parser already walked
-                continue
-            seen.add(id(child))
+        for name, child in _distinct_choices(action):
             yield from _leaves(child, (*path, name))
+
+
+def _leaf(
+    parser: argparse.ArgumentParser, path: tuple[str, ...],
+) -> Iterator[tuple[str, argparse.ArgumentParser]]:
+    """``parser`` named by its ``path``, none for the root parser."""
+    if path:
+        yield " ".join(path), parser
 
 
 def subcommand_names(parser: argparse.ArgumentParser) -> list[str]:
@@ -166,8 +185,10 @@ def dispatch(
         return args.func(args)
     return run_recorded(
         run_dir, lambda: args.func(args),
-        command=command_line(sys.argv[1:] if argv is None else argv, module=module),
-        inputs=inputs,
-        create=entry.create(args) if callable(entry.create) else entry.create,
-        reason=lambda: getattr(args, REFUSAL_DEST, None),
+        RunCommand(
+            command_line(sys.argv[1:] if argv is None else argv, module=module),
+            inputs=inputs,
+            create=entry.create(args) if callable(entry.create) else entry.create,
+            reason=lambda: getattr(args, REFUSAL_DEST, None),
+        ),
     )

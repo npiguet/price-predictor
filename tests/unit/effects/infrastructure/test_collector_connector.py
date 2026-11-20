@@ -344,7 +344,7 @@ class TestTheRoundReportsItsWorkerLogs:
         the running command's entry of ``run.json``."""
         import json
 
-        from price_predictor.infrastructure.run_manifest import run_recorded
+        from price_predictor.infrastructure.run_manifest import RunCommand, run_recorded
 
         def body():
             supervisor = self._round_logging(tmp_path, {
@@ -353,7 +353,7 @@ class TestTheRoundReportsItsWorkerLogs:
             supervisor.stop()
             return 0
 
-        run_recorded(tmp_path, body, command="python -m effects collect-coverage")
+        run_recorded(tmp_path, body, RunCommand("python -m effects collect-coverage"))
 
         entry = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))["invocations"][0]
         assert entry["run_id"] == "run"
@@ -392,7 +392,7 @@ class TestTheRoundReportsItsWorkerLogs:
         import json
         import logging
 
-        from price_predictor.infrastructure.run_manifest import run_recorded
+        from price_predictor.infrastructure.run_manifest import RunCommand, run_recorded
 
         found = {}
 
@@ -406,7 +406,7 @@ class TestTheRoundReportsItsWorkerLogs:
                 })
             return 0
 
-        run_recorded(tmp_path, body, command="python -m effects collect-coverage")
+        run_recorded(tmp_path, body, RunCommand("python -m effects collect-coverage"))
 
         entry = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))["invocations"][0]
         assert entry["fork_refusals"] == {"directed dies": 2, "probe no combat": 5}
@@ -453,7 +453,7 @@ class TestTheWorkersStopAtAGameEnd:
         import json
 
         from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
-        from price_predictor.infrastructure.run_manifest import run_recorded
+        from price_predictor.infrastructure.run_manifest import RunCommand, run_recorded
 
         def body():
             supervisor = _supervisor(tmp_path)
@@ -468,7 +468,7 @@ class TestTheWorkersStopAtAGameEnd:
             supervisor.count_cut_games(0)
             return 0
 
-        run_recorded(tmp_path, body, command="python -m effects collect-coverage")
+        run_recorded(tmp_path, body, RunCommand("python -m effects collect-coverage"))
 
         entry = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))["invocations"][0]
         assert entry["cut_games"] == {"before_rounds": 4, "by_round": [1, 0], "total": 5}
@@ -623,13 +623,13 @@ class TestTheSupervisorRecordsWhatItIsTold:
     def test_record_writes_into_the_running_command_s_entry(self, tmp_path):
         import json
 
-        from price_predictor.infrastructure.run_manifest import run_recorded
+        from price_predictor.infrastructure.run_manifest import RunCommand, run_recorded
 
         def body():
             _supervisor(tmp_path).record(unresolved_cards=3, unresolved_share=0.25)
             return 0
 
-        run_recorded(tmp_path, body, command="python -m effects collect-coverage")
+        run_recorded(tmp_path, body, RunCommand("python -m effects collect-coverage"))
 
         entry = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))["invocations"][0]
         assert (entry["unresolved_cards"], entry["unresolved_share"]) == (3, 0.25)

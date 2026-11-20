@@ -32,7 +32,7 @@ from _lib.markdown import md_table, utf8_console  # noqa: E402
 
 from effect_knowledge_probes.common import fmt  # noqa: E402
 from effect_knowledge_probes.scorecard import Scorecard  # noqa: E402
-from price_predictor.infrastructure.run_manifest import run_script  # noqa: E402
+from price_predictor.infrastructure.run_manifest import ScriptRun, run_script  # noqa: E402
 
 PROBE_MODELS = ("linear", "mlp")
 #: The score each target kind is read by, which names its ranking.
@@ -174,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     return run_script(
         args.output.parent if args.output else None, lambda: _run(args),
-        script=__file__, argv=argv, inputs=args.scorecards,
+        ScriptRun(script=__file__, argv=argv, inputs=args.scorecards),
     )
 
 

@@ -247,15 +247,18 @@ def main_with_manifest(main: Callable[[], object], script: str) -> None:
     each script run as one more command. The common flags are read here once
     more, ahead of ``main``, for the directory; ``--help`` runs bare.
     """
-    from price_predictor.infrastructure.run_manifest import run_script
+    from price_predictor.infrastructure.run_manifest import ScriptRun, run_script
 
     if {"-h", "--help"} & set(sys.argv[1:]):
         main()
         return
     args, _ = add_probe_arguments(argparse.ArgumentParser(add_help=False)).parse_known_args()
     raise SystemExit(run_script(
-        report_dir(args.checkpoint, args.reports_dir, output=args.output), main, script=script,
-        inputs=[args.checkpoint, args.abilities_root, *(args.cards_folders or ())],
+        report_dir(args.checkpoint, args.reports_dir, output=args.output), main,
+        ScriptRun(
+            script=script,
+            inputs=[args.checkpoint, args.abilities_root, *(args.cards_folders or ())],
+        ),
     ))
 
 

@@ -394,7 +394,7 @@ class TestARoundEndsInItsReport:
         report and the run's manifest name the cut game."""
         import json
 
-        from price_predictor.infrastructure.run_manifest import run_recorded
+        from price_predictor.infrastructure.run_manifest import RunCommand, run_recorded
 
         def pool_run(pool):
             # Kept by build-corpus's refusal rule only when its line converts.
@@ -406,7 +406,7 @@ class TestARoundEndsInItsReport:
 
         code = run_recorded(
             tmp_path / "records", lambda: self._run(tmp_path, caplog, pool_run),
-            command="python -m effects collect-coverage",
+            RunCommand("python -m effects collect-coverage"),
         )
 
         entry = json.loads(

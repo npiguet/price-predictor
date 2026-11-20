@@ -436,13 +436,13 @@ class TestTheRunReportsWhatItsWorkersLogged:
     def test_the_run_s_stops_and_matches_reach_its_manifest(self, tmp_path):
         import json
 
-        from price_predictor.infrastructure.run_manifest import run_recorded
+        from price_predictor.infrastructure.run_manifest import RunCommand, run_recorded
 
         def body():
             self._run(tmp_path, matches=1, record_lines=2, random_seat_matches=2)
             return 0
 
-        run_recorded(tmp_path / "records", body, command="python -m sealed match-outcomes")
+        run_recorded(tmp_path / "records", body, RunCommand("python -m sealed match-outcomes"))
 
         entry = json.loads(
             (tmp_path / "records" / "run.json").read_text(encoding="utf-8"))["invocations"][0]
@@ -462,7 +462,7 @@ class TestTheRunReportsWhatItsWorkersLogged:
         the run's verdict alone."""
         import json
 
-        from price_predictor.infrastructure.run_manifest import run_recorded
+        from price_predictor.infrastructure.run_manifest import RunCommand, run_recorded
 
         found = {}
 
@@ -474,7 +474,7 @@ class TestTheRunReportsWhatItsWorkersLogged:
             ])
             return 0
 
-        run_recorded(tmp_path / "records", body, command="python -m sealed match-outcomes")
+        run_recorded(tmp_path / "records", body, RunCommand("python -m sealed match-outcomes"))
 
         supervisor = found["supervisor"]
         assert not supervisor.worker_failures
@@ -552,7 +552,7 @@ class TestTheRunKeepsItsResolvedCapsFromTheStart:
         import argparse
         import json
 
-        from price_predictor.infrastructure.run_manifest import run_recorded
+        from price_predictor.infrastructure.run_manifest import RunCommand, run_recorded
         from sealed.infrastructure.cli import _effect_collection_caps
 
         records = tmp_path / "records"
@@ -578,7 +578,7 @@ class TestTheRunKeepsItsResolvedCapsFromTheStart:
             supervisor.run()
             return 0
 
-        run_recorded(records, body, command="python -m sealed match-outcomes")
+        run_recorded(records, body, RunCommand("python -m sealed match-outcomes"))
 
         entry = seen["run"]["invocations"][0]
         assert entry["caps"]["playability_rate"] == 0.5, "the resolved rate, under its field name"

@@ -27,7 +27,7 @@ from effects.domain.rule_breadth import flagged_rows
 from effects.domain.shard_generation import UnacceptedGenerationError
 from effects.infrastructure.cli import exits_with
 from effects.infrastructure.converted_trees import SourceTrees
-from price_predictor.infrastructure.run_manifest import run_script
+from price_predictor.infrastructure.run_manifest import ScriptRun, run_script
 
 #: The refusals ``rule-counts`` exits 1 on: no shards, a set that is not gen-3,
 #: a damaged shard or a line that does not decode.
@@ -62,8 +62,11 @@ def main(argv: list[str] | None = None) -> int:
     cards_folders = args.cards_folders or DEFAULT_CARDS_FOLDER_PATHS
     run = exits_with(_REFUSED)(lambda parsed: _run(parsed, cards_folders))
     return run_script(
-        args.output.parent, lambda: run(args), script=__file__, argv=argv,
-        inputs=[args.records_dir, args.rules_dir, *cards_folders, args.variant_scripts],
+        args.output.parent, lambda: run(args),
+        ScriptRun(
+            script=__file__, argv=argv,
+            inputs=[args.records_dir, args.rules_dir, *cards_folders, args.variant_scripts],
+        ),
     )
 
 

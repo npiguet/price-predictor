@@ -46,7 +46,7 @@ from effects.domain.records import TurnActionSubkind
 from effects.infrastructure.record_codec import record_from_dict
 from effects.infrastructure.shard_io import ended_games, iter_shard_lines, iter_shards
 from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
-from price_predictor.infrastructure.run_manifest import run_recorded
+from price_predictor.infrastructure.run_manifest import RunCommand, run_recorded
 from price_predictor.infrastructure.worker_stops import STOPPED_LINE, WorkerStopSettings
 from sealed.application.match_outcomes import MatchOutcomeSupervisor, MatchRunOptions
 from sealed.infrastructure.cli import _effect_collection_caps, build_parser
@@ -120,7 +120,8 @@ def recycled_run(tmp_path_factory):
     watcher.start()
     try:
         code = run_recorded(
-            run_dir, lambda: (supervisor.run(), 0)[1], command="sealed match-outcomes (test)",
+            run_dir, lambda: (supervisor.run(), 0)[1],
+            RunCommand("sealed match-outcomes (test)"),
         )
     finally:
         for sig, handler in handlers.items():
