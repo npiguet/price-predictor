@@ -27,7 +27,7 @@ from price_predictor.infrastructure.run_manifest import annotate_run
 from price_predictor.infrastructure.worker_log_files import WorkerLogFiles
 from price_predictor.infrastructure.worker_log_scan import WorkerLogReport
 from price_predictor.infrastructure.worker_stops import WorkerStops, WorkerStopSettings
-from sealed.infrastructure.effect_collection_flags import dropped_events_report
+from sealed.infrastructure.dropped_events import dropped_events_report
 from sealed.infrastructure.match_worker_connector import (
     MatchWorkerConnector,
     WorkerDecks,

@@ -34,7 +34,7 @@ None of these loads by itself. Read a topic file in full when its condition is m
 
 ## Rules for any work in the package
 
-- `sealed` never imports `effects`. The two places they meet are plain data: the `--exclude-cards` name list that `python -m effects holdout-cards` writes, and the collection flags, which are defined here in `infrastructure/effect_collection_flags.py` and imported by `effects`.
+- `sealed` never imports `effects`. The two places they meet are plain data: the `--exclude-cards` name list that `python -m effects holdout-cards` writes, and the collection caps, whose values, defaults and property names are defined once in `domain/collection_caps.py` (`CollectionCaps`) and whose flags are in `infrastructure/effect_collection_flags.py`, both imported by `effects`.
 - The composition engine in `application/analyze_generated_decks.py` is reused by `draft analyze-generated-decks`.
 - Every subcommand that writes files keeps a `run.json` run manifest in its run directory (`.claude/skills/artifact-layout/SKILL.md`), declared in `RUN_MANIFESTS` in `infrastructure/cli.py`: `match-outcomes` records in `--effect-records` when given, else in `--outcomes-dir`, and `encode-cards` in its `--embeddings-path` directory, else in the `--cards-path` tree it writes beside.
 - Paths follow the `artifact-layout` skill: every input and output path is a required flag, and no flag defaults to a location under `output/` or `models/`. A resumable trainer (`train-scorer`, `train-picker`) inherits the paths it needs from its `--resume` checkpoint, and refuses a fresh run without them (exit 2, naming the flags). `encode-cards` takes exactly one of `--encoder-checkpoint` and `--scorer-checkpoint`; `match-outcomes` takes `--outcomes-dir` or `--effect-records`.

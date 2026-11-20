@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from effects.domain.collection_caps import CollectionCaps
 from effects.infrastructure.collector_connector import caps_document
-from sealed.infrastructure.effect_collection_flags import caps_manifest
+from sealed.domain.collection_caps import caps_manifest
 
 
 def test_the_properties_of_a_cap_set_read_back_as_the_collectors_document():

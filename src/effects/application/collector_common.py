@@ -8,7 +8,6 @@ everything here is the plumbing beneath both, so neither imports the other.
 
 from __future__ import annotations
 
-import argparse
 import random
 import uuid
 from collections.abc import Iterator, Mapping
@@ -33,6 +32,7 @@ from price_predictor.infrastructure.worker_stops import (
     stop_timeout,
 )
 from sealed.domain.manabase import compute_basic_lands
+from sealed.infrastructure.effect_collection_flags import positive_int
 
 if TYPE_CHECKING:
     from effects.domain.coverage import DeckCandidate
@@ -43,24 +43,6 @@ if TYPE_CHECKING:
 #: ``forge_worker_pool.MAX_WORKERS``, which its shard counters also run.
 DEFAULT_WORKERS = 12
 DEFAULT_DECKS_PER_ROUND = 500
-
-
-def positive_int(text: str) -> int:
-    """A count of at least 1: a round of no decks, a target of no records or
-    no rounds before retiring is no run (V4 #9)."""
-    value = int(text)
-    if value < 1:
-        raise argparse.ArgumentTypeError(f"must be at least 1, got {value}")
-    return value
-
-
-def non_negative_int(text: str) -> int:
-    """A count of at least 0."""
-    value = int(text)
-    if value < 0:
-        raise argparse.ArgumentTypeError(f"must be at least 0, got {value}")
-    return value
-
 
 
 #: Seeds both collectors' deck draws, and the variant collector's perturbations.

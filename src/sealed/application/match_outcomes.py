@@ -21,13 +21,13 @@ from price_predictor.infrastructure.run_manifest import annotate_run
 from price_predictor.infrastructure.worker_log_files import WorkerLogFiles
 from price_predictor.infrastructure.worker_log_scan import WorkerLogReport
 from price_predictor.infrastructure.worker_stops import WorkerStopSettings
-from sealed.domain.directed_fork_needs import DirectedForkNeeds
-from sealed.infrastructure.effect_collection_flags import (
+from sealed.domain.collection_caps import (
     COUNT_DROPPED_EVENTS_PROPERTY,
     caps_manifest,
     directed_rule_probability_properties,
-    dropped_events_report,
 )
+from sealed.domain.directed_fork_needs import DirectedForkNeeds
+from sealed.infrastructure.dropped_events import dropped_events_report
 from sealed.infrastructure.match_worker_connector import (
     MatchWorkerConnector,
     WorkerDecks,

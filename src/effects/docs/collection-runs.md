@@ -2,7 +2,7 @@
 
 Rules to respect when running, babysitting or changing `collect-coverage`, `collect-variants`, `validate-corpus`, `field-coverage` or a `sealed match-outcomes --effect-records` run, and when changing how workers are recycled, stopped or killed. This file does not describe the commands:
 
-- Flags and defaults: each command's `--help`; the shared collection flags are defined in `sealed/infrastructure/effect_collection_flags.py`.
+- Flags and defaults: each command's `--help`; the shared collection flags are defined in `sealed/infrastructure/effect_collection_flags.py`, the caps they set in `sealed/domain/collection_caps.py`.
 - The variant rounds: `specs/2026-10-30-ability-effect-model-gen3.md` § 8.15, `domain/variant_rounds.py`, `application/steered_variants.py`.
 - The stop protocol: `specs/025-ability-effect-model-gen3/contracts/cli.md` § Match worker stop protocol, and Java `WorkerStop`. The pool: `ForgeWorkerPool` in `price_predictor/infrastructure/forge_worker_pool.py`.
 - What a user launching a collection must know: `specs/025-ability-effect-model-gen3/quickstart.md` Stage 5.
@@ -127,7 +127,7 @@ Rules to respect when running, babysitting or changing `collect-coverage`, `coll
 - The share of resolution events naming a clause counts every event, since the writer stamps each event of a resolution record; an unstamped one is a regression. On fork records the share also reads a trigger's firing event and a rewrite's `incoming` and `outgoing`, which are the event as it arrived and name no clause.
 - The copy-key finding counts each copy once by `(game_id, entity id)`, however many records show it. A copy keeping keys of the copied card's file and naming exactly one other file is accepted: a copy effect adding a keyword (Omni-Changeling's `AddKeywords$ Changeling`) keys it into the file of the card holding the effect.
 - A kind's share of exact duplicates is judged only over kinds holding `--min-duplicate-kind-records` records; every kind is listed.
-- A dropped-events line counts only when newline-terminated (`sum_dropped_events`): the writer appends a game's lines in one write a kill can cut inside a count.
+- A dropped-events line counts only when newline-terminated (`sum_dropped_events` in `sealed/infrastructure/dropped_events.py`): the writer appends a game's lines in one write a kill can cut inside a count.
 - A shard's records are all gen-3. A shard whose first record is not fails `validate-corpus` and `field-coverage` before any line is read (`require_generation`, as in every reader); an older or unknown record further in fails at its shard and line.
 - A shard line that does not decode fails "every shard line decodes", naming the shard and line; the other shards are read on.
 - `--variant-scripts` names the variant tree for the key joins. A keyword key in a tree the run was not given fails the keyword-join check as unchecked.

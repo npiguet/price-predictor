@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 
+from sealed.domain.collection_caps import DEFAULT_PROBE_KEYWORDS as EFFECT_PROBE_KEYWORDS
 from sealed.infrastructure.cli import (
     _effect_collection_caps,
     build_parser,
@@ -17,7 +18,6 @@ from sealed.infrastructure.cli import (
     run_match_outcomes,
 )
 from sealed.infrastructure.effect_collection_flags import (
-    EFFECT_PROBE_KEYWORDS,
     announce_probe_state,
     candidate_rate_error,
 )
@@ -286,7 +286,7 @@ class TestDirectedForkFlags:
 
     def test_an_unregistered_rule_exits_1_naming_it(self, monkeypatch, capsys):
         """704.5f passes the catalogue's checks; the JVM, stubbed, lists none."""
-        import sealed.infrastructure.effect_collection_flags as flags
+        import sealed.infrastructure.directed_fork_check as flags
 
         monkeypatch.setattr(flags, "registered_directed_rules", lambda: frozenset())
         err = self._refused(monkeypatch, capsys, "--directed-fork-rules", "704.5f")

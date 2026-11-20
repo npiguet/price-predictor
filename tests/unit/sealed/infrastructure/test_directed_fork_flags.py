@@ -17,8 +17,8 @@ from pathlib import Path
 
 import pytest
 
-import sealed.infrastructure.effect_collection_flags as flags
-from sealed.infrastructure.effect_collection_flags import (
+import sealed.infrastructure.directed_fork_check as flags
+from sealed.infrastructure.directed_fork_check import (
     UNTAGGABLE_SCENARIOS,
     directed_fork_error,
     rule_readiness,

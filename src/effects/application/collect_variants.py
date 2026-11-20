@@ -33,8 +33,6 @@ from effects.application.collector_common import (
     CollectorConfig,
     build_coverage_decks,
     collector_supervisor,
-    non_negative_int,
-    positive_int,
     record_damaged_shards,
 )
 from effects.application.directed_steering import DirectedSteering
@@ -77,7 +75,8 @@ from effects.domain.variant_rounds import (
 from effects.infrastructure.one_shot_workers import write_variant_sidecars
 from effects.infrastructure.variant_staging import claim_staging, unstage_variants
 from price_predictor.infrastructure.card_filenames import sanitize_card_name
-from sealed.infrastructure.effect_collection_flags import directed_fork_error
+from sealed.infrastructure.directed_fork_check import directed_fork_error
+from sealed.infrastructure.effect_collection_flags import non_negative_int, positive_int
 
 if TYPE_CHECKING:
     from effects.infrastructure.collector_connector import CollectorSupervisor

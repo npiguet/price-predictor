@@ -20,37 +20,20 @@ import pytest
 from effects.domain.collection_caps import (
     DEFAULT_DIRECTED_FORK_PROBABILITY,
     DEFAULT_DIRECTED_FORKS_PER_GAME,
-    DEFAULT_INTERVENTIONS_PER_GAME,
-    DEFAULT_MANA_CAP,
     DEFAULT_MAX_RECORDS_PER_GAME,
     DEFAULT_PLAIN_CANDIDATE_RATE,
     DEFAULT_PLAYABILITY_RATE,
     DEFAULT_PROBE_KEYWORDS,
     DEFAULT_PROBES_PER_GAME,
     DEFAULT_RANDOM_SEAT_PROBABILITY,
-    DEFAULT_RANDOM_SEAT_SHARE,
     DEFAULT_ZONE_CANDIDATE_RATE,
     DIRECTED_RULE_PROBABILITY_PREFIX,
     CollectionCaps,
 )
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME
 from sealed.infrastructure.cli import _effect_collection_caps
+from sealed.infrastructure.dropped_events import DROPPED_EVENTS_SUFFIX
 from sealed.infrastructure.effect_collection_flags import (
-    DROPPED_EVENTS_SUFFIX,
-    EFFECT_COUNT_DROPPED_EVENTS,
-    EFFECT_DIRECTED_FORK_PROBABILITY,
-    EFFECT_DIRECTED_FORK_RULES,
-    EFFECT_DIRECTED_FORKS_PER_GAME,
-    EFFECT_INTERVENTIONS_PER_GAME,
-    EFFECT_MANA_CAP,
-    EFFECT_MAX_RECORDS_PER_GAME,
-    EFFECT_PLAIN_CANDIDATE_RATE,
-    EFFECT_PLAYABILITY_RATE,
-    EFFECT_PROBE_KEYWORDS,
-    EFFECT_PROBES_PER_GAME,
-    EFFECT_RANDOM_SEAT_PROBABILITY,
-    EFFECT_RANDOM_SEAT_SHARE,
-    EFFECT_ZONE_CANDIDATE_RATE,
     add_cap_flags,
     announce_probe_state,
 )
@@ -100,22 +83,6 @@ def test_the_contract_defaults_not_pinned_beside_their_own_rule():
 class TestTheTwoSidesAgree:
     """A default that drifts between the two commands makes two corpora that
     mean different things and nothing says which is which."""
-
-    def test_the_defaults_match(self):
-        assert EFFECT_MANA_CAP == DEFAULT_MANA_CAP
-        assert EFFECT_PLAYABILITY_RATE == DEFAULT_PLAYABILITY_RATE
-        assert EFFECT_ZONE_CANDIDATE_RATE == DEFAULT_ZONE_CANDIDATE_RATE
-        assert EFFECT_PLAIN_CANDIDATE_RATE == DEFAULT_PLAIN_CANDIDATE_RATE
-        assert EFFECT_INTERVENTIONS_PER_GAME == DEFAULT_INTERVENTIONS_PER_GAME
-        assert EFFECT_PROBES_PER_GAME == DEFAULT_PROBES_PER_GAME
-        assert EFFECT_PROBE_KEYWORDS == CollectionCaps().probe_keywords
-        assert EFFECT_RANDOM_SEAT_SHARE == DEFAULT_RANDOM_SEAT_SHARE
-        assert EFFECT_RANDOM_SEAT_PROBABILITY == DEFAULT_RANDOM_SEAT_PROBABILITY
-        assert EFFECT_COUNT_DROPPED_EVENTS == CollectionCaps().count_dropped_events
-        assert EFFECT_DIRECTED_FORK_RULES == CollectionCaps().directed_fork_rules
-        assert EFFECT_DIRECTED_FORKS_PER_GAME == DEFAULT_DIRECTED_FORKS_PER_GAME
-        assert EFFECT_DIRECTED_FORK_PROBABILITY == DEFAULT_DIRECTED_FORK_PROBABILITY
-        assert EFFECT_MAX_RECORDS_PER_GAME == DEFAULT_MAX_RECORDS_PER_GAME
 
     def test_the_property_names_match(self):
         """Both sides must spell the -D properties the worker reads identically."""

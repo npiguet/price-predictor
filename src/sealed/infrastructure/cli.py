@@ -21,6 +21,13 @@ from price_predictor.infrastructure.worker_stops import add_worker_stop_flags
 from sealed.application.encode_cards import EncodeCardsConfig
 from sealed.application.evaluate_scorer import EvaluateScorerConfig
 from sealed.application.train_scorer import TrainScorerConfig
+from sealed.domain.collection_caps import (
+    DEFAULT_DIRECTED_FORK_PROBABILITY,
+    DEFAULT_PROBE_KEYWORDS,
+    DEFAULT_PROBES_PER_GAME,
+    DEFAULT_RANDOM_SEAT_SHARE,
+    CollectionCaps,
+)
 from sealed.domain.greedy_deck_builder import COLOR_PAIRS_STRATEGY
 from sealed.infrastructure.cli_resume import (
     resolve_resumable_args,
@@ -30,33 +37,18 @@ from sealed.infrastructure.collection_conversion import (
     cards_folder_error,
     check_conversion,
 )
+from sealed.infrastructure.directed_fork_check import directed_fork_error
 from sealed.infrastructure.directed_fork_probabilities_file import (
     add_directed_fork_probabilities_flag,
     read_directed_fork_needs,
 )
 from sealed.infrastructure.effect_collection_flags import (
-    COUNT_DROPPED_EVENTS_PROPERTY,
-    EFFECT_COUNT_DROPPED_EVENTS,
-    EFFECT_DIRECTED_FORK_PROBABILITY,
-    EFFECT_DIRECTED_FORK_RULES,
-    EFFECT_INTERVENTIONS_PER_GAME,
-    EFFECT_MANA_CAP,
-    EFFECT_MAX_RECORDS_PER_GAME,
-    EFFECT_PLAIN_CANDIDATE_RATE,
-    EFFECT_PLAYABILITY_RATE,
-    EFFECT_PROBE_KEYWORDS,
-    EFFECT_PROBES_PER_GAME,
-    EFFECT_RANDOM_SEAT_PROBABILITY,
-    EFFECT_RANDOM_SEAT_SHARE,
-    EFFECT_ZONE_CANDIDATE_RATE,
-    MAX_RECORDS_PER_GAME_PROPERTY,
     add_cap_flags,
     add_directed_fork_flags,
     announce_probe_state,
     candidate_rate_error,
-    directed_fork_error,
-    directed_fork_properties,
     random_seat_error,
+    worker_cap_properties,
 )
 from sealed.infrastructure.match_worker_connector import DEFAULT_SIDE_B_DECKS_WEIGHT, WorkerDecks
 
@@ -1080,50 +1072,10 @@ def outcomes_dir_error(args: argparse.Namespace) -> str | None:
 
 
 def _effect_collection_caps(args: argparse.Namespace) -> dict[str, str]:
-    """The cap flags as the ``-D`` properties the worker reads them from.
-
-    Built here rather than imported from ``effects``, which this package never
-    imports. The property names are the contract between the two sides and are
-    pinned by a test that may see both.
-    """
-    # Unset only where the share is 0, which run_match_outcomes enforces before
-    # any game; the worker then never reads it.
-    probability = getattr(args, "random_seat_probability", None)
-    if probability is None:
-        probability = EFFECT_RANDOM_SEAT_PROBABILITY
-    return {
-        "effect.mana.cap": str(getattr(args, "mana_cap", EFFECT_MANA_CAP)),
-        "effect.playability.rate": str(
-            getattr(args, "playability_rate", EFFECT_PLAYABILITY_RATE)
-        ),
-        "effect.zone.candidate.rate": str(
-            getattr(args, "zone_candidate_rate", EFFECT_ZONE_CANDIDATE_RATE)
-        ),
-        "effect.plain.candidate.rate": str(
-            getattr(args, "plain_candidate_rate", EFFECT_PLAIN_CANDIDATE_RATE)
-        ),
-        "effect.interventions.per.game": str(
-            getattr(args, "interventions_per_game", EFFECT_INTERVENTIONS_PER_GAME)
-        ),
-        "effect.probes.per.game": str(
-            getattr(args, "probes_per_game", EFFECT_PROBES_PER_GAME)
-        ),
-        "effect.probe.keywords": str(
-            getattr(args, "probe_keywords", EFFECT_PROBE_KEYWORDS)
-        ),
-        "effect.random.seat.share": str(
-            getattr(args, "random_seat_share", EFFECT_RANDOM_SEAT_SHARE)
-        ),
-        "effect.random.seat.probability": str(probability),
-        COUNT_DROPPED_EVENTS_PROPERTY: (
-            "true" if getattr(args, "count_dropped_events", EFFECT_COUNT_DROPPED_EVENTS)
-            else "false"
-        ),
-        **directed_fork_properties(args),
-        MAX_RECORDS_PER_GAME_PROPERTY: str(
-            getattr(args, "max_records_per_game", EFFECT_MAX_RECORDS_PER_GAME)
-        ),
-    }
+    """The cap flags as the ``-D`` properties the worker reads them from, built
+    from the one ``CollectionCaps`` the ``effects`` collectors build theirs
+    from."""
+    return worker_cap_properties(args)
 
 
 def _add_effect_record_flags(parser: argparse.ArgumentParser) -> None:
@@ -1204,7 +1156,7 @@ def check_random_seat_flags(args: argparse.Namespace) -> str | None:
     error = random_seat_error(args)
     if error is not None:
         return error
-    share = getattr(args, "random_seat_share", EFFECT_RANDOM_SEAT_SHARE)
+    share = getattr(args, "random_seat_share", DEFAULT_RANDOM_SEAT_SHARE)
     if share > 0 and not getattr(args, "effect_records", None):
         return (
             "--random-seat-share above 0 needs --effect-records: a random-seat"
@@ -1911,7 +1863,7 @@ def _directed_startup_error(args: argparse.Namespace) -> str | None:
     ``--directed-fork-probabilities`` file, read into ``args.directed_fork_needs``
     and its starting ``args.directed_rule_probabilities``, then the rules'
     startup check."""
-    rules = getattr(args, "directed_fork_rules", EFFECT_DIRECTED_FORK_RULES)
+    rules = getattr(args, "directed_fork_rules", CollectionCaps().directed_fork_rules)
     path = getattr(args, "directed_fork_probabilities", None)
     if path is not None:
         try:
@@ -1920,7 +1872,7 @@ def _directed_startup_error(args: argparse.Namespace) -> str | None:
             return str(exc)
         args.directed_rule_probabilities = args.directed_fork_needs.probabilities()
     return directed_fork_error(
-        rules, getattr(args, "directed_fork_probability", EFFECT_DIRECTED_FORK_PROBABILITY),
+        rules, getattr(args, "directed_fork_probability", DEFAULT_DIRECTED_FORK_PROBABILITY),
     )
 
 
@@ -2000,8 +1952,8 @@ def _supervise_match_outcomes(
         print(f"Collecting effect records into {effect_records_dir}")
         print(
             announce_probe_state(
-                getattr(args, "probe_keywords", EFFECT_PROBE_KEYWORDS),
-                getattr(args, "probes_per_game", EFFECT_PROBES_PER_GAME),
+                getattr(args, "probe_keywords", DEFAULT_PROBE_KEYWORDS),
+                getattr(args, "probes_per_game", DEFAULT_PROBES_PER_GAME),
             )
         )
 

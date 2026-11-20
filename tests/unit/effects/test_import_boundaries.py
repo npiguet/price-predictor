@@ -86,9 +86,21 @@ _ALLOWED: dict[str, set[str] | None] = {
     # The cap flags every collecting supervisor carries, one definition for
     # match-outcomes and the effects collectors alike.
     "sealed.infrastructure.effect_collection_flags": {
-        "add_cap_flags", "announce_probe_state", "dropped_events_report",
-        "random_seat_error", "candidate_rate_error", "add_directed_fork_flags",
-        "rule_list", "directed_fork_error",
+        "add_cap_flags", "announce_probe_state", "random_seat_error",
+        "candidate_rate_error", "add_directed_fork_flags", "rule_list",
+        "positive_int", "non_negative_int",
+    },
+    "sealed.infrastructure.directed_fork_check": {"directed_fork_error"},
+    "sealed.infrastructure.dropped_events": {"dropped_events_report"},
+    # The caps' one definition, which ``sealed`` reads too (M04b).
+    "sealed.domain.collection_caps": {
+        "DEFAULT_DIRECTED_FORK_PROBABILITY", "DEFAULT_DIRECTED_FORKS_PER_GAME",
+        "DEFAULT_INTERVENTIONS_PER_GAME", "DEFAULT_MANA_CAP",
+        "DEFAULT_MAX_RECORDS_PER_GAME", "DEFAULT_PLAIN_CANDIDATE_RATE",
+        "DEFAULT_PLAYABILITY_RATE", "DEFAULT_PROBE_KEYWORDS", "DEFAULT_PROBES_PER_GAME",
+        "DEFAULT_RANDOM_SEAT_PROBABILITY", "DEFAULT_RANDOM_SEAT_SHARE",
+        "DEFAULT_ZONE_CANDIDATE_RATE", "DIRECTED_RULE_PROBABILITY_PREFIX",
+        "CollectionCaps",
     },
     # The connector and the launch its ``start`` takes, with its three parts.
     "sealed.infrastructure.match_worker_connector": {

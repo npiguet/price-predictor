@@ -2,154 +2,40 @@
 
 Shared by ``sealed match-outcomes`` and the ``effects`` collectors, so the two
 cannot drift into collecting under different defaults. Loads no torch: the
-``effects`` parser imports it. The defaults restate ``effects``'
-``CollectionCaps`` because ``sealed`` never imports ``effects``;
-``tests/unit/effects/domain/test_collection_caps.py`` pins the two together.
+``effects`` parser imports it. The values, names and defaults of the caps are
+defined once, in ``sealed.domain.collection_caps``; this module adds the flags
+that set them, the properties they travel as and the startup checks over the
+parsed values.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
-from collections import Counter
-from collections.abc import Callable, Mapping, Sequence
-from pathlib import Path
+from dataclasses import fields
 
-EFFECT_MANA_CAP = 1
-#: Stage 1 of decision sampling (FR-033b): the share of enumerated decision
-#: candidates evaluated.
-EFFECT_PLAYABILITY_RATE = 0.01
-#: Stage 2's buckets, each the share of every enumerated candidate written,
-#: both stages together: a candidate failing ``zone`` and otherwise only
-#: ``cost``/``casting_speed``, and a plain one in its usual zone. A special
-#: candidate is written whenever stage 1 keeps it.
-EFFECT_ZONE_CANDIDATE_RATE = 0.0001
-EFFECT_PLAIN_CANDIDATE_RATE = 0.001
-EFFECT_INTERVENTIONS_PER_GAME = 2
-EFFECT_PROBES_PER_GAME = 2
-#: Every damage-step keyword gate 2 checks, in the spelling the JVM compares a
-#: normalized Forge keyword against.
-EFFECT_PROBE_KEYWORDS = (
-    "first_strike,double_strike,deathtouch,lifelink,trample,indestructible,"
-    "wither,infect"
+from price_predictor.domain.dataclass_defaults import field_default
+from sealed.domain.collection_caps import (
+    DEFAULT_DIRECTED_FORK_PROBABILITY,
+    DEFAULT_DIRECTED_FORKS_PER_GAME,
+    DEFAULT_INTERVENTIONS_PER_GAME,
+    DEFAULT_MANA_CAP,
+    DEFAULT_MAX_RECORDS_PER_GAME,
+    DEFAULT_PLAIN_CANDIDATE_RATE,
+    DEFAULT_PLAYABILITY_RATE,
+    DEFAULT_PROBE_KEYWORDS,
+    DEFAULT_PROBES_PER_GAME,
+    DEFAULT_RANDOM_SEAT_PROBABILITY,
+    DEFAULT_RANDOM_SEAT_SHARE,
+    DEFAULT_ZONE_CANDIDATE_RATE,
+    DIRECTED_RULE_PROBABILITY_PREFIX,
+    CollectionCaps,
+    property_name,
 )
-EFFECT_RANDOM_SEAT_SHARE = 0.0
-EFFECT_RANDOM_SEAT_PROBABILITY = 0.0
-EFFECT_COUNT_DROPPED_EVENTS = False
-#: The property ``--count-dropped-events`` travels to the worker as.
-COUNT_DROPPED_EVENTS_PROPERTY = "effect.count.dropped.events"
-#: Directed forks (FR-012): no rule unless a run names one, at most two a
-#: game beside the other fork budgets, and a quarter of the boundaries where
-#: an enabled rule's precondition holds.
-EFFECT_DIRECTED_FORK_RULES: tuple[str, ...] = ()
-EFFECT_DIRECTED_FORKS_PER_GAME = 2
-EFFECT_DIRECTED_FORK_PROBABILITY = 0.25
-DIRECTED_FORK_RULES_PROPERTY = "effect.directed.fork.rules"
-DIRECTED_FORKS_PER_GAME_PROPERTY = "effect.directed.forks.per.game"
-DIRECTED_FORK_PROBABILITY_PROPERTY = "effect.directed.fork.probability"
-#: A listed rule's own probability: this prefix and the rule id.
-DIRECTED_RULE_PROBABILITY_PREFIX = "effect.directed.probability."
-#: The records one game may write, its forks' included (FR-041a).
-EFFECT_MAX_RECORDS_PER_GAME = 5000
-MAX_RECORDS_PER_GAME_PROPERTY = "effect.max.records.per.game"
-#: The rules catalogue the startup check reads (``rules/README.md``).
-DEFAULT_RULES_DIR = Path("rules")
-#: Prints the rule ids the worker holds a board precondition for.
-DIRECTED_RULES_MAIN = "com.pricepredictor.connector.DirectedRulesMain"
-
-#: The file each worker lifetime appends its games' dropped-event counts to,
-#: beside its shard: ``{run_id}.{worker}-{lifetime}`` then this. The JVM's
-#: ``DroppedEvents.SUFFIX``; a test pins the two.
-DROPPED_EVENTS_SUFFIX = ".dropped-events.tsv"
-
-
-def add_cap_flags(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--mana-cap", type=non_negative_int, default=EFFECT_MANA_CAP,
-        help=(
-            "Records per unique mana ability and mana produced, per game "
-            "(default: %(default)s): repeat taps observe a board that barely moved"
-        ),
-    )
-    parser.add_argument(
-        "--playability-rate", type=float, default=EFFECT_PLAYABILITY_RATE,
-        help=(
-            "Stage 1 of decision sampling: the share of decision candidates "
-            "evaluated (default: %(default)s); legality records are coalesced "
-            "instead"
-        ),
-    )
-    parser.add_argument(
-        "--zone-candidate-rate", type=float, default=EFFECT_ZONE_CANDIDATE_RATE,
-        help=(
-            "Share of decision candidates failing only zone (and cost or "
-            "timing) written, both sampling stages together (default: "
-            "%(default)s); at most --playability-rate"
-        ),
-    )
-    parser.add_argument(
-        "--plain-candidate-rate", type=float, default=EFFECT_PLAIN_CANDIDATE_RATE,
-        help=(
-            "Share of plain decision candidates (usual zone, failing at most "
-            "cost or timing) written, both sampling stages together (default: "
-            "%(default)s); at most --playability-rate"
-        ),
-    )
-    parser.add_argument(
-        "--interventions-per-game", type=non_negative_int,
-        default=EFFECT_INTERVENTIONS_PER_GAME,
-        help="Interventional resolutions per game (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--probes-per-game", type=non_negative_int, default=EFFECT_PROBES_PER_GAME,
-        help=(
-            "Damage-step probe forks per game (default: %(default)s); a budget "
-            "spent only on keywords --probe-keywords names"
-        ),
-    )
-    parser.add_argument(
-        "--probe-keywords", type=probe_keyword_list, default=EFFECT_PROBE_KEYWORDS,
-        help=(
-            "Comma-separated damage-step keywords to probe (default: all "
-            "eight); an empty string takes no probe fork at all"
-        ),
-    )
-    parser.add_argument(
-        "--random-seat-share", type=float, default=EFFECT_RANDOM_SEAT_SHARE,
-        help=(
-            "Share of matches where one seat plays at random among the legal "
-            "options, casting cards the Forge AI never would (default: %(default)s)"
-        ),
-    )
-    parser.add_argument(
-        "--random-seat-probability", type=float, default=None,
-        help=(
-            "P, the chance the random seat draws at random at a decision "
-            "point; required when --random-seat-share is above 0"
-        ),
-    )
-    parser.add_argument(
-        "--max-records-per-game", type=positive_int, default=EFFECT_MAX_RECORDS_PER_GAME,
-        help=(
-            "Records one game may write, its forks' included (default: "
-            "%(default)s); past it the worker withholds the rest, counts them "
-            "and prints one line naming the game, the turn and the acting card "
-            "most of them shared"
-        ),
-    )
-    parser.add_argument(
-        "--count-dropped-events", action="store_true",
-        default=EFFECT_COUNT_DROPPED_EVENTS,
-        help=(
-            "Count the events that reach no record, by event type and engine "
-            "phase, and print the table summed over every worker when the "
-            "run ends"
-        ),
-    )
 
 
 def positive_int(text: str) -> int:
-    """An integer of at least 1, for ``--max-records-per-game``."""
+    """An integer of at least 1: a cap, a round of no decks, a target of no
+    records or no rounds before retiring is no run (V4 #9)."""
     value = int(text)
     if value < 1:
         raise argparse.ArgumentTypeError(f"must be at least 1, got {value}")
@@ -173,7 +59,7 @@ def probe_keyword_list(text: str) -> str:
     ``Trample`` or ``first strike`` would never be probed and nothing would
     say so; a keyword gate 2 does not check is refused.
     """
-    known = EFFECT_PROBE_KEYWORDS.split(",")
+    known = DEFAULT_PROBE_KEYWORDS.split(",")
     named = [
         word.strip().lower().replace(" ", "_") for word in text.split(",") if word.strip()
     ]
@@ -191,12 +77,113 @@ def rule_list(text: str) -> tuple[str, ...]:
     return tuple(rule.strip() for rule in text.split(",") if rule.strip())
 
 
+def _add_sampling_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--mana-cap", type=non_negative_int, default=DEFAULT_MANA_CAP,
+        help=(
+            "Records per unique mana ability and mana produced, per game "
+            "(default: %(default)s): repeat taps observe a board that barely moved"
+        ),
+    )
+    parser.add_argument(
+        "--playability-rate", type=float, default=DEFAULT_PLAYABILITY_RATE,
+        help=(
+            "Stage 1 of decision sampling: the share of decision candidates "
+            "evaluated (default: %(default)s); legality records are coalesced "
+            "instead"
+        ),
+    )
+    parser.add_argument(
+        "--zone-candidate-rate", type=float, default=DEFAULT_ZONE_CANDIDATE_RATE,
+        help=(
+            "Share of decision candidates failing only zone (and cost or "
+            "timing) written, both sampling stages together (default: "
+            "%(default)s); at most --playability-rate"
+        ),
+    )
+    parser.add_argument(
+        "--plain-candidate-rate", type=float, default=DEFAULT_PLAIN_CANDIDATE_RATE,
+        help=(
+            "Share of plain decision candidates (usual zone, failing at most "
+            "cost or timing) written, both sampling stages together (default: "
+            "%(default)s); at most --playability-rate"
+        ),
+    )
+
+
+def _add_fork_budget_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--interventions-per-game", type=non_negative_int,
+        default=DEFAULT_INTERVENTIONS_PER_GAME,
+        help="Interventional resolutions per game (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--probes-per-game", type=non_negative_int, default=DEFAULT_PROBES_PER_GAME,
+        help=(
+            "Damage-step probe forks per game (default: %(default)s); a budget "
+            "spent only on keywords --probe-keywords names"
+        ),
+    )
+    parser.add_argument(
+        "--probe-keywords", type=probe_keyword_list, default=DEFAULT_PROBE_KEYWORDS,
+        help=(
+            "Comma-separated damage-step keywords to probe (default: all "
+            "eight); an empty string takes no probe fork at all"
+        ),
+    )
+
+
+def _add_random_seat_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--random-seat-share", type=float, default=DEFAULT_RANDOM_SEAT_SHARE,
+        help=(
+            "Share of matches where one seat plays at random among the legal "
+            "options, casting cards the Forge AI never would (default: %(default)s)"
+        ),
+    )
+    parser.add_argument(
+        "--random-seat-probability", type=float, default=None,
+        help=(
+            "P, the chance the random seat draws at random at a decision "
+            "point; required when --random-seat-share is above 0"
+        ),
+    )
+
+
+def _add_record_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--max-records-per-game", type=positive_int, default=DEFAULT_MAX_RECORDS_PER_GAME,
+        help=(
+            "Records one game may write, its forks' included (default: "
+            "%(default)s); past it the worker withholds the rest, counts them "
+            "and prints one line naming the game, the turn and the acting card "
+            "most of them shared"
+        ),
+    )
+    parser.add_argument(
+        "--count-dropped-events", action="store_true",
+        default=CollectionCaps().count_dropped_events,
+        help=(
+            "Count the events that reach no record, by event type and engine "
+            "phase, and print the table summed over every worker when the "
+            "run ends"
+        ),
+    )
+
+
+def add_cap_flags(parser: argparse.ArgumentParser) -> None:
+    _add_sampling_flags(parser)
+    _add_fork_budget_flags(parser)
+    _add_random_seat_flags(parser)
+    _add_record_flags(parser)
+
+
 def add_directed_fork_flags(parser: argparse.ArgumentParser) -> None:
     """The directed-fork flags of ``match-outcomes`` and ``collect-variants``
     (FR-012). ``collect-coverage`` takes ``--directed-fork-rules`` as a label
     only and none of these."""
     parser.add_argument(
-        "--directed-fork-rules", type=rule_list, default=EFFECT_DIRECTED_FORK_RULES,
+        "--directed-fork-rules", type=rule_list, default=CollectionCaps().directed_fork_rules,
         help=(
             "Comma-separated rule ids to take directed forks for, each with a "
             "board precondition in forge-connector; the order breaks a tie "
@@ -205,7 +192,7 @@ def add_directed_fork_flags(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--directed-forks-per-game", type=non_negative_int,
-        default=EFFECT_DIRECTED_FORKS_PER_GAME,
+        default=DEFAULT_DIRECTED_FORKS_PER_GAME,
         help=(
             "Directed forks per game, kept or discarded, a budget beside the "
             "other forks' (default: %(default)s)"
@@ -213,7 +200,7 @@ def add_directed_fork_flags(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--directed-fork-probability", type=float,
-        default=EFFECT_DIRECTED_FORK_PROBABILITY,
+        default=DEFAULT_DIRECTED_FORK_PROBABILITY,
         help=(
             "Chance a phase boundary where an enabled rule's precondition holds "
             "forks, in (0, 1] (default: %(default)s)"
@@ -221,206 +208,42 @@ def add_directed_fork_flags(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def directed_fork_properties(args: argparse.Namespace) -> dict[str, str]:
-    """The directed-fork flags as the ``-D`` properties the worker reads; a
-    command without them sends the defaults, which name no rule."""
-    rules = getattr(args, "directed_fork_rules", EFFECT_DIRECTED_FORK_RULES)
-    return {
-        **directed_rule_probability_properties(
-            getattr(args, "directed_rule_probabilities", {})),
-        DIRECTED_FORK_RULES_PROPERTY: ",".join(rules),
-        DIRECTED_FORKS_PER_GAME_PROPERTY: str(
-            getattr(args, "directed_forks_per_game", EFFECT_DIRECTED_FORKS_PER_GAME)
-        ),
-        DIRECTED_FORK_PROBABILITY_PROPERTY: str(
-            getattr(args, "directed_fork_probability", EFFECT_DIRECTED_FORK_PROBABILITY)
-        ),
+def caps_from_args(args: argparse.Namespace) -> CollectionCaps:
+    """The caps a command's parsed flags name; a flag the command lacks takes
+    the cap's default, which for the directed forks names no rule.
+
+    ``aimed_at`` is the effects collectors' alone and stays unset here. An unset
+    ``--random-seat-probability`` is None until here, so a share above 0
+    without one can be refused first; with the share at 0 the worker never
+    reads it.
+    """
+    values = {
+        spec.name: getattr(args, spec.name, field_default(spec))
+        for spec in fields(CollectionCaps)
+        if spec.name != "aimed_at"
     }
+    if values["random_seat_probability"] is None:
+        values["random_seat_probability"] = DEFAULT_RANDOM_SEAT_PROBABILITY
+    values["directed_fork_rules"] = tuple(values["directed_fork_rules"])
+    return CollectionCaps(**values)
 
 
-def directed_rule_probability_properties(probabilities: Mapping[str, float]) -> dict[str, str]:
-    """Each rule's own probability as its ``-D`` property."""
-    return {DIRECTED_RULE_PROBABILITY_PREFIX + rule: str(p) for rule, p in probabilities.items()}
-
-
-def _comma_list(value: str) -> list[str]:
-    return [item for item in value.split(",") if item]
-
-
-#: Each cap property's ``run.json`` member and how its value reads back: the
-#: members are the effects collectors' ``CollectionCaps`` field names, which
-#: ``tests/unit/effects/domain/test_caps_manifest_spelling.py`` pins.
-_CAP_MEMBERS: dict[str, tuple[str, Callable[[str], object]]] = {
-    "effect.mana.cap": ("mana_cap", int),
-    "effect.playability.rate": ("playability_rate", float),
-    "effect.zone.candidate.rate": ("zone_candidate_rate", float),
-    "effect.plain.candidate.rate": ("plain_candidate_rate", float),
-    "effect.interventions.per.game": ("interventions_per_game", int),
-    "effect.probes.per.game": ("probes_per_game", int),
-    "effect.probe.keywords": ("probe_keywords", str),
-    "effect.random.seat.share": ("random_seat_share", float),
-    "effect.random.seat.probability": ("random_seat_probability", float),
-    "effect.aimed.at": ("aimed_at", _comma_list),
-    COUNT_DROPPED_EVENTS_PROPERTY: ("count_dropped_events", lambda v: v == "true"),
-    DIRECTED_FORK_RULES_PROPERTY: ("directed_fork_rules", _comma_list),
-    DIRECTED_FORKS_PER_GAME_PROPERTY: ("directed_forks_per_game", int),
-    DIRECTED_FORK_PROBABILITY_PROPERTY: ("directed_fork_probability", float),
-    MAX_RECORDS_PER_GAME_PROPERTY: ("max_records_per_game", int),
-}
-
-
-def caps_manifest(properties: Mapping[str, object]) -> dict[str, object]:
-    """The ``-D`` cap properties as ``run.json`` records the resolved caps: the
-    collectors' member names and types, ``aimed_at`` null for a run aimed at
-    no rule (what ``effects``' ``caps_document`` writes for the same caps)."""
-    document: dict[str, object] = {"aimed_at": None}
-    for name, (member, read) in _CAP_MEMBERS.items():
-        if name in properties:
-            document[member] = read(str(properties[name]))
-    document["directed_rule_probabilities"] = {
-        name[len(DIRECTED_RULE_PROBABILITY_PREFIX):]: float(str(value))
-        for name, value in properties.items()
+def worker_cap_properties(args: argparse.Namespace) -> dict[str, str]:
+    """The cap flags as the ``-D`` properties a ``match-outcomes`` worker reads,
+    the directed rules' own probabilities ahead of the directed-fork rules."""
+    properties = caps_from_args(args).as_system_properties()
+    probabilities = {
+        name: properties.pop(name)
+        for name in list(properties)
         if name.startswith(DIRECTED_RULE_PROBABILITY_PREFIX)
     }
-    return document
-
-
-_DETECTOR_RANK = {"missing": 0, "none": 1, "untaggable": 2, "same_as": 3, "declared": 4}
-
-#: The scenarios whose declaration names an event its record kind never
-#: lists (the effects package's ``DetectorIndex.untaggable``, read off its
-#: emittable-events table): no record of theirs can be tagged.
-#: ``test_directed_fork_flags.py`` pins this set to that index over the real
-#: catalogue.
-UNTAGGABLE_SCENARIOS = frozenset({"104.4c-1"})
-
-
-def rule_readiness(rules_dir: Path = DEFAULT_RULES_DIR) -> dict[str, tuple[str, bool]]:
-    """Per rule id of the catalogue: its detector state, and whether a
-    contrasting variant of one of its scenarios is classified into a fork
-    operation.
-
-    The detector state is ``"declared"`` when some scenario listing the rule
-    declares a detector family, else ``"same_as"`` when one declares the
-    same fact as another scenario (``{"same_as": id, "reason": ...}``, its
-    rule counted under that scenario's), else ``"untaggable"`` when one
-    declares a family no record can show (:data:`UNTAGGABLE_SCENARIOS`), else
-    ``"none"`` when one declares ``{"none": reason}``, else ``"missing"``.
-    The base variant, the first, makes nothing, and an unclassifiable
-    variant's operation is an object.
-
-    Read here rather than through ``effects.infrastructure.rules_catalogue_io``,
-    which this package may not import; ``test_directed_fork_flags.py`` pins the
-    two readings together over the real catalogue.
-    """
-    detector: dict[str, str] = {}
-    forkable: dict[str, bool] = {}
-    for path in sorted(Path(rules_dir, "scenarios").glob("*.json")):
-        doc = json.loads(path.read_text(encoding="utf-8"))
-        for scenario in doc.get("scenarios") or ():
-            declaration = scenario.get("detector")
-            if declaration is None:
-                state = "missing"
-            elif "none" in declaration:
-                state = "none"
-            elif "same_as" in declaration:
-                state = "same_as"
-            elif scenario.get("id") in UNTAGGABLE_SCENARIOS:
-                state = "untaggable"
-            else:
-                state = "declared"
-            classified = any(
-                isinstance(variant.get("operation"), str)
-                for variant in (scenario.get("variants") or ())[1:]
-            )
-            for rule in scenario.get("rules") or ():
-                if _DETECTOR_RANK[state] >= _DETECTOR_RANK[detector.get(rule, "missing")]:
-                    detector[rule] = state
-                forkable[rule] = forkable.get(rule, False) or classified
-    return {rule: (detector[rule], forkable[rule]) for rule in detector}
-
-
-def registered_directed_rules() -> frozenset[str]:
-    """The rule ids one run of ``DirectedRulesMain`` prints: those the worker
-    holds a board precondition for (FR-014).
-
-    Raises ``RuntimeError`` when the query fails, and ``FileNotFoundError``
-    when the connector JAR or java is missing.
-    """
-    from price_predictor.infrastructure.jvm_processes import run_forge_worker
-
-    result = run_forge_worker(DIRECTED_RULES_MAIN, input_text="")
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"DirectedRulesMain exited {result.returncode}: {(result.stderr or '').strip()}"
-        )
-    return frozenset(line.strip() for line in result.stdout.splitlines() if line.strip())
-
-
-def directed_fork_error(
-    rules: Sequence[str],
-    probability: float,
-    *,
-    rules_dir: Path = DEFAULT_RULES_DIR,
-    registered: Callable[[], frozenset[str]] | None = None,
-) -> str | None:
-    """Why the directed-fork flags cannot run, naming the rule, or None when
-    they can (FR-014): the startup check of ``match-outcomes`` and
-    ``collect-variants``, never of ``collect-coverage``, whose
-    ``--directed-fork-rules`` is a label only.
-
-    A listed rule needs a detector declared in its scenarios (not ``none``,
-    not ``same_as``, not one only for an event its record never lists),
-    a contrasting variant classified into a fork operation, and a board
-    precondition registered in ``forge-connector``, which one run of
-    ``DirectedRulesMain`` lists. The JVM is asked once the catalogue's checks
-    pass, and not at all when no rule is listed; ``registered`` replaces that
-    query, for a test.
-    """
-    if not 0.0 < probability <= 1.0:
-        return f"--directed-fork-probability must be in (0, 1], got {probability}"
-    if not rules:
-        return None
-    readiness = rule_readiness(rules_dir)
-    for rule in rules:
-        detector, forkable = readiness.get(rule, ("missing", False))
-        if detector == "missing":
-            return (
-                f"--directed-fork-rules: {rule} has no detector declaration "
-                f"in {Path(rules_dir, 'scenarios')}"
-            )
-        if detector == "none":
-            return (
-                f"--directed-fork-rules: {rule} declares its detector none, so "
-                "no record of its fork could be tagged"
-            )
-        if detector == "untaggable":
-            return (
-                f"--directed-fork-rules: {rule} declares a detector only for an event "
-                "its record kind never lists, so no record of its fork could be tagged"
-            )
-        if detector == "same_as":
-            return (
-                f"--directed-fork-rules: {rule} states the same fact as another "
-                "scenario (same_as) and is counted under that scenario's rule, so "
-                "no record of its fork would be tagged for it: aim at that rule"
-            )
-        if not forkable:
-            return (
-                f"--directed-fork-rules: {rule} has no contrasting variant "
-                "classified into a fork operation"
-            )
-    try:
-        known = (registered or registered_directed_rules)()
-    except (OSError, RuntimeError) as exc:
-        return f"--directed-fork-rules: cannot list the registered rules: {exc}"
-    for rule in rules:
-        if rule not in known:
-            return (
-                f"--directed-fork-rules: {rule} has no board precondition "
-                "registered in forge-connector (DirectedRulesMain does not list it)"
-            )
-    return None
+    ahead = property_name("directed_fork_rules")
+    ordered: dict[str, str] = {}
+    for name, value in properties.items():
+        if name == ahead:
+            ordered.update(probabilities)
+        ordered[name] = value
+    return ordered
 
 
 def random_seat_error(args: argparse.Namespace) -> str | None:
@@ -428,7 +251,7 @@ def random_seat_error(args: argparse.Namespace) -> str | None:
 
     A share with no ``P`` is a seat whose behaviour nobody chose.
     """
-    share = getattr(args, "random_seat_share", EFFECT_RANDOM_SEAT_SHARE)
+    share = getattr(args, "random_seat_share", DEFAULT_RANDOM_SEAT_SHARE)
     probability = getattr(args, "random_seat_probability", None)
     if not 0.0 <= share <= 1.0:
         return f"--random-seat-share must be between 0 and 1, got {share}"
@@ -441,25 +264,14 @@ def random_seat_error(args: argparse.Namespace) -> str | None:
     return None
 
 
-def candidate_rate_error(args: argparse.Namespace) -> str | None:
-    """Why the decision-sampling rates cannot run, or None when they can
-    (FR-033b).
-
-    A bucket's rate is a share of every candidate enumerated, both stages
-    together, so it cannot exceed the stage-1 share it is drawn from.
-    """
-    rates = {
-        "--playability-rate": getattr(args, "playability_rate", EFFECT_PLAYABILITY_RATE),
-        "--zone-candidate-rate": getattr(
-            args, "zone_candidate_rate", EFFECT_ZONE_CANDIDATE_RATE
-        ),
-        "--plain-candidate-rate": getattr(
-            args, "plain_candidate_rate", EFFECT_PLAIN_CANDIDATE_RATE
-        ),
-    }
+def _rate_range_error(rates: dict[str, float]) -> str | None:
     for flag, rate in rates.items():
         if not 0.0 <= rate <= 1.0:
             return f"{flag} must be between 0 and 1, got {rate}"
+    return None
+
+
+def _bucket_error(rates: dict[str, float]) -> str | None:
     stage_one = rates["--playability-rate"]
     for flag in ("--zone-candidate-rate", "--plain-candidate-rate"):
         if rates[flag] > stage_one:
@@ -468,6 +280,25 @@ def candidate_rate_error(args: argparse.Namespace) -> str | None:
                 "a bucket cannot keep more candidates than stage 1 evaluates"
             )
     return None
+
+
+def candidate_rate_error(args: argparse.Namespace) -> str | None:
+    """Why the decision-sampling rates cannot run, or None when they can
+    (FR-033b).
+
+    A bucket's rate is a share of every candidate enumerated, both stages
+    together, so it cannot exceed the stage-1 share it is drawn from.
+    """
+    rates = {
+        "--playability-rate": getattr(args, "playability_rate", DEFAULT_PLAYABILITY_RATE),
+        "--zone-candidate-rate": getattr(
+            args, "zone_candidate_rate", DEFAULT_ZONE_CANDIDATE_RATE
+        ),
+        "--plain-candidate-rate": getattr(
+            args, "plain_candidate_rate", DEFAULT_PLAIN_CANDIDATE_RATE
+        ),
+    }
+    return _rate_range_error(rates) or _bucket_error(rates)
 
 
 def announce_probe_state(probe_keywords: str, probes_per_game: int) -> str:
@@ -488,57 +319,3 @@ def announce_probe_state(probe_keywords: str, probes_per_game: int) -> str:
         f"Damage-step probes: up to {probes_per_game} per game on "
         f"{', '.join(named)}"
     )
-
-
-def sum_dropped_events(records_dir: Path, run_id: str) -> tuple[Counter[tuple[str, str]], int]:
-    """The run's dropped-event counts summed over its worker lifetimes, and
-    how many lifetimes' files they came from.
-
-    Each lifetime appends one ``event_type<TAB>phase<TAB>count`` line per pair
-    and game, written in one append a kill can cut. Only a newline-terminated
-    line counts: a count cut inside its digits (``123`` as ``12``) still
-    parses, so an unterminated tail is dropped whole, as a shard's trailing
-    partial line is; a terminated line that does not parse is skipped too.
-    """
-    counts: Counter[tuple[str, str]] = Counter()
-    files = sorted(Path(records_dir).glob(f"{run_id}.*{DROPPED_EVENTS_SUFFIX}"))
-    for path in files:
-        try:
-            text = path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            # Printed from the supervisors' ``finally``: one unreadable file
-            # must not hide the run's report and return code.
-            continue
-        for line in text.split("\n")[:-1]:
-            fields = line.split("\t")
-            if len(fields) != 3 or not fields[2].isdigit():
-                continue
-            counts[(fields[0], fields[1])] += int(fields[2])
-    return counts, len(files)
-
-
-def dropped_events_report(records_dir: Path, run_id: str) -> str:
-    """The table a run under ``--count-dropped-events`` prints when it ends
-    (FR-041): every (event type, engine phase) pair, most dropped first."""
-    counts, lifetimes = sum_dropped_events(records_dir, run_id)
-    if not counts:
-        return (
-            f"Dropped events: none counted over {lifetimes} worker lifetime"
-            f"{'' if lifetimes == 1 else 's'}"
-        )
-    rows = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
-    type_width = max(len("event type"), *(len(t) for (t, _), _ in rows))
-    phase_width = max(len("phase"), *(len(p) for (_, p), _ in rows))
-    total = sum(counts.values())
-    count_width = max(len("count"), len(str(total)))
-    lines = [
-        f"Dropped events (no record open), summed over {lifetimes} worker "
-        f"lifetime{'' if lifetimes == 1 else 's'}:",
-        f"  {'event type':<{type_width}}  {'phase':<{phase_width}}  {'count':>{count_width}}",
-    ]
-    lines.extend(
-        f"  {event_type:<{type_width}}  {phase:<{phase_width}}  {count:>{count_width}}"
-        for (event_type, phase), count in rows
-    )
-    lines.append(f"  {'total':<{type_width}}  {'':<{phase_width}}  {total:>{count_width}}")
-    return "\n".join(lines)

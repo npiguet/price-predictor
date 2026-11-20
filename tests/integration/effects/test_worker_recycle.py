@@ -50,7 +50,7 @@ from price_predictor.infrastructure.run_manifest import run_recorded
 from price_predictor.infrastructure.worker_stops import STOPPED_LINE, WorkerStopSettings
 from sealed.application.match_outcomes import MatchOutcomeSupervisor, MatchRunOptions
 from sealed.infrastructure.cli import _effect_collection_caps, build_parser
-from sealed.infrastructure.effect_collection_flags import directed_fork_error
+from sealed.infrastructure.directed_fork_check import directed_fork_error
 from tests.integration.conftest import assert_no_lost_output, require_jar
 
 pytestmark = pytest.mark.integration

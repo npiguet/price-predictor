@@ -14,7 +14,7 @@ from pathlib import Path
 from effects.domain.collection_caps import CollectionCaps
 from effects.infrastructure.collector_connector import CollectorRun, CollectorSupervisor
 from sealed.application.match_outcomes import MatchOutcomeSupervisor, MatchRunOptions
-from sealed.infrastructure.effect_collection_flags import (
+from sealed.infrastructure.dropped_events import (
     DROPPED_EVENTS_SUFFIX,
     dropped_events_report,
     sum_dropped_events,

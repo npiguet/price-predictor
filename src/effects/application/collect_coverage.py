@@ -21,7 +21,6 @@ from typing import TYPE_CHECKING, ClassVar
 
 from effects.application.collector_common import (
     CollectorConfig,
-    positive_int,
     read_name_list,
 )
 from effects.application.coverage_counting import CoverageCounter
@@ -44,6 +43,7 @@ from effects.domain.coverage import (
     deck_weights,
     rank_by_consult,
 )
+from sealed.infrastructure.effect_collection_flags import positive_int
 
 if TYPE_CHECKING:
     from effects.infrastructure.converted_trees import ConvertedTrees
