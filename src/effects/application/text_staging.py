@@ -25,6 +25,7 @@ from effects.domain.ability_encoder import (
 from effects.domain.ability_tokenizer import (
     INFERENCE_KEYWORD_EXPAND_P,
     AbilityTokenizer,
+    KeywordSampling,
     Surface,
     withheld_keyword_tokens,
 )
@@ -182,7 +183,8 @@ class TextStager:
         truncation is reported under ``keys_of(text)``."""
         tokens = self.tokenizer.encoding_tokens(
             text, withheld=withheld_keyword_tokens(self.withhold_keyword),
-            role_spans=role_spans, probability=self.keyword_expand_p, rng=rng,
+            role_spans=role_spans,
+            sampling=KeywordSampling(probability=self.keyword_expand_p, rng=rng),
         )
         line = prepare_line(self.tokenizer, tokens)
         if line.truncated and self.truncations is not None:

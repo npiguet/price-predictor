@@ -85,11 +85,14 @@ def _numeric_values(script_text: str) -> dict[str, str]:
     found: dict[str, str] = {}
     for key, value in _PARAM_RE.findall(script_text):
         stripped = value.strip()
-        if key in NUMERIC_PARAM_KEYS and (
-            stripped.isdigit() or _SIGNED_RE.fullmatch(stripped)
-        ):
+        if key in NUMERIC_PARAM_KEYS and _is_number(stripped):
             found[key] = stripped
     return found
+
+
+def _is_number(written: str) -> bool:
+    """An unsigned or signed whole number as a source script writes it."""
+    return written.isdigit() or bool(_SIGNED_RE.fullmatch(written))
 
 
 def _is_gameplay_line(script_text: str) -> bool:
@@ -171,23 +174,35 @@ def perturb(
 
     kind = rng.choice(choices)
     if kind == PerturbationKind.SELECTOR:
-        key = rng.choice(sorted(selectors))
-        original = selectors[key]
-        alternatives = [s for s in SELECTOR_WHITELIST if s != original]
-        replacement = rng.choice(alternatives)
+        perturbation: Perturbation | None = _swapped_selector(selectors, rng)
     else:
-        key = rng.choice(sorted(numbers))
-        original = numbers[key]
+        perturbation = _changed_number(numbers, kind, rng)
+    if perturbation is None:
+        return None
+    return _apply(script_text, perturbation), perturbation
+
+
+def _swapped_selector(selectors: dict[str, str], rng: random.Random) -> Perturbation:
+    key = rng.choice(sorted(selectors))
+    original = selectors[key]
+    alternatives = [s for s in SELECTOR_WHITELIST if s != original]
+    replacement = rng.choice(alternatives)
+    return Perturbation(PerturbationKind.SELECTOR, key, original, replacement)
+
+
+def _changed_number(
+    numbers: dict[str, str], kind: PerturbationKind, rng: random.Random,
+) -> Perturbation | None:
+    key = rng.choice(sorted(numbers))
+    original = numbers[key]
+    replacement = _perturbed_number(original, kind, rng)
+    if replacement == original:
+        # A shift of zero is not a variant; try the other perturbation.
+        kind = PerturbationKind.DOUBLE
         replacement = _perturbed_number(original, kind, rng)
         if replacement == original:
-            # A shift of zero is not a variant; try the other perturbation.
-            kind = PerturbationKind.DOUBLE
-            replacement = _perturbed_number(original, kind, rng)
-            if replacement == original:
-                return None
-
-    perturbation = Perturbation(kind, key, original, replacement)
-    return _apply(script_text, perturbation), perturbation
+            return None
+    return Perturbation(kind, key, original, replacement)
 
 
 def _apply(script_text: str, perturbation: Perturbation) -> str:

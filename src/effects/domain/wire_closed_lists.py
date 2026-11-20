@@ -11,7 +11,7 @@ corpus usable.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 
 from effects.domain.event_schema import EventType
 from effects.domain.records import ForkKind
@@ -108,15 +108,25 @@ def off_list_values(raw: Mapping) -> Iterator[tuple[str, object]]:
     member's closed list; a member a record need not carry is checked only
     where present."""
     yield from _envelope(raw)
-    yield from _state(raw.get("state") or {})
-    for event in _payload_events(raw.get("payload") or {}):
+    yield from _state(_block(raw, "state"))
+    for event in _payload_events(_block(raw, "payload")):
         yield from _event(event)
+
+
+def _block(holder: Mapping, member: str) -> Mapping:
+    """The object ``member`` holds, an empty one where it is absent or empty."""
+    return holder.get(member) or {}
+
+
+def _each(holder: Mapping, member: str) -> Iterable:
+    """The items ``member`` holds, none where it is absent or empty."""
+    return holder.get(member) or ()
 
 
 def _envelope(raw: Mapping) -> Iterator[tuple[str, object]]:
     if "mode" not in raw:
         yield "mode", ABSENT
-    for kind in raw.get("copy_dropped") or ():
+    for kind in _each(raw, "copy_dropped"):
         if _outside(kind, _COPY_DROPPED_KINDS):
             yield "copy_dropped", kind
     yield from _fork_kind(raw)
@@ -133,10 +143,10 @@ def _fork_kind(raw: Mapping) -> Iterator[tuple[str, object]]:
 
 
 def _state(state: Mapping) -> Iterator[tuple[str, object]]:
-    yield from _global(state.get("global") or {})
-    for entity in state.get("entities") or ():
+    yield from _global(_block(state, "global"))
+    for entity in _each(state, "entities"):
         yield from _entity(entity)
-    for link in state.get("links") or ():
+    for link in _each(state, "links"):
         yield from _members(link, "link", _LINK_LISTS)
     pending = state.get("pending_event")
     if pending:
@@ -170,22 +180,28 @@ def _members(block: Mapping, prefix: str, lists) -> Iterator[tuple[str, object]]
 def _global(block: Mapping) -> Iterator[tuple[str, object]]:
     yield from _members(block, "global", _GLOBAL_LISTS)
     for member in ("floating_effects", "delayed_triggers"):
-        for made in block.get(member) or ():
-            if "duration" in made and _outside(made["duration"], _DURATIONS):
+        for made in _each(block, member):
+            if _bad_duration(made):
                 yield f"global.{member}.duration", made["duration"]
+
+
+def _bad_duration(made: Mapping) -> bool:
+    """Whether a floating effect or delayed trigger carries a duration outside
+    its list; one carrying none is not judged."""
+    return "duration" in made and _outside(made["duration"], _DURATIONS)
 
 
 def _entity(entity: Mapping) -> Iterator[tuple[str, object]]:
     yield from _members(entity, "entity", _ENTITY_LISTS)
-    for line in entity.get("lines") or ():
+    for line in _each(entity, "lines"):
         yield from _members(line, "line", _LINE_LISTS)
 
 
 def _payload_events(payload: Mapping) -> Iterator[Mapping]:
     """Every event a payload of any kind carries, a rewrite's buffered
     ability's run included."""
-    yield from payload.get("events") or ()
-    yield from payload.get("buffered_events") or ()
+    yield from _each(payload, "events")
+    yield from _each(payload, "buffered_events")
     for member in ("incoming", "outgoing", "event"):
         event = payload.get(member)
         if isinstance(event, Mapping):
@@ -198,14 +214,19 @@ def _event(event: Mapping) -> Iterator[tuple[str, object]]:
         yield "event.attributed_to", attributed
     if _outside(event.get("duration"), _EVENT_DURATIONS):
         yield "event.duration", event.get("duration")
-    yield from _event_params(event.get("type"), event.get("params") or {})
+    yield from _event_params(event.get("type"), _block(event, "params"))
 
 
 def _event_params(kind: object, params: Mapping) -> Iterator[tuple[str, object]]:
     for (event_type, name), allowed in _EVENT_PARAM_LISTS.items():
-        if kind == event_type and _checks_param(event_type, name, params):
-            if _outside(params.get(name), allowed):
-                yield f"{event_type}.{name}", params.get(name)
+        if kind == event_type and _param_outside(event_type, name, allowed, params):
+            yield f"{event_type}.{name}", params.get(name)
+
+
+def _param_outside(
+    event_type: str, name: str, allowed: frozenset, params: Mapping,
+) -> bool:
+    return _checks_param(event_type, name, params) and _outside(params.get(name), allowed)
 
 
 def _is_attribution(attributed: object) -> bool:

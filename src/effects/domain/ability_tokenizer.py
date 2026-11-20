@@ -15,7 +15,6 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
-from typing import NamedTuple
 
 from effects.domain.keyword_definitions import KeywordDefinition
 from effects.domain.keyword_formatting import (
@@ -26,7 +25,8 @@ from effects.domain.keyword_formatting import (
 from effects.domain.keyword_names import QUALITY_KEYWORDS, display_name_of
 from effects.domain.provenance import Role, RoleSpan
 from effects.domain.recorded_version import recorded_version
-from effects.domain.script_text import CHAIN_KEYS, SCRIPT_READING, SEG, is_script_reading
+from effects.domain.script_regions import script_regions
+from effects.domain.script_text import SCRIPT_READING, SEG, is_script_reading
 from price_predictor.domain.keyword_tokens import keyword_token_form
 from price_predictor.domain.tokenizer import MtgTokenizer
 
@@ -52,29 +52,6 @@ _TOKEN_RE = re.compile(
 
 #: Inside a ``TokenScript$`` value the underscore separates words (FR-009a).
 _TOKEN_SCRIPT_GRAMMAR = re.compile(r"[A-Za-z]+|\{[^}]+\}|\d+|[^\sA-Za-z0-9_]")
-
-#: Parameters whose value items stay one token on the script surface (FR-009).
-_WHOLE_VALUE_RE = re.compile(
-    r"(?<![A-Za-z])"
-    rf"(?:{'|'.join((*sorted(CHAIN_KEYS), 'CounterType'))})"
-    r"\$[ \t]*([^\s|]+)"
-)
-#: ``Choices$`` names chain labels only on a chooser API; elsewhere it is a
-#: selector and splits like any other value.
-_CHOICES_RE = re.compile(r"(?<![A-Za-z])Choices\$[ \t]*([^\s|]+)")
-_CHOOSER_API_RE = re.compile(
-    r"(?<![A-Za-z])(?:SP|DB|AB)\$[ \t]*"
-    r"(?:Charm|GenericChoice|AssignGroup|VillainousChoice|Vote)(?![A-Za-z])"
-)
-#: The label opening a segment: at the start (an option line) or after ``[SEG]``.
-_SEGMENT_OPENER_RE = re.compile(rf"(?:^|{re.escape(SEG)})[ \t]*(SV\d+)(?=:)")
-#: A renamed chain label wherever it stands. The converter follows more
-#: parameters than ``CHAIN_KEYS`` lists (``AddTrigger$``, ``Trigger$``,
-#: ``ResultSubAbilities$`` after ``range:``... see ``TraitScript.java`` and
-#: ``GrantedTraits.java`` in forge-connector), and a label after any of them
-#: is as much one token as after ``Execute$``.
-_CHAIN_LABEL_RE = re.compile(r"(?<![A-Za-z0-9_])SV\d+(?![A-Za-z0-9_])")
-_TOKEN_SCRIPT_VALUE_RE = re.compile(r"(?<![A-Za-z])TokenScript\$[ \t]*([^\s|]+)")
 
 #: When two role spans cover a token, the more specific one wins: a target
 #: phrase sits inside the clause it restricts.
@@ -261,6 +238,40 @@ class Token:
     keyword_line: KeywordLine | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class KeywordSampling:
+    """How a known keyword is chosen for expansion while encoding: with
+    ``probability``, drawn from ``rng``. Without ``rng`` the draws decide
+    nothing (see :meth:`AbilityTokenizer.expand_keywords`)."""
+
+    probability: float = 0.0
+    rng: random.Random | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _Draw:
+    """The expansion decision of one ``expand_keywords`` call, its ``rng``
+    resolved."""
+
+    probability: float
+    rng: random.Random
+    forced: frozenset[str]
+
+    @classmethod
+    def of(
+        cls, probability: float, rng: random.Random | None, forced: frozenset[str],
+    ) -> _Draw:
+        if rng is None:
+            if 0.0 < probability < 1.0:
+                raise ValueError(f"expanding at probability {probability} needs an rng")
+            rng = random.Random(0)
+        return cls(probability, rng, forced)
+
+    def chooses(self, form: str) -> bool:
+        """Whether the keyword spelled ``form`` expands: forced, or drawn."""
+        return form in self.forced or self.rng.random() < self.probability
+
+
 class AbilityTokenizer:
     """Tokenizes one ability line into :class:`Token`s."""
 
@@ -394,7 +405,7 @@ class AbilityTokenizer:
         """
         tokens: list[Token] = []
         position = 0
-        for start, end, whole in _script_regions(text):
+        for start, end, whole in script_regions(text):
             tokens.extend(self._split_camel_region(text, position, start))
             if whole:
                 whole = text[start:end].lower()
@@ -522,23 +533,22 @@ class AbilityTokenizer:
         exactly the draws it would without the parameter. Without ``rng`` the
         draws decide nothing, so a ``probability`` they would decide is refused.
         """
-        if rng is None:
-            if 0.0 < probability < 1.0:
-                raise ValueError(f"expanding at probability {probability} needs an rng")
-            rng = random.Random(0)
+        draw = _Draw.of(probability, rng, forced)
         line = tokens[0].keyword_line if tokens else None
         if line is not None:
-            return self._expand_line(tokens, line, probability, rng, forced)
+            return self._expand_line(tokens, line, draw)
         out: list[Token] = []
         for token in tokens:
-            if self.must_expand(token) or (
-                self.expandable(token)
-                and (token.text in forced or rng.random() < probability)
-            ):
+            if self._expands_token(token, draw):
                 out.extend(self._expansion(token))
             else:
                 out.append(token)
         return out
+
+    def _expands_token(self, token: Token, draw: _Draw) -> bool:
+        if self.must_expand(token):
+            return True
+        return self.expandable(token) and draw.chooses(token.text)
 
     def encoding_tokens(
         self,
@@ -546,8 +556,7 @@ class AbilityTokenizer:
         *,
         role_spans: tuple[RoleSpan, ...] = (),
         withheld: frozenset[str] = frozenset(),
-        probability: float = 0.0,
-        rng: random.Random | None = None,
+        sampling: KeywordSampling = KeywordSampling(),
     ) -> list[Token]:
         """The tokens one ability text is encoded from, wherever it is encoded.
 
@@ -557,32 +566,28 @@ class AbilityTokenizer:
         """
         tokens = self.expand_keywords(
             self.tokenize(text, role_spans),
-            probability=probability, rng=rng, forced=withheld,
+            probability=sampling.probability, rng=sampling.rng, forced=withheld,
         )
         if withheld:
             tokens = [token for token in tokens if token.text not in withheld]
         return tokens
 
     def _expand_line(
-        self,
-        tokens: list[Token],
-        line: KeywordLine,
-        probability: float,
-        rng: random.Random,
-        forced: frozenset[str] = frozenset(),
+        self, tokens: list[Token], line: KeywordLine, draw: _Draw,
     ) -> list[Token]:
         if not self.keywords.expands(line.name):
             return list(tokens)
+        unknown = self._name_is_unknown(tokens, line)
+        if not (unknown or draw.chooses(keyword_token(line.name))):
+            return list(tokens)
+        return self._as_expansion(line.name, line.details, role=tokens[0].role)
+
+    def _name_is_unknown(self, tokens: list[Token], line: KeywordLine) -> bool:
+        """Whether the line's name reads as no known word, or has no token."""
         name_tokens = [
             t for t in tokens if t.start is not None and t.start < line.name_end
         ]
-        unknown = not name_tokens or any(
-            t.token_id == self.unk_id for t in name_tokens
-        )
-        form = keyword_token(line.name)
-        if not (unknown or form in forced or rng.random() < probability):
-            return list(tokens)
-        return self._as_expansion(line.name, line.details, role=tokens[0].role)
+        return not name_tokens or any(t.token_id == self.unk_id for t in name_tokens)
 
     def _expansion(self, token: Token) -> list[Token]:
         name = self.keywords.name_of_token(token.text)
@@ -626,60 +631,3 @@ def camel_parts(word: str) -> list[tuple[int, int]]:
             start = index
     parts.append((start, len(word)))
     return parts
-
-
-class _Region(NamedTuple):
-    """A span the script grammar skips: kept ``whole`` (FR-009), or split at
-    underscores (FR-009a). Sorts underscore-first at an equal span."""
-
-    start: int
-    end: int
-    whole: bool
-
-
-def _item_regions(match: re.Match) -> list[_Region]:
-    """One whole region per non-empty item of a comma list in group 1."""
-    regions: list[_Region] = []
-    offset = match.start(1)
-    for item in match.group(1).split(","):
-        if item:
-            regions.append(_Region(offset, offset + len(item), whole=True))
-        offset += len(item) + 1
-    return regions
-
-
-def _script_regions(text: str) -> list[_Region]:
-    """The ordered, non-overlapping regions of ``text`` the grammar skips."""
-    regions: list[_Region] = []
-    for match in _WHOLE_VALUE_RE.finditer(text):
-        regions.extend(_item_regions(match))
-    for match in _CHOICES_RE.finditer(text):
-        if _CHOOSER_API_RE.search(_segment_at(text, match.start())):
-            regions.extend(_item_regions(match))
-    regions.extend(
-        _Region(match.start(1), match.end(1), whole=True)
-        for match in _SEGMENT_OPENER_RE.finditer(text)
-    )
-    regions.extend(
-        _Region(match.start(), match.end(), whole=True)
-        for match in _CHAIN_LABEL_RE.finditer(text)
-    )
-    regions.extend(
-        _Region(match.start(1), match.end(1), whole=False)
-        for match in _TOKEN_SCRIPT_VALUE_RE.finditer(text)
-    )
-    regions.sort()
-    ordered: list[_Region] = []
-    for region in regions:
-        if ordered and region.start < ordered[-1].end:
-            continue
-        ordered.append(region)
-    return ordered
-
-
-def _segment_at(text: str, position: int) -> str:
-    """The ``[SEG]``-delimited segment of ``text`` holding ``position``."""
-    start = text.rfind(SEG, 0, position)
-    start = 0 if start < 0 else start + len(SEG)
-    end = text.find(SEG, position)
-    return text[start:] if end < 0 else text[start:end]

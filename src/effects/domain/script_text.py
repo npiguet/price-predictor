@@ -81,9 +81,17 @@ def params(segment: str) -> dict[str, str]:
     for part in segment.split("|"):
         key, separator, value = part.partition("$")
         key = key.strip()
-        if separator and key and key not in found:
+        if _is_new_key(found, key, separator):
             found[key] = value.strip()
     return found
+
+
+def _is_new_key(found: dict[str, str], key: str, separator: str) -> bool:
+    """Whether a ``Key$`` part opens a parameter not yet read: it has its
+    ``$`` and a name, and the first occurrence of a name wins."""
+    if not (separator and key):
+        return False
+    return key not in found
 
 
 def root_param(text: str | None, name: str) -> str | None:
