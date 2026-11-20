@@ -142,10 +142,11 @@ class CollectorSupervisor:
         """True when some round ended on Ctrl-C rather than at its budget.
 
         ``ForgeWorkerPool.run`` returns normally on SIGINT, so without this a
-        caller would start the next round. The last pool is asked live: its
-        SIGINT handler stays installed after its round, so a Ctrl-C while the
-        round's shards are counted lands there. Latched when the pool is
-        dropped, because ``stop()`` drops it before ``collect_variants`` asks.
+        caller would start the next round, which ``play_round`` now refuses.
+        The pool restores the previous handlers when its run ends, so a
+        Ctrl-C after the round raises ``KeyboardInterrupt`` in the caller.
+        Latched when the pool is dropped, because ``stop()`` drops it before
+        ``collect_variants`` asks.
         """
         return self._interrupted or (self._pool is not None and self._pool.interrupted)
 
@@ -201,7 +202,13 @@ class CollectorSupervisor:
 
         No deck raises before any worker spawns: every worker is decks-only,
         so no worker could play at all.
+
+        Once an interrupt is latched (:attr:`interrupted`) it returns at once
+        without writing, counting or starting anything: a Ctrl-C between two
+        rounds ends the run and does not play one more.
         """
+        if self.interrupted:
+            return
         deck_count = write_deck_file(decks, decks_file, label=label, rules=rules)
         if deck_count == 0:
             raise ValueError(

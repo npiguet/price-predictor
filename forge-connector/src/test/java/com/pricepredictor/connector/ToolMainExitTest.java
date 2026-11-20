@@ -6,16 +6,20 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * {@link ToolMain#exit} throws rather than ending the JVM, so every exit path
@@ -77,6 +81,47 @@ class ToolMainExitTest {
         assertEquals(ExitCode.BAD_CONFIG, exitOf(ConvertMain::work,
                 "--cards-path", "cards", "--output-path", "out"));
         assertEquals(ExitCode.BAD_CONFIG, exitOf(VariantSidecarMain::work));
+    }
+
+    /** The guard ends the process non-zero on any throwable, not only its own exit. */
+    @Test
+    void theGuardExitsNonZeroOnAnyThrowable() {
+        assertEquals(OptionalInt.of(ExitCode.FAILURE.status()), guardedQuietly(() -> {
+            throw new IllegalStateException("holdout property unreadable");
+        }));
+        assertEquals(OptionalInt.of(ExitCode.FAILURE.status()), guardedQuietly(() -> {
+            throw new OutOfMemoryError("Java heap space");
+        }));
+        assertEquals(OptionalInt.of(ExitCode.BAD_CONFIG.status()), guardedQuietly(() -> {
+            throw ToolMain.exit(ExitCode.BAD_CONFIG);
+        }));
+        assertEquals(OptionalInt.empty(), guardedQuietly(() -> { }));
+    }
+
+    @Test
+    void theGuardPrintsTheThrowableItEnds() {
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        PrintStream original = System.err;
+        System.setErr(new PrintStream(captured, true, StandardCharsets.UTF_8));
+        try {
+            ToolMain.guardedStatus(() -> {
+                throw new IllegalStateException("holdout property unreadable");
+            });
+        } finally {
+            System.setErr(original);
+        }
+        assertTrue(captured.toString(StandardCharsets.UTF_8)
+                .contains("holdout property unreadable"));
+    }
+
+    private static OptionalInt guardedQuietly(Runnable main) {
+        PrintStream original = System.err;
+        System.setErr(new PrintStream(OutputStream.nullOutputStream()));
+        try {
+            return ToolMain.guardedStatus(main);
+        } finally {
+            System.setErr(original);
+        }
     }
 
     /** The exit {@code body} requests on {@code args}, its stderr discarded. */

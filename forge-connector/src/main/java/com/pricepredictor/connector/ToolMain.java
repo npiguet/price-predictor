@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -51,8 +52,10 @@ final class ToolMain {
 
     /**
      * Run a worker's {@code main}, ending the process with the code of an
-     * {@link Exit} thrown anywhere under it; a {@code main} that returns ends
-     * as it would have unguarded.
+     * {@link Exit} thrown anywhere under it, or {@link ExitCode#FAILURE} with
+     * the throwable on stderr for anything else, an {@link Error} out of a
+     * game included; a {@code main} that returns ends as it would have
+     * unguarded.
      *
      * <p>Every main that reaches {@link #exit} or {@link #badConfig} runs
      * under this or {@link #run}: those throw rather than call
@@ -60,12 +63,31 @@ final class ToolMain {
      * catching the {@link Exit} it throws.
      */
     static void guard(Runnable main) {
-        try {
-            main.run();
-        } catch (Exit exit) {
+        OptionalInt status = guardedStatus(main);
+        if (status.isPresent()) {
             System.out.flush();
             System.err.flush();
-            System.exit(exit.status());
+            System.exit(status.getAsInt());
+        }
+    }
+
+    /**
+     * The exit status {@link #guard} ends the process with for {@code main},
+     * empty when it returns. A throwable that is not an {@link Exit} is
+     * printed first: left uncaught it would end only the main thread, and
+     * the JVM would stay up until Forge's non-daemon pool threads idled out,
+     * holding the worker's slot.
+     */
+    static OptionalInt guardedStatus(Runnable main) {
+        try {
+            main.run();
+            return OptionalInt.empty();
+        } catch (Exit exit) {
+            return OptionalInt.of(exit.status());
+        } catch (Throwable thrown) {
+            System.err.println("Fatal error: " + thrown);
+            thrown.printStackTrace(System.err);
+            return OptionalInt.of(ExitCode.FAILURE.status());
         }
     }
 

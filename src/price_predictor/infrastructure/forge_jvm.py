@@ -1259,10 +1259,33 @@ class ForgeWorkerPool:
         :class:`WorkerStartError` when every slot failed to start a worker
         ``max_failed_starts`` times in a row.
         """
-        self._output_path.parent.mkdir(parents=True, exist_ok=True)
+        previous = self._install_signal_handlers()
+        try:
+            self._run_workers()
+        finally:
+            self._restore_signal_handlers(previous)
 
-        signal.signal(signal.SIGINT, self._handle_signal)
-        signal.signal(signal.SIGTERM, self._handle_signal)
+    def _install_signal_handlers(self) -> dict[int, object]:
+        """Handle SIGINT and SIGTERM for the run; the handlers they replace."""
+        previous = {
+            signum: signal.getsignal(signum) for signum in (signal.SIGINT, signal.SIGTERM)
+        }
+        for signum in previous:
+            signal.signal(signum, self._handle_signal)
+        return previous
+
+    @staticmethod
+    def _restore_signal_handlers(previous: dict[int, object]) -> None:
+        """Put back the handlers :meth:`_install_signal_handlers` replaced, so
+        a signal after the run reaches its caller and not a finished pool. A
+        handler Python did not install (None) cannot be set again and stays."""
+        for signum, handler in previous.items():
+            if handler is not None:
+                signal.signal(signum, handler)
+
+    def _run_workers(self) -> None:
+        """The body of :meth:`run`, under its signal handlers."""
+        self._output_path.parent.mkdir(parents=True, exist_ok=True)
 
         print(f"Starting {self._worker_count} workers...")
 

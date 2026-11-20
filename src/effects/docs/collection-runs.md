@@ -31,6 +31,7 @@ Rules to respect when running, babysitting or changing `collect-coverage`, `coll
 - No worker is restarted once the round's budget is reached, so a round ends at most one game's length, bounded by `--stop-timeout`, after its budget.
 - The kill (`taskkill /F /T`, `ForgeWorkerPool._kill`) ends the longest-running worker every status interval (§ Short-lived workers), a worker still playing `--stop-timeout` after the request, one overdue past its recycle time by `--stop-timeout`, every worker on a second Ctrl-C, and a survivor of a crash. No periodic kill happens while a stop waits for the workers to finish their games.
 - A round is counted only once every worker of its pool has ended.
+- A pool handles SIGINT and SIGTERM only while its `run()` lasts and puts the previous handlers back when it ends, however it ends; a Ctrl-C while a round's shards are counted raises `KeyboardInterrupt` in the caller. `CollectorSupervisor.play_round` returns at once, starting no pool, once an interrupt is latched (`interrupted`), so a Ctrl-C between rounds does not play another.
 - Each round reports, and `run.json` records, how the workers ended (`worker_stops`) and how many games the counts left out as cut (`cut_games`).
 
 ## The workers' engine
