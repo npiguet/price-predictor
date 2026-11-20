@@ -368,7 +368,7 @@ class ForkFidelityTest {
         String fork = entity("[\"flying\",\"bushido:1\"]", "[" + FLYING_LINE + "," + BUSHIDO_LINE + "]",
                 "[\"E1\",\"E2\"]");
 
-        assertEquals(List.of(), ForkFidelity.differencesById("entity", live, fork));
+        assertEquals(List.of(), ForkFidelity.differencesById(new ForkFidelity.Section("entity", live, fork)));
     }
 
     /** A keyword that stacks, granted twice in one and once in the other, differs. */
@@ -380,8 +380,8 @@ class ForkFidelityTest {
         String twice = entity("[]", "[" + BUSHIDO_LINE + "," + BUSHIDO_LINE + "]", "[]");
         String once = entity("[]", "[" + BUSHIDO_LINE + "]", "[]");
 
-        List<String> keywords = ForkFidelity.differencesById("entity", live, fork);
-        List<String> repeatedLine = ForkFidelity.differencesById("entity", twice, once);
+        List<String> keywords = ForkFidelity.differencesById(new ForkFidelity.Section("entity", live, fork));
+        List<String> repeatedLine = ForkFidelity.differencesById(new ForkFidelity.Section("entity", twice, once));
 
         assertEquals(1, keywords.size(), keywords.toString());
         assertTrue(keywords.get(0).startsWith("entity E7 (Samurai).granted_temporary: "), keywords.toString());
@@ -396,7 +396,7 @@ class ForkFidelityTest {
         String live = entity("[]", lines, "[\"E1\",\"E2\"]");
         String fork = entity("[]", lines, "[\"E2\",\"E1\"]");
 
-        List<String> differences = ForkFidelity.differencesById("entity", live, fork);
+        List<String> differences = ForkFidelity.differencesById(new ForkFidelity.Section("entity", live, fork));
 
         assertEquals(1, differences.size(), differences.toString());
         assertTrue(differences.get(0).startsWith("entity E7 (Samurai).combat: "), differences.toString());
@@ -450,11 +450,11 @@ class ForkFidelityTest {
                 + "{\"id\":\"-1\",\"name\":\"B\",\"tapped\":true}]";
         String one = "[{\"id\":\"-1\",\"name\":\"A\",\"tapped\":false}]";
 
-        assertEquals(List.of(), ForkFidelity.differencesById("entity", live, same));
-        List<String> changed = ForkFidelity.differencesById("entity", live, second);
+        assertEquals(List.of(), ForkFidelity.differencesById(new ForkFidelity.Section("entity", live, same)));
+        List<String> changed = ForkFidelity.differencesById(new ForkFidelity.Section("entity", live, second));
         assertEquals(1, changed.size(), changed.toString());
         assertTrue(changed.get(0).contains(".tapped: live=false fork=true"), changed.toString());
-        List<String> missing = ForkFidelity.differencesById("entity", live, one);
+        List<String> missing = ForkFidelity.differencesById(new ForkFidelity.Section("entity", live, one));
         assertEquals(1, missing.size(), missing.toString());
         assertTrue(missing.get(0).endsWith(": only in live"), missing.toString());
     }

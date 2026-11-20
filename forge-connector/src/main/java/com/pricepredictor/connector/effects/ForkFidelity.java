@@ -48,6 +48,18 @@ final class ForkFidelity {
     private static final Set<String> UNORDERED =
             Set.of("keywords", "abilities", "lines", "keys", "emblems", "source_lines");
 
+    /** One kind's two rendered JSON arrays: the live game's and the fork's. */
+    record Section(String kind, String live, String fork) {
+    }
+
+    /** One entity's, player's or the global block's members on each side, under its report label. */
+    private record Fields(String label, Map<String, String> live, Map<String, String> fork) {
+    }
+
+    /** A JSON value and the name of the member holding it, null for a list element. */
+    private record Member(String name, String value) {
+    }
+
     private ForkFidelity() {
     }
 
@@ -57,10 +69,11 @@ final class ForkFidelity {
         // The builder the fork's own records read through.
         Snapshot copy = SnapshotBuilder.forFork(fork, live).ofBoard();
         List<String> out = new ArrayList<>();
-        compareFields("global", JsonParts.fields(real.global()), JsonParts.fields(copy.global()), out);
-        out.addAll(differencesById("player", real.players(), copy.players()));
-        out.addAll(differencesById("entity", real.entitiesJson(), copy.entitiesJson()));
-        compareMultiset("link", real.links(), copy.links(), out);
+        compareFields(
+                new Fields("global", JsonParts.fields(real.global()), JsonParts.fields(copy.global())), out);
+        out.addAll(differencesById(new Section("player", real.players(), copy.players())));
+        out.addAll(differencesById(new Section("entity", real.entitiesJson(), copy.entitiesJson())));
+        compareMultiset(new Section("link", real.links(), copy.links()), out);
         return out;
     }
 
@@ -90,13 +103,15 @@ final class ForkFidelity {
             return;
         }
         StringBuilder out = new StringBuilder(line);
-        for (String difference : found.subList(0, Math.min(MAX_REPORTED, found.size()))) {
-            out.append("\n  ").append(difference);
-        }
-        for (String example : exampleLines(examples)) {
-            out.append("\n  ").append(example);
-        }
+        appendIndented(out, found.subList(0, Math.min(MAX_REPORTED, found.size())));
+        appendIndented(out, exampleLines(examples));
         System.err.println(out);
+    }
+
+    private static void appendIndented(StringBuilder out, List<String> lines) {
+        for (String line : lines) {
+            out.append("\n  ").append(line);
+        }
     }
 
     /**
@@ -164,30 +179,34 @@ final class ForkFidelity {
      * id, field by field: {@code kind id (name).field: live=... fork=...}, or
      * an id only one side has.
      */
-    static List<String> differencesById(String kind, String realArray, String copyArray) {
+    static List<String> differencesById(Section section) {
         List<String> out = new ArrayList<>();
-        Map<String, List<Map<String, String>>> real = byId(realArray);
-        Map<String, List<Map<String, String>>> copy = byId(copyArray);
+        Map<String, List<Map<String, String>>> real = byId(section.live());
+        Map<String, List<Map<String, String>>> copy = byId(section.fork());
         Set<String> ids = new TreeSet<>(real.keySet());
         ids.addAll(copy.keySet());
         for (String id : ids) {
-            List<Map<String, String>> lefts = real.getOrDefault(id, List.of());
-            List<Map<String, String>> rights = copy.getOrDefault(id, List.of());
-            for (int i = 0; i < Math.max(lefts.size(), rights.size()); i++) {
-                Map<String, String> left = i < lefts.size() ? lefts.get(i) : null;
-                Map<String, String> right = i < rights.size() ? rights.get(i) : null;
-                // Entities sharing an id (506.4c's placeholders) pair up in order.
-                String label = kind + " " + id + name(left != null ? left : right);
-                if (right == null) {
-                    out.add(label + ": only in live");
-                } else if (left == null) {
-                    out.add(label + ": only in fork");
-                } else {
-                    compareFields(label, left, right, out);
-                }
-            }
+            pairDifferences(section.kind() + " " + id,
+                    real.getOrDefault(id, List.of()), copy.getOrDefault(id, List.of()), out);
         }
         return out;
+    }
+
+    /** The entities sharing one id (506.4c's placeholders) pair up in order. */
+    private static void pairDifferences(String idLabel, List<Map<String, String>> lefts,
+                                        List<Map<String, String>> rights, List<String> out) {
+        for (int i = 0; i < Math.max(lefts.size(), rights.size()); i++) {
+            Map<String, String> left = i < lefts.size() ? lefts.get(i) : null;
+            Map<String, String> right = i < rights.size() ? rights.get(i) : null;
+            String label = idLabel + name(left != null ? left : right);
+            if (right == null) {
+                out.add(label + ": only in live");
+            } else if (left == null) {
+                out.add(label + ": only in fork");
+            } else {
+                compareFields(new Fields(label, left, right), out);
+            }
+        }
     }
 
     /** The array's elements by id, those sharing an id kept apart in array order. */
@@ -200,15 +219,15 @@ final class ForkFidelity {
         return byId;
     }
 
-    private static void compareFields(String label, Map<String, String> real, Map<String, String> copy,
-                                      List<String> out) {
-        Set<String> names = new java.util.LinkedHashSet<>(real.keySet());
-        names.addAll(copy.keySet());
+    private static void compareFields(Fields fields, List<String> out) {
+        Set<String> names = new java.util.LinkedHashSet<>(fields.live().keySet());
+        names.addAll(fields.fork().keySet());
         for (String name : names) {
-            String left = real.get(name);
-            String right = copy.get(name);
-            if (left == null ? right != null : !canonical(name, left).equals(canonical(name, right))) {
-                out.add(label + "." + name + ": live=" + shorten(left) + " fork=" + shorten(right));
+            String left = fields.live().get(name);
+            String right = fields.fork().get(name);
+            if (left == null ? right != null
+                    : !canonical(new Member(name, left)).equals(canonical(new Member(name, right)))) {
+                out.add(fields.label() + "." + name + ": live=" + shorten(left) + " fork=" + shorten(right));
             }
         }
     }
@@ -219,41 +238,46 @@ final class ForkFidelity {
      * read the same: the elements of every such list, at any depth, sorted
      * (repeats kept, as some keywords stack), every other list in its order.
      */
-    static String canonical(String name, String value) {
-        String text = value.strip();
+    private static String canonical(Member member) {
+        String text = member.value().strip();
         if (text.startsWith("{")) {
-            List<String> members = new ArrayList<>();
-            JsonParts.fields(text).forEach((member, inner) ->
-                    members.add("\"" + member + "\":" + canonical(member, inner)));
-            return "{" + String.join(",", members) + "}";
+            return canonicalObject(text);
         }
         if (text.startsWith("[")) {
-            List<String> elements = new ArrayList<>();
-            for (String element : JsonParts.elements(text)) {
-                elements.add(canonical(null, element));
-            }
-            if (name != null && UNORDERED.contains(name)) {
-                elements.sort(null);
-            }
-            return "[" + String.join(",", elements) + "]";
+            return canonicalArray(text, member.name() != null && UNORDERED.contains(member.name()));
         }
         return text;
     }
 
+    private static String canonicalObject(String text) {
+        List<String> members = new ArrayList<>();
+        JsonParts.fields(text).forEach((member, inner) ->
+                members.add("\"" + member + "\":" + canonical(new Member(member, inner))));
+        return "{" + String.join(",", members) + "}";
+    }
 
-    private static void compareMultiset(String kind, String realArray, String copyArray, List<String> out) {
+    private static String canonicalArray(String text, boolean sorted) {
+        List<String> elements = new ArrayList<>();
+        for (String element : JsonParts.elements(text)) {
+            elements.add(canonical(new Member(null, element)));
+        }
+        if (sorted) {
+            elements.sort(null);
+        }
+        return "[" + String.join(",", elements) + "]";
+    }
+
+    private static void compareMultiset(Section section, List<String> out) {
         Map<String, Integer> left = new HashMap<>();
-        for (String element : JsonParts.elements(realArray)) {
+        for (String element : JsonParts.elements(section.live())) {
             left.merge(element, 1, Integer::sum);
         }
-        for (String element : JsonParts.elements(copyArray)) {
+        for (String element : JsonParts.elements(section.fork())) {
             left.merge(element, -1, Integer::sum);
         }
         left.forEach((element, count) -> {
-            if (count > 0) {
-                out.add(kind + " only in live: " + shorten(element));
-            } else if (count < 0) {
-                out.add(kind + " only in fork: " + shorten(element));
+            if (count != 0) {
+                out.add(section.kind() + " only in " + (count > 0 ? "live" : "fork") + ": " + shorten(element));
             }
         });
     }
