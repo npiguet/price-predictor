@@ -6,6 +6,7 @@ zero-padded batch.
 from __future__ import annotations
 
 import random
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -13,6 +14,15 @@ from sealed.domain.card_embedding_layout import is_land_embedding
 from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 from sealed.infrastructure.pool_file_reader import SealedPool
+
+
+@dataclass(frozen=True)
+class SharedRows:
+    """A pool's cards as rows of the shared embedding table: the table and
+    the pool's ``int`` row indices into it, in pool order."""
+
+    table: np.ndarray
+    indices: np.ndarray
 
 
 class PreparedPool:
@@ -45,8 +55,7 @@ class PreparedPool:
         cls,
         set_code: str,
         names: list[str],
-        table: np.ndarray,
-        indices: np.ndarray,
+        rows: SharedRows,
         is_land: np.ndarray,
     ) -> "PreparedPool":
         obj = cls.__new__(cls)
@@ -54,8 +63,8 @@ class PreparedPool:
         obj.names = names
         obj.is_land = is_land
         obj._dense = None
-        obj._table = table
-        obj._indices = indices
+        obj._table = rows.table
+        obj._indices = rows.indices
         return obj
 
     @property
@@ -77,6 +86,59 @@ class PreparedPool:
         return int(self._table.shape[1])
 
 
+class _EmbeddingTable:
+    """The shared embedding table ``_prepare_pools`` builds: each distinct
+    card's embedding loaded once, a missing card remembered as ``None``."""
+
+    def __init__(self, locator: ConvertedCardLocator) -> None:
+        self.locator = locator
+        self.rows: list[np.ndarray] = []
+        self.is_land: list[bool] = []
+        self.name_to_idx: dict[str, int | None] = {}
+
+    def intern(self, name: str) -> int | None:
+        idx = self.name_to_idx.get(name, -1)
+        if idx != -1:
+            return idx
+        emb = self.locator.load_embedding(name)
+        if emb is None:
+            self.name_to_idx[name] = None
+            return None
+        new_idx = len(self.rows)
+        self.rows.append(np.asarray(emb, dtype=np.float32))
+        self.is_land.append(bool(is_land_embedding(emb)))
+        self.name_to_idx[name] = new_idx
+        return new_idx
+
+    def embeddable(self, names: list[str]) -> tuple[list[str], list[int]]:
+        """The names with an embedding, in pool order, and their table rows."""
+        valid_names: list[str] = []
+        idxs: list[int] = []
+        for name in names:
+            idx = self.intern(name)
+            if idx is not None:
+                valid_names.append(name)
+                idxs.append(idx)
+        return valid_names, idxs
+
+    def prepared(
+        self, pending: list[tuple[str, list[str], list[int]]],
+    ) -> list[PreparedPool]:
+        """Each kept pool as a ``PreparedPool`` over the stacked table."""
+        table = np.stack(self.rows).astype(np.float32)
+        land_table = np.array(self.is_land, dtype=bool)
+        prepared: list[PreparedPool] = []
+        for set_code, valid_names, idxs in pending:
+            index_arr = np.asarray(idxs, dtype=np.int64)
+            prepared.append(
+                PreparedPool.from_shared(
+                    set_code, valid_names, SharedRows(table, index_arr),
+                    land_table[index_arr],
+                )
+            )
+        return prepared
+
+
 def _prepare_pools(
     pools: list[SealedPool], locator: ConvertedCardLocator,
 ) -> list[PreparedPool]:
@@ -86,51 +148,17 @@ def _prepare_pools(
     indices into it (see ``PreparedPool``) so a large pool file stays at the
     size of the unique-card set rather than the sum of all pool copies.
     """
-    table_rows: list[np.ndarray] = []
-    table_is_land: list[bool] = []
-    name_to_idx: dict[str, int | None] = {}
-
-    def _intern(name: str) -> int | None:
-        idx = name_to_idx.get(name, -1)
-        if idx != -1:
-            return idx
-        emb = locator.load_embedding(name)
-        if emb is None:
-            name_to_idx[name] = None
-            return None
-        new_idx = len(table_rows)
-        table_rows.append(np.asarray(emb, dtype=np.float32))
-        table_is_land.append(bool(is_land_embedding(emb)))
-        name_to_idx[name] = new_idx
-        return new_idx
-
+    table = _EmbeddingTable(locator)
     pending: list[tuple[str, list[str], list[int]]] = []
     for pool in pools:
-        set_code, names = pool.set_code, pool.cards
-        valid_names: list[str] = []
-        idxs: list[int] = []
-        for name in names:
-            idx = _intern(name)
-            if idx is not None:
-                valid_names.append(name)
-                idxs.append(idx)
+        valid_names, idxs = table.embeddable(pool.cards)
         if len(valid_names) < NONLAND_DECK_SIZE:
             continue
-        pending.append((set_code, valid_names, idxs))
+        pending.append((pool.set_code, valid_names, idxs))
 
     if not pending:
         return []
-    table = np.stack(table_rows).astype(np.float32)
-    land_table = np.array(table_is_land, dtype=bool)
-    prepared: list[PreparedPool] = []
-    for set_code, valid_names, idxs in pending:
-        index_arr = np.asarray(idxs, dtype=np.int64)
-        prepared.append(
-            PreparedPool.from_shared(
-                set_code, valid_names, table, index_arr, land_table[index_arr],
-            )
-        )
-    return prepared
+    return table.prepared(pending)
 
 
 def _split_pools(
