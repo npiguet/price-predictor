@@ -135,6 +135,17 @@ final class HealGrantAndRetargetApiRules {
      */
     private static EffectEvent grantedAbilities(
             EffectEvent event, SpellAbility sa, Card host, List<Card> animated) {
+        List<String> granted = grantedTraits(sa);
+        if (animated != null) {
+            stillInPlay(event, host.getGame(), animated);
+        }
+        return event
+                .param("abilities", String.join(",", granted))
+                .param("removed", sa.hasParam("RemoveAllAbilities"));
+    }
+
+    /** The trait names the animation's {@link #GRANT_LISTS} hold, in their order. */
+    private static List<String> grantedTraits(SpellAbility sa) {
         List<String> granted = new ArrayList<>();
         for (String list : GRANT_LISTS) {
             String names = sa.getParamOrDefault(list, "");
@@ -144,18 +155,17 @@ final class HealGrantAndRetargetApiRules {
                 }
             }
         }
-        if (animated != null) {
-            Game game = host.getGame();
-            for (Card card : animated) {
-                Card now = game.getCardState(card, null);
-                if (now != null && now.isInPlay()) {
-                    event.subject(Refs.of(now));
-                }
+        return granted;
+    }
+
+    /** Each animated card still on the battlefield, as it is now, a subject of {@code event}. */
+    private static void stillInPlay(EffectEvent event, Game game, List<Card> animated) {
+        for (Card card : animated) {
+            Card now = game.getCardState(card, null);
+            if (now != null && now.isInPlay()) {
+                event.subject(Refs.of(now));
             }
         }
-        return event
-                .param("abilities", String.join(",", granted))
-                .param("removed", sa.hasParam("RemoveAllAbilities"));
     }
 
     /** The parameters an animation names granted traits in, as {@code AnimateEffectBase} reads them. */

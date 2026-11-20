@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 
 import static com.pricepredictor.connector.effects.ApiEvents.put;
 
@@ -65,10 +66,19 @@ final class PermanentStateApiRules {
         if (before == null) {
             return null;
         }
+        return flagged(host, "door_unlocked",
+                card -> doors(card) > before.getOrDefault(card.getId(), 0));
+    }
+
+    /**
+     * {@code state_flag_change} {@code flag} on every permanent on the
+     * battlefield that {@code changed} holds for; null when it holds for none.
+     */
+    private static EffectEvent flagged(Card host, String flag, Predicate<Card> changed) {
         EffectEvent event = new EffectEvent(EventType.STATE_FLAG_CHANGE)
-                .param("flag", "door_unlocked").param("value", true);
+                .param("flag", flag).param("value", true);
         for (Card card : host.getGame().getCardsIn(ZoneType.Battlefield)) {
-            if (doors(card) > before.getOrDefault(card.getId(), 0)) {
+            if (changed.test(card)) {
                 event.subject(Refs.of(card));
             }
         }
@@ -94,14 +104,7 @@ final class PermanentStateApiRules {
         if (before == null) {
             return null;
         }
-        EffectEvent event = new EffectEvent(EventType.STATE_FLAG_CHANGE)
-                .param("flag", "paired").param("value", true);
-        for (Card card : host.getGame().getCardsIn(ZoneType.Battlefield)) {
-            if (card.isPaired() && !before.contains(card.getId())) {
-                event.subject(Refs.of(card));
-            }
-        }
-        return event.subjects().isEmpty() ? null : event;
+        return flagged(host, "paired", card -> card.isPaired() && !before.contains(card.getId()));
     }
 
     /**

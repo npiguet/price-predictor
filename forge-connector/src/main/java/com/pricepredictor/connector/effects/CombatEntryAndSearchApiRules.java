@@ -155,14 +155,19 @@ final class CombatEntryAndSearchApiRules {
         for (Card attacker : before) {
             if (combat.isAttacking(attacker) && combat.isBlocked(attacker)) {
                 event.subject(Refs.of(attacker));
-                for (Card blocker : combat.getBlockers(attacker)) {
-                    String ref = Refs.of(blocker);
-                    if (!blockers.contains(ref)) {
-                        blockers.add(ref);
-                    }
-                }
+                addBlockers(combat.getBlockers(attacker), blockers);
             }
         }
         return event.subjects().isEmpty() ? null : event.param("blockers", blockers);
+    }
+
+    /** Each of {@code blocking}'s refs not already in {@code blockers}, onto it, in order. */
+    private static void addBlockers(Iterable<Card> blocking, List<String> blockers) {
+        for (Card blocker : blocking) {
+            String ref = Refs.of(blocker);
+            if (!blockers.contains(ref)) {
+                blockers.add(ref);
+            }
+        }
     }
 }
