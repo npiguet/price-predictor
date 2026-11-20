@@ -97,6 +97,18 @@ _SHRUNK_HEAD_INDICES = (
 _NONCOLOR_SHRUNK_HEAD_INDICES = _SHRUNK_HEAD_INDICES[:4]
 
 
+def _any_populated_head_shifted(row_k0: list[str], row_k20: list[str]) -> bool:
+    """Whether a shrunk head populated in both rows moved by more than 0.05."""
+    for idx in _SHRUNK_HEAD_INDICES:
+        v_k0 = row_k0[idx]
+        v_k20 = row_k20[idx]
+        if v_k0 == "" or v_k20 == "":
+            continue
+        if abs(float(v_k0) - float(v_k20)) > 0.05:
+            return True
+    return False
+
+
 @pytest.mark.integration
 def test_shrinkage_diff_across_heads(tmp_path: Path):
     cards_folder = tmp_path / "cardsfolder"
@@ -151,17 +163,7 @@ def test_shrinkage_diff_across_heads(tmp_path: Path):
 
         # (a) The low-observation card's shrunk values across the
         # populated head columns shift measurably between the two runs.
-        low_k0 = rows_k0[low]
-        low_k20 = rows_k20[low]
-        any_shifted = False
-        for idx in _SHRUNK_HEAD_INDICES:
-            v_k0 = low_k0[idx]
-            v_k20 = low_k20[idx]
-            if v_k0 == "" or v_k20 == "":
-                continue
-            if abs(float(v_k0) - float(v_k20)) > 0.05:
-                any_shifted = True
-                break
+        any_shifted = _any_populated_head_shifted(rows_k0[low], rows_k20[low])
         assert any_shifted, (
             "SC-005: low-observation card's shrunk values must shift "
             "measurably between k=0 and k=20"
