@@ -85,21 +85,28 @@ def script_vocabularies(folders) -> tuple[list[str], list[str]]:
     """
     from concurrent.futures import ThreadPoolExecutor
 
-    from effects.domain.value_targets import params, segments
-
     paths = [path for folder in folders for path in sidecar_paths(folder)]
     api_types: set[str] = set()
     param_keys: set[str] = set()
     # Threads: the cost is file opens, which release the interpreter lock.
     with ThreadPoolExecutor(max_workers=_SCAN_THREADS) as pool:
-        for raw in pool.map(lambda p: p.read_bytes(), paths, chunksize=64):
+        for raw in pool.map(Path.read_bytes, paths, chunksize=64):
             for line in json.loads(raw).get("lines", ()):
-                if line.get("script_api_type"):
-                    api_types.add(line["script_api_type"])
-                param_keys.update(line.get("script_param_keys") or ())
-                for segment in segments(line.get("script_text") or ""):
-                    param_keys.update(params(segment))
+                _collect_script_vocabulary(line, api_types, param_keys)
     return sorted(api_types), sorted(param_keys)
+
+
+def _collect_script_vocabulary(
+    line: dict, api_types: set[str], param_keys: set[str],
+) -> None:
+    """Add one raw sidecar line's script API type and parameter keys."""
+    from effects.domain.value_targets import params, segments
+
+    if line.get("script_api_type"):
+        api_types.add(line["script_api_type"])
+    param_keys.update(line.get("script_param_keys") or ())
+    for segment in segments(line.get("script_text") or ""):
+        param_keys.update(params(segment))
 
 
 #: Threads reading sidecars for :func:`script_vocabularies`.
@@ -217,21 +224,24 @@ def read_sidecar(path: Path) -> ProvenanceSidecar:
         except FileNotFoundError:
             raise
         except OSError as exc:
-            if exc.errno not in _TRANSIENT_ERRNOS and not isinstance(
-                exc, PermissionError
-            ):
-                raise
-            if attempt == _SIDECAR_READ_ATTEMPTS:
-                raise
-            if attempt == 1:
-                logger.warning(
-                    "%s could not be opened (%s); retrying up to %d times",
-                    path, exc, _SIDECAR_READ_ATTEMPTS - 1,
-                )
-            time.sleep(_SIDECAR_RETRY_DELAY * 2 ** (attempt - 1))
+            _back_off_or_raise(path, exc, attempt)
         else:
             return _parsed_sidecar(path, text)
     raise AssertionError("unreachable: the last attempt either returns or raises")
+
+
+def _back_off_or_raise(path: Path, exc: OSError, attempt: int) -> None:
+    """Wait before the next read attempt, or raise ``exc`` where it is no
+    transient hold or this was the last attempt."""
+    transient = exc.errno in _TRANSIENT_ERRNOS or isinstance(exc, PermissionError)
+    if not transient or attempt == _SIDECAR_READ_ATTEMPTS:
+        raise exc
+    if attempt == 1:
+        logger.warning(
+            "%s could not be opened (%s); retrying up to %d times",
+            path, exc, _SIDECAR_READ_ATTEMPTS - 1,
+        )
+    time.sleep(_SIDECAR_RETRY_DELAY * 2 ** (attempt - 1))
 
 
 def _parsed_sidecar(path: Path, text: str) -> ProvenanceSidecar:
