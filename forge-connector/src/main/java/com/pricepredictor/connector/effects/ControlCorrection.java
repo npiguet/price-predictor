@@ -6,6 +6,7 @@ import forge.game.combat.Combat;
 import forge.game.event.EventValueChangeType;
 import forge.game.event.GameEventZone;
 
+import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
@@ -34,19 +35,19 @@ final class ControlCorrection {
     private ControlCorrection() {
     }
 
-    /** The {@code removed_from_combat} a battlefield's zone event tells, or null. */
-    static EffectEvent removalAt(Game game, GameEventZone event) {
+    /** The {@code removed_from_combat} a battlefield's zone event tells, or empty. */
+    static Optional<EffectEvent> removalAt(Game game, GameEventZone event) {
         if (event.mode() != EventValueChangeType.Added || event.card() == null) {
-            return null;
+            return Optional.empty();
         }
         Combat combat = game.getCombat();
         Card combatant = combatantOf(combat, event.card().getId());
         if (combatant == null || CombatRemovalApiRules.tellsEveryCombatRemoval(PatchHooks.currentSubAbility())) {
-            return null;
+            return Optional.empty();
         }
-        return new EffectEvent(EventType.REMOVED_FROM_COMBAT)
+        return Optional.of(new EffectEvent(EventType.REMOVED_FROM_COMBAT)
                 .subject(Refs.of(combatant))
-                .onlyIf(() -> !CombatShape.isCombatant(combat, combatant));
+                .onlyIf(() -> !CombatShape.isCombatant(combat, combatant)));
     }
 
     /** The attacker or blocker of {@code combat} whose id is {@code id}, or null. */

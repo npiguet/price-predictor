@@ -26,7 +26,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -51,7 +50,7 @@ class BusEventsTest {
     void anEnergyCounterBecomesAnEnergyChangeEvent() {
         EffectEvent event = BusEvents.playerCounter(
                 new GameEventPlayerCounters(
-                        player, CounterEnumType.ENERGY, 0, 2));
+                        player, CounterEnumType.ENERGY, 0, 2)).orElseThrow();
 
         assertNotNull(event);
         assertEquals(EventType.ENERGY_CHANGE, event.type());
@@ -74,7 +73,7 @@ class BusEventsTest {
     void anEnergyCounterDeltaIsTheChangeNotTheNewTotal() {
         EffectEvent event = BusEvents.playerCounter(
                 new GameEventPlayerCounters(
-                        player, CounterEnumType.ENERGY, 3, 5));
+                        player, CounterEnumType.ENERGY, 3, 5)).orElseThrow();
 
         assertEquals(2, event.param(EventParam.DELTA));
     }
@@ -82,9 +81,9 @@ class BusEventsTest {
     /** A counter with no vocabulary entry is not guessed at. */
     @Test
     void aPlayerCounterWithNoEventTypeIsSkipped() {
-        assertNull(BusEvents.playerCounter(
+        assertTrue(BusEvents.playerCounter(
                 new GameEventPlayerCounters(
-                        player, CounterEnumType.EXPERIENCE, 0, 1)));
+                        player, CounterEnumType.EXPERIENCE, 0, 1)).isEmpty());
     }
 
     /**
@@ -98,8 +97,8 @@ class BusEventsTest {
      */
     @Test
     void aPlayerCounterEventWithNoTypeAtAllIsSkipped() {
-        assertNull(BusEvents.playerCounter(
-                new GameEventPlayerCounters(player, null, 0, 0)));
+        assertTrue(BusEvents.playerCounter(
+                new GameEventPlayerCounters(player, null, 0, 0)).isEmpty());
     }
 
     @Test
@@ -173,7 +172,7 @@ class BusEventsTest {
     void aDrawNamesNoWinner() {
         GameEventGameOutcome draw = new GameEventGameOutcome(4, List.of("Draw"), null, "");
 
-        assertNull(BusEvents.gameOutcome(draw, TestBoard.twoPlayerGame("p1", "p2")));
+        assertTrue(BusEvents.gameOutcome(draw, TestBoard.twoPlayerGame("p1", "p2")).isEmpty());
     }
 
     /**
@@ -192,7 +191,7 @@ class BusEventsTest {
         GameEventGameOutcome event = new GameEventGameOutcome(
                 4, List.of("p1 has won"), "p1", "p1: 1 p2: 0 ");
 
-        EffectEvent built = BusEvents.gameOutcome(event, game);
+        EffectEvent built = BusEvents.gameOutcome(event, game).orElseThrow();
 
         assertEquals(EventType.PLAYER_WON, built.type());
         assertEquals(List.of(Refs.of(p1)), built.subjects());
@@ -205,7 +204,7 @@ class BusEventsTest {
         GameEventGameOutcome event = new GameEventGameOutcome(
                 4, List.of("nobody has won"), "a name nobody at this table has", "");
 
-        assertNull(BusEvents.gameOutcome(event, game));
+        assertTrue(BusEvents.gameOutcome(event, game).isEmpty());
     }
 
     /**
@@ -220,7 +219,7 @@ class BusEventsTest {
         GameEventGameOutcome event = new GameEventGameOutcome(
                 4, List.of("same has won"), "same", "");
 
-        EffectEvent built = BusEvents.gameOutcome(event, game);
+        EffectEvent built = BusEvents.gameOutcome(event, game).orElseThrow();
 
         assertEquals(List.of(Refs.of(first)), built.subjects());
     }
@@ -234,10 +233,10 @@ class BusEventsTest {
      */
     @Test
     void aMoveOntoTheStackIsNotRecordedAsAnOutcome() {
-        assertNull(BusEvents.cardMoved(new GameEventCardChangeZone(
+        assertTrue(BusEvents.cardMoved(new GameEventCardChangeZone(
                 TestCards.build("Lightning Bolt"),
                 new Zone(ZoneType.Hand, TestCards.game()),
-                new Zone(ZoneType.Stack, TestCards.game()))));
+                new Zone(ZoneType.Stack, TestCards.game()))).isEmpty());
     }
 
     // ── a completed move ────────────────────────────────────────────────
@@ -258,7 +257,7 @@ class BusEventsTest {
         Card card = TestCards.build("Mountain");
 
         EffectEvent moved = BusEvents.cardMoved(new GameEventCardChangeZone(
-                card, zone(ZoneType.Hand), zone(ZoneType.Battlefield)));
+                card, zone(ZoneType.Hand), zone(ZoneType.Battlefield))).orElseThrow();
 
         assertEquals(EventType.ZONE_CHANGE, moved.type());
         String json = moved.toJson();
@@ -271,7 +270,7 @@ class BusEventsTest {
     @Test
     void aCardArrivingFromNowhereStillNamesWhereItLanded() {
         EffectEvent moved = BusEvents.cardMoved(new GameEventCardChangeZone(
-                TestCards.build("Mountain"), null, zone(ZoneType.Battlefield)));
+                TestCards.build("Mountain"), null, zone(ZoneType.Battlefield))).orElseThrow();
 
         String json = moved.toJson();
         assertTrue(json.contains("\"to_zone\":\"battlefield\""), json);
@@ -281,7 +280,7 @@ class BusEventsTest {
     /** And a move with neither end is not a move this collector can describe. */
     @Test
     void aMoveWithNeitherEndIsNotRecorded() {
-        assertNull(BusEvents.cardMoved(
-                new GameEventCardChangeZone(TestCards.build("Mountain"), null, null)));
+        assertTrue(BusEvents.cardMoved(
+                new GameEventCardChangeZone(TestCards.build("Mountain"), null, null)).isEmpty());
     }
 }

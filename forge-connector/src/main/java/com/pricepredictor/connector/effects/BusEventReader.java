@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The outcome events of the public bus, read once for every collector.
@@ -234,38 +235,38 @@ abstract class BusEventReader {
 
     @Subscribe
     public void onLifeChanged(GameEventPlayerLivesChanged event) {
-        file(BusEvents.lifeChanged(event), null);
+        fileOutcome(BusEvents.lifeChanged(event), null);
     }
 
     @Subscribe
     public void onPoisoned(GameEventPlayerPoisoned event) {
-        file(BusEvents.poisoned(event), BusEvents.causeOf(event));
+        fileOutcome(BusEvents.poisoned(event), BusEvents.causeOf(event));
     }
 
     @Subscribe
     public void onCounters(GameEventCardCounters event) {
-        file(BusEvents.counters(event), null);
+        fileOutcome(BusEvents.counters(event), null);
     }
 
     /** Energy, and any other player counter the vocabulary learns to name. */
     @Subscribe
     public void onPlayerCounters(GameEventPlayerCounters event) {
-        file(BusEvents.playerCounter(event), null);
+        BusEvents.playerCounter(event).ifPresent(counter -> fileOutcome(counter, null));
     }
 
     @Subscribe
     public void onRadiation(GameEventPlayerRadiation event) {
-        file(BusEvents.radiation(event), BusEvents.causeOf(event));
+        fileOutcome(BusEvents.radiation(event), BusEvents.causeOf(event));
     }
 
     @Subscribe
     public void onSpeed(GameEventSpeedChanged event) {
-        file(BusEvents.speed(event), null);
+        fileOutcome(BusEvents.speed(event), null);
     }
 
     @Subscribe
     public void onDayTime(GameEventDayTimeChanged event) {
-        file(BusEvents.dayTime(event), null);
+        fileOutcome(BusEvents.dayTime(event), null);
     }
 
     /**
@@ -274,7 +275,7 @@ abstract class BusEventReader {
      */
     @Subscribe
     public void onRegenerated(GameEventCardRegenerated event) {
-        file(BusEvents.regenerated(event), null);
+        fileOutcome(BusEvents.regenerated(event), null);
     }
 
     /**
@@ -300,7 +301,8 @@ abstract class BusEventReader {
             return;
         }
         if (event.zoneType() == ZoneType.Battlefield) {
-            file(ControlCorrection.removalAt(game, event), null);
+            ControlCorrection.removalAt(game, event)
+                    .ifPresent(removal -> fileOutcome(removal, null));
             controlMoved(event);
         } else if (event.zoneType() == ZoneType.Command) {
             commandZoneChanged(event);
@@ -368,7 +370,7 @@ abstract class BusEventReader {
     /** A library shuffled. No named cause: see {@link BusEvents#libraryShuffled}. */
     @Subscribe
     public void onShuffle(GameEventShuffle event) {
-        file(BusEvents.libraryShuffled(event), null);
+        fileOutcome(BusEvents.libraryShuffled(event), null);
     }
 
     /**
@@ -382,10 +384,7 @@ abstract class BusEventReader {
             for (EffectEvent lost : BusEvents.playersLost(game)) {
                 fileGameOutcome(lost);
             }
-            EffectEvent won = BusEvents.gameOutcome(event, game);
-            if (won != null) {
-                fileGameOutcome(won);
-            }
+            BusEvents.gameOutcome(event, game).ifPresent(this::fileGameOutcome);
         }
     }
 
@@ -408,21 +407,19 @@ abstract class BusEventReader {
      */
     @Subscribe
     public void onSacrificed(GameEventCardSacrificed event) {
-        EffectEvent sacrificed = BusEvents.sacrificed(event);
-        if (sacrificed != null) {
-            sacrificesPending.put(event.card().getId(), sacrificed);
-        }
+        BusEvents.sacrificed(event).ifPresent(
+                sacrificed -> sacrificesPending.put(event.card().getId(), sacrificed));
     }
 
     @Subscribe
     public void onTapped(GameEventCardTapped event) {
-        file(BusEvents.tapped(event), null);
+        fileOutcome(BusEvents.tapped(event), null);
     }
 
     /** A permanent phasing. No named cause: the bus names none. */
     @Subscribe
     public void onPhased(GameEventCardPhased event) {
-        file(BusEvents.phased(event), null);
+        BusEvents.phased(event).ifPresent(phased -> fileOutcome(phased, null));
     }
 
     /**
@@ -446,7 +443,7 @@ abstract class BusEventReader {
             mills.settle(libraryOwner);
         }
         fileCardMoved(event, move);
-        file(checkedMovement(move, libraryOwner), null);
+        checkedMovement(move, libraryOwner).ifPresent(movement -> fileOutcome(movement, null));
         if (move.card() != null) {
             followBoard(move);
         }
@@ -454,16 +451,16 @@ abstract class BusEventReader {
 
     /** File the move itself, and how a permanent left, ahead of it. */
     private void fileCardMoved(GameEventCardChangeZone event, Move move) {
-        EffectEvent moved = BusEvents.cardMoved(move);
+        Optional<EffectEvent> moved = BusEvents.cardMoved(move);
         for (EffectEvent how : howItLeft(move)) {
             // Filed as the move is, ahead of it, so a state-based death's
             // destroyed joins the record its move joins.
             fileMove(event, how);
         }
-        if (moved != null) {
-            placeInLibrary(move, moved);
-            fileMove(event, moved);
-        }
+        moved.ifPresent(zoneChange -> {
+            placeInLibrary(move, zoneChange);
+            fileMove(event, zoneChange);
+        });
     }
 
     /** What the move does to the readings kept of the battlefield and to the stack's followers. */
@@ -695,7 +692,7 @@ abstract class BusEventReader {
 
     @Subscribe
     public void onAttachment(GameEventCardAttachment event) {
-        file(BusEvents.attachment(event), null);
+        BusEvents.attachment(event).ifPresent(attached -> fileOutcome(attached, null));
     }
 
     @Subscribe
@@ -737,33 +734,29 @@ abstract class BusEventReader {
 
     /**
      * The draw, discard or mill a move may be, a draw or a mill gated on what
-     * Forge counted for it ({@link DrawCheck}, {@link MillCheck}); null for
+     * Forge counted for it ({@link DrawCheck}, {@link MillCheck}); empty for
      * none.
      */
-    private EffectEvent checkedMovement(Move move, Player libraryOwner) {
-        EffectEvent movement = BusEvents.libraryMovement(move, ownerOf(move));
-        if (movement == null || libraryOwner == null) {
-            return movement;
+    private Optional<EffectEvent> checkedMovement(Move move, Player libraryOwner) {
+        Optional<EffectEvent> movement = BusEvents.libraryMovement(move, ownerOf(move));
+        if (libraryOwner != null) {
+            movement.ifPresent(found -> gateOnCount(found, move, libraryOwner));
         }
+        return movement;
+    }
+
+    private void gateOnCount(EffectEvent movement, Move move, Player libraryOwner) {
         if (movement.type() == EventType.CARD_DRAWN) {
             movement.onlyIf(draws.open(libraryOwner)::drawn);
         } else if (movement.type() == EventType.CARD_MILLED) {
             movement.onlyIf(mills.open(libraryOwner, move.card().getId())::milled);
         }
-        return movement;
     }
 
     /** The live owner of the card a move names, or null. */
     private Player ownerOf(Move move) {
         PlayerView owner = move.owner();
         return game == null || owner == null ? null : game.getPlayer(owner);
-    }
-
-    /** File an outcome a {@link BusEvents} factory may have answered null for. */
-    private void file(EffectEvent event, String namedCause) {
-        if (event != null) {
-            fileOutcome(event, namedCause);
-        }
     }
 
     /**

@@ -28,6 +28,7 @@ import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * One Forge bus event as one {@link EffectEvent}.
@@ -177,17 +178,17 @@ final class BusEvents {
      * second Aether Hub tap in the same game record the player's cumulative
      * energy as if it had all arrived at once.
      */
-    static EffectEvent playerCounter(GameEventPlayerCounters event) {
+    static Optional<EffectEvent> playerCounter(GameEventPlayerCounters event) {
         if (event.type() == null) {
-            return null;
+            return Optional.empty();
         }
         String type = CardSpelling.counterName(event.type());
         if (!"ENERGY".equals(type)) {
-            return null;
+            return Optional.empty();
         }
-        return new EffectEvent(EventType.ENERGY_CHANGE)
+        return Optional.of(new EffectEvent(EventType.ENERGY_CHANGE)
                 .subject(Refs.of(event.receiver()))
-                .param(EventParam.DELTA, event.amount() - event.oldValue());
+                .param(EventParam.DELTA, event.amount() - event.oldValue()));
     }
 
     static EffectEvent radiation(GameEventPlayerRadiation event) {
@@ -256,7 +257,7 @@ final class BusEvents {
      * entity or player ref, and a display name in a ref's place silently drops
      * every row a reader joins to {@code state.entities}.
      *
-     * <p>Null on a draw: {@code winningPlayerName} is null whenever {@code
+     * <p>Empty on a draw: {@code winningPlayerName} is null whenever {@code
      * GameOutcome.getWinningLobbyPlayer()} is, and a {@code player_won} with no
      * winner would be a false record -- {@code game_drawn} is the type for
      * that outcome, and it is not this task's scope.
@@ -272,19 +273,19 @@ final class BusEvents {
      * collision is broken by taking the first match in {@code
      * game.getPlayers()}'s own order rather than guessing further.
      */
-    static EffectEvent gameOutcome(GameEventGameOutcome event, Game game) {
+    static Optional<EffectEvent> gameOutcome(GameEventGameOutcome event, Game game) {
         String winnerName = event.winningPlayerName();
         if (winnerName == null) {
-            return null;
+            return Optional.empty();
         }
         for (Player player : game.getPlayers()) {
             LobbyPlayer lobby = player.getLobbyPlayer();
             if (lobby != null && winnerName.equals(lobby.getName())) {
-                return new EffectEvent(EventType.PLAYER_WON)
-                        .subject(Refs.of(player));
+                return Optional.of(new EffectEvent(EventType.PLAYER_WON)
+                        .subject(Refs.of(player)));
             }
         }
-        return null;
+        return Optional.empty();
     }
 
     /**
@@ -300,33 +301,29 @@ final class BusEvents {
         List<EffectEvent> lost = new ArrayList<>();
         // Registered rather than in the game: a player who lost has left it.
         for (Player player : game.getRegisteredPlayers()) {
-            var reason = lossOf(player);
-            if (reason == null) {
-                continue;
-            }
-            lost.add(new EffectEvent(EventType.PLAYER_LOST)
+            lossOf(player).ifPresent(reason -> lost.add(new EffectEvent(EventType.PLAYER_LOST)
                     .subject(Refs.of(player))
-                    .param(EventParam.REASON, reason.name()));
+                    .param(EventParam.REASON, reason.name())));
         }
         return lost;
     }
 
-    /** Why the player lost, or null when they lost nothing: no outcome, or a draw. */
-    private static forge.game.player.GameLossReason lossOf(Player player) {
+    /** Why the player lost, or empty when they lost nothing: no outcome, or a draw. */
+    private static Optional<forge.game.player.GameLossReason> lossOf(Player player) {
         var outcome = player.getOutcome();
         if (outcome == null || outcome.lossState == null) {
-            return null;
+            return Optional.empty();
         }
         return outcome.lossState == forge.game.player.GameLossReason.IntentionalDraw
-                ? null : outcome.lossState;
+                ? Optional.empty() : Optional.of(outcome.lossState);
     }
 
-    /** A permanent sacrificed, or null when the event names no card. */
-    static EffectEvent sacrificed(GameEventCardSacrificed event) {
+    /** A permanent sacrificed, or empty when the event names no card. */
+    static Optional<EffectEvent> sacrificed(GameEventCardSacrificed event) {
         if (event.card() == null) {
-            return null;
+            return Optional.empty();
         }
-        return new EffectEvent(EventType.SACRIFICED).subject(Refs.of(event.card()));
+        return Optional.of(new EffectEvent(EventType.SACRIFICED).subject(Refs.of(event.card())));
     }
 
     static EffectEvent counters(GameEventCardCounters event) {
@@ -344,13 +341,13 @@ final class BusEvents {
      * with what they are attached to included, and whatever phased it — the
      * untap step's turn-based action or a phasing effect resolving.
      */
-    static EffectEvent phased(GameEventCardPhased event) {
+    static Optional<EffectEvent> phased(GameEventCardPhased event) {
         if (event.card() == null) {
-            return null;
+            return Optional.empty();
         }
-        return new EffectEvent(EventType.PHASED)
+        return Optional.of(new EffectEvent(EventType.PHASED)
                 .subject(Refs.of(event.card()))
-                .param(EventParam.OUT, event.phaseState());
+                .param(EventParam.OUT, event.phaseState()));
     }
 
     static EffectEvent tapped(GameEventCardTapped event) {
@@ -372,10 +369,10 @@ final class BusEvents {
      * third repeating the second verbatim. Reading the move is also the only
      * way {@code from_zone} gets filled at all.
      *
-     * <p>Null when neither end is known, which is a move this collector has
+     * <p>Empty when neither end is known, which is a move this collector has
      * nothing to say about rather than a move to nowhere.
      *
-     * <p>Also null for a move <b>onto</b> the stack. That move is a spell being
+     * <p>Also empty for a move <b>onto</b> the stack. That move is a spell being
      * cast, and the cast already has a record of its own — the activation half,
      * with the costs that were paid. Filed as an outcome it is worse than
      * redundant: it lands in whichever bracket happens to be open, so an
@@ -384,27 +381,27 @@ final class BusEvents {
      * outcome — the permanent arriving, or the spell going to the graveyard —
      * and says {@code from_zone=stack}.
      */
-    static EffectEvent cardMoved(GameEventCardChangeZone event) {
+    static Optional<EffectEvent> cardMoved(GameEventCardChangeZone event) {
         return cardMoved(new Move(event));
     }
 
     /** {@link #cardMoved(GameEventCardChangeZone)} for a move already read. */
-    static EffectEvent cardMoved(Move move) {
+    static Optional<EffectEvent> cardMoved(Move move) {
         if (move.card() == null) {
-            return null;
+            return Optional.empty();
         }
         String from = move.fromName();
         String to = move.toName();
         if (from == null && to == null) {
-            return null;
+            return Optional.empty();
         }
         if (move.to(ZoneType.Stack)) {
-            return null;
+            return Optional.empty();
         }
-        return new EffectEvent(EventType.ZONE_CHANGE)
+        return Optional.of(new EffectEvent(EventType.ZONE_CHANGE)
                 .subject(Refs.of(move.card()))
                 .param(EventParam.FROM_ZONE, from)
-                .param(EventParam.TO_ZONE, to);
+                .param(EventParam.TO_ZONE, to));
     }
 
     /**
@@ -428,33 +425,31 @@ final class BusEvents {
      * the player's discarded list says that card was just discarded, which is
      * how a madness discard reads.
      */
-    static EffectEvent libraryMovement(Move move, Player owner) {
+    static Optional<EffectEvent> libraryMovement(Move move, Player owner) {
         if (move.card() == null || move.owner() == null) {
-            return null;
+            return Optional.empty();
         }
         if (move.fromZone() == null || move.toZone() == null) {
-            return null;
+            return Optional.empty();
         }
-        EventType type = movementType(move, owner);
-        if (type == null) {
-            return null;
-        }
-        return new EffectEvent(type)
+        return movementType(move, owner).map(type -> new EffectEvent(type)
                 .subject(Refs.of(move.card().getOwner()))
-                .param(EventParam.COUNT, 1);
+                .param(EventParam.COUNT, 1));
     }
 
-    private static EventType movementType(Move move, Player owner) {
+    private static Optional<EventType> movementType(Move move, Player owner) {
         ZoneType from = move.fromZone();
         return switch (move.toZone()) {
-            case Hand -> from == ZoneType.Library ? EventType.CARD_DRAWN : null;
+            case Hand -> from == ZoneType.Library
+                    ? Optional.of(EventType.CARD_DRAWN) : Optional.empty();
             case Graveyard -> switch (from) {
-                case Hand -> EventType.CARD_DISCARDED;
-                case Library -> EventType.CARD_MILLED;
-                default -> null;
+                case Hand -> Optional.of(EventType.CARD_DISCARDED);
+                case Library -> Optional.of(EventType.CARD_MILLED);
+                default -> Optional.empty();
             };
-            case Exile -> discardedToExile(move, owner) ? EventType.CARD_DISCARDED : null;
-            default -> null;
+            case Exile -> discardedToExile(move, owner)
+                    ? Optional.of(EventType.CARD_DISCARDED) : Optional.empty();
+            default -> Optional.empty();
         };
     }
 
@@ -480,7 +475,7 @@ final class BusEvents {
     }
 
     /**
-     * An aura, equipment or fortification moving, or null when it names no
+     * An aura, equipment or fortification moving, or empty when it names no
      * card: {@code attached} with {@code attached_to}, the entity it now
      * hangs on, or {@code unattached} with {@code detached_from}, the one it
      * left, as the trigger path's run parameters name them. A move from one
@@ -488,18 +483,18 @@ final class BusEvents {
      * {@code attached} to the new one: {@code Card.attachToEntity} unattaches
      * first.
      */
-    static EffectEvent attachment(GameEventCardAttachment event) {
+    static Optional<EffectEvent> attachment(GameEventCardAttachment event) {
         if (event.equipment() == null) {
-            return null;
+            return Optional.empty();
         }
         boolean attaching = event.newTarget() != null;
         EffectEvent built = new EffectEvent(
                 attaching ? EventType.ATTACHED : EventType.UNATTACHED)
                 .subject(Refs.of(event.equipment()));
         String host = entityRef(attaching ? event.newTarget() : event.oldEntity());
-        return attaching
+        return Optional.of(attaching
                 ? built.param(EventParam.ATTACHED_TO, host)
-                : built.param(EventParam.DETACHED_FROM, host);
+                : built.param(EventParam.DETACHED_FROM, host));
     }
 
     /** A card's or a player's ref from its view, or null for neither. */
