@@ -201,17 +201,31 @@ class DirectedForkPlayedForwardForcedCastTest extends DirectedForkPlayedForwardS
     @Test
     void aBranchwalkerExploresAnEmptyLibrary() throws Throwable {
         Game game = empty(PhaseType.MAIN1);
-        Player active = game.getPlayers().get(0);
-        lands(game, active, "Forest", 2);
-        Card walker = permanent(game, active, "Wildgrowth Walker");
-        Card branchwalker = TestBoard.inHand(game, active, "Merfolk Branchwalker");
-        library(game, active, "Forest", "Grizzly Bears", "Island");
+        lands(game, game.getPlayers().get(0), "Forest", 2);
+        Watched cast = watched(game, "Wildgrowth Walker", "Merfolk Branchwalker",
+                "Forest", "Grizzly Bears", "Island");
 
         List<String> fork = forkOf(game, PhaseType.MAIN1, "701.44b", "empty_library");
 
-        assertFalse(resolutionsOf(fork, branchwalker).isEmpty(), "the Branchwalker is cast in the fork");
-        assertFalse(fired(fork, walker).isEmpty(), "Wildgrowth Walker triggers in the fork");
+        assertFalse(resolutionsOf(fork, cast.spell()).isEmpty(), "the Branchwalker is cast in the fork");
+        assertFalse(fired(fork, cast.watcher()).isEmpty(), "Wildgrowth Walker triggers in the fork");
         assertTrue(holding(fork, "card_revealed").isEmpty(), "the fork's explore reveals nothing");
+    }
+
+    /** A's permanent whose trigger answers the forced cast, and the spell in A's hand the fork casts. */
+    private record Watched(Card watcher, Card spell) {
+    }
+
+    /**
+     * {@code watcher} on A's battlefield, {@code spell} in A's hand, then
+     * {@code library} at the bottom of A's library, in that order.
+     */
+    private static Watched watched(Game game, String watcher, String spell, String... library) {
+        Player active = game.getPlayers().get(0);
+        Card permanent = permanent(game, active, watcher);
+        Card inHand = TestBoard.inHand(game, active, spell);
+        library(game, active, library);
+        return new Watched(permanent, inHand);
     }
 
     /**
@@ -225,15 +239,13 @@ class DirectedForkPlayedForwardForcedCastTest extends DirectedForkPlayedForwardS
         Game game = empty(PhaseType.MAIN1);
         Player active = game.getPlayers().get(0);
         lands(game, active, "Island", 4);
-        Card purpose = permanent(game, active, "Glorious Purpose");
-        Card inspector = TestBoard.inHand(game, active, "Echo Inspector");
-        library(game, active, "Forest", "Island", "Island");
+        Watched cast = watched(game, "Glorious Purpose", "Echo Inspector", "Forest", "Island", "Island");
         active.drawCard();
 
         List<String> fork = forkOf(game, PhaseType.MAIN1, "701.50f", "spirit_added");
 
-        assertFalse(resolutionsOf(fork, inspector).isEmpty(), "the Inspector is cast in the fork");
-        assertFalse(fired(fork, purpose).isEmpty(), "Glorious Purpose triggers in the fork");
+        assertFalse(resolutionsOf(fork, cast.spell()).isEmpty(), "the Inspector is cast in the fork");
+        assertFalse(fired(fork, cast.watcher()).isEmpty(), "Glorious Purpose triggers in the fork");
         assertTrue(holding(fork, "card_drawn").isEmpty(), "the fork's connive draws nothing");
     }
 
