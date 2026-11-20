@@ -42,7 +42,14 @@ from effects.domain.provenance import (
 )
 from effects.domain.records import EffectRecord, Moment, RecordKind
 from effects.domain.rule_outcomes import EffectKind, damage_lethal, lethal, shrink_lethal
-from effects.domain.script_text import api_of, params, root, segments
+from effects.domain.script_text import (
+    api_of,
+    is_script_reading,
+    params,
+    root,
+    script_reading,
+    segments,
+)
 from effects.domain.state_snapshot import (
     EntityState,
     LineKind,
@@ -463,20 +470,26 @@ def amount_edit(record: EffectRecord, effect: StatedEffect, line: SidecarLine,
     if not text:
         return unedited
     script = edit_text(line.script_text, effect, drawn)
-    if script is None:
+    found = None if script is None else _edited_reading(text, line, script, effect, drawn)
+    if found is None:
         return unedited
-    if text == line.script_text:
-        edited, spans = script, ()
-    else:
-        found = edit_prose(text, line.role_spans, effect, drawn)
-        if found is None:
-            return unedited
-        edited, spans = found
+    edited, spans = found
     original = record.ability[0]
     # A tree of its own, so the edited text never shares a key with the real line's.
     key = replace(original, script_file=(
         f"{SourceTree.COUNTERFACTUAL}/{drawn}/{original.script_file}"))
     return TextEdit(drawn, key, edited, script, spans)
+
+
+def _edited_reading(text: str, line: SidecarLine, script: str, effect: StatedEffect,
+                    drawn: int) -> tuple[str, tuple[RoleSpan, ...]] | None:
+    """``text`` as the edited line reads it, by what ``text`` is: the line's
+    script, its script reading (a line with no prose), or its prose."""
+    if text == line.script_text:
+        return script, ()
+    if is_script_reading(text):
+        return script_reading(script), ()
+    return edit_prose(text, line.role_spans, effect, drawn)
 
 
 def _with_toughness(entities: tuple[EntityState, ...], chosen: str, toughness: int

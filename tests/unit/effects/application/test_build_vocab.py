@@ -23,8 +23,14 @@ from effects.application.build_vocab import (
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.infrastructure.sidecar_io import sidecar_path_for
-from price_predictor.infrastructure.tokenizer_store import load_vocabulary
+from effects.infrastructure.vocabulary_file import read_vocabulary
 from tests.unit.effects.builders import write_sidecar
+
+
+def load_vocabulary(path: Path) -> dict[str, int]:
+    """The tokens of the effects vocabulary at ``path``."""
+    return read_vocabulary(path).tokens
+
 
 _CARD = """name: serra angel
 mana cost: {3}{W}{W}
@@ -142,11 +148,20 @@ class TestTheKeywordScanFollowsTheSurface:
         )
         return cards, tokens, keywords
 
-    def test_prose_does_not_take_script_parameter_names(self, scripted, tmp_path):
+    def test_prose_takes_the_sidecars_script_names_and_not_the_generated_script(
+        self, scripted, tmp_path,
+    ):
+        """A line with no prose (a variant's) reads its script on the prose
+        surface too (finding 1.5), so the prose build stages the trees' script
+        lines; the keyword's generated script is still never scanned."""
+        _scripted_corpus(scripted, ["DB$ PutCounter | CounterNum$ 2"], copies=1)
         config = _config(scripted, tmp_path, target_size=5000)
         run(config)
         vocab = load_vocabulary(config.vocab_path)
-        assert "activezones" not in vocab
+        assert {"db", "put", "counter", "num"} <= vocab.keys(), (
+            "the prose vocabulary lacks the API name or a parameter key of a script line"
+        )
+        assert "activezones" not in vocab and "active" not in vocab
         assert "cantblockby" not in vocab
         # The reminder text is still scanned: it is what prose expands to.
         assert "blocked" in vocab
@@ -445,7 +460,9 @@ class TestScriptSurfaceReport:
         assert "Camel-case split produces" in caplog.text
         assert "chain labels" in caplog.text
 
-    def test_the_prose_surface_prints_no_script_numbers(self, corpus, tmp_path, caplog):
+    def test_a_corpus_without_script_lines_prints_no_script_numbers(
+        self, corpus, tmp_path, caplog,
+    ):
         with caplog.at_level("INFO"):
             run(_config(corpus, tmp_path))
         assert "Script-line length" not in caplog.text

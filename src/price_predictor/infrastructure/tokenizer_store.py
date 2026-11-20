@@ -28,9 +28,13 @@ def load_vocabulary(vocab_path: Path) -> dict[str, int]:
     """
     if not vocab_path.exists():
         raise FileNotFoundError(f"Vocabulary file not found: {vocab_path}")
+    return vocabulary_of(vocab_path.read_text(encoding="utf-8").splitlines())
 
-    lines = vocab_path.read_text(encoding="utf-8").splitlines()
 
+def vocabulary_of(lines: list[str]) -> dict[str, int]:
+    """``{token: id}`` of a vocabulary's token lines, ``[PAD]`` and ``[UNK]``
+    checked at lines 0 and 1: what :func:`load_vocabulary` reads, for a reader
+    whose file holds more than the tokens."""
     if not lines or lines[0] != MtgTokenizer.PAD:
         got = lines[0] if lines else "empty file"
         raise ValueError(

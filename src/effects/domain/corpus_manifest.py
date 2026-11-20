@@ -200,7 +200,7 @@ class CorpusManifest:
     """Every decision ``build-corpus`` made, and what it made them from."""
 
     seed: int = field(metadata=_reads(int))
-    #: The encoding surface (``surface_of(vocab_path)``) the rarity table's
+    #: The encoding surface (the vocabulary header's) the rarity table's
     #: text keys were built on; the other surface keys every text differently.
     surface: Surface = field(metadata=_reads(Surface))
     vocab_path: str = field(metadata=_reads(str))

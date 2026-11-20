@@ -49,6 +49,17 @@ CHOOSER_APIS = frozenset(
 #: The keys whose value names the segment's API type.
 _API_KEYS: tuple[str, ...] = ("SP", "AB", "DB")
 
+#: Opens a script reading: the tokenizer reads the text after it by the
+#: script grammar on either surface (``AbilityTokenizer``).
+SCRIPT_READING = "[SCRIPT]"
+
+#: Free text restating the card's printed wording, which a variant's
+#: perturbation leaves stating the original: every ``...Description$`` and
+#: ``TgtPrompt$``, and the four prompts found still stating the original value
+#: on perturbed lines of the gen-2 variant tree (finding 1.5).
+_FREE_TEXT_KEY = re.compile(
+    r"\w*Description|TgtPrompt|SelectPrompt|ChoiceTitle|CostDesc|RepeatOptionalMessage")
+
 
 def segments(text: str) -> list[str]:
     """A chained text's segments, each stripped and without its ``SVn:`` opener."""
@@ -89,6 +100,34 @@ def api_of(found: dict[str, str]) -> str | None:
         if found.get(key):
             return found[key]
     return None
+
+
+def script_reading(script: str) -> str:
+    """What a line with no prose (a variant's) is encoded from: its script
+    with every free-text parameter dropped from each segment, opened by
+    :data:`SCRIPT_READING`. The one spelling of it, for the encoder and for
+    ``build-vocab``'s staging alike."""
+    kept = (_without_free_text(segment) for segment in script.split(SEG))
+    return f"{SCRIPT_READING} " + f" {SEG} ".join(kept)
+
+
+def is_script_reading(text: str | None) -> bool:
+    """Whether ``text`` is a :func:`script_reading`."""
+    return bool(text) and text.startswith(SCRIPT_READING)
+
+
+def _without_free_text(segment: str) -> str:
+    """One segment without its free-text parameters, its ``SVn:`` opener kept."""
+    opener = SEGMENT_OPENER.match(segment)
+    label = f"{opener.group(1)}: " if opener else ""
+    body = segment[opener.end():] if opener else segment
+    kept = [part.strip() for part in body.split("|") if not _is_free_text(part)]
+    return label + " | ".join(kept)
+
+
+def _is_free_text(part: str) -> bool:
+    key, separator, _value = part.partition("$")
+    return bool(separator) and _FREE_TEXT_KEY.fullmatch(key.strip()) is not None
 
 
 def is_bare_keyword(text: str | None) -> bool:

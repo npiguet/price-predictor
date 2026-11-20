@@ -34,7 +34,14 @@ from effects.infrastructure.effect_model_store import (
     content_hash,
 )
 from effects.infrastructure.sidecar_io import sidecar_path_for
+from effects.infrastructure.vocabulary_file import save_vocabulary
 from tests.unit.effects.builders import write_sidecar
+
+
+def _vocabulary(path, words: list[str]):
+    """A prose vocabulary file of ``words``, in id order."""
+    save_vocabulary({word: index for index, word in enumerate(words)}, "prose", path)
+    return path
 
 E_DIM = 8
 
@@ -77,8 +84,7 @@ def corpus(tmp_path):
         sidecar_path_for(tokens / "soldier.txt"),
     )
 
-    vocab = tmp_path / "vocab.txt"
-    vocab.write_text("[PAD]\n[UNK]\n", encoding="utf-8")
+    vocab = _vocabulary(tmp_path / "vocab.txt", ["[PAD]", "[UNK]"])
     keywords = tmp_path / "kw.json"
     keywords.write_text("{}", encoding="utf-8")
 
@@ -302,14 +308,10 @@ class TestTheRealEncoder:
             "static[4]: whatever\n",
             encoding="utf-8",
         )
-        vocab = tmp_path / "vocab.txt"
-        vocab.write_text(
-            "\n".join([
-                "[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", "creatures",
-                "you", "control", "get", "flying", "vigilance", "1",
-            ]) + "\n",
-            encoding="utf-8",
-        )
+        vocab = _vocabulary(tmp_path / "vocab.txt", [
+            "[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", "creatures",
+            "you", "control", "get", "flying", "vigilance", "1",
+        ])
         keywords = tmp_path / "kw.json"
         keywords.write_text("{}", encoding="utf-8")
 
@@ -423,11 +425,10 @@ class TestAGen3Checkpoint:
             "static[4]: flying\nstatic[5]: vigilance\n",
             encoding="utf-8",
         )
-        vocab = tmp_path / "vocab.txt"
-        vocab.write_text("\n".join([
+        vocab = _vocabulary(tmp_path / "vocab.txt", [
             "[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", "creatures",
             "you", "control", "get", "flying", "vigilance", "1",
-        ]) + "\n", encoding="utf-8")
+        ])
         keywords = tmp_path / "kw.json"
         keywords.write_text("{}", encoding="utf-8")
 
@@ -637,7 +638,7 @@ class TestHashCheck:
     ):
         _cards, _tokens, _checkpoint, vocab = corpus
         config = _config(corpus, tmp_path)
-        vocab.write_text("[PAD]\n[UNK]\nmoved\n", encoding="utf-8")
+        _vocabulary(vocab, ["[PAD]", "[UNK]", "moved"])
         with pytest.raises(HashMismatchError):
             run(config)
         assert not (config.output_root).exists() or not list(

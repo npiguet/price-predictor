@@ -673,8 +673,8 @@ def build(config: BuildCorpusConfig) -> int:
     """Build a curated dataset, or verify an existing one. Returns an exit code:
     1, after the corpus and its manifest are written, when a rule-test
     component already misses its precision target (research E5)."""
-    from effects.domain.ability_encoder import surface_of
     from effects.infrastructure.corpus_store import CorpusStore
+    from effects.infrastructure.vocabulary_file import vocabulary_surface
 
     store = CorpusStore(config.output)
     if config.verify:
@@ -685,7 +685,7 @@ def build(config: BuildCorpusConfig) -> int:
     roots = config.source_trees.sidecar_roots()
     trees = _converted_trees(config, roots)
     held_out = _select_holdout(config, trees)
-    surface = surface_of(config.vocab_path)
+    surface = vocabulary_surface(config.vocab_path)
     _log_holdout(config, held_out, surface)
     read = ReadConfig(
         records_dir=config.records_dir, sidecar_roots=roots,

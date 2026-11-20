@@ -692,6 +692,14 @@ Both rounds
   loaded is written under another extension.
 - A round's staged variants are removed from Forge's custom-cards directory when the round
   ends.
+- A variant's lines have no prose. On either surface each is encoded from its script reading:
+  the line's script opened by `[SCRIPT]`, with every `...Description$`, `TgtPrompt$`,
+  `SelectPrompt$`, `ChoiceTitle$`, `CostDesc$` and `RepeatOptionalMessage$` parameter
+  dropped, read by the script surface's grammar (camel case split, `$` and `|` as tokens).
+  These parameters restate the card's printed wording, which the perturbation does not change.
+- `build-vocab` stages the script lines of the converted trees on both surfaces, so the
+  prose vocabulary holds every API name and parameter key a variant reads. The vocabulary
+  file's header records its surface, and every reader takes the surface from it.
 
 Steered round
 

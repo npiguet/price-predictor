@@ -29,6 +29,7 @@ from effects.domain.selection_set import (
 from effects.domain.shard_generation import UnacceptedGenerationError
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.shard_io import write_shard
+from tests.unit.effects.builders import write_vocabulary
 
 #: Three texts ``text_is_held_out`` selects at the default permille, found by
 #: search: the trainer recomputes the holdout from its sidecars at startup and
@@ -136,7 +137,7 @@ def config(corpus, tmp_path, reports):
     return TrainEffectModelConfig.unpathed(
         corpus=str(corpus.directory),
         cards_folders=(_card_tree(tmp_path / "cardsfolder"),),
-        vocab_path="models/effects/vocab-script.txt",
+        vocab_path=write_vocabulary(tmp_path / "vocab-script.txt", "script"),
         reports_dir=reports,
     )
 

@@ -155,13 +155,14 @@ def load_model(
     (:meth:`SourceTrees.sidecar_cache`)."""
     device = default_device()
     encoder, model = load_weights(checkpoint, device)
+    tokenizer = tokenizer_for(checkpoint, files)
     return LoadedModel(
         checkpoint=checkpoint,
         encoder=encoder,
         model=model,
-        tokenizer=tokenizer_for(checkpoint, files),
+        tokenizer=tokenizer,
         identity_table=_identity_table(checkpoint, device),
-        surface=files.surface,
+        surface=tokenizer.surface,
         device=device,
         sidecars=sidecars,
     )

@@ -1213,12 +1213,6 @@ def _steered_catalogue(args: argparse.Namespace) -> Path | None:
     return CollectVariantsConfig.rules_dir if args.round is VariantRound.STEERED else None
 
 
-def _vocab_output(args: argparse.Namespace) -> Path:
-    from effects.application.build_vocab import BuildVocabConfig
-
-    return config_from_args(BuildVocabConfig, args).resolved_vocab_path()
-
-
 def _evaluation_dir(args: argparse.Namespace) -> Path:
     """Where the evaluation's pictures go: ``--output``, else
     ``<checkpoint stem>.evaluation/`` beside the checkpoint."""
@@ -1263,7 +1257,7 @@ _TOKENIZER_PATHS = ("vocab_path", "keyword_definitions")
 #: argument naming its output and the ones it reads.
 RUN_MANIFESTS: ManifestTable = {
     "build-vocab": Writes(
-        _vocab_output, file=True, inputs=("cards_folders", "keyword_definitions"),
+        "vocab_path", file=True, inputs=("cards_folders", "keyword_definitions"),
     ),
     "extract-keyword-definitions": Writes("output", file=True),
     "collect-coverage": Writes(

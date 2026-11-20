@@ -821,7 +821,7 @@ class TestTokenizerRulesByCheckpoint:
     def test_a_checkpoint_reads_its_vocabularys_surface(self):
         from effects.domain.ability_tokenizer import tokenizer_surface
 
-        settings = {"tokenizer_rules": "gen-2"}
+        settings = {"tokenizer_rules": "gen-3"}
         assert tokenizer_surface("script", settings) == "script"
         assert tokenizer_surface("prose", settings) == "prose"
 
@@ -829,8 +829,11 @@ class TestTokenizerRulesByCheckpoint:
         from effects.domain.ability_tokenizer import tokenizer_surface
         from effects.domain.recorded_version import UnknownRecordedVersion
 
-        with pytest.raises(UnknownRecordedVersion, match="gen-3"):
-            tokenizer_surface("script", {"tokenizer_rules": "gen-3"})
+        # gen-2 read a variant's script by the prose grammar on the prose
+        # surface, descriptions and all (finding 1.5).
+        for rules in ("gen-2", "gen-4"):
+            with pytest.raises(UnknownRecordedVersion, match=rules):
+                tokenizer_surface("script", {"tokenizer_rules": rules})
 
 
 class TestWithheldKeyword:

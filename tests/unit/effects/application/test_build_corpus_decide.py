@@ -68,7 +68,9 @@ def fake_sidecars() -> FakeSidecarCache:
     ):
         key = _provenance_key(label)
         lines[key] = _line(text, key)
-    return FakeSidecarCache(lines=lines)
+    # Converted cards' lines, which have prose: here the same text.
+    prose = {key: line.script_text for key, line in lines.items()}
+    return FakeSidecarCache(lines=lines, prose=prose)
 
 
 def a_survey(

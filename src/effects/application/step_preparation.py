@@ -233,7 +233,6 @@ class StepPreparer:
     ) -> None:
         self.config = settings.config
         self.seed = settings.seed
-        self.surface = settings.config.tokenizer_files.surface
         self.surface_spec = SurfaceSpec.for_training(settings.config, settings.widths)
         self.split = settings.split
         self.rarity = settings.rarity
@@ -250,6 +249,7 @@ class StepPreparer:
         )
         self._api_targets: dict[str, tuple[int, tuple[int, ...]]] = {}
         self.tokenizer = load_tokenizer(self.config.tokenizer_files)
+        self.surface = self.tokenizer.surface
         self.sidecars = self.config.source_trees.sidecar_cache()
         #: One memoised join for the run, not per step.
         self.resolver = KeyResolver(self.sidecars, self.surface)

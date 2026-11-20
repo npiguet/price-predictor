@@ -36,6 +36,7 @@ from effects.infrastructure.corpus_store import (
     card_disjoint_resolutions,
     training_acting_keys,
 )
+from effects.infrastructure.vocabulary_file import vocabulary_surface
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +110,7 @@ def run_gate_one(context: EvaluationContext, identity) -> CheckResult:
         )
     # Both checkpoints read one vocabulary (require_same_split), so one
     # surface's texts decide the stratum for both: the batcher's own join.
-    texts = KeyResolver(context.sidecars, context.tokenizer_files.surface)
+    texts = KeyResolver(context.sidecars, vocabulary_surface(context.tokenizer_files.vocab))
     stratum = unique_text_stratum(context.corpus_path, games, texts.text_of)
     if not stratum:
         return CheckResult(

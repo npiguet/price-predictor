@@ -12,7 +12,7 @@ from pathlib import Path
 from effects.domain.ability_tokenizer import AbilityTokenizer, tokenizer_surface
 from effects.domain.keyword_definitions import KeywordDefinition
 from effects.domain.tokenizer_files import TokenizerFiles
-from price_predictor.infrastructure.tokenizer_store import load_vocabulary
+from effects.infrastructure.vocabulary_file import read_vocabulary
 
 
 def _normalized(template: str | None) -> str | None:
@@ -50,14 +50,15 @@ def load_tokenizer(
 
     With a loaded checkpoint's ``training_settings`` it applies the rules that
     checkpoint trained under (:func:`tokenizer_surface`, which refuses rules this
-    code does not read); without, the vocabulary's own surface's.
+    code does not read); without, those of the surface the vocabulary's header
+    records.
     """
-    surface = files.surface
+    vocabulary = read_vocabulary(files.vocab)
+    surface = vocabulary.surface
     if training_settings is not None:
         surface = tokenizer_surface(surface, training_settings)
     return AbilityTokenizer(
-        load_vocabulary(files.vocab), load_definitions(files.keywords),
-        surface=surface,
+        vocabulary.tokens, load_definitions(files.keywords), surface=surface,
     )
 
 

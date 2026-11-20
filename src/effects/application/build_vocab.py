@@ -1,11 +1,15 @@
 """``build-vocab``: the effects-side tokenizer vocabulary (FR-064, FR-065).
 
-A wrapper over ``price_predictor.application.build_vocabulary``. Script lines
-are tokenized here rather than by the shared builder, whose tokenizer
-lowercases before splitting and would erase the camel case the script rules
-split on; they are counted before the prose, so a truncation drops prose
-first. Every template word is seeded (FR-019), so no truncation can turn an
-expansion into ``[UNK]``.
+A wrapper over ``price_predictor.application.build_vocabulary``. Both surfaces
+stage the sidecars' script lines: the script surface reads them, and the prose
+surface reads a line with no prose (a variant's) as its script reading
+(``script_text.script_reading``, finding 1.5). Script lines are tokenized here
+rather than by the shared builder, whose tokenizer lowercases before splitting
+and would erase the camel case the script rules split on. On the script
+surface they are counted before the prose, so a truncation drops prose first;
+on the prose surface after it. Every template word, chain label, parameter key
+part and API name part is seeded (FR-019), so no truncation can drop one. The
+file records its surface in its header (``vocabulary_file``).
 """
 
 from __future__ import annotations
@@ -25,15 +29,15 @@ from effects.domain.ability_tokenizer import (
     Token,
     camel_parts,
 )
-from effects.domain.script_text import SEG
+from effects.domain.script_text import SCRIPT_READING, SEG, script_reading
 from effects.infrastructure.tokenizer_loading import load_definitions
+from effects.infrastructure.vocabulary_file import save_vocabulary
 from price_predictor.application.build_vocabulary import (
     MULTI_WORD_KEYWORDS,
     build_vocabulary,
     truncate_to_target_size,
 )
 from price_predictor.domain.keyword_tokens import multi_word_keywords
-from price_predictor.infrastructure.tokenizer_store import save_vocabulary
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +46,7 @@ DEFAULT_TARGET_SIZE = 5000
 #: Seeded into every effects vocabulary at the lowest ids, whatever their
 #: corpus frequency.
 SEEDED_SPECIALS: tuple[str, ...] = (
-    "[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", SEG,
+    "[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", SEG, SCRIPT_READING,
 )
 
 #: The shared builder's production threshold.
@@ -51,6 +55,8 @@ _FREQ_THRESHOLD = 2
 _LABEL_RE = re.compile(r"(?<![A-Za-z0-9])SV(\d+)(?![A-Za-z0-9])")
 #: A parameter key, or a ``$``-prefix glued to its value (``Count$Valid``).
 _KEY_RE = re.compile(r"([A-Za-z]+)\$")
+#: An API name, a trigger's or static's mode, or a replacement's event.
+_API_RE = re.compile(r"(?<![A-Za-z])(?:SP|AB|DB|Mode|Event)\$[ \t]*([A-Za-z]+)")
 #: Free prose, so left out of the script coverage figure (FR-011).
 _DESCRIPTION_PARAM_RE = re.compile(r"\w*Description\$[^|\[]*")
 
@@ -90,9 +96,10 @@ class SeededTokens:
     labels: list[str] = field(default_factory=list)
     template_words: list[str] = field(default_factory=list)
     key_parts: list[str] = field(default_factory=list)
+    api_parts: list[str] = field(default_factory=list)
 
     def all(self) -> list[str]:
-        return [*self.labels, *self.template_words, *self.key_parts]
+        return [*self.labels, *self.template_words, *self.key_parts, *self.api_parts]
 
 
 def _scan_sources(config: BuildVocabConfig) -> list[Path]:
@@ -119,18 +126,23 @@ def _keyword_corpus_text(definitions: dict) -> str:
 
 
 def script_lines(folders: list[Path]) -> list[str]:
-    """Every sidecar's script lines and API types, for the script surface."""
+    """Every sidecar's script lines and API types."""
     from effects.infrastructure.sidecar_io import iter_sidecars
 
     lines: list[str] = []
     for folder in folders:
         for _path, sidecar in iter_sidecars(folder):
             for line in sidecar.lines:
-                if line.script_text:
-                    lines.append(line.script_text)
-                if line.script_api_type:
-                    lines.append(line.script_api_type)
+                lines.extend(text for text in (line.script_text, line.script_api_type) if text)
     return lines
+
+
+def staged_lines(folders: list[Path], surface: Surface) -> list[str]:
+    """The script texts a surface's vocabulary is staged from: each line's
+    script as the script surface reads it, else as its script reading, which
+    is how the prose surface reads a line with no prose."""
+    lines = script_lines(folders)
+    return lines if surface == Surface.SCRIPT else [script_reading(line) for line in lines]
 
 
 def staging_tokenizer(surface: Surface, definitions: dict | None = None) -> AbilityTokenizer:
@@ -156,7 +168,7 @@ def template_texts(
         if definition.reminder_template
     ]
     for line in staged:
-        keyword = tokenizer.keywords.line_of(line)
+        keyword = tokenizer.keywords.line_of(line.removeprefix(f"{SCRIPT_READING} "))
         if keyword is not None and definitions[keyword.name].reminder_template:
             texts.append(tokenizer.keywords.line_text(keyword.name, keyword.details))
     return texts
@@ -166,32 +178,33 @@ def seed_tokens(
     stager: AbilityTokenizer, definitions: dict, staged: list[str],
 ) -> SeededTokens:
     """The tokens seeded ahead of the corpus, so no truncation can drop them:
-    template words (FR-019), and on the script surface the chain labels and
-    every key part (FR-002a, FR-009b). ``stager`` is the surface's
-    :func:`staging_tokenizer`."""
+    template words (FR-019), and the staged script lines' chain labels, every
+    key part (FR-002a, FR-009b) and every API name part, on both surfaces since
+    both read scripts. ``stager`` is the surface's :func:`staging_tokenizer`."""
     seeded = SeededTokens()
-    for text in template_texts(stager, definitions, staged):
-        seeded.template_words.extend(t.text for t in stager.tokenize(text))
-    if stager.surface == Surface.SCRIPT:
-        longest = max(
-            (int(n) for line in staged for n in _LABEL_RE.findall(line)), default=0,
-        )
-        seeded.labels = [f"sv{n}" for n in range(1, longest + 1)]
-        for line in staged:
-            for key in _KEY_RE.findall(line):
-                seeded.key_parts.extend(
-                    key[start:end].lower() for start, end in camel_parts(key)
-                )
-    seeded.template_words = list(dict.fromkeys(seeded.template_words))
-    seeded.key_parts = list(dict.fromkeys(seeded.key_parts))
+    words = (t.text for text in template_texts(stager, definitions, staged)
+             for t in stager.tokenize(text))
+    seeded.template_words = list(dict.fromkeys(words))
+    longest = max((int(n) for line in staged for n in _LABEL_RE.findall(line)), default=0)
+    seeded.labels = [f"sv{n}" for n in range(1, longest + 1)]
+    seeded.key_parts = _camel_parts_of(_KEY_RE, staged)
+    seeded.api_parts = _camel_parts_of(_API_RE, staged)
     return seeded
+
+
+def _camel_parts_of(pattern: re.Pattern, staged: list[str]) -> list[str]:
+    """The lower-cased camel parts of every ``pattern`` group in ``staged``,
+    each once, in order of first appearance."""
+    names = (name for line in staged for name in pattern.findall(line))
+    return list(dict.fromkeys(
+        name[start:end].lower() for name in names for start, end in camel_parts(name)))
 
 
 def run(config: BuildVocabConfig) -> int:
     """Build and write the vocabulary. Returns the resulting size."""
     folders = _scan_sources(config)
     definitions = _load_definitions(Path(config.keyword_definitions))
-    staged = script_lines(folders) if config.surface == Surface.SCRIPT else []
+    staged = staged_lines(folders, config.surface)
     stager = staging_tokenizer(config.surface, definitions)
     staged_tokens = [stager.tokenize(line) for line in staged]
     seeded = seed_tokens(stager, definitions, staged)
@@ -199,19 +212,21 @@ def run(config: BuildVocabConfig) -> int:
     results, sources = _scan_vocabularies(folders, definitions)
     # The staged script lines count as a source too.
     scanned = sources + bool(staged)
-    vocab, domain_token_count = _merge_vocab(results, seeded, staged_tokens)
+    vocab, domain_token_count = _merge_vocab(
+        results, seeded, staged_tokens, script_first=config.surface == Surface.SCRIPT,
+    )
     truncated = truncate_to_target_size(vocab, domain_token_count, config.target_size)
     final = AbilityTokenizer(truncated, definitions, surface=config.surface)
     _check_expansions(final, definitions)
 
     vocab_path = Path(config.vocab_path)
     vocab_path.parent.mkdir(parents=True, exist_ok=True)
-    save_vocabulary(truncated, vocab_path)
+    save_vocabulary(truncated, config.surface, vocab_path)
     logger.info(
         "Wrote %d tokens to %s (surface=%s, %d sources)",
         len(truncated), vocab_path, config.surface, scanned,
     )
-    _report(config.surface, seeded, staged, staged_tokens, final)
+    _report(seeded, staged, staged_tokens, final)
     return len(truncated)
 
 
@@ -242,27 +257,23 @@ def _scan_vocabularies(folders: list[Path], definitions: dict) -> tuple[list, in
 
 
 def _merge_vocab(
-    results: list, seeded: SeededTokens, staged_tokens: list[list[Token]],
+    results: list, seeded: SeededTokens, staged_tokens: list[list[Token]], *,
+    script_first: bool,
 ) -> tuple[dict[str, int], int]:
     """One vocabulary from the seeds, the staged script lines and the scans,
-    and its ``domain_token_count``."""
+    and its ``domain_token_count``. A truncation drops from the tail, so the
+    surface's own text goes first: the script lines on the script surface
+    (``script_first``), the prose on the prose surface."""
     # Specials, seeded tokens and the shared builder's domain terms all sit
     # below ``domain_token_count``, which a truncation never drops.
-    vocab: dict[str, int] = {}
-    for token in [*SEEDED_SPECIALS, *seeded.all()]:
-        vocab.setdefault(token, len(vocab))
-    for result in results:
-        for token, index in result.vocab.items():
-            if index < result.domain_token_count:
-                vocab.setdefault(token, len(vocab))
+    domain = [token for result in results
+              for token, index in result.vocab.items() if index < result.domain_token_count]
+    vocab = dict.fromkeys([*SEEDED_SPECIALS, *seeded.all(), *domain])
     domain_token_count = len(vocab)
-    # Script lines before prose: a truncation drops from the tail.
-    for token in _frequent(staged_tokens):
-        vocab.setdefault(token, len(vocab))
-    for result in results:
-        for token in result.vocab:
-            vocab.setdefault(token, len(vocab))
-    return vocab, domain_token_count
+    script = _frequent(staged_tokens)
+    prose = [token for result in results for token in result.vocab]
+    vocab.update(dict.fromkeys([*script, *prose] if script_first else [*prose, *script]))
+    return {token: index for index, token in enumerate(vocab)}, domain_token_count
 
 
 def _load_definitions(path: Path) -> dict:
@@ -304,7 +315,6 @@ def _check_expansions(tokenizer: AbilityTokenizer, definitions: dict) -> None:
 
 
 def _report(
-    surface: Surface,
     seeded: SeededTokens,
     staged: list[str],
     staged_tokens: list[list[Token]],
@@ -312,11 +322,12 @@ def _report(
 ) -> None:
     """The build log's numbers (FR-006, FR-011): lengths, coverage, seeding."""
     logger.info(
-        "Seeded %d specials, %d chain labels, %d template words, %d key parts",
+        "Seeded %d specials, %d chain labels, %d template words, %d key parts, "
+        "%d API name parts",
         len(SEEDED_SPECIALS), len(seeded.labels), len(seeded.template_words),
-        len(seeded.key_parts),
+        len(seeded.key_parts), len(seeded.api_parts),
     )
-    if surface != Surface.SCRIPT or not staged:
+    if not staged:
         return
     _report_lengths(staged, staged_tokens)
     _report_unknown_rate(staged, final)

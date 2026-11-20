@@ -26,7 +26,7 @@ from effects.domain.keyword_formatting import (
 from effects.domain.keyword_names import QUALITY_KEYWORDS, display_name_of
 from effects.domain.provenance import Role, RoleSpan
 from effects.domain.recorded_version import recorded_version
-from effects.domain.script_text import CHAIN_KEYS, SEG
+from effects.domain.script_text import CHAIN_KEYS, SCRIPT_READING, SEG, is_script_reading
 from price_predictor.domain.keyword_tokens import keyword_token_form
 from price_predictor.domain.tokenizer import MtgTokenizer
 
@@ -40,7 +40,7 @@ class Surface(StrEnum):
 
 
 #: Each is one token wherever it appears, never ``[``, a word and ``]``.
-SPECIAL_TOKENS: tuple[str, ...] = ("[PAD]", "[UNK]", "[MASK]", "[CLS]", SEG)
+SPECIAL_TOKENS: tuple[str, ...] = ("[PAD]", "[UNK]", "[MASK]", "[CLS]", SEG, SCRIPT_READING)
 
 _SPECIAL_ALTERNATION = "|".join(re.escape(token) for token in SPECIAL_TOKENS)
 
@@ -97,7 +97,7 @@ INFERENCE_KEYWORD_EXPAND_P = 0.0
 #: ``training_settings``: the grammar's version label, not a generation of
 #: records. A checkpoint recording none or another is refused.
 TOKENIZER_RULES_KEY = "tokenizer_rules"
-TOKENIZER_RULES = "gen-2"
+TOKENIZER_RULES = "gen-3"
 
 
 def tokenizer_surface(vocab_surface: Surface, training_settings) -> Surface:
@@ -363,7 +363,9 @@ class AbilityTokenizer:
         return list(tokens)
 
     def _split_with_offsets(self, text: str) -> list[Token]:
-        if self.surface == Surface.SCRIPT:
+        """The surface's grammar; a script reading (a line with no prose)
+        reads by the script grammar on either surface."""
+        if self.surface == Surface.SCRIPT or is_script_reading(text):
             return self._split_script(text)
         return [
             self._token(match.group(0), match.start(), match.end())
@@ -474,12 +476,17 @@ class AbilityTokenizer:
     # ── keyword lines (FR-013, FR-016) ──────────────────────────────────
 
     def _tag_keyword_line(self, tokens: list[Token], text: str) -> list[Token]:
+        """Tag a keyword line's first token; a script reading's keyword is
+        read after its opener, so a variant's ``Protection from red`` is one."""
         if not tokens:
             return tokens
-        line = self.keywords.line_of(text)
+        opener = len(SCRIPT_READING) + 1 if is_script_reading(text) else 0
+        line = self.keywords.line_of(text[opener:])
         if line is None:
             return tokens
-        tokens[0] = replace(tokens[0], keyword_line=line)
+        tokens[0] = replace(
+            tokens[0], keyword_line=replace(line, name_end=line.name_end + opener),
+        )
         return tokens
 
     # ── keyword expansion (FR-070, FR-012–FR-018) ───────────────────────

@@ -384,9 +384,9 @@ def require_matching_surface(
     The rarity table is keyed by surface; on the other one every lookup
     misses, and ``sample_weights`` silently falls back to per-shard counts.
     """
-    from effects.domain.ability_encoder import surface_of
+    from effects.infrastructure.vocabulary_file import vocabulary_surface
 
-    actual = surface_of(vocab_path)
+    actual = vocabulary_surface(vocab_path)
     if actual != manifest_surface:
         raise SurfaceMismatchError(
             f"the curated dataset at {corpus} was built on the "

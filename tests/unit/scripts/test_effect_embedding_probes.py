@@ -24,6 +24,7 @@ import pytest
 from effect_embedding_probes import build_texts, common, effect_profiles
 
 from effects.domain.provenance import BuiltTrait, ProvenanceKey
+from tests.unit.effects.builders import write_vocabulary
 
 _FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "effects"
 
@@ -32,8 +33,20 @@ _WIDTH = 12
 _SIDECARS = 100
 
 
-def _provenance(vocab: str = "models/effects/vocab-script.txt", corpus: str = ""):
-    return SimpleNamespace(vocab_path=vocab, corpus_path=corpus)
+#: ``surface -> vocabulary file`` recording it, written once for the module.
+_VOCABULARIES: dict[str, Path] = {}
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _vocabularies(tmp_path_factory):
+    root = tmp_path_factory.mktemp("vocabularies")
+    for surface in ("script", "prose"):
+        _VOCABULARIES[surface] = write_vocabulary(root / "vocab.txt" if surface == "prose"
+                                                  else root / "renamed.txt", surface)
+
+
+def _provenance(surface: str = "script", corpus: str = ""):
+    return SimpleNamespace(vocab_path=str(_VOCABULARIES[surface]), corpus_path=corpus)
 
 
 @pytest.fixture
@@ -86,10 +99,10 @@ class TestResolvePaths:
 
     def test_the_surface_follows_the_checkpoint_s_vocabulary(self, tree):
         script = _paths_for(
-            Path("c.pt"), tree.abilities, _provenance("models/effects/vocab-script.txt"),
+            Path("c.pt"), tree.abilities, _provenance("script"),
         )
         prose = _paths_for(
-            Path("c.pt"), tree.abilities, _provenance("models/effects/vocab.txt"),
+            Path("c.pt"), tree.abilities, _provenance("prose"),
         )
         assert (script.surface, prose.surface) == ("script", "prose")
 

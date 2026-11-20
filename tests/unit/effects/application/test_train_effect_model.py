@@ -7,8 +7,6 @@ encoding surface.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from effects.application.train_effect_model import TrainEffectModelConfig
@@ -20,6 +18,7 @@ from effects.application.training_schedule import (
     warmup_steps,
 )
 from effects.domain.baselines import Baseline
+from tests.unit.effects.builders import write_vocabulary
 
 
 class TestScheduleConstants:
@@ -138,14 +137,14 @@ class TestCorpusSurface:
 
     ``CorpusManifest.surface`` records which, and nothing read it: the
     ``--corpus`` branch took its surface from ``--vocab-path`` alone. A
-    prose-built dataset read with ``--vocab-path
-    models/effects/vocab-script.txt`` misses on every rarity lookup, and
+    prose-built dataset read with a script vocabulary misses on every rarity
+    lookup, and
     ``sample_weights`` reads a miss as "a shard collected after the dataset was
     built" and falls back to the resident shard's own count — reverting
     silently to exactly the per-shard weighting FR-141 exists to replace.
     """
 
-    def test_a_vocabulary_on_the_other_surface_is_refused(self) -> None:
+    def test_a_vocabulary_on_the_other_surface_is_refused(self, tmp_path) -> None:
         from effects.application.train_effect_model import (
             SurfaceMismatchError,
             require_matching_surface,
@@ -154,23 +153,19 @@ class TestCorpusSurface:
         with pytest.raises(SurfaceMismatchError, match="script"):
             require_matching_surface(
                 manifest_surface="script",
-                vocab_path=Path("models/effects/vocab.txt"),
+                vocab_path=write_vocabulary(tmp_path / "vocab-script.txt", "prose"),
                 corpus="output/effects/corpus",
             )
 
-    def test_the_surface_the_dataset_was_built_on_is_accepted(self) -> None:
+    def test_the_surface_the_dataset_was_built_on_is_accepted(self, tmp_path) -> None:
         from effects.application.train_effect_model import require_matching_surface
 
-        require_matching_surface(
-            manifest_surface="script",
-            vocab_path=Path("models/effects/vocab-script.txt"),
-            corpus="output/effects/corpus",
-        )
-        require_matching_surface(
-            manifest_surface="prose",
-            vocab_path=Path("models/effects/vocab.txt"),
-            corpus="output/effects/corpus",
-        )
+        for surface in ("script", "prose"):
+            require_matching_surface(
+                manifest_surface=surface,
+                vocab_path=write_vocabulary(tmp_path / f"{surface}.txt", surface),
+                corpus="output/effects/corpus",
+            )
 
 
 class TestProvenanceRecordsTheCorpus:

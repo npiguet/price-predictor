@@ -101,6 +101,16 @@ def test_the_trainer_manifests_the_directory_it_is_given():
     )
 
 
+def test_build_vocab_manifests_the_directory_of_its_vocabulary():
+    args = parse_cli([
+        "build-vocab", "--vocab-path", "output/effects/gen3/inputs/run/vocab.txt",
+        "--keyword-definitions", "k.json",
+    ])
+    assert cli.RUN_MANIFESTS["build-vocab"].run_dir(args) == Path(
+        "output/effects/gen3/inputs/run",
+    )
+
+
 def test_shard_discovery_never_takes_the_manifest_for_a_shard(tmp_path: Path):
     (tmp_path / "nested").mkdir()
     (tmp_path / "run.json").write_text("{}", encoding="utf-8")

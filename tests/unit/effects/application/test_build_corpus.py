@@ -61,6 +61,7 @@ from effects.domain.records import (
     RewritePayload,
     TurnActionSubkind,
 )
+from effects.domain.script_text import script_reading
 from effects.domain.split import HoldoutRule
 from effects.domain.state_snapshot import StateSnapshot
 from effects.domain.strata import Stratum
@@ -85,6 +86,7 @@ from tests.unit.effects.builders import (
     make_snapshot,
     write_ended_shard,
     write_sidecar,
+    write_vocabulary,
 )
 from tests.unit.effects.builders import make_record as _any_generation_record
 
@@ -282,7 +284,8 @@ class CorpusFixture:
         replace any field, a rule included."""
         return BuildCorpusConfig(**{
             "records_dir": self.records, "cards_folders": self.cards,
-            "output": output, "workers": 1, "vocab_path": "vocab.txt",
+            "output": output, "workers": 1,
+            "vocab_path": str(write_vocabulary(self.records.parent / "vocab.txt")),
             "keyword_definitions": None, **rules, **overrides,
         })
 
@@ -1190,7 +1193,9 @@ def test_no_empty_output_shard_is_written(default_build):
     assert not empty, f"empty shards written: {[str(s) for s in empty]}"
 
 
-def test_the_trainer_refuses_a_real_dataset_built_on_the_other_surface(default_build):
+def test_the_trainer_refuses_a_real_dataset_built_on_the_other_surface(
+    default_build, tmp_path,
+):
     """The manifest's ``surface`` reaches the trainer (FR-141).
 
     A real ``build-corpus`` output, read back by ``train_effect_model.run``
@@ -1210,7 +1215,7 @@ def test_the_trainer_refuses_a_real_dataset_built_on_the_other_surface(default_b
     with pytest.raises(SurfaceMismatchError, match="prose"):
         train(TrainEffectModelConfig.unpathed(
             corpus=str(default_build.directory),
-            vocab_path=Path("models/effects/vocab-script.txt"),
+            vocab_path=write_vocabulary(tmp_path / "vocab.txt", "script"),
         ))
 
 
@@ -1315,7 +1320,7 @@ def test_a_variant_text_is_capped_and_weighted_like_any_other(variant_build):
     it lands in neither the rarity table nor the per-text cap while every real
     ability is in both — uncapped records competing against capped ones.
     """
-    assert _VARIANT_TEXT in variant_build.load().rarity
+    assert script_reading(_VARIANT_TEXT) in variant_build.load().rarity
 
 
 def test_without_the_variant_tree_a_variant_text_resolves_to_nothing(
@@ -1326,7 +1331,7 @@ def test_without_the_variant_tree_a_variant_text_resolves_to_nothing(
 
     store = fixture.build(tmp_path / "curated")
 
-    assert _VARIANT_TEXT not in store.load().rarity
+    assert script_reading(_VARIANT_TEXT) not in store.load().rarity
 
 
 def test_the_manifest_records_the_variant_tree_it_read(a_corpus_with_variants, variant_build):
@@ -2161,7 +2166,8 @@ def _gen3_config(records: Path, output: Path, **overrides) -> BuildCorpusConfig:
 
     values = dict(
         records_dir=records, output=output, cards_folders=GEN3_SIDECAR_FOLDERS,
-        keyword_definitions=None, vocab_path="vocab.txt", workers=1,
+        keyword_definitions=None, vocab_path=str(write_vocabulary(records.parent / "vocab.txt")),
+        workers=1,
         holdout=HoldoutRule(permille=100),
         game_disjoint_share=0.05, validation_sample=0, min_games_per_half=2,
         max_item_error=math.inf, max_component_error=math.inf,

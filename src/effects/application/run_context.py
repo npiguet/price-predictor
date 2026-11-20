@@ -48,6 +48,7 @@ from effects.domain.effect_head_layout import FieldSpec
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.loss_denominators import LossDenominators
 from effects.infrastructure.sidecar_io import script_vocabularies
+from effects.infrastructure.vocabulary_file import vocabulary_surface
 
 logger = logging.getLogger(__name__)
 
@@ -233,7 +234,7 @@ def _identity_table(config: TrainEffectModelConfig, device: torch.device) -> Ide
     """The identity baseline's table, one row per text the sidecars hold."""
     texts = known_texts(
         config.source_trees.sidecar_roots(),
-        config.tokenizer_files.surface,
+        vocabulary_surface(config.tokenizer_files.vocab),
     )
     logger.info("Identity table over %d ability texts.", len(texts))
     return IdentityTable(texts, config.e_dim).to(device)

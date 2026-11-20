@@ -170,7 +170,8 @@ def line_items(
         usable, matrix = _cached_matrix(cache, sidecar)
         if not usable:
             continue
-        rendered = prose_lines(converted_text_path(path)) if surface == Surface.PROSE else []
+        # Read on both surfaces: a line with no prose reads its script reading on either.
+        rendered = prose_lines(converted_text_path(path))
         _add_sidecar_items(items, _SidecarRead(sidecar, rendered, matrix), surface)
     return list(items.values())
 
@@ -307,7 +308,7 @@ def load_probe_model(
     return ProbeModel(
         checkpoint=checkpoint, encoder=runnable.encoder, model=runnable.model,
         batcher=runnable.batcher, fields=runnable.fields,
-        device=runnable.batcher.materializer.device, surface=files.surface,
+        device=runnable.batcher.materializer.device, surface=runnable.batcher.surface,
         e_dim=checkpoint.encoder_config.e_dim,
     )
 

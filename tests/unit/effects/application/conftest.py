@@ -11,7 +11,7 @@ from effects.domain.baselines import baseline_masks
 from effects.infrastructure.shard_io import write_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 from effects.infrastructure.tokenizer_loading import load_keyword_definitions
-from price_predictor.infrastructure.tokenizer_store import save_vocabulary
+from effects.infrastructure.vocabulary_file import save_vocabulary
 from tests.unit.effects.application.geometry_checks_support import SourceRows, _write_source
 from tests.unit.effects.builders import (
     FIXTURE_KEYWORD_DEFINITIONS,
@@ -57,7 +57,7 @@ def _write_vocabulary(root, records):
         for token in bare.tokenize(text):
             vocab.setdefault(token.text, len(vocab))
     vocab_path = root / "vocab-script.txt"
-    save_vocabulary(vocab, vocab_path)
+    save_vocabulary(vocab, "script", vocab_path)
     return vocab_path
 
 

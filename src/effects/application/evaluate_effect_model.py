@@ -196,7 +196,10 @@ def _recorded(value: float | None, name: str) -> float:
 def _sidecar_index(context: EvaluationContext):
     """The card and token trees' sidecars (FR-123), keyed on the checkpoint's
     surface once for every variant's cache."""
-    return SidecarIndex(context.config.cards_folders, surface=context.tokenizer_files.surface)
+    from effects.infrastructure.vocabulary_file import vocabulary_surface
+
+    return SidecarIndex(context.config.cards_folders,
+                        surface=vocabulary_surface(context.tokenizer_files.vocab))
 
 
 def _load_cache(

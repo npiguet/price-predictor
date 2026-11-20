@@ -373,9 +373,9 @@ class TestTheBatchersTheLoopBuilds:
         )
         assert settings["e_noise"] == 0.05 and settings["value_weight"] == 0.1
         assert settings["api_types"] == ["Draw"]
-        # Every new run reads the gen-2 script rules and says so, so a loader
+        # Every new run reads the gen-3 script rules and says so, so a loader
         # never confuses it with a gen-1 checkpoint that recorded none.
-        assert settings["tokenizer_rules"] == "gen-2"
+        assert settings["tokenizer_rules"] == "gen-3"
         # Likewise the input layout (FR-045): a loader refuses a checkpoint
         # recording any other.
         assert settings["input_layout"] == "gen-3"

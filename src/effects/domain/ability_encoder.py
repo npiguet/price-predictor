@@ -22,6 +22,7 @@ from effects.domain.ability_tokenizer import (
     Token,
 )
 from effects.domain.provenance import Role, RoleSpan, SidecarLine
+from effects.domain.script_text import is_script_reading, script_reading
 
 #: Fixed order, so an embedding row means the same role across checkpoints.
 #: Row 0 is "no role", a token outside every span.
@@ -149,27 +150,19 @@ class AbilityEncoder(nn.Module):
 # ── surfaces (FR-062, stage four) ───────────────────────────────────────
 
 
-def surface_of(vocab_path) -> Surface:
-    """Which surface a vocabulary path implies: never a flag of its own, which
-    could disagree with the vocabulary and still look like a working run."""
-    from pathlib import Path
-
-    return (
-        Surface.SCRIPT
-        if "vocab-script" in Path(vocab_path).name
-        else Surface.PROSE
-    )
-
-
 def encoding_text(line: SidecarLine | None, prose: str | None, surface: Surface) -> str:
-    """The text a line is encoded from on ``surface``, falling back to the
-    other surface's where its own is missing (a keyword-derived line has no
-    script, a variant script no prose), and to the empty string where both
-    are: the one no-text fallback, training's and the cache's alike."""
+    """The text a line is encoded from on ``surface``: the one place that
+    decides it. A line with no prose (a variant script's) reads its
+    :func:`script_reading` on either surface, which the tokenizer reads by the
+    script grammar; a line with prose reads its prose, or on the script surface
+    its script where it has one (a keyword-derived line has none); a line with
+    neither reads the empty string, training's and the cache's alike."""
     script = line.script_text if line is not None else None
+    if not prose:
+        return script_reading(script) if script else ""
     if surface == Surface.SCRIPT:
-        return script or prose or ""
-    return prose or script or ""
+        return script or prose
+    return prose
 
 
 def encoding_role_spans(
@@ -179,7 +172,7 @@ def encoding_role_spans(
     on a prose text, since the spans index the converted prose."""
     if surface != Surface.PROSE or line is None or not text:
         return ()
-    if text == line.script_text:
+    if text == line.script_text or is_script_reading(text):
         return ()
     return line.role_spans
 

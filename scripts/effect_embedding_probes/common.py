@@ -203,7 +203,7 @@ def paths_for(
     come from ``options.cards_folders`` when given, else from what the
     checkpoint recorded it trained against, else the converted defaults.
     """
-    from effects.domain.ability_encoder import surface_of
+    from effects.infrastructure.vocabulary_file import vocabulary_surface
 
     checkpoint = Path(checkpoint)
     folders = tuple(Path(f) for f in (
@@ -216,8 +216,9 @@ def paths_for(
         abilities_root=Path(abilities_root),
         out=report_dir(checkpoint, options.reports_dir, options.today, output=options.output),
         cards_folders=folders,
-        surface=surface_of(Path(provenance.vocab_path)),
+        # The cache first: an empty one is the refusal that names the command to run.
         e_width=cache_e_width(abilities_root),
+        surface=vocabulary_surface(Path(provenance.vocab_path)),
         manifest=manifest,
         variant_scripts=options.variant_scripts,
     )

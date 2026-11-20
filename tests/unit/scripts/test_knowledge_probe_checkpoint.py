@@ -41,7 +41,7 @@ def checkpoint_path(tmp_path_factory, records, sidecars):
     from effects.domain.split_provenance import SplitProvenance
     from effects.infrastructure.effect_model_store import EffectCheckpoint, EffectModelStore
     from effects.infrastructure.tokenizer_loading import load_keyword_definitions
-    from price_predictor.infrastructure.tokenizer_store import save_vocabulary
+    from effects.infrastructure.vocabulary_file import save_vocabulary
     from tests.unit.effects.builders import FIXTURE_KEYWORD_DEFINITIONS, make_batcher
 
     root = tmp_path_factory.mktemp("checkpoint")
@@ -59,7 +59,7 @@ def checkpoint_path(tmp_path_factory, records, sidecars):
         for token in bare.tokenize(text):
             vocab.setdefault(token.text, len(vocab))
     vocab_path = root / "vocab-script.txt"
-    save_vocabulary(vocab, vocab_path)
+    save_vocabulary(vocab, "script", vocab_path)
     encoder_config = AbilityEncoderConfig(vocab_size=len(vocab), e_dim=E_DIM, d_model=16,
                                           n_layers=1, n_heads=2)
     model_config = EffectModelConfig(

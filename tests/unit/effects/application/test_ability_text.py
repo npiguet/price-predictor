@@ -219,6 +219,7 @@ def test_a_decisions_acting_text_is_its_candidates():
             line_index=0, line_kind="spell", provenance=(key,),
             script_text="DealDamage", prose_offset=0,
         )},
+        prose={key: "CARDNAME deals 2 damage to any target."},
     )
 
     assert KeyResolver(sidecars, "script").acting_text(record) == "DealDamage"

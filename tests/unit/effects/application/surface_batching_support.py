@@ -40,7 +40,10 @@ class _Sidecars:
         return _LINES.get(key)
 
     def prose_for(self, key):
-        return None
+        """A converted card's line has prose; here it spells the script, which
+        the script surface reads."""
+        line = _LINES.get(key)
+        return line.script_text if line is not None else None
 
     def get(self, script_file):
         raise KeyError(f"{script_file}: no sidecar, so no charm options")

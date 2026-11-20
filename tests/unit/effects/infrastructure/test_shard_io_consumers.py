@@ -27,10 +27,11 @@ def _build_corpus(root: Path, corpus: Path) -> None:
 def _train(root: Path, corpus: Path) -> None:
     from effects.application.train_effect_model import TrainEffectModelConfig, run
     from tests.unit.effects.application.test_train_startup import _card_tree
+    from tests.unit.effects.builders import write_vocabulary
 
     run(TrainEffectModelConfig.unpathed(
         corpus=str(corpus), cards_folders=(_card_tree(root / "cardsfolder"),),
-        vocab_path="models/effects/vocab-script.txt",
+        vocab_path=write_vocabulary(root / "vocab-script.txt", "script"),
     ))
 
 

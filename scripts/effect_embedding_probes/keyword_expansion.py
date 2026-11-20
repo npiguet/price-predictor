@@ -84,7 +84,7 @@ from effects.infrastructure.effect_model_store import (  # noqa: E402
 )
 from effects.infrastructure.sidecar_io import iter_sidecars, tree_of_folder  # noqa: E402
 from effects.infrastructure.tokenizer_loading import load_keyword_definitions  # noqa: E402
-from price_predictor.infrastructure.tokenizer_store import load_vocabulary  # noqa: E402
+from effects.infrastructure.vocabulary_file import read_vocabulary  # noqa: E402
 
 BATCH = 256
 
@@ -235,7 +235,7 @@ def load_readers(paths: ProbePaths):
     encoder = AbilityEncoder(checkpoint.encoder_config)
     encoder.load_state_dict(checkpoint.encoder_state)
     encoder.eval()
-    vocab = load_vocabulary(files.vocab)
+    vocab = read_vocabulary(files.vocab).tokens
     definitions = load_keyword_definitions(files.keywords)
     tok = AbilityTokenizer(vocab, definitions, surface=tokenizer_surface(
         paths.surface, checkpoint.training_settings))

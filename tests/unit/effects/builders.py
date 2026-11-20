@@ -426,6 +426,19 @@ def slots_of_kind(surface, kind) -> tuple:
     return tuple(slot for slot in surface.slots if slot.kind is kind)
 
 
+def write_vocabulary(path: Path, surface: str = "prose", extra: tuple[str, ...] = ()) -> Path:
+    """An effects vocabulary file of the specials and ``extra``, its header
+    recording ``surface``: what a command reading only the surface needs."""
+    from effects.domain.ability_tokenizer import SPECIAL_TOKENS
+    from effects.infrastructure.vocabulary_file import save_vocabulary
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tokens = dict.fromkeys([*SPECIAL_TOKENS, *extra])
+    save_vocabulary({token: index for index, token in enumerate(tokens)}, surface, path)
+    return path
+
+
 def make_preparer(
     directory, *, seed: int = 0, api_types=(), param_keys=(), rarity=None, **config,
 ):
@@ -433,12 +446,9 @@ def make_preparer(
     about how it builds batchers rather than about what they read."""
     from effects.application.step_preparation import PreparerSettings, StepPreparer
     from effects.application.train_effect_model import TrainEffectModelConfig
-    from effects.domain.ability_tokenizer import SPECIAL_TOKENS
     from effects.domain.split import CorpusSplit
-    from price_predictor.infrastructure.tokenizer_store import save_vocabulary
 
-    vocab = directory / "vocab-script.txt"
-    save_vocabulary({token: index for index, token in enumerate(SPECIAL_TOKENS)}, vocab)
+    vocab = write_vocabulary(directory / "vocab-script.txt", "script")
     settings = dict(
         corpus="unused", vocab_path=vocab,
         keyword_definitions=directory / "no-keyword-definitions.json",
@@ -709,7 +719,7 @@ def stub_below_the_loop(monkeypatch):
     monkeypatch.setattr(run_context, "EffectModel", lambda config: model)
     monkeypatch.setattr(
         step_preparation, "load_tokenizer",
-        lambda *a, **k: type("T", (), {"vocab_size": 8})(),
+        lambda *a, **k: type("T", (), {"vocab_size": 8, "surface": "script"})(),
     )
     # The script-API vocabulary is read off every real sidecar; none here.
     monkeypatch.setattr(run_context, "script_vocabularies", lambda folders: ([], []))
