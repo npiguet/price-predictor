@@ -45,12 +45,25 @@ class SealedEncoderConfig:
     pool_mode: str = "dual"  # "dual" = attention ‖ max-pool; "attn" = attention-only
 
     def __post_init__(self) -> None:
+        self._require_positive_sizes()
+        self._require_divisible_widths()
+        if not (0.0 <= self.dropout < 1.0):
+            raise ValueError(f"dropout must be in [0.0, 1.0), got {self.dropout}")
+        if self.pool_mode not in ("dual", "attn"):
+            raise ValueError(
+                f"pool_mode must be 'dual' (attention ‖ max-pool) or 'attn' "
+                f"(attention-pool only), got {self.pool_mode!r}"
+            )
+
+    def _require_positive_sizes(self) -> None:
         for name in (
             "vocab_size", "d_model", "n_layers", "n_heads",
             "ff_dim", "max_seq_len", "n_pool_queries",
         ):
             if getattr(self, name) <= 0:
                 raise ValueError(f"{name} must be > 0, got {getattr(self, name)}")
+
+    def _require_divisible_widths(self) -> None:
         if self.d_model % self.n_heads != 0:
             raise ValueError(
                 f"d_model ({self.d_model}) must be divisible by n_heads "
@@ -60,13 +73,6 @@ class SealedEncoderConfig:
             raise ValueError(
                 f"d_model ({self.d_model}) must be divisible by n_pool_queries "
                 f"({self.n_pool_queries})"
-            )
-        if not (0.0 <= self.dropout < 1.0):
-            raise ValueError(f"dropout must be in [0.0, 1.0), got {self.dropout}")
-        if self.pool_mode not in ("dual", "attn"):
-            raise ValueError(
-                f"pool_mode must be 'dual' (attention ‖ max-pool) or 'attn' "
-                f"(attention-pool only), got {self.pool_mode!r}"
             )
 
     @property
