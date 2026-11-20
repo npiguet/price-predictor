@@ -37,7 +37,7 @@ from price_predictor.infrastructure.torch_training import (
     kl_divergence,
     policy_entropy,
 )
-from sealed.application.picker_losses import _compute_losses
+from sealed.application.picker_losses import LossInputs, LossSpec, _compute_losses
 from sealed.application.picker_pools import (
     PreparedPool,
     _collate,
@@ -327,9 +327,11 @@ class TrainPickerUseCase:
 
         entropy = policy_entropy(logits, pool_mask)
         losses = _compute_losses(
-            rewards, log_prob, entropy, aux_pred,
-            entropy_coef, config.aux_weight, config.normalize_advantage,
-            config.objective, config.topk,
+            LossInputs(rewards, log_prob, entropy, aux_pred),
+            LossSpec(
+                entropy_coef, config.aux_weight, config.normalize_advantage,
+                config.objective, config.topk,
+            ),
         )
         total = losses.total
 

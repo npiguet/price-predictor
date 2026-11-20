@@ -9,7 +9,7 @@ import pytest
 import torch
 
 from price_predictor.infrastructure.torch_training import kl_divergence, policy_entropy
-from sealed.application.picker_losses import _compute_losses
+from sealed.application.picker_losses import LossInputs, LossSpec, _compute_losses
 from sealed.application.picker_pools import PreparedPool, _shuffle_train, _split_pools
 from sealed.application.picker_sampling import (
     SamplingSpec,
@@ -136,7 +136,10 @@ class TestLosses:
         log_prob = torch.zeros(2, 2, requires_grad=True)
         entropy = torch.ones(2)
         aux_pred = torch.zeros(2, requires_grad=True)
-        losses = _compute_losses(rewards, log_prob, entropy, aux_pred, 0.01, 0.1)
+        losses = _compute_losses(
+            LossInputs(rewards, log_prob, entropy, aux_pred),
+            LossSpec(0.01, 0.1),
+        )
         assert losses.baseline.tolist() == pytest.approx([2.0, 5.0])
 
     def test_advantage_detached(self):
@@ -144,7 +147,10 @@ class TestLosses:
         log_prob = torch.zeros(1, 2, requires_grad=True)
         entropy = torch.ones(1)
         aux_pred = torch.zeros(1, requires_grad=True)
-        losses = _compute_losses(rewards, log_prob, entropy, aux_pred, 0.01, 0.1)
+        losses = _compute_losses(
+            LossInputs(rewards, log_prob, entropy, aux_pred),
+            LossSpec(0.01, 0.1),
+        )
         assert not losses.advantage.requires_grad
 
     def test_zero_advantage_zero_policy_gradient(self):
@@ -153,7 +159,10 @@ class TestLosses:
         log_prob = torch.randn(1, 4, requires_grad=True)
         entropy = torch.ones(1)
         aux_pred = torch.zeros(1, requires_grad=True)
-        losses = _compute_losses(rewards, log_prob, entropy, aux_pred, 0.0, 0.0)
+        losses = _compute_losses(
+            LossInputs(rewards, log_prob, entropy, aux_pred),
+            LossSpec(0.0, 0.0),
+        )
         losses.policy_loss.backward()
         assert torch.allclose(log_prob.grad, torch.zeros_like(log_prob.grad))
 
@@ -162,7 +171,10 @@ class TestLosses:
         log_prob = torch.zeros(1, 2)
         entropy = torch.ones(1)
         aux_pred = torch.zeros(1, requires_grad=True)
-        losses = _compute_losses(rewards, log_prob, entropy, aux_pred, 0.0, 1.0)
+        losses = _compute_losses(
+            LossInputs(rewards, log_prob, entropy, aux_pred),
+            LossSpec(0.0, 1.0),
+        )
         losses.aux_loss.backward()
         # Gradient flows to aux_pred, not back into rewards (target detached).
         assert aux_pred.grad is not None
@@ -174,8 +186,8 @@ class TestLosses:
         rewards = torch.tensor([[1.0, 3.0], [100.0, 0.0]])
         log_prob = torch.zeros(2, 2)
         losses = _compute_losses(
-            rewards, log_prob, torch.ones(2), torch.zeros(2), 0.0, 0.0,
-            normalize_advantage=True,
+            LossInputs(rewards, log_prob, torch.ones(2), torch.zeros(2)),
+            LossSpec(0.0, 0.0, normalize_advantage=True),
         )
         adv = losses.advantage
         assert torch.allclose(adv.mean(dim=1), torch.zeros(2), atol=1e-5)
@@ -188,8 +200,8 @@ class TestLosses:
         # (and ~0, since the numerator is 0) rather than NaN/inf.
         rewards = torch.full((1, 4), 5.0)
         losses = _compute_losses(
-            rewards, torch.zeros(1, 4), torch.ones(1), torch.zeros(1), 0.0, 0.0,
-            normalize_advantage=True,
+            LossInputs(rewards, torch.zeros(1, 4), torch.ones(1), torch.zeros(1)),
+            LossSpec(0.0, 0.0, normalize_advantage=True),
         )
         assert torch.isfinite(losses.advantage).all()
         assert torch.allclose(losses.advantage, torch.zeros_like(losses.advantage))
@@ -200,8 +212,8 @@ class TestLosses:
         rewards = torch.tensor([[1.0, 9.0, 2.0, 8.0]])  # top-2 are idx 1, 3
         log_prob = torch.tensor([[-5.0, -1.0, -4.0, -2.0]])
         losses = _compute_losses(
-            rewards, log_prob, torch.ones(1), torch.zeros(1), 0.0, 0.0,
-            objective="topk", topk=2,
+            LossInputs(rewards, log_prob, torch.ones(1), torch.zeros(1)),
+            LossSpec(0.0, 0.0, objective="topk", topk=2),
         )
         # policy_loss = -mean(log_prob[selected]) = -mean([-1.0, -2.0]) = 1.5
         assert losses.policy_loss.item() == pytest.approx(1.5)
@@ -212,12 +224,12 @@ class TestLosses:
         log_prob = torch.tensor([[-5.0, -1.0, -4.0, -2.0]])
         base = torch.tensor([[1.0, 9.0, 2.0, 8.0]])
         a = _compute_losses(
-            base, log_prob, torch.ones(1), torch.zeros(1), 0.0, 0.0,
-            objective="topk", topk=2,
+            LossInputs(base, log_prob, torch.ones(1), torch.zeros(1)),
+            LossSpec(0.0, 0.0, objective="topk", topk=2),
         )
         b = _compute_losses(
-            base * 1000.0, log_prob, torch.ones(1), torch.zeros(1), 0.0, 0.0,
-            objective="topk", topk=2,
+            LossInputs(base * 1000.0, log_prob, torch.ones(1), torch.zeros(1)),
+            LossSpec(0.0, 0.0, objective="topk", topk=2),
         )
         assert a.policy_loss.item() == pytest.approx(b.policy_loss.item())
 
@@ -226,8 +238,8 @@ class TestLosses:
         rewards = torch.tensor([[1.0, 2.0, 3.0]])
         log_prob = torch.tensor([[-1.0, -2.0, -3.0]])
         losses = _compute_losses(
-            rewards, log_prob, torch.ones(1), torch.zeros(1), 0.0, 0.0,
-            objective="topk", topk=99,
+            LossInputs(rewards, log_prob, torch.ones(1), torch.zeros(1)),
+            LossSpec(0.0, 0.0, objective="topk", topk=99),
         )
         # All three kept: -mean([-1, -2, -3]) = 2.0
         assert losses.policy_loss.item() == pytest.approx(2.0)
@@ -240,11 +252,12 @@ class TestLosses:
         entropy = torch.tensor([2.5])
         aux_pred = torch.tensor([3.0])
         rein = _compute_losses(
-            rewards, log_prob, entropy, aux_pred, 0.01, 0.1, objective="reinforce",
+            LossInputs(rewards, log_prob, entropy, aux_pred),
+            LossSpec(0.01, 0.1, objective="reinforce"),
         )
         topk = _compute_losses(
-            rewards, log_prob, entropy, aux_pred, 0.01, 0.1,
-            objective="topk", topk=2,
+            LossInputs(rewards, log_prob, entropy, aux_pred),
+            LossSpec(0.01, 0.1, objective="topk", topk=2),
         )
         assert topk.entropy_loss.item() == pytest.approx(rein.entropy_loss.item())
         assert topk.aux_loss.item() == pytest.approx(rein.aux_loss.item())

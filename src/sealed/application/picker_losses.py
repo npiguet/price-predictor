@@ -22,17 +22,30 @@ class _Losses:
     advantage: torch.Tensor  # (B, S), detached
 
 
-def _compute_losses(
-    rewards: torch.Tensor,
-    log_prob: torch.Tensor,
-    entropy: torch.Tensor,
-    aux_pred: torch.Tensor,
-    entropy_coef: float,
-    aux_weight: float,
-    normalize_advantage: bool = False,
-    objective: str = "reinforce",
-    topk: int = 16,
-) -> _Losses:
+@dataclass(frozen=True)
+class LossInputs:
+    """One batch's loss inputs: the sampled decks' ``(B, S)`` rewards and
+    log-probabilities, and the policy's ``(B,)`` entropy and aux prediction."""
+
+    rewards: torch.Tensor
+    log_prob: torch.Tensor
+    entropy: torch.Tensor
+    aux_pred: torch.Tensor
+
+
+@dataclass(frozen=True)
+class LossSpec:
+    """How the loss weighs its terms: the entropy and aux weights, and the
+    policy objective with its advantage normalization and ``topk``."""
+
+    entropy_coef: float
+    aux_weight: float
+    normalize_advantage: bool = False
+    objective: str = "reinforce"
+    topk: int = 16
+
+
+def _compute_losses(inputs: LossInputs, spec: LossSpec) -> _Losses:
     """Assemble the picker training loss (spec § 3.3, § 3.4, FR-039).
 
     ``rewards`` and ``log_prob`` are ``(B, S)``; ``entropy`` and ``aux_pred``
@@ -54,6 +67,10 @@ def _compute_losses(
     ranking, not the (tiny) advantage magnitudes, and has no high-variance
     negative-gradient term.
     """
+    rewards, log_prob = inputs.rewards, inputs.log_prob
+    entropy, aux_pred = inputs.entropy, inputs.aux_pred
+    entropy_coef, aux_weight, topk = spec.entropy_coef, spec.aux_weight, spec.topk
+    normalize_advantage, objective = spec.normalize_advantage, spec.objective
     baseline = rewards.mean(dim=1)
     centered = rewards - baseline.unsqueeze(1)
     if normalize_advantage:
