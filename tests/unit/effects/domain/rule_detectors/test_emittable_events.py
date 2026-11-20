@@ -32,6 +32,14 @@ from tests.unit.effects.builders import java_golden_records, make_record
 _SOURCES = (Path(__file__).resolve().parents[5] / "forge-connector" / "src" / "main" / "java"
             / "com" / "pricepredictor" / "connector" / "effects")
 
+#: The classes holding ``ApiEvents``' rules, one family of APIs each.
+_API_RULE_FAMILIES = (
+    "TurnAndPhaseApiRules", "ValueAndOwnershipApiRules", "ChoiceApiRules",
+    "HealGrantAndRetargetApiRules", "ScheduleAndReplacementApiRules", "TitleApiRules",
+    "CombatRemovalApiRules", "TextApiRules", "CombatEntryAndSearchApiRules",
+    "PermanentStateApiRules",
+)
+
 
 def _named(*files: str) -> set[EventType]:
     found: set[EventType] = set()
@@ -58,7 +66,7 @@ def test_the_bus_set_is_what_the_bus_shapers_build():
 
 
 def test_the_clause_hook_set_is_what_the_clause_hooks_build():
-    hooks = _named("ApiEvents") | _outcome_hook_types() | {EventType.MANA_PRODUCED}
+    hooks = _named("ApiEvents", *_API_RULE_FAMILIES) | _outcome_hook_types() | {EventType.MANA_PRODUCED}
     assert CLAUSE_HOOKS == hooks
 
 

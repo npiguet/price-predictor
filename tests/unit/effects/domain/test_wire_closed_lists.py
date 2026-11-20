@@ -180,7 +180,7 @@ def test_the_damage_types_are_the_connector_s():
 
 
 def test_the_choice_kinds_are_the_connector_s():
-    source = (_CONNECTOR / "ApiEvents.java").read_text(encoding="utf-8")
+    source = (_CONNECTOR / "ChoiceApiRules.java").read_text(encoding="utf-8")
     assert sorted(CHOICE_KINDS) == sorted(re.findall(r'new ChoiceReading\("([a-z_]+)"', source))
 
 

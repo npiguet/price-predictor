@@ -25,7 +25,7 @@ import java.util.stream.Stream;
  * is written.
  *
  * <p>A clause whose own rule tells every combatant leaving combat while it
- * runs ({@link ApiEvents#tellsEveryCombatRemoval}: a {@code GainControl},
+ * runs ({@link CombatRemovalApiRules#tellsEveryCombatRemoval}: a {@code GainControl},
  * which corrects the zone itself, a {@code Regeneration}, a {@code Phases})
  * keeps that telling, and nothing is filed here meanwhile.
  */
@@ -41,7 +41,7 @@ final class ControlCorrection {
         }
         Combat combat = game.getCombat();
         Card combatant = combatantOf(combat, event.card().getId());
-        if (combatant == null || ApiEvents.tellsEveryCombatRemoval(PatchHooks.currentSubAbility())) {
+        if (combatant == null || CombatRemovalApiRules.tellsEveryCombatRemoval(PatchHooks.currentSubAbility())) {
             return null;
         }
         return new EffectEvent(EventType.REMOVED_FROM_COMBAT)
