@@ -780,7 +780,7 @@ class TestCountingReportsProgress:
 
     def test_the_held_out_round_reports_progress_too(self, tmp_path, caplog) -> None:
         """Its first pass reads the same whole corpus, and was silent."""
-        from effects.application.collect_coverage import TextCoverageCounter
+        from effects.application.coverage_counting import TextCoverageCounter
         from effects.domain.coverage import TextCoverage
 
         self._shards(tmp_path, 120)
@@ -883,7 +883,7 @@ class TestHeldOutTextUnit:
         """A held-out card's other lines are carried by it alone too; under
         ``template`` theirs is printed elsewhere, so no game is ever credited
         to them and the round would deck them until each retired."""
-        from effects.application.collect_coverage import _held_out_carriers
+        from effects.application.held_out_round import _held_out_carriers
 
         held, other = "SP$ Rare | Thing$ 1", "AB$ GainLife | LifeAmount$ 3"
         carriers = _held_out_carriers(
@@ -1021,7 +1021,7 @@ class TestHeldOutTextUnit:
 
     def test_the_round_ends_without_waiting_on_uncastable_texts(self):
         """FR-037 / spec Story 2 scenario 6."""
-        from effects.application.collect_coverage import text_residues
+        from effects.application.held_out_round import text_residues
         from effects.domain.coverage import TextCoverage, awaited_texts, is_complete
 
         coverage = {
@@ -1209,7 +1209,7 @@ class TestNonDeckTypesLeaveTheUnit:
         """
         import logging
 
-        from effects.application import collect_coverage
+        from effects.application import collect_coverage, held_out_round
 
         cards = tmp_path / "cardsfolder"
         (cards / "a").mkdir(parents=True)
@@ -1234,12 +1234,12 @@ class TestNonDeckTypesLeaveTheUnit:
             return {}
 
         held_out = _holding({"SP$ Shared", "SP$ Alpha", "SP$ Plan"})
-        with patch.object(collect_coverage, "consult_castability", _consult), \
+        with patch.object(held_out_round, "consult_castability", _consult), \
              patch("effects.infrastructure.converted_trees.load_card_texts",
                    return_value=texts_by_card), \
              patch("effects.infrastructure.converted_trees.ConvertedTrees.holdout",
                    return_value=held_out), \
-             caplog.at_level(logging.INFO, logger=collect_coverage.__name__):
+             caplog.at_level(logging.INFO, logger=held_out_round.__name__):
             collect_coverage.run(collect_coverage.CollectCoverageConfig(
                 effect_records=tmp_path / "records", cards_folders=(cards,),
                 deck_holdout=DeckHoldout(only_cards=listed), min_text_games=0,
@@ -1257,7 +1257,7 @@ class TestHeldOutRoundCaps:
     a hundred times denser in the card-disjoint stratum than in training."""
 
     def test_the_held_out_rounds_caps_are_the_runs(self, tmp_path, fake_supervisor):
-        from effects.application import collect_coverage
+        from effects.application import collect_coverage, held_out_round
         from effects.domain.collection_caps import CollectionCaps
 
         cards = tmp_path / "cardsfolder"
@@ -1271,7 +1271,7 @@ class TestHeldOutRoundCaps:
         caps = CollectionCaps(aimed_at=(), playability_rate=0.02)
 
         with (
-            patch.object(collect_coverage, "consult_castability", return_value={}),
+            patch.object(held_out_round, "consult_castability", return_value={}),
             patch("effects.infrastructure.converted_trees.load_card_texts",
                   return_value={"alpha": ["SP$ Alpha"]}),
             patch("effects.infrastructure.converted_trees.ConvertedTrees.holdout",
@@ -1524,7 +1524,7 @@ class TestARoundChargesTheCardsItsGamesShowed:
     not to every card of every deck written."""
 
     def test_a_written_card_no_game_showed_is_not_charged(self, tmp_path, fake_supervisor):
-        from effects.application import collect_coverage, collection_rounds
+        from effects.application import collect_coverage, collection_rounds, coverage_rounds
 
         cards = tmp_path / "cardsfolder"
         cards.mkdir()
@@ -1552,7 +1552,7 @@ class TestARoundChargesTheCardsItsGamesShowed:
 
         with patch.object(collect_coverage, "consult_castability", return_value={}), \
                 patch.object(collection_rounds, "retire_stalled", _spy), \
-                patch.object(collect_coverage, "build_coverage_decks",
+                patch.object(coverage_rounds, "build_coverage_decks",
                              return_value=[["shown", "unseen"]]):
             collect_coverage.run(CollectCoverageConfig(
                 effect_records=records_dir, cards_folders=(cards,),
@@ -1739,10 +1739,10 @@ class TestWhatTheRunItselfPlayedAndWrote:
     def test_a_run_that_could_deck_nothing_played_no_round_and_fails(
         self, tmp_path, fake_supervisor, caplog,
     ):
-        from effects.application import collect_coverage
+        from effects.application import collect_coverage, coverage_rounds
 
         with patch.object(collect_coverage, "consult_castability", return_value={}), \
-             patch.object(collect_coverage, "build_coverage_decks", return_value=[]):
+             patch.object(coverage_rounds, "build_coverage_decks", return_value=[]):
             assert collect_coverage.run(self._config(tmp_path)) == 1
         fake_supervisor.play_round.assert_not_called()
         assert "No round was played" in caplog.text

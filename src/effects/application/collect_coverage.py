@@ -14,49 +14,38 @@ in games of its own rather than at the rate the whole corpus would deck it.
 from __future__ import annotations
 
 import logging
-import random
-from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from effects.application.collection_rounds import (
-    RoundCharge,
-    RoundDecks,
-    RoundPlan,
-    play_rounds,
-)
 from effects.application.collector_common import (
     CollectorConfig,
-    build_coverage_decks,
-    collector_supervisor,
     positive_int,
     read_name_list,
-    record_damaged_shards,
 )
-from effects.application.coverage_counting import CoverageCounter, TextCoverageCounter
-from effects.domain.collection_caps import CollectionCaps
+from effects.application.coverage_counting import CoverageCounter
+from effects.application.coverage_rounds import (
+    CoverageRounds,
+    Unresolved,
+    consult_castability,
+    count_existing,
+    no_converted_cards,
+    non_deck_names,
+    play_to_completion,
+    unresolvable,
+)
+from effects.application.held_out_round import run_text_coverage
 from effects.domain.coverage import (
     HELD_OUT_GAME_FLOOR,
     CardCoverage,
     ConsultVerdict,
-    CoverageUnit,
     DeckCandidate,
-    TextCoverage,
-    awaited_texts,
     deck_weights,
-    held_out_texts_of,
-    is_complete,
-    is_deckable,
     rank_by_consult,
-    text_deck_weights,
 )
 
 if TYPE_CHECKING:
-    from effects.domain.split import HeldOutCards
-    from effects.infrastructure.collector_connector import CollectorSupervisor
     from effects.infrastructure.converted_trees import ConvertedTrees
 
 logger = logging.getLogger(__name__)
@@ -116,33 +105,34 @@ def count_from_error(effect_records: Path, count_from: tuple[Path, ...]) -> str 
     Shards are found recursively, so a directory holding the run's own, or
     held by it, or two overlapping ones, would count a shard twice."""
     directories = [Path(effect_records), *count_from]
+    overlap = _first_overlap(directories)
+    if overlap is not None:
+        index, other_index = overlap
+        first = "--effect-records" if other_index == 0 else "--count-from"
+        return (
+            f"--count-from {directories[index]} overlaps {first} "
+            f"{directories[other_index]}: their shards would count twice"
+        )
+    return next((
+        f"--count-from {directory}: no such directory"
+        for directory in count_from if not Path(directory).is_dir()
+    ), None)
+
+
+def _first_overlap(directories: list[Path]) -> tuple[int, int] | None:
+    """The first ``(index, earlier index)`` of two directories one of which
+    holds the other (or is it), resolved; None when none does."""
     resolved = [directory.resolve() for directory in directories]
-    for index, directory in enumerate(resolved):
-        for other_index, other in enumerate(resolved[:index]):
-            if directory == other or directory.is_relative_to(other) or (
-                other.is_relative_to(directory)
-            ):
-                first = "--effect-records" if other_index == 0 else "--count-from"
-                return (
-                    f"--count-from {directories[index]} overlaps {first} "
-                    f"{directories[other_index]}: their shards would count twice"
-                )
-    for directory in count_from:
-        if not Path(directory).is_dir():
-            return f"--count-from {directory}: no such directory"
-    return None
+    return next((
+        (index, other_index)
+        for index, directory in enumerate(resolved)
+        for other_index, other in enumerate(resolved[:index])
+        if _overlaps(directory, other)
+    ), None)
 
 
-
-def no_converted_cards(trees: ConvertedTrees) -> str:
-    """The error for a run whose card tree holds no converted card. Deck
-    candidates and the coverage unit come from the card tree alone (FR-046,
-    FR-048): a token script could never be satisfied or retired."""
-    where = trees.cards_folder or ", ".join(str(folder) for folder in trees.roots.values())
-    return (
-        f"No converted cards under {where}. Run 'python -m price_predictor "
-        "convert' first."
-    )
+def _overlaps(directory: Path, other: Path) -> bool:
+    return directory == other or directory.is_relative_to(other) or other.is_relative_to(directory)
 
 
 @dataclass
@@ -188,151 +178,6 @@ def build_coverage_units(
     }
 
 
-def non_deck_names(texts: Mapping[str, str]) -> set[str]:
-    """The cards whose converted text names a type no deck holds."""
-    return {name for name, text in texts.items() if not is_deckable(text)}
-
-
-@dataclass(frozen=True)
-class Unresolved:
-    """The cards Forge's card database does not hold, out of the pool the
-    consult was asked about (P1 #11)."""
-
-    cards: tuple[str, ...] = ()
-    pool: int = 0
-
-    @property
-    def share(self) -> float:
-        return len(self.cards) / self.pool if self.pool else 0.0
-
-    def fields(self) -> dict:
-        """What ``run.json`` records: the count, the share, and some names."""
-        return {
-            "unresolved_cards": len(self.cards),
-            "unresolved_share": round(self.share, 4),
-            "unresolved_examples": list(self.cards[:20]),
-        }
-
-
-@dataclass(kw_only=True)
-class CoverageRounds(ABC):
-    """What the round loop needs from one kind of coverage unit, and what both
-    kinds hold: the units, the consult's verdicts, the counter that reads each
-    round's shards into the units, and the cards a deck can be drawn from. The
-    card run and the held-out round differ in what a unit is, how its cards
-    are weighted and which units have to finish."""
-
-    coverage: dict[str, CoverageUnit]
-    verdicts: Mapping[str, ConsultVerdict]
-    counter: CoverageCounter | TextCoverageCounter
-    records_dir: Path
-    target: int
-    candidates: dict[str, DeckCandidate]
-    #: Processes counting shards: the run's ``--workers``, never the CPU count.
-    workers: int | None = None
-    #: The cards left out because Forge's card database does not hold them.
-    unresolved: Unresolved = field(default_factory=Unresolved)
-    #: Logged when the weighted cards yield no deck at all.
-    no_decks: ClassVar[str]
-    label: ClassVar[str] = "coverage"
-    stopping: ClassVar[str] = (
-        "Interrupted after round %d; stopping instead of starting another round"
-    )
-
-    @property
-    def units(self) -> dict[str, CoverageUnit]:
-        return self.coverage
-
-    @property
-    @abstractmethod
-    def awaited(self) -> Mapping[str, CoverageUnit]:
-        """The units whose completion ends the run: every card, but only the
-        held-out texts some castable card carries (FR-037)."""
-
-    @abstractmethod
-    def weights(self) -> dict[str, float]:
-        """The next round's per-card deck weights, the consult applied."""
-
-    @abstractmethod
-    def units_decked(self, cards: set[str]) -> set[str]:
-        """The units a round attempted, from the cards its decks held."""
-
-    @abstractmethod
-    def report(self) -> str:
-        """What the rounds could not reach, printed however they ended."""
-
-    def before_rounds(self, supervisor: CollectorSupervisor) -> None:
-        """A coverage run tells the supervisor nothing before its rounds."""
-
-    def decks(self, weights: dict[str, float], plan: RoundPlan) -> RoundDecks:
-        return RoundDecks(build_coverage_decks(
-            weights, self.candidates, plan.decks_per_round, rng=plan.rng,
-        ))
-
-    def count_round(self, round_number: int) -> set[str]:
-        """Count the shards the last round wrote into ``units``; the cards
-        their games showed."""
-        read = self.counter.update(self.coverage, self.records_dir, workers=self.workers)
-        logger.info("Counted %d new shard(s) from round %d", read, round_number)
-        return self.counter.seen
-
-    def after_count(self, supervisor: CollectorSupervisor) -> None:
-        """A coverage run tells the supervisor nothing after a round."""
-
-    def charged(self, cards: set[str], shown: set[str]) -> RoundCharge:
-        return RoundCharge(self.units_decked(cards & shown), self.units_decked(cards))
-
-    def summary(self, round_number: int, retired: list[str]) -> str:
-        satisfied = sum(1 for unit in self.units.values() if unit.satisfied(self.target))
-        remaining = sum(1 for unit in self.awaited.values() if not unit.done(self.target))
-        return (
-            f"round {round_number}: {satisfied} satisfied, {remaining} remaining, "
-            f"{len(retired)} retired this round"
-        )
-
-
-def _play_to_completion(
-    rounds: CoverageRounds, config: CollectCoverageConfig, caps: CollectionCaps,
-) -> int:
-    """Play ``rounds`` under a supervisor and report what they left; 130 when
-    Ctrl-C ended them, 1 when they played and wrote no record at all."""
-    with collector_supervisor(
-        workers=config.workers, effect_records=config.effect_records, caps=caps,
-        stop=config.worker_stop, allow_degraded=config.allow_degraded,
-    ) as supervisor:
-        if rounds.unresolved.pool:
-            supervisor.record(**rounds.unresolved.fields())
-        record_damaged_shards(supervisor, rounds.counter.damaged)
-        supervisor.count_cut_games(rounds.counter.cut_games)
-        played = play_rounds(rounds, supervisor, RoundPlan(
-            config.decks_per_round, config.no_progress_rounds, random.Random(config.seed),
-        ))
-    logger.info("%s", rounds.report())
-    # Residues print either way, but an interrupted run did not finish.
-    if played.interrupted:
-        return 130
-    if not played.rounds:
-        if is_complete(rounds.awaited, rounds.target):
-            return 0
-        logger.error(
-            "No round was played and %d unit(s) are still unfinished: none of "
-            "them could be decked.",
-            sum(1 for unit in rounds.awaited.values() if not unit.done(rounds.target)),
-        )
-        return 1
-    written = rounds.counter.records_of(supervisor.run_id)
-    if written <= 0:
-        logger.error(
-            "%d round(s) played and no new effect record written under %s. "
-            "The worker logs say why (under logs/, summed above): every match "
-            "failing, or every deck naming a card Forge's card database does "
-            "not hold.", played.rounds, config.effect_records,
-        )
-        return 1
-    logger.info("Collected %d new effect records over %d round(s)", written, played.rounds)
-    return 0
-
-
 @dataclass(kw_only=True)
 class CardRounds(CoverageRounds):
     """The card run's rounds: every deckable card a unit, and every one awaited."""
@@ -362,13 +207,20 @@ def run(config: CollectCoverageConfig) -> int:
     # ability text rather than a card.
     if config.deck_holdout.only_cards is not None:
         return run_text_coverage(config)
+    rounds = _card_rounds(config, config.source_trees.converted())
+    if rounds is None:
+        return 1
+    return play_to_completion(rounds, config)
 
-    trees = config.source_trees.converted()
+
+def _deck_texts(config: CollectCoverageConfig, trees: ConvertedTrees) -> dict[str, str] | None:
+    """The converted text of every card the run decks from, the
+    ``--wording-cards`` list's alone when given; None (logged) when none has
+    converted text."""
     converted = trees.converted_cards
     if not converted:
         logger.error("%s", no_converted_cards(trees))
-        return 1
-
+        return None
     if config.wording_cards is not None:
         converted = wording_cards_of(converted, config.wording_cards)
         if not converted:
@@ -376,97 +228,74 @@ def run(config: CollectCoverageConfig) -> int:
                 "None of the cards in %s has converted text under %s",
                 config.wording_cards, trees.cards_folder,
             )
-            return 1
+            return None
+    return {name: card.text for name, card in converted.items()}
 
+
+def _card_units(
+    config: CollectCoverageConfig, trees: ConvertedTrees, texts: Mapping[str, str],
+) -> dict[str, CardCoverage] | None:
+    """Every deckable card of ``texts`` a unit, the holdout and non-deck types
+    left out; None (logged) when none is left."""
     held_out = config.deck_holdout.exclusions()
-    texts = {name: card.text for name, card in converted.items()}
     non_deck = non_deck_names(texts)
     coverage = build_coverage_units(
-        (name for name in converted if name not in non_deck), held_out,
+        (name for name in texts if name not in non_deck), held_out,
     )
     if not coverage:
         logger.error("No deckable cards under %s", trees.cards_folder)
-        return 1
+        return None
     logger.info(
         "Coverage unit: %d cards (%d held out, %d of a non-deck type), target "
         "%d records each",
         len(coverage), len(held_out), len(non_deck), config.target_records,
     )
+    return coverage
 
-    records_dir = config.effect_records
+
+def _consulted(
+    coverage: dict[str, CardCoverage], verdicts: Mapping[str, ConsultVerdict],
+) -> Unresolved:
+    """Take the cards the consult left unanswered out of ``coverage`` and give
+    the rest their verdicts; the cards taken out."""
+    unresolved = unresolvable(coverage, verdicts)
+    for name in unresolved.cards:
+        del coverage[name]
+    for name, verdict in verdicts.items():
+        if name in coverage:
+            coverage[name].verdict = verdict
+    return unresolved
+
+
+def _card_rounds(config: CollectCoverageConfig, trees: ConvertedTrees) -> CardRounds | None:
+    """The card run's units, counted as the corpus stands and consulted; None
+    (logged) when there is no card to deck."""
+    texts = _deck_texts(config, trees)
+    coverage = None if texts is None else _card_units(config, trees, texts)
+    if coverage is None:
+        return None
     counter = CoverageCounter(config.source_trees.sidecar_roots())
-    seeded = _count_existing(counter, coverage, config)
+    seeded = count_existing(counter, coverage, config)
     logger.info(
         "Counted %d existing shard(s); %d of %d cards already at target",
         seeded,
         sum(1 for c in coverage.values() if c.satisfied(config.target_records)),
         len(coverage),
     )
-
     verdicts = consult_castability(sorted(coverage))
-    unresolved = unresolvable(coverage, verdicts)
-    for name in unresolved.cards:
-        del coverage[name]
+    unresolved = _consulted(coverage, verdicts)
     if not coverage:
         logger.error("No card under %s is in Forge's card database", trees.cards_folder)
-        return 1
-    for name, verdict in verdicts.items():
-        if name in coverage:
-            coverage[name].verdict = verdict
-
-    rounds = CardRounds(
+        return None
+    return CardRounds(
         coverage=coverage, verdicts=verdicts, counter=counter, unresolved=unresolved,
-        records_dir=records_dir, target=config.target_records, workers=config.workers,
+        records_dir=config.effect_records, target=config.target_records,
+        workers=config.workers,
         candidates={
             name: DeckCandidate.from_converted_text(name, text)
             for name, text in texts.items()
         },
     )
-    return _play_to_completion(rounds, config, config.caps)
-
-
-def _count_existing(
-    counter: CoverageCounter | TextCoverageCounter, coverage: Mapping,
-    config: CollectCoverageConfig,
-) -> int:
-    """Count what the run's own directory and every ``--count-from`` directory
-    already hold; how many shards. The ``--count-from`` directories are read
-    here once and never again: the rounds write only to the run's own."""
-    seeded = counter.update(coverage, config.effect_records, workers=config.workers)
-    for directory in config.count_from:
-        found = counter.update(coverage, directory, workers=config.workers)
-        logger.info("Counted %d shard(s) from --count-from %s", found, directory)
-        seeded += found
-    return seeded
-
-
-def unresolvable(units: Iterable[str], verdicts: Mapping[str, ConsultVerdict]) -> Unresolved:
-    """The cards the consult left unanswered, reported; none when it answered
-    nothing at all (a consult that could not run proves nothing).
-
-    The castability verdict only ranks and never drops a card. This is a
-    different rule: the consult answers every name Forge's card database
-    holds, and a decks-only round refuses a whole deck naming any other card,
-    so a card left unanswered cannot be decked at all. Kept, it would be
-    unrecorded and so weighted the most, failing every match whose deck holds
-    it until it retired unseen (P1 #11); it leaves the unit and the decks
-    instead. No share stops the run; the report says how many, out of how
-    many, and what a large share means."""
-    pool = sorted(units)
-    if not verdicts:
-        return Unresolved(pool=len(pool))
-    missing = tuple(name for name in pool if name not in verdicts)
-    result = Unresolved(missing, len(pool))
-    if missing:
-        logger.warning(
-            "%d of %d card(s) (%.1f%%) are not in Forge's card database (the "
-            "castability consult left them unanswered) and are left out of the "
-            "unit and the decks. A large share means ../forge is older than the "
-            "converted cards: rebuild Forge or reconvert. %s",
-            len(missing), len(pool), 100.0 * result.share,
-            ", ".join(missing[:20]) + (" ..." if len(missing) > 20 else ""),
-        )
-    return result
 
 
 def wording_cards_of[C](converted: Mapping[str, C], path: Path) -> dict[str, C]:
@@ -486,187 +315,3 @@ def wording_cards_of[C](converted: Mapping[str, C], path: Path) -> dict[str, C]:
             "Listed in %s with no converted card: %s", path, ", ".join(sorted(missing)),
         )
     return kept
-
-
-def consult_castability(names: list[str]) -> dict[str, ConsultVerdict]:
-    """Ask a live Forge whether each card can be cast at all (FR-047). A failed
-    consult leaves every card ``unknown``, ranked as castable: the safe
-    direction, since the consult only ranks."""
-    from effects.infrastructure.one_shot_workers import castability_verdicts
-
-    try:
-        verdicts = castability_verdicts(names)
-    except OSError as exc:
-        logger.warning(
-            "Castability consult unavailable (%s); every card ranks as "
-            "castable, which only slows the run down", exc,
-        )
-        return {}
-    return {name: ConsultVerdict.parse(raw) for name, raw in verdicts.items()}
-
-
-# ── the held-out coverage round (FR-035–FR-038) ─────────────────────────
-
-
-@dataclass
-class TextResidues:
-    """What the held-out round could not reach (FR-037, SC-004)."""
-
-    under_floor: dict[str, int] = field(default_factory=dict)
-    uncastable: tuple[str, ...] = ()
-
-    def render(self, floor: int) -> str:
-        lines = [
-            f"{len(self.under_floor)} held-out text(s) with a castable carrier "
-            f"under {floor} games; {len(self.uncastable)} with no castable "
-            "carrier, never counted as satisfied."
-        ]
-        lines += [f"  under floor ({games} games): {text}"
-                  for text, games in sorted(self.under_floor.items())]
-        lines += [f"  uncastable: {text}" for text in self.uncastable]
-        return "\n".join(lines)
-
-
-def text_residues(coverage: dict[str, TextCoverage], floor: int) -> TextResidues:
-    under = {
-        text: len(unit.games) for text, unit in coverage.items()
-        if unit.castable and not unit.satisfied(floor)
-    }
-    uncastable = tuple(sorted(
-        text for text, unit in coverage.items() if not unit.castable
-    ))
-    return TextResidues(under, uncastable)
-
-
-@dataclass(kw_only=True)
-class TextRounds(CoverageRounds):
-    """The held-out round's rounds: each held-out text a unit, awaited only
-    when some castable card carries it."""
-
-    coverage: dict[str, TextCoverage]
-    #: ``held-out text -> the deckable listed cards carrying it``.
-    carriers: Mapping[str, frozenset[str]]
-    counter: TextCoverageCounter
-    no_decks: ClassVar[str] = "No unfinished held-out text has a card with converted text."
-
-    @cached_property
-    def awaited(self) -> dict[str, TextCoverage]:
-        # Fixed for the run: castability comes from the consult, once.
-        return awaited_texts(self.coverage)
-
-    def weights(self) -> dict[str, float]:
-        return rank_by_consult(
-            text_deck_weights(self.coverage, self.carriers, self.target),
-            self.verdicts,
-        )
-
-    def units_decked(self, cards: set[str]) -> set[str]:
-        return {
-            text for text, carrying in self.carriers.items() if carrying & cards
-        }
-
-    def report(self) -> str:
-        return text_residues(self.coverage, self.target).render(self.target)
-
-
-def _held_out_carriers(
-    listed: Iterable[str], texts_by_card: Mapping[str, list[str]],
-    non_deck: set[str], held_out: HeldOutCards,
-) -> dict[str, frozenset[str]]:
-    """``held-out text -> its deckable listed carriers``, for each text some
-    deckable card carries.
-
-    Held-out texts are decided over every listed card, non-deck ones
-    included, or those would read as unlisted carriers and take their texts
-    out of the round; only then do non-deck cards leave as carriers. A text
-    only listed cards carry is a unit only when ``held_out`` holds it: a held-out
-    card's other lines are carried by it alone too, and under ``template`` their
-    template is often printed elsewhere, so no game could ever be credited to
-    them (:meth:`HeldOutCards.text_acted_through` credits held-out texts only)
-    and the round would deck them until each retired.
-    """
-    carriers = held_out_texts_of(frozenset(listed), texts_by_card)
-    return {
-        text: cards - non_deck
-        for text, cards in carriers.items()
-        if cards - non_deck and held_out.holds_text(text)
-    }
-
-
-def _text_coverage(
-    carriers: Mapping[str, frozenset[str]], verdicts: Mapping[str, ConsultVerdict],
-) -> dict[str, TextCoverage]:
-    """One unit per held-out text, castable while any carrier is not judged
-    uncastable."""
-    return {
-        text: TextCoverage(text=text, castable=any(
-            verdicts.get(card, ConsultVerdict.UNKNOWN) != ConsultVerdict.UNCASTABLE
-            for card in cards
-        ))
-        for text, cards in carriers.items()
-    }
-
-
-def run_text_coverage(config: CollectCoverageConfig) -> int:
-    """The held-out coverage round: listed cards only, keyed by held-out text."""
-
-
-    trees = config.source_trees.converted()
-    converted = trees.converted_cards
-    if not converted:
-        logger.error("%s", no_converted_cards(trees))
-        return 1
-    only_cards = config.deck_holdout.only_cards
-    listed = read_name_list(only_cards)
-    listed_files = {
-        name: script for name, script in trees.card_files.items()
-        if name in listed
-    }
-    texts = {name: converted[name].text for name in listed_files}
-    non_deck = non_deck_names(texts)
-    present = frozenset(name for name in listed_files if name not in non_deck)
-    held_out = trees.holdout(config.holdout)
-    carriers = _held_out_carriers(listed_files, trees.card_texts(), non_deck, held_out)
-    if non_deck:
-        logger.info(
-            "Held-out round: %d listed card(s) of a non-deck type left out",
-            len(non_deck),
-        )
-    if not carriers:
-        logger.error(
-            "None of the %d card(s) in %s carries a text only listed cards "
-            "carry; nothing to cover.", len(listed), only_cards,
-        )
-        return 1
-
-    verdicts = consult_castability(sorted(present))
-    unresolved = unresolvable(present, verdicts)
-    missing = frozenset(unresolved.cards)
-    present = present - missing
-    carriers = {
-        text: cards - missing for text, cards in carriers.items() if cards - missing
-    }
-    coverage = _text_coverage(carriers, verdicts)
-    floor = config.min_text_games
-    records_dir = config.effect_records
-    counter = TextCoverageCounter(config.source_trees.sidecar_roots(), held_out)
-    _count_existing(counter, coverage, config)
-    logger.info(
-        "Held-out round: %d text(s) on %d card(s); %d already at %d games; %d "
-        "with no castable carrier",
-        len(coverage), len(present),
-        sum(1 for unit in coverage.values() if unit.satisfied(floor)), floor,
-        sum(1 for unit in coverage.values() if not unit.castable),
-    )
-
-    rounds = TextRounds(
-        coverage=coverage, carriers=carriers, verdicts=verdicts, unresolved=unresolved,
-        counter=counter, records_dir=records_dir, target=floor, workers=config.workers,
-        candidates={
-            name: DeckCandidate.from_converted_text(name, text)
-            for name, text in texts.items() if name in present
-        },
-    )
-    # The run's own caps, the three decision-sampling rates included: every
-    # stratum has one record composition (FR-059a).
-    return _play_to_completion(rounds, config, config.caps)
