@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import argparse
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from _lib.corpora import iter_matches
@@ -89,21 +90,43 @@ def rate_cell(matches: int, wins: int) -> str:
     return f"{100 * wins / matches:>6.1f}% (n={matches:>5})"
 
 
-def print_bucket_table(title: str, tally: dict, methods: list[str], buckets, labels,
-                       note: str | None = None) -> None:
+@dataclass(frozen=True)
+class BucketTable:
+    """How one per-deck table is laid out: its title, columns and optional note."""
+
+    title: str
+    buckets: Sequence
+    labels: Sequence[str]
+    note: str | None = None
+
+
+def _pooled(tally: dict, methods: list[str], bucket) -> list[int]:
+    """``[matches, wins]`` of one bucket, summed over every method."""
+    return [sum(tally[(m, bucket)][i] for m in methods) for i in (0, 1)]
+
+
+def print_bucket_table(table: BucketTable, tally: dict, methods: list[str]) -> None:
     """Win rate per (method, bucket), then an overall row pooling the methods."""
-    print(title)
-    if note:
-        print(note)
+    buckets = table.buckets
+    print(table.title)
+    if table.note:
+        print(table.note)
     rule = "-" * (14 + CELL * len(buckets))
-    print(f"{'method':<14}" + "".join(f"{label:>{CELL}}" for label in labels))
+    print(f"{'method':<14}" + "".join(f"{label:>{CELL}}" for label in table.labels))
     print(rule)
     for method in methods:
         print(f"{method:<14}" + "".join(rate_cell(*tally[(method, b)]) for b in buckets))
     print(rule)
-    overall = [[sum(tally[(m, b)][i] for m in methods) for i in (0, 1)] for b in buckets]
-    print(f"{'Overall':<14}" + "".join(rate_cell(*cell) for cell in overall))
+    print(f"{'Overall':<14}" + "".join(
+        rate_cell(*_pooled(tally, methods, b)) for b in buckets))
     print()
+
+
+def _bucket_values(feature: str, value) -> Iterator:
+    """The buckets one deck falls in for ``feature``: every colour present, else one."""
+    for bucket in (value if feature == "color_presence" else (value,)):
+        if bucket is not None:
+            yield bucket
 
 
 class Tally:
@@ -131,7 +154,14 @@ class Tally:
         self.n += 1
         self.games_length_counts[len(games)] += 1
         bo7_winner = winner_at_threshold(games, 4)
+        self._add_best_ofs(method_a, method_b, games, bo7_winner)
+        self._add_head_to_head(method_a, method_b, bo7_winner)
 
+        if self.card is not None:
+            self._add_deck(method_a, match.deck_a.cards, int(bo7_winner == "A"))
+            self._add_deck(method_b, match.deck_b.cards, int(bo7_winner == "B"))
+
+    def _add_best_ofs(self, method_a: str, method_b: str, games: str, bo7_winner: str) -> None:
         for bo in BEST_OFS:
             w = winner_at_threshold(games, (bo + 1) // 2)  # Bo1 -> 1 ... Bo7 -> 4
             self.method_stats[method_a][bo][0] += 1
@@ -140,6 +170,7 @@ class Tally:
             if bo != 7 and w != bo7_winner:
                 self.flip_counts[bo] += 1
 
+    def _add_head_to_head(self, method_a: str, method_b: str, bo7_winner: str) -> None:
         # Mirror matches arbitrarily credit the A side so the cell reads near
         # the ~50% baseline.
         first = min(method_a, method_b)
@@ -149,18 +180,12 @@ class Tally:
         if (bo7_winner == "A") if method_a == method_b else winning_method == first:
             cell[1] += 1
 
-        if self.card is not None:
-            self._add_deck(method_a, match.deck_a.cards, int(bo7_winner == "A"))
-            self._add_deck(method_b, match.deck_b.cards, int(bo7_winner == "B"))
-
     def _add_deck(self, method: str, cards, won: int) -> None:
         for feature, value in deck_features(cards, self.card).items():
-            buckets = value if feature == "color_presence" else (value,)
-            for bucket in buckets:
-                if bucket is not None:
-                    tally = self.deck_tallies[feature][(method, bucket)]
-                    tally[0] += 1
-                    tally[1] += won
+            for bucket in _bucket_values(feature, value):
+                tally = self.deck_tallies[feature][(method, bucket)]
+                tally[0] += 1
+                tally[1] += won
 
 
 def report_lengths(t: Tally) -> None:
@@ -210,21 +235,27 @@ def report_head_to_head(t: Tally, methods: list[str]) -> None:
     print()
 
 
+DECK_TABLES = (
+    ("color_count", BucketTable(
+        "=== Win rate by method by deck color count (Bo7) ===",
+        COLOR_BUCKETS, [f"{c}-color" for c in COLOR_BUCKETS])),
+    ("color_presence", BucketTable(
+        "=== Win rate by method by color presence (Bo7) ===", WUBRG, WUBRG,
+        "  (each cell counts every match where the deck contained that "
+        "color; rows can sum to >100% of matches)")),
+    ("creatures", BucketTable(
+        "=== Win rate by method by creature count (Bo7) ===",
+        CREATURE_BUCKETS, CREATURE_BUCKETS)),
+    ("mv", BucketTable(
+        "=== Win rate by method by avg nonland mana value (Bo7) ===",
+        MV_BUCKETS, MV_BUCKETS)),
+)
+
+
 def report_deck_tables(t: Tally, methods: list[str]) -> None:
-    for feature, title, buckets, labels, note in (
-        ("color_count", "=== Win rate by method by deck color count (Bo7) ===",
-         COLOR_BUCKETS, [f"{c}-color" for c in COLOR_BUCKETS], None),
-        ("color_presence", "=== Win rate by method by color presence (Bo7) ===",
-         WUBRG, WUBRG,
-         "  (each cell counts every match where the deck contained that "
-         "color; rows can sum to >100% of matches)"),
-        ("creatures", "=== Win rate by method by creature count (Bo7) ===",
-         CREATURE_BUCKETS, CREATURE_BUCKETS, None),
-        ("mv", "=== Win rate by method by avg nonland mana value (Bo7) ===",
-         MV_BUCKETS, MV_BUCKETS, None),
-    ):
+    for feature, table in DECK_TABLES:
         if t.deck_tallies[feature]:
-            print_bucket_table(title, t.deck_tallies[feature], methods, buckets, labels, note)
+            print_bucket_table(table, t.deck_tallies[feature], methods)
 
 
 def card_reader(cards_path: Path) -> Callable[[str], Card | None] | None:
