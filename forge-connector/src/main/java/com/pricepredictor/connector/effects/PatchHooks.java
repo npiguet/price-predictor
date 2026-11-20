@@ -161,6 +161,14 @@ public final class PatchHooks {
             return PatchHooks.read(target, method);
         }
 
+        /**
+         * Call this one-argument method on {@code target}, its parameter
+         * declared as {@code parameterType}, or answer null.
+         */
+        Object read(Object target, Class<?> parameterType, Object argument) {
+            return PatchHooks.invoke(target, method, parameterType, argument);
+        }
+
         /** Call this one-{@code long}-argument accessor on {@code target}, or answer null. */
         Object read(Object target, long argument) {
             return PatchHooks.read(target, method, argument);
@@ -455,6 +463,38 @@ public final class PatchHooks {
     static final Hook SET_ASIDE_COLORS = new Hook(CARD, "setAsideEffectRecordColors",
             "a continuous record's static conditions and untapped_production on the colours without"
                     + " its static: the static's colour changes set aside for the read and put back");
+    static final Hook PRIMARY_ABILITY = new Hook(MAGIC_STACK, "getEffectRecordPrimaryAbility",
+            "which player action is in progress: a special action, resolved in place with no push and no"
+                    + " cast event, is told from the state-based check that follows a cast");
+    static final Hook STATIC_EFFECTS_BY_STATIC = new Hook(
+            "forge.game.StaticEffects", "getEffectRecordStaticEffects",
+            "the permanents a static affects, read without the entry the engine's own lookup creates");
+    static final Hook CHANGED_CARD_TYPES = new Hook(CARD, "getEffectRecordChangedCardTypes",
+            "a resolved effect's type change, joined by its timestamp");
+    static final Hook CHANGED_CARD_COLORS = new Hook(CARD, "getEffectRecordChangedCardColors",
+            "a resolved effect's colour change, joined by its timestamp");
+    static final Hook COLOR_LAYERS = new Hook(CARD, "getEffectRecordColorLayers",
+            "the check that a lend of a continuous record's board puts every colour change back");
+    static final Hook CHANGED_CARD_MANA_COST = new Hook(CARD, "getEffectRecordChangedCardManaCost",
+            "a continuous record's mana cost without its static");
+    static final Hook HIDDEN_EXTRINSIC_KEYWORDS = new Hook(CARD, "getEffectRecordHiddenExtrinsicKeywords",
+            "a resolved effect's hidden keywords, and a static's, by timestamp and static id");
+    static final Hook CANT_HAVE_KEYWORDS = new Hook(CARD, "getEffectRecordCantHaveKeywords",
+            "a resolved effect's can't-have keyword rows, joined by its timestamp");
+    static final Hook TEMP_CONTROLLERS = new Hook(CARD, "getEffectRecordTempControllers",
+            "a resolved gain-control effect's row, joined by its timestamp");
+    static final Hook SPELL_ABILITIES_THROUGH = new Hook(
+            "forge.game.card.CardState", "getEffectRecordSpellAbilitiesThrough",
+            "the printed slice of a card's lines, and a printed line's index among them");
+    static final Hook TRIGGERS_THROUGH = new Hook(
+            "forge.game.card.CardState", "getEffectRecordTriggersThrough",
+            "the printed slice of a card's triggers, and a printed trigger's index among them");
+    static final Hook STATIC_ABILITIES_THROUGH = new Hook(
+            "forge.game.card.CardState", "getEffectRecordStaticAbilitiesThrough",
+            "the printed slice of a card's statics, and a printed static's index among them");
+    static final Hook REPLACEMENT_EFFECTS_THROUGH = new Hook(
+            "forge.game.card.CardState", "getEffectRecordReplacementEffectsThrough",
+            "the printed slice of a card's replacement effects, and a printed one's index among them");
     static final Hook ASSIGNED_DAMAGE = new Hook(COMBAT, "getAssignedDamage",
             "a combat record's assignment_choices");
     static final Hook CONFIRM_LISTENER = new Hook(
@@ -547,14 +587,17 @@ public final class PatchHooks {
             CHANGED_COLORS_BY_STATIC, TYPE_WITHOUT, COLOR_WITHOUT, KEYWORDS_WITHOUT,
             PT_WITHOUT, CONTROLLER_WITHOUT, TRAITS_WITHOUT,
             CHANGED_NAMES, COPY_SOURCE, COPIED_PERMANENT, CLONE_PRINTER, PRIOR_CONTROLLER, PRIOR_SICKNESS,
-            LEND_TYPE, SET_ASIDE_COLORS, ASSIGNED_DAMAGE, CONFIRM_LISTENER, NOTE_CONFIRM, OUTCOME_LISTENER,
+            LEND_TYPE, SET_ASIDE_COLORS, PRIMARY_ABILITY, STATIC_EFFECTS_BY_STATIC,
+            CHANGED_CARD_TYPES, CHANGED_CARD_COLORS, COLOR_LAYERS, CHANGED_CARD_MANA_COST,
+            HIDDEN_EXTRINSIC_KEYWORDS, CANT_HAVE_KEYWORDS, TEMP_CONTROLLERS, SPELL_ABILITIES_THROUGH,
+            TRIGGERS_THROUGH, STATIC_ABILITIES_THROUGH, REPLACEMENT_EFFECTS_THROUGH, ASSIGNED_DAMAGE, CONFIRM_LISTENER, NOTE_CONFIRM, OUTCOME_LISTENER,
             PENDING_DELAYED_TRIGGERS, SIMULTANEOUS_STACK_ENTRIES, STATE_BASED_LOOP_LISTENER,
             PRIORITY_SETTLED_LISTENER,
             CAST_LISTENER, RESOLUTION_LISTENER, PAYMENT_LISTENER);
 
     /**
-     * The components of the two layer records {@link #CHANGED_COLORS_BY_STATIC}
-     * and {@link #CHANGED_NAMES} hand out.
+     * The components of the three layer records {@link #CHANGED_COLORS_BY_STATIC},
+     * {@link #CHANGED_NAMES} and {@link #CHANGED_CARD_MANA_COST} hand out.
      *
      * <p>Not in {@link #REQUIRED}, because a lookup cannot tell them from stock
      * Forge's: the records exist there too, private, and a record's accessors
@@ -567,6 +610,10 @@ public final class PatchHooks {
             "whether a continuous contribution adds its colours or sets them");
     static final Hook COLOR_CHANGE_COLORS = new Hook(CARD + "$CardColor", "color",
             "a continuous contribution's colours");
+    static final Hook MANA_COST_CHANGE_MANA = new Hook(CARD + "$CardManaCost", "mana",
+            "a mana cost change's cost");
+    static final Hook MANA_COST_CHANGE_ADDITIONAL = new Hook(CARD + "$CardManaCost", "additional",
+            "whether a mana cost change adds to the cost before it or sets it");
     static final Hook NAME_CHANGE_NAME = new Hook(CARD + "$CardChangedName", "newName",
             "a continuous contribution's name");
 
