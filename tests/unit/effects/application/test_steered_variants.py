@@ -13,6 +13,7 @@ from effects.application import steered_variants
 from effects.application.collect_variants import CollectVariantsConfig, DeckDraw, decks_of
 from effects.application.steered_variants import (
     SteeredGeneration,
+    SteeredRound,
     SteerOutcome,
     combined_counts,
     rule_carriers,
@@ -107,10 +108,7 @@ _SHORT = ShortPair("702.2b", Polarity.DOES_NOT_FIRE, 10, 90)
 
 def test_a_rule_s_carriers_are_its_scenario_cards_and_its_counted_cards(world):
     generation, counts, _ = world
-    carriers = rule_carriers(
-        "702.2b", generation.catalogue, counts, index=generation.index,
-        forge_cards_path=generation.forge_cards_path, held_out=generation.held_out,
-    )
+    carriers = rule_carriers("702.2b", counts, generation.sources)
     assert set(carriers) == {"Servant of the Stinger", "Grizzly Bears", "Venom Slinger"}
     assert carriers["Venom Slinger"].keys == {_SLINGER_PING, _SLINGER_TOUCH}
 
@@ -136,9 +134,7 @@ def test_a_carrier_takes_its_pair_s_script_edits_then_near_misses(world):
 def test_a_pair_s_edits_are_those_of_its_own_polarity(world):
     generation, counts, _ = world
     fires = ShortPair("702.2b", Polarity.FIRES, 0, 100)
-    made = generation.pair_variants(fires, rule_carriers(
-        "702.2b", generation.catalogue, counts, index=generation.index,
-        forge_cards_path=generation.forge_cards_path, held_out=generation.held_out), 1)
+    made = generation.pair_variants(fires, rule_carriers("702.2b", counts, generation.sources), 1)
     assert [v.perturbation for v in made] == ["script_edit 702.2b-1/bear_touch"]
 
 
@@ -227,9 +223,11 @@ def _steer(world, monkeypatch, ruled, supervisor=None, **config):
     )
     catalogue = load_scenarios(rules)
     units: dict = {}
-    result = steer(config, generation, counts, load_heads(rules, catalogue.rules()),
-                   detected_rules(catalogue), units, supervisor or MagicMock(), MagicMock(),
-                   ruled)
+    result = steer(SteeredRound(
+        config=config, generation=generation, counts=counts,
+        heads=load_heads(rules, catalogue.rules()), detected=detected_rules(catalogue),
+        units=units, supervisor=supervisor or MagicMock(), games=MagicMock(), ruled=ruled,
+    ))
     return result, played, units
 
 
@@ -312,7 +310,7 @@ def test_the_steered_rule_count_says_how_many_cut_games_it_left_out(tmp_path, ca
     import logging
     from pathlib import Path
 
-    from effects.application.steered_variants import RunRuleCounter
+    from effects.application.steered_variants import RuleCountSetup, RunRuleCounter
     from tests.unit.effects.builders import (
         GEN3_FIXTURE_GAMES,
         GEN3_SIDECAR_FOLDERS,
@@ -322,11 +320,11 @@ def test_the_steered_rule_count_says_how_many_cut_games_it_left_out(tmp_path, ca
     records = tmp_path / "records"
     # The fixture without its markers: every game in it reads as cut.
     write_cut_gen3_fixture(records / "run-1.0-a.jsonl.gz")
-    counter = RunRuleCounter(
-        records, "run-1", rules_dir=Path(__file__).parents[4] / "rules",
+    counter = RunRuleCounter(records, "run-1", RuleCountSetup(
+        rules_dir=Path(__file__).parents[4] / "rules",
         sidecar_roots={"cardsfolder": GEN3_SIDECAR_FOLDERS[0],
                        "tokenscripts": GEN3_SIDECAR_FOLDERS[1]},
-        workers=1)
+        workers=1))
 
     with caplog.at_level(logging.INFO):
         counter.update()

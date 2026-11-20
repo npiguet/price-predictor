@@ -32,6 +32,7 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from functools import partial
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from effects.application.collect_variants import (
     CollectVariantsConfig,
@@ -48,7 +49,7 @@ from effects.application.collector_common import collector_supervisor, record_da
 from effects.application.shard_ledger import ShardLedger, ShardPass
 from effects.domain.card_names import fold_card_name
 from effects.domain.provenance import ProvenanceKey, SourceTree, split_script_file
-from effects.domain.rule_catalogue import ScenarioCatalogue, ScriptEdit
+from effects.domain.rule_catalogue import RuleMapEntry, ScenarioCatalogue, ScriptEdit
 from effects.domain.script_variants import (
     is_multi_face,
     perturb,
@@ -71,6 +72,9 @@ from effects.domain.variant_rounds import (
 )
 from effects.infrastructure.variant_staging import unstage_variants
 
+if TYPE_CHECKING:
+    from effects.infrastructure.collector_connector import CollectorSupervisor
+
 logger = logging.getLogger(__name__)
 
 #: Near-miss draws per variant a pair still wants before it gives up: a
@@ -92,39 +96,51 @@ class Carrier:
     keys: set[ProvenanceKey] = field(default_factory=set)
 
 
+def _script_names(source: Path) -> list[str]:
+    """Every ``Name:`` line of one Forge script; none where it cannot be read."""
+    try:
+        lines = source.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    return [line[len("Name:"):].strip() for line in lines if line.startswith("Name:")]
+
+
 def script_index(sources: list[Path]) -> dict[str, Path]:
     """``card name -> its Forge source script``, every ``Name:`` line of every
     script, the first script naming a card kept."""
     index: dict[str, Path] = {}
     for source in sources:
-        try:
-            lines = source.read_text(encoding="utf-8").splitlines()
-        except OSError:
-            continue
-        for line in lines:
-            if line.startswith("Name:"):
-                index.setdefault(line[len("Name:"):].strip(), source)
+        for name in _script_names(source):
+            index.setdefault(name, source)
     return index
 
 
-def rule_carriers(
-    rule: str,
-    catalogue: ScenarioCatalogue,
-    counts: Mapping,
-    *,
-    index: Mapping[str, Path],
-    forge_cards_path: Path,
-    held_out: frozenset[str],
-) -> dict[str, Carrier]:
-    """``card -> Carrier`` of one rule (FR-058c): the cards its scenarios name
-    and the cardsfolder carriers the counts list, read from Forge's source
-    scripts; a held-out or multi-faced card, or one with no source script,
-    carries nothing."""
+@dataclass(frozen=True)
+class CarrierSources:
+    """Where a rule's carriers are looked for: the scenario catalogue, the
+    card-to-script index, Forge's cards folder and the held-out cards."""
+
+    catalogue: ScenarioCatalogue
+    index: Mapping[str, Path]
+    forge_cards_path: Path
+    held_out: frozenset[str]
+
+
+def _scenario_paths(rule: str, sources: CarrierSources) -> dict[Path, set[ProvenanceKey]]:
+    """The scripts of the cards the rule's scenarios name, each with no keys yet."""
     paths: dict[Path, set[ProvenanceKey]] = {}
-    for scenario in catalogue.by_rule().get(rule, ()):
+    for scenario in sources.catalogue.by_rule().get(rule, ()):
         for card in scenario.cards:
-            if card in index:
-                paths.setdefault(index[card], set())
+            if card in sources.index:
+                paths.setdefault(sources.index[card], set())
+    return paths
+
+
+def _add_counted_paths(
+    paths: dict[Path, set[ProvenanceKey]], rule: str, counts: Mapping, forge_cards_path: Path,
+) -> None:
+    """Add the cardsfolder scripts of the carriers the counts list for the rule,
+    with the keys that listed them."""
     for carrier in counted_carriers(counts, rule):
         tree, relative = split_script_file(carrier.script_file)
         if tree != SourceTree.CARDSFOLDER:
@@ -132,13 +148,33 @@ def rule_carriers(
         path = Path(forge_cards_path) / relative
         if path.is_file():
             paths.setdefault(path, set()).update(carrier.keys)
+
+
+def _excluded(card: str | None, lines: list[str], held_out: frozenset[str]) -> bool:
+    return card is None or is_multi_face(lines) or fold_card_name(card) in held_out
+
+
+def _read_carrier(path: Path, held_out: frozenset[str]) -> Carrier | None:
+    """The carrier a script makes; None for a multi-faced or held-out card."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    card = script_card_name(lines)
+    if _excluded(card, lines, held_out):
+        return None
+    return Carrier(card, path, lines)
+
+
+def rule_carriers(rule: str, counts: Mapping, sources: CarrierSources) -> dict[str, Carrier]:
+    """``card -> Carrier`` of one rule (FR-058c): the cards its scenarios name
+    and the cardsfolder carriers the counts list, read from Forge's source
+    scripts; a held-out or multi-faced card, or one with no source script,
+    carries nothing."""
+    paths = _scenario_paths(rule, sources)
+    _add_counted_paths(paths, rule, counts, sources.forge_cards_path)
     found: dict[str, Carrier] = {}
     for path, keys in paths.items():
-        lines = path.read_text(encoding="utf-8").splitlines()
-        card = script_card_name(lines)
-        if card is None or is_multi_face(lines) or fold_card_name(card) in held_out:
-            continue
-        found.setdefault(card, Carrier(card, path, lines)).keys.update(keys)
+        carrier = _read_carrier(path, sources.held_out)
+        if carrier is not None:
+            found.setdefault(carrier.card, carrier).keys.update(keys)
     return found
 
 
@@ -151,6 +187,16 @@ def pair_edits(pair: ShortPair, catalogue: ScenarioCatalogue) -> list[tuple[str,
         for variant in scenario.variants
         if variant.polarity is pair.polarity and variant.script_edit is not None
     ]
+
+
+def _applied(label: str, edit: ScriptEdit, carrier: Carrier) -> list[str] | None:
+    """The carrier's lines with the scenario's ``script_edit`` applied, None
+    (and a warning) where the edit does not apply."""
+    try:
+        return edit.applied(carrier.lines)
+    except ValueError as exc:
+        logger.warning("%s: %s", label, exc)
+        return None
 
 
 def near_miss_lines(carrier: Carrier, script_text_of: ScriptTextOf) -> list[int]:
@@ -196,16 +242,21 @@ class SteeredGeneration:
     #: yields at most one variant in the whole round.
     used: set[str] = field(default_factory=set)
 
+    @property
+    def sources(self) -> CarrierSources:
+        return CarrierSources(self.catalogue, self.index, self.forge_cards_path, self.held_out)
+
+    def carriers(self, rule: str, counts: Mapping) -> dict[str, Carrier]:
+        """The carriers of one rule (FR-058c)."""
+        return rule_carriers(rule, counts, self.sources)
+
     def variants(self, pairs: list[ShortPair], counts: Mapping, total: int,
                  ) -> list[GeneratedVariant]:
         """Each pair's share of ``total`` variants (FR-058c)."""
         shares = variant_shares(pairs, total)
         made: list[GeneratedVariant] = []
         for pair in pairs:
-            carriers = rule_carriers(
-                pair.rule, self.catalogue, counts, index=self.index,
-                forge_cards_path=self.forge_cards_path, held_out=self.held_out,
-            )
+            carriers = self.carriers(pair.rule, counts)
             made += self.pair_variants(pair, carriers, shares[(pair.rule, pair.polarity)])
         return made
 
@@ -213,31 +264,40 @@ class SteeredGeneration:
                       wanted: int) -> list[GeneratedVariant]:
         """Up to ``wanted`` new variants for one pair: its scenario variants'
         script edits on the carriers they name, then near misses."""
+        made = self._edit_variants(pair, carriers, wanted)
+        if len(made) < wanted:
+            self._add_near_misses(pair, carriers, wanted, made)
+        return made
+
+    def _edit_variants(self, pair: ShortPair, carriers: Mapping[str, Carrier],
+                       wanted: int) -> list[GeneratedVariant]:
         made: list[GeneratedVariant] = []
         for label, edit in pair_edits(pair, self.catalogue):
             if len(made) >= wanted:
-                return made
+                break
             carrier = carriers.get(edit.card)
-            if carrier is None:
-                continue
-            try:
-                lines = edit.applied(carrier.lines)
-            except ValueError as exc:
-                logger.warning("%s: %s", label, exc)
-                continue
-            made += self._write(pair, carrier, lines, f"script_edit {label}")
+            lines = None if carrier is None else _applied(label, edit, carrier)
+            if lines is not None:
+                made += self._write(pair, carrier, lines, f"script_edit {label}")
+        return made
+
+    def _add_near_misses(self, pair: ShortPair, carriers: Mapping[str, Carrier],
+                         wanted: int, made: list[GeneratedVariant]) -> None:
+        """Draw near misses from the carriers' acting lines into ``made``, until
+        ``wanted`` or ``NEAR_MISS_DRAWS`` a variant wanted are spent."""
         pool = [
             (carrier, index) for carrier in carriers.values()
             for index in near_miss_lines(carrier, self.script_text_of)
         ]
-        draws = 0
-        while pool and len(made) < wanted and draws < NEAR_MISS_DRAWS * wanted:
-            carrier, index = pool[draws % len(pool)]
-            draws += 1
+        if not pool:
+            return
+        for draw in range(NEAR_MISS_DRAWS * wanted):
+            if len(made) >= wanted:
+                return
+            carrier, index = pool[draw % len(pool)]
             result = _near_miss(carrier.lines, index, self.rng)
             if result is not None:
                 made += self._write(pair, carrier, *result)
-        return made
 
     def _write(self, pair: ShortPair, carrier: Carrier, lines: list[str],
                description: str) -> list[GeneratedVariant]:
@@ -251,32 +311,46 @@ class SteeredGeneration:
         return [replace(variant, rule=pair.rule)]
 
 
+def _add_section(rules: dict[str, dict[str, dict[str, int]]], section: Mapping) -> None:
+    """Add one document's ``rules`` section into ``rules``."""
+    for rule, sides in section.items():
+        for polarity, sources in sides.items():
+            into = rules.setdefault(rule, {}).setdefault(polarity, {})
+            for source, n in sources.items():
+                into[source] = into.get(source, 0) + n
+
+
 def combined_counts(*documents: Mapping) -> dict:
     """The ``rules`` sections of several ``rule-counts`` documents summed."""
     rules: dict[str, dict[str, dict[str, int]]] = {}
     for document in documents:
-        for rule, sides in document.get("rules", {}).items():
-            for polarity, sources in sides.items():
-                into = rules.setdefault(rule, {}).setdefault(polarity, {})
-                for source, n in sources.items():
-                    into[source] = into.get(source, 0) + n
+        _add_section(rules, document.get("rules", {}))
     return {"rules": rules}
+
+
+@dataclass(frozen=True)
+class RuleCountSetup:
+    """What counting rules over shards reads: the rules catalogue, the sidecar
+    roots the records' keys resolve in, and the counting workers."""
+
+    rules_dir: Path
+    sidecar_roots: dict
+    workers: int | None
 
 
 class RunRuleCounter(ShardLedger):
     """The rule counts of this run's own shards, each read once (FR-058d:
     the pairs are counted again over the corpus and the round's shards)."""
 
-    def __init__(self, records_dir: Path, run_id: str, *, rules_dir: Path,
-                 sidecar_roots: dict, workers: int | None) -> None:
+    def __init__(self, records_dir: Path, run_id: str, setup: RuleCountSetup) -> None:
         from effects.application.rule_counts import RuleCounts
 
         super().__init__()
         self._records_dir = Path(records_dir)
         self._prefix = f"{run_id}."
-        self._rules_dir = rules_dir
-        self._roots = sidecar_roots
-        self._workers = workers
+        self._rules_dir = setup.rules_dir
+        self._roots = setup.sidecar_roots
+        self._workers = setup.workers
         self.total = RuleCounts()
 
     def update(self) -> None:
@@ -303,42 +377,57 @@ class RunRuleCounter(ShardLedger):
         return self.total.to_json()
 
 
-def collect_steered(config: CollectVariantsConfig, sources: list[Path]) -> int:
-    """The steered round's iterations under one supervisor (one run id)."""
+def _steered_generation(config: CollectVariantsConfig, sources: list[Path],
+                        catalogue: ScenarioCatalogue) -> SteeredGeneration:
+    """The round's generation, reading each carrier's script text off the
+    converted sidecars."""
     from effects.infrastructure.converted_trees import SourceTrees, process_sidecars
-    from effects.infrastructure.rules_catalogue_io import load_heads, load_scenarios
 
-    counts = json.loads(Path(config.rule_counts).read_text(encoding="utf-8"))
-    catalogue = load_scenarios(config.rules_dir)
-    heads = load_heads(config.rules_dir, catalogue.rules())
-    detected = detected_rules(catalogue)
     converted = process_sidecars(SourceTrees.of(config.cards_folders).sidecar_roots())
 
     def script_text_of(key: ProvenanceKey) -> str | None:
         line = converted.line_or_none(key)
         return line.script_text if line is not None else None
 
-    generation = SteeredGeneration(
+    return SteeredGeneration(
         catalogue=catalogue, index=script_index(sources),
         forge_cards_path=config.forge_cards_path,
         held_out=config.deck_holdout.exclusions(),
         script_text_of=script_text_of, output_path=config.variant_scripts,
         rng=random.Random(config.seed),
     )
+
+
+def _run_rule_counter(config: CollectVariantsConfig, run_id: str) -> RunRuleCounter:
+    from effects.infrastructure.converted_trees import SourceTrees
+
+    return RunRuleCounter(config.effect_records, run_id, RuleCountSetup(
+        rules_dir=config.rules_dir,
+        sidecar_roots=SourceTrees.of(config.cards_folders, config.variant_scripts).sidecar_roots(),
+        workers=config.workers,
+    ))
+
+
+def collect_steered(config: CollectVariantsConfig, sources: list[Path]) -> int:
+    """The steered round's iterations under one supervisor (one run id)."""
+    from effects.infrastructure.rules_catalogue_io import load_heads, load_scenarios
+
+    counts = json.loads(Path(config.rule_counts).read_text(encoding="utf-8"))
+    catalogue = load_scenarios(config.rules_dir)
+    heads = load_heads(config.rules_dir, catalogue.rules())
+    detected = detected_rules(catalogue)
+    generation = _steered_generation(config, sources, catalogue)
     units: dict[str, VariantGames] = {}
     try:
         with collector_supervisor(
             config, variant_scripts=config.variant_scripts,
         ) as supervisor:
             games = VariantGameCounter(config.effect_records, supervisor.run_id, config.workers)
-            ruled = RunRuleCounter(
-                config.effect_records, supervisor.run_id, rules_dir=config.rules_dir,
-                sidecar_roots=SourceTrees.of(
-                    config.cards_folders, config.variant_scripts).sidecar_roots(),
-                workers=config.workers,
-            )
-            outcome = steer(config, generation, counts, heads, detected, units,
-                            supervisor, games, ruled)
+            outcome = steer(SteeredRound(
+                config=config, generation=generation, counts=counts, heads=heads,
+                detected=detected, units=units, supervisor=supervisor, games=games,
+                ruled=_run_rule_counter(config, supervisor.run_id),
+            ))
             if outcome is not SteerOutcome.PLAYED:
                 return outcome.exit_code
         return finish(config, units, games, interrupted=supervisor.interrupted)
@@ -360,45 +449,93 @@ class SteerOutcome(Enum):
         return 1 if self is SteerOutcome.NO_VARIANT else 0
 
 
-def steer(config, generation: SteeredGeneration, counts, heads, detected,
-          units: dict[str, VariantGames], supervisor, games, ruled) -> SteerOutcome:
+@dataclass(frozen=True)
+class SteeredRound:
+    """What the steered round's iterations read and fill: the config, the
+    generation, the corpus's rule counts, the rule map's heads and the rules
+    with a declared detector, the variants' game units (filled as the round
+    plays), the supervisor and the counters of this run's games and rules."""
+
+    config: CollectVariantsConfig
+    generation: SteeredGeneration
+    counts: Mapping
+    heads: Mapping[str, RuleMapEntry]
+    detected: frozenset[str]
+    units: dict[str, VariantGames]
+    supervisor: CollectorSupervisor
+    games: VariantGameCounter
+    ruled: RunRuleCounter
+
+
+@dataclass
+class _Progress:
+    """What the iterations so far did: the rules retired, whether a variant was
+    played, whether the round stalled with short pairs and no variant."""
+
+    retired: set[str] = field(default_factory=set)
+    played: bool = False
+    stalled: bool = False
+
+    def outcome(self) -> SteerOutcome:
+        if self.played:
+            return SteerOutcome.PLAYED
+        return SteerOutcome.NO_VARIANT if self.stalled else SteerOutcome.NOTHING_SHORT
+
+
+def steer(steered: SteeredRound) -> SteerOutcome:
     """The iterations (FR-058d); what ended them when none had anything to play."""
-    retired: set[str] = set()
-    played = False
-    stalled = False
-    for iteration in range(1, config.steer_iterations + 1):
-        before = combined_counts(counts, ruled.document())
-        pairs = short_pairs(before, SteerScope(
-            heads, detected, config.steer_floor, frozenset(retired),
-        ))
-        if not pairs:
-            logger.info("Steered iteration %d: no short pair left", iteration)
+    progress = _Progress()
+    for iteration in range(1, steered.config.steer_iterations + 1):
+        if not _iterate(steered, iteration, progress):
             break
-        variants = generation.variants(pairs, counts, config.steer_variants)
-        log_variants(iteration, pairs, variants)
-        if not variants:
-            stalled = not played and _log_stall(iteration, len(pairs))
-            break
-        variants = prepare_variants(config, variants)
-        fresh = {variant.name: variant.games_unit() for variant in variants}
-        units.update(fresh)
-        played = True
-        interrupted = play_variant_rounds(VariantRounds(
-            units=fresh, candidates={v.name: v.deck_candidate() for v in variants},
-            counter=games, config=config, by_rule=True,
-        ), supervisor, rng=generation.rng)
-        ruled.update()
-        record_damaged_shards(supervisor, sorted({*games.damaged, *ruled.damaged}))
-        after = combined_counts(counts, ruled.document())
-        newly = rules_to_retire(gained(before, after, pairs), min_gain=config.steer_min_gain)
-        retired |= newly
-        logger.info("Steered iteration %d: retired %d rule(s): %s", iteration, len(newly),
-                    ", ".join(sorted(newly)) or "none")
-        if interrupted:
-            break
-    if played:
-        return SteerOutcome.PLAYED
-    return SteerOutcome.NO_VARIANT if stalled else SteerOutcome.NOTHING_SHORT
+    return progress.outcome()
+
+
+def _iterate(steered: SteeredRound, iteration: int, progress: _Progress) -> bool:
+    """One iteration; whether the next should follow."""
+    config = steered.config
+    before = combined_counts(steered.counts, steered.ruled.document())
+    pairs = short_pairs(before, SteerScope(
+        steered.heads, steered.detected, config.steer_floor, frozenset(progress.retired),
+    ))
+    if not pairs:
+        logger.info("Steered iteration %d: no short pair left", iteration)
+        return False
+    variants = steered.generation.variants(pairs, steered.counts, config.steer_variants)
+    log_variants(iteration, pairs, variants)
+    if not variants:
+        progress.stalled = not progress.played and _log_stall(iteration, len(pairs))
+        return False
+    progress.played = True
+    interrupted = _play(steered, prepare_variants(config, variants))
+    progress.retired |= _retire(steered, iteration, before, pairs)
+    return not interrupted
+
+
+def _play(steered: SteeredRound, variants: list[GeneratedVariant]) -> bool:
+    """Play the prepared variants' rounds, then count this run's shards again;
+    whether the run was interrupted."""
+    fresh = {variant.name: variant.games_unit() for variant in variants}
+    steered.units.update(fresh)
+    interrupted = play_variant_rounds(VariantRounds(
+        units=fresh, candidates={v.name: v.deck_candidate() for v in variants},
+        counter=steered.games, config=steered.config, by_rule=True,
+    ), steered.supervisor, rng=steered.generation.rng)
+    steered.ruled.update()
+    record_damaged_shards(
+        steered.supervisor, sorted({*steered.games.damaged, *steered.ruled.damaged}))
+    return interrupted
+
+
+def _retire(steered: SteeredRound, iteration: int, before: dict,
+            pairs: list[ShortPair]) -> set[str]:
+    """The rules whose short polarities gained too few records this iteration."""
+    after = combined_counts(steered.counts, steered.ruled.document())
+    newly = rules_to_retire(
+        gained(before, after, pairs), min_gain=steered.config.steer_min_gain)
+    logger.info("Steered iteration %d: retired %d rule(s): %s", iteration, len(newly),
+                ", ".join(sorted(newly)) or "none")
+    return newly
 
 
 def _log_stall(iteration: int, pairs: int) -> bool:
