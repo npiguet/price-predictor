@@ -71,6 +71,7 @@ from effects.domain.state_snapshot import (
     GrantedTemporary,
     PlayerState,
     PowerToughness,
+    Refs,
     StateSnapshot,
 )
 from effects.domain.surface_collation import gather_entities
@@ -126,6 +127,12 @@ class _Sidecars:
         raise KeyError(f"{script_file}: no sidecar, so no charm options")
 
 
+def _active_statics(lines: tuple[CardLine, ...]) -> tuple[CardLine, ...]:
+    """``lines`` as gen-3 writes them: a static line carries ``active``."""
+    return tuple(replace(line, active=True) if line.kind == "static" else line
+                 for line in lines)
+
+
 def _creature(
     entity_id: str,
     power: int,
@@ -139,7 +146,7 @@ def _creature(
     return EntityState(
         id=entity_id, name=entity_id, zone="battlefield", controller=controller,
         types=("creature",), pt=PowerToughness(base=(power, toughness)),
-        combat=combat, lines=lines_of(printed),
+        combat=combat, lines=_active_statics(lines_of(printed)),
         granted_temporary=GrantedTemporary(keywords=keywords),
     )
 
@@ -164,10 +171,12 @@ def _combat_record(
                 stack_size=0, combat_substep=substep,
             ),
             players=(
-                PlayerState(id="P0", life=20, hand=3, library=30, graveyard=1),
-                PlayerState(id="P1", life=17, hand=4, library=28, graveyard=2),
+                PlayerState(id="P0", life=20, hand=3, library=30, graveyard=1,
+                            max_land_plays=1),
+                PlayerState(id="P1", life=17, hand=4, library=28, graveyard=2,
+                            max_land_plays=1),
             ),
-            entities=entities,
+            entities=entities, refs=Refs(targets_on_stack=()),
         ),
     )
 

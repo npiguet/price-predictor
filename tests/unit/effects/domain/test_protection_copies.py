@@ -51,8 +51,8 @@ from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 REPO_ROOT = Path(__file__).parents[4]
 
 DIED = ZONE_OUTCOMES.index("died")
-PLAYERS = (PlayerState(id="P0", life=20, hand=3, library=30, graveyard=0),
-           PlayerState(id="P1", life=20, hand=3, library=30, graveyard=0))
+PLAYERS = (PlayerState(id="P0", life=20, hand=3, library=30, graveyard=0, max_land_plays=1),
+           PlayerState(id="P1", life=20, hand=3, library=30, graveyard=0, max_land_plays=1))
 
 
 def _creature(entity_id: str, toughness: int = 2, *, subtypes=("goblin",), colours=("R",),
@@ -73,7 +73,8 @@ def _spell(entity_id: str = "S1", *, types=("sorcery",), subtypes=(), colours=("
 def _state(entities, **refs):
     return make_snapshot(
         global_=GlobalState(turn=3, phase="main1", active="P0", priority="P0", stack_size=1),
-        players=PLAYERS, entities=tuple(entities), refs=Refs(**refs),
+        players=PLAYERS, entities=tuple(entities),
+        refs=Refs(**{"targets_on_stack": (), **refs}),
     )
 
 
@@ -343,7 +344,8 @@ def _decision(*targets: str, source: EntityState | None = None) -> EffectRecord:
     source = source or make_entity("H1", "bolt", zone="hand", types=("instant",),
                                    colors=("R",), mana_value=1, lines=())
     candidate = Candidate(ability=(), can_play=True, affordable=True, has_legal_target=True,
-                          legal_targets=targets)
+                          legal_targets=targets, timing=True, failed_checks=(),
+                          land_play=False)
     return make_record(
         RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.DECISION, generation=3,
         state=_state((source, _creature("E1"), _creature("E2")), source=source.id),

@@ -307,12 +307,13 @@ class Event:
 
     @classmethod
     def from_dict(cls, data: dict) -> Event:
+        """An event as the gen-3 writer writes it, every member present."""
         return cls(
             type=EventType(data["type"]),
-            subjects=tuple(data.get("subjects", ())),
-            params=dict(data.get("params", {})),
-            duration=data.get("duration"),
-            attributed_to=data.get("attributed_to"),
+            subjects=tuple(data["subjects"]),
+            params=dict(data["params"]),
+            duration=data["duration"],
+            attributed_to=data["attributed_to"],
         )
 
 

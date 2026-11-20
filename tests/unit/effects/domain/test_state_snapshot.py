@@ -308,20 +308,17 @@ class TestTheGen3FactsRead:
         assert any(p.turn_counts.life_gained == 3 for p in players)
         assert any(p.monarch for p in players)
 
-    def test_a_player_carries_its_land_plays_and_unlimited_stays_apart_from_absent(self):
-        """1 on every golden player; null is unlimited (Fastbond), which a
-        player collected without the member is not (T074a)."""
+    def test_a_player_carries_its_land_plays_and_null_is_unlimited(self):
+        """1 on every golden player; null is unlimited (Fastbond) (T074a)."""
         from effects.infrastructure.record_codec import _player_from_json
 
         players = [p for state in self._states() for p in state.players]
         assert players and all(p.max_land_plays == 1 and not p.land_plays_unlimited
                                for p in players)
-        base = {"id": "P0", "life": 20, "hand": 7, "library": 40, "graveyard": 0}
+        base = java_golden_records()[0]["state"]["players"][0]
         assert _player_from_json({**base, "max_land_plays": 2}).max_land_plays == 2
         unlimited = _player_from_json({**base, "max_land_plays": None})
-        absent = _player_from_json(base)
         assert (unlimited.max_land_plays, unlimited.land_plays_unlimited) == (None, True)
-        assert (absent.max_land_plays, absent.land_plays_unlimited) == (None, False)
 
     def test_an_affected_list_and_an_affects_link_reach_players(self):
         """Exploration's line affects its controller: cards first, then players."""

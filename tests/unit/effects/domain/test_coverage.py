@@ -45,7 +45,7 @@ def _record(entities, *, source=None, targets=(), events=()) -> EffectRecord:
         ability=(ACTING_KEY,),
         state=make_snapshot(
             entities=tuple(entities),
-            refs=Refs(source=source, targets=tuple(targets)),
+            refs=Refs(source=source, targets=tuple(targets), targets_on_stack=()),
         ),
         payload=ResolutionPayload(events=tuple(events)),
     )

@@ -1842,7 +1842,8 @@ def test_a_short_family_is_repeated_up_to_the_reuse_cap(tmp_path, a_corpus):
         make_record(
             RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.BLOCKERS,
             record_id=f"g-clean-1.leg{i}", game_id="g-clean-1", timestamp=_TIMESTAMP,
-            what_if=i >= 2, payload=PlayabilityBlockersPayload(anchor_attacker=f"E{i}"),
+            what_if=i >= 2,
+            payload=PlayabilityBlockersPayload(anchor_attacker=f"E{i}", must_block=()),
         )
         for i in range(22)
     ]
@@ -2121,7 +2122,8 @@ def test_a_decision_whose_candidate_key_is_unjoinable_is_refused(tmp_path, a_cor
             RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.DECISION,
             record_id=record_id, game_id="g-clean-1", timestamp=_TIMESTAMP,
             payload=PlayabilityDecisionPayload(candidates=(Candidate(
-                ability=(key,), can_play=True, affordable=True, has_legal_target=True),)),
+                ability=(key,), can_play=True, affordable=True, has_legal_target=True,
+                timing=True, failed_checks=(), land_play=False),)),
         )
 
     unjoinable = ProvenanceKey(_BEAR_FILE, 0, "spell", 1, option=0)

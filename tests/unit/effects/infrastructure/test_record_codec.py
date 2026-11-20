@@ -101,9 +101,9 @@ def _rich_snapshot() -> StateSnapshot:
             PlayerState(
                 id="P0", life=14, hand=3, library=21, graveyard=9, poison=1,
                 energy=2, this_turn={"creatures_died": 1, "spells_cast": 2},
-                floating_mana={"R": 1}, untapped_production={"G": 3},
+                floating_mana={"R": 1}, untapped_production={"G": 3}, max_land_plays=1,
             ),
-            PlayerState(id="P1", life=8, hand=1, library=30, graveyard=4),
+            PlayerState(id="P1", life=8, hand=1, library=30, graveyard=4, max_land_plays=1),
         ),
         entities=(
             EntityState(
@@ -132,7 +132,7 @@ def _rich_snapshot() -> StateSnapshot:
             ),
         ),
         refs=Refs(
-            targets=("E12",), source="S1", modes=("option-0",), x=3,
+            targets=("E12",), targets_on_stack=(), source="S1", modes=("option-0",), x=3,
             choices={"color": "red"},
         ),
         tiers=frozenset({InclusionTier.REFERENCED, InclusionTier.CORE}),
@@ -217,7 +217,8 @@ ALL_KINDS = {
             contributions=(
                 Contribution(
                     entity="E12", pt_boost=(1, 1), keywords=("vigilance",),
-                    types=("Creature",), colors=("W",), name=None,
+                    types=("Creature",), colors=("W",), abilities=(), hidden_keywords=(),
+                    name=None,
                 ),
             ),
             board_hash="ab12cd",
@@ -248,7 +249,8 @@ ALL_KINDS = {
                     ability=(_KEY,), can_play=True, affordable=False,
                     has_legal_target=True, legal_targets=("E20",),
                     cost_after_adjustment={"R": 2},
-                    responsible_static=(_DONOR,),
+                    responsible_static=(_DONOR,), timing=True, failed_checks=(),
+                    land_play=False,
                 ),
             )
         ),
@@ -257,6 +259,7 @@ ALL_KINDS = {
         kind=RecordKind.PLAYABILITY, moment=None, ability=None,
         subkind=PlayabilitySubkind.ATTACKERS,
         payload=PlayabilityAttackersPayload(
+            anchor_attacker="E12", legal_defenders=("P1",), must_attack=False,
             legal_attackers=("E12",),
             forbidden=(ForbiddenEntity(entity="E13", responsible_static=(_DONOR,)),),
         ),
@@ -266,7 +269,7 @@ ALL_KINDS = {
         subkind=PlayabilitySubkind.BLOCKERS,
         payload=PlayabilityBlockersPayload(
             anchor_attacker="E12", legal_blockers=("E20",),
-            forbidden=(ForbiddenEntity(entity="E21"),), min_blockers=2,
+            forbidden=(ForbiddenEntity(entity="E21"),), must_block=(), min_blockers=2,
         ),
     ),
 }
@@ -299,12 +302,6 @@ class TestRoundTrip:
         """Without them, an empty entity list and an uncollected tier look alike."""
         data = record_to_dict(_record())
         assert data["state"]["tiers"] == [1, 2]
-
-    def test_a_snapshot_naming_no_tier_reads_as_none_collected(self):
-        """Absence means uncollected (schema rule 3): never a tier inferred."""
-        data = record_to_dict(_record())
-        del data["state"]["tiers"]
-        assert record_from_dict(data).state.tiers == frozenset()
 
 class TestRecordMoments:
     """The record-moment payloads (root spec § 8.14, FR-042a, FR-042b) keep
@@ -359,14 +356,6 @@ class TestForwardCompatibility:
     def test_ability_unresolved_round_trips(self):
         record = _record(ability=(), ability_unresolved="engine_effect")
         assert record_from_dict(record_to_dict(record)) == record
-
-    def test_a_shard_written_before_the_field_reads_as_no_reason(self):
-        """The corpus is append-only, so a line without the key still parses."""
-        data = record_to_dict(_record())
-        del data["ability_unresolved"]
-        restored = record_from_dict(data)
-        assert restored.ability_unresolved is None
-        assert restored.extra_fields == {}
 
 
 class TestTheProbedPerturbation:
@@ -490,57 +479,6 @@ class TestADamageEventReadsItsDamageType:
         assert "damage_type" not in loaded.payload.events[0].params
 
 
-class TestARewriteShardCollectedBeforeTheResult:
-    """Both shapes coexist: the corpus is append-only.
-
-    A shard written before the hook passed a result carries
-    ``{incoming, outgoing}`` and nothing else, and its ``outgoing`` is usually
-    a copy of its ``incoming``. It has to keep reading, and it has to keep
-    reading as a *third* state -- not as ``not_replaced``, which would
-    reinterpret every one of those records as a replacement the collector
-    watched decline.
-    """
-
-    def _old_wire(self) -> dict:
-        wire = record_to_dict(
-            _record(
-                kind=RecordKind.REWRITE, moment=None,
-                payload=RewritePayload(
-                    incoming=Event(type=EventType.DAMAGE_DEALT,
-                                   params={"amount": 3}),
-                    outgoing=Event(type=EventType.DAMAGE_DEALT,
-                                   params={"amount": 3}),
-                ),
-            )
-        )
-        del wire["payload"]["result"]
-        del wire["payload"]["replaced_by"]
-        return wire
-
-    def test_it_still_parses(self):
-        loaded = record_from_dict(self._old_wire())
-        assert loaded.payload.incoming.params["amount"] == 3
-        assert loaded.payload.outgoing.params["amount"] == 3
-
-    def test_its_missing_result_is_none_and_not_not_replaced(self):
-        payload = record_from_dict(self._old_wire()).payload
-        assert payload.result is None
-        assert payload.result is not RewriteResult.NOT_REPLACED
-
-    def test_it_names_no_substituted_ability_rather_than_failing(self):
-        assert record_from_dict(self._old_wire()).payload.replaced_by == ()
-
-    def test_rewriting_it_writes_the_new_keys_explicitly(self):
-        """Reading an old line and writing it back yields the current shape
-        with nulls, rather than silently reproducing the old one."""
-        rewritten = record_to_dict(record_from_dict(self._old_wire()))
-        assert rewritten["payload"]["result"] is None
-        assert rewritten["payload"]["replaced_by"] == []
-        assert rewritten["payload"]["outgoing"] == {
-            **rewritten["payload"]["incoming"],
-        }
-
-
 class TestTheRandomSeatAndWhatIf:
     """``random_seat`` and ``what_if`` (FR-030, FR-031, FR-033)."""
 
@@ -612,7 +550,7 @@ class TestTheWireFormIsPinned:
     def test_every_kind_serializes_to_the_pinned_bytes(self):
         records = [_record(**ALL_KINDS[name]) for name in sorted(ALL_KINDS)]
         assert self._digest(records) == (
-            "80542c6159f1b942df4a87272e3a085e4ca4db23def721dc0ac42ecc69ada554"
+            "82b26b422aba06e10c63df317907335dc03e234fa16a458bf3169a4be9a77704"
         )
 
     def test_the_fixture_round_trips_through_its_own_wire_form(self):
@@ -630,10 +568,12 @@ class TestAContinuousContributionsSetBaseAndControl:
     def test_they_read_and_write_back_where_present(self):
         record = _record(**ALL_KINDS["continuous"])
         record = replace(record, payload=replace(record.payload, contributions=(
-            Contribution(entity="E13", set_pt=(1, None), controller="P1"),)))
+            Contribution(entity="E13", set_pt=(1, None), abilities=(), hidden_keywords=(),
+                         controller="P1"),)))
         written = record_to_dict(record)["payload"]["contributions"][0]
         assert list(written) == ["entity", "pt_boost", "set_pt", "keywords", "types",
-                                 "colors", "name", "controller"]
+                                 "colors", "abilities", "hidden_keywords", "name",
+                                 "controller"]
         assert written["set_pt"] == [1, None]
         assert record_from_dict(record_to_dict(record)) == record
 
@@ -977,8 +917,8 @@ class TestTheGen3EntityShape:
                      PlayerState(id="P1", life=20, hand=7, library=40, graveyard=0,
                                  land_plays_unlimited=True,
                                  turn_counts=TurnCounts())),
-            refs=Refs(random=RandomResults(dice=(4, 17), coin_flips_won=1,
-                                           coin_flips_lost=2)))
+            refs=Refs(targets_on_stack=(), random=RandomResults(dice=(4, 17), coin_flips_won=1,
+                                                                coin_flips_lost=2)))
         records = [
             _record(state=state, payload=ResolutionPayload(conditions_met=(
                 ConditionMet("root", True), ConditionMet("1", False)))),
@@ -1031,13 +971,6 @@ class TestTheGen3EntityShape:
         assert (read.max_land_plays, read.land_plays_unlimited) == (None, True)
         written = record_to_dict(record_from_dict(unlimited))["state"]["players"][0]
         assert "max_land_plays" in written and written["max_land_plays"] is None
-
-        before = json.loads(json.dumps(raw))
-        del before["state"]["players"][0]["max_land_plays"]
-        read = record_from_dict(before).state.players[0]
-        assert (read.max_land_plays, read.land_plays_unlimited) == (None, False)
-        assert "max_land_plays" not in record_to_dict(
-            record_from_dict(before))["state"]["players"][0]
 
     def test_an_attackers_record_carries_no_what_if(self):
         attackers = [raw for raw in java_golden_records()

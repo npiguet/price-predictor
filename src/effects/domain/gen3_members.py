@@ -23,7 +23,7 @@ entity's ``history``, a cost half's ``costs``) are not sites yet.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum
 
@@ -259,6 +259,7 @@ ALWAYS: Mapping[Site, tuple[str, ...]] = {
     for site in Site
 }
 
+
 #: Every path ``field-coverage``'s walk reaches for a member of the table,
 #: once each, in the table's order.
 WALK_PATHS: tuple[str, ...] = tuple(dict.fromkeys(
@@ -268,6 +269,61 @@ WALK_PATHS: tuple[str, ...] = tuple(dict.fromkeys(
 FIXED_PATHS: Mapping[str, str] = {
     path: row.fixed for row in MEMBERS if row.fixed for path in row.walk_paths()
 }
+
+
+# ── the strict gen-3 decode ─────────────────────────────────────────────
+
+
+class MissingMemberError(ValueError):
+    """A gen-3 block without a member the writer puts on every instance of
+    its site."""
+
+
+#: :data:`ALWAYS` as sets, the one shape a block's keys compare against.
+_OWED: Mapping[Site, frozenset[str]] = {site: frozenset(names) for site, names in ALWAYS.items()}
+
+
+def require_always(site: Site, block: Mapping) -> None:
+    """Refuse a block of ``site`` without a member :data:`ALWAYS` owes it,
+    naming each missing one as ``<site>.<member>``."""
+    if not block.keys() >= _OWED[site]:
+        missing = ", ".join(f"{site.value}.{name}" for name in ALWAYS[site] if name not in block)
+        raise MissingMemberError(f"no {missing}: a gen-3 writer puts it on every {site.value}")
+
+
+def owes[T](site: Site) -> Callable[[Callable[[Mapping], T]], Callable[[Mapping], T]]:
+    """Make the gen-3 decode of one ``site``'s block name what it lacks.
+
+    The decode reads every member :data:`ALWAYS` owes the site by index, so
+    a missing one raises ``KeyError``; this turns it into the
+    :class:`MissingMemberError` naming each owed member the block lacks. A
+    ``KeyError`` with every owed member present (a member of a nested object
+    the table does not cover) goes on as raised. Checked only on a failure:
+    a check of every block before reading it cost the training loader a
+    fifth of its decode time.
+    """
+    def strict(decode: Callable[[Mapping], T]) -> Callable[[Mapping], T]:
+        def decode_owed(block: Mapping) -> T:
+            try:
+                return decode(block)
+            except KeyError:
+                require_always(site, block)
+                raise
+        return decode_owed
+    return strict
+
+
+#: The line kinds that owe members of their own beside a line's.
+_LINE_KINDS: Mapping[str, Site] = {"static": Site.STATIC_LINE, "keyword": Site.KEYWORD_LINE}
+
+
+def require_line_kind(block: Mapping) -> None:
+    """Refuse a line without a member its kind owes beyond a line's
+    (:data:`Site.STATIC_LINE`, :data:`Site.KEYWORD_LINE`), which the line's
+    decode reads as optional on a line of another kind."""
+    kind = _LINE_KINDS.get(block["kind"])
+    if kind is not None:
+        require_always(kind, block)
 
 
 # ── where each site sits on a raw record ────────────────────────────────

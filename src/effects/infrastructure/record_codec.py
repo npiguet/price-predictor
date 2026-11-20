@@ -23,6 +23,13 @@ import orjson
 
 from effects.domain.event_schema import Event
 from effects.domain.fork_operation import ForkOperation
+from effects.domain.gen3_members import (
+    Site,
+    owes,
+    payload_site,
+    require_always,
+    require_line_kind,
+)
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
@@ -137,6 +144,7 @@ def _events_from_json(data: Any) -> tuple[Event, ...]:
     return tuple(_event_from_json(item) for item in data or ())
 
 
+@owes(Site.EVENT)
 def _event_from_json(item: Any) -> Event:
     """One event, with its counter type in this package's spelling.
 
@@ -168,10 +176,9 @@ def _pt_boosts_to_json(pt: PowerToughness) -> dict:
 
 def _pt_from_json(data: dict) -> PowerToughness | None:
     """An entity's ``base_pt`` and ``pt_boosts``, both null on a non-creature."""
-    base = data.get("base_pt")
+    base, boosts = data["base_pt"], data["pt_boosts"]
     if base is None:
         return None
-    boosts = data.get("pt_boosts") or {}
     return PowerToughness(
         base=tuple(base),
         boosts=tuple(boosts.get("temporary", (0, 0))),
@@ -198,11 +205,13 @@ def _line_to_json(line: CardLine) -> dict:
     return out
 
 
+@owes(Site.LINE)
 def _line_from_json(data: dict) -> CardLine:
+    require_line_kind(data)
     return CardLine(
-        keys=_keys_from_json(data.get("keys")),
+        keys=_keys_from_json(data["keys"]),
         kind=data["kind"],
-        granted=data.get("granted", False),
+        granted=data["granted"],
         grant=data.get("grant"),
         active=data.get("active"),
         cast_with=data.get("cast_with"),
@@ -385,24 +394,25 @@ def _entity_to_json(entity: EntityState) -> dict:
     }
 
 
+@owes(Site.ENTITY)
 def _entity_from_json(data: dict) -> EntityState:
     """One entity, whose ``printed`` :class:`EntityState` derives from its
     ``lines``."""
     return _entity(
         data, pt=_pt_from_json(data),
         lines=tuple(_line_from_json(line) for line in data["lines"]),
-        owner=data.get("owner"), face_state=data.get("face_state"),
-        mana_cost=_absent_or(dict, data.get("mana_cost")),
-        printed_loyalty=data.get("printed_loyalty"),
-        printed_defense=data.get("printed_defense"),
-        real_face=_absent_or(_real_face_from_json, data.get("real_face")),
-        designations=tuple(data.get("designations", ())),
-        x_paid=data.get("x_paid"),
-        chosen=_absent_or(_choices_from_json, data.get("chosen")),
-        costs_paid=_absent_or(_costs_paid_from_json, data.get("costs_paid")),
-        history=_absent_or(_history_from_json, data.get("history")),
-        order_rank=data.get("order_rank"),
-        role=data.get("role"),
+        owner=data["owner"], face_state=data["face_state"],
+        mana_cost=_absent_or(dict, data["mana_cost"]),
+        printed_loyalty=data["printed_loyalty"],
+        printed_defense=data["printed_defense"],
+        real_face=_absent_or(_real_face_from_json, data["real_face"]),
+        designations=tuple(data["designations"]),
+        x_paid=data["x_paid"],
+        chosen=_absent_or(_choices_from_json, data["chosen"]),
+        costs_paid=_absent_or(_costs_paid_from_json, data["costs_paid"]),
+        history=_absent_or(_history_from_json, data["history"]),
+        order_rank=data["order_rank"],
+        role=data["role"],
     )
 
 
@@ -410,23 +420,21 @@ def _entity(data: dict, **facts) -> EntityState:
     """An entity's identity, characteristics and status, plus its ``facts``."""
     return EntityState(
         id=data["id"], name=data["name"], zone=data["zone"],
-        controller=data["controller"], face=data.get("face", 0),
-        copy_source=data.get("copy_source"),
-        token_script_id=data.get("token_script_id"),
-        types=tuple(data.get("types", ())),
-        subtypes=tuple(data.get("subtypes", ())),
-        supertypes=tuple(data.get("supertypes", ())),
-        colors=tuple(data.get("colors", ())),
-        mana_value=data.get("mana_value", 0),
-        tapped=data.get("tapped", False), sick=data.get("sick", False),
-        damage=data.get("damage", 0), counters=dict(data.get("counters", {})),
-        combat=_optional(_combat_status_from_json, data.get("combat")),
-        attached_to=data.get("attached_to"),
-        face_down=data.get("face_down", False),
-        granted_temporary=_granted_temporary_from_json(
-            data.get("granted_temporary") or {}
-        ),
-        stack_extras=_optional(_stack_extras_from_json, data.get("stack_extras")),
+        controller=data["controller"], face=data["face"],
+        copy_source=data["copy_source"],
+        token_script_id=data["token_script_id"],
+        types=tuple(data["types"]),
+        subtypes=tuple(data["subtypes"]),
+        supertypes=tuple(data["supertypes"]),
+        colors=tuple(data["colors"]),
+        mana_value=data["mana_value"],
+        tapped=data["tapped"], sick=data["sick"],
+        damage=data["damage"], counters=dict(data["counters"]),
+        combat=_optional(_combat_status_from_json, data["combat"]),
+        attached_to=data["attached_to"],
+        face_down=data["face_down"],
+        granted_temporary=_granted_temporary_from_json(data["granted_temporary"]),
+        stack_extras=_optional(_stack_extras_from_json, data["stack_extras"]),
         **facts,
     )
 
@@ -474,18 +482,19 @@ def _global_to_json(global_: GlobalState) -> dict:
     }
 
 
+@owes(Site.GLOBAL)
 def _global_from_json(data: dict) -> GlobalState:
     return GlobalState(
         turn=data["turn"], phase=data["phase"], active=data["active"],
-        priority=data.get("priority"), stack_size=data.get("stack_size", 0),
-        combat_substep=data.get("combat_substep"),
-        emblems=_keys_from_json(data.get("emblems")),
-        day_night=data.get("day_night"),
+        priority=data["priority"], stack_size=data["stack_size"],
+        combat_substep=data["combat_substep"],
+        emblems=_keys_from_json(data["emblems"]),
+        day_night=data["day_night"],
         floating_effects=tuple(
-            _command_zone_object_from_json(made) for made in data.get("floating_effects", ())),
+            _command_zone_object_from_json(made) for made in data["floating_effects"]),
         delayed_triggers=tuple(
-            _command_zone_object_from_json(made) for made in data.get("delayed_triggers", ())),
-        dungeons=tuple(_dungeon_from_json(dungeon) for dungeon in data.get("dungeons", ())),
+            _command_zone_object_from_json(made) for made in data["delayed_triggers"]),
+        dungeons=tuple(_dungeon_from_json(dungeon) for dungeon in data["dungeons"]),
     )
 
 
@@ -523,20 +532,21 @@ def _player_to_json(player: PlayerState) -> dict:
     }
 
 
+@owes(Site.PLAYER)
 def _player_from_json(data: dict) -> PlayerState:
     return PlayerState(
         id=data["id"], life=data["life"], hand=data["hand"],
         library=data["library"], graveyard=data["graveyard"],
-        poison=data.get("poison", 0), energy=data.get("energy", 0),
-        this_turn=dict(data.get("this_turn", {})),
-        floating_mana=dict(data.get("floating_mana", {})),
-        untapped_production=dict(data.get("untapped_production", {})),
-        max_land_plays=data.get("max_land_plays"),
-        land_plays_unlimited="max_land_plays" in data and data["max_land_plays"] is None,
-        speed=data.get("speed", 0), city_blessing=data.get("city_blessing", False),
-        rad=data.get("rad", 0), monarch=data.get("monarch", False),
-        initiative=data.get("initiative", False),
-        turn_counts=_absent_or(_turn_counts_from_json, data.get("turn_counts")),
+        poison=data["poison"], energy=data["energy"],
+        this_turn=dict(data["this_turn"]),
+        floating_mana=dict(data["floating_mana"]),
+        untapped_production=dict(data["untapped_production"]),
+        max_land_plays=data["max_land_plays"],
+        land_plays_unlimited=data["max_land_plays"] is None,
+        speed=data["speed"], city_blessing=data["city_blessing"],
+        rad=data["rad"], monarch=data["monarch"],
+        initiative=data["initiative"],
+        turn_counts=_absent_or(_turn_counts_from_json, data["turn_counts"]),
     )
 
 
@@ -567,16 +577,17 @@ def _refs_to_json(refs: Refs) -> dict:
     }
 
 
+@owes(Site.REFS)
 def _refs_from_json(data: dict) -> Refs:
     return Refs(
-        targets=tuple(data.get("targets", ())),
-        targets_at_cast=_tuple_or_none(data.get("targets_at_cast")),
-        targets_on_stack=_tuple_or_none(data.get("targets_on_stack")),
-        source=data.get("source"),
-        modes=tuple(data.get("modes", ())),
-        x=data.get("x"),
-        choices=dict(data.get("choices", {})),
-        random=_absent_or(_random_from_json, data.get("random")),
+        targets=tuple(data["targets"]),
+        targets_at_cast=_tuple_or_none(data["targets_at_cast"]),
+        targets_on_stack=_tuple_or_none(data["targets_on_stack"]),
+        source=data["source"],
+        modes=tuple(data["modes"]),
+        x=data["x"],
+        choices=dict(data["choices"]),
+        random=_absent_or(_random_from_json, data["random"]),
     )
 
 
@@ -600,6 +611,7 @@ def _link_to_json(link: Link) -> dict:
     return out
 
 
+@owes(Site.LINK)
 def _link_from_json(data: dict) -> Link:
     return Link(from_=_link_end_from_json(data["from"]), to=_link_end_from_json(data["to"]),
                 type=data["type"], index=data.get("index"))
@@ -621,15 +633,16 @@ def _snapshot_to_json(state: StateSnapshot) -> dict:
     }
 
 
+@owes(Site.STATE)
 def _snapshot_from_json(data: dict) -> StateSnapshot:
-    pending = data.get("pending_event")
+    pending = data["pending_event"]
     return StateSnapshot(
         global_=_global_from_json(data["global"]),
-        players=tuple(_player_from_json(p) for p in data.get("players", ())),
-        entities=tuple(_entity_from_json(e) for e in data.get("entities", ())),
-        refs=_refs_from_json(data.get("refs") or {}),
+        players=tuple(_player_from_json(p) for p in data["players"]),
+        entities=tuple(_entity_from_json(e) for e in data["entities"]),
+        refs=_refs_from_json(data["refs"]),
         pending_event=_event_from_json(pending) if pending else None,
-        tiers=frozenset(InclusionTier(t) for t in data.get("tiers", ())),
+        tiers=frozenset(InclusionTier(t) for t in data["tiers"]),
         links=tuple(_link_from_json(link) for link in data["links"]),
     )
 
@@ -681,7 +694,7 @@ def _activation_to_json(payload: ActivationPayload) -> dict:
 def _activation_from_json(data: dict) -> ActivationPayload:
     """A cost half, ``{events, costs}``."""
     return ActivationPayload(
-        costs=_costs_from_json(data.get("costs") or {}),
+        costs=_costs_from_json(data["costs"]),
         events=_events_from_json(data["events"]),
     )
 
@@ -697,13 +710,13 @@ def _resolution_to_json(payload: ResolutionPayload) -> dict:
 
 
 def _resolution_from_json(data: dict) -> ResolutionPayload:
-    conditions = data.get("conditions_met")
+    conditions = data["conditions_met"]
     return ResolutionPayload(
-        events=_events_from_json(data.get("events")),
+        events=_events_from_json(data["events"]),
         conditions_met=tuple(
             ConditionMet(segment=entry["segment"], met=entry["met"]) for entry in conditions
         ) if conditions is not None else None,
-        outcome=ResolutionOutcome(data["outcome"]) if data.get("outcome") is not None else None,
+        outcome=ResolutionOutcome(data["outcome"]) if data["outcome"] is not None else None,
         outcome_written="outcome" in data,
     )
 
@@ -728,14 +741,14 @@ def _rewrite_to_json(payload: RewritePayload) -> dict:
 
 
 def _rewrite_from_json(data: dict) -> RewritePayload:
-    outgoing = data.get("outgoing")
-    result = data.get("result")
+    outgoing = data["outgoing"]
+    result = data["result"]
     buffered = data.get("buffered")
     return RewritePayload(
         incoming=_event_from_json(data["incoming"]),
         outgoing=_event_from_json(outgoing) if outgoing else None,
         result=RewriteResult(result) if result else None,
-        replaced_by=_keys_from_json(data.get("replaced_by")),
+        replaced_by=_keys_from_json(data["replaced_by"]),
         incoming_unknown=bool(data.get("incoming_unknown", False)),
         buffered=_keys_from_json(buffered) if buffered is not None else None,
         buffered_ran=bool(data.get("buffered_ran")) if buffered is not None else None,
@@ -763,17 +776,18 @@ def _contribution_to_json(contribution: Contribution) -> dict:
     return out
 
 
+@owes(Site.CONTRIBUTION)
 def _contribution_from_json(data: dict) -> Contribution:
     return Contribution(
         entity=data["entity"],
-        pt_boost=tuple(data.get("pt_boost", (0, 0))),
+        pt_boost=tuple(data["pt_boost"]),
         set_pt=tuple(data["set_pt"]) if data.get("set_pt") is not None else None,
-        keywords=tuple(normalize_keyword(k) for k in data.get("keywords", ())),
-        types=tuple(data.get("types", ())),
-        colors=tuple(data.get("colors", ())),
-        abilities=_tuple_or_none(data.get("abilities")),
-        hidden_keywords=_tuple_or_none(data.get("hidden_keywords")),
-        name=data.get("name"),
+        keywords=tuple(normalize_keyword(k) for k in data["keywords"]),
+        types=tuple(data["types"]),
+        colors=tuple(data["colors"]),
+        abilities=_tuple_or_none(data["abilities"]),
+        hidden_keywords=_tuple_or_none(data["hidden_keywords"]),
+        name=data["name"],
         controller=data.get("controller"),
     )
 
@@ -788,9 +802,9 @@ def _continuous_to_json(payload: ContinuousPayload) -> dict:
 def _continuous_from_json(data: dict) -> ContinuousPayload:
     return ContinuousPayload(
         contributions=tuple(
-            _contribution_from_json(c) for c in data.get("contributions", ())
+            _contribution_from_json(c) for c in data["contributions"]
         ),
-        board_hash=data.get("board_hash", ""),
+        board_hash=data["board_hash"],
     )
 
 
@@ -814,13 +828,10 @@ def _is_observed_combat(payload) -> bool:
 
 def _combat_from_json(data: dict) -> CombatPayload:
     return CombatPayload(
-        attackers=tuple(data.get("attackers", ())),
-        blocks={k: tuple(v) for k, v in (data.get("blocks") or {}).items()},
-        assignment_choices={
-            k: dict(v)
-            for k, v in (data.get("assignment_choices") or {}).items()
-        },
-        events=_events_from_json(data.get("events")),
+        attackers=tuple(data["attackers"]),
+        blocks={k: tuple(v) for k, v in data["blocks"].items()},
+        assignment_choices={k: dict(v) for k, v in data["assignment_choices"].items()},
+        events=_events_from_json(data["events"]),
         probed_keyword=data.get("probed_keyword"),
         probed_entity=data.get("probed_entity"),
     )
@@ -863,24 +874,30 @@ def _candidate_to_json(candidate: Candidate) -> dict:
     return out
 
 
+@owes(Site.CANDIDATE)
 def _candidate_from_json(data: dict) -> Candidate:
     verdict = data["verdict"]
-    failed = data.get("failed_checks")
+    require_always(Site.VERDICT, verdict)
+    failed = data["failed_checks"]
     return Candidate(
-        ability=_keys_from_json(data.get("ability")),
+        ability=_keys_from_json(data["ability"]),
         can_play=verdict["can_play"],
         affordable=verdict["affordable"],
         has_legal_target=verdict["has_legal_target"],
-        legal_targets=tuple(data.get("legal_targets", ())),
-        cost_after_adjustment=dict(data.get("cost_after_adjustment", {})),
-        responsible_static=_keys_from_json(data.get("responsible_static")),
-        timing=verdict.get("timing"),
+        legal_targets=tuple(data["legal_targets"]),
+        cost_after_adjustment=dict(data["cost_after_adjustment"]),
+        responsible_static=_keys_from_json(data["responsible_static"]),
+        timing=verdict["timing"],
         failed_checks=tuple(
-            FailedCheck(check=entry["check"],
-                        responsible_static=_keys_from_json(entry.get("responsible_static")))
-            for entry in failed) if failed is not None else None,
-        land_play=data.get("land_play"),
+            _failed_check_from_json(entry) for entry in failed) if failed is not None else None,
+        land_play=data["land_play"],
     )
+
+
+@owes(Site.FAILED_CHECK)
+def _failed_check_from_json(data: dict) -> FailedCheck:
+    return FailedCheck(check=data["check"],
+                       responsible_static=_keys_from_json(data["responsible_static"]))
 
 
 def _decision_to_json(payload: PlayabilityDecisionPayload) -> dict:
@@ -889,7 +906,7 @@ def _decision_to_json(payload: PlayabilityDecisionPayload) -> dict:
 
 def _decision_from_json(data: dict) -> PlayabilityDecisionPayload:
     return PlayabilityDecisionPayload(
-        candidates=tuple(_candidate_from_json(c) for c in data.get("candidates", ())),
+        candidates=tuple(_candidate_from_json(c) for c in data["candidates"]),
     )
 
 
@@ -911,15 +928,17 @@ def _forbidden_to_json(forbidden: tuple[ForbiddenEntity, ...]) -> list[dict]:
 
 
 def _forbidden_from_json(data: Any) -> tuple[ForbiddenEntity, ...]:
-    return tuple(
-        ForbiddenEntity(
-            entity=f["entity"],
-            responsible_static=_keys_from_json(f.get("responsible_static")),
-            required_elsewhere=bool(f.get("required_elsewhere", False)),
-            responsible_own=bool(f.get("responsible_own", False)),
-            responsible_unresolved=f.get("responsible_unresolved"),
-        )
-        for f in data or ()
+    return tuple(_forbidden_entity_from_json(f) for f in data or ())
+
+
+@owes(Site.FORBIDDEN)
+def _forbidden_entity_from_json(data: dict) -> ForbiddenEntity:
+    return ForbiddenEntity(
+        entity=data["entity"],
+        responsible_static=_keys_from_json(data["responsible_static"]),
+        required_elsewhere=bool(data.get("required_elsewhere", False)),
+        responsible_own=bool(data.get("responsible_own", False)),
+        responsible_unresolved=data.get("responsible_unresolved"),
     )
 
 
@@ -942,11 +961,11 @@ def _attackers_to_json(payload: PlayabilityAttackersPayload) -> dict:
 
 def _attackers_from_json(data: dict) -> PlayabilityAttackersPayload:
     return PlayabilityAttackersPayload(
-        legal_attackers=tuple(data.get("legal_attackers", ())),
-        forbidden=_forbidden_from_json(data.get("forbidden")),
-        anchor_attacker=data.get("anchor_attacker"),
-        legal_defenders=tuple(data.get("legal_defenders", ())),
-        must_attack=data.get("must_attack", False),
+        legal_attackers=tuple(data["legal_attackers"]),
+        forbidden=_forbidden_from_json(data["forbidden"]),
+        anchor_attacker=data["anchor_attacker"],
+        legal_defenders=tuple(data["legal_defenders"]),
+        must_attack=data["must_attack"],
         tapped_by_attack=data.get("tapped_by_attack"),
     )
 
@@ -966,10 +985,10 @@ def _blockers_to_json(payload: PlayabilityBlockersPayload) -> dict:
 def _blockers_from_json(data: dict) -> PlayabilityBlockersPayload:
     return PlayabilityBlockersPayload(
         anchor_attacker=data["anchor_attacker"],
-        legal_blockers=tuple(data.get("legal_blockers", ())),
-        forbidden=_forbidden_from_json(data.get("forbidden")),
-        min_blockers=data.get("min_blockers", 0),
-        must_block=_tuple_or_none(data.get("must_block")),
+        legal_blockers=tuple(data["legal_blockers"]),
+        forbidden=_forbidden_from_json(data["forbidden"]),
+        min_blockers=data["min_blockers"],
+        must_block=_tuple_or_none(data["must_block"]),
     )
 
 
@@ -982,7 +1001,7 @@ def _turn_action_to_json(payload: TurnActionPayload) -> dict:
 
 
 def _turn_action_from_json(data: dict) -> TurnActionPayload:
-    return TurnActionPayload(events=_events_from_json(data.get("events")),
+    return TurnActionPayload(events=_events_from_json(data["events"]),
                              records_withheld=data.get("records_withheld"))
 
 
@@ -1015,8 +1034,9 @@ def _payload_to_json(payload) -> dict:
 
 
 def _payload_from_json(
-    data: dict, kind: RecordKind, discriminator: Moment | StrEnum | None,
+    record: dict, kind: RecordKind, discriminator: Moment | StrEnum | None,
 ):
+    """``record``'s payload, the members its site owes checked first."""
     payload_type = PAYLOAD_TYPES.get((kind, discriminator))
     if payload_type is None:
         # A ValueError, as the record's own discriminator check raises.
@@ -1024,6 +1044,8 @@ def _payload_from_json(
             f"no payload is defined for kind={kind.value} with "
             f"moment/subkind={discriminator.value if discriminator else None}"
         )
+    data = record["payload"]
+    require_always(payload_site(record), data)
     return _PAYLOAD_CODECS[payload_type].decode(data)
 
 
@@ -1133,15 +1155,19 @@ def record_from_dict(data: dict) -> EffectRecord:
     and so is a ``generation`` other than the integer 3
     (:class:`~effects.domain.shard_generation.UnknownGenerationError`) and a
     resolution half in the payload shape gen 3 replaced
-    (:class:`SupersededPayloadError`).
+    (:class:`SupersededPayloadError`). A block without a member
+    :data:`~effects.domain.gen3_members.ALWAYS` owes its site is refused
+    naming both (:class:`~effects.domain.gen3_members.MissingMemberError`);
+    those members are read by index, never defaulted.
     """
     require_gen3(data)
+    require_always(Site.RECORD, data)
     check_gen3_payload_shape(data)
     kind = RecordKind(data["kind"])
-    moment = Moment(data["moment"]) if data.get("moment") else None
+    moment = Moment(data["moment"]) if data["moment"] else None
     subkinds = SUBKINDS_OF.get(kind, PlayabilitySubkind)
-    subkind = subkinds(data["subkind"]) if data.get("subkind") else None
-    ability = data.get("ability")
+    subkind = subkinds(data["subkind"]) if data["subkind"] else None
+    ability = data["ability"]
     aimed_at = data.get("aimed_at")
     directed = data.get("directed")
     copy_dropped = data.get("copy_dropped")
@@ -1155,13 +1181,13 @@ def record_from_dict(data: dict) -> EffectRecord:
         kind=kind,
         actor_player=data["actor_player"],
         state=_snapshot_from_json(data["state"]),
-        payload=_payload_from_json(data["payload"], kind, moment or subkind),
+        payload=_payload_from_json(data, kind, moment or subkind),
         mode=CollectionMode(data["mode"]),
         moment=moment,
         subkind=subkind,
-        link_id=data.get("link_id"),
-        mirror_of=data.get("mirror_of"),
-        variant_of=data.get("variant_of"),
+        link_id=data["link_id"],
+        mirror_of=data["mirror_of"],
+        variant_of=data["variant_of"],
         interventional=data["interventional"],
         fork=data["fork"],
         fork_kind=ForkKind(fork_kind) if fork_kind is not None else None,
@@ -1176,7 +1202,7 @@ def record_from_dict(data: dict) -> EffectRecord:
                       if copy_dropped is not None else None),
         curation=_curation_from_json(curation) if curation is not None else None,
         ability=_keys_from_json(ability) if ability is not None else None,
-        ability_unresolved=data.get("ability_unresolved"),
+        ability_unresolved=data["ability_unresolved"],
         extra_fields={
             k: v for k, v in data.items() if k not in _KNOWN_ENVELOPE_KEYS
         },
