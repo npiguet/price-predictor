@@ -37,6 +37,7 @@ from effects.application.collect_variants import (
     CollectVariantsConfig,
     GeneratedVariant,
     VariantGameCounter,
+    VariantRounds,
     finish,
     play_variant_rounds,
     prepare_variants,
@@ -384,10 +385,10 @@ def steer(config, generation: SteeredGeneration, counts, heads, detected,
         fresh = {variant.name: variant.games_unit() for variant in variants}
         units.update(fresh)
         played = True
-        interrupted = play_variant_rounds(
-            fresh, {v.name: v.deck_candidate() for v in variants}, supervisor, games,
-            config, by_rule=True, rng=generation.rng,
-        )
+        interrupted = play_variant_rounds(VariantRounds(
+            units=fresh, candidates={v.name: v.deck_candidate() for v in variants},
+            counter=games, config=config, by_rule=True,
+        ), supervisor, rng=generation.rng)
         ruled.update()
         record_damaged_shards(supervisor, sorted({*games.damaged, *ruled.damaged}))
         after = combined_counts(counts, ruled.document())

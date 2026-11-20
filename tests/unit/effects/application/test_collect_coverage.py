@@ -524,6 +524,7 @@ class TestOnlyDeckedCardsCountAStalledRound:
         """``run`` must hand ``retire_stalled`` the round's own decks, not the
         whole coverage unit -- otherwise the guard above never fires."""
         from effects.application import collect_coverage
+        from effects.application import collection_rounds
 
         # Sixty candidates against a single deck of 23 nonland slots: most of
         # the unit cannot be in the round at all, which is the real shape of
@@ -538,7 +539,7 @@ class TestOnlyDeckedCardsCountAStalledRound:
             )
         supervisor = fake_supervisor
         seen = []
-        real = collect_coverage.retire_stalled
+        real = collection_rounds.retire_stalled
 
         def _spy(coverage, previous, *, no_progress_rounds, decked, written):
             seen.append(frozenset(written))
@@ -548,7 +549,7 @@ class TestOnlyDeckedCardsCountAStalledRound:
             )
 
         with patch.object(collect_coverage, "consult_castability", return_value={}), \
-             patch.object(collect_coverage, "retire_stalled", _spy):
+             patch.object(collection_rounds, "retire_stalled", _spy):
             collect_coverage.run(CollectCoverageConfig(
                 effect_records=tmp_path / "records",
                 cards_folders=(cards,),
@@ -1525,6 +1526,7 @@ class TestARoundChargesTheCardsItsGamesShowed:
 
     def test_a_written_card_no_game_showed_is_not_charged(self, tmp_path, fake_supervisor):
         from effects.application import collect_coverage
+        from effects.application import collection_rounds
 
         cards = tmp_path / "cardsfolder"
         cards.mkdir()
@@ -1544,14 +1546,14 @@ class TestARoundChargesTheCardsItsGamesShowed:
 
         fake_supervisor.play_round.side_effect = _play
         calls = []
-        real = collect_coverage.retire_stalled
+        real = collection_rounds.retire_stalled
 
         def _spy(coverage, previous, **kwargs):
             calls.append(kwargs)
             return real(coverage, previous, **kwargs)
 
         with patch.object(collect_coverage, "consult_castability", return_value={}), \
-                patch.object(collect_coverage, "retire_stalled", _spy), \
+                patch.object(collection_rounds, "retire_stalled", _spy), \
                 patch.object(collect_coverage, "build_coverage_decks",
                              return_value=[["shown", "unseen"]]):
             collect_coverage.run(CollectCoverageConfig(

@@ -20,8 +20,14 @@ import random
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
+from effects.application.collection_rounds import (
+    RoundCharge,
+    RoundDecks,
+    RoundPlan,
+    play_rounds,
+)
 from effects.application.collector_common import (
     RANDOM_SEED,
     CollectorConfig,
@@ -35,7 +41,7 @@ from effects.application.directed_steering import DirectedSteering
 from effects.application.shard_ledger import ShardLedger, ShardPass, read_records
 from effects.domain import default_paths
 from effects.domain.card_names import fold_card_name
-from effects.domain.coverage import DeckCandidate, is_complete, retire_stalled
+from effects.domain.coverage import DeckCandidate, is_complete
 from effects.domain.directed_sides import DirectedForkGames
 from effects.domain.rule_outcomes import (
     CARD_TYPES,
@@ -422,7 +428,9 @@ def _collect(config: CollectVariantsConfig) -> int:
             counter.seed(units)
             record_damaged_shards(supervisor, counter.damaged)
             supervisor.count_cut_games(counter.cut_games)
-            play_variant_rounds(units, candidates, supervisor, counter, config)
+            play_variant_rounds(VariantRounds(
+                units=units, candidates=candidates, counter=counter, config=config,
+            ), supervisor)
         return finish(config, units, counter, interrupted=supervisor.interrupted)
     finally:
         # The sidecar pass and every worker staged the tree into Forge's
@@ -652,85 +660,122 @@ class VariantGameCounter(ShardLedger):
         return credit_games(units, found)
 
 
+@dataclass(frozen=True)
+class DeckDraw:
+    """What a round's decks are drawn from: the deck candidates, how many
+    decks, and the stream that draws them."""
+
+    candidates: Mapping[str, DeckCandidate]
+    count: int
+    rng: random.Random
+
+
 def decks_of(
-    weights: dict[str, float], candidates: Mapping[str, DeckCandidate], count: int,
-    rng: random.Random, units: Mapping[str, VariantGames], *, by_rule: bool,
-) -> tuple[list[list[str]], list[str | None] | None]:
+    weights: dict[str, float], units: Mapping[str, VariantGames], draw: DeckDraw, *,
+    by_rule: bool,
+) -> RoundDecks:
     """A round's decks, and in the steered round the rule each deck is aimed
     at: a steered deck holds one rule's variants (FR-058d), decks dealt to the
     rules by the games their variants lack."""
     if not by_rule:
-        return build_coverage_decks(weights, candidates, count, rng=rng), None
+        return RoundDecks(build_coverage_decks(
+            weights, draw.candidates, draw.count, rng=draw.rng,
+        ))
     per_rule: dict[str, dict[str, float]] = {}
     for name, weight in weights.items():
         per_rule.setdefault(units[name].rule or "", {})[name] = weight
+    return _rule_decks(per_rule, draw)
+
+
+def _rule_decks(per_rule: dict[str, dict[str, float]], draw: DeckDraw) -> RoundDecks:
+    """``draw.count`` rules drawn by their variants' summed weights, one deck
+    of each drawn rule's variants; a rule that yields no deck is skipped."""
     rules = sorted(per_rule)
-    drawn = rng.choices(rules, weights=[sum(per_rule[r].values()) for r in rules], k=count)
+    drawn = draw.rng.choices(
+        rules, weights=[sum(per_rule[r].values()) for r in rules], k=draw.count,
+    )
     decks: list[list[str]] = []
     aimed: list[str | None] = []
     for rule in drawn:
-        deck = build_coverage_decks(per_rule[rule], candidates, 1, rng=rng)
+        deck = build_coverage_decks(per_rule[rule], draw.candidates, 1, rng=draw.rng)
         if deck:
             decks.append(deck[0])
             aimed.append(rule)
-    return decks, aimed
+    return RoundDecks(decks, aimed)
+
+
+@dataclass
+class VariantRounds:
+    """The variant rounds' units for the round loop: every variant a unit,
+    weighted by the games it lacks, its games counted from this run's own
+    shards. A variant a round's games showed and that gained no game counts
+    a stalled round, and retires after ``--no-progress-rounds`` of them in a
+    row; one written into decks no game showed retires after
+    ``UNSEEN_RETIRE_FACTOR`` times as many. ``by_rule``: the steered round's
+    decks, one rule's variants each."""
+
+    units: dict[str, VariantGames]
+    candidates: Mapping[str, DeckCandidate]
+    counter: VariantGameCounter
+    config: CollectVariantsConfig
+    by_rule: bool = False
+    #: The listed rules' directed-fork probabilities, set before the first
+    #: round and after every round.
+    steering: DirectedSteering = field(init=False)
+    label: ClassVar[str] = "variant"
+    no_decks: ClassVar[str] = "No unfinished variant has a deck candidate; nothing to deck."
+    stopping: ClassVar[str] = "Interrupted after round %d; stopping instead of starting another"
+
+    def __post_init__(self) -> None:
+        self.steering = DirectedSteering.of(self.config)
+
+    @property
+    def target(self) -> int:
+        return self.config.variant_games
+
+    @property
+    def awaited(self) -> dict[str, VariantGames]:
+        return self.units
+
+    def before_rounds(self, supervisor: CollectorSupervisor) -> None:
+        self.steering.steer(supervisor, self.counter.directed)
+
+    def weights(self) -> dict[str, float]:
+        return missing_games(self.units, self.target)
+
+    def decks(self, weights: dict[str, float], plan: RoundPlan) -> RoundDecks:
+        draw = DeckDraw(self.candidates, plan.decks_per_round, plan.rng)
+        return decks_of(weights, self.units, draw, by_rule=self.by_rule)
+
+    def count_round(self, round_number: int) -> set[str]:
+        """Credit the round's shards; the variants their games showed."""
+        return self.counter.update(self.units)
+
+    def after_count(self, supervisor: CollectorSupervisor) -> None:
+        self.steering.steer(supervisor, self.counter.directed)
+
+    def charged(self, cards: set[str], shown: set[str]) -> RoundCharge:
+        written = cards & set(self.units)
+        return RoundCharge(written & shown, written)
+
+    def summary(self, round_number: int, retired: list[str]) -> str:
+        return round_line(round_number, self.units, self.target, len(retired))
 
 
 def play_variant_rounds(
-    units: dict[str, VariantGames],
-    candidates: Mapping[str, DeckCandidate],
-    supervisor: CollectorSupervisor,
-    counter: VariantGameCounter,
-    config: CollectVariantsConfig,
-    *,
-    by_rule: bool = False,
+    rounds: VariantRounds, supervisor: CollectorSupervisor, *,
     rng: random.Random | None = None,
 ) -> bool:
     """Play rounds until every variant has ``--variant-games`` games or has
-    retired (FR-058a); True when Ctrl-C ended them.
-
-    Each round plays ``--decks-per-round`` matches from decks weighted by the
-    games each variant lacks. A variant a round's games showed and that gained
-    no game counts a stalled round, and retires after ``--no-progress-rounds``
-    of them in a row; one written into decks no game showed retires after
-    ``UNSEEN_RETIRE_FACTOR`` times as many.
-    """
-    decks_file = supervisor.decks_path("variant")
-    rng = rng if rng is not None else random.Random(config.seed)
-    target = config.variant_games
-    round_number = 0
-    steering = DirectedSteering.of(config)
-    steering.steer(supervisor, counter.directed)
-    while not is_complete(units, target):
-        round_number += 1
-        weights = missing_games(units, target)
-        decks, rules = decks_of(
-            weights, candidates, config.decks_per_round, rng, units, by_rule=by_rule,
-        )
-        if not decks:
-            logger.error("No unfinished variant has a deck candidate; nothing to deck.")
-            break
-        previous = {name: unit.progress for name, unit in units.items()}
-        written = {name for deck in decks for name in deck} & set(units)
-        supervisor.play_round(
-            decks, decks_file, label="variant", matches=config.decks_per_round, rules=rules,
-        )
-        shown = counter.update(units)
-        record_damaged_shards(supervisor, counter.damaged)
-        supervisor.count_cut_games(counter.last_cut)
-        steering.steer(supervisor, counter.directed)
-        retired = retire_stalled(
-            units, previous, no_progress_rounds=config.no_progress_rounds,
-            decked=written & shown, written=written,
-        )
-        logger.info("%s", round_line(round_number, units, target, len(retired)))
-        if supervisor.interrupted:
-            logger.warning(
-                "Interrupted after round %d; stopping instead of starting another",
-                round_number,
-            )
-            return True
-    return False
+    retired (FR-058a); True when Ctrl-C ended them. Each round plays
+    ``--decks-per-round`` matches; the decks are drawn from ``rng``, by
+    default one seeded with ``--seed``."""
+    config = rounds.config
+    plan = RoundPlan(
+        config.decks_per_round, config.no_progress_rounds,
+        rng if rng is not None else random.Random(config.seed),
+    )
+    return play_rounds(rounds, supervisor, plan).interrupted
 
 
 def round_line(round_number: int, units: Mapping[str, VariantGames], target: int,

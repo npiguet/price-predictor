@@ -22,6 +22,12 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
+from effects.application.collection_rounds import (
+    RoundCharge,
+    RoundDecks,
+    RoundPlan,
+    play_rounds,
+)
 from effects.application.collector_common import (
     CollectorConfig,
     build_coverage_decks,
@@ -45,7 +51,6 @@ from effects.domain.coverage import (
     is_complete,
     is_deckable,
     rank_by_consult,
-    retire_stalled,
     text_deck_weights,
 )
 
@@ -229,6 +234,10 @@ class CoverageRounds(ABC):
     unresolved: Unresolved = field(default_factory=Unresolved)
     #: Logged when the weighted cards yield no deck at all.
     no_decks: ClassVar[str]
+    label: ClassVar[str] = "coverage"
+    stopping: ClassVar[str] = (
+        "Interrupted after round %d; stopping instead of starting another round"
+    )
 
     @property
     def units(self) -> dict[str, CoverageUnit]:
@@ -248,90 +257,38 @@ class CoverageRounds(ABC):
     def units_decked(self, cards: set[str]) -> set[str]:
         """The units a round attempted, from the cards its decks held."""
 
-    def count_new_shards(self) -> int:
-        """Count the shards the last round wrote into ``units``; how many."""
-        return self.counter.update(self.coverage, self.records_dir, workers=self.workers)
-
     @abstractmethod
     def report(self) -> str:
         """What the rounds could not reach, printed however they ended."""
 
+    def before_rounds(self, supervisor: CollectorSupervisor) -> None:
+        """A coverage run tells the supervisor nothing before its rounds."""
 
-def round_summary(
-    round_number: int, rounds: CoverageRounds, retired: list[str],
-) -> str:
-    satisfied = sum(
-        1 for unit in rounds.units.values() if unit.satisfied(rounds.target)
-    )
-    remaining = sum(
-        1 for unit in rounds.awaited.values() if not unit.done(rounds.target)
-    )
-    return (
-        f"round {round_number}: {satisfied} satisfied, {remaining} remaining, "
-        f"{len(retired)} retired this round"
-    )
+    def decks(self, weights: dict[str, float], plan: RoundPlan) -> RoundDecks:
+        return RoundDecks(build_coverage_decks(
+            weights, self.candidates, plan.decks_per_round, rng=plan.rng,
+        ))
 
-
-@dataclass(frozen=True)
-class RoundsPlayed:
-    """How a run's rounds ended: how many were played, and whether Ctrl-C
-    ended them."""
-
-    rounds: int
-    interrupted: bool
-
-
-def play_rounds(
-    rounds: CoverageRounds,
-    supervisor: CollectorSupervisor,
-    config: CollectCoverageConfig,
-) -> RoundsPlayed:
-    """Play rounds until every awaited unit is done.
-
-    The decks file is the run's own (``decks/coverage-decks.<run_id>.txt``):
-    every worker reloads it at its start, so two runs on one records
-    directory would otherwise play each other's decks.
-    """
-    decks_file = supervisor.decks_path("coverage")
-    rng = random.Random(config.seed)
-    round_number = 0
-    while not is_complete(rounds.awaited, rounds.target):
-        previous = {key: unit.progress for key, unit in rounds.units.items()}
-        weights = rounds.weights()
-        if not weights:
-            break
-        decks = build_coverage_decks(
-            weights, rounds.candidates, config.decks_per_round, rng=rng,
-        )
-        if not decks:
-            logger.error("%s", rounds.no_decks)
-            break
-        round_number += 1
-        written = {name for deck in decks for name in deck}
-        supervisor.play_round(
-            decks, decks_file, label="coverage", matches=config.decks_per_round,
-        )
-        read = rounds.count_new_shards()
+    def count_round(self, round_number: int) -> set[str]:
+        """Count the shards the last round wrote into ``units``; the cards
+        their games showed."""
+        read = self.counter.update(self.coverage, self.records_dir, workers=self.workers)
         logger.info("Counted %d new shard(s) from round %d", read, round_number)
-        record_damaged_shards(supervisor, rounds.counter.damaged)
-        supervisor.count_cut_games(rounds.counter.last_cut)
-        # Charged to what the round's games showed: a worker draws its decks
-        # with replacement, so some written decks are never played.
-        retired = retire_stalled(
-            rounds.units, previous, no_progress_rounds=config.no_progress_rounds,
-            decked=rounds.units_decked(written & rounds.counter.seen),
-            written=rounds.units_decked(written),
+        return self.counter.seen
+
+    def after_count(self, supervisor: CollectorSupervisor) -> None:
+        """A coverage run tells the supervisor nothing after a round."""
+
+    def charged(self, cards: set[str], shown: set[str]) -> RoundCharge:
+        return RoundCharge(self.units_decked(cards & shown), self.units_decked(cards))
+
+    def summary(self, round_number: int, retired: list[str]) -> str:
+        satisfied = sum(1 for unit in self.units.values() if unit.satisfied(self.target))
+        remaining = sum(1 for unit in self.awaited.values() if not unit.done(self.target))
+        return (
+            f"round {round_number}: {satisfied} satisfied, {remaining} remaining, "
+            f"{len(retired)} retired this round"
         )
-        logger.info("%s", round_summary(round_number, rounds, retired))
-        if supervisor.interrupted:
-            # ForgeWorkerPool swallows SIGINT, so without this Ctrl-C would only
-            # skip to the next round.
-            logger.warning(
-                "Interrupted after round %d; stopping instead of starting "
-                "another round", round_number,
-            )
-            return RoundsPlayed(round_number, interrupted=True)
-    return RoundsPlayed(round_number, interrupted=False)
 
 
 def _play_to_completion(
@@ -347,7 +304,9 @@ def _play_to_completion(
             supervisor.record(**rounds.unresolved.fields())
         record_damaged_shards(supervisor, rounds.counter.damaged)
         supervisor.count_cut_games(rounds.counter.cut_games)
-        played = play_rounds(rounds, supervisor, config)
+        played = play_rounds(rounds, supervisor, RoundPlan(
+            config.decks_per_round, config.no_progress_rounds, random.Random(config.seed),
+        ))
     logger.info("%s", rounds.report())
     # Residues print either way, but an interrupted run did not finish.
     if played.interrupted:

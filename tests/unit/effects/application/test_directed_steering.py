@@ -14,6 +14,7 @@ from unittest.mock import patch
 from effects.application.collect_variants import (
     CollectVariantsConfig,
     VariantGameCounter,
+    VariantRounds,
     play_variant_rounds,
 )
 from effects.application.directed_steering import DirectedSteering
@@ -114,8 +115,10 @@ class TestTheRounds:
         units = {"Bolt Variant 0a1b2c3d": VariantGames(
             name="Bolt Variant 0a1b2c3d", script_file=BOLT)}
         cands = {"Bolt Variant 0a1b2c3d": DeckCandidate("Bolt Variant 0a1b2c3d", "{R}")}
-        play_variant_rounds(units, cands, supervisor, counter,
-                            config(tmp_path, "702.19e", "702.19f"))
+        play_variant_rounds(VariantRounds(
+            units=units, candidates=cands, counter=counter,
+            config=config(tmp_path, "702.19e", "702.19f"),
+        ), supervisor)
 
     def test_each_round_is_played_with_the_probabilities_the_rounds_before_it_left(
         self, tmp_path, fake_supervisor,

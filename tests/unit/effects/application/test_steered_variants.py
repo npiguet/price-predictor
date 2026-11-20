@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from effects.application import steered_variants
-from effects.application.collect_variants import CollectVariantsConfig, decks_of
+from effects.application.collect_variants import CollectVariantsConfig, DeckDraw, decks_of
 from effects.application.steered_variants import (
     SteeredGeneration,
     SteerOutcome,
@@ -168,8 +168,8 @@ def test_a_steered_deck_holds_one_rule_s_variants_and_names_it():
         "b1": VariantGames("b1", "variant-scripts/b1.txt", rule="704.5f"),
     }
     candidates = {name: DeckCandidate(name, "{B}") for name in units}
-    decks, rules = decks_of({"a1": 1.0, "a2": 2.0, "b1": 1.0}, candidates, 30,
-                            random.Random(1), units, by_rule=True)
+    decks, rules = decks_of({"a1": 1.0, "a2": 2.0, "b1": 1.0}, units,
+                            DeckDraw(candidates, 30, random.Random(1)), by_rule=True)
     assert len(decks) == len(rules) == 30
     assert set(rules) == {"702.2b", "704.5f"}
     for deck, rule in zip(decks, rules, strict=True):
@@ -215,8 +215,8 @@ def _steer(world, monkeypatch, ruled, supervisor=None, **config):
     generation, counts, rules = world
     played = []
 
-    def play(units, candidates, supervisor, games, config, *, by_rule, rng):
-        played.append((dict(units), by_rule))
+    def play(rounds, supervisor, *, rng):
+        played.append((dict(rounds.units), rounds.by_rule))
         return False
 
     monkeypatch.setattr(steered_variants, "play_variant_rounds", play)
