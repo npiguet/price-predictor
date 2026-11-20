@@ -599,7 +599,7 @@ class TestAuditorEndToEnd:
         )
         from sealed.application.picker_pools import _prepare_pools
         from sealed.application.picker_scoring import _load_scorer, _select_device
-        from sealed.application.picker_validation import _validate
+        from sealed.application.picker_validation import ValidationContext, _validate
         from sealed.application.train_picker import TrainPickerUseCase
         from sealed.domain.picker_model import PickerConfig, PickerModel
         from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
@@ -621,8 +621,8 @@ class TestAuditorEndToEnd:
         prepared = _prepare_pools(parse_pools(pools_path), ConvertedCardLocator(cards_dir))
         picker = PickerModel(PickerConfig(embedding_dim=WIDTH, d_model=WIDTH, n_heads=8))
         picker.to(device)
-        with_aud = _validate(picker, scorer, auditor, prepared, 2, device)
-        without_aud = _validate(picker, scorer, None, prepared, 2, device)
+        with_aud = _validate(picker, prepared, ValidationContext(scorer, auditor, 2, device))
+        without_aud = _validate(picker, prepared, ValidationContext(scorer, None, 2, device))
         assert with_aud.audit_corr is not None
         assert without_aud.audit_corr is None
 

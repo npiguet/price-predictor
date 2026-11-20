@@ -65,7 +65,7 @@ from sealed.application.picker_training_loop import (
     _log_epoch,
     _should_stop,
 )
-from sealed.application.picker_validation import _validate
+from sealed.application.picker_validation import ValidationContext, _validate
 from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE
 from sealed.domain.picker_model import PickerConfig, PickerModel
 from sealed.domain.scorer_model import SetTransformerScorer
@@ -241,7 +241,8 @@ class TrainPickerUseCase:
                     continue
 
                 report = _validate(
-                    picker, scorer, auditor, val_pools, config.batch_size, device,
+                    picker, val_pools,
+                    ValidationContext(scorer, auditor, config.batch_size, device),
                 )
                 schedule.update(report.mean_reward)
                 _log_epoch(epoch, step, n_steps, stats, report)
