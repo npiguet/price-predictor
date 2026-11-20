@@ -417,7 +417,7 @@ def test_thrasta_is_still_a_trampler_for_gate_2(thrasta_sidecars):
 
 # ── 702.19e and 702.19f played forward ──────────────────────────────────
 
-#: The combat records of ``DirectedForkPlayedForwardTest``'s two gone-planeswalker
+#: The combat records of ``DirectedForkPlayedForwardCombatTest``'s two gone-planeswalker
 #: turns, as the connector wrote them: a live attacker (Thrasta; Craw Wurm)
 #: attacking Forge's 506.4c placeholder (``E-1``) beside a Grizzly Bears
 #: attacking B (``P1``), and its directed fork's replacement (Colossal Dreadmaw;
