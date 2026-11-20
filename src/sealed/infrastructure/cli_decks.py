@@ -28,20 +28,37 @@ def _parse_restarts(value: str) -> int | str:
     return n
 
 
-def _parse_label(value: str) -> str:
-    """Parse --label: a non-empty string with no ';', '|', or whitespace."""
+#: The generated-decks file's separators, which no label may contain.
+_LABEL_SEPARATORS = frozenset({";", "|"})
+
+
+def _has_separator(value: str) -> bool:
+    return any(ch in _LABEL_SEPARATORS for ch in value)
+
+
+def _has_whitespace(value: str) -> bool:
+    return any(ch.isspace() for ch in value)
+
+
+def _label_refusal(value: str) -> str | None:
+    """Why ``value`` cannot be a --label, or None."""
     if not value:
-        raise argparse.ArgumentTypeError("--label must be a non-empty string")
-    forbidden = {";", "|"}
-    if any(ch in forbidden for ch in value):
-        raise argparse.ArgumentTypeError(
+        return "--label must be a non-empty string"
+    if _has_separator(value):
+        return (
             f"--label must not contain ';' or '|' (file-format separators), "
             f"got: {value!r}"
         )
-    if any(ch.isspace() for ch in value):
-        raise argparse.ArgumentTypeError(
-            f"--label must not contain whitespace, got: {value!r}"
-        )
+    if _has_whitespace(value):
+        return f"--label must not contain whitespace, got: {value!r}"
+    return None
+
+
+def _parse_label(value: str) -> str:
+    """Parse --label: a non-empty string with no ';', '|', or whitespace."""
+    refusal = _label_refusal(value)
+    if refusal is not None:
+        raise argparse.ArgumentTypeError(refusal)
     return value
 
 
@@ -72,6 +89,13 @@ def _build_build_decks_parser(subparsers) -> None:
         help="Build scorer-guided 40-card decks from a sealed pools file",
     )
     build_parser.set_defaults(func=run_build_decks)
+    _add_build_decks_io_flags(build_parser)
+    _add_build_decks_search_flags(build_parser)
+    _add_build_decks_run_flags(build_parser)
+
+
+def _add_build_decks_io_flags(build_parser: argparse.ArgumentParser) -> None:
+    """The pools, the label, the scorer, the cards and the output file."""
     build_parser.add_argument(
         "--pools-path",
         required=True,
@@ -100,6 +124,10 @@ def _build_build_decks_parser(subparsers) -> None:
         required=True,
         help="Output generated-decks file",
     )
+
+
+def _add_build_decks_search_flags(build_parser: argparse.ArgumentParser) -> None:
+    """The simulated annealing and the restarts."""
     build_parser.add_argument(
         "--sa-temperature",
         type=float,
@@ -143,6 +171,10 @@ def _build_build_decks_parser(subparsers) -> None:
             "highest-scoring deck across runs is kept."
         ),
     )
+
+
+def _add_build_decks_run_flags(build_parser: argparse.ArgumentParser) -> None:
+    """Printing the decks and resuming a partial run."""
     build_parser.add_argument(
         "--print-decks",
         action="store_true",
