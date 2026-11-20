@@ -67,6 +67,33 @@ def load_converted_cards(cards_folder: Path) -> dict[str, ConvertedCard]:
     return out
 
 
+def _cards_of(set_info) -> list[dict]:
+    """The cards of one entry of the dump's ``data``: a bare list, or a set's ``cards``."""
+    return set_info if isinstance(set_info, list) else set_info.get("cards", [])
+
+
+def _release_of(set_info) -> str:
+    """A set's ``releaseDate``, ``""`` for a bare list or a set without one."""
+    return set_info.get("releaseDate", "") if isinstance(set_info, dict) else ""
+
+
+def _names_of(card: dict) -> set:
+    """The names a card is indexed under: its own and its face's, whichever are given."""
+    return {card.get("name"), card.get("faceName")} - {None, ""}
+
+
+def _is_earlier(release: str, previous: str) -> bool:
+    """Whether ``release`` is a date before ``previous``; an empty one is none."""
+    return bool(release) and release < previous
+
+
+def _note_release(earliest: dict[str, str], key: str, release: str) -> None:
+    """Record ``release`` for ``key`` when it has none yet or this one is earlier and dated."""
+    previous = earliest.get(key)
+    if previous is None or _is_earlier(release, previous):
+        earliest[key] = release
+
+
 def load_first_printings(printings_path: Path) -> dict[str, str]:
     """``card name -> earliest release date`` from an MTGJSON dump, faces
     indexed under their own names as well as the combined one."""
@@ -75,13 +102,8 @@ def load_first_printings(printings_path: Path) -> dict[str, str]:
     data = json.loads(Path(printings_path).read_text(encoding="utf-8"))
     earliest: dict[str, str] = {}
     for set_info in data.get("data", {}).values():
-        cards = set_info if isinstance(set_info, list) else set_info.get("cards", [])
-        release = (
-            set_info.get("releaseDate", "") if isinstance(set_info, dict) else ""
-        )
-        for card in cards:
-            for key in {card.get("name"), card.get("faceName")} - {None, ""}:
-                previous = earliest.get(key)
-                if previous is None or (release and release < previous):
-                    earliest[key] = release
+        release = _release_of(set_info)
+        for card in _cards_of(set_info):
+            for key in _names_of(card):
+                _note_release(earliest, key, release)
     return earliest

@@ -11,7 +11,7 @@ which parse the same files.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -119,20 +119,25 @@ def load_registered_variants(rules_dir: Path = DEFAULT_RULES_DIR) -> dict[str, f
     return {rule: frozenset(labels) for rule, labels in registered.items()}
 
 
+def _lines_of(path: Path) -> Iterator[dict[str, Any]]:
+    """The parsed, non-blank lines of one heads file, parsed as they are read."""
+    for text in path.read_text(encoding="utf-8").splitlines():
+        if text.strip():
+            yield json.loads(text)
+
+
 def _heads_lines(rules_dir: Path) -> list[dict[str, Any]]:
     """Every heads line; raises ValueError on a rule id given two lines."""
     lines: list[dict[str, Any]] = []
     seen: dict[str, str] = {}
     for path in sorted(Path(rules_dir, "heads").glob("*.jsonl")):
-        for text in path.read_text(encoding="utf-8").splitlines():
-            if text.strip():
-                line = json.loads(text)
-                rule = line.get("id")
-                if rule in seen:
-                    raise ValueError(
-                        f"rule {rule} has a heads line twice: in {seen[rule]} and in {path.name}")
-                seen[rule] = path.name
-                lines.append(line)
+        for line in _lines_of(path):
+            rule = line.get("id")
+            if rule in seen:
+                raise ValueError(
+                    f"rule {rule} has a heads line twice: in {seen[rule]} and in {path.name}")
+            seen[rule] = path.name
+            lines.append(line)
     return lines
 
 
