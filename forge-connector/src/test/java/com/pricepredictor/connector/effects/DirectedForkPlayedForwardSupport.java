@@ -10,8 +10,11 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.function.Predicate;
 
 import static com.pricepredictor.connector.effects.RecordLines.events;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
@@ -66,13 +69,7 @@ abstract class DirectedForkPlayedForwardSupport {
      * fork's records, each checked to name the rule's registration.
      */
     List<String> forkOf(Game game, PhaseType step, String rule, String variant) throws Throwable {
-        return forkOf(game, step, rule, variant, Decisions.SAMPLED);
-    }
-
-    /** {@link #forkOf(Game, PhaseType, String, String)}, decision candidates sampled as {@code decisions} says. */
-    List<String> forkOf(Game game, PhaseType step, String rule, String variant, Decisions decisions)
-            throws Throwable {
-        return forkOf(played(game, step, rule, decisions), rule, variant);
+        return forkOf(played(game, step, rule, Decisions.SAMPLED), rule, variant);
     }
 
     /**
@@ -166,13 +163,17 @@ abstract class DirectedForkPlayedForwardSupport {
         List<Map<String, Object>> found = new ArrayList<>();
         for (String record : records) {
             for (Map<String, Object> event : events(record)) {
-                if (type.equals(event.get("type")) && event.get("subjects") instanceof List<?> subjects
-                        && subjects.contains(ref)) {
+                if (type.equals(event.get("type")) && subjectsOf(event).contains(ref)) {
                     found.add(event);
                 }
             }
         }
         return found;
+    }
+
+    /** The event's {@code subjects}, or none when it carries no list of them. */
+    private static List<?> subjectsOf(Map<String, Object> event) {
+        return event.get("subjects") instanceof List<?> subjects ? subjects : Collections.emptyList();
     }
 
     static String ref(Card card) {
@@ -203,16 +204,47 @@ abstract class DirectedForkPlayedForwardSupport {
 
     /** The fired trigger records among {@code records} whose trigger's host is {@code host}. */
     static List<String> fired(List<String> records, Card host) {
-        List<String> found = new ArrayList<>();
-        for (String record : records) {
-            Map<String, Object> parsed = parse(record);
-            Object source = RecordLines.asMap(RecordLines.asMap(parsed.get("state")).get("refs")).get("source");
-            if ("trigger".equals(parsed.get("kind")) && ref(host).equals(source)
-                    && Boolean.TRUE.equals(RecordLines.payload(record).get("fired"))) {
-                found.add(record);
-            }
+        return sourcedBy(records, SourcedKind.TRIGGER, host, firedIs(Boolean.TRUE));
+    }
+
+    /** The not-fired trigger records among {@code records} whose trigger's host is {@code host}. */
+    static List<String> notFired(List<String> records, Card host) {
+        return sourcedBy(records, SourcedKind.TRIGGER, host, firedIs(Boolean.FALSE));
+    }
+
+    /** The fork's resolution records whose source is {@code card}. */
+    static List<String> resolutionsOf(List<String> fork, Card card) {
+        return sourcedBy(fork, SourcedKind.RESOLUTION, card, record -> true);
+    }
+
+    /** Keeps a trigger record whose payload's {@code fired} is {@code fired}. */
+    private static Predicate<String> firedIs(Boolean fired) {
+        return record -> fired.equals(RecordLines.payload(record).get("fired"));
+    }
+
+    /** The kinds of record {@link #sourcedBy} selects by their source: each its wire name, lower-cased. */
+    enum SourcedKind {
+        TRIGGER,
+        RESOLUTION;
+
+        boolean isKindOf(Map<String, Object> parsed) {
+            return name().toLowerCase(Locale.ROOT).equals(parsed.get("kind"));
         }
-        return found;
+    }
+
+    /**
+     * The records among {@code records} of {@code kind} whose source is
+     * {@code card} and that {@code kept} keeps, checked in that order.
+     */
+    private static List<String> sourcedBy(List<String> records, SourcedKind kind, Card card,
+                                          Predicate<String> kept) {
+        return records.stream().filter(record -> isSourcedBy(parse(record), kind, card)).filter(kept).toList();
+    }
+
+    /** Whether a parsed record is of {@code kind} and its state's source is {@code card}. */
+    private static boolean isSourcedBy(Map<String, Object> parsed, SourcedKind kind, Card card) {
+        Object source = RecordLines.asMap(RecordLines.asMap(parsed.get("state")).get("refs")).get("source");
+        return kind.isKindOf(parsed) && ref(card).equals(source);
     }
 
     /** The fork's records among {@code records} holding an event of {@code type}, as kind/moment. */
@@ -240,18 +272,5 @@ abstract class DirectedForkPlayedForwardSupport {
             cards.add(game.getAction().moveToLibrary(TestBoard.card(game, owner, name), -1, null, null));
         }
         return cards;
-    }
-
-    /** The fork's resolution records whose source is {@code card}. */
-    static List<String> resolutionsOf(List<String> fork, Card card) {
-        List<String> found = new ArrayList<>();
-        for (String record : fork) {
-            Map<String, Object> parsed = parse(record);
-            Object source = RecordLines.asMap(RecordLines.asMap(parsed.get("state")).get("refs")).get("source");
-            if ("resolution".equals(parsed.get("kind")) && ref(card).equals(source)) {
-                found.add(record);
-            }
-        }
-        return found;
     }
 }

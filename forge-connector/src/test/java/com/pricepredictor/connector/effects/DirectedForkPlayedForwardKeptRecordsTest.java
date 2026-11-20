@@ -12,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiFunction;
 
 import static com.pricepredictor.connector.effects.RecordLines.parse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -170,54 +171,53 @@ class DirectedForkPlayedForwardKeptRecordsTest extends DirectedForkPlayedForward
         assertTrue(checks.stream().anyMatch(failed -> failed.contains("zone")), checks.toString());
     }
 
+    /**
+     * Play the bare board in {@code step} where {@code host} puts the card
+     * the case reads in the active player's reach, with no decision sampled,
+     * and assert a kept candidate of that card in {@code rule}'s fork cannot
+     * be played.
+     */
+    private void assertUnplayableInFork(PhaseType step, BiFunction<Game, Player, Card> host, String rule,
+                                        String variant) throws Throwable {
+        Card[] card = new Card[1];
+        List<String> fork = keptFork(() -> {
+            Game game = bare(step);
+            card[0] = host.apply(game, game.getPlayers().get(0));
+            return new Setup(game, card[0]);
+        }, step, rule, variant);
+
+        List<Object> playable = bits(candidatesOf(fork, card[0]), "can_play");
+        assertTrue(playable.contains(false), playable.toString());
+    }
+
     /** 702.187b: Electro's Bolt discarded this turn over two Mountains; the fork takes one away, so the mayhem cast is unplayable. */
     @Test
     void oneMountainLeavesMayhemUnplayable() throws Throwable {
-        Card[] bolt = new Card[1];
-        List<String> fork = keptFork(() -> {
-            Game game = bare(PhaseType.MAIN2);
-            Player active = game.getPlayers().get(0);
+        assertUnplayableInFork(PhaseType.MAIN2, (game, active) -> {
             lands(game, active, "Mountain", 2);
-            bolt[0] = TestBoard.inGraveyard(game, active, "Electro's Bolt");
-            bolt[0].setDiscarded(true);
-            return new Setup(game, bolt[0]);
-        }, PhaseType.MAIN2, "702.187b", "one_mountain");
-
-        List<Object> playable = bits(candidatesOf(fork, bolt[0]), "can_play");
-        assertTrue(playable.contains(false), playable.toString());
+            Card bolt = TestBoard.inGraveyard(game, active, "Electro's Bolt");
+            bolt.setDiscarded(true);
+            return bolt;
+        }, "702.187b", "one_mountain");
     }
 
     /** 702.188a: Spider-Man, Web-Slinger over a Plains and a tapped Grizzly Bears; the fork untaps the Bears, so nothing can be returned. */
     @Test
     void anUntappedCreatureLeavesWebSlingingUnplayable() throws Throwable {
-        Card[] spider = new Card[1];
-        List<String> fork = keptFork(() -> {
-            Game game = bare(PhaseType.MAIN2);
-            Player active = game.getPlayers().get(0);
+        assertUnplayableInFork(PhaseType.MAIN2, (game, active) -> {
             permanent(game, active, "Plains");
             permanent(game, active, "Grizzly Bears").setTapped(true);
-            spider[0] = TestBoard.inHand(game, active, "Spider-Man, Web-Slinger");
-            return new Setup(game, spider[0]);
-        }, PhaseType.MAIN2, "702.188a", "creature_untapped");
-
-        List<Object> playable = bits(candidatesOf(fork, spider[0]), "can_play");
-        assertTrue(playable.contains(false), playable.toString());
+            return TestBoard.inHand(game, active, "Spider-Man, Web-Slinger");
+        }, "702.188a", "creature_untapped");
     }
 
     /** 718.3a: Blitz Automaton over three Mountains; the fork takes one away, so the prototype cast is unplayable. */
     @Test
     void twoMountainsLeaveThePrototypeUnplayable() throws Throwable {
-        Card[] automaton = new Card[1];
-        List<String> fork = keptFork(() -> {
-            Game game = bare(PhaseType.MAIN1);
-            Player active = game.getPlayers().get(0);
+        assertUnplayableInFork(PhaseType.MAIN1, (game, active) -> {
             lands(game, active, "Mountain", 3);
-            automaton[0] = TestBoard.inHand(game, active, "Blitz Automaton");
-            return new Setup(game, automaton[0]);
-        }, PhaseType.MAIN1, "718.3a", "two_mountains");
-
-        List<Object> playable = bits(candidatesOf(fork, automaton[0]), "can_play");
-        assertTrue(playable.contains(false), playable.toString());
+            return TestBoard.inHand(game, active, "Blitz Automaton");
+        }, "718.3a", "two_mountains");
     }
 
     /**
@@ -245,20 +245,6 @@ class DirectedForkPlayedForwardKeptRecordsTest extends DirectedForkPlayedForward
             pairs.add(List.of(candidates.get(i).get("ability"), checks.get(i)));
         }
         assertEquals(pairs.stream().distinct().toList(), pairs, "each (candidate, failed checks) pair is written once");
-    }
-
-    /** The not-fired trigger records among {@code records} whose trigger's host is {@code host}. */
-    private static List<String> notFired(List<String> records, Card host) {
-        List<String> found = new ArrayList<>();
-        for (String record : records) {
-            Map<String, Object> parsed = parse(record);
-            Object source = RecordLines.asMap(RecordLines.asMap(parsed.get("state")).get("refs")).get("source");
-            if ("trigger".equals(parsed.get("kind")) && ref(host).equals(source)
-                    && Boolean.FALSE.equals(RecordLines.payload(record).get("fired"))) {
-                found.add(record);
-            }
-        }
-        return found;
     }
 
     /**
