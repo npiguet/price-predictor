@@ -196,7 +196,10 @@ final class RunParamNormalizer {
      * next.
      */
     static List<String> changedCounterTypes(Object trait, Object before, Object after) {
-        if (before == null || !isAddCounter(trait)) {
+        if (before == null || !(trait instanceof ReplacementEffect replacement)) {
+            return List.of();
+        }
+        if (!isAddCounter(replacement)) {
             return List.of();
         }
         Map<String, Integer> was = counterMapTotals(paramsByName(before).get("CounterMap"));
@@ -218,8 +221,8 @@ final class RunParamNormalizer {
     /** The replacement mode whose record is written once per counter type it changed. */
     static final String ADD_COUNTER = "AddCounter";
 
-    private static boolean isAddCounter(Object trait) {
-        return trait instanceof ReplacementEffect && ADD_COUNTER.equals(modeOf(trait));
+    private static boolean isAddCounter(ReplacementEffect replacement) {
+        return ADD_COUNTER.equals(modeOf(replacement));
     }
 
     /**
@@ -234,29 +237,5 @@ final class RunParamNormalizer {
                 : trait instanceof ReplacementEffect replacement ? replacement.getMode()
                 : null;
         return mode == null ? null : String.valueOf(mode);
-    }
-
-    /**
-     * Forge's produced-mana string as counts per colour letter.
-     *
-     * <p>Returned as a map rather than rendered here, because
-     * {@link EffectEvent#param} renders a map as a JSON object and a string as
-     * a JSON string — and the reader expects {@code {"B":1}}, not {@code "{...}"}.
-     */
-    static Map<String, Integer> manaByColor(String produced) {
-        Map<String, Integer> counts = new LinkedHashMap<>();
-        for (String atom : produced.split(" ")) {
-            if (atom.isEmpty()) {
-                continue;
-            }
-            // A bare number is that many generic; anything else is one mana of
-            // the colour it names, "C" included.
-            if (atom.chars().allMatch(Character::isDigit)) {
-                counts.merge("C", Integer.parseInt(atom), Integer::sum);
-            } else {
-                counts.merge(atom.toUpperCase(java.util.Locale.ROOT), 1, Integer::sum);
-            }
-        }
-        return counts;
     }
 }

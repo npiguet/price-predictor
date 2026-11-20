@@ -595,7 +595,7 @@ class TriggerRecordTest {
      * A mana trigger says which mana, in the slot the activation channel uses.
      *
      * <p>Without it a {@code TapsForMana} event carries only its mode. The
-     * reading is the same {@code manaByColor} the mana-activation records use,
+     * reading is the same {@code ProducedMana.byColor} the mana-activation records use,
      * so a tapped land and a replaced mana production are comparable rows
      * rather than two spellings of one fact.
      */

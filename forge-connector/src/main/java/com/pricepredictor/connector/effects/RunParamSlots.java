@@ -178,7 +178,7 @@ final class RunParamSlots {
     /**
      * {@code mana_by_color}: the mana a mana event moved, Forge's own short
      * text ({@code "G"}, {@code "G G"}, {@code "1"}) under {@code Produced}
-     * or {@code Mana}, read as {@link RunParamNormalizer#manaByColor} reads
+     * or {@code Mana}, read as {@link ProducedMana#byColor} reads
      * it for the activation channel, which keeps a tapped land and a replaced
      * mana production comparable. A value that is not text yields nothing:
      * {@code {}} would claim no mana moved.
@@ -226,7 +226,7 @@ final class RunParamSlots {
             produced = params.get("Mana");
         }
         if (produced instanceof String text) {
-            Map<String, Integer> mana = RunParamNormalizer.manaByColor(text.trim());
+            Map<String, Integer> mana = ProducedMana.byColor(text.trim());
             event.param("mana_by_color", mana.isEmpty() ? null : mana);
         }
     }

@@ -215,7 +215,7 @@ final class ManaChannel implements BusBracketCollector.EventTap {
      * and zero mana is not an event.
      */
     private static EffectEvent manaEvent(String player, String produced) {
-        Map<String, Integer> byColor = RunParamNormalizer.manaByColor(produced);
+        Map<String, Integer> byColor = ProducedMana.byColor(produced);
         if (byColor.values().stream().noneMatch(count -> count > 0)) {
             return null;
         }
