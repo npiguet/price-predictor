@@ -2185,6 +2185,7 @@ _EVERY_CHECK = (
     'snapshot tier depth is uniform across kinds',
     'exact duplicates within a game stay rare, per kind',
     'no record repeats an event inside itself',
+    'one-event-per-unit types repeat inside a record',
     'trigger records draw negatives against positives',
     'trigger records hold positives',
     'rewrite records say which replacement result happened',

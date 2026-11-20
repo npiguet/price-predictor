@@ -29,16 +29,59 @@ from effects.domain.records import (
     RecordKind,
 )
 
+#: The types a draw, a mill, a discard or a life change writes one event per
+#: unit of (``count: 1``, the player as subject), so N cards are N identical
+#: events: their repeats are by design and are measured apart.
+ONE_PER_UNIT_TYPES = frozenset({
+    EventType.CARD_DRAWN,
+    EventType.CARD_MILLED,
+    EventType.CARD_DISCARDED,
+    EventType.LIFE_CHANGE,
+})
+
+
+class _Repeats:
+    """The events of one population repeating an earlier event of their record."""
+
+    def __init__(self) -> None:
+        self.share = Share()
+        self.by_type: Counter[EventType] = Counter()
+
+    def note(self, event: Event, repeat: bool) -> None:
+        self.share.note(repeat)
+        if repeat:
+            self.by_type[event.type] += 1
+
+    def finding(self, name: str, noun: str, ceiling: float | None) -> Finding:
+        share = self.share
+        return ceiling_finding(
+            name=name,
+            ceiling=ceiling,
+            rate=share.rate,
+            measured=lambda limit: (
+                f"{share.hit}/{share.seen} {noun} repeat another in the "
+                f"same record ({share.rate:.1%}, {limit})"
+            ),
+            detail=(
+                f"{event_type}: {count}"
+                for event_type, count in self.by_type.most_common(EXAMPLES)
+            ),
+        )
+
 
 class DuplicateEvents:
     """Byte-identical events inside one record: one outcome written twice,
     which the record-level check cannot see and which teaches the model that
-    abilities deal their damage twice."""
+    abilities deal their damage twice.
+
+    The one-event-per-unit types (:data:`ONE_PER_UNIT_TYPES`) repeat on every
+    healthy mill or lifelink hit, so they are counted apart: the rest are
+    judged near zero, the others watched until a run measures their share.
+    """
 
     def __init__(self) -> None:
-        #: Events repeating an earlier event of their own record.
-        self.repeats = Share()
-        self.by_type: Counter[EventType] = Counter()
+        self.rest = _Repeats()
+        self.unit = _Repeats()
 
     def add(self, record: EffectRecord) -> None:
         seen: set[bytes] = set()
@@ -46,27 +89,18 @@ class DuplicateEvents:
         # repeat on every healthy record.
         for event in record.payload.listed_events():
             digest = canonical_digest(event.as_dict())
-            repeat = digest in seen
-            self.repeats.note(repeat)
-            if repeat:
-                self.by_type[event.type] += 1
+            population = self.unit if event.type in ONE_PER_UNIT_TYPES else self.rest
+            population.note(event, digest in seen)
             seen.add(digest)
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
-        repeats = self.repeats
-        yield ceiling_finding(
-            name="no record repeats an event inside itself",
-            ceiling=limits.max_duplicate_event_rate,
-            rate=repeats.rate,
-            measured=lambda limit: (
-                f"{repeats.hit}/{repeats.seen} events repeat another in the "
-                f"same record ({repeats.rate:.1%}, {limit})"
-            ),
-            detail=(
-                f"{event_type}: {count}"
-                for event_type, count in self.by_type.most_common(EXAMPLES)
-            ),
-        )
+        yield self.rest.finding(
+            "no record repeats an event inside itself",
+            "events of the other types", limits.max_duplicate_event_rate)
+        yield self.unit.finding(
+            "one-event-per-unit types repeat inside a record",
+            "card_drawn, card_milled, card_discarded and life_change events",
+            limits.max_unit_event_repeat_rate)
 
 
 class ZoneChanges:

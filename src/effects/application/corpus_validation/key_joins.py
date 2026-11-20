@@ -25,6 +25,7 @@ from effects.domain.records import (
     EffectRecord,
     key_sites,
 )
+from effects.domain.state_snapshot import EntityState
 
 
 class JoinOutcome(Enum):
@@ -79,6 +80,22 @@ _OUTSIDE_JOIN = "provenance keys outside every declared range"
 _COPY_JOIN = "a copy keys its keyword lines into the copied card's file"
 
 
+def _keys_outside_the_copied_file(
+    keys: list[ProvenanceKey], copied_files: set[str],
+) -> bool:
+    """Whether a copy's keyword keys betray a join into the wrong file.
+
+    A copy effect may add a keyword of its own (Omni-Changeling's ``Clone``
+    carries ``AddKeywords$ Changeling``), and that keyword keys into the file
+    of the card holding the effect: so a copy keeping keys of the copied file
+    and naming exactly one other file is the exception. Every key outside the
+    copied file, or keys in several other files, is not.
+    """
+    outside = {key.script_file for key in keys} - copied_files
+    inside = any(key.script_file in copied_files for key in keys)
+    return bool(outside) and not (inside and len(outside) == 1)
+
+
 class KeyJoins:
     """Every provenance key the window names resolves in its own sidecar.
 
@@ -100,35 +117,43 @@ class KeyJoins:
         self.sidecars = sidecars
         #: Every distinct printed-line key the window named, joined once.
         self.keys: set[ProvenanceKey] = set()
-        #: Copies whose copied card the snapshot shows, and those keying a
-        #: printed keyword line into a file other than the copied card's.
-        self.copies = 0
-        self.miskeyed_copies = 0
+        #: Each copy once, by (game, entity id), whichever records show it: whether
+        #: its copied card was in a snapshot, and whether it keys a printed keyword
+        #: line into a file other than the copied card's.
+        self.copies: dict[tuple[str, str], bool] = {}
         self.copy_examples: list[str] = []
+
+    @property
+    def miskeyed_copies(self) -> int:
+        return sum(self.copies.values())
 
     def add(self, record: EffectRecord) -> None:
         self.keys.update(key_sites(record))
         for entity in record.state.entities:
-            if entity.copy_source is None:
-                continue
-            copied = record.state.entity(entity.copy_source)
-            files = {key.script_file for key in copied.line_keys} if copied else set()
-            keys = [key for line in entity.lines if line.kind == "keyword" and not line.granted
-                    for key in line.keys]
-            if not files or not keys:
-                continue
-            self.copies += 1
-            if any(key.script_file not in files for key in keys):
-                self.miskeyed_copies += 1
-                keep_example(self.copy_examples, f"{record.record_id}: {entity.id} copies "
-                             f"{entity.copy_source} and keys {keys[0].label}")
+            if entity.copy_source is not None:
+                self._add_copy(record, entity)
+
+    def _add_copy(self, record: EffectRecord, entity: EntityState) -> None:
+        copied = record.state.entity(entity.copy_source)
+        files = {key.script_file for key in copied.line_keys} if copied else set()
+        keys = [key for line in entity.lines if line.kind == "keyword" and not line.granted
+                for key in line.keys]
+        if not files or not keys:
+            return
+        who = (record.game_id, entity.id)
+        miskeyed = _keys_outside_the_copied_file(keys, files)
+        if miskeyed and not self.copies.get(who):
+            keep_example(self.copy_examples, f"{record.record_id}: {entity.id} copies "
+                         f"{entity.copy_source} and keys {keys[0].label}")
+        self.copies[who] = self.copies.get(who, False) or miskeyed
 
     def copy_finding(self) -> Finding:
         """A copy has the copied card's printed lines (707.2), so its keyword
-        lines key into that card's file; watched, its healthy rate unmeasured."""
+        lines key into that card's file; watched, its healthy rate unmeasured.
+        Each copy counts once, however many records show it."""
         return Finding.watch(
             name=_COPY_JOIN,
-            measured=(f"{self.miskeyed_copies}/{self.copies} copies key a printed keyword "
+            measured=(f"{self.miskeyed_copies}/{len(self.copies)} copies key a printed keyword "
                       "line into a file other than the copied card's (watched, no ceiling)"),
             detail=tuple(self.copy_examples),
         )

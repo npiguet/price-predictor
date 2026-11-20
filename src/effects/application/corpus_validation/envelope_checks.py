@@ -633,7 +633,10 @@ class Duplicates:
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
         kinds = sorted(self.by_kind.items())
-        worst = max((share.rate for _, share in kinds), default=0.0)
+        # A kind of two records with one repeat reads 50%: only kinds holding
+        # enough records are judged, every kind is listed.
+        judged = [share for _, share in kinds if share.seen >= limits.min_duplicate_kind_records]
+        worst = max((share.rate for share in judged), default=0.0)
         overall = Share.total(self.by_kind.values())
         yield ceiling_finding(
             name="exact duplicates within a game stay rare, per kind",
@@ -641,7 +644,8 @@ class Duplicates:
             rate=worst,
             measured=lambda limit: (
                 f"{overall.hit}/{overall.seen} overall ({overall.rate:.1%}); "
-                f"worst kind {worst:.1%}, {limit}"
+                f"worst of the {len(judged)} kinds with at least "
+                f"{limits.min_duplicate_kind_records} records {worst:.1%}, {limit}"
             ),
             detail=(
                 f"{label}: {share.hit}/{share.seen} ({share.rate:.1%})"

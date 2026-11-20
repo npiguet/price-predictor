@@ -495,9 +495,10 @@ def sum_dropped_events(records_dir: Path, run_id: str) -> tuple[Counter[tuple[st
     how many lifetimes' files they came from.
 
     Each lifetime appends one ``event_type<TAB>phase<TAB>count`` line per pair
-    and game. A worker is killed rather than stopped, so its last line may be
-    cut short; a line that does not parse is skipped, as a shard's trailing
-    partial line is.
+    and game, written in one append a kill can cut. Only a newline-terminated
+    line counts: a count cut inside its digits (``123`` as ``12``) still
+    parses, so an unterminated tail is dropped whole, as a shard's trailing
+    partial line is; a terminated line that does not parse is skipped too.
     """
     counts: Counter[tuple[str, str]] = Counter()
     files = sorted(Path(records_dir).glob(f"{run_id}.*{DROPPED_EVENTS_SUFFIX}"))
@@ -508,7 +509,7 @@ def sum_dropped_events(records_dir: Path, run_id: str) -> tuple[Counter[tuple[st
             # Printed from the supervisors' ``finally``: one unreadable file
             # must not hide the run's report and return code.
             continue
-        for line in text.splitlines():
+        for line in text.split("\n")[:-1]:
             fields = line.split("\t")
             if len(fields) != 3 or not fields[2].isdigit():
                 continue

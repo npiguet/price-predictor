@@ -56,6 +56,17 @@ class TestSummingAcrossWorkers:
 
         assert counts == {("zone_change", "main1"): 2}
 
+    def test_a_count_cut_inside_its_digits_is_not_summed_as_a_smaller_one(self, tmp_path):
+        """``...	123`` cut to ``...	12`` still parses: only a line that ends in
+        a newline was written whole."""
+        path = _lifetime(tmp_path, "run", "0-aaa", "zone_change	main1	2")
+        with path.open("a", encoding="utf-8") as tail:
+            tail.write("zone_change	main1	12")
+
+        counts, lifetimes = sum_dropped_events(tmp_path, "run")
+
+        assert (counts, lifetimes) == ({("zone_change", "main1"): 2}, 1)
+
     def test_shards_and_logs_beside_the_files_are_not_read(self, tmp_path):
         _lifetime(tmp_path, "run", "0-aaa", "zone_change\tmain1\t2")
         (tmp_path / "run.0-aaa.jsonl.gz").write_bytes(b"\x1f\x8b")

@@ -112,7 +112,7 @@ GEN3_SIDECAR_FOLDERS = (
 #: three together, and with them every count a test pins on the fixture.
 GEN3_FIXTURE_RECORDS = 314
 GEN3_FIXTURE_GAMES = 57
-GEN3_FIXTURE_SHA256 = "2c474ca2512b7e786ccb552fb069e32b9f1e14dc6834447891e5907524db4b29"
+GEN3_FIXTURE_SHA256 = "506dc4513e478e842fc55ce98cc70dbb7a0bbc1420059adc303d6e48b72102c6"
 
 
 def gen3_fixture_records() -> list[dict]:

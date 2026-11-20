@@ -33,6 +33,12 @@ class Thresholds:
         "Share of a kind's records that may repeat an earlier record of the "
         "same kind in the same game (default: %(default)s)"
     )})
+    #: One repeat in a kind of two records reads 50%: a rate over so few
+    #: records is noise, as with ``min_outcome_evidence``.
+    min_duplicate_kind_records: int = field(default=20, metadata={"help": (
+        "Records of one kind a window needs before that kind's repeat share is "
+        "judged by --max-duplicate-rate (default: %(default)s)"
+    )})
     #: A worker killed mid-game truncates its last block, leaving a few
     #: unpaired halves.
     max_unpaired_link_rate: float = field(default=0.02, metadata={"help": (
@@ -62,9 +68,17 @@ class Thresholds:
         "outcome fails the run (default: %(default)s)"
     )})
     max_duplicate_event_rate: float = field(default=0.02, metadata={"help": (
-        "Share of events that may repeat another event in the same record, "
-        "which --max-duplicate-rate's whole-record comparison cannot see "
+        "Share of the events other than card_drawn, card_milled, card_discarded "
+        "and life_change that may repeat another event in the same record, which "
+        "--max-duplicate-rate's whole-record comparison cannot see "
         "(default: %(default)s)"
+    )})
+    #: A draw, a mill or a discard of N cards, and N life changes from one
+    #: source, are N identical events by design; no run measured their share.
+    max_unit_event_repeat_rate: float | None = field(default=None, metadata={"help": (
+        "Share of the card_drawn, card_milled, card_discarded and life_change "
+        "events that may repeat another in the same record; unset, it is "
+        "reported as [WATCH] without failing the run"
     )})
     #: Far above ~1:1 the sampler stopped drawing negatives, and positives
     #: alone teach the base rate.
