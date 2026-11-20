@@ -589,7 +589,10 @@ class TestACtrlCDuringARoundIsNotLost:
             signal.getsignal(signal.SIGINT)(signal.SIGINT, None)
 
         try:
-            with patch.object(ForgeWorkerPool, "_monitor_worker"),                     patch.object(ForgeWorkerPool, "_supervisor_loop", ctrl_c):
+            with (
+                patch.object(ForgeWorkerPool, "_monitor_worker"),
+                patch.object(ForgeWorkerPool, "_supervisor_loop", ctrl_c),
+            ):
                 supervisor.play_round(
                     _DECKS, tmp_path / "decks.txt", label="coverage", matches=1)
 
