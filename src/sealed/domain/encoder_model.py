@@ -238,7 +238,7 @@ class SealedEncoderModel(nn.Module):
 
         Mirrors ``CardPriceTransformerModel._encode_and_pool`` so the sealed
         encoder is a drop-in alternate encoder for the Phase B fine-tuning
-        path (``sealed.application.train_scorer._encode_chunked``,
+        path (``sealed.application.scorer_phase_b._encode_chunked``,
         ``CardEncoder.encode_batch_text``), which need gradients flowing into
         the encoder parameters — unlike :meth:`encode`, which is
         ``@torch.no_grad()``.

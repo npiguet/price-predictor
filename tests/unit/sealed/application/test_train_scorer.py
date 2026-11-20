@@ -10,16 +10,14 @@ import torch
 
 from price_predictor.domain.entities import TransformerConfig
 from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
-from sealed.application.train_scorer import (
-    TrainScorerConfig,
-    TrainScorerUseCase,
+from sealed.application.scorer_encoder_loading import _check_encoder_width
+from sealed.application.scorer_pairwise_loss import _compute_margin_weights, _pairwise_bce
+from sealed.application.scorer_resume import (
     _build_optimizer,
-    _check_encoder_width,
     _check_scorer_width,
-    _compute_margin_weights,
-    _pairwise_bce,
     _resume_or_build_model,
 )
+from sealed.application.train_scorer import TrainScorerConfig, TrainScorerUseCase
 from sealed.domain.card_embedding_layout import DET_FEATURE_DIM, FEATURE_COUNT
 from sealed.domain.encoder_model import SealedEncoderConfig, SealedEncoderModel
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
@@ -351,10 +349,8 @@ class TestPhaseBTraining:
     ):
         """T018: for a batch containing duplicates, the encoder is called
         once per unique card; gradients still accumulate from every reference."""
-        from sealed.application.train_scorer import (
-            _phase_b_inject_encoder,
-            _TrainingContext,
-        )
+        from sealed.application.scorer_phase_b import _phase_b_inject_encoder
+        from sealed.application.scorer_training_context import _TrainingContext
         from sealed.infrastructure.match_data_loader import (
             EmbeddingTable,
             TrainingBatch,
@@ -443,7 +439,7 @@ class TestEncoderChunking:
     equivalent to the non-chunked path and keeps gradient flow intact."""
 
     def test_chunked_matches_unchunked(self):
-        from sealed.application.train_scorer import _encode_chunked
+        from sealed.application.scorer_phase_b import _encode_chunked
 
         encoder_cfg = _tiny_transformer_config()
         encoder = CardPriceTransformerModel(encoder_cfg)
@@ -462,7 +458,7 @@ class TestEncoderChunking:
         torch.testing.assert_close(full, chunked)
 
     def test_gradient_flows_through_chunked_path(self):
-        from sealed.application.train_scorer import _encode_chunked
+        from sealed.application.scorer_phase_b import _encode_chunked
 
         encoder_cfg = _tiny_transformer_config()
         encoder = CardPriceTransformerModel(encoder_cfg)
@@ -771,7 +767,7 @@ class TestDeterministicTrainValSplit:
     def test_same_seed_same_split(
         self, tmp_path, synthetic_cards_dir, synthetic_outcomes_file,
     ):
-        from sealed.application.train_scorer import _load_dataset
+        from sealed.application.scorer_dataset import _load_dataset
 
         config1 = _config(
             synthetic_outcomes_file, synthetic_cards_dir, tmp_path / "ckpts1",
