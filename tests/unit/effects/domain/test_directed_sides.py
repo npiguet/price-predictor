@@ -2,8 +2,8 @@
 that follow (D8, task DF01b2).
 
 The records are the played gone-planeswalker forks of ``DirectedForkPlayedForwardCombatTest``
-(``directed-702.19ef-combats.jsonl``) and one record of ``DirectedForkPlayedForwardInvertedTest``'s meld fork, a
-registration of three rules (``directed-meld-fork.jsonl``, task DF04), re-gamed;
+(``directed-702.19ef-combats.jsonl``) and one record of
+``DirectedForkPlayedForwardInvertedTest``'s meld fork, a registration of three rules (``directed-meld-fork.jsonl``, task DF04), re-gamed;
 the sides come from the real catalogue under ``rules/``.
 """
 
