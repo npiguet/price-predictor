@@ -135,23 +135,29 @@ class DirectedForkPlayedForwardCombatTest extends DirectedForkPlayedForwardSuppo
     private List<Map<String, Object>> combatDamageToB(List<String> records, boolean fork) {
         List<Map<String, Object>> found = new ArrayList<>();
         for (String record : records) {
-            Map<String, Object> parsed = parse(record);
-            if (Boolean.TRUE.equals(parsed.get("fork")) != fork || !"combat".equals(parsed.get("kind"))) {
-                continue;
-            }
-            for (Map<String, Object> event : eventsOf(List.of(record), "damage_dealt", "P1")) {
-                if (Boolean.TRUE.equals(params(event).get("combat")) && !bearsRef.equals(params(event).get("source"))) {
-                    found.add(event);
-                }
+            if (isCombatOf(parse(record), fork)) {
+                found.addAll(combatDamageToBBesideTheBears(record));
             }
         }
         return found;
     }
 
+    /** The combat damage events of {@code record} dealt to player {@code P1} by anything but the Bears. */
+    private List<Map<String, Object>> combatDamageToBBesideTheBears(String record) {
+        return eventsOf(List.of(record), "damage_dealt", "P1").stream()
+                .filter(event -> Boolean.TRUE.equals(params(event).get("combat"))
+                        && !bearsRef.equals(params(event).get("source")))
+                .toList();
+    }
+
     /** Whether {@code records} hold a combat record (of the fork, or of the live game). */
     private static boolean hasCombat(List<String> records, boolean fork) {
-        return records.stream().map(RecordLines::parse).anyMatch(parsed ->
-                Boolean.TRUE.equals(parsed.get("fork")) == fork && "combat".equals(parsed.get("kind")));
+        return records.stream().map(RecordLines::parse).anyMatch(parsed -> isCombatOf(parsed, fork));
+    }
+
+    /** Whether a parsed record is a combat record of the fork ({@code fork}) or of the live game. */
+    private static boolean isCombatOf(Map<String, Object> parsed, boolean fork) {
+        return Boolean.TRUE.equals(parsed.get("fork")) == fork && "combat".equals(parsed.get("kind"));
     }
 
     /**
