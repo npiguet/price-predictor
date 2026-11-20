@@ -103,62 +103,77 @@ def score(grid: np.ndarray, rule: np.ndarray) -> str:
     return line
 
 
-def main() -> None:
-    from effects.domain.damage_step_keywords import KeywordResolver
+def _options(parser) -> None:
+    parser.add_argument("--source", choices=("validation", "training"),
+                        default="validation")
+    parser.add_argument("--blocks", choices=BLOCKS, default="one",
+                        help="one blocked attacker, or several")
+    parser.add_argument("--variant", choices=(*VARIANTS, "all"), nargs="+",
+                        default=["all"])
+    parser.add_argument("--half", choices=("reporting", "selection", "both"),
+                        default="reporting")
+    parser.add_argument("--probe-set-dir", type=Path, required=True,
+                        help="where the corpus's selection set is")
 
-    def options(parser) -> None:
-        parser.add_argument("--source", choices=("validation", "training"),
-                            default="validation")
-        parser.add_argument("--blocks", choices=BLOCKS, default="one",
-                            help="one blocked attacker, or several")
-        parser.add_argument("--variant", choices=(*VARIANTS, "all"), nargs="+",
-                            default=["all"])
-        parser.add_argument("--half", choices=("reporting", "selection", "both"),
-                            default="reporting")
-        parser.add_argument("--probe-set-dir", type=Path, required=True,
-                            help="where the corpus's selection set is")
 
-    args, context = common.grid_run(__doc__, records=40, options=options)
-    variants = list(VARIANTS) if "all" in args.variant else args.variant
-    resolver = KeywordResolver(context.sidecars())
+def _triples(args, context, resolver) -> list:
+    """``(record, attacker, blocker)`` of the blocks the run reads."""
     if args.source == "training":
         # One block a game: a game repeats its creatures from combat to combat, and
         # forty blocks by one large attacker would read one board forty times.
-        triples = record_walk.qualifying(
+        return record_walk.qualifying(
             [context.training_dir],
             record_walk.with_record(
                 lambda r: grid_block(r, resolver.keywords_of, args.blocks)),
             args.records, shards=args.shards)
-    else:
-        from effect_knowledge_probes.selection import frozen_grid_records
+    from effect_knowledge_probes.selection import frozen_grid_records
 
-        halves = ("selection", "reporting") if args.half == "both" else (args.half,)
-        triples = [(record, *entities) for record, entities in frozen_grid_records(
-            context, GRID_PREFIX[args.blocks], halves=halves,
-            reports_dir=args.probe_set_dir)]
+    halves = ("selection", "reporting") if args.half == "both" else (args.half,)
+    return [(record, *entities) for record, entities in frozen_grid_records(
+        context, GRID_PREFIX[args.blocks], halves=halves,
+        reports_dir=args.probe_set_dir)]
+
+
+def _mean_grids(probe_model, triples: list, variant: str, which: str):
+    """The predicted and the rule's death grids of one variant, averaged over
+    the records."""
+    grid = np.zeros((8, 8))
+    rule = np.zeros((8, 8))
+    for record, attacker, blocker in triples:
+        rows, rules = grid_records(record, attacker, blocker, which, variant)
+        dies = readout.at_card("dies", blocker if which == "blocker" else attacker)
+        cells = common.predict_all(probe_model, [cell for row in rows for cell in row], dies)
+        grid += np.reshape(cells, grid.shape)
+        rule += rules
+    grid /= max(len(triples), 1)
+    rule /= max(len(triples), 1)
+    return grid, rule
+
+
+def _print_grid(variant: str, which: str, grid: np.ndarray, rule: np.ndarray) -> None:
+    striker, struck = (("attacker", "blocker") if which == "blocker"
+                       else ("blocker", "attacker"))
+    print(f"\n{variant}, {struck}'s death: {score(grid, rule)}")
+    print_table([f"{striker} power \\ {struck} toughness", *VALUES],
+                [[power, *(f"{v:.2f}" for v in row)] for power, row in zip(VALUES, grid)],
+                "l" + "r" * 8)
+    sys.stdout.flush()
+
+
+def main() -> None:
+    from effects.domain.damage_step_keywords import KeywordResolver
+
+    args, context = common.grid_run(__doc__, records=40, options=_options)
+    variants = list(VARIANTS) if "all" in args.variant else args.variant
+    resolver = KeywordResolver(context.sidecars())
+    triples = _triples(args, context, resolver)
     probe_model = context.model([r for r, _, _ in triples])
     kind = "one-on-one blocks" if args.blocks == "one" else "combats of several blocks"
     common.heading(args, context, f"{len(triples)} {args.source} {kind}")
     for variant in variants:
         for which in ("blocker", "attacker"):
-            grid = np.zeros((8, 8))
-            rule = np.zeros((8, 8))
-            for record, attacker, blocker in triples:
-                rows, rules = grid_records(record, attacker, blocker, which, variant)
-                dies = readout.at_card("dies", blocker if which == "blocker" else attacker)
-                cells = common.predict_all(probe_model, [cell for row in rows for cell in row],
-                                           dies)
-                grid += np.reshape(cells, grid.shape)
-                rule += rules
-            grid /= max(len(triples), 1)
-            rule /= max(len(triples), 1)
-            striker, struck = (("attacker", "blocker") if which == "blocker"
-                               else ("blocker", "attacker"))
-            print(f"\n{variant}, {struck}'s death: {score(grid, rule)}")
-            print_table([f"{striker} power \\ {struck} toughness", *VALUES],
-                        [[power, *(f"{v:.2f}" for v in row)] for power, row in zip(VALUES, grid)],
-                        "l" + "r" * 8)
-            sys.stdout.flush()
+            grid, rule = _mean_grids(probe_model, triples, variant, which)
+            _print_grid(variant, which, grid, rule)
 
 
 if __name__ == "__main__":

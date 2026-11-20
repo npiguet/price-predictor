@@ -66,22 +66,38 @@ def frozen_grid_records(context, prefix: str, *, reports_dir, halves: Sequence[s
     frozen = load_selection(context, reports_dir)
     out: list[tuple[object, tuple[str, ...]]] = []
     for stratum, by_half in sorted(frozen.grids.items()):
-        wanted: dict[str, tuple[str, ...]] = {}
-        games: set[str] = set()
-        for half in halves:
-            for name, grid in sorted(by_half.get(half, {}).items()):
-                if name.startswith(prefix):
-                    for row in grid.records:
-                        wanted.setdefault(row.record_id, row.entities)
-                        games.add(row.game_id)
-        if not wanted:
-            continue
-        seen: set[str] = set()
-        shards = iter_stratum_shards(context, stratum)
-        for _, record in common.read_games(shards, games, set(wanted)):
-            if record.record_id not in seen:
-                seen.add(record.record_id)
-                out.append((record, wanted[record.record_id]))
+        wanted, games = _wanted_rows(by_half, prefix, halves)
+        if wanted:
+            out.extend(_first_rows(context, stratum, wanted, games))
+    return out
+
+
+def _wanted_rows(by_half: dict, prefix: str, halves: Sequence[str],
+                 ) -> tuple[dict[str, tuple[str, ...]], set[str]]:
+    """``record_id -> entities`` of the grids named ``prefix``… in the named
+    halves of one stratum, and the games they come from."""
+    wanted: dict[str, tuple[str, ...]] = {}
+    games: set[str] = set()
+    for half in halves:
+        for name, grid in sorted(by_half.get(half, {}).items()):
+            if not name.startswith(prefix):
+                continue
+            for row in grid.records:
+                wanted.setdefault(row.record_id, row.entities)
+                games.add(row.game_id)
+    return wanted, games
+
+
+def _first_rows(context, stratum: str, wanted: dict[str, tuple[str, ...]], games: set[str],
+                ) -> list[tuple[object, tuple[str, ...]]]:
+    """``(record, entities)`` of each wanted record's first row in ``stratum``."""
+    seen: set[str] = set()
+    out: list[tuple[object, tuple[str, ...]]] = []
+    shards = iter_stratum_shards(context, stratum)
+    for _, record in common.read_games(shards, games, set(wanted)):
+        if record.record_id not in seen:
+            seen.add(record.record_id)
+            out.append((record, wanted[record.record_id]))
     return out
 
 

@@ -59,41 +59,47 @@ from effects.domain.grid_edits import evasion_pair as qualifying_pair  # noqa: E
 from effects.domain.rule_outcomes import may_block  # noqa: E402, F401
 
 
-def main() -> None:
+def _options(parser) -> None:
+    parser.add_argument("--half", choices=("reporting", "selection", "both"),
+                        default="reporting")
+    parser.add_argument("--probe-set-dir", type=Path, required=True,
+                        help="where the corpus's selection set is")
 
-    from effect_knowledge_probes.selection import frozen_grid_records
 
-    def options(parser) -> None:
-        parser.add_argument("--half", choices=("reporting", "selection", "both"),
-                            default="reporting")
-        parser.add_argument("--probe-set-dir", type=Path, required=True,
-                            help="where the corpus's selection set is")
-
-    args, context = common.grid_run(__doc__, records=40, options=options)
-    halves = ("selection", "reporting") if args.half == "both" else (args.half,)
-    triples = [(record, *entities) for record, entities in frozen_grid_records(
-        context, "evasion", halves=halves, reports_dir=args.probe_set_dir)]
-    probe_model = context.model([r for r, _, _ in triples])
-    common.heading(args, context, f"{len(triples)} validation attacker-blocker pairs")
-
+def _grids(probe_model, triples: list):
+    """The predicted and the rule's may-block grids, and each attacker row's
+    ``(allowed, predicted)`` cells pooled over the records."""
     grid = np.zeros((len(ATTACKER_KEYWORDS), len(BLOCKER_TRAITS)))
     rule = np.zeros_like(grid)
     per_row = {row: ([], []) for row in ATTACKER_KEYWORDS}
     read_may_block = readout.at_cards("may_block", [b for _, _, b in triples])
     for i, row in enumerate(ATTACKER_KEYWORDS):
         for j, column in enumerate(BLOCKER_TRAITS):
-            cells = [edited(record, a, b, row, column) for record, a, b in triples]
-            predictions = common.predict(probe_model, [c[0] for c in cells], read_may_block)
+            allowed, predictions = _cell(probe_model, triples, read_may_block, (row, column))
             grid[i, j] = float(np.mean(predictions))
-            rule[i, j] = float(np.mean([c[1] for c in cells]))
-            per_row[row][0].extend(c[1] for c in cells)
+            rule[i, j] = float(np.mean(allowed))
+            per_row[row][0].extend(allowed)
             per_row[row][1].extend(predictions)
+    return grid, rule, per_row
+
+
+def _cell(probe_model, triples: list, read_may_block, edit: tuple):
+    """What the rule allows and what the model predicts in one cell, per record."""
+    cells = [edited(record, a, b, *edit) for record, a, b in triples]
+    predictions = common.predict(probe_model, [c[0] for c in cells], read_may_block)
+    return [c[1] for c in cells], predictions
+
+
+def _print_grids(grid: np.ndarray, rule: np.ndarray) -> None:
     for title, values in (("predicted may block", grid), ("rule may block", rule)):
         print(f"\n{title}: error against the rule {np.abs(grid - rule).mean():.3f}")
         print_table(["attacker keyword \\ blocker", *map(label, BLOCKER_TRAITS)],
                     [[label(row), *(f"{v:.2f}" for v in cells)]
                      for row, cells in zip(ATTACKER_KEYWORDS, values)],
                     "l" + "r" * len(BLOCKER_TRAITS))
+
+
+def _print_ranking(per_row: dict) -> None:
     # The absolute level of `blocker_legal` sits low even on legal blocks, so the
     # ranking within a row says more: does the model put the blocks the rule allows
     # above the ones it forbids?
@@ -108,6 +114,20 @@ def main() -> None:
     print("\nranking within each attacker row, cells and records pooled")
     print_table(["attacker keyword", "allowed, mean", "forbidden, mean", "AUC"], rows, "lrrr")
     print(f"| all rows | | | {common.auc(*every):.3f} |", flush=True)
+
+
+def main() -> None:
+    from effect_knowledge_probes.selection import frozen_grid_records
+
+    args, context = common.grid_run(__doc__, records=40, options=_options)
+    halves = ("selection", "reporting") if args.half == "both" else (args.half,)
+    triples = [(record, *entities) for record, entities in frozen_grid_records(
+        context, "evasion", halves=halves, reports_dir=args.probe_set_dir)]
+    probe_model = context.model([r for r, _, _ in triples])
+    common.heading(args, context, f"{len(triples)} validation attacker-blocker pairs")
+    grid, rule, per_row = _grids(probe_model, triples)
+    _print_grids(grid, rule)
+    _print_ranking(per_row)
 
 
 if __name__ == "__main__":
