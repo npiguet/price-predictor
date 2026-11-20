@@ -89,18 +89,31 @@ public final class RandomChoices {
             return options.size() == printed.size()
                     ? Optional.of(new ArrayList<>(options)) : Optional.empty();
         }
-        Card host = charm.getHostCard();
         boolean repeat = charm.hasParam("CanRepeatModes");
         if (charm.hasParam("Pawprint")) {
             return Optional.of(drawPawprintModes(charm, options, repeat));
         }
+        return modeBounds(charm, printed.size(), options, repeat)
+                .map(bounds -> drawModeSet(options, bounds, repeat));
+    }
+
+    /** A count range, both ends inclusive. */
+    private record Bounds(int min, int max) {
+    }
+
+    /**
+     * How many modes a non-Pawprint charm may take, or empty where no legal
+     * mode set exists.
+     */
+    private static Optional<Bounds> modeBounds(
+            SpellAbility charm, int printedSize, List<AbilitySub> options, boolean repeat) {
         int max = AbilityUtils.calculateAmount(
-                host, charm.getParamOrDefault("CharmNum", "1"), charm);
+                charm.getHostCard(), charm.getParamOrDefault("CharmNum", "1"), charm);
         int min = CharmModes.minimumModes(charm);
         if (!repeat) {
             // A mode set of the printed size needs that many distinct legal
             // modes: fewer legal than the charm's minimum is no legal set.
-            if (Math.min(min, printed.size()) > options.size()) {
+            if (Math.min(min, printedSize) > options.size()) {
                 return Optional.empty();
             }
             max = Math.min(max, options.size());
@@ -108,18 +121,20 @@ public final class RandomChoices {
             return Optional.empty();
         }
         min = Math.max(0, Math.min(min, max));
-        if (max < 0) {
-            return Optional.empty();
-        }
-        int count = between(min, max);
+        return max < 0 ? Optional.empty() : Optional.of(new Bounds(min, max));
+    }
+
+    /** A count in {@code bounds}, then that many modes, repeating only where {@code repeat}. */
+    private List<AbilitySub> drawModeSet(List<AbilitySub> options, Bounds bounds, boolean repeat) {
+        int count = between(bounds.min(), bounds.max());
         if (!repeat) {
-            return Optional.of(drawDistinct(options, count, random));
+            return drawDistinct(options, count, random);
         }
         List<AbilitySub> chosen = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
             chosen.add(options.get(random.nextInt(options.size())));
         }
-        return Optional.of(chosen);
+        return chosen;
     }
 
     /**
@@ -242,8 +257,24 @@ public final class RandomChoices {
         // clearTargets also sets the amount a divided clause splits.
         clause.clearTargets();
         List<GameObject> candidates = TargetingClauses.candidatesOf(clause);
+        Optional<Bounds> bounds = targetBounds(clause, candidates.size());
+        if (bounds.isEmpty()) {
+            return false;
+        }
+        addTargets(clause, candidates, between(bounds.get().min(), bounds.get().max()));
+        if (!clause.isTargetNumberValid()) {
+            return false;
+        }
+        if (clause.isDividedAsYouChoose()) {
+            divide(clause);
+        }
+        return true;
+    }
+
+    /** How many targets the clause may take, or empty where it cannot reach its minimum. */
+    private static Optional<Bounds> targetBounds(SpellAbility clause, int candidateCount) {
         int min = Math.max(0, clause.getMinTargets());
-        int max = Math.min(clause.getMaxTargets(), candidates.size());
+        int max = Math.min(clause.getMaxTargets(), candidateCount);
         if (clause.isDividedAsYouChoose()) {
             // Each target takes at least one of the amount (601.2d): no more
             // targets than the amount, which an announced X decides, and at
@@ -254,10 +285,11 @@ public final class RandomChoices {
                 min = Math.max(min, 1);
             }
         }
-        if (max < min) {
-            return false;
-        }
-        int count = between(min, max);
+        return max < min ? Optional.empty() : Optional.of(new Bounds(min, max));
+    }
+
+    /** Offer the candidates in a random order, taking each the clause can still target, up to {@code count}. */
+    private void addTargets(SpellAbility clause, List<GameObject> candidates, int count) {
         for (GameObject target : drawDistinct(candidates, candidates.size(), random)) {
             if (clause.getTargets().size() >= count || !clause.canAddMoreTarget()) {
                 break;
@@ -266,13 +298,6 @@ public final class RandomChoices {
                 clause.getTargets().add(target);
             }
         }
-        if (!clause.isTargetNumberValid()) {
-            return false;
-        }
-        if (clause.isDividedAsYouChoose()) {
-            divide(clause);
-        }
-        return true;
     }
 
     /** The amount a divided clause splits, with its X as announced; never below zero. */

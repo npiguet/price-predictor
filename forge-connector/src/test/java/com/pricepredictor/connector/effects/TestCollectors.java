@@ -45,8 +45,8 @@ final class TestCollectors {
      * installs.
      */
     static PatchedCollectors unwired(CollectionCaps caps) {
-        return new PatchedCollectors(
-                null, context(null, "game-1"), caps, 42L, bracket(null, null, "game-1"));
+        return new PatchedCollectors(null, new Channels.Setup(
+                context(null, "game-1"), caps, 42L, bracket(null, null, "game-1")));
     }
 
     /**

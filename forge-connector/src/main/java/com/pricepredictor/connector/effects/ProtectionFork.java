@@ -88,7 +88,7 @@ final class ProtectionFork {
      * @return whether a fork was taken, kept or discarded
      */
     boolean collect(PhaseType phase) {
-        if (phase != PHASE || game.isGameOver() || !budget.mayProtect()) {
+        if (!mayFork(phase)) {
             return false;
         }
         List<Card> creatures = creatures(game);
@@ -102,6 +102,13 @@ final class ProtectionFork {
         budget.spendProtection();
         take(new Grant(creature, qualities.get(random.nextInt(qualities.size()))));
         return true;
+    }
+
+    private boolean mayFork(PhaseType phase) {
+        if (phase != PHASE || game.isGameOver()) {
+            return false;
+        }
+        return budget.mayProtect();
     }
 
     /**

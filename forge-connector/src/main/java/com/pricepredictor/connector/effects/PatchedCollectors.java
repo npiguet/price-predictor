@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects;
 import forge.game.Game;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
@@ -84,32 +85,28 @@ final class PatchedCollectors implements AutoCloseable {
     private volatile PatchedCollectors routedFork;
 
     /**
-     * @param seed    seeds the game's sampling stream
-     * @param bracket where the clause and outcome hooks file their events,
-     *                and whose confirm listener this installs
+     * @param setup where the game's collectors write: its context and caps, the
+     *              seed of its sampling stream, and the bracket the clause and
+     *              outcome hooks file their events in and whose confirm
+     *              listener this installs
      */
-    PatchedCollectors(
-            Game game, CollectorContext context, CollectionCaps caps, long seed,
-            BusBracketCollector bracket) {
-        this(game, context, caps, seed, bracket, false);
+    PatchedCollectors(Game game, Channels.Setup setup) {
+        this(game, setup, false);
     }
 
     /**
      * The collectors of a fork played on from a live game: they install no
      * hook and take none down, and their game is not one the run counts.
      */
-    static PatchedCollectors forFork(
-            Game fork, CollectorContext context, CollectionCaps caps, long seed,
-            BusBracketCollector bracket) {
-        return new PatchedCollectors(fork, context, caps, seed, bracket, true);
+    static PatchedCollectors forFork(Game fork, Channels.Setup setup) {
+        return new PatchedCollectors(fork, setup, true);
     }
 
-    private PatchedCollectors(
-            Game game, CollectorContext context, CollectionCaps caps, long seed,
-            BusBracketCollector bracket, boolean forkBound) {
+    private PatchedCollectors(Game game, Channels.Setup setup, boolean forkBound) {
+        BusBracketCollector bracket = setup.bracket();
         this.forkBound = forkBound;
-        this.context = context;
-        this.channels = Channels.of(game, new Channels.Setup(context, caps, seed, bracket));
+        this.context = setup.context();
+        this.channels = Channels.of(game, setup);
         this.everyMode = List.of(bracket.confirmHandler());
         this.patchedOnly = List.of(
                 bracket.castHandler(),
@@ -210,21 +207,16 @@ final class PatchedCollectors implements AutoCloseable {
 
     /** Hand one callback of {@code hook} to this fork's own listener for it, if it has one. */
     private void dispatch(PatchHooks.Hook hook, PatchHooks.Callback callback, PatchHooks.Args args) {
-        for (PatchHooks.Listener listener : everyMode) {
-            if (listener.hook() == hook) {
-                listener.body().on(callback, args);
-                return;
-            }
+        Optional<PatchHooks.Listener> own = listenerFor(everyMode, hook);
+        if (own.isEmpty() && context.mode() != AttributionMode.DEGRADED) {
+            own = listenerFor(patchedOnly, hook);
         }
-        if (context.mode() == AttributionMode.DEGRADED) {
-            return;
-        }
-        for (PatchHooks.Listener listener : patchedOnly) {
-            if (listener.hook() == hook) {
-                listener.body().on(callback, args);
-                return;
-            }
-        }
+        own.ifPresent(listener -> listener.body().on(callback, args));
+    }
+
+    private static Optional<PatchHooks.Listener> listenerFor(
+            List<PatchHooks.Listener> listeners, PatchHooks.Hook hook) {
+        return listeners.stream().filter(listener -> listener.hook() == hook).findFirst();
     }
 
     /**

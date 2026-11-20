@@ -201,9 +201,9 @@ class FloatingEffectsTest {
         Game game = board.game;
         RecordShardWriter writer = ShardRun.writer(dir);
         try (PatchedCollectors collectors = new PatchedCollectors(
-                game, TestCollectors.context(writer, ShardRun.GAME_ID),
+                game, new Channels.Setup(TestCollectors.context(writer, ShardRun.GAME_ID),
                 TestCaps.caps().interventions(0).probes(0).build(), 1L,
-                TestCollectors.bracket(game, writer, ShardRun.GAME_ID))) {
+                TestCollectors.bracket(game, writer, ShardRun.GAME_ID)))) {
             collectors.install();
             Card onStack = game.getAction().moveToStack(card, null);
             SpellAbility spell = TestBoard.spellOf(onStack, board.you);

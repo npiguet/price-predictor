@@ -87,7 +87,7 @@ public final class GameRecording implements AutoCloseable {
         this.bracket = new BusBracketCollector(game, request.newContext(mode),
                 recordId -> probes.ifPresent(probe -> probe.writeHeldProbes(recordId)));
         this.patched = new PatchedCollectors(
-                game, request.newContext(mode), caps, seed, bracket);
+                game, new Channels.Setup(request.newContext(mode), caps, seed, bracket));
         // Forced at a step's first priority, after the decision records.
         interventions.map(InterventionScheduler::prioritySink).ifPresent(patched::alsoTell);
         this.droppedEventsFile = caps.countDroppedEvents()
@@ -146,7 +146,7 @@ public final class GameRecording implements AutoCloseable {
         this.probes = Optional.empty();
         this.directed = Optional.empty();
         this.bracket = new BusBracketCollector(fork, context, recordId -> { });
-        this.patched = PatchedCollectors.forFork(fork, context, caps, seed, bracket);
+        this.patched = PatchedCollectors.forFork(fork, new Channels.Setup(context, caps, seed, bracket));
         this.droppedEventsFile = null;
         this.playForward = null;
     }
