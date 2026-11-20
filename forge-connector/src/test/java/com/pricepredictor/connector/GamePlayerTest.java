@@ -44,7 +44,8 @@ class GamePlayerTest {
     @Test
     void theRegisteredPlayersCarryNoAiOption() throws ReflectiveOperationException {
         List<RegisteredPlayer> players =
-                GamePlayer.registeredPlayers(new Deck(), new Deck(), Optional.empty(), 0.0, null);
+                GamePlayer.registeredPlayers(
+                        new Deck(), new Deck(), new GamePlayer.SeatPlan(Optional.empty(), 0.0, null));
 
         assertTrue(players.size() >= 2, "expected both seats: " + players);
         for (RegisteredPlayer registered : players) {

@@ -57,8 +57,8 @@ class GameOutcomeRecordingTest {
         RecordShardWriter writer = new RecordShardWriter(dir, "run", 0, "l1");
         CollectionCaps randomSeat = TestCaps.caps().interventions(0).probes(0)
                 .randomSeat(1.0, 1.0).build();
-        GamePlayer player = new GamePlayer(
-                2, writer, randomSeat, WorkerStop.NEVER, Match::startGame, () -> 1L);
+        GamePlayer player = new GamePlayer(new GamePlayer.Config(
+                2, writer, randomSeat, WorkerStop.NEVER, Match::startGame, () -> 1L));
 
         Random was = MyRandom.getRandom();
         MyRandom.setRandom(new Random(MATCH_SEED));

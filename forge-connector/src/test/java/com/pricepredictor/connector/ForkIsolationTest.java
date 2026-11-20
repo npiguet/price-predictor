@@ -121,7 +121,7 @@ class ForkIsolationTest {
         Random was = MyRandom.getRandom();
         MyRandom.setRandom(new Random(seed));
         try {
-            new GamePlayer(1, writer, caps, WorkerStop.NEVER, Match::startGame, () -> START + seed)
+            new GamePlayer(new GamePlayer.Config(1, writer, caps, WorkerStop.NEVER, Match::startGame, () -> START + seed))
                     .playMatch(a, b);
         } finally {
             MyRandom.setRandom(was);

@@ -106,10 +106,10 @@ class InterventionSpreadTest {
             MyRandom.setRandom(new Random(seed));
             List<Game> games = new ArrayList<>();
             try {
-                new GamePlayer(1, writer, caps, WorkerStop.NEVER, (match, game) -> {
+                new GamePlayer(new GamePlayer.Config(1, writer, caps, WorkerStop.NEVER, (match, game) -> {
                     games.add(game);
                     match.startGame(game);
-                }, () -> 1_700_000_000_000L + seed * 7919).playMatch(deck, deck);
+                }, () -> 1_700_000_000_000L + seed * 7919)).playMatch(deck, deck);
             } finally {
                 MyRandom.setRandom(was);
                 writer.close();

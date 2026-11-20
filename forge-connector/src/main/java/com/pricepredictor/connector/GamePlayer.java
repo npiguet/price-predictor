@@ -129,32 +129,39 @@ public class GamePlayer {
      * were going to be played anyway.
      */
     public GamePlayer(int gamesPerMatch, RecordShardWriter effectRecords, CollectionCaps caps) {
-        this(gamesPerMatch, effectRecords, caps, WorkerStop.NEVER, Match::startGame);
+        this(new Config(gamesPerMatch, effectRecords, caps, WorkerStop.NEVER, Match::startGame));
     }
 
     /**
-     * A player that also stops at a game end when {@code stop} asks it to,
-     * throwing {@link WorkerStop.Requested} out of {@link #playMatch} once the
-     * game's recording is closed and its marker written.
+     * What a player is built from: the match format, where its effect records
+     * go, the caps, the stop it obeys at a game end and the seams a test
+     * replaces.
+     *
+     * @param stop   a player stops at a game end when it asks, throwing
+     *               {@link WorkerStop.Requested} out of {@link #playMatch} once
+     *               the game's recording is closed and its marker written
+     * @param driver plays a game to its end
+     * @param clock  the match's start read from it: a test replaying one match
+     *               twice gives both the same start, which seeds the match's
+     *               source and its games' recordings
      */
-    GamePlayer(int gamesPerMatch, RecordShardWriter effectRecords, CollectionCaps caps,
-            WorkerStop stop, GameDriver driver) {
-        this(gamesPerMatch, effectRecords, caps, stop, driver, System::currentTimeMillis);
-    }
-
-    /**
-     * The same, the match's start read from {@code clock}: a test replaying
-     * one match twice gives both the same start, which seeds the match's
-     * source and its games' recordings.
-     */
-    GamePlayer(int gamesPerMatch, RecordShardWriter effectRecords, CollectionCaps caps,
+    record Config(int gamesPerMatch, RecordShardWriter effectRecords, CollectionCaps caps,
             WorkerStop stop, GameDriver driver, java.util.function.LongSupplier clock) {
-        this.gamesPerMatch = gamesPerMatch;
-        this.effectRecords = effectRecords;
-        this.caps = caps;
-        this.stop = stop;
-        this.driver = driver;
-        this.clock = clock;
+
+        /** A config on the wall clock. */
+        Config(int gamesPerMatch, RecordShardWriter effectRecords, CollectionCaps caps,
+                WorkerStop stop, GameDriver driver) {
+            this(gamesPerMatch, effectRecords, caps, stop, driver, System::currentTimeMillis);
+        }
+    }
+
+    GamePlayer(Config config) {
+        this.gamesPerMatch = config.gamesPerMatch();
+        this.effectRecords = config.effectRecords();
+        this.caps = config.caps();
+        this.stop = config.stop();
+        this.driver = config.driver();
+        this.clock = config.clock();
     }
 
     /**
@@ -182,24 +189,29 @@ public class GamePlayer {
      * <p>Package-private so that test can call it directly rather than
      * playing a match.
      *
-     * @param seeds the match's seeded source the random seat's controllers
-     *              draw their own seeds from; unused when the seat is none
+     * @param seats which seat is the random seat, if any, and what it draws from
      */
-    static List<RegisteredPlayer> registeredPlayers(
-            Deck deckA, Deck deckB, Optional<Side> randomSeat, double probability,
-            java.util.Random seeds) {
+    static List<RegisteredPlayer> registeredPlayers(Deck deckA, Deck deckB, SeatPlan seats) {
         return List.of(
-                new RegisteredPlayer(deckA).setPlayer(
-                        seat(Side.A, randomSeat, probability, seeds)),
-                new RegisteredPlayer(deckB).setPlayer(
-                        seat(Side.B, randomSeat, probability, seeds))
+                new RegisteredPlayer(deckA).setPlayer(seat(Side.A, seats)),
+                new RegisteredPlayer(deckB).setPlayer(seat(Side.B, seats))
         );
     }
 
-    private static LobbyPlayerAi seat(
-            Side side, Optional<Side> randomSeat, double probability, java.util.Random seeds) {
-        return randomSeat.equals(Optional.of(side))
-                ? new RandomSeatLobbyPlayer(side.lobbyName(), probability, seeds)
+    /**
+     * The match's seats.
+     *
+     * @param randomSeat  the seat that is the random seat, or empty when none is
+     * @param probability the random seat's probability of drawing a choice uniformly
+     * @param seeds       the match's seeded source the random seat's controllers
+     *                    draw their own seeds from; unused when the seat is none
+     */
+    record SeatPlan(Optional<Side> randomSeat, double probability, java.util.Random seeds) {
+    }
+
+    private static LobbyPlayerAi seat(Side side, SeatPlan seats) {
+        return seats.randomSeat().equals(Optional.of(side))
+                ? new RandomSeatLobbyPlayer(side.lobbyName(), seats.probability(), seats.seeds())
                 : new LobbyPlayerAi(side.lobbyName(), null);
     }
 
@@ -251,50 +263,74 @@ public class GamePlayer {
         long matchSeed = matchSeed(startMillis);
         java.util.Random matchRandom = SeedStreams.random(matchSeed, SeedStreams.Consumer.SEAT);
         Optional<Side> randomSeat = drawRandomSeat(caps, matchRandom);
-        List<GameOutcome> outcomes = new ArrayList<>();
-        // Seeds each game's recording, so a worker's games sample
-        // independently of one another rather than all alike, and two
-        // workers' games never replay one another's streams.
-        long gameSeed = matchSeed;
+        SeatPlan seats = new SeatPlan(randomSeat, caps.randomSeatProbability(), matchRandom);
 
-        // From the seat's draw on, whatever fails is a random-seat match's
-        // failure when the match has one: setting the match up, playing a
-        // game, closing its recording.
-        try {
-            var players = registeredPlayers(
-                    deckA, deckB, randomSeat, caps.randomSeatProbability(), matchRandom);
-            var rules = new GameRules(GameType.Sealed);
-            rules.setGamesPerMatch(gamesPerMatch);
-            var match = new Match(rules, players, "sealed-match");
-            while (!match.isMatchOver()) {
-                playGame(match, gameSeed++, deckRules).ifPresent(outcomes::add);
-                // At the game end, its records and marker written: the match
-                // is left unfinished and records no row (D2).
-                var reason = stop.reason();
-                if (reason.isPresent() && !match.isMatchOver()) {
-                    throw new WorkerStop.Requested(reason.get());
-                }
-            }
-        } catch (RandomSeatMatchFailed | WorkerStop.Requested passOn) {
-            throw passOn;
-        } catch (RuntimeException failure) {
-            if (randomSeat.isPresent()) {
-                throw new RandomSeatMatchFailed(failure);
-            }
-            throw failure;
-        } catch (Error error) {
-            // An Error is never caught: it ends the worker. Named here first,
-            // in the worker loop's own words, so a random-seat match it cut is
-            // counted as one.
-            if (randomSeat.isPresent()) {
-                System.err.println("Error generating match: " + RandomSeatMatchFailed.MARK + error);
-                System.err.flush();
-            }
-            throw error;
-        }
+        // The match's seed seeds its first game's recording, so a worker's
+        // games sample independently of one another rather than all alike,
+        // and two workers' games never replay one another's streams.
+        List<GameOutcome> outcomes =
+                playGamesOf(new Matchup(deckA, deckB, deckRules), seats, matchSeed);
 
         int durationSeconds = (int) ((System.currentTimeMillis() - wallStart) / 1000);
         return new PlayedMatch(outcomes, durationSeconds, randomSeat.isPresent());
+    }
+
+    /** The decks of a match and the rules they are aimed at. */
+    private record Matchup(Deck deckA, Deck deckB, DeckRules rules) {
+    }
+
+    /**
+     * The match's games, played from the seat's draw on: whatever fails is a
+     * random-seat match's failure when the match has one: setting the match
+     * up, playing a game, closing its recording.
+     */
+    private List<GameOutcome> playGamesOf(Matchup matchup, SeatPlan seats, long firstGameSeed) {
+        try {
+            return playGames(matchup, seats, firstGameSeed);
+        } catch (RandomSeatMatchFailed | WorkerStop.Requested passOn) {
+            throw passOn;
+        } catch (RuntimeException failure) {
+            throw seats.randomSeat().isPresent() ? new RandomSeatMatchFailed(failure) : failure;
+        } catch (Error error) {
+            nameCutRandomSeatMatch(seats, error);
+            throw error;
+        }
+    }
+
+    /**
+     * An Error is never caught: it ends the worker. Named first, in the
+     * worker loop's own words, so a random-seat match it cut is counted as one.
+     */
+    private static void nameCutRandomSeatMatch(SeatPlan seats, Error error) {
+        if (seats.randomSeat().isPresent()) {
+            System.err.println("Error generating match: " + RandomSeatMatchFailed.MARK + error);
+            System.err.flush();
+        }
+    }
+
+    private List<GameOutcome> playGames(Matchup matchup, SeatPlan seats, long firstGameSeed) {
+        var players = registeredPlayers(matchup.deckA(), matchup.deckB(), seats);
+        var rules = new GameRules(GameType.Sealed);
+        rules.setGamesPerMatch(gamesPerMatch);
+        var match = new Match(rules, players, "sealed-match");
+        List<GameOutcome> outcomes = new ArrayList<>();
+        long gameSeed = firstGameSeed;
+        while (!match.isMatchOver()) {
+            playGame(match, gameSeed++, matchup.rules()).ifPresent(outcomes::add);
+            stopAtGameEnd(match);
+        }
+        return outcomes;
+    }
+
+    /**
+     * At the game end, its records and marker written: a match left
+     * unfinished by a stop records no row (D2).
+     */
+    private void stopAtGameEnd(Match match) {
+        var reason = stop.reason();
+        if (reason.isPresent() && !match.isMatchOver()) {
+            throw new WorkerStop.Requested(reason.get());
+        }
     }
 
     /**
@@ -329,11 +365,34 @@ public class GamePlayer {
         // what a fork clones and the controller is what a fork does not
         // attach.
         Optional<RandomSeatController> seat = randomSeatOf(game);
-        Throwable thrown = null;
-        GameRecording recording = effectRecords == null ? null : new GameRecording(
+        GameRecording recording = recordingOf(game, seat, gameSeed, rules);
+        playRecorded(match, game, seat, recording);
+        gamesPlayed++;
+
+        // The game's rows are refused when a card could not be credited; the
+        // match worker reports it as a match error.
+        collector.requireComplete();
+        return outcomeOf(game, collector);
+    }
+
+    /** The game's recording, or null when the run is not instrumented. */
+    private GameRecording recordingOf(
+            forge.game.Game game, Optional<RandomSeatController> seat, long gameSeed,
+            DeckRules rules) {
+        if (effectRecords == null) {
+            return null;
+        }
+        return new GameRecording(
                 game, effectRecords, effectRecords.nextGameId(), caps, gameSeed,
                 seat.map(s -> Refs.of(s.getPlayer())).orElse(null), GamePlayer::attachForkSeats,
                 rules);
+    }
+
+    /** Play the game to its end with its recording open, closing the recording whatever happens. */
+    private void playRecorded(
+            Match match, forge.game.Game game, Optional<RandomSeatController> seat,
+            GameRecording recording) {
+        Throwable thrown = null;
         try {
             // Inside the try: open() installs JVM-static hooks one by one, and
             // a hook left behind by an open() that threw part way would hand
@@ -341,14 +400,7 @@ public class GamePlayer {
             if (recording != null) {
                 recording.open();
             }
-            // Live from here. A fork's clone of this seat plays as the
-            // ordinary AI unless the fork is played on, which attaches it
-            // (attachForkSeats). Without a recording the seat plays at random
-            // and reports nothing -- FR-026 keeps that combination out of a
-            // run.
-            seat.ifPresent(s -> s.attach(
-                    game, recording == null ? null : recording.priorityCandidates(),
-                    recording == null ? null : recording.fruitlessActivations()));
+            attachSeat(seat, game, recording);
             driver.play(match, game); // blocks until game is finished
         } catch (RuntimeException | Error failure) {
             thrown = failure;
@@ -358,11 +410,23 @@ public class GamePlayer {
                 closeRecording(recording::close, thrown);
             }
         }
-        gamesPlayed++;
+    }
 
-        // The game's rows are refused when a card could not be credited; the
-        // match worker reports it as a match error.
-        collector.requireComplete();
+    /**
+     * Live from here. A fork's clone of this seat plays as the ordinary AI
+     * unless the fork is played on, which attaches it (attachForkSeats).
+     * Without a recording the seat plays at random and reports nothing --
+     * FR-026 keeps that combination out of a run.
+     */
+    private static void attachSeat(
+            Optional<RandomSeatController> seat, forge.game.Game game, GameRecording recording) {
+        seat.ifPresent(s -> s.attach(
+                game, recording == null ? null : recording.priorityCandidates(),
+                recording == null ? null : recording.fruitlessActivations()));
+    }
+
+    private static Optional<GameOutcome> outcomeOf(
+            forge.game.Game game, PlayedCardCollector collector) {
         var winningLobby = game.getOutcome().getWinningLobbyPlayer();
         if (winningLobby == null) {
             return Optional.empty();

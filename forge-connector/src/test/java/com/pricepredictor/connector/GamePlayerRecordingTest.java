@@ -115,7 +115,7 @@ class GamePlayerRecordingTest {
     @Test
     void eachGameThatEndedWritesItsMarkerLast() throws IOException {
         RecordShardWriter writer = writer();
-        GamePlayer player = new GamePlayer(3, writer, caps(), WorkerStop.NEVER, Match::startGame);
+        GamePlayer player = new GamePlayer(new GamePlayer.Config(3, writer, caps(), WorkerStop.NEVER, Match::startGame));
 
         GamePlayer.PlayedMatch played = player.playMatch(burn(), burn());
         writer.close();
@@ -179,13 +179,13 @@ class GamePlayerRecordingTest {
         RecordShardWriter writer = writer();
         byte[][] taken = new byte[1][];
         List<Game> started = new ArrayList<>();
-        GamePlayer player = new GamePlayer(3, writer, caps(), WorkerStop.NEVER, (match, game) -> {
+        GamePlayer player = new GamePlayer(new GamePlayer.Config(3, writer, caps(), WorkerStop.NEVER, (match, game) -> {
             started.add(game);
             if (started.size() == 2) {
                 game.subscribeToEvents(new SnapshotAtTurnTwo(game, writer.path(), taken));
             }
             match.startGame(game);
-        });
+        }));
 
         player.playMatch(burn(), burn());
         writer.close();
@@ -211,7 +211,7 @@ class GamePlayerRecordingTest {
     @Test
     void aGameAtTheCapKeepsItsOutcomeAndItsMarker() throws IOException {
         RecordShardWriter writer = new RecordShardWriter(dir, "run", 0, "l1", 12);
-        GamePlayer player = new GamePlayer(3, writer, caps(), WorkerStop.NEVER, Match::startGame);
+        GamePlayer player = new GamePlayer(new GamePlayer.Config(3, writer, caps(), WorkerStop.NEVER, Match::startGame));
 
         player.playMatch(burn(), burn());
         writer.close();
@@ -234,11 +234,11 @@ class GamePlayerRecordingTest {
         Path stopFile = dir.resolve("worker.stop");
         WorkerStop stop = new WorkerStop(stopFile, -1, System::nanoTime);
         List<Game> started = new ArrayList<>();
-        GamePlayer player = new GamePlayer(3, writer, caps(), stop, (match, game) -> {
+        GamePlayer player = new GamePlayer(new GamePlayer.Config(3, writer, caps(), stop, (match, game) -> {
             started.add(game);
             game.subscribeToEvents(new StopAtTurn(game, stopFile));
             match.startGame(game);
-        });
+        }));
 
         WorkerStop.Requested requested = assertThrows(
                 WorkerStop.Requested.class, () -> player.playMatch(burn(), burn()));
@@ -293,7 +293,7 @@ class GamePlayerRecordingTest {
     void aGameThatThrowsMidMatchWritesNoMarkerAndTheNextRecordsNormally() throws IOException {
         RecordShardWriter writer = writer();
         List<Game> started = new ArrayList<>();
-        GamePlayer player = new GamePlayer(1, writer, caps(), WorkerStop.NEVER, (match, game) -> {
+        GamePlayer player = new GamePlayer(new GamePlayer.Config(1, writer, caps(), WorkerStop.NEVER, (match, game) -> {
             started.add(game);
             if (started.size() == 1) {
                 match.startGame(game, () -> game.getPlayers().get(0).dangerouslySetController(
@@ -301,7 +301,7 @@ class GamePlayerRecordingTest {
             } else {
                 match.startGame(game);
             }
-        });
+        }));
 
         IllegalStateException thrown = assertThrows(
                 IllegalStateException.class, () -> player.playMatch(burn(), burn()));
@@ -328,10 +328,10 @@ class GamePlayerRecordingTest {
         RecordShardWriter writer = writer();
         CollectionCaps randomSeat = TestCaps.caps().interventions(0).probes(0)
                 .randomSeat(1.0, 0.5).build();
-        GamePlayer player = new GamePlayer(1, writer, randomSeat, WorkerStop.NEVER,
+        GamePlayer player = new GamePlayer(new GamePlayer.Config(1, writer, randomSeat, WorkerStop.NEVER,
                 (match, game) -> {
                     throw new StackOverflowError("deep");
-                });
+                }));
         java.io.PrintStream err = System.err;
         ByteArrayOutputStream printed = new ByteArrayOutputStream();
         System.setErr(new PrintStream(printed, true, StandardCharsets.UTF_8));
@@ -352,10 +352,10 @@ class GamePlayerRecordingTest {
         RecordShardWriter writer = writer();
         CollectionCaps randomSeat = TestCaps.caps().interventions(0).probes(0)
                 .randomSeat(1.0, 0.5).build();
-        GamePlayer player = new GamePlayer(1, writer, randomSeat, WorkerStop.NEVER,
+        GamePlayer player = new GamePlayer(new GamePlayer.Config(1, writer, randomSeat, WorkerStop.NEVER,
                 (match, game) -> {
                     throw new IllegalStateException("boom");
-                });
+                }));
 
         GamePlayer.RandomSeatMatchFailed failed = assertThrows(
                 GamePlayer.RandomSeatMatchFailed.class, () -> player.playMatch(burn(), burn()));
