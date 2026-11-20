@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from sealed.application.train_scorer import TrainScorerConfig
@@ -25,6 +26,16 @@ def _build_train_scorer_parser(subparsers) -> None:
     # `run_train_scorer` can apply resume-precedence resolution: explicit CLI
     # > resumed `train_config` > dataclass default (FR-010,
     # contracts/checkpoint-format.md §Resume Precedence).
+    _add_scorer_path_flags(train_parser)
+    _add_scorer_start_flags(train_parser)
+    _add_scorer_training_flags(train_parser)
+    _add_scorer_architecture_flags(train_parser)
+    _add_scorer_phase_flags(train_parser)
+    _add_scorer_schedule_flags(train_parser)
+
+
+def _add_scorer_path_flags(train_parser: argparse.ArgumentParser) -> None:
+    """The corpus, the embeddings and the run directory."""
     train_parser.add_argument(
         "--outcomes-path",
         default=None,
@@ -51,6 +62,10 @@ def _build_train_scorer_parser(subparsers) -> None:
             "Required unless --resume. Resumable."
         ),
     )
+
+
+def _add_scorer_start_flags(train_parser: argparse.ArgumentParser) -> None:
+    """What a run starts from: a resumed run, a Phase A scorer, an encoder."""
     train_parser.add_argument(
         "--resume",
         default=None,
@@ -82,6 +97,10 @@ def _build_train_scorer_parser(subparsers) -> None:
             "fine-tuned encoder weights)."
         ),
     )
+
+
+def _add_scorer_training_flags(train_parser: argparse.ArgumentParser) -> None:
+    """How long and how fast the scorer trains."""
     train_parser.add_argument(
         "--epochs", type=int, default=None,
         help="Number of training epochs (default: 100). Resumable.",
@@ -94,48 +113,30 @@ def _build_train_scorer_parser(subparsers) -> None:
         "--lr", type=float, default=None,
         help="Scorer learning rate (default: 1e-5). Resumable.",
     )
-    train_parser.add_argument(
-        "--n-layers", type=int, default=None,
-        help=(
-            "Number of Set Transformer SAB layers (default: 6). "
-            "Forbidden alongside --resume or --scorer-checkpoint."
-        ),
-    )
-    train_parser.add_argument(
-        "--n-heads", type=int, default=None,
-        help=(
-            "Number of attention heads (default: 4). "
-            "Forbidden alongside --resume or --scorer-checkpoint."
-        ),
-    )
-    train_parser.add_argument(
-        "--n-seeds", type=int, default=None,
-        help=(
-            "Number of PMA seed vectors (default: 4). "
-            "Forbidden alongside --resume or --scorer-checkpoint."
-        ),
-    )
-    train_parser.add_argument(
-        "--d-ff", type=int, default=None,
-        help=(
-            "Feed-forward dimension in SAB layers (default: 1088). "
-            "Forbidden alongside --resume or --scorer-checkpoint."
-        ),
-    )
-    train_parser.add_argument(
-        "--mlp-hidden", type=int, default=None,
-        help=(
-            "Hidden dimension of the scoring MLP head (default: 256). "
-            "Forbidden alongside --resume or --scorer-checkpoint."
-        ),
-    )
-    train_parser.add_argument(
-        "--dropout", type=float, default=None,
-        help=(
-            "Dropout rate (default: 0.2). "
-            "Forbidden alongside --resume or --scorer-checkpoint."
-        ),
-    )
+
+
+#: The architecture flags: (flag, type, help text before the shared "Forbidden" sentence).
+_SCORER_ARCHITECTURE_FLAG_SPECS: tuple[tuple[str, type, str], ...] = (
+    ("--n-layers", int, "Number of Set Transformer SAB layers (default: 6). "),
+    ("--n-heads", int, "Number of attention heads (default: 4). "),
+    ("--n-seeds", int, "Number of PMA seed vectors (default: 4). "),
+    ("--d-ff", int, "Feed-forward dimension in SAB layers (default: 1088). "),
+    ("--mlp-hidden", int, "Hidden dimension of the scoring MLP head (default: 256). "),
+    ("--dropout", float, "Dropout rate (default: 0.2). "),
+)
+
+
+def _add_scorer_architecture_flags(train_parser: argparse.ArgumentParser) -> None:
+    """The scorer's shape, which a resumed or bootstrapped run inherits."""
+    for flag, kind, text in _SCORER_ARCHITECTURE_FLAG_SPECS:
+        train_parser.add_argument(
+            flag, type=kind, default=None,
+            help=text + "Forbidden alongside --resume or --scorer-checkpoint.",
+        )
+
+
+def _add_scorer_phase_flags(train_parser: argparse.ArgumentParser) -> None:
+    """Phase A or B, and how long to wait for a new peak."""
     train_parser.add_argument(
         "--embedding-lr", type=float, default=None,
         help=(
@@ -152,6 +153,10 @@ def _build_train_scorer_parser(subparsers) -> None:
             "peak val_acc (default: 5). Resumable."
         ),
     )
+
+
+def _add_scorer_schedule_flags(train_parser: argparse.ArgumentParser) -> None:
+    """The split, the encoder chunking, the gradient cap and the margin weighting."""
     train_parser.add_argument(
         "--val-fraction", type=float, default=None,
         help="Fraction of examples held out for validation (default: 0.2). Resumable.",
@@ -260,141 +265,168 @@ def _resolve_scorer_encoder_checkpoint(
     return None
 
 
-def _validate_scorer_phase(
-    args: argparse.Namespace,
-    embedding_lr: float,
-    requested_phase_b: bool,
-    resumed_is_phase_b: bool | None,
-    encoder_checkpoint: Path | None,
-) -> int | None:
+@dataclass(frozen=True)
+class _ScorerPhase:
+    """The phase a run asks for and the one its resumed checkpoint is in,
+    knowable only after resume-precedence resolution."""
+
+    embedding_lr: float
+    #: None without --resume.
+    resumed_is_phase_b: bool | None
+    encoder_checkpoint: Path | None
+
+    @property
+    def requested_phase_b(self) -> bool:
+        return self.embedding_lr != 0
+
+
+def _starts_from_nothing(args: argparse.Namespace) -> bool:
+    """Neither --scorer-checkpoint nor --resume: a fresh scorer."""
+    return args.scorer_checkpoint is None and args.resume is None
+
+
+def _phase_b_without_scorer(args: argparse.Namespace, phase: _ScorerPhase) -> str | None:
+    if phase.requested_phase_b and _starts_from_nothing(args):
+        return (
+            f"Error: --embedding-lr {phase.embedding_lr} requires either "
+            "--scorer-checkpoint <phaseA>.pt (fresh Phase B kickoff) or "
+            "--resume <phaseB>.pt (continuing Phase B). Phase B against a "
+            "randomly-initialized scorer is not supported."
+        )
+    return None
+
+
+def _scorer_checkpoint_on_phase_a(args: argparse.Namespace, phase: _ScorerPhase) -> str | None:
+    if args.scorer_checkpoint is not None and not phase.requested_phase_b:
+        return (
+            "Error: --scorer-checkpoint is only valid when starting a Phase B "
+            "run; pass --embedding-lr <nonzero> alongside it. To continue a "
+            "Phase A run, use --resume instead."
+        )
+    return None
+
+
+def _fresh_phase_a(args: argparse.Namespace, phase: _ScorerPhase) -> bool:
+    """A Phase A run from a fresh scorer."""
+    return _starts_from_nothing(args) and not phase.requested_phase_b
+
+
+def _encoder_checkpoint_on_phase_a(args: argparse.Namespace, phase: _ScorerPhase) -> str | None:
+    if args.encoder_checkpoint is not None and _fresh_phase_a(args, phase):
+        return (
+            "Error: --encoder-checkpoint has no effect on a Phase A run "
+            "(encoder is not in the training graph). Drop the flag, or add "
+            "--scorer-checkpoint <phaseA>.pt and --embedding-lr <nonzero> to "
+            "kick off Phase B."
+        )
+    return None
+
+
+def _phase_letter(is_phase_b: bool) -> str:
+    return "B" if is_phase_b else "A"
+
+
+def _resumed_in_other_phase(args: argparse.Namespace, phase: _ScorerPhase) -> str | None:
+    resumed_is_phase_b = phase.resumed_is_phase_b
+    if resumed_is_phase_b is not None and resumed_is_phase_b != phase.requested_phase_b:
+        eff_lr = phase.embedding_lr if phase.requested_phase_b else 0
+        return (
+            f"Error: --resume {args.resume} is a Phase {_phase_letter(resumed_is_phase_b)} "
+            f"checkpoint but --embedding-lr {eff_lr} requests Phase "
+            f"{_phase_letter(phase.requested_phase_b)}. Use "
+            "--scorer-checkpoint to start a fresh Phase B run from a Phase A "
+            "checkpoint."
+        )
+    return None
+
+
+def _resumes_phase_b(args: argparse.Namespace, phase: _ScorerPhase) -> bool | None:
+    """--resume of a Phase B checkpoint (falsy otherwise)."""
+    return args.resume is not None and phase.resumed_is_phase_b
+
+
+def _encoder_checkpoint_on_phase_b_resume(
+    args: argparse.Namespace, phase: _ScorerPhase,
+) -> str | None:
+    if args.encoder_checkpoint is not None and _resumes_phase_b(args, phase):
+        return (
+            "Error: --encoder-checkpoint conflicts with --resume on a Phase B "
+            "checkpoint, which already carries fine-tuned encoder weights. "
+            "Omit --encoder-checkpoint."
+        )
+    return None
+
+
+def _phase_b_kickoff_without_encoder(
+    args: argparse.Namespace, phase: _ScorerPhase,
+) -> str | None:
+    # A fresh Phase B kickoff loads the encoder from `--encoder-checkpoint`;
+    # Phase A skips the encoder load path entirely, and Phase B resumes pull
+    # encoder weights from the resumed checkpoint.
+    is_phase_b_fresh_kickoff = phase.requested_phase_b and args.resume is None
+    if is_phase_b_fresh_kickoff and phase.encoder_checkpoint is None:
+        return (
+            "Error: --encoder-checkpoint is required to start a fresh Phase B run: "
+            "it names the encoder weights to fine-tune."
+        )
+    return None
+
+
+#: The Phase A/B checks, in the order they refuse a run: each returns its
+#: refusal, or None.
+_PHASE_CHECKS = (
+    _phase_b_without_scorer,
+    _scorer_checkpoint_on_phase_a,
+    _encoder_checkpoint_on_phase_a,
+    _resumed_in_other_phase,
+    _encoder_checkpoint_on_phase_b_resume,
+    _phase_b_kickoff_without_encoder,
+)
+
+
+def _validate_scorer_phase(args: argparse.Namespace, phase: _ScorerPhase) -> int | None:
     """Reject Phase A/B flag combinations that are only knowable post-resolution.
 
     Returns an exit code to propagate, or ``None`` to continue.
     """
-    if requested_phase_b and args.scorer_checkpoint is None and args.resume is None:
-        print(
-            f"Error: --embedding-lr {embedding_lr} requires either "
-            "--scorer-checkpoint <phaseA>.pt (fresh Phase B kickoff) or "
-            "--resume <phaseB>.pt (continuing Phase B). Phase B against a "
-            "randomly-initialized scorer is not supported.",
-            file=sys.stderr,
-        )
-        return 2
-
-    if args.scorer_checkpoint is not None and not requested_phase_b:
-        print(
-            "Error: --scorer-checkpoint is only valid when starting a Phase B "
-            "run; pass --embedding-lr <nonzero> alongside it. To continue a "
-            "Phase A run, use --resume instead.",
-            file=sys.stderr,
-        )
-        return 2
-
-    if (
-        args.encoder_checkpoint is not None
-        and args.scorer_checkpoint is None
-        and args.resume is None
-        and not requested_phase_b
-    ):
-        print(
-            "Error: --encoder-checkpoint has no effect on a Phase A run "
-            "(encoder is not in the training graph). Drop the flag, or add "
-            "--scorer-checkpoint <phaseA>.pt and --embedding-lr <nonzero> to "
-            "kick off Phase B.",
-            file=sys.stderr,
-        )
-        return 2
-
-    if resumed_is_phase_b is not None and resumed_is_phase_b != requested_phase_b:
-        ckpt_phase = "B" if resumed_is_phase_b else "A"
-        run_phase = "B" if requested_phase_b else "A"
-        eff_lr = embedding_lr if requested_phase_b else 0
-        print(
-            f"Error: --resume {args.resume} is a Phase {ckpt_phase} checkpoint "
-            f"but --embedding-lr {eff_lr} requests Phase {run_phase}. Use "
-            "--scorer-checkpoint to start a fresh Phase B run from a Phase A "
-            "checkpoint.",
-            file=sys.stderr,
-        )
-        return 2
-
-    if (
-        args.encoder_checkpoint is not None
-        and args.resume is not None
-        and resumed_is_phase_b
-    ):
-        print(
-            "Error: --encoder-checkpoint conflicts with --resume on a Phase B "
-            "checkpoint, which already carries fine-tuned encoder weights. "
-            "Omit --encoder-checkpoint.",
-            file=sys.stderr,
-        )
-        return 2
-
-    # A fresh Phase B kickoff loads the encoder from `--encoder-checkpoint`;
-    # Phase A skips the encoder load path entirely, and Phase B resumes pull
-    # encoder weights from the resumed checkpoint.
-    is_phase_b_fresh_kickoff = requested_phase_b and args.resume is None
-    if is_phase_b_fresh_kickoff and encoder_checkpoint is None:
-        print(
-            "Error: --encoder-checkpoint is required to start a fresh Phase B run: "
-            "it names the encoder weights to fine-tune.",
-            file=sys.stderr,
-        )
-        return 2
+    for check in _PHASE_CHECKS:
+        refusal = check(args, phase)
+        if refusal is not None:
+            print(refusal, file=sys.stderr)
+            return 2
     return None
 
 
-def run_train_scorer(args: argparse.Namespace) -> int:
-    """Execute the train-scorer command."""
-    from sealed.application.train_scorer import TrainScorerUseCase
+@dataclass(frozen=True)
+class _ResumedScorer:
+    """What ``--resume``'s checkpoint carries into the run (empty without it)."""
+
+    train_config: dict | None = None
+    is_phase_b: bool | None = None
+
+
+def _load_scorer_checkpoints(args: argparse.Namespace) -> _ResumedScorer | int:
+    """Load ``--resume``'s and ``--scorer-checkpoint``'s checkpoints; exit 2
+    when one is missing."""
     from sealed.infrastructure.scorer_store import ScorerStore
 
-    exclusive_err = _validate_scorer_exclusive_flags(args)
-    if exclusive_err is not None:
-        return exclusive_err
-
-    resumed_train_config: dict | None = None
-    resumed_is_phase_b: bool | None = None
-    if args.resume is not None:
-        try:
-            resumed = ScorerStore().load_checkpoint(Path(args.resume))
-        except FileNotFoundError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
-            return 2
-        resumed_train_config = resumed.train_config
-        resumed_is_phase_b = resumed.encoder_state_dict is not None
-
-    if args.scorer_checkpoint is not None:
-        try:
+    resumed = _ResumedScorer()
+    try:
+        if args.resume is not None:
+            loaded = ScorerStore().load_checkpoint(Path(args.resume))
+            resumed = _ResumedScorer(loaded.train_config, loaded.encoder_state_dict is not None)
+        if args.scorer_checkpoint is not None:
             ScorerStore().load_checkpoint(Path(args.scorer_checkpoint))
-        except FileNotFoundError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
-            return 2
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    return resumed
 
-    missing_err = _missing_paths_error(args, resumed_train_config, _SCORER_REQUIRED_PATHS)
-    if missing_err is not None:
-        return missing_err
 
-    resolved = resolve_resumable_args(
-        args,
-        flag_names=_RESUMABLE_FLAG_NAMES,
-        config_cls=TrainScorerConfig,
-        path_fields=_PATH_FIELDS,
-        resumed_config=resumed_train_config,
-    )
-
-    embedding_lr = float(resolved["embedding_lr"])
-    requested_phase_b = embedding_lr != 0
-    encoder_checkpoint = _resolve_scorer_encoder_checkpoint(args, resumed_train_config)
-
-    phase_err = _validate_scorer_phase(
-        args, embedding_lr, requested_phase_b, resumed_is_phase_b, encoder_checkpoint,
-    )
-    if phase_err is not None:
-        return phase_err
-
-    config = TrainScorerConfig(
+def _train_scorer_config(
+    args: argparse.Namespace, resolved: dict, encoder_checkpoint: Path | None,
+) -> TrainScorerConfig:
+    return TrainScorerConfig(
         resume=Path(args.resume) if args.resume else None,
         scorer_checkpoint=(
             Path(args.scorer_checkpoint) if args.scorer_checkpoint else None
@@ -402,6 +434,10 @@ def run_train_scorer(args: argparse.Namespace) -> int:
         encoder_checkpoint=encoder_checkpoint,
         **resolved,
     )
+
+
+def _execute_train_scorer(config: TrainScorerConfig) -> int:
+    from sealed.application.train_scorer import TrainScorerUseCase
 
     try:
         use_case = TrainScorerUseCase()
@@ -417,3 +453,37 @@ def run_train_scorer(args: argparse.Namespace) -> int:
         return 2
 
     return 0
+
+
+def run_train_scorer(args: argparse.Namespace) -> int:
+    """Execute the train-scorer command."""
+    exclusive_err = _validate_scorer_exclusive_flags(args)
+    if exclusive_err is not None:
+        return exclusive_err
+
+    resumed = _load_scorer_checkpoints(args)
+    if isinstance(resumed, int):
+        return resumed
+
+    missing_err = _missing_paths_error(args, resumed.train_config, _SCORER_REQUIRED_PATHS)
+    if missing_err is not None:
+        return missing_err
+
+    resolved = resolve_resumable_args(
+        args,
+        flag_names=_RESUMABLE_FLAG_NAMES,
+        config_cls=TrainScorerConfig,
+        path_fields=_PATH_FIELDS,
+        resumed_config=resumed.train_config,
+    )
+
+    phase = _ScorerPhase(
+        embedding_lr=float(resolved["embedding_lr"]),
+        resumed_is_phase_b=resumed.is_phase_b,
+        encoder_checkpoint=_resolve_scorer_encoder_checkpoint(args, resumed.train_config),
+    )
+    phase_err = _validate_scorer_phase(args, phase)
+    if phase_err is not None:
+        return phase_err
+
+    return _execute_train_scorer(_train_scorer_config(args, resolved, phase.encoder_checkpoint))
