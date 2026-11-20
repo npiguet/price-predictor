@@ -18,7 +18,7 @@ from sealed.application.scorer_pairwise_loss import (
     _pairwise_bce,
     _score_batch,
 )
-from sealed.application.scorer_phase_b import _phase_b_inject_encoder
+from sealed.application.scorer_phase_b import _embedding_drift, _phase_b_inject_encoder
 from sealed.application.scorer_training_context import _TrainingContext
 from sealed.domain.scorer_model import SetTransformerScorer
 
@@ -119,6 +119,44 @@ def _validate(
         score_loser_mean=l_mean,
         score_loser_std=l_std,
     )
+
+
+def _validate_epoch(ctx: _TrainingContext, metrics: TrainingMetrics) -> ValidationResult:
+    """Validate one epoch and record its loss, its accuracy and, once Phase B
+    has captured its reference batch, the embedding drift."""
+    val = _validate(
+        ctx.model, ctx.val_loader,
+        PairScoring(ctx.embedding_table, ctx.device, ctx.margin_weighting),
+    )
+    metrics.val_losses.append(val.loss)
+    metrics.val_accuracies.append(val.accuracy)
+    if ctx.encoder is not None and ctx.reference_batch is not None:
+        metrics.embedding_drifts.append(_embedding_drift(ctx))
+    return val
+
+
+class _PeakPatience:
+    """The early stop: the epochs since the last new peak validation
+    accuracy, and whether ``patience`` of them have passed."""
+
+    def __init__(self, patience: int) -> None:
+        self.patience = patience
+        self.epochs_since_peak = 0
+
+    def exhausted(self, new_best: bool) -> bool:
+        """Count one epoch; True, after logging the early stop, once
+        ``patience`` epochs have passed without a new peak."""
+        if new_best:
+            self.epochs_since_peak = 0
+            return False
+        self.epochs_since_peak += 1
+        if self.epochs_since_peak < self.patience:
+            return False
+        _log(
+            f"Early stop: {self.epochs_since_peak} epochs without "
+            f"new peak val_acc (--patience={self.patience})"
+        )
+        return True
 
 
 def _print_epoch_report(

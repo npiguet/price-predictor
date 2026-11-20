@@ -4,7 +4,7 @@ Phase B encoder beside the scorer, and the flattened run config."""
 
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -15,13 +15,22 @@ if TYPE_CHECKING:
     from sealed.application.train_scorer import TrainScorerConfig
 
 
+@dataclass(frozen=True)
+class EpochAccuracy:
+    """One epoch's validation accuracy beside the best one before it: what
+    decides whether the epoch's checkpoint is also the new best."""
+
+    epoch: int
+    val_accuracy: float
+    best_so_far: float
+
+
 def _persist_checkpoint(
     ctx: _TrainingContext,
     store: ScorerStore,
-    epoch: int,
-    val_accuracy: float,
-    current_best: float,
+    accuracy: EpochAccuracy,
 ) -> tuple[bool, float]:
+    epoch, current_best = accuracy.epoch, accuracy.best_so_far
     encoder_state_dict = (
         ctx.encoder.state_dict() if ctx.encoder is not None else None
     )
@@ -35,9 +44,9 @@ def _persist_checkpoint(
         encoder_state_dict=encoder_state_dict,
         encoder_config=encoder_config,
     )
-    new_best = val_accuracy > current_best
+    new_best = accuracy.val_accuracy > current_best
     if new_best:
-        current_best = val_accuracy
+        current_best = accuracy.val_accuracy
         store.save_checkpoint(
             ctx.model, ctx.optimizer, epoch, current_best,
             ctx.model.config, ctx.best_path,

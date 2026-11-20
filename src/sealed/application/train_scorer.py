@@ -13,15 +13,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from sealed.application.scorer_checkpoints import _persist_checkpoint
+from sealed.application.scorer_checkpoints import EpochAccuracy, _persist_checkpoint
 from sealed.application.scorer_log import _log
-from sealed.application.scorer_pairwise_loss import PairScoring
-from sealed.application.scorer_phase_b import _embedding_drift
 from sealed.application.scorer_training_loop import (
     TrainingMetrics,
+    _PeakPatience,
     _print_epoch_report,
     _train_one_epoch,
-    _validate,
+    _validate_epoch,
 )
 from sealed.application.scorer_training_setup import _prepare
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
@@ -122,35 +121,20 @@ class TrainScorerUseCase:
 
         metrics = TrainingMetrics()
         best_val_accuracy = ctx.best_val_accuracy
-        epochs_since_peak = 0
+        patience = _PeakPatience(config.patience)
 
         _log(f"Starting training loop ({config.epochs} epochs)")
         for epoch in range(ctx.start_epoch, ctx.start_epoch + config.epochs):
             train_stats = _train_one_epoch(ctx)
             metrics.train_losses.append(train_stats.loss)
 
-            val = _validate(
-                ctx.model, ctx.val_loader,
-                PairScoring(ctx.embedding_table, ctx.device, ctx.margin_weighting),
-            )
-            metrics.val_losses.append(val.loss)
-            metrics.val_accuracies.append(val.accuracy)
-            if ctx.encoder is not None and ctx.reference_batch is not None:
-                metrics.embedding_drifts.append(_embedding_drift(ctx))
+            val = _validate_epoch(ctx, metrics)
             _print_epoch_report(epoch, train_stats, val, metrics)
             new_best, best_val_accuracy = _persist_checkpoint(
-                ctx, store, epoch, val.accuracy, best_val_accuracy,
+                ctx, store, EpochAccuracy(epoch, val.accuracy, best_val_accuracy),
             )
-            if new_best:
-                epochs_since_peak = 0
-            else:
-                epochs_since_peak += 1
-                if epochs_since_peak >= config.patience:
-                    _log(
-                        f"Early stop: {epochs_since_peak} epochs without "
-                        f"new peak val_acc (--patience={config.patience})"
-                    )
-                    break
+            if patience.exhausted(new_best):
+                break
 
         return TrainScorerResult(
             model=ctx.model,
