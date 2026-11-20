@@ -106,6 +106,27 @@ final class CardLines {
         }
     }
 
+    /**
+     * One face whose trait lines are being listed: whether it is the face up,
+     * the keywords whose own lines stand for the traits they build (by
+     * instance, and by fragment), and the key of the card's ability on the
+     * stack, null when none is.
+     */
+    private record FaceListing(
+            boolean faceUp, Set<KeywordInterface> keywordLines, Set<String> keywordTexts,
+            ProvenanceKey stackKey) {
+
+        /** Whether this keyword's own line already stands for its trait. */
+        boolean hasKeywordLine(KeywordInterface keyword) {
+            return keywordLines.contains(keyword) || keywordTexts.contains(keyword.getOriginal());
+        }
+
+        /** Whether the line keyed {@code key} is the face up's ability on the stack. */
+        boolean isStackLine(ProvenanceKey key) {
+            return faceUp && key != null && key.equals(stackKey);
+        }
+    }
+
     private static final class Builder {
         private final Game game;
         private final Card card;
@@ -195,6 +216,21 @@ final class CardLines {
 
         private void addTraitLines(CardState state, List<KeywordInterface> keywords,
                                    boolean faceUp) {
+            FaceListing face = faceListing(keywords, faceUp);
+            addAbilityLines(state, face);
+            for (CardTraitBase trigger : board.triggers(state)) {
+                addTrait(trigger, LineKind.TRIGGER, face);
+            }
+            for (CardTraitBase stat : board.staticAbilities(state)) {
+                addTrait(stat, LineKind.STATIC, face);
+            }
+            for (CardTraitBase replacement : board.replacementEffects(state)) {
+                addTrait(replacement, LineKind.REPLACEMENT, face);
+            }
+        }
+
+        /** The listing of one face whose lines {@code keywords} heads. */
+        private FaceListing faceListing(List<KeywordInterface> keywords, boolean faceUp) {
             Set<KeywordInterface> keywordLines = identitySet();
             keywordLines.addAll(keywords);
             Set<String> keywordTexts = new HashSet<>();
@@ -202,49 +238,51 @@ final class CardLines {
                 keywordTexts.add(keyword.getOriginal());
             }
             ProvenanceKey stackKey = onStack == null ? null : ProvenanceResolver.of(onStack);
+            return new FaceListing(faceUp, keywordLines, keywordTexts, stackKey);
+        }
+
+        /** The spell and activated lines of a face, its rules spells left out. */
+        private void addAbilityLines(CardState state, FaceListing face) {
             for (SpellAbility ability : board.spellAbilities(state)) {
                 if (isRulesSpell(ability)) {
                     continue;
                 }
-                addTrait(ability, ability.isSpell() ? LineKind.SPELL : LineKind.ACTIVATED,
-                        faceUp, keywordLines, keywordTexts, stackKey);
-            }
-            for (CardTraitBase trigger : board.triggers(state)) {
-                addTrait(trigger, LineKind.TRIGGER, faceUp, keywordLines, keywordTexts, stackKey);
-            }
-            for (CardTraitBase stat : board.staticAbilities(state)) {
-                addTrait(stat, LineKind.STATIC, faceUp, keywordLines, keywordTexts, stackKey);
-            }
-            for (CardTraitBase replacement : board.replacementEffects(state)) {
-                addTrait(replacement, LineKind.REPLACEMENT, faceUp, keywordLines, keywordTexts, stackKey);
+                addTrait(ability, ability.isSpell() ? LineKind.SPELL : LineKind.ACTIVATED, face);
             }
         }
 
-        private void addTrait(CardTraitBase trait, LineKind kind, boolean faceUp,
-                              Set<KeywordInterface> keywordLines, Set<String> keywordTexts,
-                              ProvenanceKey stackKey) {
-            if (!faceUp && grants.byLayerChange(trait)) {
+        private void addTrait(CardTraitBase trait, LineKind kind, FaceListing face) {
+            if (standsElsewhere(trait, face)) {
                 return;
             }
-            KeywordInterface keyword = trait.getKeyword();
-            if (keyword != null) {
-                if (keywordLines.contains(keyword) || keywordTexts.contains(keyword.getOriginal())) {
-                    // The keyword's own line already stands for it.
-                    return;
-                }
-                if (board.grantedKeyword(keyword)) {
-                    // A trait of the removed static's keyword grant.
-                    return;
-                }
-            }
+            boolean faceUp = face.faceUp();
             ProvenanceKey key = ProvenanceResolver.of(trait);
             Boolean active = inForce.ofTrait(trait, key, faceUp);
-            List<Integer> chosen = faceUp && key != null && key.equals(stackKey)
-                    ? chosenModes(onStack) : null;
-            List<String> affected = faceUp && trait instanceof StaticAbility stat
-                    ? affectedBy(stat) : null;
+            List<Integer> chosen = face.isStackLine(key) ? chosenModes(onStack) : null;
+            List<String> affected = affectedOf(trait, faceUp);
             add(new Line(keysOf(key), kind, grants.ofTrait(trait, key), active, null, chosen, null, affected),
                     key, faceUp);
+        }
+
+        /**
+         * Whether a trait is no line of its own here: a layer change's grant
+         * on a face not up, a keyword's trait whose keyword line stands for
+         * it, or a trait of the removed static's keyword grant.
+         */
+        private boolean standsElsewhere(CardTraitBase trait, FaceListing face) {
+            if (!face.faceUp() && grants.byLayerChange(trait)) {
+                return true;
+            }
+            KeywordInterface keyword = trait.getKeyword();
+            if (keyword == null) {
+                return false;
+            }
+            return face.hasKeywordLine(keyword) || board.grantedKeyword(keyword);
+        }
+
+        /** The {@code affected} of a face up's static, else null. */
+        private List<String> affectedOf(CardTraitBase trait, boolean faceUp) {
+            return faceUp && trait instanceof StaticAbility stat ? affectedBy(stat) : null;
         }
 
         /**
@@ -307,13 +345,17 @@ final class CardLines {
         }
 
         private void add(Line line, ProvenanceKey key, boolean faceUp) {
-            if (!faceUp && key != null && listed.contains(key)) {
+            if (!faceUp && isListed(key)) {
                 return;
             }
             if (key != null) {
                 listed.add(key);
             }
             lines.add(line);
+        }
+
+        private boolean isListed(ProvenanceKey key) {
+            return key != null && listed.contains(key);
         }
 
         /**
@@ -328,11 +370,16 @@ final class CardLines {
             CardStateName up = card.getCurrentStateName();
             List<CardState> faces = new ArrayList<>();
             for (CardStateName name : order) {
-                if (name != up && name != CardStateName.FaceDown && card.hasState(name)) {
+                if (name != up && isPrintedFace(name)) {
                     faces.add(card.getState(name));
                 }
             }
             return faces;
+        }
+
+        /** Whether the card has this state as a printed face, never its face-down one. */
+        private boolean isPrintedFace(CardStateName name) {
+            return name != CardStateName.FaceDown && card.hasState(name);
         }
 
         /** The keywords a state prints, its split halves' included. */
