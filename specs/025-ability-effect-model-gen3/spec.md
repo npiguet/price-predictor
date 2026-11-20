@@ -726,15 +726,13 @@ and that the reporting half never enters the control score.
   sacrifices another permanent), at the actor's first priority in the fork's own step where the
   rules let it be played with its named targets, its targets named by binding role clause by clause
   (a clause left unnamed drawn from its legal targets by the fork's own random stream), X drawn, its
-  cost paid through the engine's own payment (what a cost sacrifices, discards or exiles named by
-  role, else the seat's choice; a named card the cost cannot take leaves it unpaid); a "you may" or
-  a "you may pay" asked by a named line of a bound source (by default its triggered abilities)
-  answered yes or no, whenever the turn asks it, a yes to a "you may pay" paying the cost whenever
-  it can be paid, whatever the AI would choose; or an attack by a bound creature at a bound player
-  or permanent in the turn's declare-attackers step, added to the seat's own declaration. A modal
+  cost paid through the engine's own payment with the seat's choices; a "you may" asked by a named
+  line of a bound source (by default its triggered abilities) answered yes or no, whenever the turn
+  asks it; or an attack by a bound creature at a bound player or permanent in the turn's
+  declare-attackers step, added to the seat's own declaration. A modal
   line (a charm) is no line a forced play makes: the engine's cast asks its modes afresh, so its
-  forced play has no legal line. Any card a play names (its source, a target, a cost card, a
-  defender), whatever the play's kind, may be a card the edit puts on the battlefield, bound on the
+  forced play has no legal line. Any card a play names (its source, a target, a defender),
+  whatever the play's kind, may be a card the edit puts on the battlefield, bound on the
   edited copy. The forcing seat is attached in the fork's copy only. Every other
   decision in the fork stays the seat's own (FR-010). A forced play is recorded as a live play is,
   by the fork's own recorders, with no record member marking it forced: a directed fork's records
@@ -742,13 +740,13 @@ and that the reporting half never enters the control score.
   registry (FR-014a). A fork whose forced play has no legal line or target after the edit, is not
   made by the end of its step (an answer: of the turn), or whose cost is not paid (the AI's own
   check says it cannot pay at the first priority where the rules let the line be played, before any
-  payment is tried; its payment or a named cost card fails; a "you may pay" answered yes cannot be
-  paid) ends as a counted refusal (`forced play has no legal line`, `forced play not made`,
-  `forced play cost not paid`) and writes nothing. A forced play whose source, line, named target
+  payment is tried; or its payment fails) ends as a counted refusal
+  (`forced play has no legal line`, `forced play not made`, `forced play cost not paid`) and
+  writes nothing. A forced play whose source, line, named target
   or attack the live board lacks is refused before the fork is taken, spending none of
   `--directed-forks-per-game` and leaving the rule's one fork of the game untaken; the refusal is
   counted at each boundary it is found at. What a play names of a card the edit makes (the line
-  when that card is the source, a targeting clause, a cost card, the defender) is checked on the
+  when that card is the source, a targeting clause, the defender) is checked on the
   edited copy only, and the rest of the play on the live board; when that card is the play's
   source, the whole play is checked on the edited copy only, since without the line nothing of it
   can be checked live.
@@ -769,7 +767,7 @@ and that the reporting half never enters the control score.
   Forge's restart resets the JVM-wide trigger id counter, which the live game's records and
   trigger comparisons depend on.
 - **FR-011**: The fork operations are: change a creature's power or toughness (`pt`); add or
-  remove a keyword (`keyword`); change a colour or type (`colour_type`); add or remove counters
+  remove a keyword (`keyword`); change a colour (`colour_type`); add or remove counters
   (`counters`); tap or untap a permanent (`tap`); change a life total (`life`); replace one card
   with another (`replace_card`); take a permanent off the battlefield (`remove_permanent`); put a
   card onto the battlefield (`add_permanent`); move a card between hand, library and graveyard,

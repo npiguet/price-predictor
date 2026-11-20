@@ -152,11 +152,11 @@ variant of polarity `other` whose forced cast makes the `fires` side.
 
 An `Application` may also name the one play its fork forces (`ForcedPlay`, FR-010b), built from
 the fork's binding after the edit, which `Application.making(role, find)` extends with a card the
-edit makes, found on the edited copy (`afterEdit`; `Application.makes` lists those roles, and the live dry run skips what names one of them, the line when it is the source, a targeting clause, a cost card or the defender, and checks the rest of the play; a play whose source is such a card it skips whole): `ForcedPlay.cast(actor, card)`, `activate(actor, permanent,
+edit makes, found on the edited copy (`afterEdit`; `Application.makes` lists those roles, and the live dry run skips what names one of them, the line when it is the source, a targeting clause or the defender, and checks the rest of the play; a play whose source is such a card it skips whole): `ForcedPlay.cast(actor, card)`, `activate(actor, permanent,
 line)`, `answer(actor, source, yes)` or `attack(actor, attacker, defender)`, each argument a
 binding role, refined by `.targeting(roles...)` (one call per targeting clause, in chain order; a
-clause named by no call is drawn), `.paying(roles...)` (what the cost sacrifices, discards or
-exiles) and `.playing(line)`. A cast or activation is made in the fork's own step, an attack in
+clause named by no call is drawn) and `.playing(line)`. A cast or activation is made in the
+fork's own step, an attack in
 the turn's declare-attackers step, an answer whenever its question is asked that turn; X is
 drawn. A line is chosen by `ForcedPlay.Line.SPELL` (the card's own cast, no alternative cost),
 `Line.TRIGGER` (the source's triggered abilities, an answer's default), `Line.api(name)`,
@@ -167,11 +167,9 @@ play to its actor's seat in the copy only: a random seat consults it first (`For
 plain AI seat is replaced by a `ForcingSeatController`. At the actor's first priority in the step
 where the rules let the line be played (`PlayabilityVerdict`) with its named targets legal
 (`canTarget`), the seat plays it through `RandomSpellPlayer.play`, the engine's own paid cast
-path, its cost decided by the named cards and its mana by the AI. An answer is given only to a
-question its named line of the source asks: to an optional trigger or a confirmation, reported
-through the engine's confirm hook as an AI answer is; to a "you may pay", a no declines and a yes
-pays the cost through `CostPayment.payComputerCosts` whenever `ComputerUtilCost.canPayCost` says
-it can be paid, whatever the AI's `willPayUnlessCost` would choose. The attack is added to the
+path, its cost paid with the AI's own choices. An answer is given only to an optional trigger or
+a confirmation its named line of the source asks, reported through the engine's confirm hook as an
+AI answer is; a "you may pay" stays the seat's AI's to answer. The attack is added to the
 seat's own declaration and checked with `CombatUtil.validateAttackers`. A paid forced play is
 written by the fork's recorders as a live play, with no member marking it. The controller only
 flags what fails; `ForkPlayForward` throws the refusal between main-loop steps and after the
@@ -180,8 +178,8 @@ turn, before the fork's lines are written: `forced play has no legal line`
 the edited copy or as the play is made), `forced play not made` (its step passed, or the turn
 ended, unmade), `forced play cost not paid` (the AI's own check, `ComputerUtilCost.canPayCost`,
 says the line cannot be paid at the first priority where the rules let it be played, before any
-payment is tried; the AI's mana payment or a named cost card failed; a "you may pay" answered yes
-cannot be paid). Its unnamed targets and X are drawn from a stream of its own, seeded from the
+payment is tried; or the AI's payment failed). Its unnamed targets and X are drawn from a stream
+of its own, seeded from the
 game's sequence of fork seeds, which only a fork that forces draws from: every later fork of the
 same game takes the next seeds of that sequence, so a forcing fork shifts the seeds of the forks
 after it, the same for a given game seed.

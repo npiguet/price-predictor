@@ -278,7 +278,7 @@ from a real game.
   |---|---|
   | `pt` | change a creature's power or toughness |
   | `keyword` | add or remove a keyword |
-  | `colour_type` | change a colour or type |
+  | `colour_type` | change a colour |
   | `counters` | add or remove counters |
   | `tap` | tap or untap a permanent |
   | `life` | change a life total |
@@ -297,9 +297,9 @@ from a real game.
 - No operation forces a choice, a target or a timing on a seat. The one play a variant may
   force beside its operation is below.
 - A variant may force one play in its fork, made by a seat its precondition binds: a cast or
-  activation of a bound card's line in the fork's own step, its targets, cost cards and X named
-  or drawn from the fork's own random stream; a yes or no to a "you may" or a "you may pay" a
-  bound card's line asks; or a bound creature's attack. A modal line is never forced. A play
+  activation of a bound card's line in the fork's own step, its targets and X named or drawn
+  from the fork's own random stream; a yes or no to a "you may" a bound card's line asks; or a
+  bound creature's attack. A modal line is never forced. A play
   that cannot be made is a counted refusal and the fork writes nothing. The forcing seat
   exists in the fork's copy only, and no record member marks a forced play.
 - A variant may keep its bound cards' records: in its fork their decision candidates and
