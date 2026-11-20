@@ -261,7 +261,7 @@ final class TriggerChannel {
     private EffectRecord record(
             Object trait, ProvenanceKey.Resolved line, Object runParams, boolean fired) {
         EffectEvent event = RunParamNormalizer.describeParams(trait, runParams);
-        return live.traitRecord(context, RecordKind.TRIGGER, trait, line, event)
+        return live.traitRecord(new LiveGame.ActingTrait(context, RecordKind.TRIGGER, trait, line), event)
                 .payload(new RecordPayload(Json.object()
                         .raw("event", event.toJson())
                         .value("fired", fired)

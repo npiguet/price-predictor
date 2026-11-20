@@ -11,7 +11,7 @@ public final class TestHookFailures {
 
     /** Count one contained failure under {@code key}. */
     public static void count(String key) {
-        HookFailures.countContained(key);
+        HookFailures.countContained(new HookFailures.FailureKey(key));
     }
 
     /** Count one fork of {@code kind} that refused, for {@code reason}. */

@@ -280,19 +280,29 @@ final class LiveGame {
      */
     EffectRecord traitRecord(
             CollectorContext context, RecordKind kind, Object trait, EffectEvent pending) {
-        return traitRecord(context, kind, trait, lineOf(trait), pending);
+        return traitRecord(new ActingTrait(context, kind, trait, lineOf(trait)), pending);
     }
 
     /**
      * The same, with the acting line already resolved by a caller that gated
      * on it before paying for the snapshot.
      *
-     * @param line {@link #lineOf}{@code (trait)}
+     * @param acting the trait and its resolved line
      */
-    EffectRecord traitRecord(
-            CollectorContext context, RecordKind kind, Object trait,
-            ProvenanceKey.Resolved line, EffectEvent pending) {
-        return traitRecordOn(context, kind, trait, line, traitState(trait, pending));
+    EffectRecord traitRecord(ActingTrait acting, EffectEvent pending) {
+        return traitRecordOn(acting, traitState(acting.trait(), pending));
+    }
+
+    /**
+     * The trait a record is about, with the line it acts as.
+     *
+     * @param context the collector's context the record starts from
+     * @param kind    the record's kind
+     * @param trait   the trait as the hook handed it over
+     * @param line    {@link #lineOf}{@code (trait)}, resolved by a caller that gated on it
+     */
+    record ActingTrait(
+            CollectorContext context, RecordKind kind, Object trait, ProvenanceKey.Resolved line) {
     }
 
     /**
@@ -313,12 +323,10 @@ final class LiveGame {
      * The same record on a board read earlier ({@link #traitState}): a
      * replacement's, read before it ran.
      */
-    EffectRecord traitRecordOn(
-            CollectorContext context, RecordKind kind, Object trait,
-            ProvenanceKey.Resolved line, RecordState state) {
-        return context.newRecord(kind)
-                .actor(controllerOf(hostOf(trait)))
-                .ability(line)
+    EffectRecord traitRecordOn(ActingTrait acting, RecordState state) {
+        return acting.context().newRecord(acting.kind())
+                .actor(controllerOf(hostOf(acting.trait())))
+                .ability(acting.line())
                 .state(state);
     }
 

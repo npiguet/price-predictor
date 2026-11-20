@@ -359,7 +359,9 @@ final class RewriteChannel implements EventRouter.EventTap {
         return state == null
                 ? live.traitRecord(context, RecordKind.REWRITE, trait, incoming)
                 : live.traitRecordOn(
-                        context, RecordKind.REWRITE, trait, LiveGame.lineOf(trait), state);
+                        new LiveGame.ActingTrait(
+                                context, RecordKind.REWRITE, trait, LiveGame.lineOf(trait)),
+                        state);
     }
 
     /**

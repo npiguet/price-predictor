@@ -347,7 +347,7 @@ public final class GameRecording implements AutoCloseable {
             write.run();
             return true;
         } catch (RuntimeException failure) {
-            HookFailures.countContained("game-end marker");
+            HookFailures.countContained(new HookFailures.FailureKey("game-end marker"));
             MARKER_UNWRITTEN.raise(() -> "Effect records: the game-end marker of game " + gameId
                     + " could not be written, so the game reads as cut (later failures are"
                     + " counted, not printed): " + failure);
@@ -482,7 +482,7 @@ public final class GameRecording implements AutoCloseable {
             try {
                 step.body().run();
             } catch (RuntimeException failure) {
-                HookFailures.countContained("boundary step " + step.name());
+                HookFailures.countContained(new HookFailures.FailureKey("boundary step " + step.name()));
                 BOUNDARY_STEP_FAILED.computeIfAbsent(step.name(), name -> new OnceWarning())
                         .raise(() -> "Effect records: the phase boundary's " + step.name()
                                 + " step threw, and lost its records at that boundary"

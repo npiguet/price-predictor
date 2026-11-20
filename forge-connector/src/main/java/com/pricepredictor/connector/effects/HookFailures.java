@@ -6,6 +6,7 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 import java.util.logging.Handler;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
@@ -53,12 +54,33 @@ public final class HookFailures {
     private static final Pattern SUBSCRIBER =
             Pattern.compile("subscriber method (\\w+)\\(.*?\\) on subscriber ([\\w.$]+)@");
 
+    private static final Function<String, AtomicLong> NEW_COUNTER = new Function<>() {
+        @Override
+        public AtomicLong apply(String key) {
+            return new AtomicLong();
+        }
+    };
+
+    /** The name a count is filed and printed under: a hook, a short call, a subscriber or a contained failure. */
+    record FailureKey(String name) {
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
     private HookFailures() {
+    }
+
+    /** The count of the failures filed under {@code key}, started at zero. */
+    private static AtomicLong counter(FailureKey key) {
+        return COUNTS.computeIfAbsent(key.name(), NEW_COUNTER);
     }
 
     /** Count one call of {@code hook}'s listener that threw {@code failure}. */
     static void count(PatchHooks.Hook hook, RuntimeException failure) {
-        AtomicLong failures = COUNTS.computeIfAbsent(hook.toString(), name -> new AtomicLong());
+        AtomicLong failures = counter(new FailureKey(hook.toString()));
         if (failures.incrementAndGet() == 1) {
             System.err.println("effect-record hook " + hook + ": its listener threw, which loses what"
                     + " that call would have recorded (later failures are counted, not printed): "
@@ -75,8 +97,8 @@ public final class HookFailures {
      * printed.
      */
     static void countShortCall(PatchHooks.Hook hook, String method, int given, int read) {
-        String key = hook + " " + method + " short of arguments";
-        AtomicLong calls = COUNTS.computeIfAbsent(key, name -> new AtomicLong());
+        FailureKey key = new FailureKey(hook + " " + method + " short of arguments");
+        AtomicLong calls = counter(key);
         if (calls.incrementAndGet() == 1) {
             System.err.println("effect-record hook " + hook + ": " + method + " was called with "
                     + given + " argument(s) and its listener reads " + read + "; the call is"
@@ -101,8 +123,7 @@ public final class HookFailures {
             @Override
             public void publish(LogRecord record) {
                 if (record != null && record.getThrown() != null) {
-                    COUNTS.computeIfAbsent(subscriberOf(record.getMessage()),
-                            name -> new AtomicLong()).incrementAndGet();
+                    counter(new FailureKey(subscriberOf(record.getMessage()))).incrementAndGet();
                 }
             }
 
@@ -132,8 +153,8 @@ public final class HookFailures {
      * ({@code "boundary step <name>"}), a decision candidate the rules check
      * could not read ({@code "decision candidate unreadable"}).
      */
-    static void countContained(String key) {
-        COUNTS.computeIfAbsent(key, name -> new AtomicLong()).incrementAndGet();
+    static void countContained(FailureKey key) {
+        counter(key).incrementAndGet();
     }
 
     /**
@@ -142,8 +163,8 @@ public final class HookFailures {
      * {@code "fork <kind> body"}), which is discarded rather than failing the
      * worker, and which would otherwise leave no trace.
      */
-    static void countContained(String key, Throwable failure) {
-        if (COUNTS.computeIfAbsent(key, name -> new AtomicLong()).incrementAndGet() == 1) {
+    static void countContained(FailureKey key, Throwable failure) {
+        if (counter(key).incrementAndGet() == 1) {
             System.err.println("Effect records: " + key + " threw, and is discarded (later failures"
                     + " are counted, not printed): " + withStack(failure));
         }
@@ -160,8 +181,8 @@ public final class HookFailures {
      * firstLine}: a fork that moved the live game ({@code "fork <kind> moved
      * the live game"}), where what moved says more than a stack.
      */
-    static void countContained(String key, String firstLine) {
-        if (COUNTS.computeIfAbsent(key, name -> new AtomicLong()).incrementAndGet() == 1) {
+    static void countContained(FailureKey key, String firstLine) {
+        if (counter(key).incrementAndGet() == 1) {
             System.err.println(firstLine);
         }
     }

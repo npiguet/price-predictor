@@ -230,7 +230,7 @@ final class Forks {
             }
             return true;
         } catch (RuntimeException | StackOverflowError e) {
-            HookFailures.countContained("fork " + kind + " score check");
+            HookFailures.countContained(new HookFailures.FailureKey("fork " + kind + " score check"));
             System.err.println(
                     "Effect records: fork score check failed (" + e.getMessage()
                             + "); discarding");
@@ -346,7 +346,7 @@ final class Forks {
             FloatingEffects.ofFork(fork, live);
             ForkFidelity.report(live, fork, copier.getNoCounterpartTally(), copier.getNoCounterpartExamples());
         } catch (RuntimeException | StackOverflowError e) {
-            HookFailures.countContained("fork " + kind + " copy", e);
+            HookFailures.countContained(new HookFailures.FailureKey("fork " + kind + " copy"), e);
             release(fork);
             return Optional.empty();
         }
@@ -474,7 +474,7 @@ final class Forks {
                         ForkRefusals.count(kind, refusal.reason());
                         return null;
                     } catch (RuntimeException | StackOverflowError e) {
-                        HookFailures.countContained("fork " + kind + " body", e);
+                        HookFailures.countContained(new HookFailures.FailureKey("fork " + kind + " body"), e);
                         return null;
                     }
                     if (produced == null) {
@@ -483,7 +483,7 @@ final class Forks {
                     try {
                         return write.apply(verified.get(), produced);
                     } catch (RuntimeException | StackOverflowError e) {
-                        HookFailures.countContained("fork " + kind + " write", e);
+                        HookFailures.countContained(new HookFailures.FailureKey("fork " + kind + " write"), e);
                         return null;
                     }
                 }));
@@ -608,7 +608,7 @@ final class Forks {
             }
             boolean restarted = fork != null && fork.getAge() == forge.game.GameStage.RestartedByKarn;
             if (!after.marks().equals(marks) || after.triggerIds() < triggerIds || restarted) {
-                HookFailures.countContained(key, "Effect records: " + key + "; before the fork: " + marks
+                HookFailures.countContained(new HookFailures.FailureKey(key), "Effect records: " + key + "; before the fork: " + marks
                         + ", trigger ids " + triggerIds + "; after: " + after.marks() + ", trigger ids "
                         + after.triggerIds() + (restarted ? "; the fork restarted its game" : "")
                         + " (later ones are counted, not printed)");

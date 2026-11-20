@@ -62,7 +62,7 @@ public record DecisionCandidate(
                         DecisionSample.of(candidate, activator, verdict));
             }));
         } catch (RuntimeException e) {
-            HookFailures.countContained("decision candidate unreadable");
+            HookFailures.countContained(new HookFailures.FailureKey("decision candidate unreadable"));
             return Optional.empty();
         }
     }
