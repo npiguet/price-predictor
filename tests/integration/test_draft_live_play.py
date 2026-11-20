@@ -19,7 +19,7 @@ from draft.application.generate_draft_data import (
 )
 from draft.domain.draft_geometry import DraftGeometry
 from draft.infrastructure.draft_record_io import read_records
-from price_predictor.infrastructure.forge_jvm import resolve_connector_jar
+from price_predictor.infrastructure.forge_classpath import resolve_connector_jar
 
 pytestmark = pytest.mark.integration
 

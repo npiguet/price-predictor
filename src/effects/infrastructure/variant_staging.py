@@ -13,25 +13,25 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-import price_predictor.infrastructure.forge_jvm as forge_jvm
+import price_predictor.infrastructure.custom_card_staging as custom_card_staging
 
 logger = logging.getLogger(__name__)
 
 #: The staging's manifest, ``ForgeEnvironmentInitializer.STAGED_MANIFEST``.
-STAGED_MANIFEST = forge_jvm.STAGED_MANIFEST
+STAGED_MANIFEST = custom_card_staging.STAGED_MANIFEST
 
 
 def custom_cards_dir() -> Path:
     """Forge's ``USER_CUSTOM_CARDS_DIR`` as a worker resolves it."""
-    return forge_jvm.custom_cards_dir()
+    return custom_card_staging.custom_cards_dir()
 
 
 def claim_staging() -> None:
     """Record this process as the staging's owner before anything is staged,
     so another command's first JVM leaves the staging alone while this run
-    lasts (``forge_jvm.clear_stale_staging``); :func:`unstage_variants`
+    lasts (``custom_card_staging.clear_stale_staging``); :func:`unstage_variants`
     drops the record."""
-    forge_jvm.claim_staging()
+    custom_card_staging.claim_staging()
 
 
 def unstage_variants(directory: Path | None = None) -> int:
@@ -41,10 +41,10 @@ def unstage_variants(directory: Path | None = None) -> int:
     put there is not in the manifest and stays. A manifest that cannot be
     read is reported and left. A run killed too hard to get here leaves its
     scripts staged: the next command's first JVM clears them once this
-    process is gone (``forge_jvm.clear_stale_staging``)."""
+    process is gone (``custom_card_staging.clear_stale_staging``)."""
     directory = custom_cards_dir() if directory is None else Path(directory)
     try:
-        removed = forge_jvm.unstage_custom_cards(directory)
+        removed = custom_card_staging.unstage_custom_cards(directory)
     except (OSError, ValueError) as exc:
         logger.warning("Could not unstage the variant scripts in %s: %s", directory, exc)
         return 0

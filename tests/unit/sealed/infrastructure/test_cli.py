@@ -22,14 +22,18 @@ from sealed.infrastructure.cli import (
 from sealed.infrastructure.match_worker_connector import DEFAULT_SIDE_B_DECKS_WEIGHT
 from sealed.infrastructure.scorer_store import ScorerStore
 
+#: Where the worker prerequisites check looks the JAR and ``java`` up.
+CONNECTOR_JAR = "price_predictor.infrastructure.forge_classpath.resolve_connector_jar"
+WHICH = "price_predictor.infrastructure.forge_classpath.shutil.which"
+
 
 @pytest.fixture(autouse=True)
 def _workers_could_start():
     """The JAR and ``java`` exist, as far as these tests know (python R2's
     check must not make a unit test depend on a built connector)."""
     with (
-        patch("price_predictor.infrastructure.forge_jvm.resolve_connector_jar"),
-        patch("price_predictor.infrastructure.forge_jvm.shutil.which", return_value="java"),
+        patch(CONNECTOR_JAR),
+        patch(WHICH, return_value="java"),
     ):
         yield
 
@@ -485,8 +489,8 @@ class TestMatchOutcomesWorkerPrerequisites:
     def test_a_missing_exclude_cards_file_exits_before_any_supervisor(self, tmp_path, capsys):
         with patch(
             "sealed.application.match_outcomes.MatchOutcomeSupervisor"
-        ) as mock_sup, patch("price_predictor.infrastructure.forge_jvm.resolve_connector_jar"), \
-                patch("price_predictor.infrastructure.forge_jvm.shutil.which", return_value="java"):
+        ) as mock_sup, patch(CONNECTOR_JAR), \
+                patch(WHICH, return_value="java"):
             rc = run_match_outcomes(_args(exclude_cards=str(tmp_path / "missing.txt")))
         assert rc == 2
         mock_sup.assert_not_called()
@@ -495,15 +499,15 @@ class TestMatchOutcomesWorkerPrerequisites:
     def test_a_missing_java_exits_before_any_supervisor(self, capsys):
         with patch(
             "sealed.application.match_outcomes.MatchOutcomeSupervisor"
-        ) as mock_sup, patch("price_predictor.infrastructure.forge_jvm.resolve_connector_jar"), \
-                patch("price_predictor.infrastructure.forge_jvm.shutil.which", return_value=None):
+        ) as mock_sup, patch(CONNECTOR_JAR), \
+                patch(WHICH, return_value=None):
             rc = run_match_outcomes(_args())
         assert rc == 2
         mock_sup.assert_not_called()
         assert "Java not found" in capsys.readouterr().err
 
     def test_a_pool_that_cannot_start_ends_the_run_with_an_error(self, capsys):
-        from price_predictor.infrastructure.forge_jvm import WorkerStartError
+        from price_predictor.infrastructure.forge_worker_pool import WorkerStartError
 
         with patch(
             "sealed.application.match_outcomes.MatchOutcomeSupervisor"

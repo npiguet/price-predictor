@@ -28,7 +28,7 @@ def parse(command: str, *argv: str):
 @pytest.fixture(autouse=True)
 def _workers_could_start():
     with (
-        patch("price_predictor.infrastructure.forge_jvm.check_worker_prerequisites"),
+        patch("price_predictor.infrastructure.forge_classpath.check_worker_prerequisites"),
         patch(TREES_CONVERSION, return_value=STAND_IN_CONVERSION),
     ):
         yield

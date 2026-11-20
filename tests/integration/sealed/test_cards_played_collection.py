@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-from price_predictor.infrastructure.forge_jvm import kill_process_tree
+from price_predictor.infrastructure.jvm_processes import kill_process_tree
 
 _BASIC_LAND_NAMES = frozenset({
     "Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes",

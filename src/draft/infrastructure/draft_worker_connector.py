@@ -1,13 +1,13 @@
 """DraftWorkerConnector: launches a Java DraftWorkerMain subprocess.
 
-Reuses the shared ``forge_jvm`` helpers exactly as ``MatchWorkerConnector`` /
-``PoolConnector`` do. The worker streams one ``<<DRAFT-EVENT-JSON>>`` line per
-completed draft on stdout (piped, text-mode, line-buffered), plus — for
-model-piloted seats — ``<<DRAFT-PICK-REQUEST>>`` / ``<<DRAFT-ABANDONED>>`` lines
-answered over its stdin (the live-play side-channel, contracts/pick-protocol.md).
-Its diagnostics go to a per-run stderr log file (FR-015). Run parameters (set
-restriction, agent mix, pod size, external-agent set) are forwarded as JVM
-system properties.
+Reuses the shared ``forge_classpath`` and ``jvm_processes`` helpers exactly as
+``MatchWorkerConnector`` / ``PoolConnector`` do. The worker streams one
+``<<DRAFT-EVENT-JSON>>`` line per completed draft on stdout (piped, text-mode,
+line-buffered), plus — for model-piloted seats — ``<<DRAFT-PICK-REQUEST>>`` /
+``<<DRAFT-ABANDONED>>`` lines answered over its stdin (the live-play
+side-channel, contracts/pick-protocol.md). Its diagnostics go to a per-run
+stderr log file (FR-015). Run parameters (set restriction, agent mix, pod size,
+external-agent set) are forwarded as JVM system properties.
 """
 
 from __future__ import annotations
@@ -15,10 +15,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from price_predictor.infrastructure.forge_jvm import (
-    build_forge_classpath,
-    build_jvm_command,
-)
+from price_predictor.infrastructure.forge_classpath import build_forge_classpath
+from price_predictor.infrastructure.jvm_processes import build_jvm_command
 
 _MAIN_CLASS = "com.pricepredictor.connector.DraftWorkerMain"
 

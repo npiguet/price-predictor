@@ -652,7 +652,7 @@ class GenerateDraftDataSupervisor:
         record count, and any stopping condition. ``close()`` (or garbage
         collection) runs the ``finally`` that terminates the worker.
         """
-        from price_predictor.infrastructure.forge_jvm import kill_process_tree
+        from price_predictor.infrastructure.jvm_processes import kill_process_tree
 
         while not self._shutdown.is_set():
             proc = launch()

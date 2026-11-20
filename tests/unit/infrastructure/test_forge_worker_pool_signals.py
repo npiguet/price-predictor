@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
 
 
 def _pool(tmp_path) -> ForgeWorkerPool:

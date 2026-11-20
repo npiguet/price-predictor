@@ -22,8 +22,8 @@ import types
 
 import pytest
 
-from price_predictor.infrastructure import forge_jvm
-from price_predictor.infrastructure.forge_jvm import kill_process_tree as real_kill
+from price_predictor.infrastructure import jvm_processes
+from price_predictor.infrastructure.jvm_processes import kill_process_tree as real_kill
 from tests.unit.sealed.conftest import FakeProcess
 
 _OWN_PACKAGES = ("price_predictor", "sealed", "draft", "effects")
@@ -56,10 +56,10 @@ def _between_tests():
     """What the kill is outside any one test: before this file's first test
     sets up and after its last one tears down, when a pool's monitor thread
     that outlived its test would look it up."""
-    state = {"real_before": forge_jvm.kill_process_tree is real_kill}
+    state = {"real_before": jvm_processes.kill_process_tree is real_kill}
     yield state
     sys.modules.pop(_PROBE, None)
-    assert forge_jvm.kill_process_tree is not real_kill, "the real kill is back between tests"
+    assert jvm_processes.kill_process_tree is not real_kill, "the real kill is back between tests"
     assert _holders_of_the_real_kill() == []
 
 
@@ -101,11 +101,11 @@ def test_the_next_tests_setup_replaces_it():
 
 def test_the_pool_kill_never_reaches_the_os(monkeypatch, killed_process_trees):
     calls: list = []
-    monkeypatch.setattr(forge_jvm.subprocess, "run", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(jvm_processes.subprocess, "run", lambda *a, **k: calls.append(a))
     monkeypatch.setattr(os, "killpg", lambda *a: calls.append(a), raising=False)
     proc = FakeProcess(pid=1000, hang=True)
 
-    forge_jvm.kill_process_tree(proc)
+    jvm_processes.kill_process_tree(proc)
 
     assert calls == []
     assert killed_process_trees == [proc]
@@ -124,7 +124,7 @@ def test_a_monitor_thread_outlives_its_test(killed_process_trees):
 
     def monitor() -> None:
         go.wait(timeout=30)
-        forge_jvm.kill_process_tree(proc)
+        jvm_processes.kill_process_tree(proc)
 
     thread = threading.Thread(target=monitor, daemon=True)
     thread.start()

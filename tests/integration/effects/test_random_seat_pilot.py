@@ -44,11 +44,9 @@ from effects.domain.records import Moment, PlayabilitySubkind, RecordKind, TurnA
 from effects.infrastructure.deck_file import write_deck_file
 from effects.infrastructure.record_codec import record_from_dict
 from effects.infrastructure.shard_io import ended_games, iter_shard_lines, iter_shards
-from price_predictor.infrastructure.forge_jvm import (
-    STOPPED_LINE,
-    kill_process_tree,
-    resolve_connector_jar,
-)
+from price_predictor.infrastructure.forge_classpath import resolve_connector_jar
+from price_predictor.infrastructure.jvm_processes import kill_process_tree
+from price_predictor.infrastructure.worker_stops import STOPPED_LINE
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 
 pytestmark = pytest.mark.integration

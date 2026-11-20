@@ -14,17 +14,13 @@ from unittest.mock import patch
 
 import pytest
 
-from price_predictor.infrastructure.forge_jvm import (
-    STARTUP_LINE,
-    ForgeWorkerPool,
-    GracefulStop,
-    WorkerStartError,
-    _LogMark,
-)
+from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool, WorkerStartError
+from price_predictor.infrastructure.worker_log_mark import _LogMark
+from price_predictor.infrastructure.worker_stops import STARTUP_LINE, GracefulStop
 from tests.unit.infrastructure.real_processes import SLEEPER
 
-KILL = "price_predictor.infrastructure.forge_jvm.kill_process_tree"
-BIND = "price_predictor.infrastructure.forge_jvm.bind_to_this_process"
+KILL = "price_predictor.infrastructure.forge_worker_pool.kill_process_tree"
+BIND = "price_predictor.infrastructure.forge_worker_pool.bind_to_this_process"
 
 
 class _FakeProc:

@@ -196,10 +196,8 @@ def run_convert(args: argparse.Namespace) -> int:
     """
     import subprocess
 
-    from price_predictor.infrastructure.forge_jvm import (
-        build_forge_classpath,
-        build_jvm_command,
-    )
+    from price_predictor.infrastructure.forge_classpath import build_forge_classpath
+    from price_predictor.infrastructure.jvm_processes import build_jvm_command
 
     try:
         # ConvertMain calls ForgeEnvironmentInitializer.initialize(), which
@@ -245,7 +243,7 @@ def _converted(args: argparse.Namespace, convert: Callable[[], int]) -> int:
     ``null`` when it may have changed the trees without finishing (a failed
     script, a crash, Ctrl-C), nothing when it refused before touching them."""
     from price_predictor.infrastructure.converted_provenance import forge_checkout
-    from price_predictor.infrastructure.forge_jvm import forge_dir
+    from price_predictor.infrastructure.forge_classpath import forge_dir
 
     commit, dirty = forge_checkout(forge_dir())
     try:

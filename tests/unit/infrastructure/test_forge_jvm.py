@@ -10,30 +10,35 @@ from unittest.mock import patch
 
 import pytest
 
-from price_predictor.infrastructure import forge_jvm
-from price_predictor.infrastructure.forge_jvm import (
-    UNSAFE_MEMORY_ACCESS_OPTION,
-    WorkerLogFiles,
+from price_predictor.infrastructure import (
+    custom_card_staging,
+    forge_classpath,
+    job_objects,
+    jvm_processes,
+)
+from price_predictor.infrastructure.custom_card_staging import claim_staging as real_claim_staging
+from price_predictor.infrastructure.custom_card_staging import (
+    clear_stale_staging as real_clear_stale_staging,
+)
+from price_predictor.infrastructure.forge_classpath import (
     build_forge_classpath,
-    build_jvm_command,
-    parse_java_feature_version,
     resolve_connector_jar,
 )
-from price_predictor.infrastructure.forge_jvm import (
-    claim_staging as real_claim_staging,
-)
-from price_predictor.infrastructure.forge_jvm import (
-    clear_stale_staging as real_clear_stale_staging,
+from price_predictor.infrastructure.jvm_processes import (
+    UNSAFE_MEMORY_ACCESS_OPTION,
+    build_jvm_command,
+    parse_java_feature_version,
 )
 
 # Bound at import, before the unit-test conftest swaps the module attribute
 # for a stub, so the probe itself can still be exercised here.
-from price_predictor.infrastructure.forge_jvm import (
+from price_predictor.infrastructure.jvm_processes import (
     java_feature_version as real_java_feature_version,
 )
-from price_predictor.infrastructure.forge_jvm import (
+from price_predictor.infrastructure.jvm_processes import (
     kill_process_tree as real_kill_process_tree,
 )
+from price_predictor.infrastructure.worker_log_files import WorkerLogFiles
 from tests.unit.infrastructure.real_processes import (
     SLEEPER,
     OwnedProcess,
@@ -45,16 +50,16 @@ from tests.unit.infrastructure.real_processes import (
 
 class TestResolveConnectorJar:
     def test_raises_when_jar_missing(self, tmp_path):
-        with patch.object(forge_jvm, "project_root", return_value=tmp_path):
+        with patch.object(forge_classpath, "project_root", return_value=tmp_path):
             with pytest.raises(FileNotFoundError, match="mvn install"):
                 resolve_connector_jar()
 
     def test_returns_path_when_jar_exists(self, tmp_path):
         jar_dir = tmp_path / "forge-connector" / "target"
         jar_dir.mkdir(parents=True)
-        jar = jar_dir / forge_jvm.CONNECTOR_JAR_NAME
+        jar = jar_dir / forge_classpath.CONNECTOR_JAR_NAME
         jar.write_bytes(b"")
-        with patch.object(forge_jvm, "project_root", return_value=tmp_path):
+        with patch.object(forge_classpath, "project_root", return_value=tmp_path):
             assert resolve_connector_jar() == jar
 
 
@@ -63,14 +68,14 @@ class TestBuildForgeClasspath:
     def fake_jar(self, tmp_path):
         jar_dir = tmp_path / "forge-connector" / "target"
         jar_dir.mkdir(parents=True)
-        (jar_dir / forge_jvm.CONNECTOR_JAR_NAME).write_bytes(b"")
-        with patch.object(forge_jvm, "project_root", return_value=tmp_path):
+        (jar_dir / forge_classpath.CONNECTOR_JAR_NAME).write_bytes(b"")
+        with patch.object(forge_classpath, "project_root", return_value=tmp_path):
             yield tmp_path
 
     def test_includes_connector_and_core_modules(self, fake_jar):
         cp = build_forge_classpath()
         parts = cp.split(os.pathsep)
-        assert any(forge_jvm.CONNECTOR_JAR_NAME in p for p in parts)
+        assert any(forge_classpath.CONNECTOR_JAR_NAME in p for p in parts)
         assert any("forge-game" in p for p in parts)
         assert any("forge-core" in p for p in parts)
 
@@ -98,15 +103,15 @@ class TestRunForgeWorker:
     def test_dependency_glob_reaches_the_classpath(self, tmp_path, glob):
         jar_dir = tmp_path / "forge-connector" / "target"
         jar_dir.mkdir(parents=True)
-        (jar_dir / forge_jvm.CONNECTOR_JAR_NAME).write_bytes(b"")
-        with patch.object(forge_jvm, "project_root", return_value=tmp_path), \
-             patch.object(forge_jvm.subprocess, "Popen") as popen:
+        (jar_dir / forge_classpath.CONNECTOR_JAR_NAME).write_bytes(b"")
+        with patch.object(forge_classpath, "project_root", return_value=tmp_path), \
+             patch.object(jvm_processes.subprocess, "Popen") as popen:
             popen.return_value.communicate.return_value = (None, None)
             popen.return_value.returncode = 0
             if glob:
-                forge_jvm.run_forge_worker("Main", include_dependency_glob=True)
+                jvm_processes.run_forge_worker("Main", include_dependency_glob=True)
             else:
-                forge_jvm.run_forge_worker("Main")
+                jvm_processes.run_forge_worker("Main")
 
         cmd = popen.call_args.args[0]
         classpath = cmd[cmd.index("-cp") + 1]
@@ -156,13 +161,13 @@ class TestUnsafeMemoryAccessOption:
 
     @pytest.mark.parametrize("version", [24, 25])
     def test_a_jdk_that_warns_gets_the_option_first(self, monkeypatch, version):
-        monkeypatch.setattr(forge_jvm, "java_feature_version", lambda: version)
+        monkeypatch.setattr(jvm_processes, "java_feature_version", lambda: version)
         cmd = build_jvm_command(main_class="com.example.Main", classpath="cp")
         assert cmd[:2] == ["java", UNSAFE_MEMORY_ACCESS_OPTION]
 
     @pytest.mark.parametrize("version", [17, 21, 23, None])
     def test_an_older_or_unidentified_jdk_gets_no_option(self, monkeypatch, version):
-        monkeypatch.setattr(forge_jvm, "java_feature_version", lambda: version)
+        monkeypatch.setattr(jvm_processes, "java_feature_version", lambda: version)
         cmd = build_jvm_command(main_class="com.example.Main", classpath="cp")
         assert UNSAFE_MEMORY_ACCESS_OPTION not in cmd
 
@@ -426,7 +431,7 @@ class TestKillProcessTree:
     def test_a_real_child_and_its_grandchild_both_die(self, tmp_path):
         child, grandchild = start_with_grandchild(tmp_path / "grandchild.pid")
         try:
-            assert forge_jvm.kill_process_tree(child) is True
+            assert jvm_processes.kill_process_tree(child) is True
             assert child.poll() is not None
             assert not grandchild.is_alive(within=10)
         finally:
@@ -462,16 +467,16 @@ class TestKillProcessTree:
 
     def test_a_tree_kill_that_times_out_falls_back_to_killing_the_process(self):
         proc = self._stubborn(dies_on_kill=True)
-        with patch.object(forge_jvm.subprocess, "run") as taskkill, \
-             patch.object(forge_jvm.platform, "system", return_value="Windows"):
+        with patch.object(jvm_processes.subprocess, "run") as taskkill, \
+             patch.object(jvm_processes.platform, "system", return_value="Windows"):
             assert real_kill_process_tree(proc, timeout=0.01) is True
         assert taskkill.call_args.args[0][:3] == ["taskkill", "/F", "/T"]
         assert proc.killed
 
     def test_a_survivor_is_reported_not_swallowed(self, capsys):
         proc = self._stubborn(dies_on_kill=False)
-        with patch.object(forge_jvm.subprocess, "run"), \
-             patch.object(forge_jvm.platform, "system", return_value="Windows"):
+        with patch.object(jvm_processes.subprocess, "run"), \
+             patch.object(jvm_processes.platform, "system", return_value="Windows"):
             assert real_kill_process_tree(proc, timeout=0.01) is False
         assert "PID 4242 survived" in capsys.readouterr().out
 
@@ -484,9 +489,9 @@ class TestWorkersDieWithTheirParent:
 
     _PARENT = (
         "import subprocess, sys, time, os\n"
-        "from price_predictor.infrastructure import forge_jvm\n"
+        "from price_predictor.infrastructure import job_objects\n"
         "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
-        "bound = forge_jvm.bind_to_this_process(child)\n"
+        "bound = job_objects.bind_to_this_process(child)\n"
         "open(sys.argv[1] + '.tmp', 'w').write(f'{child.pid} {bound}')\n"
         "os.replace(sys.argv[1] + '.tmp', sys.argv[1])\n"
         "time.sleep(60)\n"
@@ -497,7 +502,7 @@ class TestWorkersDieWithTheirParent:
         env = dict(os.environ, PYTHONPATH=os.pathsep.join(["src", "."]))
         parent = subprocess.Popen(
             [sys.executable, "-c", self._PARENT, str(out)],
-            env=env, cwd=forge_jvm.project_root(),
+            env=env, cwd=forge_classpath.project_root(),
         )
         try:
             pid, bound = wait_for_file(out, parent).split()
@@ -525,14 +530,14 @@ class TestWorkersDieWithTheirParent:
         class Fake:
             pid = 1000
 
-        assert forge_jvm.bind_to_this_process(Fake()) is False
+        assert job_objects.bind_to_this_process(Fake()) is False
 
     def test_a_mock_process_is_left_unbound(self, capsys):
         """A ``MagicMock`` answers ``_handle`` with a made-up value too, which
         could name one of this process's own handles: it is never tried."""
         from unittest.mock import MagicMock
 
-        assert forge_jvm.bind_to_this_process(MagicMock(pid=1000)) is False
+        assert job_objects.bind_to_this_process(MagicMock(pid=1000)) is False
         assert "Could not bind" not in capsys.readouterr().out
 
 
@@ -549,13 +554,13 @@ class TestOneShotTimeout:
             started.append(real_popen(*args, **kwargs))
             return started[-1]
 
-        monkeypatch.setattr(forge_jvm, "build_forge_classpath", lambda **_: "")
-        monkeypatch.setattr(forge_jvm, "build_jvm_command", lambda **_: list(SLEEPER))
-        monkeypatch.setattr(forge_jvm.subprocess, "Popen", popen)
+        monkeypatch.setattr(jvm_processes, "build_forge_classpath", lambda **_: "")
+        monkeypatch.setattr(jvm_processes, "build_jvm_command", lambda **_: list(SLEEPER))
+        monkeypatch.setattr(jvm_processes.subprocess, "Popen", popen)
         begun = time.monotonic()
         try:
-            with pytest.raises(forge_jvm.ForgeWorkerTimeout, match="Main"):
-                forge_jvm.run_forge_worker("Main", timeout=1.0)
+            with pytest.raises(jvm_processes.ForgeWorkerTimeout, match="Main"):
+                jvm_processes.run_forge_worker("Main", timeout=1.0)
             assert time.monotonic() - begun < 20
             assert started[0].poll() is not None
         finally:
@@ -563,7 +568,7 @@ class TestOneShotTimeout:
                 proc.kill()
 
     def test_the_timeout_is_an_os_error_a_caller_can_degrade_on(self):
-        assert issubclass(forge_jvm.ForgeWorkerTimeout, TimeoutError)
+        assert issubclass(jvm_processes.ForgeWorkerTimeout, TimeoutError)
 
 
 class TestStaleStagingIsClearedAtTheFirstLaunch:
@@ -577,12 +582,12 @@ class TestStaleStagingIsClearedAtTheFirstLaunch:
         custom.mkdir(parents=True)
         (custom / "bolt_variant_0a1b2c3d.txt").write_text("Name:x", encoding="utf-8")
         (custom / "my_card.txt").write_text("Name:mine", encoding="utf-8")
-        (custom / forge_jvm.STAGED_MANIFEST).write_text(
+        (custom / custom_card_staging.STAGED_MANIFEST).write_text(
             "bolt_variant_0a1b2c3d.txt", encoding="utf-8",
         )
-        monkeypatch.setattr(forge_jvm, "forge_dir", lambda: tmp_path / "forge")
-        monkeypatch.setattr(forge_jvm, "clear_stale_staging", real_clear_stale_staging)
-        monkeypatch.setattr(forge_jvm, "_stale_staging_checked", False)
+        monkeypatch.setattr(custom_card_staging, "forge_dir", lambda: tmp_path / "forge")
+        monkeypatch.setattr(jvm_processes, "clear_stale_staging", real_clear_stale_staging)
+        monkeypatch.setattr(custom_card_staging, "_stale_staging_checked", False)
         return custom
 
     def test_the_first_command_clears_and_says_so(self, staged, capsys):
@@ -595,7 +600,9 @@ class TestStaleStagingIsClearedAtTheFirstLaunch:
     def test_it_is_checked_once_per_process(self, staged, capsys):
         build_jvm_command(main_class="Main", classpath="cp")
         (staged / "late_variant.txt").write_text("Name:y", encoding="utf-8")
-        (staged / forge_jvm.STAGED_MANIFEST).write_text("late_variant.txt", encoding="utf-8")
+        (staged / custom_card_staging.STAGED_MANIFEST).write_text(
+            "late_variant.txt", encoding="utf-8",
+        )
 
         build_jvm_command(main_class="Main", classpath="cp")
 
@@ -606,12 +613,12 @@ class TestStaleStagingIsClearedAtTheFirstLaunch:
     def test_the_manifest_is_the_one_the_staging_writes(self):
         import re
 
-        source = (forge_jvm.project_root() / "forge-connector" / "src" / "main" / "java" / "com"
-                  / "pricepredictor" / "connector" / "ForgeEnvironmentInitializer.java")
+        source = (forge_classpath.project_root() / "forge-connector" / "src" / "main" / "java"
+                  / "com" / "pricepredictor" / "connector" / "ForgeEnvironmentInitializer.java")
         declared = re.search(
             r'STAGED_MANIFEST\s*=\s*"([^"]+)"', source.read_text(encoding="utf-8"),
         )
-        assert declared is not None and declared.group(1) == forge_jvm.STAGED_MANIFEST
+        assert declared is not None and declared.group(1) == custom_card_staging.STAGED_MANIFEST
 
 
 class TestAStagingInUseIsLeftAlone:
@@ -625,25 +632,25 @@ class TestAStagingInUseIsLeftAlone:
         custom = tmp_path / "forge" / "forge-gui" / "data" / "custom" / "cards"
         custom.mkdir(parents=True)
         (custom / "bolt_variant_0a1b2c3d.txt").write_text("Name:x", encoding="utf-8")
-        (custom / forge_jvm.STAGED_MANIFEST).write_text(
+        (custom / custom_card_staging.STAGED_MANIFEST).write_text(
             "bolt_variant_0a1b2c3d.txt", encoding="utf-8",
         )
-        monkeypatch.setattr(forge_jvm, "forge_dir", lambda: tmp_path / "forge")
-        monkeypatch.setattr(forge_jvm, "clear_stale_staging", real_clear_stale_staging)
-        monkeypatch.setattr(forge_jvm, "_stale_staging_checked", False)
+        monkeypatch.setattr(custom_card_staging, "forge_dir", lambda: tmp_path / "forge")
+        monkeypatch.setattr(jvm_processes, "clear_stale_staging", real_clear_stale_staging)
+        monkeypatch.setattr(custom_card_staging, "_stale_staging_checked", False)
         return custom
 
     def _owned_by(self, staged, pid, started):
         import json
 
-        (staged / forge_jvm.STAGING_OWNER).write_text(
+        (staged / custom_card_staging.STAGING_OWNER).write_text(
             json.dumps({"pid": pid, "started": started}), encoding="utf-8",
         )
 
     def test_a_live_owner_keeps_its_staging_and_the_notice_names_it(self, staged, capsys):
         owner = subprocess.Popen(SLEEPER)
         try:
-            self._owned_by(staged, owner.pid, forge_jvm.process_start_time(owner.pid))
+            self._owned_by(staged, owner.pid, custom_card_staging.process_start_time(owner.pid))
 
             build_jvm_command(main_class="Main", classpath="cp")
 
@@ -660,15 +667,15 @@ class TestAStagingInUseIsLeftAlone:
         build_jvm_command(main_class="Main", classpath="cp")
 
         assert not (staged / "bolt_variant_0a1b2c3d.txt").exists()
-        assert not (staged / forge_jvm.STAGING_OWNER).exists()
+        assert not (staged / custom_card_staging.STAGING_OWNER).exists()
 
     def test_the_claim_names_this_process(self, tmp_path):
         real_claim_staging(tmp_path)
 
-        assert forge_jvm.staging_owner(tmp_path) == os.getpid()
+        assert custom_card_staging.staging_owner(tmp_path) == os.getpid()
 
     def test_an_unreadable_manifest_is_reported_and_the_command_goes_on(self, staged, capsys):
-        (staged / forge_jvm.STAGED_MANIFEST).write_bytes(b"\xff\xfe\x00bad")
+        (staged / custom_card_staging.STAGED_MANIFEST).write_bytes(b"\xff\xfe\x00bad")
 
         command = build_jvm_command(main_class="Main", classpath="cp")
 
@@ -678,7 +685,7 @@ class TestAStagingInUseIsLeftAlone:
     def test_an_entry_outside_the_directory_is_never_deleted(self, staged, capsys):
         outside = staged.parent / "outside.txt"
         outside.write_text("Name:keep", encoding="utf-8")
-        (staged / forge_jvm.STAGED_MANIFEST).write_text(
+        (staged / custom_card_staging.STAGED_MANIFEST).write_text(
             f"../outside.txt\n{outside}\nbolt_variant_0a1b2c3d.txt\n", encoding="utf-8",
         )
 

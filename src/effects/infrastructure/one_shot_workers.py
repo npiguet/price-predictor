@@ -14,7 +14,7 @@ import logging
 import tempfile
 from pathlib import Path
 
-from price_predictor.infrastructure.forge_jvm import run_forge_worker
+from price_predictor.infrastructure.jvm_processes import run_forge_worker
 
 logger = logging.getLogger(__name__)
 

@@ -58,7 +58,7 @@ from price_predictor.infrastructure.cli_run_manifest import (
     dispatch,
     tag_subcommands,
 )
-from price_predictor.infrastructure.forge_jvm import MAX_WORKERS, worker_count
+from price_predictor.infrastructure.forge_worker_pool import MAX_WORKERS, worker_count
 from sealed.infrastructure.effect_collection_flags import (
     add_cap_flags,
     add_directed_fork_flags,
@@ -613,11 +613,11 @@ def _check_workers_can_start(command: str, config: Any) -> None:
     """The connector JAR, ``java`` and the list files the run reads, checked
     before any worker starts (python R2), so a missing one exits 1 naming it
     rather than in a traceback (V4 #9)."""
-    import price_predictor.infrastructure.forge_jvm as forge_jvm
+    import price_predictor.infrastructure.forge_classpath as forge_classpath
 
     holdout = config.deck_holdout
     try:
-        forge_jvm.check_worker_prerequisites(files={
+        forge_classpath.check_worker_prerequisites(files={
             "--exclude-cards": holdout.exclude_cards, "--only-cards": holdout.only_cards,
             "--split-from": holdout.split_from,
             "--wording-cards": getattr(config, "wording_cards", None),
@@ -655,7 +655,7 @@ def _collector_runner(command: str, config_type: type, module: str) -> Callable:
 
     @exits_with({
         CollectorRefusal: 1, _LAYOUT_REFUSED: 1, UnacceptedGenerationError: 1,
-        "price_predictor.infrastructure.forge_jvm.WorkerStartError": 1,
+        "price_predictor.infrastructure.forge_worker_pool.WorkerStartError": 1,
         "price_predictor.domain.worker_status.WorkerEngineRefused": 1,
     })
     def run(args: argparse.Namespace) -> int:

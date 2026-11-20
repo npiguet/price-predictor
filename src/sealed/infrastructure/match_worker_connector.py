@@ -7,11 +7,11 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import IO
 
-from price_predictor.infrastructure.forge_jvm import (
+from price_predictor.infrastructure.forge_classpath import build_forge_classpath
+from price_predictor.infrastructure.jvm_processes import build_jvm_command
+from price_predictor.infrastructure.worker_stops import (
     RECYCLE_SECONDS_PROPERTY,
     STOP_FILE_PROPERTY,
-    build_forge_classpath,
-    build_jvm_command,
     graceful_popen_options,
 )
 

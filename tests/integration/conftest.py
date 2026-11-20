@@ -15,7 +15,8 @@ import pytest
 
 from effects.domain.records import EffectRecord
 from effects.infrastructure.shard_io import read_records
-from price_predictor.infrastructure.forge_jvm import kill_process_tree, resolve_connector_jar
+from price_predictor.infrastructure.forge_classpath import resolve_connector_jar
+from price_predictor.infrastructure.jvm_processes import kill_process_tree
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 
 #: A worker needs to initialize Forge, build two decks and play a game before

@@ -35,7 +35,7 @@ from price_predictor.domain.worker_status import (
 )
 
 if TYPE_CHECKING:
-    from price_predictor.infrastructure.forge_jvm import WorkerLogFiles
+    from price_predictor.infrastructure.worker_log_files import WorkerLogFiles
 
 
 class WorkerLogScan:

@@ -347,7 +347,7 @@ def registered_directed_rules() -> frozenset[str]:
     Raises ``RuntimeError`` when the query fails, and ``FileNotFoundError``
     when the connector JAR or java is missing.
     """
-    from price_predictor.infrastructure.forge_jvm import run_forge_worker
+    from price_predictor.infrastructure.jvm_processes import run_forge_worker
 
     result = run_forge_worker(DIRECTED_RULES_MAIN, input_text="")
     if result.returncode != 0:

@@ -18,7 +18,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import sealed.application.match_outcomes as supervisor_module
-from price_predictor.infrastructure import forge_jvm, run_manifest
+from price_predictor.infrastructure import forge_classpath, run_manifest
 from sealed.infrastructure import cli
 from tests.unit.conversion_fixtures import (
     DIGEST,
@@ -42,9 +42,9 @@ def started(monkeypatch, tmp_path) -> list:
         return MagicMock(collected_nothing=False)
 
     monkeypatch.setattr(supervisor_module, "MatchOutcomeSupervisor", supervisor)
-    monkeypatch.setattr(forge_jvm, "check_worker_prerequisites", lambda **_kw: None)
+    monkeypatch.setattr(forge_classpath, "check_worker_prerequisites", lambda **_kw: None)
     jar = write_jar(tmp_path / "forge-connector.jar", FORGE_COMMIT)
-    monkeypatch.setattr(forge_jvm, "resolve_connector_jar", lambda: jar)
+    monkeypatch.setattr(forge_classpath, "resolve_connector_jar", lambda: jar)
     stand_in_checkout(monkeypatch)
     monkeypatch.setattr(
         run_manifest, "read_commits",
@@ -99,7 +99,7 @@ def test_a_connector_naming_no_commit_is_refused_naming_the_jar(
 ):
     converted = write_conversion(tmp_path / "converted")
     jar = write_jar(tmp_path / "old-connector.jar", None)
-    monkeypatch.setattr(forge_jvm, "resolve_connector_jar", lambda: jar)
+    monkeypatch.setattr(forge_classpath, "resolve_connector_jar", lambda: jar)
 
     code, entry = _run(monkeypatch, tmp_path, "--cards-folder", str(converted / "cardsfolder"))
 
@@ -136,7 +136,7 @@ def test_a_plain_run_reads_no_conversion(started, monkeypatch, tmp_path):
     outcomes = tmp_path / "outcomes"
     monkeypatch.setattr(sys, "argv", [
         "sealed", "match-outcomes", "--workers", "1", "--outcomes-dir", str(outcomes)])
-    monkeypatch.setattr(forge_jvm, "resolve_connector_jar", lambda: tmp_path / "absent.jar")
+    monkeypatch.setattr(forge_classpath, "resolve_connector_jar", lambda: tmp_path / "absent.jar")
 
     with pytest.raises(SystemExit) as exit_:
         cli.main()

@@ -21,7 +21,7 @@ from unittest.mock import patch
 import pytest
 
 from effects.infrastructure import cli
-from price_predictor.infrastructure import forge_jvm, run_manifest
+from price_predictor.infrastructure import forge_classpath, run_manifest
 from tests.unit.conversion_fixtures import (
     DIGEST,
     FORGE_COMMIT,
@@ -44,7 +44,7 @@ def _no_real_checkouts(monkeypatch):
         run_manifest, "read_commits",
         lambda *_args, **_kw: {"repo": "abc1234", "forge": "d44cf28", "dirty": False},
     )
-    monkeypatch.setattr(forge_jvm, "check_worker_prerequisites", lambda **_kw: None)
+    monkeypatch.setattr(forge_classpath, "check_worker_prerequisites", lambda **_kw: None)
 
 
 @dataclass
@@ -59,7 +59,7 @@ class Collector:
 
     def jar(self, commit: str | None = FORGE_COMMIT) -> Path:
         jar = write_jar(self.tmp_path / "forge-connector.jar", commit)
-        self.monkeypatch.setattr(forge_jvm, "resolve_connector_jar", lambda: jar)
+        self.monkeypatch.setattr(forge_classpath, "resolve_connector_jar", lambda: jar)
         stand_in_checkout(self.monkeypatch)
         return jar
 

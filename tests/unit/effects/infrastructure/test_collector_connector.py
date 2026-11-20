@@ -15,7 +15,7 @@ import pytest
 
 from effects.domain.collection_caps import CollectionCaps
 from effects.infrastructure.collector_connector import CollectorSupervisor
-from price_predictor.infrastructure.forge_jvm import WorkerStopSettings
+from price_predictor.infrastructure.worker_stops import WorkerStopSettings
 from tests.unit.sealed.conftest import FakeProcess
 from tests.unit.worker_status_line import status_line
 
@@ -243,7 +243,7 @@ class TestTheRoundShutsTheRealPoolDown:
     """
 
     def _played_round(self, tmp_path) -> CollectorSupervisor:
-        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+        from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
 
         supervisor = _supervisor(tmp_path)
         with patch.object(ForgeWorkerPool, "run", autospec=True):
@@ -251,7 +251,7 @@ class TestTheRoundShutsTheRealPoolDown:
         return supervisor
 
     def test_stop_asks_the_real_pool_to_stop(self, tmp_path):
-        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+        from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
 
         supervisor = self._played_round(tmp_path)
 
@@ -267,7 +267,7 @@ class TestTheRoundShutsTheRealPoolDown:
 
     def test_a_second_round_can_follow_a_stopped_one(self, tmp_path):
         """The coverage loop plays round after round through one supervisor."""
-        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+        from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
 
         supervisor = self._played_round(tmp_path)
         supervisor.stop()
@@ -285,7 +285,7 @@ class TestTheRoundReportsItsWorkerLogs:
     nothing read them, so a run losing its matches reported success."""
 
     def _round_logging(self, tmp_path, lines_by_slot, *, workers=2, survivors=()):
-        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+        from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
 
         supervisor = _supervisor(tmp_path, workers=workers)
 
@@ -316,7 +316,7 @@ class TestTheRoundReportsItsWorkerLogs:
     def test_a_later_round_reports_only_its_own_lines(self, tmp_path, caplog):
         import logging
 
-        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+        from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
 
         supervisor = self._round_logging(tmp_path, {0: ["Error generating match: a"]})
         with patch.object(ForgeWorkerPool, "run", autospec=True), caplog.at_level(logging.INFO):
@@ -427,7 +427,7 @@ class TestTheWorkersStopAtAGameEnd:
         supervisor.stop()
 
     def test_the_round_s_pool_runs_the_protocol_on_the_same_files(self, tmp_path):
-        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+        from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
 
         supervisor = _supervisor(tmp_path, run_id="r1")
         pools = []
@@ -443,7 +443,7 @@ class TestTheWorkersStopAtAGameEnd:
     def test_cut_games_are_reported_by_round_and_kept_in_the_manifest(self, tmp_path, caplog):
         import json
 
-        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+        from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
         from price_predictor.infrastructure.run_manifest import run_recorded
 
         def body():
@@ -473,7 +473,7 @@ class TestTheWorkersStopAtAGameEnd:
         import subprocess
         import sys
 
-        from price_predictor.infrastructure.forge_jvm import stop_line_of
+        from price_predictor.infrastructure.worker_log_mark import stop_line_of
         from tests.unit.infrastructure import stand_in_worker
 
         supervisor = _supervisor(tmp_path, workers=2, stop=WorkerStopSettings(
@@ -542,7 +542,7 @@ class TestInterruptIsVisibleToTheCaller:
     """
 
     def _round(self, tmp_path, *, interrupted: bool) -> CollectorSupervisor:
-        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+        from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
 
         supervisor = _supervisor(tmp_path)
 
@@ -580,7 +580,7 @@ class TestACtrlCDuringARoundIsNotLost:
     ):
         import signal
 
-        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+        from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
 
         supervisor = _supervisor(tmp_path)
         saved = {sig: signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM)}

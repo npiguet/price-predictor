@@ -20,8 +20,9 @@ import pytest
 from effects.domain.collection_caps import CollectionCaps
 from effects.infrastructure.collector_connector import CollectorSupervisor
 from price_predictor.domain.worker_status import WorkerEngineRefused
-from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool, WorkerStopSettings
+from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
 from price_predictor.infrastructure.run_manifest import run_recorded
+from price_predictor.infrastructure.worker_stops import WorkerStopSettings
 from tests.unit.worker_status_line import PINNED_PREFERENCES, status_line
 
 _DECKS = [["Plains"]]

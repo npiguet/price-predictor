@@ -25,16 +25,15 @@ from pathlib import Path
 
 import pytest
 
-from price_predictor.infrastructure import forge_jvm
-from price_predictor.infrastructure.forge_jvm import (
+from price_predictor.infrastructure import worker_stops
+from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool, WorkerStartError
+from price_predictor.infrastructure.worker_log_files import WorkerLogFiles
+from price_predictor.infrastructure.worker_log_mark import stop_line_of
+from price_predictor.infrastructure.worker_stops import (
     RECYCLE_SECONDS_PROPERTY,
     STARTUP_LINE,
     STOP_FILE_PROPERTY,
-    ForgeWorkerPool,
-    WorkerLogFiles,
-    WorkerStartError,
     WorkerStopSettings,
-    stop_line_of,
 )
 from tests.unit.infrastructure import stand_in_worker as stand_in
 from tests.unit.infrastructure.real_processes import end_tree, wait_for_file
@@ -143,7 +142,7 @@ class _Run:
         proc = subprocess.Popen(
             [sys.executable, "-u", str(STAND_IN), *(f"-D{k}={v}" for k, v in properties.items())],
             stdout=self.logs.get(slot), stderr=subprocess.STDOUT,
-            **forge_jvm.graceful_popen_options(),
+            **worker_stops.graceful_popen_options(),
         )
         self.started.append(proc)
         return proc
@@ -526,8 +525,8 @@ def test_the_stop_properties_name_the_slot_s_stop_file_beside_its_log(tmp_path):
         "worker.recycle.seconds": "900",
     }
     assert re.fullmatch(r"run-1\.3\.stop", Path(graceful.stop_file_for(3)).name)
-    assert forge_jvm.DEFAULT_STOP_TIMEOUT == 600
-    assert forge_jvm.DEFAULT_RECYCLE_SECONDS == 600
+    assert worker_stops.DEFAULT_STOP_TIMEOUT == 600
+    assert worker_stops.DEFAULT_RECYCLE_SECONDS == 600
 
 
 HARNESS = Path(__file__).with_name("ctrl_c_harness.py")
@@ -540,7 +539,7 @@ def test_a_console_ctrl_c_reaches_no_worker_started_under_the_protocol(tmp_path)
     runner's): the stand-in started with the protocol's Popen options keeps
     running, while the same stand-in started without them exits 130, as a
     JVM does. So the supervisor's handler alone decides how workers end."""
-    flags = forge_jvm.graceful_popen_options()["creationflags"]
+    flags = worker_stops.graceful_popen_options()["creationflags"]
     result = tmp_path / "result.json"
     child = [sys.executable, "-u", str(STAND_IN), "-Dstandin.game.seconds=60"]
     hidden = subprocess.STARTUPINFO()

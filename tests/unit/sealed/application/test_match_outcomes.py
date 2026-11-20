@@ -483,7 +483,7 @@ class TestTheRunReportsWhatItsWorkersLogged:
     def test_with_effect_records_each_worker_gets_the_stop_protocol(self, tmp_path):
         from unittest.mock import MagicMock
 
-        from price_predictor.infrastructure.forge_jvm import WorkerStopSettings
+        from price_predictor.infrastructure.worker_stops import WorkerStopSettings
 
         supervisor = MatchOutcomeSupervisor(
             worker_count=1, output_path=tmp_path / "out.txt", best_of=3,

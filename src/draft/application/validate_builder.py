@@ -220,7 +220,7 @@ def fresh_drafted_pools(set_code: str | None, limit: int) -> list[list[str]]:
     from draft.application.generate_draft_data import parse_sentinel_line
     from draft.domain.draft_geometry import Booster, DraftGeometry, DraftRecord, Seat
     from draft.infrastructure.draft_worker_connector import DraftWorkerConnector
-    from price_predictor.infrastructure.forge_jvm import kill_process_tree
+    from price_predictor.infrastructure.jvm_processes import kill_process_tree
 
     mix = format_agent_mix(parse_agent_mix("forge-full:6,forge-r30:1,forge-r100:1"))
     connector = DraftWorkerConnector()

@@ -69,14 +69,16 @@ def test_the_directory_is_forge_s_user_custom_cards_under_the_headless_assets_di
 
 def test_unstaging_drops_the_owner_record(tmp_path):
     """The owner record lives as long as the staging it guards."""
-    from price_predictor.infrastructure import forge_jvm
+    from price_predictor.infrastructure import custom_card_staging
 
     _staged(tmp_path, "bolt_variant_0a1b2c3d.txt")
-    (tmp_path / forge_jvm.STAGING_OWNER).write_text('{"pid": 1, "started": 1}', encoding="utf-8")
+    (tmp_path / custom_card_staging.STAGING_OWNER).write_text(
+        '{"pid": 1, "started": 1}', encoding="utf-8",
+    )
 
     unstage_variants(tmp_path)
 
-    assert not (tmp_path / forge_jvm.STAGING_OWNER).exists()
+    assert not (tmp_path / custom_card_staging.STAGING_OWNER).exists()
 
 
 def test_an_unreadable_manifest_never_stops_the_run_s_end(tmp_path, caplog):

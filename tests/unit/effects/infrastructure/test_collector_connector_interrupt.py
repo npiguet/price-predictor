@@ -7,7 +7,8 @@ from unittest.mock import patch
 
 from effects.domain.collection_caps import CollectionCaps
 from effects.infrastructure.collector_connector import CollectorSupervisor
-from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool, WorkerStopSettings
+from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
+from price_predictor.infrastructure.worker_stops import WorkerStopSettings
 
 _DECKS = [["Plains"]]
 

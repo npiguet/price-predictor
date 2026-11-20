@@ -119,7 +119,7 @@ def test_a_status_line_still_being_written_is_read_whole_next_time(tmp_path):
 
 def test_the_totals_reach_the_manifest_fields(tmp_path):
     """Each lifetime's latest line, summed over lifetimes and slots, no failure line."""
-    from price_predictor.infrastructure.forge_jvm import WorkerLogFiles
+    from price_predictor.infrastructure.worker_log_files import WorkerLogFiles
     from price_predictor.infrastructure.worker_log_scan import WorkerLogReport
 
     def directed(n: int) -> dict:

@@ -232,7 +232,7 @@ class TestTheCollectors:
 def test_the_worker_lists_its_registered_rules():
     """One real run of DirectedRulesMain: it exits 0 and prints rule ids only,
     704.5f's among them."""
-    from price_predictor.infrastructure.forge_jvm import resolve_connector_jar
+    from price_predictor.infrastructure.forge_classpath import resolve_connector_jar
 
     try:
         resolve_connector_jar()

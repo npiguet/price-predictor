@@ -13,7 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from price_predictor.infrastructure import cli, converted_provenance, forge_jvm, run_manifest
+from price_predictor.infrastructure import (
+    cli,
+    converted_provenance,
+    forge_classpath,
+    jvm_processes,
+    run_manifest,
+)
 from price_predictor.infrastructure.cli_run_manifest import dispatch, tag_subcommands
 from price_predictor.infrastructure.converted_provenance import sidecar_digest
 
@@ -36,9 +42,9 @@ def jvm(monkeypatch) -> dict:
             raise behaviour["raise"]
         return subprocess.CompletedProcess(cmd, behaviour["code"])
 
-    monkeypatch.setattr(forge_jvm, "build_forge_classpath", lambda **_kw: "forge.jar")
+    monkeypatch.setattr(forge_classpath, "build_forge_classpath", lambda **_kw: "forge.jar")
     monkeypatch.setattr(
-        forge_jvm, "build_jvm_command",
+        jvm_processes, "build_jvm_command",
         lambda **kw: ["java", kw["main_class"], *kw["main_args"]],
     )
     monkeypatch.setattr(subprocess, "run", run)

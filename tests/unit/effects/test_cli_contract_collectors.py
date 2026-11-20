@@ -19,7 +19,7 @@ from effects.infrastructure.cli import (
     run_collect_coverage,
     run_collect_variants,
 )
-from price_predictor.infrastructure.forge_jvm import (
+from price_predictor.infrastructure.forge_classpath import (
     check_worker_prerequisites as real_check_worker_prerequisites,
 )
 from sealed.infrastructure.cli import build_parser as sealed_parser
@@ -56,7 +56,7 @@ def parse(*argv: str):
 
 #: Stands in for the JAR, ``java`` and input-file check (python R2), which a
 #: unit test must not make depend on a built connector.
-PREREQUISITES = "price_predictor.infrastructure.forge_jvm.check_worker_prerequisites"
+PREREQUISITES = "price_predictor.infrastructure.forge_classpath.check_worker_prerequisites"
 
 
 @pytest.fixture(autouse=True)
@@ -536,7 +536,7 @@ class TestWorkersMustBeAbleToStart:
     def test_a_pool_that_cannot_start_exits_1(self, command, module, runner, caplog):
         from unittest.mock import patch
 
-        from price_predictor.infrastructure.forge_jvm import WorkerStartError
+        from price_predictor.infrastructure.forge_worker_pool import WorkerStartError
 
         with patch(module, side_effect=WorkerStartError("every slot failed")):
             assert runner(parse(command, "--exclude-cards", "h.txt")) == 1
@@ -673,7 +673,7 @@ class TestTheBounds:
 
         def files_only(*, files):
             """The real check of the list files, without the JAR and java."""
-            with patch("price_predictor.infrastructure.forge_jvm.resolve_connector_jar"), \
+            with patch("price_predictor.infrastructure.forge_classpath.resolve_connector_jar"), \
                  patch("shutil.which", return_value="java"):
                 real_check_worker_prerequisites(files=files)
 
@@ -818,7 +818,7 @@ class TestTheWorkerStopFlags:
     def test_the_values_reach_the_supervisor_s_settings(self, command, module, runner):
         from unittest.mock import patch
 
-        from price_predictor.infrastructure.forge_jvm import WorkerStopSettings
+        from price_predictor.infrastructure.worker_stops import WorkerStopSettings
 
         with patch(module, return_value=0) as collect:
             assert runner(parse(

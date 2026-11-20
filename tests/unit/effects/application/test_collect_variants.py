@@ -862,7 +862,7 @@ class TestTheUntargetedRound:
         self, tmp_path, monkeypatch, fake_supervisor, caplog,
     ):
         """P1 #12: the one-shot JVM is killed at its timeout; the run says so."""
-        from price_predictor.infrastructure.forge_jvm import ForgeWorkerTimeout
+        from price_predictor.infrastructure.jvm_processes import ForgeWorkerTimeout
 
         collect_variants, config = self._fixture(tmp_path, monkeypatch, fake_supervisor)
         monkeypatch.setattr(collect_variants, "write_variant_sidecars", MagicMock(

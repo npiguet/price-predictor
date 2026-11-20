@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from price_predictor.infrastructure.forge_jvm import run_forge_worker
+from price_predictor.infrastructure.jvm_processes import run_forge_worker
 
 
 class PoolConnector:

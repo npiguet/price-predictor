@@ -15,13 +15,11 @@ from price_predictor.domain.worker_status import (
     render_hook_failures,
 )
 from price_predictor.infrastructure.append_only import has_shard_record
-from price_predictor.infrastructure.forge_jvm import (
-    ForgeWorkerPool,
-    WorkerLogFiles,
-    WorkerStopSettings,
-)
+from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
 from price_predictor.infrastructure.run_manifest import annotate_run
+from price_predictor.infrastructure.worker_log_files import WorkerLogFiles
 from price_predictor.infrastructure.worker_log_scan import WorkerLogReport
+from price_predictor.infrastructure.worker_stops import WorkerStopSettings
 from sealed.domain.directed_fork_needs import DirectedForkNeeds
 from sealed.infrastructure.effect_collection_flags import (
     COUNT_DROPPED_EVENTS_PROPERTY,
@@ -325,7 +323,7 @@ class MatchOutcomeSupervisor:
         different: it is the one case where a worker can trip one of this
         branch's five latched effect-record failure reporters, so it gets a
         real, size-capped destination instead (F4; see
-        ``price_predictor.infrastructure.forge_jvm.WorkerLogFiles``).
+        ``price_predictor.infrastructure.worker_log_files.WorkerLogFiles``).
         """
         log_file = (
             self._worker_logs.get(worker_id) if self._worker_logs is not None

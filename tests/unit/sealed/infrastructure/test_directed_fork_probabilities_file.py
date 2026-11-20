@@ -114,7 +114,7 @@ def test_the_supervisor_starts_from_the_file_and_is_steered_by_it(tmp_path, monk
 
     import sealed.application.match_outcomes as module
     import sealed.infrastructure.cli as cli
-    from price_predictor.infrastructure import forge_jvm
+    from price_predictor.infrastructure import forge_classpath
 
     built = {}
 
@@ -124,7 +124,7 @@ def test_the_supervisor_starts_from_the_file_and_is_steered_by_it(tmp_path, monk
         return built["supervisor"]
 
     monkeypatch.setattr(module, "MatchOutcomeSupervisor", supervisor)
-    monkeypatch.setattr(forge_jvm, "check_worker_prerequisites", lambda **_: None)
+    monkeypatch.setattr(forge_classpath, "check_worker_prerequisites", lambda **_: None)
     monkeypatch.setattr(cli, "directed_fork_error", lambda *_: None)
     monkeypatch.setattr(cli, "check_conversion", lambda *_: None)
     path = _write(tmp_path, _document({"704.5f": {"does_not_fire": 40},

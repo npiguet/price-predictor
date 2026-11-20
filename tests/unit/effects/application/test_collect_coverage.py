@@ -359,7 +359,7 @@ class TestARoundEndsInItsReport:
         import logging
 
         from effects.application import collect_coverage
-        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+        from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
 
         config = self._one_card_config(tmp_path)
         with patch.object(ForgeWorkerPool, "run", pool_run), \
@@ -1571,7 +1571,7 @@ class TestAHungConsultOnlyRanks:
     def test_a_timed_out_consult_yields_no_verdicts(self, caplog):
         from effects.application import collect_coverage
         from effects.infrastructure import one_shot_workers
-        from price_predictor.infrastructure.forge_jvm import ForgeWorkerTimeout
+        from price_predictor.infrastructure.jvm_processes import ForgeWorkerTimeout
 
         with patch.object(one_shot_workers, "castability_verdicts",
                           side_effect=ForgeWorkerTimeout("CastabilityMain ran past its timeout")):

@@ -45,12 +45,9 @@ from effects.domain.fork_operation import ForkOperation
 from effects.domain.records import TurnActionSubkind
 from effects.infrastructure.record_codec import record_from_dict
 from effects.infrastructure.shard_io import ended_games, iter_shard_lines, iter_shards
-from price_predictor.infrastructure.forge_jvm import (
-    STOPPED_LINE,
-    ForgeWorkerPool,
-    WorkerStopSettings,
-)
+from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
 from price_predictor.infrastructure.run_manifest import run_recorded
+from price_predictor.infrastructure.worker_stops import STOPPED_LINE, WorkerStopSettings
 from sealed.application.match_outcomes import MatchOutcomeSupervisor
 from sealed.infrastructure.cli import _effect_collection_caps, build_parser
 from sealed.infrastructure.effect_collection_flags import directed_fork_error

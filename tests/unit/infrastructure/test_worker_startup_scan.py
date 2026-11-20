@@ -8,12 +8,9 @@ from unittest.mock import patch
 
 import pytest
 
-from price_predictor.infrastructure.forge_jvm import (
-    STARTUP_LINE,
-    WorkerLogFiles,
-    _LogMark,
-    _past_forge_start,
-)
+from price_predictor.infrastructure.worker_log_files import WorkerLogFiles
+from price_predictor.infrastructure.worker_log_mark import _LogMark, _past_forge_start
+from price_predictor.infrastructure.worker_stops import STARTUP_LINE
 
 MIB = 1024 * 1024
 NOISE = "The custom card x_variant was not assigned to any set and will be skipped\n"

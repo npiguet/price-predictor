@@ -21,7 +21,7 @@ from effects.domain.records import is_game_end
 from effects.infrastructure.deck_file import write_deck_file
 from effects.infrastructure.one_shot_workers import write_variant_sidecars
 from effects.infrastructure.shard_io import read_records
-from price_predictor.infrastructure.forge_jvm import kill_process_tree
+from price_predictor.infrastructure.jvm_processes import kill_process_tree
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 from tests.integration.conftest import POLL_SECONDS, require_jar, stop_file_for, stop_worker
 

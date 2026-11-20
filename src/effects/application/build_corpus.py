@@ -90,7 +90,7 @@ from effects.domain.stratum_placement import (
     place_games,
     rule_test_misses,
 )
-from price_predictor.infrastructure.forge_jvm import MAX_WORKERS, worker_count
+from price_predictor.infrastructure.forge_worker_pool import MAX_WORKERS, worker_count
 
 if TYPE_CHECKING:
     from effects.infrastructure.converted_trees import ConvertedTrees, SourceTrees

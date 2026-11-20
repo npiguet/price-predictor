@@ -37,11 +37,8 @@ import pytest
 from effects.domain.records import RecordKind, TurnActionSubkind
 from effects.infrastructure.record_codec import record_from_dict
 from effects.infrastructure.shard_io import ended_games, iter_shard_lines, iter_shards
-from price_predictor.infrastructure.forge_jvm import (
-    STARTUP_LINE,
-    STOPPED_LINE,
-    kill_process_tree,
-)
+from price_predictor.infrastructure.jvm_processes import kill_process_tree
+from price_predictor.infrastructure.worker_stops import STARTUP_LINE, STOPPED_LINE
 from tests.integration.conftest import assert_no_lost_output, require_jar
 
 pytestmark = pytest.mark.integration
@@ -61,7 +58,7 @@ _WORDING_CARDS = ("lightning bolt", "goblin piker")
 #: of a round slower than a minute, and this module reads the round's end alone.
 _LAUNCHER = (
     "import runpy\n"
-    "from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool\n"
+    "from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool\n"
     f"ForgeWorkerPool.STATUS_INTERVAL = {2 * _RUN_SECONDS}\n"
     "runpy.run_module('effects', run_name='__main__', alter_sys=True)\n"
 )

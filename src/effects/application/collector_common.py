@@ -22,16 +22,15 @@ from effects.domain.card_names import fold_card_name
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.split import HoldoutRule
 from price_predictor.domain.worker_status import ALLOW_DEGRADED_HELP
-from price_predictor.infrastructure.forge_jvm import (
+from price_predictor.infrastructure.forge_worker_pool import MAX_WORKERS, worker_count
+from price_predictor.infrastructure.worker_stops import (
     DEFAULT_RECYCLE_SECONDS,
     DEFAULT_STOP_TIMEOUT,
-    MAX_WORKERS,
     RECYCLE_SECONDS_HELP,
     STOP_TIMEOUT_HELP,
     WorkerStopSettings,
     recycle_seconds,
     stop_timeout,
-    worker_count,
 )
 from sealed.domain.manabase import compute_basic_lands
 
@@ -41,7 +40,7 @@ if TYPE_CHECKING:
     from effects.infrastructure.converted_trees import SourceTrees
 
 #: Java worker processes, for both collectors; the most a run may take is
-#: ``forge_jvm.MAX_WORKERS``, which its shard counters also run.
+#: ``forge_worker_pool.MAX_WORKERS``, which its shard counters also run.
 DEFAULT_WORKERS = 12
 DEFAULT_DECKS_PER_ROUND = 500
 

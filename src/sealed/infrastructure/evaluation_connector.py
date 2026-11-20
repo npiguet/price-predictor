@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO
 
-from price_predictor.infrastructure.forge_jvm import (
-    build_forge_classpath,
+from price_predictor.infrastructure.forge_classpath import build_forge_classpath
+from price_predictor.infrastructure.jvm_processes import (
     build_jvm_command,
     kill_process_tree,
     run_forge_worker,

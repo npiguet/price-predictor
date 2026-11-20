@@ -19,7 +19,7 @@ def _convert_environment_available() -> bool:
     """
     if shutil.which("java") is None:
         return False
-    from price_predictor.infrastructure.forge_jvm import build_forge_classpath
+    from price_predictor.infrastructure.forge_classpath import build_forge_classpath
 
     try:
         build_forge_classpath(include_full_runtime=True, include_dependency_glob=True)
@@ -99,7 +99,7 @@ _FORGE_CARDS = (
 
 
 def _forge_cardsfolder() -> Path:
-    from price_predictor.infrastructure.forge_jvm import forge_dir
+    from price_predictor.infrastructure.forge_classpath import forge_dir
 
     return forge_dir() / "forge-gui" / "res" / "cardsfolder"
 

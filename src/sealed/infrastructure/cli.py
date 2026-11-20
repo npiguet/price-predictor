@@ -16,8 +16,8 @@ from price_predictor.infrastructure.cli_run_manifest import (
     dispatch,
     tag_subcommands,
 )
-from price_predictor.infrastructure.forge_jvm import add_worker_stop_flags
-from price_predictor.infrastructure.forge_jvm import worker_count as forge_worker_count
+from price_predictor.infrastructure.forge_worker_pool import worker_count as forge_worker_count
+from price_predictor.infrastructure.worker_stops import add_worker_stop_flags
 from sealed.application.encode_cards import EncodeCardsConfig
 from sealed.application.evaluate_scorer import EvaluateScorerConfig
 from sealed.application.train_scorer import TrainScorerConfig
@@ -1154,7 +1154,7 @@ def worker_stop_settings(args: argparse.Namespace):
     """The workers' stop settings, or None (exit 2 named by
     :func:`worker_stop_error`) when a stop flag is given without
     ``--effect-records``."""
-    from price_predictor.infrastructure.forge_jvm import (
+    from price_predictor.infrastructure.worker_stops import (
         DEFAULT_RECYCLE_SECONDS,
         DEFAULT_STOP_TIMEOUT,
         WorkerStopSettings,
@@ -1980,7 +1980,7 @@ def _supervise_match_outcomes(
     matches recorded nothing, else 0."""
     from price_predictor.domain.converted_provenance import ConversionRefused
     from price_predictor.domain.worker_status import WorkerEngineRefused
-    from price_predictor.infrastructure import forge_jvm
+    from price_predictor.infrastructure import forge_classpath, forge_worker_pool
     from sealed.application.match_outcomes import MatchOutcomeSupervisor
 
     output_path = outcomes_dir(args) / MATCH_OUTCOMES_FILE
@@ -2009,7 +2009,7 @@ def _supervise_match_outcomes(
     try:
         # Before any worker: a missing JAR, java or list file would otherwise
         # surface only inside each worker's start.
-        forge_jvm.check_worker_prerequisites(files={"--exclude-cards": exclude_cards})
+        forge_classpath.check_worker_prerequisites(files={"--exclude-cards": exclude_cards})
         check_conversion(args, effect_records_dir)
         supervisor = MatchOutcomeSupervisor(
             worker_count=args.workers,
@@ -2026,7 +2026,7 @@ def _supervise_match_outcomes(
         )
         supervisor.steer_directed_forks(getattr(args, "directed_fork_needs", None))
         supervisor.run()
-    except (FileNotFoundError, forge_jvm.WorkerStartError) as exc:
+    except (FileNotFoundError, forge_worker_pool.WorkerStartError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
     except (ConversionRefused, WorkerEngineRefused) as exc:

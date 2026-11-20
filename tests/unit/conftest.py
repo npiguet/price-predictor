@@ -12,13 +12,13 @@ from types import ModuleType
 
 import pytest
 
-from price_predictor.infrastructure import forge_jvm
+from price_predictor.infrastructure import custom_card_staging, jvm_processes
 
 #: The packages whose modules can hold a name for the process-tree kill.
 _OWN_PACKAGES = ("price_predictor", "sealed", "draft", "effects")
 
 #: The real ``kill_process_tree``, taken before anything replaces it.
-_REAL_KILL = forge_jvm.kill_process_tree
+_REAL_KILL = jvm_processes.kill_process_tree
 
 
 def pytest_configure(config):
@@ -133,9 +133,9 @@ def _no_stale_staging_check(monkeypatch):
     The first JVM command a process builds clears the variant scripts a
     killed ``collect-variants`` left staged there; a unit test building a
     command would otherwise reach the real ``../forge``."""
-    monkeypatch.setattr(forge_jvm, "clear_stale_staging", lambda: None)
+    monkeypatch.setattr(jvm_processes, "clear_stale_staging", lambda: None)
     # A collect-variants claims the real directory before its sidecar pass.
-    monkeypatch.setattr(forge_jvm, "claim_staging", lambda directory=None: None)
+    monkeypatch.setattr(custom_card_staging, "claim_staging", lambda directory=None: None)
 
 
 @pytest.fixture(autouse=True)
@@ -149,4 +149,4 @@ def _no_java_version_probe(monkeypatch):
     unidentified JVM gets the command a pre-24 JDK gets, which is what every
     command-shape assertion was written against.
     """
-    monkeypatch.setattr(forge_jvm, "java_feature_version", lambda: None)
+    monkeypatch.setattr(jvm_processes, "java_feature_version", lambda: None)

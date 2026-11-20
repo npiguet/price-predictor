@@ -161,7 +161,7 @@ def _checked_against_checkout(
     (``forge``, by default ``forge_dir()``: Forge's ``findForgeDir`` resolves
     the sibling ``forge`` of the workers' working directory) is dirty; refused
     when it is at another commit than the JAR's."""
-    from price_predictor.infrastructure.forge_jvm import forge_dir
+    from price_predictor.infrastructure.forge_classpath import forge_dir
 
     forge = forge_dir() if forge is None else Path(forge)
     commit, dirty = forge_checkout(forge)
@@ -176,7 +176,7 @@ def _checked_against_checkout(
 
 
 def _connector_jar() -> Path:
-    from price_predictor.infrastructure.forge_jvm import resolve_connector_jar
+    from price_predictor.infrastructure.forge_classpath import resolve_connector_jar
 
     try:
         return resolve_connector_jar()

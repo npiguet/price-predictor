@@ -1,8 +1,9 @@
 """Launch Java DraftGameWorkerMain subprocesses.
 
 Mirrors ``draft_worker_connector`` and the sealed connectors: the JVM command is
-assembled from the shared helpers in ``price_predictor.infrastructure.forge_jvm``
-so every worker in the repo is launched the same way.
+assembled from the shared helpers in ``price_predictor.infrastructure.forge_classpath``
+and ``price_predictor.infrastructure.jvm_processes`` so every worker in the repo
+is launched the same way.
 
 Workers are autonomous — they are handed a seat table and choose their own
 pairings — so this connector passes a population and a few settings, never a
@@ -14,10 +15,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from price_predictor.infrastructure.forge_jvm import (
-    build_forge_classpath,
-    build_jvm_command,
-)
+from price_predictor.infrastructure.forge_classpath import build_forge_classpath
+from price_predictor.infrastructure.jvm_processes import build_jvm_command
 
 MAIN_CLASS = "com.pricepredictor.connector.DraftGameWorkerMain"
 WORKER_XMX = "1200m"  # matches the sealed evaluation worker

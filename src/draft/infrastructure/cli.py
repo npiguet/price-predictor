@@ -20,7 +20,7 @@ from price_predictor.infrastructure.cli_run_manifest import (
     labelled_paths,
     tag_subcommands,
 )
-from price_predictor.infrastructure.forge_jvm import worker_count
+from price_predictor.infrastructure.forge_worker_pool import worker_count
 
 # Architecture flags forbidden alongside --resume / --checkpoint (SC-006); they
 # register with default=None so "was it supplied?" is detectable.
@@ -1233,7 +1233,7 @@ def run_play_draft_games(args: argparse.Namespace) -> int:
         workers=args.workers,
     )
 
-    from price_predictor.infrastructure.forge_jvm import WorkerStartError
+    from price_predictor.infrastructure.forge_worker_pool import WorkerStartError
 
     try:
         summary = PlayDraftGamesUseCase().execute(config)

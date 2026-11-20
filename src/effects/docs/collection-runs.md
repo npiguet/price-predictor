@@ -4,7 +4,7 @@ Rules to respect when running, babysitting or changing `collect-coverage`, `coll
 
 - Flags and defaults: each command's `--help`; the shared collection flags are defined in `sealed/infrastructure/effect_collection_flags.py`.
 - The variant rounds: `specs/2026-10-30-ability-effect-model-gen3.md` § 8.15, `domain/variant_rounds.py`, `application/steered_variants.py`.
-- The stop protocol: `specs/025-ability-effect-model-gen3/contracts/cli.md` § Match worker stop protocol, and Java `WorkerStop`. The pool: `ForgeWorkerPool` in `price_predictor/infrastructure/forge_jvm.py`.
+- The stop protocol: `specs/025-ability-effect-model-gen3/contracts/cli.md` § Match worker stop protocol, and Java `WorkerStop`. The pool: `ForgeWorkerPool` in `price_predictor/infrastructure/forge_worker_pool.py`.
 - What a user launching a collection must know: `specs/025-ability-effect-model-gen3/quickstart.md` Stage 5.
 
 ## Collection is an opt-in
@@ -26,7 +26,7 @@ Rules to respect when running, babysitting or changing `collect-coverage`, `coll
 ## Stopping a worker
 
 - Each worker slot has a stop file, `logs/<run_id>.<slot>.stop`, deleted once the pool's run ends. A round's end, the run's end and a first Ctrl-C create every running worker's file and wait for each to finish its game, write its game-end marker, close its shard and exit 0 with its stop line.
-- The workers run in process groups of their own (`forge_jvm.graceful_popen_options`), so a console Ctrl-C reaches the supervisor alone and never a worker JVM.
+- The workers run in process groups of their own (`worker_stops.graceful_popen_options`), so a console Ctrl-C reaches the supervisor alone and never a worker JVM.
 - A worker still starting Forge, with no startup line in its log, is killed at once: it has no game to cut (`killed_starting`). The startup line is searched in everything the worker wrote since its spawn (Forge prints a line per staged custom card before it), read on from where the last poll stopped (`_past_forge_start`). A slot whose log cannot be opened fails the spawn (`WorkerLogFiles.get` raises), counted as a failed start, so no worker runs unobserved.
 - No worker is restarted once the round's budget is reached, so a round ends at most one game's length, bounded by `--stop-timeout`, after its budget.
 - The kill (`taskkill /F /T`, `ForgeWorkerPool._kill`) ends the longest-running worker every status interval (§ Short-lived workers), a worker still playing `--stop-timeout` after the request, one overdue past its recycle time by `--stop-timeout`, every worker on a second Ctrl-C, and a survivor of a crash. No periodic kill happens while a stop waits for the workers to finish their games.
@@ -105,7 +105,7 @@ Rules to respect when running, babysitting or changing `collect-coverage`, `coll
 - No variant of any other card may print a held-out text or template. Such a variant is left out of the decks, and deleted with its sidecar only when this run wrote it. The command takes `build-corpus`'s holdout flags and must be passed the same values.
 - The sidecar pass runs before the first game: a variant without a sidecar produces records nothing can join, and the join is designed to fail loudly.
 - The loadable names go to `loadable.lst`, never a `.txt`: the whole tree is staged into Forge's custom-cards directory, and Forge reads every `.txt` there as a card script. Only loadable variants are decked.
-- When the run ends, however it ends, the staged scripts are taken back out of Forge's custom-cards directory. A run killed too hard to do so leaves them, and the first JVM the next command of any package starts removes them (`forge_jvm.clear_stale_staging`). While a `collect-variants` process is running, every other command leaves its staging alone (`.staged-by-effects.owner`).
+- When the run ends, however it ends, the staged scripts are taken back out of Forge's custom-cards directory. A run killed too hard to do so leaves them, and the first JVM the next command of any package starts removes them (`custom_card_staging.clear_stale_staging`). While a `collect-variants` process is running, every other command leaves its staging alone (`.staged-by-effects.owner`).
 - The command exits 1 when the run's shards hold no records. Every deck materializing as basic lands, which is what a staged script Forge never registered produces, otherwise plays its matches and reports success having collected nothing.
 - A variant's games are counted from this run's own shards, so another run writing to the directory never counts. The exception is the runs `--continues RUN_ID` names: an interrupted run restarts into the same directory with the same `--seed`, the earlier run's shards are credited first, and a finished variant is not played again. `--continues` resumes the untargeted round only.
 - A steered deck names its rule in a fourth deck-file column. Java `GeneratedDeck.parse` splits with limit 4, so the rule never folds into the last card's name. A steered game's records carry both decks' rules as `aimed_at`.

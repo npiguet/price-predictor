@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from price_predictor.infrastructure import cli, converted_provenance, forge_jvm
+from price_predictor.infrastructure import cli, converted_provenance, forge_classpath, jvm_processes
 
 PATHS = [
     "--cards-path", "forge/cardsfolder",
@@ -25,8 +25,8 @@ def launched(monkeypatch) -> dict:
         seen.update(kwargs)
         return ["java", kwargs["main_class"], *kwargs["main_args"]]
 
-    monkeypatch.setattr(forge_jvm, "build_forge_classpath", lambda **_kw: "forge.jar")
-    monkeypatch.setattr(forge_jvm, "build_jvm_command", build)
+    monkeypatch.setattr(forge_classpath, "build_forge_classpath", lambda **_kw: "forge.jar")
+    monkeypatch.setattr(jvm_processes, "build_jvm_command", build)
     # Read before the JVM runs (test_cli_convert_conversion.py), through git.
     monkeypatch.setattr(converted_provenance, "forge_checkout", lambda _dir: (None, False))
     monkeypatch.setattr(
