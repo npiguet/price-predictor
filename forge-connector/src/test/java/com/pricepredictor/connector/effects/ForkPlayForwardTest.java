@@ -552,8 +552,9 @@ class ForkPlayForwardTest {
      * creature with toughness 0 is put into its owner's graveyard), and the
      * death is in the fork's premise record, its first, a {@code fork_edit}
      * turn action. The rule is this test's own: no registered rule's edit has
-     * a state-based consequence, since {@code RegisteredRulesTest} requires
-     * the check after each edit to change nothing.
+     * a state-based consequence, since the twin every
+     * {@code RegisteredRules*Test} forks through ({@code RuleBoard.twin})
+     * requires the check after each edit to change nothing.
      */
     @Test
     void anEditsStateBasedDeathIsInTheForksPremiseRecord() throws Throwable {

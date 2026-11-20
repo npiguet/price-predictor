@@ -21,7 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * place, kills the attacker in the first-strike step: the detector tags a
  * creature dealt first-strike damage that dies there having dealt none, and
  * an attacker that survives the Knight's 2 damage shows neither side. The
- * rest of the rule's cases are {@code RegisteredRulesTest}'s.
+ * rest of the rule's cases are {@code RegisteredRulesCombatTest}'s and
+ * {@code RegisteredRulesUndoneTest}'s.
  */
 @ExtendWith(ForgeExtension.class)
 class SimultaneousDamageTest {
