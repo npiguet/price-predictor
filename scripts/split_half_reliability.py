@@ -69,6 +69,20 @@ def _labels_for(
     return _build_label_map(counters, shrinkage_k)
 
 
+def _paired_values(common: list[str], labels_a: dict, labels_b: dict, h: int):
+    """Head ``h``'s value in each half for the cards both halves label on it."""
+    xs: list[float] = []
+    ys: list[float] = []
+    for cn in common:
+        va = _label_value(labels_a[cn], h)
+        vb = _label_value(labels_b[cn], h)
+        if va is None or vb is None:
+            continue
+        xs.append(float(va))
+        ys.append(float(vb))
+    return xs, ys
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -117,15 +131,7 @@ def main() -> int:
     for h, name in enumerate(_ALL_HEAD_NAMES):
         if h == _COLOR_LIFT_OFFSET:
             print()
-        xs: list[float] = []
-        ys: list[float] = []
-        for cn in common:
-            va = _label_value(labels_a[cn], h)
-            vb = _label_value(labels_b[cn], h)
-            if va is None or vb is None:
-                continue
-            xs.append(float(va))
-            ys.append(float(vb))
+        xs, ys = _paired_values(common, labels_a, labels_b, h)
         r = pearson(xs, ys, min_n=2)
         rf = _spearman_brown(r)
         r_s = f"{r:+.3f}" if np.isfinite(r) else "--"
