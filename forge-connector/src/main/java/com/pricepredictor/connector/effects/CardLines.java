@@ -229,7 +229,7 @@ final class CardLines {
             }
         }
 
-        /** The listing of one face whose lines {@code keywords} heads. */
+        /** The listing of a face whose keyword lines are {@code keywords}. */
         private FaceListing faceListing(List<KeywordInterface> keywords, boolean faceUp) {
             Set<KeywordInterface> keywordLines = identitySet();
             keywordLines.addAll(keywords);
