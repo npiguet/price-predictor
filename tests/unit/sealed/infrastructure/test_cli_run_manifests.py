@@ -10,7 +10,7 @@ import pytest
 
 from price_predictor.infrastructure import run_manifest
 from price_predictor.infrastructure.cli_run_manifest import READ_ONLY, subcommand_names
-from sealed.infrastructure import cli
+from sealed.infrastructure import cli, cli_decks
 
 
 @pytest.fixture(autouse=True)
@@ -32,7 +32,7 @@ def test_build_decks_writes_its_manifest_beside_the_decks(tmp_path: Path, monkey
         Path(args.output).write_text("gen-2;RVR;A|B\n", encoding="utf-8")
         return 0
 
-    monkeypatch.setattr(cli, "run_build_decks", build_decks)
+    monkeypatch.setattr(cli_decks, "run_build_decks", build_decks)
     argv = ["build-decks", "--pools-path", str(tmp_path / "pools.txt"), "--label", "gen-2",
             "--checkpoint", str(tmp_path / "scorer.pt"), "--cards-path", str(tmp_path / "cards"),
             "--output", str(out)]
@@ -61,7 +61,7 @@ def test_a_command_failing_part_way_is_recorded_failed(tmp_path: Path, monkeypat
         Path(args.output).write_text("gen-2;RVR;A|B\n", encoding="utf-8")
         return 2
 
-    monkeypatch.setattr(cli, "run_build_decks", build_decks)
+    monkeypatch.setattr(cli_decks, "run_build_decks", build_decks)
     monkeypatch.setattr(sys, "argv", ["sealed", "build-decks", "--pools-path", "p",
                                       "--label", "x", "--checkpoint", "s.pt",
                                       "--cards-path", "c", "--output", str(out)])
@@ -76,7 +76,7 @@ def test_a_command_failing_part_way_is_recorded_failed(tmp_path: Path, monkeypat
 
 def test_a_refused_command_leaves_no_run_directory(tmp_path: Path, monkeypatch):
     out = tmp_path / "decks-run" / "generated-decks.txt"
-    monkeypatch.setattr(cli, "run_build_decks", lambda _args: 2)
+    monkeypatch.setattr(cli_decks, "run_build_decks", lambda _args: 2)
     monkeypatch.setattr(sys, "argv", ["sealed", "build-decks", "--pools-path", "p",
                                       "--label", "x", "--checkpoint", "s.pt",
                                       "--cards-path", "c", "--output", str(out)])

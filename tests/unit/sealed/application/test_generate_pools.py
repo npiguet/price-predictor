@@ -84,7 +84,7 @@ class TestGeneratePoolsRandomSet:
 
     def test_cli_pools_path_is_used_as_given_when_no_set(self, tmp_path, monkeypatch):
         """When --set is omitted, --pools-path is used as given."""
-        from sealed.infrastructure import cli
+        from sealed.infrastructure import cli, cli_generate_pools
 
         monkeypatch.chdir(tmp_path)
 
@@ -104,13 +104,13 @@ class TestGeneratePoolsRandomSet:
 
         parser = cli.build_parser()
         args = parser.parse_args(["generate-pools", "--size", "1", "--pools-path", "pools/x"])
-        rc = cli.run_generate_pools(args)
+        rc = cli_generate_pools.run_generate_pools(args)
         assert rc == 0
         assert captured["set_code"] is None
         assert captured["pools_path"] == Path("pools/x")
 
     def test_cli_pools_path_fills_in_the_set(self, tmp_path, monkeypatch):
-        from sealed.infrastructure import cli
+        from sealed.infrastructure import cli, cli_generate_pools
 
         monkeypatch.chdir(tmp_path)
 
@@ -132,7 +132,7 @@ class TestGeneratePoolsRandomSet:
         args = parser.parse_args([
             "generate-pools", "--set", "MH3", "--size", "1", "--pools-path", "pools/{set}",
         ])
-        rc = cli.run_generate_pools(args)
+        rc = cli_generate_pools.run_generate_pools(args)
         assert rc == 0
         assert captured["set_code"] == "MH3"
         assert captured["pools_path"] == Path("pools/MH3")

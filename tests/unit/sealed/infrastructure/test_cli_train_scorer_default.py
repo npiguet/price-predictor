@@ -47,7 +47,8 @@ class TestMissingEncoderGuard:
     def test_phase_b_fresh_kickoff_missing_encoder_exits_2(
         self, tmp_path: Path, capsys, monkeypatch,
     ):
-        from sealed.infrastructure.cli import build_parser, run_train_scorer
+        from sealed.infrastructure.cli import build_parser
+        from sealed.infrastructure.cli_train_scorer import run_train_scorer
 
         monkeypatch.chdir(tmp_path)
         scorer_ckpt = tmp_path / "scorer.pt"
@@ -69,7 +70,8 @@ class TestMissingEncoderGuard:
     ):
         """Even when the explicit path is missing, the guard does not fire —
         the existing 'encoder model not found' error path takes over."""
-        from sealed.infrastructure.cli import build_parser, run_train_scorer
+        from sealed.infrastructure.cli import build_parser
+        from sealed.infrastructure.cli_train_scorer import run_train_scorer
 
         monkeypatch.chdir(tmp_path)
         scorer_ckpt = tmp_path / "scorer.pt"
@@ -96,7 +98,8 @@ class TestMissingEncoderGuard:
     ):
         """Phase A doesn't load the encoder — no guard should fire even
         when the default sealed encoder is missing."""
-        from sealed.infrastructure.cli import build_parser, run_train_scorer
+        from sealed.infrastructure.cli import build_parser
+        from sealed.infrastructure.cli_train_scorer import run_train_scorer
 
         monkeypatch.chdir(tmp_path)
         # Phase A run with no --embedding-lr (defaults to 0). We don't
@@ -118,7 +121,8 @@ class TestResumeUnaffected:
     ):
         """Phase B resume pulls encoder weights from the resumed checkpoint;
         the missing-encoder guard must not break that path."""
-        from sealed.infrastructure.cli import build_parser, run_train_scorer
+        from sealed.infrastructure.cli import build_parser
+        from sealed.infrastructure.cli_train_scorer import run_train_scorer
 
         monkeypatch.chdir(tmp_path)
         # Build a Phase B-shaped checkpoint by attaching encoder state.

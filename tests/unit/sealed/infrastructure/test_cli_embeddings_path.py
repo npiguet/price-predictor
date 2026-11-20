@@ -7,7 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from sealed.infrastructure import cli
+from sealed.infrastructure import (
+    cli,
+    cli_decks,
+    cli_encode_cards,
+    cli_evaluate_scorer,
+    cli_train_picker,
+    cli_train_scorer,
+)
 
 _CARDS = "output/sealed/gen1/converted/cardsfolder"
 _CACHE = "output/sealed/gen1/cache/2026-11-15-encoder"
@@ -17,21 +24,22 @@ _READERS = {
     "build-decks": (
         ["build-decks", "--pools-path", "p.txt", "--label", "x", "--cards-path", _CARDS,
          "--checkpoint", "s.pt", "--output", "d.txt"],
-        "sealed.application.build_decks.BuildDecksUseCase", "run_build_decks",
+        "sealed.application.build_decks.BuildDecksUseCase", cli_decks.run_build_decks,
     ),
     "pick-decks": (
         ["pick-decks", "--pools-path", "p.txt", "--label", "x", "--cards-path", _CARDS,
          "--picker-checkpoint", "p.pt", "--output", "d.txt"],
-        "sealed.application.pick_decks.PickDecksUseCase", "run_pick_decks",
+        "sealed.application.pick_decks.PickDecksUseCase", cli_decks.run_pick_decks,
     ),
     "evaluate-scorer": (
         ["evaluate-scorer", "--checkpoint", "s.pt", "--cards-path", _CARDS],
-        "sealed.application.evaluate_scorer.EvaluateScorerUseCase", "run_evaluate_scorer",
+        "sealed.application.evaluate_scorer.EvaluateScorerUseCase",
+        cli_evaluate_scorer.run_evaluate_scorer,
     ),
     "train-scorer": (
         ["train-scorer", "--cards-path", _CARDS, "--outcomes-path", "o.txt",
          "--checkpoint-dir", "run"],
-        "sealed.application.train_scorer.TrainScorerUseCase", "run_train_scorer",
+        "sealed.application.train_scorer.TrainScorerUseCase", cli_train_scorer.run_train_scorer,
     ),
 }
 
@@ -42,7 +50,7 @@ def _config_of(monkeypatch, argv, use_case, run):
     seen = []
     monkeypatch.setattr(f"{module}.{name}.execute",
                         lambda _self, config: seen.append(config) or 0)
-    assert getattr(cli, run)(cli.build_parser().parse_args(argv)) == 0
+    assert run(cli.build_parser().parse_args(argv)) == 0
     return seen[0]
 
 
@@ -68,7 +76,7 @@ def test_train_picker_reads_the_embeddings_where_the_flag_says(monkeypatch, tmp_
         ["train-picker", "--pools-path", "p.txt", "--scorer-checkpoint", str(scorer),
          "--cards-path", _CARDS, "--embeddings-path", _CACHE,
          "--checkpoint-dir", "run"],
-        "sealed.application.train_picker.TrainPickerUseCase", "run_train_picker",
+        "sealed.application.train_picker.TrainPickerUseCase", cli_train_picker.run_train_picker,
     )
     assert config.embeddings_path == Path(_CACHE)
 
@@ -79,12 +87,12 @@ def test_a_resumed_trainer_keeps_the_embeddings_it_ran_on():
 
     args = cli.build_parser().parse_args(["train-scorer"])
     resolved = resolve_resumable_args(
-        args, flag_names=cli._RESUMABLE_FLAG_NAMES, config_cls=TrainScorerConfig,
-        path_fields=cli._PATH_FIELDS, resumed_config={"embeddings_path": _CACHE},
+        args, flag_names=cli_train_scorer._RESUMABLE_FLAG_NAMES, config_cls=TrainScorerConfig,
+        path_fields=cli_train_scorer._PATH_FIELDS, resumed_config={"embeddings_path": _CACHE},
     )
     assert resolved["embeddings_path"] == Path(_CACHE)
-    assert "embeddings_path" in cli._RESUMABLE_PICKER_FLAG_NAMES
-    assert "embeddings_path" in cli._PICKER_PATH_FIELDS
+    assert "embeddings_path" in cli_train_picker._RESUMABLE_PICKER_FLAG_NAMES
+    assert "embeddings_path" in cli_train_picker._PICKER_PATH_FIELDS
 
 
 class TestEncodeCardsWritesWhereTheFlagSays:
@@ -142,7 +150,7 @@ def test_encode_cards_writes_the_embeddings_into_the_flag_s_tree(tmp_path, monke
         return encode_cards.EncodeCardsResult(processed=1, skipped=0, errors=[])
 
     monkeypatch.setattr(encode_cards.EncodeCardsUseCase, "execute", execute)
-    monkeypatch.setattr(cli, "_load_encoder_for_encode_cards", _stub_encoder)
+    monkeypatch.setattr(cli_encode_cards, "_load_encoder_for_encode_cards", _stub_encoder)
     monkeypatch.setattr("price_predictor.infrastructure.tokenizer_store.load_tokenizer",
                         lambda _path: object())
     monkeypatch.setattr("sealed.domain.card_encoder.CardEncoder",
@@ -155,7 +163,7 @@ def test_encode_cards_writes_the_embeddings_into_the_flag_s_tree(tmp_path, monke
         "encode-cards", "--encoder-checkpoint", str(encoder), "--vocab-path", str(vocab),
         "--cards-path", str(cards), "--embeddings-path", str(cache),
     ])
-    assert cli.run_encode_cards(args) == 0
+    assert cli_encode_cards.run_encode_cards(args) == 0
     assert seen[0].embeddings_path == cache and seen[0].cards_path == cards
 
 

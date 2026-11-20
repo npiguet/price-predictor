@@ -11,14 +11,11 @@ import pytest
 import torch
 
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
-from sealed.infrastructure.cli import (
-    _parse_label,
-    _parse_restarts,
-    run_encode_cards,
-    run_evaluate_scorer,
-    run_match_outcomes,
-    run_train_scorer,
-)
+from sealed.infrastructure.cli_decks import _parse_label, _parse_restarts
+from sealed.infrastructure.cli_encode_cards import run_encode_cards
+from sealed.infrastructure.cli_evaluate_scorer import run_evaluate_scorer
+from sealed.infrastructure.cli_match_outcomes import run_match_outcomes
+from sealed.infrastructure.cli_train_scorer import run_train_scorer
 from sealed.infrastructure.match_worker_connector import DEFAULT_SIDE_B_DECKS_WEIGHT
 from sealed.infrastructure.scorer_store import ScorerStore
 

@@ -690,7 +690,7 @@ class TestResumePrecedence:
     def test_resume_inherits_train_config_when_no_cli_flags(self, tmp_path, capsys):
         from argparse import Namespace
 
-        from sealed.infrastructure.cli import run_train_scorer
+        from sealed.infrastructure.cli_train_scorer import run_train_scorer
 
         ckpt = tmp_path / "phase_b.pt"
         encoder_cfg, _, _ = _save_phase_b_checkpoint(
@@ -729,7 +729,7 @@ class TestResumePrecedence:
     def test_explicit_cli_flag_overrides_resumed_value(self, tmp_path):
         from argparse import Namespace
 
-        from sealed.infrastructure.cli import run_train_scorer
+        from sealed.infrastructure.cli_train_scorer import run_train_scorer
 
         ckpt = tmp_path / "phase_b.pt"
         _save_phase_b_checkpoint(

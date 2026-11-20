@@ -281,7 +281,7 @@ class TestEncodeCardsScorerCheckpointHappyPath:
             CardPriceTransformerModel,
         )
         from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
-        from sealed.infrastructure.cli import run_encode_cards
+        from sealed.infrastructure.cli_encode_cards import run_encode_cards
         from sealed.infrastructure.scorer_store import ScorerStore
 
         encoder_cfg = TransformerConfig(

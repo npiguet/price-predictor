@@ -553,7 +553,7 @@ class TestTheRunKeepsItsResolvedCapsFromTheStart:
         import json
 
         from price_predictor.infrastructure.run_manifest import RunCommand, run_recorded
-        from sealed.infrastructure.cli import _effect_collection_caps
+        from sealed.infrastructure.cli_match_outcomes import _effect_collection_caps
 
         records = tmp_path / "records"
         caps = _effect_collection_caps(argparse.Namespace(

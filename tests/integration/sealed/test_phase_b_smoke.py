@@ -125,7 +125,7 @@ def test_phase_b_smoke(tmp_path):
     # `.npz`, and the new vectors differ from the pre-run baseline.
     from argparse import Namespace
 
-    from sealed.infrastructure.cli import run_encode_cards
+    from sealed.infrastructure.cli_encode_cards import run_encode_cards
     rc = run_encode_cards(Namespace(
         encoder_checkpoint=None,
         scorer_checkpoint=str(phase_b_best),

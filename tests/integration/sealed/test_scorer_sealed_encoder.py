@@ -21,7 +21,7 @@ from price_predictor.infrastructure.tokenizer_store import save_vocabulary
 from sealed.application.train_scorer import TrainScorerConfig, TrainScorerUseCase
 from sealed.domain.card_embedding_layout import FEATURE_COUNT
 from sealed.domain.encoder_model import SealedEncoderConfig, SealedEncoderModel
-from sealed.infrastructure.cli import run_encode_cards
+from sealed.infrastructure.cli_encode_cards import run_encode_cards
 from sealed.infrastructure.encoder_store import SealedEncoderStore
 from sealed.infrastructure.scorer_store import ScorerStore
 

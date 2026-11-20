@@ -11,7 +11,8 @@ import json
 import pytest
 
 from sealed.domain.directed_fork_needs import DirectedForkNeeds, DirectedRuleNeed
-from sealed.infrastructure.cli import _effect_collection_caps, build_parser
+from sealed.infrastructure.cli import build_parser
+from sealed.infrastructure.cli_match_outcomes import _effect_collection_caps
 from sealed.infrastructure.directed_fork_probabilities_file import read_directed_fork_needs
 
 RULES = ("704.5f", "118.12b")
@@ -83,7 +84,7 @@ def test_the_flag_is_on_match_outcomes_and_its_probabilities_become_properties()
 
 def test_a_bad_file_exits_1_before_any_supervisor(tmp_path, monkeypatch, capsys):
     import sealed.application.match_outcomes as module
-    from sealed.infrastructure.cli import run_match_outcomes
+    from sealed.infrastructure.cli_match_outcomes import run_match_outcomes
 
     def no_supervisor(*args, **kwargs):
         raise AssertionError("a refused run must not start a supervisor")
@@ -97,7 +98,7 @@ def test_a_bad_file_exits_1_before_any_supervisor(tmp_path, monkeypatch, capsys)
 
 
 def test_a_two_sided_rule_exits_1_at_start(tmp_path, monkeypatch, capsys):
-    from sealed.infrastructure.cli import run_match_outcomes
+    from sealed.infrastructure.cli_match_outcomes import run_match_outcomes
 
     path = _write(tmp_path, _document({"704.5f": {"fires": 3, "does_not_fire": 5}}))
     args = build_parser().parse_args(
@@ -113,7 +114,7 @@ def test_the_supervisor_starts_from_the_file_and_is_steered_by_it(tmp_path, monk
     from unittest.mock import MagicMock
 
     import sealed.application.match_outcomes as module
-    import sealed.infrastructure.cli as cli
+    import sealed.infrastructure.cli_match_outcomes as cli_match_outcomes
     from price_predictor.infrastructure import forge_classpath
 
     built = {}
@@ -125,8 +126,8 @@ def test_the_supervisor_starts_from_the_file_and_is_steered_by_it(tmp_path, monk
 
     monkeypatch.setattr(module, "MatchOutcomeSupervisor", supervisor)
     monkeypatch.setattr(forge_classpath, "check_worker_prerequisites", lambda **_: None)
-    monkeypatch.setattr(cli, "directed_fork_error", lambda *_: None)
-    monkeypatch.setattr(cli, "check_conversion", lambda *_: None)
+    monkeypatch.setattr(cli_match_outcomes, "directed_fork_error", lambda *_: None)
+    monkeypatch.setattr(cli_match_outcomes, "check_conversion", lambda *_: None)
     path = _write(tmp_path, _document({"704.5f": {"does_not_fire": 40},
                                        "118.12b": {"fires": 0}}))
     args = build_parser().parse_args([
@@ -134,7 +135,7 @@ def test_the_supervisor_starts_from_the_file_and_is_steered_by_it(tmp_path, monk
         "--cards-folder", str(tmp_path / "converted" / "cardsfolder"),
         "--directed-fork-rules", "704.5f,118.12b", "--directed-fork-probabilities", str(path)])
 
-    assert cli.run_match_outcomes(args) == 0
+    assert cli_match_outcomes.run_match_outcomes(args) == 0
     caps = built["options"].collection_caps
     assert caps["effect.directed.probability.704.5f"] == "0.6"
     assert caps["effect.directed.probability.118.12b"] == "1.0"

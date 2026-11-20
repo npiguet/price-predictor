@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 
 from sealed.application.match_outcomes import MatchOutcomeSupervisor, MatchRunOptions
 from sealed.domain.directed_fork_needs import DirectedForkNeeds, DirectedRuleNeed
-from sealed.infrastructure.cli import _effect_collection_caps
+from sealed.infrastructure.cli_match_outcomes import _effect_collection_caps
 from tests.unit.sealed.conftest import FakeProcess
 from tests.unit.worker_status_line import directed_counts, status_line
 

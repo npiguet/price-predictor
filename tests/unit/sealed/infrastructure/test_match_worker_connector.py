@@ -341,7 +341,7 @@ class TestMatchWorkerConnectorRandomSeat:
     def test_both_properties_reach_the_command_line(self, tmp_path, stub_classpath):
         import argparse
 
-        from sealed.infrastructure.cli import _effect_collection_caps
+        from sealed.infrastructure.cli_match_outcomes import _effect_collection_caps
 
         caps = _effect_collection_caps(argparse.Namespace(
             random_seat_share=0.125, random_seat_probability=0.25,

@@ -113,7 +113,7 @@ class TestWhereTheWinRatesGo:
         from pathlib import Path
 
         import sealed.application.train_encoder as module
-        from sealed.infrastructure.cli import run_train_encoder
+        from sealed.infrastructure.cli_train_encoder import run_train_encoder
 
         seen = {}
         monkeypatch.setattr(module, "run", lambda config: seen.setdefault("config", config))

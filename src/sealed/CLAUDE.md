@@ -1,6 +1,6 @@
 # `sealed` — sealed-format ML pipeline
 
-Entry point: `python -m sealed <subcommand>` (see `src/sealed/infrastructure/cli.py`). The package's domain terms are defined in `GLOSSARY.md` beside this file, and the terms it shares with other packages in the root `GLOSSARY.md`. The sealed pipeline is built around a sealed-trained card encoder; the price-predictor transformer is a valid alternate encoder source via `--encoder-checkpoint`. `sealed` imports from `price_predictor` only (the tokenizer, the vocabulary builder, the transformer model and store); never create the reverse dependency.
+Entry point: `python -m sealed <subcommand>` (see `src/sealed/infrastructure/cli.py`; each command's parser and runner are in a `cli_<command>.py` beside it, the three generated-decks commands in `cli_decks.py`, shared flags in `cli_common.py`). The package's domain terms are defined in `GLOSSARY.md` beside this file, and the terms it shares with other packages in the root `GLOSSARY.md`. The sealed pipeline is built around a sealed-trained card encoder; the price-predictor transformer is a valid alternate encoder source via `--encoder-checkpoint`. `sealed` imports from `price_predictor` only (the tokenizer, the vocabulary builder, the transformer model and store); never create the reverse dependency.
 
 This file lists the rules to respect and the file formats. It does not describe the commands:
 

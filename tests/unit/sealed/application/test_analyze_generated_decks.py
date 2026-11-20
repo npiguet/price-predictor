@@ -10,7 +10,8 @@ from sealed.application.analyze_generated_decks import (
     compute_deck_stats,
 )
 from sealed.domain.deck import Deck
-from sealed.infrastructure.cli import build_parser, run_analyze_generated_decks
+from sealed.infrastructure.cli import build_parser
+from sealed.infrastructure.cli_decks import run_analyze_generated_decks
 from sealed.infrastructure.pool_file_reader import GeneratedDeck
 
 

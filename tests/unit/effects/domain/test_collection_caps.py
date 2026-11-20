@@ -31,7 +31,7 @@ from effects.domain.collection_caps import (
     CollectionCaps,
 )
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME
-from sealed.infrastructure.cli import _effect_collection_caps
+from sealed.infrastructure.cli_match_outcomes import _effect_collection_caps
 from sealed.infrastructure.dropped_events import DROPPED_EVENTS_SUFFIX
 from sealed.infrastructure.effect_collection_flags import (
     add_cap_flags,

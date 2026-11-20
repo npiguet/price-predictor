@@ -49,7 +49,8 @@ from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
 from price_predictor.infrastructure.run_manifest import RunCommand, run_recorded
 from price_predictor.infrastructure.worker_stops import STOPPED_LINE, WorkerStopSettings
 from sealed.application.match_outcomes import MatchOutcomeSupervisor, MatchRunOptions
-from sealed.infrastructure.cli import _effect_collection_caps, build_parser
+from sealed.infrastructure.cli import build_parser
+from sealed.infrastructure.cli_match_outcomes import _effect_collection_caps
 from sealed.infrastructure.directed_fork_check import directed_fork_error
 from tests.integration.conftest import assert_no_lost_output, require_jar
 

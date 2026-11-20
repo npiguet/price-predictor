@@ -11,9 +11,9 @@ from __future__ import annotations
 import pytest
 
 from sealed.domain.collection_caps import DEFAULT_PROBE_KEYWORDS as EFFECT_PROBE_KEYWORDS
-from sealed.infrastructure.cli import (
+from sealed.infrastructure.cli import build_parser
+from sealed.infrastructure.cli_match_outcomes import (
     _effect_collection_caps,
-    build_parser,
     check_random_seat_flags,
     run_match_outcomes,
 )
@@ -39,9 +39,9 @@ def parse(*argv: str):
 
 @pytest.fixture(autouse=True)
 def _conversion_checked(monkeypatch):
-    import sealed.infrastructure.cli as cli
+    import sealed.infrastructure.cli_match_outcomes as cli_match_outcomes
 
-    monkeypatch.setattr(cli, "check_conversion", lambda *_: None)
+    monkeypatch.setattr(cli_match_outcomes, "check_conversion", lambda *_: None)
 
 
 class TestEffectRecordsOptIn:

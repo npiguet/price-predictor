@@ -18,7 +18,8 @@ import torch
 from price_predictor.infrastructure.tokenizer_store import save_vocabulary
 from sealed.domain.card_embedding_layout import FEATURE_COUNT
 from sealed.domain.encoder_model import SealedEncoderConfig, SealedEncoderModel
-from sealed.infrastructure.cli import build_parser, run_encode_cards
+from sealed.infrastructure.cli import build_parser
+from sealed.infrastructure.cli_encode_cards import run_encode_cards
 from sealed.infrastructure.encoder_store import SealedEncoderStore
 
 
