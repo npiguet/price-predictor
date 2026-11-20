@@ -28,7 +28,7 @@ import json
 import logging
 import random
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from functools import partial
 from pathlib import Path
@@ -247,8 +247,8 @@ class SteeredGeneration:
         if name in self.used or is_multi_face(lines):
             return []
         self.used.add(name)
-        return [write_variant(self.output_path, carrier.card, lines, description,
-                              rule=pair.rule)]
+        variant = write_variant(self.output_path, carrier.card, lines, description)
+        return [replace(variant, rule=pair.rule)]
 
 
 def combined_counts(*documents: Mapping) -> dict:

@@ -197,11 +197,11 @@ class GeneratedVariant:
 
 def write_variant(
     output_path: Path, card_name: str, lines: list[str], description: str,
-    *, rule: str | None = None,
 ) -> GeneratedVariant:
     """File one changed script as a variant: named by its digest (FR-058b),
     written unless a file of that name exists, which is then reused as it
-    stands, because an earlier run's records join it by key."""
+    stands, because an earlier run's records join it by key. Aimed at no
+    rule; the steered round names its rule on the result."""
     name = variant_name(card_name, variant_digest(lines))
     # The sanitized card name is the path a provenance key resolves to.
     path = Path(output_path) / f"{sanitize_card_name(name)}.txt"
@@ -212,7 +212,7 @@ def write_variant(
         path.write_text("\n".join(script) + "\n", encoding="utf-8")
     return GeneratedVariant(
         name, card_name, path, description, mana_cost=script_mana_cost(script),
-        fresh=fresh, rule=rule,
+        fresh=fresh,
     )
 
 
@@ -331,7 +331,6 @@ def generate_variants(
     *,
     held_out: frozenset[str],
     seed: int = RANDOM_SEED,
-    sources: list[Path] | None = None,
 ) -> list[GeneratedVariant]:
     """Write one perturbed script of every eligible source script into the
     variant tree (FR-058a): single-faced, not held out, with a parameter the
@@ -340,19 +339,18 @@ def generate_variants(
     No variant is generated from a held-out card (FR-057): its changed text
     would not be held out, and generation is the only point where the rule
     can be enforced. ``held_out`` is folded (``DeckHoldout.exclusions``) and
-    a script's ``Name:`` is printed case, so it is folded here. ``sources`` is
-    :func:`source_scripts` of ``forge_cards_path`` when the caller already
-    listed them: the walk is over all of Forge.
+    a script's ``Name:`` is printed case, so it is folded here. The sources
+    are :func:`source_scripts` of ``forge_cards_path``, a walk over all of
+    Forge.
 
     A variant is named by its perturbed script's digest (FR-058b), so a file
     already under its name is the same script: it is reused as it stands,
     never written over, because an earlier run's records join it by key.
     """
+    sources = list(source_scripts(forge_cards_path))
     rng = random.Random(seed)
     output_path = Path(output_path)
     output_path.mkdir(parents=True, exist_ok=True)
-
-    sources = list(source_scripts(forge_cards_path) if sources is None else sources)
     rng.shuffle(sources)
 
     generated: list[GeneratedVariant] = []
@@ -406,12 +404,11 @@ def _collect(config: CollectVariantsConfig) -> int:
             "scripts, not the converted ones.", config.forge_cards_path,
         )
         raise CollectorAbort
-    sources = source_scripts(config.forge_cards_path)
     if config.round is VariantRound.STEERED:
         from effects.application.steered_variants import collect_steered
 
-        return collect_steered(config, sources)
-    variants = _generate(config, sources)
+        return collect_steered(config, source_scripts(config.forge_cards_path))
+    variants = _generate(config)
     try:
         variants = prepare_variants(config, variants)
         units = {variant.name: variant.games_unit() for variant in variants}
@@ -459,12 +456,12 @@ def _check_directed_forks(config: CollectVariantsConfig) -> None:
 
 
 def _generate(
-    config: CollectVariantsConfig, sources: list[Path],
+    config: CollectVariantsConfig,
 ) -> list[GeneratedVariant]:
     held_out = config.deck_holdout.exclusions()
     variants = generate_variants(
         config.forge_cards_path, config.variant_scripts,
-        held_out=held_out, seed=config.seed, sources=sources,
+        held_out=held_out, seed=config.seed,
     )
     logger.info(
         "Generated %d variant scripts into %s (%d cards held out with their "
@@ -535,26 +532,28 @@ def drop_held_out_variants(
     decked it and its records join its files (FR-058b). One with no sidecar
     is kept, as the loadable filter has already decided it.
     """
+    return [variant for variant in variants if not _dropped(variant, held_out)]
+
+
+def _dropped(variant: GeneratedVariant, held_out: HeldOutCards) -> bool:
+    """Whether the variant's sidecar prints a held-out text, its files
+    deleted when it is fresh; False when it has no sidecar."""
     from effects.infrastructure.sidecar_io import read_sidecar, sidecar_path_for
 
-    kept: list[GeneratedVariant] = []
-    for variant in variants:
-        sidecar_path = sidecar_path_for(variant.path)
-        try:
-            sidecar = read_sidecar(sidecar_path)
-        except FileNotFoundError:
-            kept.append(variant)
-            continue
-        if any(
-            line.script_text and held_out.holds_text(line.script_text)
-            for line in sidecar.lines
-        ):
-            if variant.fresh:
-                variant.path.unlink(missing_ok=True)
-                sidecar_path.unlink(missing_ok=True)
-            continue
-        kept.append(variant)
-    return kept
+    sidecar_path = sidecar_path_for(variant.path)
+    try:
+        sidecar = read_sidecar(sidecar_path)
+    except FileNotFoundError:
+        return False
+    if not any(
+        line.script_text and held_out.holds_text(line.script_text)
+        for line in sidecar.lines
+    ):
+        return False
+    if variant.fresh:
+        variant.path.unlink(missing_ok=True)
+        sidecar_path.unlink(missing_ok=True)
+    return True
 
 
 def _keep_unheld(
