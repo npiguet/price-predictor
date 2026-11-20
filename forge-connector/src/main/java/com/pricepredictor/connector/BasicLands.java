@@ -29,4 +29,9 @@ final class BasicLands {
     static boolean isBasic(PaperCard card) {
         return card.getRules().getMainPart().getType().isBasicLand();
     }
+
+    /** Whether the card's main face is a land of any kind, basic or not. */
+    static boolean isLand(PaperCard card) {
+        return card.getRules().getMainPart().getType().isLand();
+    }
 }

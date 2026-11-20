@@ -19,7 +19,7 @@ class DeckBuilderLandsTest {
 
     @Test
     void basicLandFallsBackToDefaultPrintingWhenSetHasNone() {
-        PaperCard land = DeckBuilder.basicLand("Plains", SET_WITHOUT_PRINTINGS);
+        PaperCard land = BasicLandAllocation.basicLand("Plains", SET_WITHOUT_PRINTINGS);
 
         assertEquals("Plains", land.getName());
     }
@@ -27,7 +27,7 @@ class DeckBuilderLandsTest {
     @Test
     void basicLandThatDoesNotExistNamesLandAndSet() {
         IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> DeckBuilder.basicLand("Not A Basic Land", "GRN"));
+                () -> BasicLandAllocation.basicLand("Not A Basic Land", "GRN"));
 
         assertTrue(e.getMessage().contains("Not A Basic Land"), e.getMessage());
         assertTrue(e.getMessage().contains("GRN"), e.getMessage());
