@@ -506,12 +506,14 @@ The connector build writes the `../forge` checkout's HEAD into the fat JAR's man
   when the latest is `null` (`<run.json>: the last convert into this tree did not finish whole, …; reconvert it with --replace`)
   or names no full commit, when the trees come from two conversions, when the JAR's manifest
   names no `Forge-Commit` (`rebuild the connector: its JAR <jar> names no Forge commit in its manifest, …; mvn -f forge-connector/pom.xml install -DskipTests`),
-  and when the two commits differ:
+  when the two commits differ, and when the Forge checkout the workers read scripts from (`../forge`) is at another commit than the JAR's or is no git checkout:
   `the converted tree was converted at Forge <conversion commit>, but the connector was built at Forge <JAR commit>: the records' provenance keys would join against another conversion's lines (converted tree <run>, connector JAR <jar>). Reconvert the tree at the connector's commit, or install Forge at the conversion's commit and rebuild the connector`.
+    `the Forge checkout is at <checkout commit>, but the connector was built at Forge <JAR commit>: the workers would play card scripts another commit wrote than the ones the keys join against (checkout <path>, connector JAR <jar>). Check out the connector's commit, or reinstall Forge and rebuild the connector`;
+  `the Forge directory <path> is no git checkout, so the card scripts the workers read name no commit (connector JAR <jar>, built at Forge <JAR commit>); point ../forge at a checkout at the connector's commit`.
   The collectors prefix the message with the command's name.
-- A conversion with `forge_dirty` true is collected against, with a warning.
+- A conversion with `forge_dirty` true, and a checkout with uncommitted changes to tracked files, are collected against, with a warning.
 - The running command's `run.json` entry records `conversion`: `{"run", "forge_commit",
-  "forge_dirty", "sidecar_digest"}`, `run` the conversion's run directory.
+  "forge_dirty", "sidecar_digest", "checkout_dirty"}`, `run` the conversion's run directory, `checkout_dirty` whether the checkout is dirty.
 
 A plain `match-outcomes` (no `--effect-records`) writes no keyed record and reads no conversion.
 

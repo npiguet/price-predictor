@@ -25,6 +25,7 @@ from tests.unit.conversion_fixtures import (
     FORGE_COMMIT,
     OTHER_COMMIT,
     conversion_member,
+    stand_in_checkout,
     write_conversion,
     write_jar,
 )
@@ -44,6 +45,7 @@ def started(monkeypatch, tmp_path) -> list:
     monkeypatch.setattr(forge_jvm, "check_worker_prerequisites", lambda **_kw: None)
     jar = write_jar(tmp_path / "forge-connector.jar", FORGE_COMMIT)
     monkeypatch.setattr(forge_jvm, "resolve_connector_jar", lambda: jar)
+    stand_in_checkout(monkeypatch)
     monkeypatch.setattr(
         run_manifest, "read_commits",
         lambda *_args, **_kw: {"repo": "abc1234", "forge": "d44cf28", "dirty": False},
@@ -88,7 +90,7 @@ def test_the_run_keeps_the_conversions_commit_and_digest(started, monkeypatch, t
     assert (code, len(started)) == (0, 1)
     assert entry["conversion"] == {
         "run": converted.as_posix(), "forge_commit": FORGE_COMMIT,
-        "forge_dirty": False, "sidecar_digest": DIGEST,
+        "forge_dirty": False, "sidecar_digest": DIGEST, "checkout_dirty": False,
     }
 
 

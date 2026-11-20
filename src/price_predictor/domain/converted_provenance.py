@@ -51,6 +51,10 @@ class Conversion:
     #: so the commit does not pin the scripts converted.
     forge_dirty: bool
     sidecar_digest: str
+    #: True when the Forge checkout the workers read their scripts from has
+    #: uncommitted changes to tracked files (set when a collection starts; a
+    #: conversion read from ``run.json`` has not been checked against one).
+    checkout_dirty: bool = False
 
     @property
     def run(self) -> Path:
@@ -62,6 +66,7 @@ class Conversion:
         return {
             "run": self.run.as_posix(), "forge_commit": self.forge_commit,
             "forge_dirty": self.forge_dirty, "sidecar_digest": self.sidecar_digest,
+            "checkout_dirty": self.checkout_dirty,
         }
 
 
@@ -127,4 +132,26 @@ def require_same_commit(conversion: Conversion, jar_commit: str, jar: Path) -> N
             f"{conversion.run}, connector JAR {jar}). Reconvert the tree at the "
             "connector's commit, or install Forge at the conversion's commit "
             "and rebuild the connector"
+        )
+
+
+def require_checkout_at_jar_commit(
+    checkout_commit: str | None, jar_commit: str, forge: Path, jar: Path,
+) -> None:
+    """Refuse a collection whose workers would read card scripts from a Forge
+    checkout at another commit than the connector JAR was built at (or from
+    a directory that is no checkout, so no commit names the scripts)."""
+    if checkout_commit is None:
+        raise ConversionRefused(
+            f"the Forge directory {forge} is no git checkout, so the card scripts the "
+            f"workers read name no commit (connector JAR {jar}, built at Forge {jar_commit}); "
+            "point ../forge at a checkout at the connector's commit"
+        )
+    if checkout_commit != jar_commit:
+        raise ConversionRefused(
+            f"the Forge checkout is at {checkout_commit}, but the connector was "
+            f"built at Forge {jar_commit}: the workers would play card scripts another "
+            f"commit wrote than the ones the keys join against (checkout {forge}, "
+            f"connector JAR {jar}). Check out the connector's commit, or reinstall "
+            "Forge and rebuild the connector"
         )

@@ -54,6 +54,19 @@ def write_jar(path: Path, commit: str | None = FORGE_COMMIT) -> Path:
     return path
 
 
+def stand_in_checkout(
+    monkeypatch, commit: str | None = FORGE_COMMIT, *, dirty: bool = False,
+) -> None:
+    """The Forge checkout a collection reads its scripts from, standing at
+    ``commit`` (None: no checkout): a real one needs git history, and its own
+    behaviour is pinned with a real repository in
+    ``tests/unit/infrastructure/test_converted_provenance.py``."""
+    monkeypatch.setattr(
+        "price_predictor.infrastructure.converted_provenance.forge_checkout",
+        lambda _forge: (commit, dirty),
+    )
+
+
 #: What ``SourceTrees.conversion`` returns in a test whose trees are no
 #: conversion: the collector tests that are not about it patch it in.
 STAND_IN_CONVERSION = Conversion(

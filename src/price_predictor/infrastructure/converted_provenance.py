@@ -13,6 +13,9 @@ The connector JAR's Forge commit is the sibling checkout's HEAD when the
 connector was built (``forge-connector/pom.xml``, manifest attribute
 ``Forge-Commit``): it names the Forge the JAR links against only when Forge
 was installed from that same HEAD before the connector (the build order).
+The workers read card scripts from the sibling Forge checkout's working tree
+at run time, so a collection also requires that checkout to still be at the
+JAR's commit.
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ import json
 import logging
 import zipfile
 from collections.abc import Iterable, Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +36,7 @@ from price_predictor.domain.converted_provenance import (
     ConversionRefused,
     latest_conversion,
     manifest_forge_commit,
+    require_checkout_at_jar_commit,
     require_same_commit,
 )
 from price_predictor.infrastructure.run_manifest import MANIFEST_NAME, annotate_run, git_output
@@ -118,11 +123,16 @@ def connector_forge_commit(jar: Path) -> str:
     return commit
 
 
-def collection_conversion(trees: Iterable[Path], *, jar: Path | None = None) -> Conversion:
+def collection_conversion(
+    trees: Iterable[Path], *, jar: Path | None = None, forge: Path | None = None,
+) -> Conversion:
     """The one conversion ``trees`` come from, checked against the connector
-    JAR (by default the one the workers run): refused when a tree names none,
-    when they name two, and when the JAR was built at another Forge commit.
-    A conversion from a dirty Forge checkout is warned about, not refused."""
+    JAR and the Forge checkout the workers read their scripts from (by
+    default the ones the workers run): refused when a tree names none, when
+    they name two, when the JAR was built at another Forge commit, and when
+    the checkout is at another commit than the JAR's or is no checkout. A
+    conversion from a dirty checkout, or a dirty checkout now, is warned
+    about, not refused; the result records whether the checkout is dirty."""
     conversions = {conversion.manifest: conversion for conversion in map(read_conversion, trees)}
     if len(conversions) != 1:
         raise ConversionRefused(
@@ -132,7 +142,9 @@ def collection_conversion(trees: Iterable[Path], *, jar: Path | None = None) -> 
         )
     conversion = next(iter(conversions.values()))
     jar = _connector_jar() if jar is None else Path(jar)
-    require_same_commit(conversion, connector_forge_commit(jar), jar)
+    jar_commit = connector_forge_commit(jar)
+    require_same_commit(conversion, jar_commit, jar)
+    conversion = _checked_against_checkout(conversion, jar_commit, jar, forge)
     if conversion.forge_dirty:
         logger.warning(
             "The converted tree %s was converted from a Forge checkout with uncommitted "
@@ -140,6 +152,27 @@ def collection_conversion(trees: Iterable[Path], *, jar: Path | None = None) -> 
             conversion.run, conversion.forge_commit,
         )
     return conversion
+
+
+def _checked_against_checkout(
+    conversion: Conversion, jar_commit: str, jar: Path, forge: Path | None,
+) -> Conversion:
+    """``conversion`` with whether the checkout the workers read scripts from
+    (``forge``, by default ``forge_dir()``: Forge's ``findForgeDir`` resolves
+    the sibling ``forge`` of the workers' working directory) is dirty; refused
+    when it is at another commit than the JAR's."""
+    from price_predictor.infrastructure.forge_jvm import forge_dir
+
+    forge = forge_dir() if forge is None else Path(forge)
+    commit, dirty = forge_checkout(forge)
+    require_checkout_at_jar_commit(commit, jar_commit, forge, jar)
+    if dirty:
+        logger.warning(
+            "The Forge checkout %s has uncommitted changes to tracked files: commit %s "
+            "does not pin the card scripts the workers read",
+            forge, commit,
+        )
+    return replace(conversion, checkout_dirty=dirty)
 
 
 def _connector_jar() -> Path:

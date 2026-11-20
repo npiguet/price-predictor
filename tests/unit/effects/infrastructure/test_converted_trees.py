@@ -17,6 +17,7 @@ from tests.unit.conversion_fixtures import (
     FORGE_COMMIT,
     OTHER_COMMIT,
     conversion_member,
+    stand_in_checkout,
     write_conversion,
     write_jar,
 )
@@ -116,6 +117,11 @@ def test_a_process_keeps_one_cache_per_roots(tmp_path) -> None:
 
 
 # ── the conversion the card trees come from (finding 11.3, task K03) ─────
+
+
+@pytest.fixture(autouse=True)
+def _checkout_at_the_jars_commit(monkeypatch) -> None:
+    stand_in_checkout(monkeypatch)
 
 
 def _trees(root: Path) -> SourceTrees:

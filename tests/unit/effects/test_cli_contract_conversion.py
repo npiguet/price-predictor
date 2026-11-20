@@ -27,6 +27,7 @@ from tests.unit.conversion_fixtures import (
     FORGE_COMMIT,
     OTHER_COMMIT,
     conversion_member,
+    stand_in_checkout,
     write_conversion,
     write_jar,
 )
@@ -59,6 +60,7 @@ class Collector:
     def jar(self, commit: str | None = FORGE_COMMIT) -> Path:
         jar = write_jar(self.tmp_path / "forge-connector.jar", commit)
         self.monkeypatch.setattr(forge_jvm, "resolve_connector_jar", lambda: jar)
+        stand_in_checkout(self.monkeypatch)
         return jar
 
     def converted(self, *members: dict | None, omit: bool = False) -> Path:
@@ -113,7 +115,7 @@ def test_the_run_keeps_the_conversions_commit_and_digest(collector):
     assert (code, collected) == (0, True)
     assert entry["conversion"] == {
         "run": converted.as_posix(), "forge_commit": FORGE_COMMIT,
-        "forge_dirty": False, "sidecar_digest": DIGEST,
+        "forge_dirty": False, "sidecar_digest": DIGEST, "checkout_dirty": False,
     }
 
 
