@@ -4,12 +4,11 @@ import forge.game.card.Card;
 import forge.game.card.CardView;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.spellability.SpellAbility;
-import forge.game.zone.ZoneType;
 
 import java.util.List;
 
 /**
- * The live collector's resolution whose effect halves wait for its
+ * The live collector's resolution whose effect halves wait for their
  * state-based consequences.
  *
  * <p>Forge does not check state-based actions when an ability finishes:
@@ -43,24 +42,18 @@ final class HeldResolutionWindow {
     /** Where a free activation that changed nothing is reported (FR-040). */
     private final FruitlessActivations fruitless;
 
-    /** The resolution waiting for its consequences, or null when none is. */
-    private HeldResolution held;
+    /**
+     * The resolution waiting for its consequences, or null when none is: the
+     * one waiting that takes the state-based deaths its effects cause.
+     */
+    private Waiting held;
 
     /**
-     * A fizzled spell's effect halves, written with no event but its card's
-     * move off the stack, which Forge makes after publishing the
-     * resolution; null when none waits.
+     * A fizzled or declined spell's effect halves, written with no event but
+     * its card's move off the stack, which Forge makes after publishing the
+     * resolution; null when none waits. It takes no deaths: it did nothing.
      */
-    private FizzledSpell fizzled;
-
-    /**
-     * A fizzled spell's halves, their ids and boards fixed at the fizzle,
-     * waiting for the card's move off the stack (608.2b).
-     */
-    private record FizzledSpell(
-            SpellAbility root, int awaitedCard, String actor, String linkId,
-            List<HalfRecord> halves, ActivationOutcome outcome) {
-    }
+    private Waiting fizzled;
 
     HeldResolutionWindow(CollectorContext context, FruitlessActivations fruitless) {
         this.context = context;
@@ -87,37 +80,58 @@ final class HeldResolutionWindow {
     }
 
     /**
-     * @param root the resolved ability, which the deaths are stamped against
-     * @param key  its line, for {@link FruitlessActivations}
-     * @param free whether it is an activation that paid nothing the game keeps
-     *             ({@link PaidCosts#paidNothingKept})
+     * What a waiting resolution's records say about the resolution itself.
+     *
+     * @param root  the resolved ability, which the deaths and the move are stamped against
+     * @param key   its line, for {@link FruitlessActivations}
+     * @param actor who the records name as the actor
      */
-    private static final class HeldResolution {
-        final SpellAbility root;
-        final ProvenanceKey key;
-        final boolean free;
-        final String actor;
-        final String linkId;
+    private record Source(SpellAbility root, ProvenanceKey key, String actor, String linkId) {
+        static Source of(OpenResolution resolved) {
+            return new Source(resolved.ability, resolved.keys.key(), resolved.actor, resolved.linkId);
+        }
+    }
+
+    /**
+     * A resolution's effect halves, their ids and boards fixed at the
+     * resolution, waiting for the card's move off the stack (608.2b). The
+     * one held waits for the deaths of the state-based loop too, and so
+     * holds the events its halves gathered; a fizzled or declined spell's
+     * halves hold none but the move.
+     *
+     * @param free whether it is an activation that paid nothing the game keeps
+     *             ({@link PaidCosts#paidNothingKept}); never true of a fizzled spell
+     */
+    private static final class Waiting {
+        final Source source;
         final ActivationOutcome outcome;
         final HeldHalves<HalfRecord> halves;
+        final boolean free;
         /**
          * The id of the spell card whose move off the stack the last half
          * takes, or -1 when none is awaited: an ability, or a move taken.
          */
         int awaitedCard;
 
-        HeldResolution(
-                SpellAbility root, ProvenanceKey key, boolean free, String actor, String linkId,
-                ActivationOutcome outcome, HeldHalves<HalfRecord> halves) {
-            this.root = root;
-            this.key = key;
-            this.free = free;
-            this.actor = actor;
-            this.linkId = linkId;
+        Waiting(
+                Source source, ActivationOutcome outcome, HeldHalves<HalfRecord> halves,
+                boolean free, int awaitedCard) {
+            this.source = source;
             this.outcome = outcome;
             this.halves = halves;
-            Card host = root.getHostCard();
-            this.awaitedCard = root.isSpell() && host != null ? host.getId() : -1;
+            this.free = free;
+            this.awaitedCard = awaitedCard;
+        }
+
+        /** Whether it waits for {@code move}: its card leaving the stack. */
+        boolean awaits(Move move) {
+            return awaitedCard >= 0 && move.leftStackAs(awaitedCard);
+        }
+
+        /** Take the card's move off the stack into the last half. */
+        void takeMove(EffectEvent moved) {
+            awaitedCard = -1;
+            halves.fileLast(EventAttribution.stampAt(moved, source.root(), null, null));
         }
     }
 
@@ -134,33 +148,10 @@ final class HeldResolutionWindow {
      *                changed nothing
      */
     void hold(OpenResolution resolved, ActivationOutcome outcome, boolean free) {
-        // Modes, X and the named card are set while the ability resolves, so
-        // the block that carries them is re-read here and paired with the
-        // board each half was captured with: the resolution's start for a
-        // root half, the mode's first clause's for a mode's.
-
-        // A modal resolution on a patched worker writes one effect half per
-        // chosen mode, each through the mode's own option line, every one of
-        // them under the cost half's link (FR-029a, FR-029d). A mode that
-        // fizzled on its own carries an empty list under its key, which is
-        // what the schema says of any resolution that did nothing observable.
-        HeldHalves<HalfRecord> halves = new HeldHalves<>();
         List<ModeSplit.ModeHalf> split = resolved.modes.halves(resolved.effectState());
-        for (int index = 0; index < split.size(); index++) {
-            ModeSplit.ModeHalf half = split.get(index);
-            // The random results and the targets are the half's own, and the
-            // library cards its events name join the board they were
-            // captured with.
-            String refs = refsOf(resolved, half, index, split.size(), half.events());
-            halves.add(HalfRecord.of(
-                    context.nextRecordId(), resolved.keys.withOption(half.mode().option()),
-                    half.mode().state().withRefs(refs).withEventCards(half.events()).render(),
-                    half.conditions()),
-                    half.events());
-        }
-        held = new HeldResolution(
-                resolved.ability, resolved.keys.key(), free, resolved.actor, resolved.linkId,
-                outcome, halves);
+        held = new Waiting(
+                Source.of(resolved), outcome, halvesOf(resolved, split, true, true), free,
+                awaitedCard(resolved.ability, true));
     }
 
     /**
@@ -188,62 +179,88 @@ final class HeldResolutionWindow {
     void writeEmpty(
             OpenResolution resolved, ActivationOutcome outcome, DroppedEvents dropped, String phase) {
         List<ModeSplit.ModeHalf> split = resolved.modes.halves(resolved.effectState());
-        List<HalfRecord> halves = new java.util.ArrayList<>();
-        for (int index = 0; index < split.size(); index++) {
-            ModeSplit.ModeHalf half = split.get(index);
-            String refs = refsOf(resolved, half, index, split.size(), List.of());
+        for (ModeSplit.ModeHalf half : split) {
             for (EffectEvent gathered : half.events()) {
                 dropped.count(gathered.type(), phase);
             }
-            List<ConditionsMet> conditions = outcome == ActivationOutcome.DECLINED
-                    ? half.conditions() : List.of();
-            halves.add(HalfRecord.of(
-                    context.nextRecordId(), resolved.keys.withOption(half.mode().option()),
-                    half.mode().state().withRefs(refs).render(), conditions));
         }
-        Card host = resolved.ability.getHostCard();
+        HeldHalves<HalfRecord> halves =
+                halvesOf(resolved, split, false, outcome == ActivationOutcome.DECLINED);
         // A spell's card leaves the stack after a fizzle or a refusal as after
         // any resolution; a copy's ceases to exist instead (707.10a) and
         // publishes no move, so its halves are written now, empty.
-        if (resolved.ability.isSpell() && host != null && !host.isCopiedSpell()) {
-            fizzled = new FizzledSpell(resolved.ability, host.getId(), resolved.actor,
-                    resolved.linkId, halves, outcome);
+        Waiting waiting = new Waiting(
+                Source.of(resolved), outcome, halves, false, awaitedCard(resolved.ability, false));
+        if (waiting.awaitedCard < 0) {
+            emit(waiting);
             return;
         }
-        emitEmpty(halves, resolved.actor, resolved.linkId, outcome, null);
+        fizzled = waiting;
     }
 
     /**
-     * Write halves that did nothing, the last taking {@code move} when it is
-     * not null: a fizzled spell's card leaving the stack.
+     * The id of the card whose move off the stack a spell's halves wait for,
+     * or -1 for an ability, and for a copy of a spell unless {@code copiesWait}.
      */
-    private void emitEmpty(
-            List<HalfRecord> halves, String actor, String linkId, ActivationOutcome outcome,
-            EffectEvent move) {
-        for (int index = 0; index < halves.size(); index++) {
-            HalfRecord record = halves.get(index);
-            List<EffectEvent> events = move != null && index == halves.size() - 1
-                    ? List.of(move) : List.of();
+    private static int awaitedCard(SpellAbility ability, boolean copiesWait) {
+        Card host = ability.isSpell() ? ability.getHostCard() : null;
+        if (host == null) {
+            return -1;
+        }
+        return host.isCopiedSpell() && !copiesWait ? -1 : host.getId();
+    }
+
+    /**
+     * One half per mode of a resolution, in order, each through the mode's own
+     * option line (FR-029a, FR-029d).
+     *
+     * <p>Modes, X and the named card are set while the ability resolves, so
+     * the block that carries them is re-read here and paired with the board
+     * each half was captured with: the resolution's start for a root half,
+     * the mode's first clause's for a mode's. A mode that fizzled on its own
+     * carries an empty list under its key, which is what the schema says of
+     * any resolution that did nothing observable.
+     *
+     * @param keepsEvents     whether a half holds the events it gathered, and its
+     *                        board the library cards they name; false for an item
+     *                        that did nothing
+     * @param keepsConditions whether a half keeps the conditions Forge decided
+     */
+    private HeldHalves<HalfRecord> halvesOf(
+            OpenResolution resolved, List<ModeSplit.ModeHalf> split, boolean keepsEvents,
+            boolean keepsConditions) {
+        HeldHalves<HalfRecord> halves = new HeldHalves<>();
+        for (int index = 0; index < split.size(); index++) {
+            ModeSplit.ModeHalf half = split.get(index);
+            // The random results and the targets are the half's own, and the
+            // library cards its events name join the board they were
+            // captured with.
+            List<EffectEvent> events = keepsEvents ? half.events() : List.of();
+            ChainTargets.Half position = new ChainTargets.Half(index, split.size(), half.mode().option());
+            String refs = refsOf(resolved, position, events);
+            halves.add(HalfRecord.of(
+                    context.nextRecordId(), resolved.keys.withOption(half.mode().option()),
+                    half.mode().state().withRefs(refs).withEventCards(events).render(),
+                    keepsConditions ? half.conditions() : List.of()),
+                    events);
+        }
+        return halves;
+    }
+
+    /** Write a waiting resolution's halves, each with the events it holds. */
+    private void emit(Waiting waiting) {
+        Source source = waiting.source;
+        for (HeldHalves.Half<HalfRecord> half : waiting.halves.halves()) {
+            HalfRecord record = half.about();
             context.emit(context.newResolution(
                     Moment.RESOLUTION, record.recordId(), record.timestamp())
-                    .actor(actor)
+                    .actor(source.actor())
                     .ability(record.keys())
-                    .linkId(linkId)
+                    .linkId(source.linkId())
                     .state(record.state())
-                    .payload(RecordPayloads.resolutionPayload(events, record.conditions(), outcome)));
+                    .payload(RecordPayloads.resolutionPayload(
+                            half.events(), record.conditions(), waiting.outcome)));
         }
-    }
-
-    /**
-     * Write the fizzled spell's waiting halves, with its card's move off the
-     * stack, or with nothing where the move never came.
-     */
-    private void writeFizzled(EffectEvent move) {
-        FizzledSpell writing = fizzled;
-        fizzled = null;
-        emitEmpty(writing.halves(), writing.actor(), writing.linkId(),
-                writing.outcome(),
-                move == null ? null : EventAttribution.stampAt(move, writing.root(), null, null));
     }
 
     /**
@@ -253,9 +270,7 @@ final class HeldResolutionWindow {
      * targets.
      */
     private static String refsOf(
-            OpenResolution resolved, ModeSplit.ModeHalf half, int index, int halves,
-            List<EffectEvent> events) {
-        ChainTargets.Half position = new ChainTargets.Half(index, halves, half.mode().option());
+            OpenResolution resolved, ChainTargets.Half position, List<EffectEvent> events) {
         List<String> targets = resolved.targetsOfHalf(position);
         List<String> atCast = resolved.targetsAtCastOfHalf(position);
         return RefsJson.renderHalf(resolved.ability, events, resolved.x(), targets, atCast,
@@ -263,29 +278,28 @@ final class HeldResolutionWindow {
     }
 
     /**
-     * Take the held spell's own move off the stack into its last half, the
+     * Take the waiting spell's own move off the stack into its last half, the
      * last event of the resolution's own (FR-042b): to the graveyard, to
      * exile, back to a library. Forge moves the card after publishing the
      * resolution, so the bracket has closed by then. A permanent spell's move
      * onto the battlefield is made while it resolves, and is filed with the
-     * rest of its events.
+     * rest of its events. A fizzled spell's halves are written with the move.
      *
      * @return whether the move was taken
      */
     boolean takeMoveOffStack(GameEventCardChangeZone event, EffectEvent moved) {
-        if (fizzled != null && event.card() != null
-                && event.card().getId() == fizzled.awaitedCard()
-                && event.from() != null && event.from().zoneType() == ZoneType.Stack) {
-            writeFizzled(moved);
+        Move move = new Move(event);
+        if (fizzled != null && fizzled.awaits(move)) {
+            Waiting writing = fizzled;
+            fizzled = null;
+            writing.takeMove(moved);
+            emit(writing);
             return true;
         }
-        if (held == null || held.awaitedCard < 0 || event.card() == null
-                || event.card().getId() != held.awaitedCard
-                || event.from() == null || event.from().zoneType() != ZoneType.Stack) {
+        if (held == null || !held.awaits(move)) {
             return false;
         }
-        held.awaitedCard = -1;
-        held.halves.fileLast(EventAttribution.stampAt(moved, held.root, null, null));
+        held.takeMove(moved);
         return true;
     }
 
@@ -345,7 +359,7 @@ final class HeldResolutionWindow {
      * <p>Only while {@link #isHolding}.
      */
     void fileConsequence(EffectEvent event, String subject) {
-        held.halves.fileDeath(EventAttribution.stampAt(event, held.root, null, null), subject);
+        held.halves.fileDeath(EventAttribution.stampAt(event, held.source.root(), null, null), subject);
     }
 
     /**
@@ -356,29 +370,27 @@ final class HeldResolutionWindow {
     void close() {
         if (fizzled != null) {
             // The card never left the stack where this collector saw it.
-            writeFizzled(null);
+            Waiting writing = fizzled;
+            fizzled = null;
+            emit(writing);
         }
         if (held == null) {
             return;
         }
-        HeldResolution writing = held;
+        Waiting writing = held;
         held = null;
-        // Reported once its state-based consequences are in: a free activation
-        // that changed nothing the seat will not repeat this turn (FR-040).
+        reportIfFruitless(writing);
+        emit(writing);
+    }
+
+    /**
+     * Reported once its state-based consequences are in: a free activation
+     * that changed nothing the seat will not repeat this turn (FR-040).
+     */
+    private void reportIfFruitless(Waiting writing) {
         if (writing.free && writing.halves.halves().stream()
                 .allMatch(half -> FruitlessActivations.changesNothing(half.events()))) {
-            fruitless.report(writing.root, writing.key);
-        }
-        for (HeldHalves.Half<HalfRecord> half : writing.halves.halves()) {
-            HalfRecord record = half.about();
-            context.emit(context.newResolution(
-                    Moment.RESOLUTION, record.recordId(), record.timestamp())
-                    .actor(writing.actor)
-                    .ability(record.keys())
-                    .linkId(writing.linkId)
-                    .state(record.state())
-                    .payload(RecordPayloads.resolutionPayload(
-                            half.events(), record.conditions(), writing.outcome)));
+            fruitless.report(writing.source.root(), writing.source.key());
         }
     }
 }
