@@ -7,6 +7,7 @@ import forge.game.zone.ZoneType;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Predicate;
 
 import static com.pricepredictor.connector.effects.directed.BoardChanges.changes;
 import static com.pricepredictor.connector.effects.directed.BoardChanges.id;
@@ -105,11 +106,7 @@ final class RuleTwinChecks {
      */
     static void assertOnlyChanged(RuleTwin twin, Card gone, Card added, String... members) {
         Set<String> ids = new TreeSet<>(List.of(id(gone), id(added)));
-        java.util.function.Predicate<String> own = change -> ids.stream().anyMatch(
-                card -> change.equals("-" + card) || change.equals("+" + card)
-                        || change.startsWith(card + ".")
-                        || change.startsWith("-link ") && change.contains("=" + card)
-                        || change.startsWith("+link ") && change.contains("=" + card));
+        Predicate<String> own = changeOf(gone).or(changeOf(added));
         // Something of the edited cards changed: an edit that did nothing
         // passes every "only" check below.
         assertTrue(twin.changes().stream().anyMatch(own),
@@ -118,5 +115,24 @@ final class RuleTwinChecks {
             assertTrue(own.test(change) || List.of(members).contains(change),
                     "changed " + change + "; all: " + twin.changes());
         }
+    }
+
+    /** A change of {@code card}: to the card itself, or to a link to it. */
+    private static Predicate<String> changeOf(Card card) {
+        return changeToItself(card).or(changeToLinkTo(card));
+    }
+
+    /** {@code card} removed, added, or one of its members changed. */
+    private static Predicate<String> changeToItself(Card card) {
+        String self = id(card);
+        return change -> change.equals("-" + self) || change.equals("+" + self)
+                || change.startsWith(self + ".");
+    }
+
+    /** A link to {@code card} removed or added. */
+    private static Predicate<String> changeToLinkTo(Card card) {
+        String linked = id(card);
+        return change -> change.startsWith("-link ") && change.contains("=" + linked)
+                || change.startsWith("+link ") && change.contains("=" + linked);
     }
 }
