@@ -4,12 +4,50 @@ from __future__ import annotations
 
 import threading
 import time
+from dataclasses import dataclass
 from unittest.mock import MagicMock
 
 from sealed.application.match_outcomes import MatchOutcomeSupervisor, MatchRunOptions
 from sealed.infrastructure.match_worker_connector import WorkerDecks
 from tests.unit.sealed.conftest import FakeProcess
 from tests.unit.worker_status_line import status_line
+
+
+def _install_fake_connector(supervisor: MatchOutcomeSupervisor) -> MagicMock:
+    """Give ``supervisor`` a connector whose workers start and exit at once."""
+    fake_connector = MagicMock()
+    fake_connector.start.return_value = FakeProcess(pid=1000, returncode=0)
+    supervisor._connector = fake_connector
+    return fake_connector
+
+
+def _run_workers_that_shut_down_on_start(tmp_path, worker_count: int = 1) -> list[int]:
+    """Run a supervisor whose first worker start sets shutdown; the started ids."""
+    output_file = tmp_path / "match-outcomes.txt"
+    started: list[int] = []
+
+    def fake_start_worker(worker_id):
+        started.append(worker_id)
+        # Signal shutdown when worker starts
+        supervisor._shutdown_event.set()
+        return FakeProcess(pid=1000, returncode=0)
+
+    supervisor = MatchOutcomeSupervisor(
+        worker_count=worker_count, output_path=output_file, best_of=3,
+    )
+    supervisor._start_worker = fake_start_worker
+    supervisor.run()
+    return started
+
+
+@dataclass(frozen=True)
+class _WorkerRun:
+    """What the one fake worker of a supervised run does."""
+
+    matches: int
+    record_lines: int
+    log_lines: tuple[str, ...] = ()
+    random_seat_matches: int = 0
 
 
 class TestSupervisorSpawnCount:
@@ -58,20 +96,9 @@ class TestSupervisorCrashRestartBehavior:
         assert start_count[0] >= 2, "Crashed worker must be restarted at least once"
 
     def test_worker_not_restarted_after_shutdown(self, tmp_path):
-        output_file = tmp_path / "match-outcomes.txt"
-        start_count = [0]
+        started = _run_workers_that_shut_down_on_start(tmp_path)
 
-        def fake_start_worker(worker_id):
-            start_count[0] += 1
-            # Signal shutdown when worker starts
-            supervisor._shutdown_event.set()
-            return FakeProcess(pid=1000, returncode=0)
-
-        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
-        supervisor._start_worker = fake_start_worker
-        supervisor.run()
-
-        assert start_count[0] == 1, "Worker must not be restarted after shutdown"
+        assert len(started) == 1, "Worker must not be restarted after shutdown"
 
 
 class TestSupervisorShutdownSignal:
@@ -117,17 +144,7 @@ class TestSupervisorWorkerCount:
     """US2: --workers argument controls exact number of spawned processes."""
 
     def test_single_worker_spawns_exactly_one(self, tmp_path):
-        output_file = tmp_path / "match-outcomes.txt"
-        spawned_ids = []
-
-        def fake_start_worker(worker_id):
-            spawned_ids.append(worker_id)
-            supervisor._shutdown_event.set()
-            return FakeProcess(pid=1000, returncode=0)
-
-        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
-        supervisor._start_worker = fake_start_worker
-        supervisor.run()
+        spawned_ids = _run_workers_that_shut_down_on_start(tmp_path)
 
         assert len(spawned_ids) == 1
 
@@ -178,9 +195,7 @@ class TestSupervisorSideDecks:
             ),
         )
 
-        fake_connector = MagicMock()
-        fake_connector.start.return_value = FakeProcess(pid=1000, returncode=0)
-        supervisor._connector = fake_connector
+        fake_connector = _install_fake_connector(supervisor)
 
         proc = supervisor._start_worker(0)
 
@@ -204,9 +219,7 @@ class TestSupervisorRunId:
         output_file = tmp_path / "match-outcomes.txt"
         supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
 
-        fake_connector = MagicMock()
-        fake_connector.start.return_value = FakeProcess(pid=1000, returncode=0)
-        supervisor._connector = fake_connector
+        fake_connector = _install_fake_connector(supervisor)
 
         supervisor._start_worker(0)
         supervisor._start_worker(1)
@@ -234,9 +247,7 @@ class TestSupervisorRunId:
             ),
         )
 
-        fake_connector = MagicMock()
-        fake_connector.start.return_value = FakeProcess(pid=1000, returncode=0)
-        supervisor._connector = fake_connector
+        fake_connector = _install_fake_connector(supervisor)
 
         supervisor._start_worker(0)
         supervisor._start_worker(0)  # the same slot, a new JVM
@@ -264,9 +275,7 @@ class TestSupervisorWorkerLogs:
         output_file = tmp_path / "match-outcomes.txt"
         supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
 
-        fake_connector = MagicMock()
-        fake_connector.start.return_value = FakeProcess(pid=1000, returncode=0)
-        supervisor._connector = fake_connector
+        fake_connector = _install_fake_connector(supervisor)
 
         supervisor._start_worker(0)
 
@@ -282,9 +291,7 @@ class TestSupervisorWorkerLogs:
             ),
         )
 
-        fake_connector = MagicMock()
-        fake_connector.start.return_value = FakeProcess(pid=1000, returncode=0)
-        supervisor._connector = fake_connector
+        fake_connector = _install_fake_connector(supervisor)
 
         supervisor._start_worker(0)
 
@@ -304,9 +311,7 @@ class TestSupervisorWorkerLogs:
             ),
         )
 
-        fake_connector = MagicMock()
-        fake_connector.start.return_value = FakeProcess(pid=1000, returncode=0)
-        supervisor._connector = fake_connector
+        fake_connector = _install_fake_connector(supervisor)
 
         supervisor._start_worker(0)
         supervisor._start_worker(0)  # same slot, a new JVM
@@ -345,9 +350,7 @@ class TestSupervisorBestOf:
             worker_count=1, output_path=output_file, best_of=17,
         )
 
-        fake_connector = MagicMock()
-        fake_connector.start.return_value = FakeProcess(pid=1000, returncode=0)
-        supervisor._connector = fake_connector
+        fake_connector = _install_fake_connector(supervisor)
 
         supervisor._start_worker(0)
 
@@ -372,8 +375,11 @@ class TestTheRunReportsWhatItsWorkersLogged:
     """V4 #3 on match-outcomes: worker failure lines went to the logs and
     nowhere else, and a run that recorded nothing said nothing."""
 
-    def _run(self, tmp_path, *, matches: int, record_lines: int, log_lines=(),
-             random_seat_matches: int = 0):
+    def _run(self, tmp_path, worker: _WorkerRun):
+        matches = worker.matches
+        record_lines = worker.record_lines
+        log_lines = worker.log_lines
+        random_seat_matches = worker.random_seat_matches
         records = tmp_path / "records"
         output_file = tmp_path / "match-outcomes.txt"
         supervisor = MatchOutcomeSupervisor(
@@ -404,32 +410,36 @@ class TestTheRunReportsWhatItsWorkersLogged:
 
     def test_the_failure_lines_are_printed_by_kind(self, tmp_path, capsys):
         supervisor = self._run(
-            tmp_path, matches=1, record_lines=3,
-            log_lines=["Worker: 10 matches generated", "Error generating match: boom"],
+            tmp_path, _WorkerRun(
+                matches=1, record_lines=3,
+                log_lines=("Worker: 10 matches generated", "Error generating match: boom"),
+            ),
         )
 
         assert supervisor.worker_failures.as_dict() == {"match_error": 1}
         assert "Worker logs over the run: 1 match_error" in capsys.readouterr().out
 
     def test_a_run_that_played_matches_and_recorded_nothing_collected_nothing(self, tmp_path):
-        assert self._run(tmp_path, matches=2, record_lines=0).collected_nothing is True
+        assert self._run(tmp_path, _WorkerRun(matches=2, record_lines=0)).collected_nothing is True
 
     def test_records_of_this_run_are_something(self, tmp_path):
-        assert self._run(tmp_path, matches=2, record_lines=3).collected_nothing is False
+        assert self._run(tmp_path, _WorkerRun(matches=2, record_lines=3)).collected_nothing is False
 
     def test_no_match_played_is_no_verdict(self, tmp_path):
-        assert self._run(tmp_path, matches=0, record_lines=0).collected_nothing is False
+        assert self._run(tmp_path, _WorkerRun(matches=0, record_lines=0)).collected_nothing is False
 
     def test_a_run_of_random_seat_matches_alone_is_judged_too(self, tmp_path):
         """A random-seat match writes no outcome row (WP7): such a run read
         as no match played, whatever it recorded."""
-        supervisor = self._run(tmp_path, matches=0, record_lines=0, random_seat_matches=3)
+        supervisor = self._run(
+            tmp_path, _WorkerRun(matches=0, record_lines=0, random_seat_matches=3),
+        )
         assert supervisor.collected_nothing is True
 
     def test_random_seat_matches_that_threw_are_matches_played(self, tmp_path):
-        supervisor = self._run(tmp_path, matches=0, record_lines=0, log_lines=[
+        supervisor = self._run(tmp_path, _WorkerRun(matches=0, record_lines=0, log_lines=(
             "Error generating match: [random-seat match] boom",
-        ])
+        )))
         assert supervisor.worker_failures.as_dict() == {"random_seat_match_error": 1}
         assert supervisor.collected_nothing is True
 
@@ -439,7 +449,9 @@ class TestTheRunReportsWhatItsWorkersLogged:
         from price_predictor.infrastructure.run_manifest import RunCommand, run_recorded
 
         def body():
-            self._run(tmp_path, matches=1, record_lines=2, random_seat_matches=2)
+            self._run(
+                tmp_path, _WorkerRun(matches=1, record_lines=2, random_seat_matches=2),
+            )
             return 0
 
         run_recorded(tmp_path / "records", body, RunCommand("python -m sealed match-outcomes"))
@@ -467,11 +479,14 @@ class TestTheRunReportsWhatItsWorkersLogged:
         found = {}
 
         def body():
-            found["supervisor"] = self._run(tmp_path, matches=1, record_lines=2, log_lines=[
+            refusals = (
                 status_line("a", fork_refusals={"directed dies": 1}),
                 status_line("a", fork_refusals={
                     "directed dies": 3, "intervention no choices": 2}),
-            ])
+            )
+            found["supervisor"] = self._run(
+                tmp_path, _WorkerRun(matches=1, record_lines=2, log_lines=refusals),
+            )
             return 0
 
         run_recorded(tmp_path / "records", body, RunCommand("python -m sealed match-outcomes"))
