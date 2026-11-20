@@ -87,6 +87,14 @@ final class CardFacts {
      */
     static String chosenJson(Card card) {
         Json.ObjectWriter chosen = Json.object();
+        addChosenBasics(chosen, card);
+        addChosenCollections(chosen, card);
+        addChosenLabels(chosen, card);
+        addChosenSectorAndRolls(chosen, card);
+        return chosen.render();
+    }
+
+    private static void addChosenBasics(Json.ObjectWriter chosen, Card card) {
         List<String> colors = new ArrayList<>();
         card.getChosenColors().forEach(colors::add);
         if (!colors.isEmpty()) {
@@ -104,6 +112,9 @@ final class CardFacts {
         if (card.getChosenPlayer() != null) {
             chosen.value("player", Refs.of(card.getChosenPlayer()));
         }
+    }
+
+    private static void addChosenCollections(Json.ObjectWriter chosen, Card card) {
         if (card.hasChosenCard()) {
             List<String> cards = new ArrayList<>();
             for (Card each : card.getChosenCards()) {
@@ -114,22 +125,31 @@ final class CardFacts {
         if (card.hasNamedCard()) {
             chosen.raw("names", Json.stringArray(card.getNamedCards()));
         }
+    }
+
+    private static void addChosenLabels(Json.ObjectWriter chosen, Card card) {
         if (card.getChosenDirection() != null) {
             chosen.value("direction", card.getChosenDirection().name().toLowerCase(java.util.Locale.ROOT));
         }
-        if (card.getChosenMode() != null && !card.getChosenMode().isEmpty()) {
+        if (isSet(card.getChosenMode())) {
             chosen.value("mode", card.getChosenMode());
         }
         if (card.hasChosenEvenOdd()) {
             chosen.value("even_odd", card.getChosenEvenOdd().name().toLowerCase(java.util.Locale.ROOT));
         }
-        if (card.getChosenSector() != null && !card.getChosenSector().isEmpty()) {
+    }
+
+    private static void addChosenSectorAndRolls(Json.ObjectWriter chosen, Card card) {
+        if (isSet(card.getChosenSector())) {
             chosen.value("sector", card.getChosenSector());
         }
         if (card.getStoredRolls() != null && !card.getStoredRolls().isEmpty()) {
             chosen.value("stored_rolls", card.getStoredRolls());
         }
-        return chosen.render();
+    }
+
+    private static boolean isSet(String text) {
+        return text != null && !text.isEmpty();
     }
 
     /**
@@ -190,38 +210,47 @@ final class CardFacts {
         if (zone == null) {
             return null;
         }
-        ZoneType type = zone.getZoneType();
-        switch (type) {
-            case Battlefield -> {
-                Comparator<Card> byTimestamp = Comparator
-                        .comparingLong(Card::getLayerTimestamp).thenComparingInt(Card::getId);
-                int rank = 0;
-                for (Card other : game.getCardsIncludePhasingIn(ZoneType.Battlefield)) {
-                    if (other != card && byTimestamp.compare(other, card) < 0) {
-                        rank++;
-                    }
-                }
-                return rank;
-            }
-            case Stack -> {
-                int rank = 0;
-                for (var instance : game.getStack()) {
-                    SpellAbility ability = instance.getSpellAbility();
-                    if (ability != null && ability.getHostCard() == card && ability.isSpell()) {
-                        return rank;
-                    }
-                    rank++;
-                }
-                return null;
-            }
-            case Command -> {
-                return null;
-            }
-            default -> {
-                int index = zone.getCards().indexOf(card);
-                return index < 0 ? null : index;
+        return switch (zone.getZoneType()) {
+            case Battlefield -> battlefieldRank(game, card);
+            case Stack -> stackRank(game, card);
+            case Command -> null;
+            default -> zoneIndex(zone, card);
+        };
+    }
+
+    private static Integer battlefieldRank(Game game, Card card) {
+        Comparator<Card> byTimestamp = Comparator
+                .comparingLong(Card::getLayerTimestamp).thenComparingInt(Card::getId);
+        int rank = 0;
+        for (Card other : game.getCardsIncludePhasingIn(ZoneType.Battlefield)) {
+            if (other != card && byTimestamp.compare(other, card) < 0) {
+                rank++;
             }
         }
+        return rank;
+    }
+
+    private static Integer stackRank(Game game, Card card) {
+        int rank = 0;
+        for (var instance : game.getStack()) {
+            if (isSpellOf(instance.getSpellAbility(), card)) {
+                return rank;
+            }
+            rank++;
+        }
+        return null;
+    }
+
+    private static boolean isSpellOf(SpellAbility ability, Card card) {
+        if (ability == null) {
+            return false;
+        }
+        return ability.getHostCard() == card && ability.isSpell();
+    }
+
+    private static Integer zoneIndex(Zone zone, Card card) {
+        int index = zone.getCards().indexOf(card);
+        return index < 0 ? null : index;
     }
 
     /**

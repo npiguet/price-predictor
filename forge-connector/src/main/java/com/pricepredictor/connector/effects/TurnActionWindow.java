@@ -69,13 +69,20 @@ final class TurnActionWindow {
     void open(PhaseType begun) {
         close();
         Player active = game.getPhaseHandler().getPlayerTurn();
-        if (begun == null || active == null || !STEPS.contains(begun)
-                || !mayAct(begun, active)) {
+        if (!opensFor(begun, active)) {
             return;
         }
         step = begun;
         actor = Refs.of(active);
         state = snapshots.ofBoard();
+    }
+
+    /** Whether a window opens for {@code begun}: a collected step whose action can happen. */
+    private static boolean opensFor(PhaseType begun, Player active) {
+        if (begun == null || active == null) {
+            return false;
+        }
+        return STEPS.contains(begun) && mayAct(begun, active);
     }
 
     /**
@@ -125,23 +132,38 @@ final class TurnActionWindow {
      * it), the main phase a lore counter.
      */
     static TurnActionSubkind actionOf(PhaseType step, EffectEvent event) {
-        EventType type = event.type();
         return switch (step) {
-            case UNTAP -> switch (type) {
-                case PHASED -> TurnActionSubkind.PHASING;
-                case DAY_NIGHT_CHANGED -> TurnActionSubkind.DAY_NIGHT;
-                case UNTAPPED -> TurnActionSubkind.UNTAP;
-                default -> null;
-            };
-            case DRAW -> type == EventType.CARD_DRAWN || movedTo(event, "hand")
-                    ? TurnActionSubkind.DRAW : null;
-            case CLEANUP -> type == EventType.CARD_DISCARDED || movedFrom(event, "hand")
-                    ? TurnActionSubkind.CLEANUP_DISCARD : null;
-            case MAIN1 -> type == EventType.COUNTER_CHANGE
-                    && "LORE".equals(event.param(EventParam.COUNTER_TYPE))
-                    ? TurnActionSubkind.LORE_COUNTER : null;
+            case UNTAP -> untapActionOf(event.type());
+            case DRAW -> drawActionOf(event);
+            case CLEANUP -> cleanupActionOf(event);
+            case MAIN1 -> loreActionOf(event);
             default -> null;
         };
+    }
+
+    private static TurnActionSubkind untapActionOf(EventType type) {
+        return switch (type) {
+            case PHASED -> TurnActionSubkind.PHASING;
+            case DAY_NIGHT_CHANGED -> TurnActionSubkind.DAY_NIGHT;
+            case UNTAPPED -> TurnActionSubkind.UNTAP;
+            default -> null;
+        };
+    }
+
+    private static TurnActionSubkind drawActionOf(EffectEvent event) {
+        return event.type() == EventType.CARD_DRAWN || movedTo(event, "hand")
+                ? TurnActionSubkind.DRAW : null;
+    }
+
+    private static TurnActionSubkind cleanupActionOf(EffectEvent event) {
+        return event.type() == EventType.CARD_DISCARDED || movedFrom(event, "hand")
+                ? TurnActionSubkind.CLEANUP_DISCARD : null;
+    }
+
+    private static TurnActionSubkind loreActionOf(EffectEvent event) {
+        return event.type() == EventType.COUNTER_CHANGE
+                && "LORE".equals(event.param(EventParam.COUNTER_TYPE))
+                ? TurnActionSubkind.LORE_COUNTER : null;
     }
 
     private static boolean movedTo(EffectEvent event, String zone) {

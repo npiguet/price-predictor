@@ -273,8 +273,8 @@ final class HeldResolutionWindow {
             OpenResolution resolved, ChainTargets.Half position, List<EffectEvent> events) {
         List<String> targets = resolved.targetsOfHalf(position);
         List<String> atCast = resolved.targetsAtCastOfHalf(position);
-        return RefsJson.renderHalf(resolved.ability, events, resolved.x(), targets, atCast,
-                resolved.onStackOf(targets, atCast));
+        return RefsJson.renderHalf(resolved.ability, new RefsJson.HalfInputs(events, resolved.x(), targets, atCast,
+                resolved.onStackOf(targets, atCast)));
     }
 
     /**

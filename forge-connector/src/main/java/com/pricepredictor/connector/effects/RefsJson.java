@@ -58,10 +58,31 @@ final class RefsJson {
      * they held before that check ({@code targets_at_cast}, null where they
      * are unknown).
      */
-    static String renderHalf(
-            SpellAbility acting, List<EffectEvent> resolved, Integer x,
-            List<String> targets, List<String> targetsAtCast, List<String> onStack) {
-        return render(acting, null, x, randomJson(resolved), targets, targetsAtCast, onStack);
+    static String renderHalf(SpellAbility acting, HalfInputs half) {
+        return renderBlock(acting, new Block(null, half.x(), randomJson(half.resolved()),
+                half.targets(), half.targetsAtCast(), half.onStack()));
+    }
+
+    /**
+     * What one effect half's refs block is read from beside its acting
+     * ability: the resolution's events, the X read before it, and the half's
+     * targets as they stood after and before Forge's check for illegal ones.
+     *
+     * @param resolved      the resolution's own events, read for dice and coin flips
+     * @param x             the X read before the resolution, or null
+     * @param targets       the targets the half's links held after the check
+     * @param targetsAtCast the targets they held before it, null where unknown
+     * @param onStack       the targets that are spells or abilities on the stack
+     */
+    record HalfInputs(
+            List<EffectEvent> resolved, Integer x, List<String> targets,
+            List<String> targetsAtCast, List<String> onStack) {
+    }
+
+    /** Everything a refs block holds besides its acting ability. */
+    private record Block(
+            Card sourceOverride, Integer x, String random, List<String> targets,
+            List<String> targetsAtCast, List<String> onStack) {
     }
 
     /**
@@ -71,69 +92,93 @@ final class RefsJson {
      * uncalled flip, as Forge's coin effects read it).
      */
     static String randomJson(List<EffectEvent> events) {
-        List<Object> dice = new ArrayList<>();
-        int won = 0;
-        int lost = 0;
+        RandomTally tally = new RandomTally();
         for (EffectEvent event : events) {
-            if (event.type() == EventType.DICE_ROLLED
-                    && event.param(EventParam.RESULTS) instanceof Iterable<?> results) {
-                for (Object die : results) {
-                    if (die instanceof java.util.Map<?, ?> rolled && rolled.get("final") != null) {
-                        dice.add(rolled.get("final"));
-                    }
-                }
-            } else if (event.type() == EventType.COIN_FLIPPED
-                    && event.param(EventParam.RESULTS) instanceof Iterable<?> results) {
-                for (Object flip : results) {
-                    String result = String.valueOf(flip);
-                    if (result.equals("win") || result.equals("heads")) {
-                        won++;
-                    } else if (result.equals("loss") || result.equals("tails")) {
-                        lost++;
-                    }
-                }
-            }
+            tally.add(event);
         }
         return Json.object()
-                .value("dice", dice)
-                .raw("coin_flips", Json.object().value("won", won).value("lost", lost).render())
+                .value("dice", tally.dice)
+                .raw("coin_flips", Json.object().value("won", tally.won).value("lost", tally.lost).render())
                 .render();
     }
 
+    /** The dice and coin flips the events of one resolution report, in the order met. */
+    private static final class RandomTally {
+        private final List<Object> dice = new ArrayList<>();
+        private int won;
+        private int lost;
+
+        void add(EffectEvent event) {
+            if (event.type() == EventType.DICE_ROLLED) {
+                addDice(event);
+            } else if (event.type() == EventType.COIN_FLIPPED) {
+                addFlips(event);
+            }
+        }
+
+        private void addDice(EffectEvent event) {
+            if (event.param(EventParam.RESULTS) instanceof Iterable<?> results) {
+                for (Object die : results) {
+                    addDie(die);
+                }
+            }
+        }
+
+        private void addDie(Object die) {
+            if (die instanceof java.util.Map<?, ?> rolled && rolled.get("final") != null) {
+                dice.add(rolled.get("final"));
+            }
+        }
+
+        private void addFlips(EffectEvent event) {
+            if (event.param(EventParam.RESULTS) instanceof Iterable<?> results) {
+                for (Object flip : results) {
+                    addFlip(String.valueOf(flip));
+                }
+            }
+        }
+
+        private void addFlip(String result) {
+            if (result.equals("win") || result.equals("heads")) {
+                won++;
+            } else if (result.equals("loss") || result.equals("tails")) {
+                lost++;
+            }
+        }
+    }
+
     /**
-     * Every target the acting ability's chain holds now, root first, each
-     * once: a charm's modes' and a {@code SubAbility$}'s as well as the
-     * root's; a spell or ability on the stack by its card.
+     * A refs block whose targets are every target the acting ability's chain
+     * holds now, root first, each once: a charm's modes' and a
+     * {@code SubAbility$}'s as well as the root's; a spell or ability on the
+     * stack by its card.
      */
-    /** A refs block whose targets are the ones the acting ability's chain holds now. */
     private static String renderNow(
             SpellAbility acting, Card sourceOverride, Integer x, String random) {
         if (acting == null) {
-            return render(null, sourceOverride, x, random, List.of(), null, List.of());
+            return renderBlock(null, new Block(sourceOverride, x, random, List.of(), null, List.of()));
         }
         ChainTargets now = ChainTargets.now(acting);
         List<String> targets = now.all();
-        return render(acting, sourceOverride, x, random, targets, null,
-                ChainTargets.onStackOf(targets, now));
+        return renderBlock(acting, new Block(sourceOverride, x, random, targets, null,
+                ChainTargets.onStackOf(targets, now)));
     }
 
-    private static String render(
-            SpellAbility acting, Card sourceOverride, Integer x, String random,
-            List<String> targets, List<String> targetsAtCast, List<String> onStack) {
-        String source = Refs.ofNullable(sourceOverride);
+    private static String renderBlock(SpellAbility acting, Block block) {
+        String source = Refs.ofNullable(block.sourceOverride());
         if (acting != null && acting.getHostCard() != null) {
             source = Refs.of(acting.getHostCard());
         }
         return Json.object()
-                .raw("targets", Json.stringArray(targets))
-                .raw("targets_at_cast",
-                        targetsAtCast == null ? "null" : Json.stringArray(targetsAtCast))
-                .raw("targets_on_stack", Json.stringArray(onStack))
+                .raw("targets", Json.stringArray(block.targets()))
+                .raw("targets_at_cast", block.targetsAtCast() == null
+                        ? "null" : Json.stringArray(block.targetsAtCast()))
+                .raw("targets_on_stack", Json.stringArray(block.onStack()))
                 .value("source", source)
                 .raw("modes", modesJson(acting))
-                .value("x", x)
+                .value("x", block.x())
                 .raw("choices", choicesJson(acting))
-                .raw("random", random)
+                .raw("random", block.random())
                 .render();
     }
 
@@ -167,12 +212,17 @@ final class RefsJson {
         if (paid != null) {
             return paid;
         }
+        return announcedFromSVar(acting);
+    }
+
+    /** The ability's {@code SVar:X} computed now, when its chain names X and it is evaluable. */
+    private static Integer announcedFromSVar(SpellAbility acting) {
         Card host = acting.getHostCard();
         if (host == null || !chainNamesX(acting)) {
             return null;
         }
         String amount = acting.getSVar("X");
-        if (amount == null || amount.isEmpty() || amount.contains("Random")) {
+        if (!isEvaluable(amount)) {
             return null;
         }
         try {
@@ -180,6 +230,13 @@ final class RefsJson {
         } catch (RuntimeException e) {
             return null;
         }
+    }
+
+    private static boolean isEvaluable(String amount) {
+        if (amount == null || amount.isEmpty()) {
+            return false;
+        }
+        return !amount.contains("Random");
     }
 
     /** Whether a parameter of the ability's root or one of its sub-abilities names X. */

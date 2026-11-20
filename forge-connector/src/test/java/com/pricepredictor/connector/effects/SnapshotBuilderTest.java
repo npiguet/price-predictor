@@ -1190,7 +1190,7 @@ class SnapshotBuilderTest {
                     .param(EventParam.RESULTS, List.of("win", "loss", "loss"));
 
             Map<String, Object> random = RecordLines.asMap(RecordLines.parse(
-                    RefsJson.renderHalf(null, List.of(dice, coins), null, List.of(), null, List.of())).get("random"));
+                    RefsJson.renderHalf(null, new RefsJson.HalfInputs(List.of(dice, coins), null, List.of(), null, List.of()))).get("random"));
 
             assertEquals(List.of(4L, 6L), random.get("dice"));
             assertEquals(Map.of("won", 1L, "lost", 2L), random.get("coin_flips"));
