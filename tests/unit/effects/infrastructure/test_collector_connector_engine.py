@@ -18,7 +18,7 @@ from unittest.mock import patch
 import pytest
 
 from effects.domain.collection_caps import CollectionCaps
-from effects.infrastructure.collector_connector import CollectorSupervisor
+from effects.infrastructure.collector_connector import CollectorRun, CollectorSupervisor, RoundSpec
 from price_predictor.domain.worker_status import WorkerEngineRefused
 from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
 from price_predictor.infrastructure.run_manifest import run_recorded
@@ -40,10 +40,10 @@ class _Round:
     that scan asked the pool to stop."""
 
     def __init__(self, tmp_path, *, allow_degraded: bool = False) -> None:
-        self.supervisor = CollectorSupervisor(
+        self.supervisor = CollectorSupervisor(CollectorRun(
             worker_count=1, effect_records=tmp_path, run_id="run",
             caps=CollectionCaps(), stop=_QUICK_STOP, allow_degraded=allow_degraded,
-        )
+        ))
         self.decks = tmp_path / "decks.txt"
         self.stopped_at_status: list[bool] = []
 
@@ -58,7 +58,7 @@ class _Round:
 
         with patch.object(ForgeWorkerPool, "run", fake_run):
             self.supervisor.play_round(
-                _DECKS, self.decks, label="coverage", matches=1)
+                _DECKS, self.decks, RoundSpec(label="coverage", matches=1))
 
 
 def _entry(tmp_path) -> dict:
@@ -101,10 +101,10 @@ class TestADegradedEngineStopsTheRun:
 
     def test_a_line_read_only_at_the_round_s_end_is_refused_too(self, tmp_path):
         """A round shorter than one status interval: the end-of-round scan judges."""
-        supervisor = CollectorSupervisor(
+        supervisor = CollectorSupervisor(CollectorRun(
             worker_count=1, effect_records=tmp_path, run_id="run",
             caps=CollectionCaps(), stop=_QUICK_STOP,
-        )
+        ))
 
         def fake_run(pool):
             path = supervisor._worker_logs.path_for(0)
@@ -112,7 +112,8 @@ class TestADegradedEngineStopsTheRun:
             path.write_text(DEGRADED + "\n", encoding="utf-8")
 
         with patch.object(ForgeWorkerPool, "run", fake_run), pytest.raises(WorkerEngineRefused):
-            supervisor.play_round(_DECKS, tmp_path / "d.txt", label="coverage", matches=1)
+            supervisor.play_round(
+                _DECKS, tmp_path / "d.txt", RoundSpec(label="coverage", matches=1))
 
     def test_a_whole_engine_runs_on(self, tmp_path):
         round_ = _Round(tmp_path)

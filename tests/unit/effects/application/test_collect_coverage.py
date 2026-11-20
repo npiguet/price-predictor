@@ -274,12 +274,12 @@ class TestTheRoundPlaysTheComputedDecks:
         # rule, which the counts apply, refuses them as no-acting-text.
         _convert_acting_line(cards)
 
-        def _play(_decks, _decks_file, *, label, matches):
+        def _play(_decks, _decks_file, spec):
             count = next(produced, 0)
             if not count:
                 return
             record = _record([make_entity("E1", "aa")], source="E1")
-            write_plain_shard(records_dir, f"{matches}{count}", [record] * count)
+            write_plain_shard(records_dir, f"{spec.matches}{count}", [record] * count)
 
         supervisor.play_round.side_effect = _play
 
@@ -297,7 +297,7 @@ class TestTheRoundPlaysTheComputedDecks:
         decks = supervisor.play_round.call_args.args[0]
         assert decks, "no decks were played"
         assert all(len(deck) == 40 for deck in decks)
-        assert supervisor.play_round.call_args.kwargs["matches"] == 150
+        assert supervisor.play_round.call_args.args[2].matches == 150
 
         flat = [name for deck in decks for name in deck]
         assert flat.count("bb") > flat.count("aa") * 3, (
@@ -1283,7 +1283,7 @@ class TestHeldOutRoundCaps:
                 caps=caps, workers=1,
             ))
 
-        assert fake_supervisor.constructor.call_args.kwargs["caps"] == caps
+        assert fake_supervisor.constructor.call_args.args[0].caps == caps
 
 
 class TestTheWordingRound:
@@ -1536,7 +1536,7 @@ class TestARoundChargesTheCardsItsGamesShowed:
         records_dir.mkdir()
         played = iter(range(100))
 
-        def _play(_decks, _decks_file, *, label, matches):
+        def _play(_decks, _decks_file, spec):
             # The round's games show "shown" in hand, crediting nothing.
             record = _record([make_entity("E9", "other")], source="E9")
             seen_record = _turn_action([make_entity("E1", "shown", zone="hand")], [])

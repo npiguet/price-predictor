@@ -85,7 +85,7 @@ def fake_supervisor(monkeypatch):
 
     Auto-specced, so a method the real one lacks, or a call its signature
     refuses, fails here as it would there; never interrupted. The stand-in
-    constructor is ``.constructor``, for the keywords a collector built it with.
+    constructor is ``.constructor``, for the ``CollectorRun`` a collector built it with.
     """
     from unittest.mock import create_autospec
 

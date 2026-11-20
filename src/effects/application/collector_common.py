@@ -337,13 +337,13 @@ def collector_supervisor(
     stay unflushed until the interpreter exits. ``--allow-degraded`` lets the
     run go on over an engine that is not whole; ``variant_scripts`` is the
     variant tree the workers stage."""
-    from effects.infrastructure.collector_connector import CollectorSupervisor
+    from effects.infrastructure.collector_connector import CollectorRun, CollectorSupervisor
 
-    supervisor = CollectorSupervisor(
+    supervisor = CollectorSupervisor(CollectorRun(
         worker_count=config.workers, effect_records=config.effect_records,
         run_id=str(uuid.uuid4()), caps=config.caps, variant_scripts=variant_scripts,
         stop=config.worker_stop, allow_degraded=config.allow_degraded,
-    )
+    ))
     try:
         yield supervisor
     finally:

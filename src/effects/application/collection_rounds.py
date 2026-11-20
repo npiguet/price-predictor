@@ -165,12 +165,11 @@ def _play(
     supervisor: CollectorSupervisor, played: RoundSettling, decks_file: Path, label: str,
 ) -> None:
     """Play the round's decks; a rule column only for decks aimed at rules."""
+    from effects.infrastructure.collector_connector import RoundSpec
+
     decks, rules = played.drawn
     matches = played.plan.decks_per_round
-    if rules is None:
-        supervisor.play_round(decks, decks_file, label=label, matches=matches)
-        return
-    supervisor.play_round(decks, decks_file, label=label, matches=matches, rules=rules)
+    supervisor.play_round(decks, decks_file, RoundSpec(label=label, matches=matches, rules=rules))
 
 
 @dataclass(frozen=True)

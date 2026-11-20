@@ -55,6 +55,33 @@ def caps_document(caps: CollectionCaps) -> dict:
     }
 
 
+@dataclasses.dataclass(frozen=True)
+class CollectorRun:
+    """What one collector run is: how many workers write to which run
+    directory, under which run id and caps; ``variant_scripts`` is the variant
+    tree the workers stage; ``stop`` the stop protocol's settings (the
+    defaults when None); ``allow_degraded`` lets the run go on over an engine
+    that is not whole."""
+
+    worker_count: int
+    effect_records: Path
+    run_id: str
+    caps: CollectionCaps
+    variant_scripts: Path | None = None
+    stop: WorkerStopSettings | None = None
+    allow_degraded: bool = False
+
+
+@dataclasses.dataclass(frozen=True)
+class RoundSpec:
+    """One round: its decks file's ``label`` and the ``matches`` it plays;
+    ``rules`` gives each steered deck its rule column (``deck_file``)."""
+
+    label: str
+    matches: int
+    rules: list[str | None] | None = None
+
+
 class CollectorSupervisor:
     """Runs records-only workers until the caller stops asking for rounds.
 
@@ -75,22 +102,13 @@ class CollectorSupervisor:
     changes under the run always does (``worker_status.EngineVerdict``).
     """
 
-    def __init__(
-        self,
-        worker_count: int,
-        effect_records: Path,
-        *,
-        run_id: str,
-        caps: CollectionCaps,
-        variant_scripts: Path | None = None,
-        stop: WorkerStopSettings | None = None,
-        allow_degraded: bool = False,
-    ) -> None:
+    def __init__(self, run: CollectorRun) -> None:
+        worker_count = run.worker_count
         self._worker_count = worker_count
-        self._effect_records = Path(effect_records)
-        self._run_id = run_id
-        self._caps = caps
-        self._variant_scripts = variant_scripts
+        self._effect_records = Path(run.effect_records)
+        self._run_id = run.run_id
+        self._caps = run.caps
+        self._variant_scripts = run.variant_scripts
         self._connector = MatchWorkerConnector()
         self._pool: ForgeWorkerPool | None = None
         self._interrupted = False
@@ -98,10 +116,10 @@ class CollectorSupervisor:
         # vanish into DEVNULL and look like a mechanic that never occurred.
         self._worker_logs = WorkerLogFiles(self.logs_dir, self._run_id)
         self._log_report = WorkerLogReport(
-            self._worker_logs, worker_count, allow_degraded=allow_degraded)
+            self._worker_logs, worker_count, allow_degraded=run.allow_degraded)
         #: The failure lines the current round's status-interval scans found.
         self._round_failures = WorkerFailures()
-        self._stop = stop if stop is not None else WorkerStopSettings()
+        self._stop = run.stop if run.stop is not None else WorkerStopSettings()
         self._graceful = self._worker_logs.graceful_stop(self._stop)
         #: PIDs of workers a round's kill could not end.
         self.survivors: list[int] = []
@@ -113,7 +131,7 @@ class CollectorSupervisor:
         self._cut_by_round: list[int] = []
         self._rounds = 0
         annotate_run(
-            self._effect_records, run_id=run_id, caps=caps_document(caps),
+            self._effect_records, run_id=self._run_id, caps=caps_document(self._caps),
             **self._stop.manifest_fields(),
         )
 
@@ -189,13 +207,10 @@ class CollectorSupervisor:
         round's file, never to the next round's count."""
         return self.logs_dir / f"{self._run_id}.round-{self._rounds:04d}.progress.txt"
 
-    def play_round(
-        self, decks: list[list[str]], decks_file: Path, *, label: str, matches: int,
-        rules: list[str | None] | None = None,
-    ) -> None:
+    def play_round(self, decks: list[list[str]], decks_file: Path, spec: RoundSpec) -> None:
         """Write ``decks`` to ``decks_file``, the file the workers read, and
-        play ``matches`` matches from it, then stop and report what the
-        workers logged. ``rules`` gives each steered deck its rule column
+        play ``spec.matches`` matches from it, then stop and report what the
+        workers logged. ``spec.rules`` gives each steered deck its rule column
         (``deck_file``).
 
         Once the progress file counts ``matches``, the pool asks every worker
@@ -217,7 +232,7 @@ class CollectorSupervisor:
         """
         if self.interrupted:
             return
-        deck_count = write_deck_file(decks, decks_file, label=label, rules=rules)
+        deck_count = write_deck_file(decks, decks_file, label=spec.label, rules=spec.rules)
         if deck_count == 0:
             raise ValueError(
                 f"{decks_file}: a decks-only round cannot run without decks "
@@ -232,12 +247,12 @@ class CollectorSupervisor:
             spawn_worker=functools.partial(self.start_worker, decks_file=Path(decks_file)),
             output_path=self.progress_path,
             options=PoolOptions(
-                should_stop=lambda completed: completed >= matches,
+                should_stop=lambda completed: completed >= spec.matches,
                 on_status=self._scan_logs,
                 graceful=self._graceful,
             ),
         )
-        logger.info("Playing %d matches from %d decks", matches, deck_count)
+        logger.info("Playing %d matches from %d decks", spec.matches, deck_count)
         try:
             self._pool.run()
         finally:

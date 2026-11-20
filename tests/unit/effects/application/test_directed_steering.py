@@ -173,10 +173,12 @@ class TestTheRounds:
 
 
 def test_the_supervisor_keeps_the_probabilities_for_its_workers_and_run_json(tmp_path):
-    from effects.infrastructure.collector_connector import CollectorSupervisor
+    from effects.infrastructure.collector_connector import CollectorRun, CollectorSupervisor
 
-    supervisor = CollectorSupervisor(
-        1, tmp_path, run_id=RUN, caps=CollectionCaps(directed_fork_rules=("702.19e",)))
+    supervisor = CollectorSupervisor(CollectorRun(
+        worker_count=1, effect_records=tmp_path, run_id=RUN,
+        caps=CollectionCaps(directed_fork_rules=("702.19e",)),
+    ))
     with patch("effects.infrastructure.collector_connector.annotate_run") as annotate:
         supervisor.set_directed_rule_probabilities({"702.19e": 0.25})
     assert supervisor.caps.as_system_properties()[

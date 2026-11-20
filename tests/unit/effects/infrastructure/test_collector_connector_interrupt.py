@@ -6,7 +6,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from effects.domain.collection_caps import CollectionCaps
-from effects.infrastructure.collector_connector import CollectorSupervisor
+from effects.infrastructure.collector_connector import CollectorRun, CollectorSupervisor, RoundSpec
 from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
 from price_predictor.infrastructure.worker_stops import WorkerStopSettings
 
@@ -14,14 +14,14 @@ _DECKS = [["Plains"]]
 
 
 def _supervisor(tmp_path) -> CollectorSupervisor:
-    return CollectorSupervisor(
+    return CollectorSupervisor(CollectorRun(
         worker_count=1, effect_records=tmp_path, run_id="run", caps=CollectionCaps(),
         stop=WorkerStopSettings(timeout=1, recycle_seconds=3600),
-    )
+    ))
 
 
 def _play(supervisor: CollectorSupervisor, tmp_path) -> None:
-    supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=1)
+    supervisor.play_round(_DECKS, tmp_path / "decks.txt", RoundSpec(label="coverage", matches=1))
 
 
 def test_a_round_after_an_interrupted_one_starts_no_pool(tmp_path):

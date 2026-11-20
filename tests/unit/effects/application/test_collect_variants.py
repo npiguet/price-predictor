@@ -399,10 +399,10 @@ class TestTheVariantRoundPlaysTheVariants:
                 )
             )
 
-        constructed = fake_supervisor.constructor.call_args.kwargs
-        assert constructed["variant_scripts"] == tmp_path / "variants"
+        constructed = fake_supervisor.constructor.call_args.args[0]
+        assert constructed.variant_scripts == tmp_path / "variants"
         assert fake_supervisor.play_round.call_args.args[0], "no variant decks"
-        assert fake_supervisor.play_round.call_args.kwargs["matches"] == 3
+        assert fake_supervisor.play_round.call_args.args[2].matches == 3
         # The run's own decks file (its path is the supervisor's: every
         # worker reloads it at its start, so two runs never share one).
         fake_supervisor.decks_path.assert_called_with("variant")

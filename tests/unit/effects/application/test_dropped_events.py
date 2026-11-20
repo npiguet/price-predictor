@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from effects.domain.collection_caps import CollectionCaps
-from effects.infrastructure.collector_connector import CollectorSupervisor
+from effects.infrastructure.collector_connector import CollectorRun, CollectorSupervisor
 from sealed.application.match_outcomes import MatchOutcomeSupervisor
 from sealed.infrastructure.effect_collection_flags import (
     DROPPED_EVENTS_SUFFIX,
@@ -122,10 +122,10 @@ class TestMatchOutcomesPrintsItWhenTheRunEnds:
 
 class TestTheCollectorsPrintItWhenTheRunEnds:
     def _supervisor(self, tmp_path, *, count: bool) -> CollectorSupervisor:
-        return CollectorSupervisor(
+        return CollectorSupervisor(CollectorRun(
             worker_count=1, effect_records=tmp_path, run_id="run",
             caps=CollectionCaps(count_dropped_events=count),
-        )
+        ))
 
     def test_a_counting_run_prints_the_table_summed_over_its_rounds(self, tmp_path, capsys):
         supervisor = self._supervisor(tmp_path, count=True)

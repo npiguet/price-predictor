@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from effects.domain.collection_caps import CollectionCaps
-from effects.infrastructure.collector_connector import CollectorSupervisor
+from effects.infrastructure.collector_connector import CollectorRun, CollectorSupervisor, RoundSpec
 from price_predictor.infrastructure.worker_stops import WorkerStopSettings
 from tests.unit.sealed.conftest import FakeProcess
 from tests.unit.worker_status_line import status_line
@@ -30,10 +30,10 @@ _QUICK_STOP = WorkerStopSettings(timeout=1, recycle_seconds=3600)
 
 def _supervisor(tmp_path, *, workers: int = 1, run_id: str = "run",
                 stop: WorkerStopSettings = _QUICK_STOP) -> CollectorSupervisor:
-    return CollectorSupervisor(
+    return CollectorSupervisor(CollectorRun(
         worker_count=workers, effect_records=tmp_path, run_id=run_id,
         caps=CollectionCaps(), stop=stop,
-    )
+    ))
 
 
 def _rigged(supervisor: CollectorSupervisor) -> MagicMock:
@@ -125,7 +125,8 @@ class TestPlayRound:
         with patch(
             "effects.infrastructure.collector_connector.ForgeWorkerPool"
         ) as pool:
-            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=500)
+            supervisor.play_round(
+                _DECKS, tmp_path / "decks.txt", RoundSpec(label="coverage", matches=500))
 
         stop = pool.call_args.kwargs["options"].should_stop
         assert stop(499) is False
@@ -141,10 +142,12 @@ class TestPlayRound:
             "effects.infrastructure.collector_connector.ForgeWorkerPool"
         ) as pool:
             pool.return_value.interrupted = False
-            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=10)
+            supervisor.play_round(
+                _DECKS, tmp_path / "decks.txt", RoundSpec(label="coverage", matches=10))
             first = pool.call_args.kwargs["output_path"]
             first.write_text("a survivor's match\n", encoding="utf-8")
-            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=10)
+            supervisor.play_round(
+                _DECKS, tmp_path / "decks.txt", RoundSpec(label="coverage", matches=10))
             second = pool.call_args.kwargs["output_path"]
 
         assert first.parent == second.parent == tmp_path / "logs"
@@ -159,7 +162,7 @@ class TestPlayRound:
         with patch(
             "effects.infrastructure.collector_connector.ForgeWorkerPool"
         ) as pool:
-            supervisor.play_round(_DECKS, decks, label="coverage", matches=1)
+            supervisor.play_round(_DECKS, decks, RoundSpec(label="coverage", matches=1))
         with patch.object(supervisor, "_connector") as connector:
             pool.call_args.kwargs["spawn_worker"](0)
 
@@ -209,7 +212,7 @@ class TestPlayRound:
         decks = tmp_path / "decks.txt"
         with patch("effects.infrastructure.collector_connector.ForgeWorkerPool"):
             supervisor.play_round(
-                [["Plains", "Plains"], ["Island"]], decks, label="coverage", matches=1,
+                [["Plains", "Plains"], ["Island"]], decks, RoundSpec(label="coverage", matches=1),
             )
 
         assert decks.read_text(encoding="utf-8") == (
@@ -222,7 +225,8 @@ class TestPlayRound:
         with patch(
             "effects.infrastructure.collector_connector.ForgeWorkerPool"
         ) as pool, pytest.raises(ValueError, match="no deck"):
-            supervisor.play_round([], tmp_path / "decks.txt", label="coverage", matches=10)
+            supervisor.play_round(
+                [], tmp_path / "decks.txt", RoundSpec(label="coverage", matches=10))
         pool.assert_not_called()
 
 
@@ -247,7 +251,8 @@ class TestTheRoundShutsTheRealPoolDown:
 
         supervisor = _supervisor(tmp_path)
         with patch.object(ForgeWorkerPool, "run", autospec=True):
-            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=1)
+            supervisor.play_round(
+                _DECKS, tmp_path / "decks.txt", RoundSpec(label="coverage", matches=1))
         return supervisor
 
     def test_stop_asks_the_real_pool_to_stop(self, tmp_path):
@@ -273,7 +278,8 @@ class TestTheRoundShutsTheRealPoolDown:
         supervisor.stop()
 
         with patch.object(ForgeWorkerPool, "run", autospec=True) as run:
-            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=1)
+            supervisor.play_round(
+                _DECKS, tmp_path / "decks.txt", RoundSpec(label="coverage", matches=1))
         supervisor.stop()
 
         assert run.call_count == 1
@@ -301,7 +307,8 @@ class TestTheRoundReportsItsWorkerLogs:
             )
 
         with patch.object(ForgeWorkerPool, "run", _fake_run):
-            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=1)
+            supervisor.play_round(
+                _DECKS, tmp_path / "decks.txt", RoundSpec(label="coverage", matches=1))
         return supervisor
 
     def test_a_round_s_failure_lines_are_reported_by_kind(self, tmp_path, caplog):
@@ -320,7 +327,8 @@ class TestTheRoundReportsItsWorkerLogs:
 
         supervisor = self._round_logging(tmp_path, {0: ["Error generating match: a"]})
         with patch.object(ForgeWorkerPool, "run", autospec=True), caplog.at_level(logging.INFO):
-            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=1)
+            supervisor.play_round(
+                _DECKS, tmp_path / "decks.txt", RoundSpec(label="coverage", matches=1))
 
         assert "Round 2 worker logs: no failure lines" in caplog.text
         assert supervisor.worker_failures.as_dict() == {"match_error": 1}
@@ -432,7 +440,8 @@ class TestTheWorkersStopAtAGameEnd:
         supervisor = _supervisor(tmp_path, run_id="r1")
         pools = []
         with patch.object(ForgeWorkerPool, "run", lambda pool: pools.append(pool)):
-            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=1)
+            supervisor.play_round(
+                _DECKS, tmp_path / "decks.txt", RoundSpec(label="coverage", matches=1))
 
         graceful = pools[0]._graceful
         assert graceful is not None
@@ -450,12 +459,12 @@ class TestTheWorkersStopAtAGameEnd:
             supervisor = _supervisor(tmp_path)
             supervisor.count_cut_games(4)
             with patch.object(ForgeWorkerPool, "run", autospec=True):
-                supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage",
-                                      matches=1)
+                supervisor.play_round(_DECKS, tmp_path / "decks.txt", RoundSpec(label="coverage",
+                                      matches=1))
             supervisor.count_cut_games(1)
             with patch.object(ForgeWorkerPool, "run", autospec=True):
-                supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage",
-                                      matches=1)
+                supervisor.play_round(_DECKS, tmp_path / "decks.txt", RoundSpec(label="coverage",
+                                      matches=1))
             supervisor.count_cut_games(0)
             return 0
 
@@ -497,7 +506,8 @@ class TestTheWorkersStopAtAGameEnd:
         supervisor._connector = MagicMock()
         supervisor._connector.start.side_effect = start
         try:
-            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=4)
+            supervisor.play_round(
+                _DECKS, tmp_path / "decks.txt", RoundSpec(label="coverage", matches=4))
             supervisor.stop()
 
             assert [proc.poll() for proc in started] == [0, 0]
@@ -550,7 +560,8 @@ class TestInterruptIsVisibleToTheCaller:
             pool._interrupted = interrupted
 
         with patch.object(ForgeWorkerPool, "run", _fake_run):
-            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=1)
+            supervisor.play_round(
+                _DECKS, tmp_path / "decks.txt", RoundSpec(label="coverage", matches=1))
         return supervisor
 
     def test_an_uninterrupted_round_reports_no_interrupt(self, tmp_path):
@@ -594,7 +605,7 @@ class TestACtrlCDuringARoundIsNotLost:
                 patch.object(ForgeWorkerPool, "_supervisor_loop", ctrl_c),
             ):
                 supervisor.play_round(
-                    _DECKS, tmp_path / "decks.txt", label="coverage", matches=1)
+                    _DECKS, tmp_path / "decks.txt", RoundSpec(label="coverage", matches=1))
 
             assert supervisor.interrupted is True
             assert {sig: signal.getsignal(sig) for sig in saved} == saved
@@ -642,10 +653,10 @@ class TestTheCapsReachTheJavaCommandLine:
             "--count-dropped-events", "--directed-fork-rules", "704.5f",
         ])
         config = collector_config(CollectCoverageConfig, args)
-        supervisor = CollectorSupervisor(
+        supervisor = CollectorSupervisor(CollectorRun(
             worker_count=1, effect_records=config.effect_records, run_id="run",
             caps=config.caps, stop=_QUICK_STOP,
-        )
+        ))
         with patch("sealed.infrastructure.match_worker_connector.build_forge_classpath",
                    return_value="cp"), patch("subprocess.Popen") as popen:
             popen.return_value = MagicMock()
