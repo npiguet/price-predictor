@@ -22,6 +22,14 @@ def _build_generate_draft_data_parser(subparsers) -> None:
         ),
     )
     parser.set_defaults(func=run_generate_draft_data)
+    _add_generate_scope_flags(parser)
+    _add_generate_labeling_flags(parser)
+    _add_generate_output_flags(parser)
+    _add_generate_live_seat_flags(parser)
+
+
+def _add_generate_scope_flags(parser: argparse.ArgumentParser) -> None:
+    """How many drafts, from which sets, with which seats."""
     parser.add_argument(
         "--n-drafts", type=int, required=True,
         help="Number of complete drafts to generate (counts pre-existing under --resume).",
@@ -41,6 +49,10 @@ def _build_generate_draft_data_parser(subparsers) -> None:
             "Default: forge-full:6,forge-r30:1,forge-r100:1"
         ),
     )
+
+
+def _add_generate_labeling_flags(parser: argparse.ArgumentParser) -> None:
+    """The deck builder and the frozen scorer that label every seat, and their inputs."""
     parser.add_argument(
         "--scorer-checkpoint", required=True,
         help="Frozen scorer labeling decks.",
@@ -58,6 +70,10 @@ def _build_generate_draft_data_parser(subparsers) -> None:
         help=".npz embedding cache.",
     )
     _add_embeddings_path(parser)
+
+
+def _add_generate_output_flags(parser: argparse.ArgumentParser) -> None:
+    """The corpus appended to and the live-seat worker's log."""
     parser.add_argument(
         "--output-path", required=True,
         help="Destination JSONL; appended, created if missing.",
@@ -73,7 +89,10 @@ def _build_generate_draft_data_parser(subparsers) -> None:
         "--resume", action="store_true",
         help="Append + count pre-existing drafts toward --n-drafts (FR-012).",
     )
-    # Live model-pilot flags (opt-in; absent ⇒ byte-for-byte gen-1, SC-004).
+
+
+def _add_generate_live_seat_flags(parser: argparse.ArgumentParser) -> None:
+    """Live model-pilot flags (opt-in; absent ⇒ byte-for-byte gen-1, SC-004)."""
     parser.add_argument(
         "--agent-checkpoint", action="append", default=[], dest="agent_checkpoints",
         metavar="LABEL=PATH",
@@ -115,37 +134,44 @@ def _generate_flag_error(args: argparse.Namespace) -> bool:
     return _picker_checkpoint_missing(args)
 
 
-def run_generate_draft_data(args: argparse.Namespace) -> int:
-    """Execute the generate-draft-data command."""
+def _parse_generate_agents(args: argparse.Namespace) -> tuple | None:
+    """The parsed ``--agent-mix`` and ``--agent-checkpoint`` bindings, or None after
+    printing the first refusal (each of them exits 2)."""
     from draft.application.agent_mix import AgentMixError, parse_agent_mix
     from draft.application.agent_registry import (
         AgentRegistryError,
         parse_agent_checkpoints,
     )
-    from draft.application.generate_draft_data import (
-        GenerateDraftDataConfig,
-        GenerateDraftDataSupervisor,
-        MaxConsecutiveFaultsError,
-    )
 
     if args.n_drafts < 1:
         print("Error: --n-drafts must be >= 1.", file=sys.stderr)
-        return 2
+        return None
 
     try:
         agent_mix = parse_agent_mix(args.agent_mix)
     except AgentMixError as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 2
+        return None
 
     try:
         agent_checkpoints = parse_agent_checkpoints(args.agent_checkpoints)
     except AgentRegistryError as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 2
+        return None
 
     if _generate_flag_error(args):
+        return None
+    return agent_mix, agent_checkpoints
+
+
+def run_generate_draft_data(args: argparse.Namespace) -> int:
+    """Execute the generate-draft-data command."""
+    from draft.application.generate_draft_data import GenerateDraftDataConfig
+
+    agents = _parse_generate_agents(args)
+    if agents is None:
         return 2
+    agent_mix, agent_checkpoints = agents
 
     config = GenerateDraftDataConfig(
         n_drafts=args.n_drafts,
@@ -164,6 +190,16 @@ def run_generate_draft_data(args: argparse.Namespace) -> int:
         seed=args.seed,
         max_consecutive_faults=args.max_consecutive_faults,
         worker_log_dir=Path(args.logs_dir),
+    )
+    return _execute_generate_draft_data(config)
+
+
+def _execute_generate_draft_data(config) -> int:
+    """Run the supervisor; map its refusals to exit codes."""
+    from draft.application.agent_registry import AgentRegistryError
+    from draft.application.generate_draft_data import (
+        GenerateDraftDataSupervisor,
+        MaxConsecutiveFaultsError,
     )
 
     try:
