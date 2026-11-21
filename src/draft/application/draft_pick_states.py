@@ -23,7 +23,7 @@ Pure domain-adjacent helper: numpy only, no torch.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -70,153 +70,159 @@ def iter_seat_pick_states(
     A pick whose entire PACK is un-embeddable yields nothing (a gap in the
     sequence), matching the gen-1 loader.
     """
-    pod, P, packs = geo.pod_size, geo.pack_size, geo.packs
-
-    # POOL / TAKEN as embeddable (idx, last-pack, last-pick); built once on entry.
-    pool_idx: list[int] = []
-    pool_lp: list[int] = []
-    pool_li: list[int] = []
-    taken_idx: list[int] = []
-    taken_lp: list[int] = []
-    taken_li: list[int] = []
-    passed: dict[str, tuple[int, int]] = {}      # all cards (state)
-    last_seen: dict[str, tuple[int, int]] = {}   # all cards (state)
-
-    for p in range(1, packs + 1):
-        for i in range(1, P + 1):
+    walk = _SeatWalk(geo, card_index)
+    for p in range(1, geo.packs + 1):
+        for i in range(1, geo.pack_size + 1):
             k, off = geo.booster_for_pick(seat, p, i)
             picks = boosters[k].picks
             vis = picks[off:]
-            # Wheel diff: cards passed from this booster last time, gone now,
-            # were taken by others (persistent; serves emit + advance).
-            if off >= pod:
-                for c in picks[off - pod + 1: off]:
-                    passed.pop(c, None)
-                    idx = card_index(c)
-                    if idx is not None:
-                        lp, li = last_seen[c]
-                        taken_idx.append(idx)
-                        taken_lp.append(lp)
-                        taken_li.append(li)
-            pack_set: set[str] = set()
-            pack_actions: list[str] = []
-            for c in vis:
-                if c not in pack_set:
-                    pack_set.add(c)
-                    pack_actions.append(c)
-
-            state = _build_state(
-                p, i, P, pack_actions, pack_set,
-                pool_idx, pool_lp, pool_li, taken_idx, taken_lp, taken_li,
-                passed, last_seen, card_index,
-            )
+            walk.resolve_wheel(picks, off)
+            state = walk.state_at(p, i, vis)
             if state is not None:
                 yield state
+            walk.advance(p, i, vis)
+        walk.flush_passed()
 
-            # --- advance past pick (p, i) ---
-            taken_card = vis[0]
-            t_idx = card_index(taken_card)
-            if t_idx is not None:
-                pool_idx.append(t_idx)
-                pool_lp.append(p)
-                pool_li.append(i)
-            passed.pop(taken_card, None)
-            for c in vis:
-                last_seen[c] = (p, i)
-            for c in vis[1:]:
-                passed[c] = (p, i)
-        # Pack boundary: remaining PASSED flush to TAKEN (FR-019b).
-        for c, (lp, li) in passed.items():
-            idx = card_index(c)
+
+@dataclass(slots=True)
+class _Block:
+    """One token block as parallel lists: embedding row, last pack, last pick."""
+
+    idx: list[int] = field(default_factory=list)
+    lp: list[int] = field(default_factory=list)
+    li: list[int] = field(default_factory=list)
+
+    def append(self, idx: int, lp: int, li: int) -> None:
+        self.idx.append(idx)
+        self.lp.append(lp)
+        self.li.append(li)
+
+    def __len__(self) -> int:
+        return len(self.idx)
+
+
+class _SeatWalk:
+    """The running state of one seat's walk: POOL / TAKEN blocks, PASSED and last-seen."""
+
+    def __init__(self, geo: DraftGeometry, card_index: Callable[[str], int | None]) -> None:
+        self._pod = geo.pod_size
+        self._pack_size = geo.pack_size
+        self._card_index = card_index
+        # POOL / TAKEN as embeddable (idx, last-pack, last-pick); built once on entry.
+        self._pool = _Block()
+        self._taken = _Block()
+        self._passed: dict[str, tuple[int, int]] = {}      # all cards (state)
+        self._last_seen: dict[str, tuple[int, int]] = {}   # all cards (state)
+
+    def resolve_wheel(self, picks: list[str], off: int) -> None:
+        """Wheel diff: cards passed from this booster last time, gone now,
+        were taken by others (persistent; serves emit + advance)."""
+        if off < self._pod:
+            return
+        for c in picks[off - self._pod + 1: off]:
+            self._passed.pop(c, None)
+            idx = self._card_index(c)
             if idx is not None:
-                taken_idx.append(idx)
-                taken_lp.append(lp)
-                taken_li.append(li)
-        passed.clear()
+                lp, li = self._last_seen[c]
+                self._taken.append(idx, lp, li)
+
+    def flush_passed(self) -> None:
+        """Pack boundary: remaining PASSED flush to TAKEN (FR-019b)."""
+        for c, (lp, li) in self._passed.items():
+            idx = self._card_index(c)
+            if idx is not None:
+                self._taken.append(idx, lp, li)
+        self._passed.clear()
+
+    def advance(self, p: int, i: int, vis: list[str]) -> None:
+        """Advance past pick ``(p, i)``: the taken card joins POOL, the rest are PASSED."""
+        taken_card = vis[0]
+        t_idx = self._card_index(taken_card)
+        if t_idx is not None:
+            self._pool.append(t_idx, p, i)
+        self._passed.pop(taken_card, None)
+        for c in vis:
+            self._last_seen[c] = (p, i)
+        for c in vis[1:]:
+            self._passed[c] = (p, i)
+
+    def state_at(self, p: int, i: int, vis: list[str]) -> RawPickState | None:
+        """Assemble one state: concat the 4 typed blocks, vectorize recency."""
+        pack_actions = list(dict.fromkeys(vis))
+        pack, action_position = self._pack_block(p, i, pack_actions)
+        if not len(pack):
+            return None  # no usable PACK tokens — nothing to learn here
+        passed = self._passed_block(set(pack_actions))
+        blocks = (self._pool, pack, passed, self._taken)
+        packs_ago, pick_ago = self._recency_ago(blocks, p, i)
+        return RawPickState(
+            card_idx=np.asarray(_joined(blocks, "idx"), dtype=np.int32),
+            type_idx=_type_idx([len(b) for b in blocks]),
+            packs_ago=packs_ago,
+            pick_ago=pick_ago,
+            pack_number=p,
+            pick_number=i,
+            action_position=action_position,
+        )
+
+    def _recency_ago(
+        self, blocks: tuple[_Block, ...], p: int, i: int,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Vectorized recency (FR-021), entirely in int8: packs_ago = min(2, p - lp);
+        pick_ago is (i - li) within the current pack else the frozen end-of-pack
+        value (P - li). Both are provably already in range (lp ≤ p, 1 ≤ li ≤ P),
+        so no clip/astype is needed.
+        """
+        lpli = np.asarray((_joined(blocks, "lp"), _joined(blocks, "li")), dtype=np.int8)
+        lp_arr, li_arr = lpli[0], lpli[1]  # (2, n)
+        packs_ago = np.minimum(p - lp_arr, 2)
+        pick_ago = np.where(packs_ago == 0, i - li_arr, self._pack_size - li_arr)
+        return packs_ago, pick_ago
+
+    def _pack_block(self, p: int, i: int, pack_actions: list[str]) -> tuple[_Block, int]:
+        """The PACK block (small Python loop) and the action's absolute position.
+
+        The taken card is ``pack_actions[0]``; its position fixes the action
+        index (or -1 if it was dropped).
+        """
+        pack = _Block()
+        action_position = -1
+        for j, name in enumerate(pack_actions):
+            idx = self._card_index(name)
+            if idx is None:
+                continue
+            ls = self._last_seen.get(name)
+            lp, li = ls if ls is not None else (p, i)  # never-seen -> recency 0,0
+            if j == 0:
+                action_position = len(self._pool) + len(pack)
+            pack.append(idx, lp, li)
+        return pack, action_position
+
+    def _passed_block(self, pack_set: set[str]) -> _Block:
+        """The PASSED block (small Python loop); wheel survivors are now in PACK."""
+        block = _Block()
+        for name, (lp, li) in self._passed.items():
+            if name in pack_set:
+                continue
+            idx = self._card_index(name)
+            if idx is not None:
+                block.append(idx, lp, li)
+        return block
 
 
-def _build_state(
-    p: int,
-    i: int,
-    P: int,
-    pack_actions: list[str],
-    pack_set: set[str],
-    pool_idx: list[int],
-    pool_lp: list[int],
-    pool_li: list[int],
-    taken_idx: list[int],
-    taken_lp: list[int],
-    taken_li: list[int],
-    passed: dict[str, tuple[int, int]],
-    last_seen: dict[str, tuple[int, int]],
-    card_index: Callable[[str], int | None],
-) -> RawPickState | None:
-    """Assemble one state: concat the 4 typed blocks, vectorize recency."""
-    n_pool = len(pool_idx)
+def _joined(blocks: tuple[_Block, ...], column: str) -> list[int]:
+    """One column (``idx``, ``lp`` or ``li``) of every block, in block order."""
+    return [x for block in blocks for x in getattr(block, column)]
 
-    # PACK block (small Python loop). The taken card is pack_actions[0]; its
-    # position fixes the action index (or -1 if it was dropped).
-    pack_i: list[int] = []
-    pack_lp: list[int] = []
-    pack_li: list[int] = []
-    action_position = -1
-    for j, name in enumerate(pack_actions):
-        idx = card_index(name)
-        if idx is None:
-            continue
-        ls = last_seen.get(name)
-        lp, li = ls if ls is not None else (p, i)  # never-seen -> recency 0,0
-        if j == 0:
-            action_position = n_pool + len(pack_i)
-        pack_i.append(idx)
-        pack_lp.append(lp)
-        pack_li.append(li)
-    if not pack_i:
-        return None  # no usable PACK tokens — nothing to learn here
 
-    # PASSED block (small Python loop); wheel survivors are now in PACK.
-    pass_i: list[int] = []
-    pass_lp: list[int] = []
-    pass_li: list[int] = []
-    for name, (lp, li) in passed.items():
-        if name in pack_set:
-            continue
-        idx = card_index(name)
-        if idx is None:
-            continue
-        pass_i.append(idx)
-        pass_lp.append(lp)
-        pass_li.append(li)
-
-    idx_all = pool_idx + pack_i + pass_i + taken_idx
-    lp_all = pool_lp + pack_lp + pass_lp + taken_lp
-    li_all = pool_li + pack_li + pass_li + taken_li
-    n = len(idx_all)
-
-    # Vectorized recency (FR-021), entirely in int8: packs_ago = min(2, p - lp);
-    # pick_ago is (i - li) within the current pack else the frozen end-of-pack
-    # value (P - li). Both are provably already in range (lp ≤ p, 1 ≤ li ≤ P),
-    # so no clip/astype is needed.
-    lpli = np.asarray((lp_all, li_all), dtype=np.int8)  # (2, n)
-    lp_arr, li_arr = lpli[0], lpli[1]
-    packs_ago = np.minimum(p - lp_arr, 2)
-    pick_ago = np.where(packs_ago == 0, i - li_arr, P - li_arr)
-
-    type_idx = np.empty(n, dtype=np.int8)
-    a = n_pool
-    b = a + len(pack_i)
-    c = b + len(pass_i)
+def _type_idx(sizes: list[int]) -> np.ndarray:
+    """Token types for blocks of ``sizes`` laid out POOL, PACK, PASSED, TAKEN."""
+    type_idx = np.empty(sum(sizes), dtype=np.int8)
+    a = sizes[0]
+    b = a + sizes[1]
+    c = b + sizes[2]
     type_idx[:a] = TYPE_POOL
     type_idx[a:b] = TYPE_PACK
     type_idx[b:c] = TYPE_PASSED
     type_idx[c:] = TYPE_TAKEN
-
-    return RawPickState(
-        card_idx=np.asarray(idx_all, dtype=np.int32),
-        type_idx=type_idx,
-        packs_ago=packs_ago,
-        pick_ago=pick_ago,
-        pack_number=p,
-        pick_number=i,
-        action_position=action_position,
-    )
+    return type_idx
