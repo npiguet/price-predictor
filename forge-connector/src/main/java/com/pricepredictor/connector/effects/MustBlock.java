@@ -38,7 +38,7 @@ import forge.game.staticability.StaticAbilityMustBlock;
  * blocked if able" variants are left out: they require something of the
  * block as a whole, not of any one creature. A blocker's
  * {@code required_elsewhere} reads them anyway, through Forge's own check
- * ({@link PlayabilityChannel#requiredElsewhere}), which holds every able
+ * ({@link BlockLegality#requiredElsewhere}), which holds every able
  * blocker to them while they are unmet.
  */
 final class MustBlock {

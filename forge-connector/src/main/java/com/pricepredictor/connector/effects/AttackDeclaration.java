@@ -98,9 +98,14 @@ public final class AttackDeclaration {
     /** A creature tapped while the declaration is being made. */
     @Subscribe
     public void onTapped(GameEventCardTapped event) {
-        if (pending != null && event.tapped() && event.card() != null) {
+        if (pending != null && tapsACard(event)) {
             pending.tapped.add(event.card().getId());
         }
+    }
+
+    /** Whether {@code event} taps a card it names, rather than untapping one. */
+    private static boolean tapsACard(GameEventCardTapped event) {
+        return event.tapped() && event.card() != null;
     }
 
     /** The declaration made: its records are written, a declared anchor's with its tap. */
@@ -221,20 +226,25 @@ public final class AttackDeclaration {
                 if (legal(card)) {
                     continue;
                 }
-                StaticAbility responsible = null;
-                for (GameEntity defender : defenders.keySet()) {
-                    if (defender != null) {
-                        responsible = cantAttackStatic.apply(card, defender);
-                    }
-                    if (responsible != null) {
-                        break;
-                    }
-                }
-                forbidden.add(PlayabilityChannel.forbiddenJson(card,
-                        PlayabilityChannel.Responsible.of(card,
-                                responsible, PlayabilityChannel.ownAttackingKeyword(card))));
+                StaticAbility responsible = firstStaticKeepingOut(card, cantAttackStatic);
+                forbidden.add(BlockLegality.forbiddenJson(card,
+                        BlockLegality.Responsible.of(card,
+                                responsible, BlockLegality.ownAttackingKeyword(card))));
             }
             return Json.array(forbidden, Function.identity());
+        }
+
+        /** The first static, in defender order, that keeps {@code card} from attacking one, or null. */
+        private StaticAbility firstStaticKeepingOut(
+                Card card, BiFunction<Card, GameEntity, StaticAbility> cantAttackStatic) {
+            for (GameEntity defender : defenders.keySet()) {
+                StaticAbility responsible = defender == null
+                        ? null : cantAttackStatic.apply(card, defender);
+                if (responsible != null) {
+                    return responsible;
+                }
+            }
+            return null;
         }
     }
 }
