@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from price_predictor.infrastructure.forge_worker_pool import worker_count
@@ -62,53 +63,86 @@ def _build_play_draft_games_parser(subparsers) -> None:
     )
 
 
+@dataclass(frozen=True)
+class _PlayCorpus:
+    """The corpus records in scope, their flat seat table and its sorted labels."""
+
+    records: list
+    rows: list
+    labels: list[str]
+
+
 def run_play_draft_games(args: argparse.Namespace) -> int:
     """Play same-pod matches and append them in the sealed match-outcome format."""
-    from draft.application.play_draft_games import (
-        PlayDraftGamesConfig,
-        PlayDraftGamesUseCase,
-    )
-    from draft.domain.seat_table import project
-    from draft.infrastructure.draft_record_io import read_records
-
     drafts_path = Path(args.drafts_path)
     run_ids = tuple(args.run_ids or ())
 
     # ── Startup validation: everything checkable before a game is played ──
+    if _play_flag_refusal(args):
+        return 2
+    corpus = _load_play_corpus(args, drafts_path, run_ids)
+    if corpus is None:
+        return 2
+
+    _echo_play_startup(args, drafts_path, run_ids, corpus)
+    return _execute_play_draft_games(_play_config(args, drafts_path, run_ids))
+
+
+def _play_flag_refusal(args: argparse.Namespace) -> bool:
+    """Print the error and return True when a flag is out of its range."""
     if args.best_of < 1 or args.best_of % 2 == 0:
         print(
             f"Error: --best-of must be a positive odd integer, got {args.best_of}",
             file=sys.stderr,
         )
-        return 2
+        return True
     if not 0.0 <= args.forge_native_fraction <= 1.0:
         print(
             "Error: --forge-native-fraction must be between 0 and 1, got "
             f"{args.forge_native_fraction}",
             file=sys.stderr,
         )
-        return 2
+        return True
     if args.n_pairings is not None and args.n_pairings < 1:
         print(
             f"Error: --n-pairings must be a positive integer, got {args.n_pairings}",
             file=sys.stderr,
         )
-        return 2
+        return True
     if args.workers < 1:
         print(
             f"Error: --workers must be a positive integer, got {args.workers}",
             file=sys.stderr,
         )
-        return 2
+        return True
+    return False
+
+
+def _read_play_records(drafts_path: Path, run_ids: tuple[str, ...]) -> list | None:
+    """The corpus records in the --run-id scope, or None after printing why there are none."""
+    from draft.infrastructure.draft_record_io import read_records
+
     if not drafts_path.exists():
         print(f"Error: corpus not found: {drafts_path}", file=sys.stderr)
-        return 2
+        return None
 
     records = [r for r in read_records(drafts_path) if not run_ids or r.run_id in run_ids]
     if not records:
         scope = f" matching --run-id {', '.join(run_ids)}" if run_ids else ""
         print(f"Error: no records in {drafts_path}{scope}", file=sys.stderr)
-        return 2
+        return None
+    return records
+
+
+def _load_play_corpus(
+    args: argparse.Namespace, drafts_path: Path, run_ids: tuple[str, ...],
+) -> _PlayCorpus | None:
+    """The corpus in scope, or None after printing why no pairing can be drawn from it."""
+    from draft.domain.seat_table import project
+
+    records = _read_play_records(drafts_path, run_ids)
+    if records is None:
+        return None
 
     rows = list(project(records))
     labels = sorted({row.label for row in rows})
@@ -119,13 +153,18 @@ def run_play_draft_games(args: argparse.Namespace) -> int:
             "Pass --include-mirrors to play same-label pairings.",
             file=sys.stderr,
         )
-        return 2
+        return None
+    return _PlayCorpus(records=records, rows=rows, labels=labels)
 
-    # ── Startup echo ──
+
+def _echo_play_startup(
+    args: argparse.Namespace, drafts_path: Path, run_ids: tuple[str, ...], corpus: _PlayCorpus,
+) -> None:
+    """Startup echo."""
     scope = ", ".join(run_ids) if run_ids else "whole corpus"
-    print(f"Corpus:      {drafts_path} ({len(records)} records, {len(rows)} seats)")
+    print(f"Corpus:      {drafts_path} ({len(corpus.records)} records, {len(corpus.rows)} seats)")
     print(f"Run ids:     {scope}")
-    print(f"Labels:      {', '.join(labels)}")
+    print(f"Labels:      {', '.join(corpus.labels)}")
     print(
         "Pairings:    "
         + (f"{args.n_pairings}" if args.n_pairings is not None else "unbounded (Ctrl-C to stop)")
@@ -136,7 +175,12 @@ def run_play_draft_games(args: argparse.Namespace) -> int:
     )
     print(f"Output:      {args.output_path}")
 
-    config = PlayDraftGamesConfig(
+
+def _play_config(args: argparse.Namespace, drafts_path: Path, run_ids: tuple[str, ...]):
+    """The PlayDraftGamesConfig the flags give."""
+    from draft.application.play_draft_games import PlayDraftGamesConfig
+
+    return PlayDraftGamesConfig(
         drafts_path=drafts_path,
         output_path=Path(args.output_path),
         run_ids=run_ids,
@@ -147,6 +191,10 @@ def run_play_draft_games(args: argparse.Namespace) -> int:
         workers=args.workers,
     )
 
+
+def _execute_play_draft_games(config) -> int:
+    """Run the use case; map its outcome to an exit code."""
+    from draft.application.play_draft_games import PlayDraftGamesUseCase
     from price_predictor.infrastructure.forge_worker_pool import WorkerStartError
 
     try:
