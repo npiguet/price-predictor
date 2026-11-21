@@ -218,7 +218,9 @@ def main(argv: list[str] | None = None) -> int:
     # to the same manifest: the arm is one run.
     return run_script(
         run_dir, lambda: _run(args, train_args, argv),
-        ScriptRun(script=__file__, argv=argv, inputs=[args.corpus, args.probe_set_dir, args.keyword_definitions, args.win_rates]),
+        ScriptRun(script=__file__, argv=argv, inputs=[
+            args.corpus, args.probe_set_dir, args.keyword_definitions, args.win_rates,
+        ]),
     )
 
 
