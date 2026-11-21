@@ -7,7 +7,7 @@ bound label. Exposes the set of external (model) labels the worker routes
 through the pick side-channel. Built once at supervisor startup.
 
 Geometry validation mirrors the fail-fast width checks in
-``train_draft_agent._check_dims`` (research D5): ``config.packs`` must equal the
+``imitation_model_setup._check_dims`` (research D5): ``config.packs`` must equal the
 live ``PACKS`` and ``config.P`` must be ≥ the live pack size when it is known
 (``--set`` runs); for random-set runs the live pack size is unknown at startup
 and the per-request ``pick_number ≤ P`` guard in :class:`AgentPickService`

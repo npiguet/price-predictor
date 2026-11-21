@@ -36,19 +36,19 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+from draft.application.draft_lr_schedule import (
+    _make_scheduler,
+    _maybe_decay,
+    _PlateauLR,
+    _reapply_resume_lr,
+)
 from draft.application.draft_pick_states import iter_seat_pick_states
 from draft.application.draft_training_common import (
     leave_one_out_rewards,
     length_bucketed_batches,
 )
+from draft.application.imitation_model_setup import _select_device
 from draft.application.rl_advantage import gae_advantages
-from draft.application.train_draft_agent import (
-    _make_scheduler,
-    _maybe_decay,
-    _PlateauLR,
-    _reapply_resume_lr,
-    _select_device,
-)
 from draft.domain.draft_agent_model import DraftAgentConfig, DraftAgentModel
 from draft.domain.draft_geometry import DraftGeometry, DraftRecord
 from draft.domain.draft_state import TYPE_PACK
@@ -157,7 +157,7 @@ class RLExample:
 class _Loader:
     """Builds ``RLExample``s + per-learner-seat trajectories from corpora.
 
-    Mirrors ``train_draft_agent._Loader``'s shared-table memoization (each
+    Mirrors ``imitation_examples._Loader``'s shared-table memoization (each
     distinct card's ``.npz`` loaded once; examples keep int rows). The on-policy
     corpus contributes both learner-seat trajectories (policy gradient + critic)
     and non-learner critic coverage; ``critic_corpus`` corpora contribute critic

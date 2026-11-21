@@ -464,7 +464,7 @@ class TrainDraftAgentOnlineUseCase:
         counter, so patience can only fire at the floor (FR-035). Both knobs are
         None unless the operator armed them.
         """
-        from draft.application.train_draft_agent import _maybe_decay
+        from draft.application.draft_lr_schedule import _maybe_decay
 
         config, window, plateau = run.config, run.window, run.plateau
         new_lr = _maybe_decay(window.rounds_since_best, config.lr_decay_patience, plateau)

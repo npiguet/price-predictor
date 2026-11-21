@@ -12,7 +12,7 @@ from pathlib import Path
 
 import torch
 
-from draft.application.train_draft_agent import _make_scheduler, _reapply_resume_lr
+from draft.application.draft_lr_schedule import _make_scheduler, _reapply_resume_lr
 from draft.domain.draft_geometry import Booster, DraftRecord, Seat
 from draft.infrastructure.cli import build_parser
 from draft.infrastructure.cli_train_draft_agent import _resolve_train_agent_config

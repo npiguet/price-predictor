@@ -7,7 +7,7 @@ import random
 import numpy as np
 
 from draft.application.draft_training_common import length_bucketed_batches
-from draft.application.train_draft_agent import DraftExample
+from draft.application.imitation_examples import DraftExample
 
 
 def _example(n_tokens: int) -> DraftExample:

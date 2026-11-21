@@ -6,7 +6,7 @@ import math
 
 import numpy as np
 
-from draft.application.train_draft_agent import (
+from draft.application.imitation_validation import (
     imitation_topk_accuracy,
     per_pack_critic_mse,
 )

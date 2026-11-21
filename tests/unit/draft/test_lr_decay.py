@@ -7,12 +7,14 @@ from pathlib import Path
 import pytest
 import torch
 
-from draft.application.train_draft_agent import (
-    TrainDraftAgentConfig,
+from draft.application.draft_lr_schedule import (
     _make_scheduler,
     _maybe_decay,
     _PlateauLR,
-    _resume_or_build,
+)
+from draft.application.imitation_model_setup import _resume_or_build
+from draft.application.train_draft_agent import (
+    TrainDraftAgentConfig,
     _validate_lr_decay,
 )
 from draft.domain.draft_agent_model import DraftAgentConfig, DraftAgentModel

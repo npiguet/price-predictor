@@ -7,10 +7,11 @@ of the taken action. The state is identical to building each pick via
 :func:`draft.domain.draft_state.build_state` (locked by the gen-1 equivalence
 test); recency follows FR-019/FR-021 of the gen-1 spec.
 
-This logic was previously inlined in ``train_draft_agent._Loader._emit_seat`` /
-``_emit_example``. It is extracted here so both the gen-1 imitation loader and the
-gen-2 RL loader build per-pick states from one implementation (research
-§Overlapping vocabulary — extract, don't duplicate). The caller owns the shared
+This logic was previously inlined in the gen-1 loader's ``_Loader._emit_seat``
+(now in ``imitation_examples``) / ``_emit_example``. It is extracted here so
+both the gen-1 imitation loader and the gen-2 RL loader build per-pick states
+from one implementation (research §Overlapping vocabulary — extract, don't
+duplicate). The caller owns the shared
 embedding table via the ``card_index`` callable (name → int row, or ``None`` when
 the card has no ``.npz``); each distinct card is resolved/last-seen exactly once
 on entry to a block, so per-pick assembly is a list-concat plus vectorized

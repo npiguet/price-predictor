@@ -353,7 +353,7 @@ def check_embedding_width(
     Without this the mismatch would surface as a torch shape error deep inside
     the first round's forward — after Forge has already started and drafted.
     """
-    from draft.application.train_draft_agent import _check_dims
+    from draft.application.imitation_model_setup import _check_dims
 
     embeddings = config.embeddings_path or config.cards_path
     width = probe_embedding_width(embeddings)

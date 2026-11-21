@@ -10,9 +10,9 @@ from __future__ import annotations
 import pytest
 import torch
 
+from draft.application.draft_lr_schedule import _maybe_decay, _PlateauLR
 from draft.application.online_anchor_window import AnchorWindow
 from draft.application.online_config_validation import resolve_min_lr
-from draft.application.train_draft_agent import _maybe_decay, _PlateauLR
 from draft.domain.draft_geometry import Booster, DraftRecord, Seat
 
 LEARNER = "gen-3"
@@ -131,7 +131,7 @@ def test_min_lr_defaults_to_a_thousandth_of_the_base() -> None:
 
 def test_the_multiplier_folds_into_the_warmup_schedule() -> None:
     """A decay scales the post-warmup constant; warmup is not re-run (FR-035)."""
-    from draft.application.train_draft_agent import _make_scheduler
+    from draft.application.draft_lr_schedule import _make_scheduler
 
     model = torch.nn.Linear(2, 2)
     optimizer = torch.optim.AdamW(

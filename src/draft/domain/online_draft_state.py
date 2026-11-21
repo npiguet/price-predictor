@@ -19,7 +19,7 @@ Pure domain logic: no torch, no IO. One tracker per ``(draft_id, seat)``.
 
 TODO(shared-reconstruction): typed-token reconstruction now lives in three
 places — ``draft_state.build_state`` (full-record oracle),
-``train_draft_agent._Loader._emit_seat`` (full-record incremental), and this
+``imitation_examples._Loader._emit_seat`` (full-record incremental), and this
 request-stream tracker. A shared ``wheel-diff / pack-flush / recency`` kernel
 across all three is a non-blocking follow-up (research §third-instance check),
 deferred because the input contracts differ (complete record vs. partial

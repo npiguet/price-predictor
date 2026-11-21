@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from draft.application.train_draft_agent import DraftExample, _Loader
+from draft.application.imitation_examples import DraftExample, _Loader
 from draft.domain.draft_geometry import Booster, DraftGeometry, DraftRecord, Seat
 from draft.domain.draft_state import TYPE_PACK, build_state
 

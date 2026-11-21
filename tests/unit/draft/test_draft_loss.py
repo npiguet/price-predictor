@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from draft.application.draft_training_common import leave_one_out_rewards
-from draft.application.train_draft_agent import _Loader, critic_standardization
+from draft.application.imitation_examples import _Loader, critic_standardization
 from draft.domain.draft_geometry import Booster, DraftRecord, Seat
 
 

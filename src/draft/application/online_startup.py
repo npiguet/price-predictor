@@ -64,7 +64,7 @@ class LoadedLearner:
 
 def load_learner(config: TrainDraftAgentOnlineConfig) -> LoadedLearner:
     """Load the learner: the model the loop optimises AND the model that drafts."""
-    from draft.application.train_draft_agent import _select_device
+    from draft.application.imitation_model_setup import _select_device
 
     store = DraftAgentStore()
     base = store.load_checkpoint(config.learner_checkpoint)
@@ -109,7 +109,7 @@ def build_optimisation(
     config: TrainDraftAgentOnlineConfig, model: DraftAgentModel,
 ) -> tuple[Learner, Any]:
     """The optimizer and LR schedule that step ``model``, and the plateau controller."""
-    from draft.application.train_draft_agent import _make_scheduler, _PlateauLR
+    from draft.application.draft_lr_schedule import _make_scheduler, _PlateauLR
 
     optimizer = torch.optim.AdamW(
         [{"params": list(model.parameters()), "lr": config.lr, "name": "agent"}],

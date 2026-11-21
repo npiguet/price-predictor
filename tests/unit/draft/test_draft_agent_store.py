@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from draft.application.train_draft_agent import (
+from draft.application.imitation_examples import (
     DraftExample,
     split_draft_disjoint,
 )
