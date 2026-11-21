@@ -6,10 +6,12 @@ from __future__ import annotations
 
 import math
 import time
+from dataclasses import dataclass
 
 import numpy as np
 import torch
 
+from draft.application.imitation_batches import BatchSource
 from draft.application.rl_advantage import gae_advantages
 from draft.application.rl_batches import _collate, _forward_logits_critic
 from draft.application.rl_examples import RLExample
@@ -19,9 +21,89 @@ from draft.domain.draft_agent_model import DraftAgentModel
 _GAMMA = 1.0  # draft reward is terminal, so the return is R (research D2).
 
 
+@dataclass(frozen=True)
+class CriticPass:
+    """A batched no-grad critic forward: what its batches are built from and their size."""
+
+    source: BatchSource
+    batch_size: int
+
+
+@dataclass(frozen=True)
+class AdvantageRefresh:
+    """The critic forward over every learner pick and the GAE(λ) that turns its
+    values into advantages."""
+
+    critic_pass: CriticPass
+    gae_lambda: float
+
+
+class _ApproxAdvantage:
+    """Running MC-advantage approx (R_std − V) over picks processed so far, for the
+    live progress line. It's the λ=1 form; the exact GAE(λ) summary is logged by
+    the caller once the full forward is done. (Picks are length-sorted, so early
+    lines are biased toward short/early-draft picks until the pass completes.)
+    """
+
+    def __init__(self) -> None:
+        self.adv_sum = self.adv_sumsq = 0.0
+        self.adv_n = self.adv_gt1 = self.adv_gt5 = 0
+
+    def add(self, approx: np.ndarray) -> None:
+        self.adv_sum += float(approx.sum())
+        self.adv_sumsq += float((approx ** 2).sum())
+        self.adv_n += approx.size
+        abs_a = np.abs(approx)
+        self.adv_gt1 += int((abs_a > 0.1).sum())
+        self.adv_gt5 += int((abs_a > 0.5).sum())
+
+    def summary(self) -> str:
+        a_mean = self.adv_sum / self.adv_n
+        a_std = math.sqrt(max(self.adv_sumsq / self.adv_n - a_mean ** 2, 0.0))
+        return (
+            f"adv≈ mean={a_mean:+.3f} std={a_std:.3f} "
+            f"|A|>0.1={self.adv_gt1 / self.adv_n:.0%} |A|>0.5={self.adv_gt5 / self.adv_n:.0%}"
+        )
+
+
+class _PassProgress:
+    """A progress line every ``_STEP_LOG_INTERVAL`` when the pass has a label."""
+
+    def __init__(self, log_label: str | None, n: int) -> None:
+        self._label = log_label
+        self._n = n
+        self._start = time.monotonic()
+        self._last_log = self._start
+
+    def after_batch(self, end: int, approx: _ApproxAdvantage) -> None:
+        """Called once the picks before ``end`` (in pass order) are done."""
+        now = time.monotonic()
+        if self._label is not None and now - self._last_log >= _STEP_LOG_INTERVAL:
+            self._log_line(min(end, self._n), now, approx)
+
+    def _log_line(self, done: int, now: float, approx: _ApproxAdvantage) -> None:
+        n = self._n
+        rate = done / (now - self._start) if now > self._start else 0.0
+        eta = (n - done) / rate if rate > 0 else 0.0
+        _log(
+            f"  {self._label}: {done}/{n} picks ({rate:.0f}/s, ETA "
+            f"{_fmt_dur(eta)}) | {approx.summary()}"
+        )
+        self._last_log = now
+
+
+def _record_values(
+    chunk: list[RLExample], vals: np.ndarray, source: BatchSource, approx: _ApproxAdvantage,
+) -> None:
+    """Write the batch's critic values onto its examples and add their (R_std − V)."""
+    for j, ex in enumerate(chunk):
+        ex.value = float(vals[j])
+    rewards = np.asarray([ex.reward for ex in chunk], dtype=np.float64)
+    approx.add((rewards - source.mean) / source.std - vals.astype(np.float64))
+
+
 def _critic_values(
-    model: DraftAgentModel, examples: list[RLExample], table: np.ndarray,
-    mean: float, std: float, batch_size: int, device: torch.device,
+    model: DraftAgentModel, examples: list[RLExample], critic_pass: CriticPass,
     *, log_label: str | None = None,
 ) -> None:
     """Write the current critic value onto each example (batched, no_grad).
@@ -30,57 +112,25 @@ def _critic_values(
     (this is otherwise a long silent pass on a large corpus).
     """
     order = sorted(range(len(examples)), key=lambda i: examples[i].n_tokens)
-    n = len(order)
+    batch_size = critic_pass.batch_size
     model.eval()
-    start = time.monotonic()
-    last_log = start
-    # Running MC-advantage approx (R_std − V) over picks processed so far, for the
-    # live progress line. It's the λ=1 form; the exact GAE(λ) summary is logged by
-    # the caller once the full forward is done. (Picks are length-sorted, so early
-    # lines are biased toward short/early-draft picks until the pass completes.)
-    adv_sum = adv_sumsq = 0.0
-    adv_n = adv_gt1 = adv_gt5 = 0
+    progress = _PassProgress(log_label, len(order))
+    approx = _ApproxAdvantage()
     with torch.no_grad():
-        for s in range(0, n, batch_size):
-            idxs = order[s:s + batch_size]
-            batch = _collate([examples[i] for i in idxs], table, mean, std, device)
+        for s in range(0, len(order), batch_size):
+            chunk = [examples[i] for i in order[s:s + batch_size]]
+            batch = _collate(chunk, critic_pass.source)
             _, critic = _forward_logits_critic(model, batch)
             vals = critic.cpu().numpy()  # one device→host transfer per batch
-            for j, i in enumerate(idxs):
-                examples[i].value = float(vals[j])
-            rewards = np.asarray([examples[i].reward for i in idxs], dtype=np.float64)
-            approx = (rewards - mean) / std - vals.astype(np.float64)
-            adv_sum += float(approx.sum())
-            adv_sumsq += float((approx ** 2).sum())
-            adv_n += approx.size
-            abs_a = np.abs(approx)
-            adv_gt1 += int((abs_a > 0.1).sum())
-            adv_gt5 += int((abs_a > 0.5).sum())
-            now = time.monotonic()
-            if log_label is not None and now - last_log >= _STEP_LOG_INTERVAL:
-                done = min(s + batch_size, n)
-                rate = done / (now - start) if now > start else 0.0
-                eta = (n - done) / rate if rate > 0 else 0.0
-                a_mean = adv_sum / adv_n
-                a_std = math.sqrt(max(adv_sumsq / adv_n - a_mean ** 2, 0.0))
-                _log(
-                    f"  {log_label}: {done}/{n} picks ({rate:.0f}/s, ETA "
-                    f"{_fmt_dur(eta)}) | adv≈ mean={a_mean:+.3f} std={a_std:.3f} "
-                    f"|A|>0.1={adv_gt1 / adv_n:.0%} |A|>0.5={adv_gt5 / adv_n:.0%}"
-                )
-                last_log = now
+            _record_values(chunk, vals, critic_pass.source, approx)
+            progress.after_batch(s + batch_size, approx)
     model.train()
 
 
 def _precompute_advantages(
     model: DraftAgentModel,
     trajectories: list[list[RLExample]],
-    table: np.ndarray,
-    mean: float,
-    std: float,
-    gae_lambda: float,
-    batch_size: int,
-    device: torch.device,
+    refresh: AdvantageRefresh,
     *, epoch: int | None = None,
 ) -> None:
     """Refresh GAE advantages over every learner trajectory (research D3).
@@ -95,12 +145,13 @@ def _precompute_advantages(
     label = f"epoch {epoch} GAE precompute" if epoch is not None else "GAE precompute"
     _log(f"{label}: critic forward over {len(flat)} learner picks...")
     t0 = time.monotonic()
-    _critic_values(model, flat, table, mean, std, batch_size, device, log_label=label)
+    _critic_values(model, flat, refresh.critic_pass, log_label=label)
+    source = refresh.critic_pass.source
     adv_chunks: list[np.ndarray] = []
     for traj in trajectories:
         values = np.asarray([ex.value for ex in traj], dtype=np.float64)
-        reward_std = (traj[0].reward - mean) / std
-        adv = gae_advantages(values, reward_std, gae_lambda, _GAMMA)
+        reward_std = (traj[0].reward - source.mean) / source.std
+        adv = gae_advantages(values, reward_std, refresh.gae_lambda, _GAMMA)
         for ex, a in zip(traj, adv):
             ex.advantage = float(a)
         adv_chunks.append(adv)

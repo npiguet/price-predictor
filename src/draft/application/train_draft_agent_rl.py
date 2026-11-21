@@ -41,9 +41,14 @@ from draft.application.draft_lr_schedule import (
     _reapply_resume_lr,
 )
 from draft.application.draft_training_common import length_bucketed_batches
+from draft.application.imitation_batches import BatchSource
 from draft.application.imitation_model_setup import _select_device
-from draft.application.rl_advantage_refresh import _precompute_advantages
-from draft.application.rl_batches import _collate, _compute_loss
+from draft.application.rl_advantage_refresh import (
+    AdvantageRefresh,
+    CriticPass,
+    _precompute_advantages,
+)
+from draft.application.rl_batches import LossSettings, PolicyPair, _collate, _compute_loss
 from draft.application.rl_behaviour_check import (
     _ANOMALY_FRACTION,
     _PROB_FLOOR,
@@ -145,6 +150,8 @@ class TrainDraftAgentRLUseCase:
         mean, std = resume.critic_mean, resume.critic_std
         model = resume.model.to(device)
         reference = resume.reference.to(device)
+        models = PolicyPair(model, reference)
+        source = BatchSource(table, mean, std, device)
 
         train_ids, val_ids = split_draft_disjoint(examples, config.val_fraction)
         train = [ex for ex in examples if ex.draft_index in train_ids]
@@ -160,7 +167,7 @@ class TrainDraftAgentRLUseCase:
         )
 
         anomaly = _behaviour_anomaly_summary(
-            reference, examples, table, mean, std, config, device,
+            reference, examples, source, config,
         )
         msg = (
             f"Behaviour check: sampled {anomaly.n_learner}/{anomaly.n_total} "
@@ -228,8 +235,8 @@ class TrainDraftAgentRLUseCase:
         def run_eval(epoch: int, step: int) -> bool:
             nonlocal best_val_loss, best_at, evals_since_best
             report = _validate(
-                model, reference, val, table, mean, std, config,
-                entropy_sched.coef, kl_sched.coef, device,
+                models, val, source,
+                LossSettings(config, entropy_sched.coef, kl_sched.coef),
             )
             _log(
                 f"  eval epoch {epoch} step {step}/{n_steps} | "
@@ -265,8 +272,9 @@ class TrainDraftAgentRLUseCase:
         for epoch in range(resume.start_epoch, resume.start_epoch + config.epochs):
             # Refresh GAE advantages from the current critic (research D3).
             _precompute_advantages(
-                model, trajectories, table, mean, std,
-                config.gae_lambda, config.batch_size, device, epoch=epoch,
+                model, trajectories,
+                AdvantageRefresh(CriticPass(source, config.batch_size), config.gae_lambda),
+                epoch=epoch,
             )
             model.train()
             batches = length_bucketed_batches(train, config.batch_size, rng)
@@ -274,10 +282,9 @@ class TrainDraftAgentRLUseCase:
             epoch_start = time.monotonic()
             last_log = epoch_start
             for step, chunk in enumerate(batches, start=1):
-                batch = _collate(chunk, table, mean, std, device)
+                batch = _collate(chunk, source)
                 out = _compute_loss(
-                    model, reference, batch, config,
-                    entropy_sched.coef, kl_sched.coef,
+                    models, batch, LossSettings(config, entropy_sched.coef, kl_sched.coef),
                 )
                 optimizer.zero_grad()
                 out.total.backward()

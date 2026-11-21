@@ -8,7 +8,8 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from draft.application.rl_batches import _collate, _compute_loss
+from draft.application.imitation_batches import BatchSource
+from draft.application.rl_batches import LossSettings, PolicyPair, _collate, _compute_loss
 from draft.application.rl_examples import RLExample
 from draft.application.train_draft_agent_rl import TrainDraftAgentRLConfig
 from draft.domain.draft_agent_model import DraftAgentConfig, DraftAgentModel
@@ -71,10 +72,12 @@ def test_total_is_weighted_sum_of_components() -> None:
     batch = _collate(
         [_ex([TYPE_PACK, TYPE_PACK, TYPE_POOL], 0, True, _Credit(1.0, 0.5)),
          _ex([TYPE_PACK, TYPE_POOL, TYPE_TAKEN], 0, False, _Credit(-1.0, 0.0))],
-        table, 0.0, 1.0, torch.device("cpu"),
+        BatchSource(table, 0.0, 1.0, torch.device("cpu")),
     )
     cfg = _config(value_weight=2.0)
-    out = _compute_loss(model, ref, batch, cfg, entropy_coef=0.1, kl_coef=0.3)
+    out = _compute_loss(
+        PolicyPair(model, ref), batch, LossSettings(cfg, entropy_coef=0.1, kl_coef=0.3),
+    )
     expected = (
         out.policy + 2.0 * out.value - 0.1 * out.entropy + 0.3 * out.kl
     )
@@ -90,9 +93,11 @@ def test_kl_is_zero_against_identical_reference() -> None:
     table = _table()
     batch = _collate(
         [_ex([TYPE_PACK, TYPE_PACK, TYPE_POOL], 0, True, _Credit(1.0, 0.5))],
-        table, 0.0, 1.0, torch.device("cpu"),
+        BatchSource(table, 0.0, 1.0, torch.device("cpu")),
     )
-    out = _compute_loss(model, ref, batch, _config(), entropy_coef=0.0, kl_coef=1.0)
+    out = _compute_loss(
+        PolicyPair(model, ref), batch, LossSettings(_config(), entropy_coef=0.0, kl_coef=1.0),
+    )
     assert torch.allclose(out.kl, torch.zeros(()), atol=1e-5)
     assert out.entropy >= 0.0
 
@@ -105,9 +110,11 @@ def test_non_learner_batch_has_zero_policy_terms() -> None:
     batch = _collate(
         [_ex([TYPE_PACK, TYPE_POOL], 0, False, _Credit(1.0, 0.0)),
          _ex([TYPE_PACK, TYPE_TAKEN], 0, False, _Credit(-1.0, 0.0))],
-        table, 0.0, 1.0, torch.device("cpu"),
+        BatchSource(table, 0.0, 1.0, torch.device("cpu")),
     )
-    out = _compute_loss(model, ref, batch, _config(), entropy_coef=0.1, kl_coef=0.3)
+    out = _compute_loss(
+        PolicyPair(model, ref), batch, LossSettings(_config(), entropy_coef=0.1, kl_coef=0.3),
+    )
     assert float(out.policy) == 0.0
     assert float(out.entropy) == 0.0
     assert float(out.kl) == 0.0
@@ -121,9 +128,11 @@ def test_backward_is_finite_with_masked_rows() -> None:
     batch = _collate(
         [_ex([TYPE_PACK, TYPE_PACK, TYPE_POOL], 1, True, _Credit(1.0, -0.7)),
          _ex([TYPE_PACK, TYPE_POOL, TYPE_TAKEN], 0, False, _Credit(0.5, 0.0))],
-        table, 0.0, 1.0, torch.device("cpu"),
+        BatchSource(table, 0.0, 1.0, torch.device("cpu")),
     )
-    out = _compute_loss(model, ref, batch, _config(), entropy_coef=0.05, kl_coef=0.2)
+    out = _compute_loss(
+        PolicyPair(model, ref), batch, LossSettings(_config(), entropy_coef=0.05, kl_coef=0.2),
+    )
     out.total.backward()
     grads = [p.grad for p in model.parameters() if p.grad is not None]
     assert grads
@@ -135,16 +144,19 @@ def test_temperature_changes_entropy() -> None:
     ref = _model()
     table = _table()
     rows = [_ex([TYPE_PACK, TYPE_PACK, TYPE_PACK, TYPE_POOL], 0, True, _Credit(1.0, 0.1))]
+    source = BatchSource(table, 0.0, 1.0, torch.device("cpu"))
     cold = _compute_loss(
-        model, ref, _collate(rows, table, 0.0, 1.0, torch.device("cpu")),
-        _config(), entropy_coef=1.0, kl_coef=0.0,
+        PolicyPair(model, ref), _collate(rows, source),
+        LossSettings(_config(), entropy_coef=1.0, kl_coef=0.0),
     )
     hot = _compute_loss(
-        model, ref, _collate(rows, table, 0.0, 1.0, torch.device("cpu")),
-        TrainDraftAgentRLConfig(
-            checkpoint=None, learner_agents=("g",), rollout_temperature=5.0, **_PATHS,
+        PolicyPair(model, ref), _collate(rows, source),
+        LossSettings(
+            TrainDraftAgentRLConfig(
+                checkpoint=None, learner_agents=("g",), rollout_temperature=5.0, **_PATHS,
+            ),
+            entropy_coef=1.0, kl_coef=0.0,
         ),
-        entropy_coef=1.0, kl_coef=0.0,
     )
     # Higher temperature flattens the PACK softmax → higher entropy.
     assert float(hot.entropy.detach()) > float(cold.entropy.detach())

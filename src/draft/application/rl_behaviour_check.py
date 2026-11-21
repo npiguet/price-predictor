@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 
+from draft.application.imitation_batches import BatchSource
 from draft.application.rl_batches import _collate, _forward_logits_critic
 from draft.application.rl_examples import RANDOM_SEED, RLExample
 from draft.domain.draft_agent_model import DraftAgentModel
@@ -19,7 +20,6 @@ from price_predictor.infrastructure.torch_training import masked_log_softmax
 
 if TYPE_CHECKING:
     from draft.application.train_draft_agent_rl import TrainDraftAgentRLConfig
-
 
 _PROB_FLOOR = 1e-4  # behaviour prob below this counts as an anomaly (D6).
 _ANOMALY_FRACTION = 0.05  # warn if more than this fraction of learner picks anomalous.
@@ -38,11 +38,8 @@ class _AnomalySummary:
 def _behaviour_anomaly_summary(
     reference: DraftAgentModel,
     examples: list[RLExample],
-    table: np.ndarray,
-    mean: float,
-    std: float,
+    source: BatchSource,
     config: TrainDraftAgentRLConfig,
-    device: torch.device,
 ) -> _AnomalySummary:
     """Recompute log π_ref,T(a_t) over a learner-pick subset; summarize anomalies (D6).
 
@@ -68,7 +65,7 @@ def _behaviour_anomaly_summary(
         for s in range(0, len(order), config.batch_size):
             idxs = order[s:s + config.batch_size]
             chunk = [learner[i] for i in idxs]
-            batch = _collate(chunk, table, mean, std, device)
+            batch = _collate(chunk, source)
             ref_logits, _ = _forward_logits_critic(reference, batch)
             logp = masked_log_softmax(ref_logits / temp, batch.pack_mask)
             idx = batch.action_token.clamp(min=0).unsqueeze(1)

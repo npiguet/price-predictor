@@ -6,11 +6,12 @@ shared embedding table (FR-013, FR-015), and the draft-disjoint split (FR-035).
 from __future__ import annotations
 
 import random
+from collections.abc import Iterator
 from dataclasses import dataclass
 
 import numpy as np
 
-from draft.application.draft_pick_states import iter_seat_pick_states
+from draft.application.draft_pick_states import RawPickState, iter_seat_pick_states
 from draft.application.draft_training_common import leave_one_out_rewards
 from draft.application.rl_log import _log
 from draft.domain.draft_geometry import DraftGeometry, DraftRecord
@@ -41,6 +42,18 @@ class RLExample:
     @property
     def n_tokens(self) -> int:
         return int(self.card_idx.shape[0])
+
+
+@dataclass(frozen=True)
+class _SeatLabels:
+    """One scored seat of one draft: the draft's index and the seat's, whether the
+    seat is a learner (its picks feed the policy gradient) and its pod-relative
+    reward."""
+
+    draft_index: int
+    seat: int
+    learner: bool
+    reward: float
 
 
 class _Loader:
@@ -111,37 +124,54 @@ class _Loader:
         allow_learner: bool,
     ) -> None:
         for ri, record in enumerate(records):
-            geo = DraftGeometry.from_record(record)
-            self.max_packs = max(self.max_packs, geo.packs)
-            self.max_pack_size = max(self.max_pack_size, geo.pack_size)
-            rewards = leave_one_out_rewards(record)
-            for seat_idx, seat in enumerate(record.seats):
-                reward = rewards[seat_idx]
-                if reward is None:
-                    continue  # failed build → excluded entirely (FR-015)
-                is_learner = allow_learner and seat.agent in self._learner
-                traj: list[RLExample] = []
-                for state in iter_seat_pick_states(
-                    geo, record.boosters, seat_idx, self._card_index,
-                ):
-                    ex = RLExample(
-                        draft_index=ri,
-                        card_idx=state.card_idx,
-                        type_idx=state.type_idx,
-                        packs_ago=state.packs_ago,
-                        pick_ago=state.pick_ago,
-                        pack_number=state.pack_number,
-                        pick_number=state.pick_number,
-                        action_token=state.action_position,
-                        learner_active=is_learner and state.action_position >= 0,
-                        critic_active=True,
-                        reward=float(reward),
-                    )
-                    examples.append(ex)
-                    if is_learner:
-                        traj.append(ex)
+            for seat_examples, traj in self._record_seats(ri, record, allow_learner):
+                examples.extend(seat_examples)
                 if traj:
                     trajectories.append(traj)
+
+    def _record_seats(
+        self, draft_index: int, record: DraftRecord, allow_learner: bool,
+    ) -> Iterator[tuple[list[RLExample], list[RLExample]]]:
+        """Each scored seat's examples, with its trajectory (the same examples for
+        a learner seat, none for any other)."""
+        geo = DraftGeometry.from_record(record)
+        self.max_packs = max(self.max_packs, geo.packs)
+        self.max_pack_size = max(self.max_pack_size, geo.pack_size)
+        rewards = leave_one_out_rewards(record)
+        for seat_idx, seat in enumerate(record.seats):
+            reward = rewards[seat_idx]
+            if reward is None:
+                continue  # failed build → excluded entirely (FR-015)
+            is_learner = allow_learner and seat.agent in self._learner
+            labels = _SeatLabels(draft_index, seat_idx, is_learner, float(reward))
+            seat_examples = self._seat_examples(record, geo, labels)
+            yield seat_examples, (list(seat_examples) if is_learner else [])
+
+    def _seat_examples(
+        self, record: DraftRecord, geo: DraftGeometry, labels: _SeatLabels,
+    ) -> list[RLExample]:
+        return [
+            _example(state, labels)
+            for state in iter_seat_pick_states(
+                geo, record.boosters, labels.seat, self._card_index,
+            )
+        ]
+
+
+def _example(state: RawPickState, labels: _SeatLabels) -> RLExample:
+    return RLExample(
+        draft_index=labels.draft_index,
+        card_idx=state.card_idx,
+        type_idx=state.type_idx,
+        packs_ago=state.packs_ago,
+        pick_ago=state.pick_ago,
+        pack_number=state.pack_number,
+        pick_number=state.pick_number,
+        action_token=state.action_position,
+        learner_active=labels.learner and state.action_position >= 0,
+        critic_active=True,
+        reward=labels.reward,
+    )
 
 
 def split_draft_disjoint(

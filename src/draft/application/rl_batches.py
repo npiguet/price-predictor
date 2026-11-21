@@ -12,6 +12,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+from draft.application.imitation_batches import BatchSource
 from draft.application.rl_examples import RLExample
 from draft.domain.draft_agent_model import DraftAgentModel
 from draft.domain.draft_state import TYPE_PACK
@@ -23,7 +24,6 @@ from price_predictor.infrastructure.torch_training import (
 
 if TYPE_CHECKING:
     from draft.application.train_draft_agent_rl import TrainDraftAgentRLConfig
-
 
 
 @dataclass
@@ -43,10 +43,27 @@ class _Batch:
     advantage: torch.Tensor
 
 
-def _collate(
-    batch: list[RLExample], table: np.ndarray, mean: float, std: float,
-    device: torch.device,
-) -> _Batch:
+@dataclass(frozen=True)
+class PolicyPair:
+    """The model being trained and the frozen KL reference it is anchored to."""
+
+    model: DraftAgentModel
+    reference: DraftAgentModel
+
+
+@dataclass(frozen=True)
+class LossSettings:
+    """What weighs the RL loss's terms: the run's config (rollout temperature,
+    value weight) and the entropy and KL coefficients at this point of the run."""
+
+    config: TrainDraftAgentRLConfig
+    entropy_coef: float
+    kl_coef: float
+
+
+def _pad_tokens(batch: list[RLExample], table: np.ndarray) -> tuple[np.ndarray, ...]:
+    """The batch's token arrays, right-padded to its longest example: card
+    embeddings, type, packs-ago, pick-ago, the card mask and the PACK mask."""
     b = len(batch)
     max_n = max(ex.n_tokens for ex in batch)
     dim = table.shape[1]
@@ -64,6 +81,22 @@ def _collate(
         pick_ago[i, :n] = ex.pick_ago
         card_mask[i, :n] = True
         pack_mask[i, :n] = ex.type_idx == TYPE_PACK
+    return card_emb, type_idx, packs_ago, pick_ago, card_mask, pack_mask
+
+
+def _column(
+    batch: list[RLExample], field: str, device: torch.device,
+    dtype: torch.dtype | None = None,
+) -> torch.Tensor:
+    """One per-example field of the batch as a ``(B,)`` tensor."""
+    return torch.tensor([getattr(ex, field) for ex in batch], device=device, dtype=dtype)
+
+
+def _collate(batch: list[RLExample], source: BatchSource) -> _Batch:
+    device = source.device
+    card_emb, type_idx, packs_ago, pick_ago, card_mask, pack_mask = _pad_tokens(
+        batch, source.table,
+    )
     return _Batch(
         card_emb=torch.from_numpy(card_emb).to(device),
         type_idx=torch.from_numpy(type_idx).to(device),
@@ -71,22 +104,16 @@ def _collate(
         pick_ago=torch.from_numpy(pick_ago).to(device),
         card_mask=torch.from_numpy(card_mask).to(device),
         pack_mask=torch.from_numpy(pack_mask).to(device),
-        pack_number=torch.tensor([ex.pack_number for ex in batch], device=device),
-        pick_number=torch.tensor([ex.pick_number for ex in batch], device=device),
-        action_token=torch.tensor([ex.action_token for ex in batch], device=device),
-        learner_active=torch.tensor(
-            [ex.learner_active for ex in batch], device=device, dtype=torch.bool,
-        ),
-        critic_active=torch.tensor(
-            [ex.critic_active for ex in batch], device=device, dtype=torch.bool,
-        ),
+        pack_number=_column(batch, "pack_number", device),
+        pick_number=_column(batch, "pick_number", device),
+        action_token=_column(batch, "action_token", device),
+        learner_active=_column(batch, "learner_active", device, torch.bool),
+        critic_active=_column(batch, "critic_active", device, torch.bool),
         reward_std=torch.tensor(
-            [(ex.reward - mean) / std for ex in batch],
+            [(ex.reward - source.mean) / source.std for ex in batch],
             device=device, dtype=torch.float32,
         ),
-        advantage=torch.tensor(
-            [ex.advantage for ex in batch], device=device, dtype=torch.float32,
-        ),
+        advantage=_column(batch, "advantage", device, torch.float32),
     )
 
 
@@ -108,17 +135,11 @@ def _forward_logits_critic(
     )
 
 
-def _compute_loss(
-    model: DraftAgentModel,
-    reference: DraftAgentModel,
-    batch: _Batch,
-    config: TrainDraftAgentRLConfig,
-    entropy_coef: float,
-    kl_coef: float,
-) -> _LossOut:
+def _compute_loss(models: PolicyPair, batch: _Batch, settings: LossSettings) -> _LossOut:
     """The RL loss (data-model §4). Distributions are π_T = softmax(logits / T)."""
+    config = settings.config
     temp = float(config.rollout_temperature or 1.0)
-    policy_logits, critic_pred = _forward_logits_critic(model, batch)
+    policy_logits, critic_pred = _forward_logits_critic(models.model, batch)
     device = policy_logits.device
     scaled = policy_logits / temp
 
@@ -134,7 +155,7 @@ def _compute_loss(
         policy = -(adv * logp_action[learner]).mean()
         entropy = policy_entropy(scaled, batch.pack_mask)[learner].mean()
         with torch.no_grad():
-            ref_logits, _ = _forward_logits_critic(reference, batch)
+            ref_logits, _ = _forward_logits_critic(models.reference, batch)
         kl = kl_divergence(scaled, ref_logits / temp, batch.pack_mask)[learner].mean()
 
     value = torch.zeros((), device=device)
@@ -144,6 +165,6 @@ def _compute_loss(
 
     total = (
         policy + config.value_weight * value
-        - entropy_coef * entropy + kl_coef * kl
+        - settings.entropy_coef * entropy + settings.kl_coef * kl
     )
     return _LossOut(total, policy, value, entropy, kl)

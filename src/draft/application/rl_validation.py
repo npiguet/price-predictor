@@ -4,18 +4,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
-import numpy as np
 import torch
 
-from draft.application.rl_batches import _collate, _compute_loss
+from draft.application.imitation_batches import BatchSource
+from draft.application.rl_batches import LossSettings, PolicyPair, _collate, _compute_loss
 from draft.application.rl_examples import RLExample
-from draft.domain.draft_agent_model import DraftAgentModel
-
-if TYPE_CHECKING:
-    from draft.application.train_draft_agent_rl import TrainDraftAgentRLConfig
-
 
 
 @dataclass
@@ -28,30 +22,21 @@ class _ValReport:
 
 
 def _validate(
-    model: DraftAgentModel,
-    reference: DraftAgentModel,
-    val: list[RLExample],
-    table: np.ndarray,
-    mean: float,
-    std: float,
-    config: TrainDraftAgentRLConfig,
-    entropy_coef: float,
-    kl_coef: float,
-    device: torch.device,
+    models: PolicyPair, val: list[RLExample], source: BatchSource, settings: LossSettings,
 ) -> _ValReport:
     """Held-out RL objective (the best-checkpoint metric, research D9)."""
+    model = models.model
+    batch_size = settings.config.batch_size
     model.eval()
     if not val:
         return _ValReport(0.0, 0.0, 0.0, 0.0, 0.0)
     tot = pol = val_l = ent = kl = 0.0
     n = 0
     with torch.no_grad():
-        for s in range(0, len(val), config.batch_size):
-            chunk = val[s:s + config.batch_size]
-            batch = _collate(chunk, table, mean, std, device)
-            out = _compute_loss(
-                model, reference, batch, config, entropy_coef, kl_coef,
-            )
+        for s in range(0, len(val), batch_size):
+            chunk = val[s:s + batch_size]
+            batch = _collate(chunk, source)
+            out = _compute_loss(models, batch, settings)
             bn = len(chunk)
             tot += float(out.total) * bn
             pol += float(out.policy) * bn

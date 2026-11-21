@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from draft.application.train_draft_agent_rl import TrainDraftAgentRLConfig
 
 
-
 @dataclass
 class _Resume:
     model: DraftAgentModel

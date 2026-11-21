@@ -5,7 +5,12 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from draft.application.rl_advantage_refresh import _precompute_advantages
+from draft.application.imitation_batches import BatchSource
+from draft.application.rl_advantage_refresh import (
+    AdvantageRefresh,
+    CriticPass,
+    _precompute_advantages,
+)
 from draft.application.rl_examples import RLExample
 from draft.domain.draft_agent_model import DraftAgentConfig, DraftAgentModel
 from draft.domain.draft_state import TYPE_PACK, TYPE_POOL
@@ -31,6 +36,11 @@ def _ex(reward: float) -> RLExample:
     )
 
 
+def _refresh(table: np.ndarray) -> AdvantageRefresh:
+    source = BatchSource(table, mean=0.0, std=1.0, device=torch.device("cpu"))
+    return AdvantageRefresh(CriticPass(source, batch_size=4), gae_lambda=0.95)
+
+
 def test_precompute_writes_finite_values_and_advantages() -> None:
     torch.manual_seed(0)
     model = DraftAgentModel(DraftAgentConfig(embedding_dim=DIM, packs=1, P=4))
@@ -40,10 +50,7 @@ def test_precompute_writes_finite_values_and_advantages() -> None:
         [_ex(2.0), _ex(2.0), _ex(2.0)],
         [_ex(-1.0), _ex(-1.0)],
     ]
-    _precompute_advantages(
-        model, trajectories, table, mean=0.0, std=1.0,
-        gae_lambda=0.95, batch_size=4, device=torch.device("cpu"), epoch=0,
-    )
+    _precompute_advantages(model, trajectories, _refresh(table), epoch=0)
     for traj in trajectories:
         for ex in traj:
             assert np.isfinite(ex.value)
@@ -57,7 +64,4 @@ def test_precompute_no_trajectories_is_noop() -> None:
     torch.manual_seed(0)
     model = DraftAgentModel(DraftAgentConfig(embedding_dim=DIM, packs=1, P=4))
     table = np.zeros((1, DIM), dtype=np.float32)
-    _precompute_advantages(
-        model, [], table, mean=0.0, std=1.0,
-        gae_lambda=0.95, batch_size=4, device=torch.device("cpu"),
-    )  # must not raise
+    _precompute_advantages(model, [], _refresh(table))  # must not raise

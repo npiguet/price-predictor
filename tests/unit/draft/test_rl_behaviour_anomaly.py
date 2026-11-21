@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from draft.application.imitation_batches import BatchSource
 from draft.application.rl_behaviour_check import _behaviour_anomaly_summary
 from draft.application.rl_examples import RLExample
 from draft.application.train_draft_agent_rl import TrainDraftAgentRLConfig
@@ -48,7 +49,7 @@ def test_summary_counts_only_learner_picks() -> None:
     table = np.random.default_rng(0).standard_normal((6, DIM)).astype(np.float32)
     examples = [_ex(True), _ex(True), _ex(False)]  # 2 learner, 1 not
     summary = _behaviour_anomaly_summary(
-        ref, examples, table, 0.0, 1.0, _config(), torch.device("cpu"),
+        ref, examples, BatchSource(table, 0.0, 1.0, torch.device("cpu")), _config(),
     )
     assert summary.n_learner == 2
     assert 0.0 <= summary.frac_below_floor <= 1.0
@@ -62,7 +63,7 @@ def test_summary_handles_no_learner_picks() -> None:
     ref = DraftAgentModel(DraftAgentConfig(embedding_dim=DIM, packs=1, P=4))
     table = np.random.default_rng(0).standard_normal((6, DIM)).astype(np.float32)
     summary = _behaviour_anomaly_summary(
-        ref, [_ex(False)], table, 0.0, 1.0, _config(), torch.device("cpu"),
+        ref, [_ex(False)], BatchSource(table, 0.0, 1.0, torch.device("cpu")), _config(),
     )
     assert summary.n_learner == 0
     assert summary.n_total == 0
@@ -79,8 +80,8 @@ def test_summary_subsamples_large_corpora() -> None:
     table = np.random.default_rng(0).standard_normal((6, DIM)).astype(np.float32)
     n_total = _ANOMALY_SAMPLE_FLOOR + 500   # just above the floor
     summary = _behaviour_anomaly_summary(
-        ref, [_ex(True) for _ in range(n_total)], table, 0.0, 1.0,
-        _config(), torch.device("cpu"),
+        ref, [_ex(True) for _ in range(n_total)],
+        BatchSource(table, 0.0, 1.0, torch.device("cpu")), _config(),
     )
     assert summary.n_total == n_total
     assert summary.n_learner == _ANOMALY_SAMPLE_FLOOR   # capped at the floor
