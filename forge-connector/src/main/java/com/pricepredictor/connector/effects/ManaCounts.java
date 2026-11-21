@@ -2,6 +2,11 @@ package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.json.Json;
 import forge.card.MagicColor;
+import forge.card.mana.ManaAtom;
+import forge.game.mana.Mana;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * An amount of mana per symbol, rendered in one fixed order: W, U, B, R, G,
@@ -18,14 +23,11 @@ final class ManaCounts {
     /** The symbols counted, in rendering order: the five colours, then colourless. */
     private static final byte[] SYMBOLS = MagicColor.WUBRGC;
 
+    /** Where colourless is counted: last. */
+    private static final int COLORLESS_INDEX = SYMBOLS.length - 1;
+
     /** No mana of any symbol. */
     static final ManaCounts NONE = new ManaCounts(new int[SYMBOLS.length]);
-
-    /** One symbol's amount, read off something that is asked once per symbol. */
-    @FunctionalInterface
-    interface AmountOf {
-        int of(byte symbol);
-    }
 
     private final int[] counts;
 
@@ -33,30 +35,49 @@ final class ManaCounts {
         this.counts = counts;
     }
 
-    /** Each symbol's amount, asked of {@code amount} once per symbol in rendering order. */
-    static ManaCounts of(AmountOf amount) {
-        int[] counts = new int[SYMBOLS.length];
-        for (int i = 0; i < SYMBOLS.length; i++) {
-            counts[i] = amount.of(SYMBOLS[i]);
+    /**
+     * One mana per unit of {@code units}, under its colour: what a floating
+     * pool holds. A null unit counts under none.
+     */
+    static ManaCounts units(Iterable<Mana> units) {
+        List<Byte> symbols = new ArrayList<>();
+        for (Mana unit : units) {
+            if (unit != null) {
+                symbols.add(unit.getColor());
+            }
         }
-        return new ManaCounts(counts);
+        return tally(symbols);
     }
 
     /**
      * One mana per entry of {@code symbols}; an entry that is not one of the
-     * six symbols — a multicolour mask, say — counts under none.
+     * six symbols — a multicolour mask, say — counts under none. Colourless
+     * counts under {@code C} under either byte: Forge keys a colourless
+     * {@link Mana} unit as {@code ManaAtom.COLORLESS}, and a colour list
+     * names it {@code MagicColor.COLORLESS}.
      */
     static ManaCounts tally(Iterable<Byte> symbols) {
         int[] counts = new int[SYMBOLS.length];
         for (byte symbol : symbols) {
-            for (int i = 0; i < SYMBOLS.length; i++) {
-                if (SYMBOLS[i] == symbol) {
-                    counts[i]++;
-                    break;
-                }
+            int index = indexOf(symbol);
+            if (index >= 0) {
+                counts[index]++;
             }
         }
         return new ManaCounts(counts);
+    }
+
+    /** Where {@code symbol} is counted, or -1 when it is none of the six. */
+    private static int indexOf(byte symbol) {
+        if (symbol == (byte) ManaAtom.COLORLESS) {
+            return COLORLESS_INDEX;
+        }
+        for (int i = 0; i < SYMBOLS.length; i++) {
+            if (SYMBOLS[i] == symbol) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /** Whether no mana of any symbol is counted. */

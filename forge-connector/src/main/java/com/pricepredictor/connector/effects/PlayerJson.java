@@ -43,9 +43,9 @@ final class PlayerJson {
                 // AdjustLandPlays$ raise in force, null when unlimited.
                 .value("max_land_plays", player.getMaxLandPlaysInfinite()
                         ? null : player.getMaxLandPlays())
-                // Every symbol, zeros included, in ManaCounts' fixed order.
-                .raw("floating_mana",
-                        ManaCounts.of(player.getManaPool()::getAmountOfColor).toJson())
+                // Every symbol, zeros included, in ManaCounts' fixed order:
+                // one per unit the pool holds, under the unit's colour.
+                .raw("floating_mana", ManaCounts.units(player.getManaPool()).toJson())
                 .raw("untapped_production", UntappedProduction.of(game, player, board).toJson())
                 .value("speed", player.getSpeed())
                 .value("city_blessing", player.hasBlessing())
