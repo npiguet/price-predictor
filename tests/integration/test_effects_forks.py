@@ -156,6 +156,11 @@ def test_forks_pair_to_the_records_they_mirror(forked) -> None:
         assert fork.game_id == real.game_id, "a fork mirrors a same-game record"
 
 
+def _forced_resolutions(forks: list[EffectRecord]) -> list[EffectRecord]:
+    """The unlinked resolution records among ``forks``."""
+    return [f for f in forks if f.kind.value == "resolution" and f.link_id is None]
+
+
 def test_an_intervention_records_what_the_ability_did(forked) -> None:
     """The failure this catches is a fork that copies, score-checks, snapshots
     and writes an empty payload — a record saying an ability was forced without
@@ -178,7 +183,7 @@ def test_an_intervention_records_what_the_ability_did(forked) -> None:
         assert record.fork and record.interventional
     # A protection fork's records are of every kind and link their halves; the
     # forced resolutions are the unlinked resolution records.
-    for record in (f for f in with_events if f.kind.value == "resolution" and f.link_id is None):
+    for record in _forced_resolutions(with_events):
         assert record.ability, "an intervention names the line it forced"
 
 
@@ -194,9 +199,8 @@ def test_an_intervention_forces_something_observation_misses(forked) -> None:
     """
     records = forked
     forks = [
-        r for r in records
-        if r.interventional and r.ability and r.link_id is None
-        and r.kind.value == "resolution" and not _only_mana(r)
+        r for r in _forced_resolutions([r for r in records if r.interventional and r.ability])
+        if not _only_mana(r)
     ]
     if not forks:
         pytest.skip("no intervention landed within the collection window")
@@ -248,6 +252,28 @@ def test_a_probe_names_what_it_perturbed(forked) -> None:
         assert probe.payload.probed_entity, "no carrier named"
 
 
+def _carrier_of(probe: EffectRecord):
+    """The entity the probe stripped, or None when its own snapshot lacks it."""
+    return next(
+        (e for e in probe.state.entities if e.id == probe.payload.probed_entity),
+        None,
+    )
+
+
+def _assert_keyword_stripped(probe: EffectRecord, carrier) -> None:
+    assert carrier.lines is not None, (
+        f"{probe.record_id}: {carrier.name} was not written in the gen-3 shape"
+    )
+    # Both places a keyword shows: its keyword line, and the overlay's
+    # list of every keyword the card has.
+    lines = {line.keyword for line in carrier.keyword_lines if line.in_force}
+    overlay = set(carrier.granted_temporary.keywords)
+    assert probe.payload.probed_keyword not in lines | overlay, (
+        f"{probe.payload.probed_keyword} survived the strip on "
+        f"{carrier.name}"
+    )
+
+
 def test_the_probed_creature_actually_lost_the_keyword(forked) -> None:
     """The failure this catches is a strip that silently does nothing: the
     branch then equals the real step, and the counterfactual says the keyword
@@ -257,27 +283,13 @@ def test_the_probed_creature_actually_lost_the_keyword(forked) -> None:
     if not probes:
         pytest.skip("no probe landed within the collection window")
 
+    carriers = [(probe, _carrier_of(probe)) for probe in probes]
     checked = 0
-    for probe in probes:
-        carrier = next(
-            (e for e in probe.state.entities
-             if e.id == probe.payload.probed_entity),
-            None,
-        )
+    for probe, carrier in carriers:
         if carrier is None:
             continue
-        assert carrier.lines is not None, (
-            f"{probe.record_id}: {carrier.name} was not written in the gen-3 shape"
-        )
+        _assert_keyword_stripped(probe, carrier)
         checked += 1
-        # Both places a keyword shows: its keyword line, and the overlay's
-        # list of every keyword the card has.
-        lines = {line.keyword for line in carrier.keyword_lines if line.in_force}
-        overlay = set(carrier.granted_temporary.keywords)
-        assert probe.payload.probed_keyword not in lines | overlay, (
-            f"{probe.payload.probed_keyword} survived the strip on "
-            f"{carrier.name}"
-        )
     assert checked, "no probe's carrier appeared in its own snapshot"
 
 

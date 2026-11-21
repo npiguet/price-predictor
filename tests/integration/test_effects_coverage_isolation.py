@@ -82,60 +82,10 @@ def _deck_of(lands: tuple[str, ...]) -> list[str]:
 _WORKER_COUNT = 2
 
 
-def test_a_named_deck_reaches_the_records(tmp_path: Path) -> None:
-    """The whole point of the collector, against a real Forge.
-
-    A coverage deck names the cards it is built to reach. If the worker plays
-    that deck, those names appear in effect records; if it falls back to
-    sealed self-play -- which is what it did before this plan -- they do not,
-    and the run looks identical while collecting something else entirely.
-
-    Two decks, not one: ``pickDeckB`` excludes a deck that is an exact
-    content mirror of deck A before accepting one at all. A single deck
-    repeated would make every match hit that exclusion and, at the time this
-    test was first written, fall through to Forge's own set-based deck
-    building -- and a coverage deck's set code is the ``COVERAGE`` sentinel,
-    which resolves against no real Forge edition, so every match threw
-    ``NullPointerException`` before a game was ever played, forever (a real
-    hang: nothing ever reached the progress file, so a bounded round never
-    saw its bound). Fixed in ``MatchGenerator.pickDeckB`` to accept a mirror
-    instead of reaching Forge under ``decksOnly`` -- see
-    ``GeneratedDecksIndex.randomAnyDeckFromSet`` and the Java tests covering
-    it (``MatchGeneratorRoutingTest``, ``MatchGeneratorTest``). This test's
-    second deck still differs by one basic land, so the fix's own mirror path
-    is never what makes this particular test pass -- it exercises the
-    ordinary non-mirror branch, the same one every real coverage/variant
-    round mostly uses.
-
-    ``Llanowar Elves`` because it is in the converted tree, castable by the
-    AI, and does nothing that needs another card present.
-
-    Also closes a gap Task 4 left open: its progress counter
-    (``-Dsealed.progress.file``, written per completed match by
-    ``ProgressWriter``) was previously only exercised by a unit test calling
-    ``recordMatch`` directly. This is the first test to drive real workers'
-    ``runForever`` loops end to end and check that the progress file they
-    share actually grows.
-
-    On the broken-evidence run this test's own history relies on (an empty
-    decks file, since Step 2 predates Tasks 1-6 and no longer fails): that
-    proves the harness fails loudly when the worker exits early on a bad
-    decks file. It does **not** by itself discriminate the narrower claim in
-    this docstring's first paragraph -- that a worker silently ignoring the
-    decks file and falling back to ordinary sealed self-play would leave this
-    card out. Checked directly rather than assumed: passing ``decksOnly=False``
-    against this exact fixture does **not** produce that failure either,
-    because ``pickDeckA`` samples from ``side_a_decks_path`` whenever it is
-    set, independent of ``decksOnly`` -- deck A still came from the file and
-    ``Llanowar Elves`` still reliably appeared within 21s. The regression the
-    first paragraph actually describes -- no decks file reaching the worker
-    at all -- is what ``_run_records_only`` above already exercises; it never
-    sees this card because it never sees any *named* card, only whatever an
-    unweighted sealed pool happens to contain.
-    """
-    require_jar()
-    records_dir = tmp_path / "records"
-    records_dir.mkdir()
+def _start_workers(
+    tmp_path: Path, records_dir: Path, progress_file: Path, stop_files: list[Path],
+) -> list:
+    """Two coverage decks, and ``_WORKER_COUNT`` workers sharing one progress file."""
     decks_file = tmp_path / "decks.txt"
     write_deck_file(
         [
@@ -145,11 +95,8 @@ def test_a_named_deck_reaches_the_records(tmp_path: Path) -> None:
         decks_file,
         label="coverage",
     )
-    progress_file = tmp_path / "progress.txt"
     run_id = str(uuid.uuid4())
-    stop_files = [tmp_path / f"worker-{index}.stop" for index in range(_WORKER_COUNT)]
-
-    processes = [
+    return [
         MatchWorkerConnector().start(launch=WorkerLaunch(
             None,
             run_id=run_id,
@@ -161,26 +108,101 @@ def test_a_named_deck_reaches_the_records(tmp_path: Path) -> None:
         ))
         for worker_index in range(_WORKER_COUNT)
     ]
+
+
+def _observe(records_dir: Path, progress_file: Path) -> tuple[set[str], int]:
+    """The entity names the records show so far, and the progress file's line count."""
+    names = {
+        entity.name
+        for record in read_records(records_dir)
+        for entity in record.state.entities
+    }
+    progress_lines = (
+        sum(1 for _ in progress_file.open(encoding="utf-8"))
+        if progress_file.exists() else 0
+    )
+    return names, progress_lines
+
+
+def _collect_until_seen(
+    processes: list, records_dir: Path, progress_file: Path,
+) -> tuple[set[str], int]:
+    """Poll until Llanowar Elves is in a record and a match finished, or the window ends."""
+    deadline = time.monotonic() + _COLLECTION_SECONDS
+    names: set[str] = set()
+    progress_lines = 0
+    while time.monotonic() < deadline:
+        time.sleep(POLL_SECONDS)
+        for process in processes:
+            if process.poll() is not None:
+                pytest.fail(f"worker exited early with {process.returncode}")
+        names, progress_lines = _observe(records_dir, progress_file)
+        if "Llanowar Elves" in names and progress_lines >= 1:
+            break
+    return names, progress_lines
+
+
+# Background of the test below (its history and what it does and does not prove):
+#
+# A coverage deck names the cards it is built to reach. If the worker plays
+# that deck, those names appear in effect records; if it falls back to
+# sealed self-play -- which is what it did before this plan -- they do not,
+# and the run looks identical while collecting something else entirely.
+#
+# Two decks, not one: ``pickDeckB`` excludes a deck that is an exact
+# content mirror of deck A before accepting one at all. A single deck
+# repeated would make every match hit that exclusion and, at the time this
+# test was first written, fall through to Forge's own set-based deck
+# building -- and a coverage deck's set code is the ``COVERAGE`` sentinel,
+# which resolves against no real Forge edition, so every match threw
+# ``NullPointerException`` before a game was ever played, forever (a real
+# hang: nothing ever reached the progress file, so a bounded round never
+# saw its bound). Fixed in ``MatchGenerator.pickDeckB`` to accept a mirror
+# instead of reaching Forge under ``decksOnly`` -- see
+# ``GeneratedDecksIndex.randomAnyDeckFromSet`` and the Java tests covering
+# it (``MatchGeneratorRoutingTest``, ``MatchGeneratorTest``). This test's
+# second deck still differs by one basic land, so the fix's own mirror path
+# is never what makes this particular test pass -- it exercises the
+# ordinary non-mirror branch, the same one every real coverage/variant
+# round mostly uses.
+#
+# ``Llanowar Elves`` because it is in the converted tree, castable by the
+# AI, and does nothing that needs another card present.
+#
+# Also closes a gap Task 4 left open: its progress counter
+# (``-Dsealed.progress.file``, written per completed match by
+# ``ProgressWriter``) was previously only exercised by a unit test calling
+# ``recordMatch`` directly. This is the first test to drive real workers'
+# ``runForever`` loops end to end and check that the progress file they
+# share actually grows.
+#
+# On the broken-evidence run this test's own history relies on (an empty
+# decks file, since Step 2 predates Tasks 1-6 and no longer fails): that
+# proves the harness fails loudly when the worker exits early on a bad
+# decks file. It does **not** by itself discriminate the narrower claim in
+# this docstring's first paragraph -- that a worker silently ignoring the
+# decks file and falling back to ordinary sealed self-play would leave this
+# card out. Checked directly rather than assumed: passing ``decksOnly=False``
+# against this exact fixture does **not** produce that failure either,
+# because ``pickDeckA`` samples from ``side_a_decks_path`` whenever it is
+# set, independent of ``decksOnly`` -- deck A still came from the file and
+# ``Llanowar Elves`` still reliably appeared within 21s. The regression the
+# first paragraph actually describes -- no decks file reaching the worker
+# at all -- is what ``_run_records_only`` above already exercises; it never
+# sees this card because it never sees any *named* card, only whatever an
+# unweighted sealed pool happens to contain.
+#
+def test_a_named_deck_reaches_the_records(tmp_path: Path) -> None:
+    """The whole point of the collector, against a real Forge.
+    """
+    require_jar()
+    records_dir = tmp_path / "records"
+    records_dir.mkdir()
+    progress_file = tmp_path / "progress.txt"
+    stop_files = [tmp_path / f"worker-{index}.stop" for index in range(_WORKER_COUNT)]
+    processes = _start_workers(tmp_path, records_dir, progress_file, stop_files)
     try:
-        deadline = time.monotonic() + _COLLECTION_SECONDS
-        names: set[str] = set()
-        progress_lines = 0
-        while time.monotonic() < deadline:
-            time.sleep(POLL_SECONDS)
-            for process in processes:
-                if process.poll() is not None:
-                    pytest.fail(f"worker exited early with {process.returncode}")
-            names = {
-                entity.name
-                for record in read_records(records_dir)
-                for entity in record.state.entities
-            }
-            progress_lines = (
-                sum(1 for _ in progress_file.open(encoding="utf-8"))
-                if progress_file.exists() else 0
-            )
-            if "Llanowar Elves" in names and progress_lines >= 1:
-                break
+        names, progress_lines = _collect_until_seen(processes, records_dir, progress_file)
         # Each worker plays the game it is in to its end and exits 0.
         for stop_file in stop_files:
             stop_file.touch()

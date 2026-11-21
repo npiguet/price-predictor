@@ -10,6 +10,7 @@ file.
 
 from __future__ import annotations
 
+import subprocess
 import time
 import uuid
 from pathlib import Path
@@ -52,6 +53,64 @@ def _unstage(tmp_path: Path) -> None:
     write_variant_sidecars(empty)
 
 
+def _write_steered_decks(tmp_path: Path, variant: str) -> Path:
+    decks_file = tmp_path / "decks.txt"
+    write_deck_file(
+        [
+            [variant] * 23 + ["Mountain"] * 17,
+            [variant] * 23 + ["Mountain"] * 16 + ["Forest"],
+        ],
+        decks_file,
+        label="variant",
+        rules=["704.5f", "702.19b"],
+    )
+    assert all(len(line.split(";")) == 4 for line in decks_file.read_text().splitlines())
+    return decks_file
+
+
+def _start_steered_worker(
+    decks_file: Path, records_dir: Path, variants_dir: Path, progress_file: Path,
+) -> subprocess.Popen:
+    return MatchWorkerConnector().start(launch=WorkerLaunch(
+        None,
+        run_id=str(uuid.uuid4()),
+        best_of=1,
+        decks=WorkerDecks(side_a=decks_file, side_b=decks_file, decks_only=True),
+        records=WorkerRecords(
+            directory=records_dir,
+            worker_index=0,
+            # A variant run aims at no rule of its own: the decks' rules replace it.
+            collection_caps={"effect.aimed.at": ""},
+            variant_scripts=variants_dir,
+        ),
+        stop=WorkerStopProtocol(stop_file=stop_file_for(records_dir)),
+        progress_file=progress_file,
+    ))
+
+
+def _wait_for_a_finished_game(process: subprocess.Popen, progress_file: Path) -> None:
+    deadline = time.monotonic() + _GAME_SECONDS
+    while time.monotonic() < deadline:
+        time.sleep(POLL_SECONDS)
+        if process.poll() is not None:
+            pytest.fail(f"worker exited early with {process.returncode}")
+        if progress_file.exists() and progress_file.read_text(encoding="utf-8").strip():
+            return
+    pytest.fail("no game finished inside the window")
+
+
+def _assert_steered_markers(records: list, variant: str) -> None:
+    # The finished game's marker is stamped as the game's records are: the
+    # decks' rules, the run's mode, the board the game ended on.
+    markers = [record for record in records if is_game_end(record)]
+    assert markers, "the finished game wrote no game-end marker"
+    for marker in markers:
+        assert marker.aimed_at == ("702.19b", "704.5f"), marker.aimed_at
+        assert marker.mode is records[0].mode, marker.record_id
+        assert marker.state is not None and marker.state.players, marker.record_id
+        assert variant in {entity.name for entity in marker.state.entities}
+
+
 def test_a_steered_games_records_carry_its_decks_rules(tmp_path: Path) -> None:
     require_jar()
     source = tmp_path / "cards"
@@ -65,17 +124,7 @@ def test_a_steered_games_records_carry_its_decks_rules(tmp_path: Path) -> None:
     records_dir = tmp_path / "records"
     records_dir.mkdir()
     progress_file = tmp_path / "progress.txt"
-    decks_file = tmp_path / "decks.txt"
-    write_deck_file(
-        [
-            [variant] * 23 + ["Mountain"] * 17,
-            [variant] * 23 + ["Mountain"] * 16 + ["Forest"],
-        ],
-        decks_file,
-        label="variant",
-        rules=["704.5f", "702.19b"],
-    )
-    assert all(len(line.split(";")) == 4 for line in decks_file.read_text().splitlines())
+    decks_file = _write_steered_decks(tmp_path, variant)
 
     stop_file = stop_file_for(records_dir)
     process = None
@@ -83,30 +132,8 @@ def test_a_steered_games_records_carry_its_decks_rules(tmp_path: Path) -> None:
         assert write_variant_sidecars(variants_dir) == 0, "VariantSidecarMain failed"
         assert variant in (variants_dir / LOADABLE_FILE).read_text(encoding="utf-8").splitlines()
 
-        process = MatchWorkerConnector().start(launch=WorkerLaunch(
-            None,
-            run_id=str(uuid.uuid4()),
-            best_of=1,
-            decks=WorkerDecks(side_a=decks_file, side_b=decks_file, decks_only=True),
-            records=WorkerRecords(
-                directory=records_dir,
-                worker_index=0,
-                # A variant run aims at no rule of its own: the decks' rules replace it.
-                collection_caps={"effect.aimed.at": ""},
-                variant_scripts=variants_dir,
-            ),
-            stop=WorkerStopProtocol(stop_file=stop_file),
-            progress_file=progress_file,
-        ))
-        deadline = time.monotonic() + _GAME_SECONDS
-        while time.monotonic() < deadline:
-            time.sleep(POLL_SECONDS)
-            if process.poll() is not None:
-                pytest.fail(f"worker exited early with {process.returncode}")
-            if progress_file.exists() and progress_file.read_text(encoding="utf-8").strip():
-                break
-        else:
-            pytest.fail("no game finished inside the window")
+        process = _start_steered_worker(decks_file, records_dir, variants_dir, progress_file)
+        _wait_for_a_finished_game(process, progress_file)
         # The game in progress is played to its end and its marker written.
         stop_worker(process, stop_file)
     finally:
@@ -119,12 +146,4 @@ def test_a_steered_games_records_carry_its_decks_rules(tmp_path: Path) -> None:
     assert {record.aimed_at for record in records} == {("702.19b", "704.5f")}
     names = {entity.name for record in records for entity in record.state.entities}
     assert variant in names, f"the variant never reached a record; saw {sorted(names)}"
-    # The finished game's marker is stamped as the game's records are: the
-    # decks' rules, the run's mode, the board the game ended on.
-    markers = [record for record in records if is_game_end(record)]
-    assert markers, "the finished game wrote no game-end marker"
-    for marker in markers:
-        assert marker.aimed_at == ("702.19b", "704.5f"), marker.aimed_at
-        assert marker.mode is records[0].mode, marker.record_id
-        assert marker.state is not None and marker.state.players, marker.record_id
-        assert variant in {entity.name for entity in marker.state.entities}
+    _assert_steered_markers(records, variant)

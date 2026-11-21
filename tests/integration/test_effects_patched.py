@@ -19,7 +19,8 @@ from pathlib import Path
 
 import pytest
 
-from effects.domain.records import is_game_end
+from effects.domain.records import RecordKind, is_game_end
+from effects.domain.state_snapshot import LineRef
 from effects.infrastructure.shard_io import read_records
 from price_predictor.infrastructure.jvm_processes import kill_process_tree
 from sealed.infrastructure.match_worker_connector import (
@@ -39,6 +40,29 @@ _POLL_SECONDS = 5
 _PATCH_UNLOCKED = {"rewrite", "continuous", "trigger", "playability"}
 
 
+def _is_degraded(records: list) -> bool:
+    return {record.mode.value for record in records} == {"degraded"}
+
+
+def _enough(records: list, wants: str | None, until: Callable[[list], bool] | None) -> bool:
+    """Whether ``records`` hold what ``_require_patched`` was asked to collect."""
+    if until is not None and not until(records):
+        return False
+    if wants is not None:
+        return sum(r.kind.value == wants for r in records) >= 20
+    return len(records) >= 20
+
+
+def _start_worker(records_dir: Path, stop_file: Path):
+    return MatchWorkerConnector().start(launch=WorkerLaunch(
+        None,
+        run_id=str(uuid.uuid4()),
+        best_of=1,
+        records=WorkerRecords(directory=records_dir, worker_index=0),
+        stop=WorkerStopProtocol(stop_file=stop_file),
+    ))
+
+
 def _require_patched(
     records_dir: Path,
     wants: str | None = None,
@@ -55,32 +79,31 @@ def _require_patched(
     require_jar()
 
     stop_file = stop_file_for(records_dir)
-    process = MatchWorkerConnector().start(launch=WorkerLaunch(
-        None,
-        run_id=str(uuid.uuid4()),
-        best_of=1,
-        records=WorkerRecords(directory=records_dir, worker_index=0),
-        stop=WorkerStopProtocol(stop_file=stop_file),
-    ))
+    process = _start_worker(records_dir, stop_file)
     try:
         deadline = time.monotonic() + _COLLECTION_SECONDS
         while time.monotonic() < deadline:
             time.sleep(_POLL_SECONDS)
             if process.poll() is not None:
                 pytest.fail(f"worker exited early with {process.returncode}")
-            records = list(read_records(records_dir))
-            if until is not None and not until(records):
-                continue
-            if wants is not None:
-                if sum(r.kind.value == wants for r in records) >= 20:
-                    break
-            elif len(records) >= 20:
+            if _enough(list(read_records(records_dir)), wants, until):
                 break
         # Stopped at its game's end: the records read then hold every game whole.
         stop_worker(process, stop_file)
         return list(read_records(records_dir))
     finally:
         kill_process_tree(process)
+
+
+def _assert_marker(marker, records: list) -> None:
+    assert marker.mode.value == "patched", marker.record_id
+    assert marker.generation == 3, marker.record_id
+    assert marker.aimed_at is None, marker.aimed_at
+    assert marker.state is not None and marker.state.players, marker.record_id
+    assert marker.payload.records_withheld == 0, marker.record_id
+    assert marker.payload.events == (), marker.record_id
+    game = [record for record in records if record.game_id == marker.game_id]
+    assert game[-1] is marker, f"{marker.game_id} wrote records after its marker"
 
 
 def test_a_patched_checkout_stamps_every_record_patched(tmp_path: Path) -> None:
@@ -94,7 +117,7 @@ def test_a_patched_checkout_stamps_every_record_patched(tmp_path: Path) -> None:
     if not records:
         pytest.skip("worker produced no records within the collection window")
     modes = {record.mode.value for record in records}
-    if modes == {"degraded"}:
+    if _is_degraded(records):
         pytest.skip(
             "../forge is unpatched, which is the stage-one case: check out "
             "its effect-record-hooks branch and rebuild to exercise this test"
@@ -103,14 +126,7 @@ def test_a_patched_checkout_stamps_every_record_patched(tmp_path: Path) -> None:
     markers = [record for record in records if is_game_end(record)]
     assert markers, "no game ended within the collection window"
     for marker in markers:
-        assert marker.mode.value == "patched", marker.record_id
-        assert marker.generation == 3, marker.record_id
-        assert marker.aimed_at is None, marker.aimed_at
-        assert marker.state is not None and marker.state.players, marker.record_id
-        assert marker.payload.records_withheld == 0, marker.record_id
-        assert marker.payload.events == (), marker.record_id
-        game = [record for record in records if record.game_id == marker.game_id]
-        assert game[-1] is marker, f"{marker.game_id} wrote records after its marker"
+        _assert_marker(marker, records)
 
 
 def test_a_patched_checkout_reaches_the_four_unlocked_kinds(
@@ -119,7 +135,7 @@ def test_a_patched_checkout_reaches_the_four_unlocked_kinds(
     records = _require_patched(tmp_path / "records")
     if not records:
         pytest.skip("worker produced no records within the collection window")
-    if {record.mode.value for record in records} == {"degraded"}:
+    if _is_degraded(records):
         pytest.skip("../forge is unpatched; the four kinds are unreachable")
 
     kinds = {record.kind.value for record in records}
@@ -141,14 +157,17 @@ def _acting_static_carriers_and_grants(state, key) -> tuple[set[str], list[str]]
         for line in entity.lines or ()
         if line.kind == "static" and key in line.keys
     }
-    granted = [
+    return carriers, _granted_lines(state, key, carriers)
+
+
+def _granted_lines(state, key, carriers: set[str]) -> list[str]:
+    return [
         f"{entity.name}: {line.kind} {line.fragment or ''}".strip()
         for entity in state.entities
         if entity.id not in carriers
         for line in entity.lines or ()
         if key in line.keys and line.granted and line.in_force
     ]
-    return carriers, granted
 
 
 def _grants_a_keyword_elsewhere(record) -> bool:
@@ -159,14 +178,58 @@ def _grants_a_keyword_elsewhere(record) -> bool:
     """
     if record.kind.value != "continuous":
         return False
+    return any(_key_grants_keyword_elsewhere(record, key) for key in record.ability)
+
+
+def _key_grants_keyword_elsewhere(record, key) -> bool:
+    carriers, _ = _acting_static_carriers_and_grants(record.state, key)
+    if len(carriers) != 1:
+        return False
+    return any(
+        _grants_keyword_beyond(contribution, carriers)
+        for contribution in record.payload.contributions
+    )
+
+
+def _grants_keyword_beyond(contribution, carriers: set[str]) -> bool:
+    return bool(contribution.keywords) and contribution.entity not in carriers
+
+
+def _entity_leaks(record) -> list[str]:
+    leaks: list[str] = []
+    for entity in record.state.entities:
+        assert entity.lines is not None, (
+            f"{record.record_id}: {entity.name} was not written in the gen-3 shape"
+        )
+        leaks.extend(
+            f"{record.record_id}: {entity.name} lists what its {line.kind} line affects"
+            for line in entity.lines
+            if line.affected is not None
+        )
+    return leaks
+
+
+def _record_leaks(record) -> list[str]:
+    """Every trace of the acting static on the board its record snapshots."""
+    return _entity_leaks(record) + _link_leaks(record) + _grant_leaks(record)
+
+
+def _link_leaks(record) -> list[str]:
+    return [
+        f"{record.record_id}: an affects link from {link.from_.entity}'s line"
+        for link in record.state.links or ()
+        if link.type == "affects" and isinstance(link.from_, LineRef)
+    ]
+
+
+def _grant_leaks(record) -> list[str]:
+    leaks: list[str] = []
     for key in record.ability:
-        carriers, _ = _acting_static_carriers_and_grants(record.state, key)
-        if len(carriers) == 1 and any(
-            contribution.keywords and contribution.entity not in carriers
-            for contribution in record.payload.contributions
-        ):
-            return True
-    return False
+        carriers, granted = _acting_static_carriers_and_grants(record.state, key)
+        if len(carriers) != 1:
+            continue
+        leaks.extend(f"{record.record_id}: {grant} granted by {key}" for grant in granted)
+    return leaks
 
 
 def test_a_continuous_snapshot_does_not_contain_the_effect_it_labels(
@@ -191,9 +254,6 @@ def test_a_continuous_snapshot_does_not_contain_the_effect_it_labels(
     second card holds too (two Royal Roles, two tokens of one Dollhouse of
     Horrors) is passed over: the twin's grants carry the same key.
     """
-    from effects.domain.records import RecordKind
-    from effects.domain.state_snapshot import LineRef
-
     records = _require_patched(
         tmp_path / "records",
         wants="continuous",
@@ -201,7 +261,7 @@ def test_a_continuous_snapshot_does_not_contain_the_effect_it_labels(
     )
     if not records:
         pytest.skip("worker produced no records within the collection window")
-    if {record.mode.value for record in records} == {"degraded"}:
+    if _is_degraded(records):
         pytest.skip("../forge is unpatched; continuous records are unreachable")
 
     continuous = [r for r in records if r.kind is RecordKind.CONTINUOUS]
@@ -210,26 +270,7 @@ def test_a_continuous_snapshot_does_not_contain_the_effect_it_labels(
 
     leaks: list[str] = []
     for record in continuous:
-        state = record.state
-        for entity in state.entities:
-            assert entity.lines is not None, (
-                f"{record.record_id}: {entity.name} was not written in the gen-3 shape"
-            )
-            leaks.extend(
-                f"{record.record_id}: {entity.name} lists what its {line.kind} line affects"
-                for line in entity.lines
-                if line.affected is not None
-            )
-        leaks.extend(
-            f"{record.record_id}: an affects link from {link.from_.entity}'s line"
-            for link in state.links or ()
-            if link.type == "affects" and isinstance(link.from_, LineRef)
-        )
-        for key in record.ability:
-            carriers, granted = _acting_static_carriers_and_grants(state, key)
-            if len(carriers) != 1:
-                continue
-            leaks.extend(f"{record.record_id}: {grant} granted by {key}" for grant in granted)
+        leaks.extend(_record_leaks(record))
 
     if not any(map(_grants_a_keyword_elsewhere, continuous)):
         pytest.skip(
@@ -280,7 +321,7 @@ def test_a_patched_checkout_collects_snapshot_tier_three(tmp_path: Path) -> None
     records = _require_patched(tmp_path / "records")
     if not records:
         pytest.skip("worker produced no records within the collection window")
-    if {record.mode.value for record in records} == {"degraded"}:
+    if _is_degraded(records):
         pytest.skip("../forge is unpatched; tier 3 is a stage-two tier")
 
     from effects.domain.state_snapshot import InclusionTier

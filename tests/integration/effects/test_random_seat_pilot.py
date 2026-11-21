@@ -98,18 +98,22 @@ def _read(records_dir: Path) -> list[tuple[list[dict], list]]:
     return shards
 
 
+def _all_records(shards) -> list:
+    """Every parsed record of every shard, in write order."""
+    return [record for _, records in shards for record in records]
+
+
+def _is_confluence_resolution(record) -> bool:
+    """A linked resolution half whose ability is Fiery Confluence's."""
+    if record.kind is not RecordKind.RESOLUTION or record.moment is not Moment.RESOLUTION:
+        return False
+    if not record.link_id or not record.ability:
+        return False
+    return _charm_of(record.ability[0]) == "fiery_confluence.txt"
+
+
 def _charm_resolved(shards) -> bool:
-    for _, records in shards:
-        for record in records:
-            if (
-                record.kind is RecordKind.RESOLUTION
-                and record.moment is Moment.RESOLUTION
-                and record.link_id
-                and record.ability
-                and _charm_of(record.ability[0]) == "fiery_confluence.txt"
-            ):
-                return True
-    return False
+    return any(_is_confluence_resolution(record) for record in _all_records(shards))
 
 
 def _run_pilot(tmp_path: Path) -> tuple[Path, Path, Path, list, int, str]:
@@ -211,43 +215,62 @@ def test_random_seat_matches_write_no_sealed_row(pilot) -> None:
         )
 
 
+def _assert_envelope_order(item: dict) -> None:
+    """``random_seat`` right after ``synthetic``; ``what_if`` right after it on blockers only."""
+    # Gen-3 attackers records carry no ``what_if``: blockers alone keep it.
+    with_what_if = {PlayabilitySubkind.BLOCKERS.value}
+    keys = list(item)
+    assert "random_seat" in item, item["record_id"]
+    assert keys.index("random_seat") == keys.index("synthetic") + 1, keys
+    if item.get("subkind") in with_what_if:
+        assert keys.index("what_if") == keys.index("random_seat") + 1, keys
+    else:
+        assert "what_if" not in item, item["record_id"]
+
+
 def test_both_envelope_fields_are_present_in_order(pilot) -> None:
     shards = pilot[3]
     raw = [item for lines, _ in shards for item in lines]
     if not raw:
         pytest.skip("worker produced no records within the collection window")
 
-    # Gen-3 attackers records carry no ``what_if``: blockers alone keep it.
-    with_what_if = {PlayabilitySubkind.BLOCKERS.value}
     for item in raw:
-        keys = list(item)
-        assert "random_seat" in item, item["record_id"]
-        assert keys.index("random_seat") == keys.index("synthetic") + 1, keys
-        if item.get("subkind") in with_what_if:
-            assert keys.index("what_if") == keys.index("random_seat") + 1, keys
-        else:
-            assert "what_if" not in item, item["record_id"]
+        _assert_envelope_order(item)
 
     assert {item["random_seat"] for item in raw} == {True, False}
     # The engine's declaration hook reports real declarations only.
     assert {item["what_if"] for item in raw if "what_if" in item} <= {False}
 
 
-def test_random_seat_follows_the_actor(pilot) -> None:
-    """FR-030: within one game, ``random_seat`` is exactly "the actor is the seat"."""
-    shards = pilot[3]
-    records = [r for _, rs in shards for r in rs]
-    seats = defaultdict(set)
+def _random_seats_by_game(records) -> dict[str, set]:
+    seats: dict[str, set] = defaultdict(set)
     for record in records:
         if record.random_seat:
             seats[record.game_id].add(record.actor_player)
+    return seats
+
+
+def _assert_follows_seat(record, seats: dict[str, set]) -> None:
+    seat = next(iter(seats.get(record.game_id, {None})))
+    if seat is not None:
+        assert record.random_seat == (record.actor_player == seat), record.record_id
+
+
+def test_random_seat_follows_the_actor(pilot) -> None:
+    """FR-030: within one game, ``random_seat`` is exactly "the actor is the seat"."""
+    shards = pilot[3]
+    records = _all_records(shards)
+    seats = _random_seats_by_game(records)
     assert seats, "no record named the random seat"
     for game, players in seats.items():
         assert len(players) == 1, f"{game} has two random seats: {players}"
     for record in records:
-        seat = next(iter(seats.get(record.game_id, {None})))
-        if seat is not None:
-            assert record.random_seat == (record.actor_player == seat), record.record_id
+        _assert_follows_seat(record, seats)
+
+
+def _turns_where(records, matches) -> set[tuple]:
+    """The (game, turn) of every non-fork record ``matches`` selects."""
+    return {(r.game_id, r.state.global_.turn) for r in records if matches(r) and not r.fork}
 
 
 def test_every_real_attack_declaration_is_written(pilot) -> None:
@@ -260,17 +283,9 @@ def test_every_real_attack_declaration_is_written(pilot) -> None:
     ``what_if`` at all, and only a blockers record could say so.
     """
     shards = pilot[3]
-    records = [r for _, rs in shards for r in rs]
-    real = {
-        (r.game_id, r.state.global_.turn)
-        for r in records
-        if r.subkind is PlayabilitySubkind.ATTACKERS and not r.fork
-    }
-    combats = {
-        (r.game_id, r.state.global_.turn)
-        for r in records
-        if r.kind is RecordKind.COMBAT and not r.fork
-    }
+    records = _all_records(shards)
+    real = _turns_where(records, lambda r: r.subkind is PlayabilitySubkind.ATTACKERS)
+    combats = _turns_where(records, lambda r: r.kind is RecordKind.COMBAT)
     if not combats:
         pytest.skip("no combat in the collection window")
     missing = sorted(combats - real)
@@ -280,6 +295,58 @@ def test_every_real_attack_declaration_is_written(pilot) -> None:
         if r.subkind in (PlayabilitySubkind.ATTACKERS, PlayabilitySubkind.BLOCKERS)
     )
     assert not what_ifs, f"{what_ifs} legality records are not real declarations"
+
+
+class _CharmLedger:
+    """The charm cost halves (by link) and resolution halves (grouped by link) of a pilot."""
+
+    def __init__(self, patched: bool) -> None:
+        self.patched = patched
+        self.halves: dict[str, list] = defaultdict(list)
+        self.charm_links: dict[str, str] = {}
+
+    def note(self, record) -> None:
+        if record.kind is not RecordKind.RESOLUTION or not record.ability:
+            return
+        charm = _charm_of(record.ability[0])
+        if charm is None:
+            return
+        if record.moment is Moment.ACTIVATION and record.link_id:
+            assert all(k.option is None for k in record.ability), (
+                f"a cost half acts through the root line: {record.record_id}"
+            )
+            self.charm_links[record.link_id] = charm
+        elif record.moment is Moment.RESOLUTION:
+            self._note_resolution_half(record)
+
+    def _note_resolution_half(self, record) -> None:
+        if record.interventional and record.link_id is None:
+            # A forced resolution has no cost half; by FR-029f its
+            # halves still go through the option lines. A protection
+            # fork's halves are linked as live ones (FR-058).
+            if self.patched:
+                assert all(k.option is not None for k in record.ability), (
+                    f"a forked charm half acts through the root: {record.record_id}"
+                )
+            return
+        self.halves[record.link_id].append(record)
+
+
+def _check_modal_halves(charm: str, modal: list, patched: bool) -> bool:
+    """Assert one resolved charm's halves; True when it is a Confluence with all three modes."""
+    if not patched:
+        assert len(modal) == 1, f"degraded {charm} wrote {len(modal)} halves"
+        assert all(k.option is None for k in modal[0].ability)
+        return False
+    for half in modal:
+        assert all(k.option is not None for k in half.ability), (
+            f"a {charm} effect half acts through a key without option: "
+            f"{half.record_id}"
+        )
+    assert 1 <= len(modal) <= _CHARMS[charm], (
+        f"{charm} chooses {_CHARMS[charm]} modes; wrote {len(modal)} halves"
+    )
+    return charm == "fiery_confluence.txt" and len(modal) == 3
 
 
 def test_a_resolved_charm_has_one_effect_half_per_chosen_mode(pilot) -> None:
@@ -294,49 +361,15 @@ def test_a_resolved_charm_has_one_effect_half_per_chosen_mode(pilot) -> None:
         pytest.skip("worker produced no records within the collection window")
     patched = {r.mode.value for _, rs in shards for r in rs} == {"patched"}
 
-    halves: dict[str, list] = defaultdict(list)
-    charm_links: dict[str, str] = {}
-    for _, records in shards:
-        for record in records:
-            if record.kind is not RecordKind.RESOLUTION or not record.ability:
-                continue
-            charm = _charm_of(record.ability[0])
-            if charm is None:
-                continue
-            if record.moment is Moment.ACTIVATION and record.link_id:
-                assert all(k.option is None for k in record.ability), (
-                    f"a cost half acts through the root line: {record.record_id}"
-                )
-                charm_links[record.link_id] = charm
-            elif record.moment is Moment.RESOLUTION:
-                if record.interventional and record.link_id is None:
-                    # A forced resolution has no cost half; by FR-029f its
-                    # halves still go through the option lines. A protection
-                    # fork's halves are linked as live ones (FR-058).
-                    if patched:
-                        assert all(k.option is not None for k in record.ability), (
-                            f"a forked charm half acts through the root: {record.record_id}"
-                        )
-                    continue
-                halves[record.link_id].append(record)
+    ledger = _CharmLedger(patched)
+    for record in _all_records(shards):
+        ledger.note(record)
+    halves = ledger.halves
 
-    resolved = {link: charm for link, charm in charm_links.items() if halves.get(link)}
+    resolved = {link: charm for link, charm in ledger.charm_links.items() if halves.get(link)}
     assert resolved, "no charm resolved in the pilot"
     full_three = False
     for link, charm in resolved.items():
-        modal = halves[link]
-        if not patched:
-            assert len(modal) == 1, f"degraded {charm} wrote {len(modal)} halves"
-            assert all(k.option is None for k in modal[0].ability)
-            continue
-        for half in modal:
-            assert all(k.option is not None for k in half.ability), (
-                f"a {charm} effect half acts through a key without option: "
-                f"{half.record_id}"
-            )
-        assert 1 <= len(modal) <= _CHARMS[charm], (
-            f"{charm} chooses {_CHARMS[charm]} modes; wrote {len(modal)} halves"
-        )
-        full_three |= charm == "fiery_confluence.txt" and len(modal) == 3
+        full_three |= _check_modal_halves(charm, halves[link], patched)
     if patched:
         assert full_three, "no Fiery Confluence resolved with all three of its modes"

@@ -42,21 +42,11 @@ def _forge_available() -> bool:
     return bool(fat_jar) and forge_dir.is_dir()
 
 
-@pytest.mark.integration
-def test_cards_played_collection(tmp_path: Path) -> None:
-    if not _forge_available():
-        pytest.skip(
-            "forge-connector fat jar or sibling ../forge checkout not available",
-        )
-
+def _run_worker(output_file: Path, run_id: str, log_path: Path) -> None:
+    """Start the worker and wait for ~2 matches (Bo3), capped at 3 minutes; then stop it."""
     from sealed.infrastructure.match_worker_connector import MatchWorkerConnector, WorkerLaunch
 
-    output_file = tmp_path / "match-outcomes.txt"
-    cards_played_file = tmp_path / "cards-played.txt"
-    run_id = "test-cards-played-collection"
-
     connector = MatchWorkerConnector()
-    log_path = tmp_path / "worker.log"
     with log_path.open("wb") as log:
         process = connector.start(
             launch=WorkerLaunch(output_file=output_file, run_id=run_id, best_of=3),
@@ -73,6 +63,74 @@ def test_cards_played_collection(tmp_path: Path) -> None:
             time.sleep(2)
         kill_process_tree(process)
 
+
+def _names(cell: str) -> list[str]:
+    return cell.split("|") if cell else []
+
+
+def _assert_card_columns(row: list[str]) -> None:
+    """The four card-list columns: no basic lands, no duplicates, played and not played disjoint."""
+    played_a, played_b = _names(row[5]), _names(row[6])
+    not_played_a, not_played_b = _names(row[7]), _names(row[8])
+    for col_name, names in (
+        ("cards_played_A", played_a),
+        ("cards_played_B", played_b),
+        ("cards_not_played_A", not_played_a),
+        ("cards_not_played_B", not_played_b),
+    ):
+        for name in names:
+            assert name not in _BASIC_LAND_NAMES, (
+                f"basic land in {col_name}: {name!r}"
+            )
+        assert len(set(names)) == len(names), (
+            f"{col_name} must not contain duplicates: {names}"
+        )
+    assert set(played_a).isdisjoint(set(not_played_a)), (
+        "cards_played_A and cards_not_played_A must be disjoint"
+    )
+    assert set(played_b).isdisjoint(set(not_played_b)), (
+        "cards_played_B and cards_not_played_B must be disjoint"
+    )
+
+
+def _assert_game_row(row: list[str], match_fields: list[str], winner: str, starter: str) -> None:
+    assert len(row) == 11, f"cards-played row must have 11 fields: {row}"
+    assert row[1] == match_fields[1]
+    assert row[2] == match_fields[2]
+    assert row[3] == match_fields[3]
+    assert row[4] == match_fields[4]
+    _assert_card_columns(row)
+    assert row[9] == winner
+    assert row[10] == starter
+
+
+def _assert_match_rows(match_lines: list[str], cards_lines: list[str], run_id: str) -> None:
+    """Validate run_id and metadata alignment, basic-land filter, game order."""
+    cursor = 0
+    for line in match_lines:
+        fields = line.split(";")
+        assert fields[1] == run_id
+        games = fields[7]
+        play = fields[8]
+        for offset, (winner_char, starter_char) in enumerate(zip(games, play)):
+            row = cards_lines[cursor + offset].split(";")
+            _assert_game_row(row, fields, winner_char, starter_char)
+        cursor += len(games)
+
+
+@pytest.mark.integration
+def test_cards_played_collection(tmp_path: Path) -> None:
+    if not _forge_available():
+        pytest.skip(
+            "forge-connector fat jar or sibling ../forge checkout not available",
+        )
+
+    output_file = tmp_path / "match-outcomes.txt"
+    cards_played_file = tmp_path / "cards-played.txt"
+    run_id = "test-cards-played-collection"
+
+    _run_worker(output_file, run_id, tmp_path / "worker.log")
+
     if not output_file.exists():
         pytest.skip("worker did not produce match-outcomes.txt within deadline")
 
@@ -82,56 +140,11 @@ def test_cards_played_collection(tmp_path: Path) -> None:
     assert cards_played_file.exists(), "cards-played.txt must be written alongside"
     cards_lines = cards_played_file.read_text(encoding="utf-8").splitlines()
 
-    expected_game_count = 0
-    for line in match_lines:
-        fields = line.split(";")
-        # field 7 = games (e.g. "ABA")
-        expected_game_count += len(fields[7])
+    # field 7 = games (e.g. "ABA")
+    expected_game_count = sum(len(line.split(";")[7]) for line in match_lines)
     assert len(cards_lines) == expected_game_count, (
         f"cards-played line count {len(cards_lines)} != "
         f"sum-of-games {expected_game_count}"
     )
 
-    # Validate run_id and metadata alignment, basic-land filter, game order.
-    cursor = 0
-    for line in match_lines:
-        fields = line.split(";")
-        m_run_id, m_set_code, m_method_a, m_method_b = (
-            fields[1], fields[2], fields[3], fields[4]
-        )
-        assert m_run_id == run_id
-        games = fields[7]
-        play = fields[8]
-        for offset, (winner_char, starter_char) in enumerate(zip(games, play)):
-            row = cards_lines[cursor + offset].split(";")
-            assert len(row) == 11, f"cards-played row must have 11 fields: {row}"
-            assert row[1] == m_run_id
-            assert row[2] == m_set_code
-            assert row[3] == m_method_a
-            assert row[4] == m_method_b
-            played_a = row[5].split("|") if row[5] else []
-            played_b = row[6].split("|") if row[6] else []
-            not_played_a = row[7].split("|") if row[7] else []
-            not_played_b = row[8].split("|") if row[8] else []
-            for col_name, names in (
-                ("cards_played_A", played_a),
-                ("cards_played_B", played_b),
-                ("cards_not_played_A", not_played_a),
-                ("cards_not_played_B", not_played_b),
-            ):
-                for name in names:
-                    assert name not in _BASIC_LAND_NAMES, (
-                        f"basic land in {col_name}: {name!r}"
-                    )
-                assert len(set(names)) == len(names), (
-                    f"{col_name} must not contain duplicates: {names}"
-                )
-            assert set(played_a).isdisjoint(set(not_played_a)), (
-                "cards_played_A and cards_not_played_A must be disjoint"
-            )
-            assert set(played_b).isdisjoint(set(not_played_b)), (
-                "cards_played_B and cards_not_played_B must be disjoint"
-            )
-            assert row[9] == winner_char
-            assert row[10] == starter_char
-        cursor += len(games)
+    _assert_match_rows(match_lines, cards_lines, run_id)
