@@ -19,6 +19,7 @@ import json
 import random
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -363,15 +364,24 @@ def compute_manifold_stats(join: pd.DataFrame) -> dict:
     }
 
 
+@dataclass(frozen=True)
+class PlaceboSample:
+    """How many cards the placebo null samples, its encode batch and its seed."""
+
+    n_sample: int = 400
+    batch_size: int = 64
+    seed: int = 42
+
+
 def compute_placebo_null(
     runner: pl.EncoderRunner, join: pd.DataFrame, probe: pl.HeadProbe,
-    *, n_sample: int = 400, batch_size: int = 64, seed: int = 42,
+    *, sample: PlaceboSample = PlaceboSample(),
 ) -> dict:
-    rng = random.Random(seed)
-    sample = rng.sample(list(join["txt_path"]), min(n_sample, len(join)))
+    rng = random.Random(sample.seed)
+    paths = rng.sample(list(join["txt_path"]), min(sample.n_sample, len(join)))
     freq = pl.subtype_frequencies()
-    base_texts = [Path(p).read_text(encoding="utf-8", errors="replace") for p in sample]
-    base = probe.predict(runner.encode_texts(base_texts, batch_size=batch_size))
+    base_texts = [Path(p).read_text(encoding="utf-8", errors="replace") for p in paths]
+    base = probe.predict(runner.encode_texts(base_texts, batch_size=sample.batch_size))
     out: dict[str, dict] = {}
     for kind in ("swap_static", "subtype_swap", "swap_ability_lines"):
         idxs, texts = [], []
@@ -383,7 +393,7 @@ def compute_placebo_null(
         if not texts:
             out[kind] = {"n": 0}
             continue
-        shifted = probe.predict(runner.encode_texts(texts, batch_size=batch_size))
+        shifted = probe.predict(runner.encode_texts(texts, batch_size=sample.batch_size))
         delta = np.abs(shifted - base[idxs])
         out[kind] = {
             "n": len(texts),
@@ -391,10 +401,38 @@ def compute_placebo_null(
             "p95": float(np.quantile(delta, 0.95)),
             "max": float(delta.max()),
         }
-    return {"edits": out, "n_sampled": len(sample)}
+    return {"edits": out, "n_sampled": len(paths)}
 
 
-def main(argv: list[str] | None = None) -> int:
+# ── the build's steps ───────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class BuildMode:
+    """The ``--smoke`` switch: every size the full build and the smoke run differ in."""
+
+    smoke: bool
+
+    def pick(self, smoke_value, full_value):
+        return smoke_value if self.smoke else full_value
+
+
+@dataclass(frozen=True)
+class Build:
+    """Everything the report is written from."""
+
+    labels: dict
+    join: pd.DataFrame
+    bitexact: str
+    metrics: pd.DataFrame
+    classes: list[dict]
+    variances: list[dict]
+    emb_check: dict
+    manifold: dict
+    placebo: dict
+
+
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--smoke", action="store_true",
                         help="2,000-card CPU sanity run; writes no report")
@@ -402,9 +440,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="rebuild the cached join table and corpus matrix")
     parser.add_argument("--no-printings", action="store_true",
                         help="skip the AllPrintings.json scan")
-    args = parser.parse_args(argv)
-    utf8_console()
+    return parser.parse_args(argv)
 
+
+def _build_join(args: argparse.Namespace) -> tuple[dict, pd.DataFrame]:
     _log("loading labels")
     labels = pl.load_labels()
 
@@ -414,32 +453,43 @@ def main(argv: list[str] | None = None) -> int:
         join = join.sample(2000, random_state=42).sort_values("name").reset_index(drop=True)
 
     _log(f"joined {len(join)} / {len(labels)} label rows")
-    _log("loading embedding matrix")
-    embeddings = pl.load_embedding_matrix(list(join["name"]), join)
+    return labels, join
 
+
+def _check_encoder(join: pd.DataFrame, mode: BuildMode) -> tuple[pl.EncoderRunner, str]:
     _log("loading encoder")
-    runner = pl.EncoderRunner(device="cpu" if args.smoke else None)
-    bitexact = section_bitexact(runner, join, n=5 if args.smoke else 20)
+    runner = pl.EncoderRunner(device=mode.pick("cpu", None))
+    bitexact = section_bitexact(runner, join, n=mode.pick(5, 20))
     print(bitexact)
+    return runner, bitexact
 
+
+def _fit_probe_sets(join: pd.DataFrame, embeddings: np.ndarray, mode: BuildMode) -> list:
     _log("fitting probes")
-    folds = 2 if args.smoke else 5
-    alphas = (1.0, 10.0) if args.smoke else pl.ALPHA_GRID
+    folds = mode.pick(2, 5)
+    alphas = mode.pick((1.0, 10.0), pl.ALPHA_GRID)
     probe_sets = []
-    for mode in ("fidelity", "honest"):
+    for probe_mode in ("fidelity", "honest"):
         for weighted in (True, False):
             ps = pl.fit_probes(join, embeddings, config=pl.ProbeConfig(
-                mode=mode, weighted=weighted, folds=folds, alphas=alphas))
+                mode=probe_mode, weighted=weighted, folds=folds, alphas=alphas))
             probe_sets.append(ps)
-            if not args.smoke:
+            if not mode.smoke:
                 pl.save_probes(ps)
             _log(f"  {ps.key}: "
                  + " ".join(f"{k}={v.metrics.get('val_r2', float('nan')):.3f}"
                             for k, v in ps.probes.items()))
-    metrics = pl.probe_metrics_frame(probe_sets)
-    if not args.smoke:
-        metrics.to_csv(pl.SCRATCH / "probe_metrics.csv", index=False)
+    return probe_sets
 
+
+def _probe_metrics(probe_sets: list, mode: BuildMode) -> pd.DataFrame:
+    metrics = pl.probe_metrics_frame(probe_sets)
+    if not mode.smoke:
+        metrics.to_csv(pl.SCRATCH / "probe_metrics.csv", index=False)
+    return metrics
+
+
+def _build_classes(join: pd.DataFrame, mode: BuildMode) -> tuple[list[dict], list[dict], dict]:
     _log("building equivalence classes")
     classes = pl.equivalence_classes(join)
     variances = [
@@ -447,53 +497,84 @@ def main(argv: list[str] | None = None) -> int:
         for floor in (0, 200, 800)
     ]
     emb_check = compute_embedding_identity(classes, join,
-                                           limit=20 if args.smoke else 200)
-    if not args.smoke:
+                                           limit=mode.pick(20, 200))
+    if not mode.smoke:
         with open(pl.SCRATCH / "equivalence_classes.json", "w", encoding="utf-8") as f:
             json.dump(classes, f, indent=1)
+    return classes, variances, emb_check
 
+
+def _build_manifold(join: pd.DataFrame, mode: BuildMode) -> dict:
     _log("computing manifold distances")
     manifold = compute_manifold_stats(join)
-    if not args.smoke:
+    if not mode.smoke:
         np.save(pl.SCRATCH / "manifold_distance.npy", manifold["distances"])
+    return manifold
 
+
+def _run_placebo(
+    runner: pl.EncoderRunner, join: pd.DataFrame, probe_sets: list, mode: BuildMode,
+) -> dict:
     _log("running the placebo null")
     fidelity_w = next(p for p in probe_sets if p.key == "fidelity_w")
     placebo = compute_placebo_null(
         runner, join, fidelity_w.probes["score_play"],
-        n_sample=40 if args.smoke else 400,
-        batch_size=16 if args.smoke else 64,
+        sample=PlaceboSample(n_sample=mode.pick(40, 400), batch_size=mode.pick(16, 64)),
     )
     placebo["label_sd"] = float(
         pd.to_numeric(join["shrunk_score_play"], errors="coerce").std()
     )
+    return placebo
 
-    if args.smoke:
-        _log("smoke run complete (no report written)")
-        print(json.dumps({
-            "classes": len(classes),
-            "variances": variances,
-            "placebo": placebo["edits"],
-        }, indent=1))
-        return 0
 
+def _print_smoke(classes: list[dict], variances: list[dict], placebo: dict) -> None:
+    _log("smoke run complete (no report written)")
+    print(json.dumps({
+        "classes": len(classes),
+        "variances": variances,
+        "placebo": placebo["edits"],
+    }, indent=1))
+
+
+def _write_report(build: Build) -> None:
     report = "\n\n".join([
         "# Encoder probes — Tier 0 build report",
         f"Checkpoint: `{ENCODER_NAME}`  \n"
         f"Labels: `{pl.WIN_RATES}`  \n"
         f"Cards: `{pl.CARDS_PATH}`  \n"
         f"Generated: {time.strftime('%Y-%m-%d %H:%M')}",
-        section_join(join, labels),
-        section_split(pl.reconstruct_split(labels), join),
-        bitexact,
-        section_probes(metrics),
-        section_classes(classes, variances, emb_check),
-        section_manifold(manifold),
-        section_placebo(placebo),
-        section_external(join),
+        section_join(build.join, build.labels),
+        section_split(pl.reconstruct_split(build.labels), build.join),
+        build.bitexact,
+        section_probes(build.metrics),
+        section_classes(build.classes, build.variances, build.emb_check),
+        section_manifold(build.manifold),
+        section_placebo(build.placebo),
+        section_external(build.join),
     ])
     REPORT.write_text(report, encoding="utf-8")
     _log(f"wrote {REPORT}")
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
+    utf8_console()
+    mode = BuildMode(smoke=args.smoke)
+    labels, join = _build_join(args)
+    _log("loading embedding matrix")
+    embeddings = pl.load_embedding_matrix(list(join["name"]), join)
+    runner, bitexact = _check_encoder(join, mode)
+    probe_sets = _fit_probe_sets(join, embeddings, mode)
+    metrics = _probe_metrics(probe_sets, mode)
+    classes, variances, emb_check = _build_classes(join, mode)
+    manifold = _build_manifold(join, mode)
+    placebo = _run_placebo(runner, join, probe_sets, mode)
+    if mode.smoke:
+        _print_smoke(classes, variances, placebo)
+        return 0
+    _write_report(Build(labels=labels, join=join, bitexact=bitexact, metrics=metrics,
+                        classes=classes, variances=variances, emb_check=emb_check,
+                        manifold=manifold, placebo=placebo))
     return 0
 
 
