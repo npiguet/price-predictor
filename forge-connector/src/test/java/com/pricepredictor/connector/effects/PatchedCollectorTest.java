@@ -20,7 +20,7 @@ import java.util.Map;
 
 import static com.pricepredictor.connector.effects.TestCaps.caps;
 import static com.pricepredictor.connector.effects.TestCollectors.recording;
-import static com.pricepredictor.connector.effects.TestCollectors.triggerOfMode;
+import static com.pricepredictor.connector.effects.TestParsed.triggerOfMode;
 import static com.pricepredictor.connector.effects.TestCollectors.unwired;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;

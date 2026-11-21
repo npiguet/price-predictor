@@ -1,10 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import forge.game.Game;
-import forge.game.replacement.ReplacementEffect;
-import forge.game.replacement.ReplacementHandler;
-import forge.game.trigger.Trigger;
-import forge.game.trigger.TriggerHandler;
 
 import java.nio.file.Path;
 
@@ -63,26 +59,5 @@ final class TestCollectors {
         return Channels.of(game, new Channels.Setup(
                 context(writer, ShardRun.GAME_ID), TestCaps.unprobed(), 1L,
                 bracket(game, writer, ShardRun.GAME_ID)));
-    }
-
-    /**
-     * A trigger of a chosen mode, on a host card the mode does not care about.
-     *
-     * <p>Parsed rather than taken off a real card, because what is under test
-     * is the reading of one mode's run parameters and finding a printed card
-     * per mode would tie the test to the set list.
-     */
-    static Trigger triggerOfMode(String mode) {
-        return TriggerHandler.parseTrigger(
-                "Mode$ " + mode + " | TriggerZones$ Battlefield"
-                        + " | TriggerDescription$ under test",
-                TestCards.build("Paralyze"), true);
-    }
-
-    /** A replacement of a chosen mode, parsed for the reason {@link #triggerOfMode} is. */
-    static ReplacementEffect replacementOfMode(String mode) {
-        return ReplacementHandler.parseReplacement(
-                "Event$ " + mode + " | Description$ under test",
-                TestCards.build("Paralyze"), true);
     }
 }

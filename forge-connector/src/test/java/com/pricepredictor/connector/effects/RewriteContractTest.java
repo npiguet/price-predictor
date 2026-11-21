@@ -22,7 +22,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static com.pricepredictor.connector.effects.TestCollectors.recording;
-import static com.pricepredictor.connector.effects.TestCollectors.replacementOfMode;
+import static com.pricepredictor.connector.effects.TestParsed.replacementOfMode;
 import static com.pricepredictor.connector.effects.TestCollectors.unwired;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
