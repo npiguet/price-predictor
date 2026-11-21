@@ -17,7 +17,9 @@ final class OpenResolution {
      * The board read when the item was cast, the effect half's board only
      * where its resolution's start was never told ({@link #resolutionState}):
      * a worker without the resolution hook, or a bracket a test drives by
-     * hand.
+     * hand. Null for an item with no cost half (a trigger, a copy) where the
+     * hook tells that start, since nothing reads it there
+     * ({@link CastTracker#toldResolutionStarts(boolean)}).
      */
     final Snapshot state;
     /**

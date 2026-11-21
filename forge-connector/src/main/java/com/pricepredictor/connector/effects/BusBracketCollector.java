@@ -239,6 +239,20 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
+     * Whether {@link #resolutionHandler} hears each resolution's start: its
+     * listener installed, or the live game's for a fork's collector. Then
+     * a trigger or a copy reads no board as it is pushed.
+     */
+    void hearsResolutionStarts(boolean told) {
+        castTracker.toldResolutionStarts(told);
+    }
+
+    /** Whether {@link #resolutionHandler} hears each resolution's start. */
+    boolean hearsResolutionStarts() {
+        return castTracker.toldResolutionStarts();
+    }
+
+    /**
      * The half of {@link #resolutionHandler} past the game check.
      *
      * <p>The resolution is the next action: the held resolution's

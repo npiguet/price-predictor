@@ -31,6 +31,14 @@ final class CastTracker {
     private PendingCast pendingCast;
 
     /**
+     * Whether the resolution hook tells this collector each resolution's
+     * start ({@link #toldResolutionStarts(boolean)}): then the board an
+     * effect half is read against is the one taken there, and an item with
+     * no cost half reads no board at its push.
+     */
+    private boolean resolutionStartsTold;
+
+    /**
      * A cast's board, read before its card moved or its costs were paid, and
      * the targets its chain held then, each ref once.
      */
@@ -94,9 +102,7 @@ final class CastTracker {
      * @param started its cast's start, or null
      */
     OpenResolution openResolution(SpellAbility ability, PendingCast started) {
-        // The board a degraded worker's effect half is read against, the
-        // resolution's start being told only by the hook.
-        Snapshot atCast = started != null ? started.board() : snapshots.ofResolving(ability);
+        Snapshot atCast = boardAtPush(ability, started);
         if (!hasCostHalf(ability)) {
             return new OpenResolution(
                     ability, ProvenanceResolver.resolve(ability), actorOf(ability), atCast);
@@ -104,6 +110,40 @@ final class CastTracker {
         return new OpenResolution(
                 ability, ProvenanceResolver.resolve(ability), actorOf(ability), atCast,
                 linkOf(context.gameId(), ability), PaidCosts.of(ability, payments.take(ability)));
+    }
+
+    /**
+     * Whether the resolution hook tells this collector each resolution's
+     * start: set once its listener is installed, or, for a fork's
+     * collector, when the live game's is, whose callbacks it is handed
+     * while the fork plays on.
+     */
+    void toldResolutionStarts(boolean told) {
+        resolutionStartsTold = told;
+    }
+
+    /** Whether the resolution hook tells this collector each resolution's start. */
+    boolean toldResolutionStarts() {
+        return resolutionStartsTold;
+    }
+
+    /**
+     * The board read as the item was pushed: its cast's start's where that
+     * was told, else the board now, which the cost half of an item somebody
+     * cast or activated reads, and the effect half where the resolution's
+     * start is never told (a degraded worker, a bracket a test drives by
+     * hand). Null for an item with no cost half on a collector told each
+     * resolution's start: nothing reads it, its effect half reading the
+     * board taken as its resolution starts.
+     */
+    private Snapshot boardAtPush(SpellAbility ability, PendingCast started) {
+        if (started != null) {
+            return started.board();
+        }
+        if (resolutionStartsTold && !hasCostHalf(ability)) {
+            return null;
+        }
+        return snapshots.ofResolving(ability);
     }
 
     /** The link a cast or activated item's halves carry in game {@code gameId}: its cost half's. */

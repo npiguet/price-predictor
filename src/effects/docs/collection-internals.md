@@ -22,7 +22,7 @@ Each record's board is read just before the moment it describes, and its events 
 - Every library card a snapshot holds renders as it was in the library: untapped, no counters, controlled by its owner, face up.
 - A rewrite record reads before the replacement runs.
 - `conditions_met` is Forge's own answer, and a clause whose effect did not run files no event.
-- On a degraded worker, with no hook, both boards fall back to the one read at the cast event.
+- On a degraded worker, with no hook, both boards fall back to the one read at the cast event. Where the resolution hook is installed (for a fork, the live game's), a trigger or a copy reads no board at its push (`CastTracker.boardAtPush`): it has no cost half, and its effect half reads the board taken as its resolution starts.
 
 ## The hook inventory
 

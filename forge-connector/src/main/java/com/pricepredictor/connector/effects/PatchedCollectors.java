@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import forge.game.Game;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -47,6 +48,8 @@ final class PatchedCollectors implements AutoCloseable {
 
     private final CollectorContext context;
     private final Channels channels;
+    /** The game's bracket, told whether the resolution hook was installed. */
+    private final BusBracketCollector bracket;
 
     /**
      * The listeners installed whatever the attribution mode: the bracket's
@@ -104,6 +107,7 @@ final class PatchedCollectors implements AutoCloseable {
 
     private PatchedCollectors(Game game, Channels.Setup setup, boolean forkBound) {
         BusBracketCollector bracket = setup.bracket();
+        this.bracket = bracket;
         this.forkBound = forkBound;
         this.context = setup.context();
         this.channels = Channels.of(game, setup);
@@ -156,11 +160,14 @@ final class PatchedCollectors implements AutoCloseable {
         if (forkBound) {
             throw new IllegalStateException("a fork's collectors install no hook");
         }
-        int installed = install(everyMode);
-        if (context.mode() == AttributionMode.DEGRADED) {
-            return installed;
+        List<ListenerSetter> installed = new ArrayList<>(install(everyMode));
+        if (context.mode() != AttributionMode.DEGRADED) {
+            installed.addAll(install(patchedOnly));
         }
-        return installed + install(patchedOnly);
+        // Told each resolution's start, the bracket reads no board as a
+        // trigger or a copy is pushed.
+        bracket.hearsResolutionStarts(installed.contains(PatchHooks.RESOLUTION_LISTENER));
+        return installed.size();
     }
 
     /**
@@ -172,9 +179,11 @@ final class PatchedCollectors implements AutoCloseable {
      * reports, checking before it draws from the sampler or writes, so
      * offering each callback to both sets of collectors hands each its own:
      * dispatch by game identity, on whatever thread the callback comes.
+     *
+     * @return the hooks found, in the order installed
      */
-    private int install(List<Listener> listeners) {
-        int installed = 0;
+    private List<ListenerSetter> install(List<Listener> listeners) {
+        List<ListenerSetter> installed = new ArrayList<>();
         for (Listener listener : listeners) {
             Listener routing = listener.hook().listener(routing(
                     listener.body(), (callback, args) -> {
@@ -184,7 +193,7 @@ final class PatchedCollectors implements AutoCloseable {
                         }
                     }));
             if (routing.install()) {
-                installed++;
+                installed.add(listener.hook());
             }
         }
         return installed;

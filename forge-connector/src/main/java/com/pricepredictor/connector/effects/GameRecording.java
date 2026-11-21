@@ -158,7 +158,12 @@ public final class GameRecording implements AutoCloseable {
      * @param seed   seeds the fork's sampling stream
      */
     GameRecording forkRecording(Game fork, ForkOutput output, long seed) {
-        return new GameRecording(fork, envelope.forFork(output), caps, seed);
+        GameRecording recording = new GameRecording(fork, envelope.forFork(output), caps, seed);
+        // The fork plays on only while this game's hooks hand it their
+        // callbacks (routingTo): it hears a resolution's start where this
+        // game does.
+        recording.bracket.hearsResolutionStarts(bracket.hearsResolutionStarts());
+        return recording;
     }
 
     /** The link a cast or activated item's halves carry in this game's records. */
