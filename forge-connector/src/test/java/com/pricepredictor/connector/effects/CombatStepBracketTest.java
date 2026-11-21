@@ -50,7 +50,7 @@ class CombatStepBracketTest {
         game.setAge(GameStage.Play);
         Card knight = TestBoard.inPlay(game, attacking, "White Knight");
         Card giant = TestBoard.inPlay(game, defending, "Hill Giant");
-        TestBoard.blockedCombat(game, attacking, defending, knight, giant);
+        TestBoard.blockedCombat(new TestBoard.CombatSides(game, attacking, defending), knight, giant);
 
         PhaseHandler phases = game.getPhaseHandler();
         List<String> records = ShardRun.observed(tempDir, game, collector -> {

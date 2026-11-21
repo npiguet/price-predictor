@@ -126,7 +126,7 @@ class ControlChangeCombatRemovalTest {
         Seats seats = Seats.inCombat();
         Card bears = seats.yours("Grizzly Bears");
         Card giant = seats.theirs("Hill Giant");
-        Combat combat = TestBoard.blockedCombat(seats.game(), seats.you(), seats.opponent(), bears, giant);
+        Combat combat = TestBoard.blockedCombat(new TestBoard.CombatSides(seats.game(), seats.you(), seats.opponent()), bears, giant);
 
         List<String> records = resolving(seats, seats.castAt(seats.you(), "Control Magic", giant));
 

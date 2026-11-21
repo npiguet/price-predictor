@@ -46,7 +46,7 @@ class CombatReplacementClauseTest {
         shield.setActivatingPlayer(defending);
         game.getStack().add(shield);
         game.getStack().resolveStack();
-        TestBoard.blockedCombat(game, attacking, defending, giant, skeletons);
+        TestBoard.blockedCombat(new TestBoard.CombatSides(game, attacking, defending), giant, skeletons);
 
         PhaseHandler phases = game.getPhaseHandler();
         List<String> records = ShardRun.recordsWithClauseHook(tempDir, game,

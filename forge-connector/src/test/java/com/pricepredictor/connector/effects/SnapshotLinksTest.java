@@ -64,7 +64,7 @@ class SnapshotLinksTest {
         CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.COMBAT_DECLARE_BLOCKERS);
         Card bears = TestBoard.inPlay(board.game, board.you, "Grizzly Bears");
         Card giant = TestBoard.inPlay(board.game, board.opponent, "Hill Giant");
-        TestBoard.blockedCombat(board.game, board.you, board.opponent, bears, giant);
+        TestBoard.blockedCombat(new TestBoard.CombatSides(board.game, board.you, board.opponent), bears, giant);
 
         assertEquals(List.of(link(bears, board.opponent, LinkFamily.ATTACKS)), links(board, LinkFamily.ATTACKS));
         assertEquals(List.of(link(giant, bears, LinkFamily.BLOCKS)), links(board, LinkFamily.BLOCKS));

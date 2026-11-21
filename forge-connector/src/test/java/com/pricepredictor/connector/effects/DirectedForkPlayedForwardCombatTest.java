@@ -44,7 +44,7 @@ class DirectedForkPlayedForwardCombatTest extends DirectedForkPlayedForwardSuppo
                 .filter(card -> card.getName().equals("Grizzly Bears")).findFirst().orElseThrow();
         attacker.setSickness(false);
         Card blocker = permanent(game, defending, "Grizzly Bears");
-        TestBoard.blockedCombat(game, active, defending, attacker, blocker);
+        TestBoard.blockedCombat(new TestBoard.CombatSides(game, active, defending), attacker, blocker);
 
         List<String> fork = forkOf(game, PhaseType.COMBAT_FIRST_STRIKE_DAMAGE, "510.2",
                 "knight_in_the_bears_place");

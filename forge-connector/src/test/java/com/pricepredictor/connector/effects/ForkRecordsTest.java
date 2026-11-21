@@ -230,7 +230,7 @@ class ForkRecordsTest {
         Player defending = game.getPlayers().get(1);
         Card dreadmaw = TestBoard.onBattlefield(game, attacking, "Colossal Dreadmaw");
         Card bears = TestBoard.onBattlefield(game, defending, "Grizzly Bears");
-        Combat combat = TestBoard.blockedCombat(game, attacking, defending, dreadmaw, bears);
+        Combat combat = TestBoard.blockedCombat(new TestBoard.CombatSides(game, attacking, defending), dreadmaw, bears);
 
         RecordShardWriter writer = ShardRun.writer(tempDir);
         DamageStepProbe.HeldProbe held;

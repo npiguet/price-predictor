@@ -261,10 +261,10 @@ class ScheduledInterventionsTest {
 
         List<String> records = forced(game, 2, () -> {
             game.getPhaseHandler().devModeSet(PhaseType.COMBAT_DECLARE_BLOCKERS, you, 4 * BOUNDARIES);
-            TestBoard.blockedCombat(game, you, opponent, attacker, blocker);
+            TestBoard.blockedCombat(new TestBoard.CombatSides(game, you, opponent), attacker, blocker);
             TestPriority.settle(game);
             game.getPhaseHandler().devModeSet(PhaseType.COMBAT_DAMAGE, you, 4 * BOUNDARIES);
-            TestBoard.blockedCombat(game, you, opponent, attacker, blocker);
+            TestBoard.blockedCombat(new TestBoard.CombatSides(game, you, opponent), attacker, blocker);
             TestPriority.settle(game);
         });
 

@@ -36,7 +36,7 @@ class SimultaneousDamageTest {
             Player opponent = game.getPlayers().get(1);
             Card attacking = permanent(game, you, attacker);
             Card blocking = permanent(game, opponent, blocker);
-            TestBoard.blockedCombat(game, you, opponent, attacking, blocking);
+            TestBoard.blockedCombat(new TestBoard.CombatSides(game, you, opponent), attacking, blocking);
             return new Blocked(game, attacking, blocking);
         }
 
@@ -131,7 +131,7 @@ class SimultaneousDamageTest {
         Card token = game.getAction().moveToPlay(copy, opponent, null, null);
         token.setSickness(false);
         token.setGameTimestamp(game.getNextTimestamp());
-        TestBoard.blockedCombat(game, you, opponent, giant, token);
+        TestBoard.blockedCombat(new TestBoard.CombatSides(game, you, opponent), giant, token);
         assertFalse(SimultaneousDamage.bind(game).isPresent());
     }
 }

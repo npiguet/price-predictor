@@ -101,7 +101,7 @@ class ForkKindRecordsTest {
         Card dreadmaw = board.battlefield("Colossal Dreadmaw", board.you);
         Card child = board.battlefield("Child of Night", board.opponent);
         board.opponent.setLife(6, null);
-        Combat combat = TestBoard.blockedCombat(board.game, board.you, board.opponent, giant, child, dreadmaw);
+        Combat combat = TestBoard.blockedCombat(new TestBoard.CombatSides(board.game, board.you, board.opponent), giant, child, dreadmaw);
         CollectionCaps caps = TestCaps.caps().everyDecision()
                 .interventions(0).probes(1).probeKeywords("lifelink").build();
         try {

@@ -58,7 +58,7 @@ class SnapshotCharacterizationTest {
         Card bears = board.named("Grizzly Bears");
         Card soldier = board.named("Soldier Token");
         Card giant = board.named("Hill Giant");
-        TestBoard.blockedCombat(board.game, board.you, board.opponent, bears, giant, soldier);
+        TestBoard.blockedCombat(new TestBoard.CombatSides(board.game, board.you, board.opponent), bears, giant, soldier);
 
         Characterization.assertMatches("snapshot-no-acting-line.json",
                 new SnapshotBuilder(board.game).ofBoard().render() + "\n");

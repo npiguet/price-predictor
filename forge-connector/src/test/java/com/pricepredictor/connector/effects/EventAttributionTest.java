@@ -362,7 +362,7 @@ class EventAttributionTest {
         Card elves = TestBoard.onBattlefield(game, you, "Llanowar Elves");
         Card giant = TestBoard.onBattlefield(game, you, "Hill Giant");
         Card wall = TestBoard.onBattlefield(game, opponent, "Wall of Wood");
-        Combat combat = TestBoard.blockedCombat(game, you, opponent, bears, wall, elves, giant);
+        Combat combat = TestBoard.blockedCombat(new TestBoard.CombatSides(game, you, opponent), bears, wall, elves, giant);
         CombatShape shape = CombatShape.of(combat);
         assertTrue(combat.assignCombatDamage(false), "the step assigned no damage");
         shape.addAssignment(combat);

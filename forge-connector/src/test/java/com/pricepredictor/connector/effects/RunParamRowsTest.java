@@ -300,7 +300,7 @@ class RunParamRowsTest {
             Card bearsTwo = TestBoard.inPlay(game, you(game), "Grizzly Bears");
             game.getPhaseHandler().devModeSet(PhaseType.COMBAT_DECLARE_ATTACKERS, you(game), false, 1);
             Combat combat = TestBoard.blockedCombat(
-                    game, you(game), opponent(game), bearsOne, sentinels);
+                    new TestBoard.CombatSides(game, you(game), opponent(game)), bearsOne, sentinels);
             combat.addAttacker(bearsTwo, opponent(game));
             combat.addBlocker(bearsTwo, giant);
             combat.setBlocked(bearsTwo, true);

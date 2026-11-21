@@ -121,7 +121,7 @@ class ProbeSchedulerTest {
         Player opponent = game.getPlayers().get(1);
         Card attacking = TestBoard.inPlay(game, you, attacker);
         Card blocker = TestBoard.inPlay(game, opponent, "Hill Giant");
-        TestBoard.blockedCombat(game, you, opponent, attacking, blocker);
+        TestBoard.blockedCombat(new TestBoard.CombatSides(game, you, opponent), attacking, blocker);
         return attacking;
     }
 

@@ -44,7 +44,7 @@ class RegisteredRulesCombatTest {
         RuleBoard board = new RuleBoard(PhaseType.COMBAT_FIRST_STRIKE_DAMAGE);
         board.other = board.card(board.you, "Grizzly Bears");
         board.subject = board.card(board.opponent, blocker.name());
-        TestBoard.blockedCombat(board.game, board.you, board.opponent, board.other, board.subject);
+        TestBoard.blockedCombat(new TestBoard.CombatSides(board.game, board.you, board.opponent), board.other, board.subject);
         return board;
     }
 

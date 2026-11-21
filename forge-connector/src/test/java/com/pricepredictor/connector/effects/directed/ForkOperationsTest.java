@@ -671,7 +671,7 @@ class ForkOperationsTest {
             board.holy.attachToEntity(board.bears, null);
             board.creature(board.opponent, "Doomed Dissenter");
             board.creature(board.opponent, "Blood Artist");
-            TestBoard.blockedCombat(board.game, board.you, board.opponent, board.giant, board.bears);
+            TestBoard.blockedCombat(new TestBoard.CombatSides(board.game, board.you, board.opponent), board.giant, board.bears);
             board.settled();
             return board;
         }

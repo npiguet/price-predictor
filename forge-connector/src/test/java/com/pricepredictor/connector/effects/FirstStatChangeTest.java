@@ -206,7 +206,7 @@ class FirstStatChangeTest {
         Card merfolk = TestBoard.inPlay(game, attacking, "Merfolk of the Pearl Trident");
         TestBoard.inPlay(game, attacking, "Blood Artist");
         Card giant = TestBoard.inPlay(game, defending, "Hill Giant");
-        TestBoard.blockedCombat(game, attacking, defending, lord, giant);
+        TestBoard.blockedCombat(new TestBoard.CombatSides(game, attacking, defending), lord, giant);
         game.getAction().checkStaticAbilities();
         assertEquals(2, merfolk.getNetToughness(), "the lord pumps the Merfolk");
         // Cards moved onto the battlefield by hand are not in the last-state

@@ -36,7 +36,7 @@ class ProbeBranchTest {
             Player opponent = game.getPlayers().get(1);
             Card attacking = TestBoard.inPlay(game, you, attacker);
             Card blocking = TestBoard.inPlay(game, opponent, blocker);
-            TestBoard.blockedCombat(game, you, opponent, attacking, blocking);
+            TestBoard.blockedCombat(new TestBoard.CombatSides(game, you, opponent), attacking, blocking);
             return new Board(game, attacking, blocking, opponent);
         }
     }

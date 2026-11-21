@@ -40,7 +40,7 @@ class RecordCharacterizationForkTest extends RecordCharacterizationSupport {
         Card soldier = board.token("w_1_1_soldier", you);
         Card bears = board.battlefield("Grizzly Bears", opponent);
         Combat combat = TestBoard.blockedCombat(
-                board.game, you, opponent, dreadmaw, bears, soldier);
+                new TestBoard.CombatSides(board.game, you, opponent), dreadmaw, bears, soldier);
         CollectionCaps caps = TestCaps.caps().everyDecision()
                 .interventions(0).probes(1).probeKeywords("trample").build();
 
@@ -194,7 +194,7 @@ class RecordCharacterizationForkTest extends RecordCharacterizationSupport {
         CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.COMBAT_DAMAGE);
         Card dreadmaw = board.battlefield("Colossal Dreadmaw", board.you);
         Card watcher = board.battlefield("Coast Watcher", board.opponent);
-        Combat combat = TestBoard.blockedCombat(board.game, board.you, board.opponent, dreadmaw, watcher);
+        Combat combat = TestBoard.blockedCombat(new TestBoard.CombatSides(board.game, board.you, board.opponent), dreadmaw, watcher);
         CollectionCaps caps = TestCaps.caps().everyDecision().manaCap(2000).interventions(0).probes(1)
                 .probeKeywords("trample").build();
 

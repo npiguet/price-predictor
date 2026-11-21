@@ -238,14 +238,18 @@ public final class TestBoard {
         game.fireEvent(new GameEventTurnPhase(game.getPhaseHandler().getPlayerTurn(), step, ""));
     }
 
+    /** The game a combat is set on, and the players on either side of it. */
+    public record CombatSides(Game game, Player attacking, Player defending) {
+    }
+
     /**
      * Combat as the declare-blockers step leaves it, set on the game:
-     * {@code blocked} attacks {@code defending} and {@code blocker} blocks
-     * it, and each of {@code unblocked} attacks unblocked.
+     * {@code blocked} attacks {@code sides.defending()} and {@code blocker}
+     * blocks it, and each of {@code unblocked} attacks unblocked.
      */
-    public static Combat blockedCombat(Game game, Player attacking, Player defending,
-                                Card blocked, Card blocker, Card... unblocked) {
-        Combat combat = new Combat(attacking);
+    public static Combat blockedCombat(CombatSides sides, Card blocked, Card blocker, Card... unblocked) {
+        Player defending = sides.defending();
+        Combat combat = new Combat(sides.attacking());
         combat.addAttacker(blocked, defending);
         for (Card attacker : unblocked) {
             combat.addAttacker(attacker, defending);
@@ -257,7 +261,7 @@ public final class TestBoard {
         }
         combat.orderBlockersForDamageAssignment();
         combat.orderAttackersForDamageAssignment();
-        game.getPhaseHandler().setCombat(combat);
+        sides.game().getPhaseHandler().setCombat(combat);
         return combat;
     }
 

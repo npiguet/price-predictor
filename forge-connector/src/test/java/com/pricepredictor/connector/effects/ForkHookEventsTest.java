@@ -244,7 +244,7 @@ class ForkHookEventsTest {
         Player opponent = game.getPlayers().get(1);
         Card dreadmaw = TestBoard.inPlay(game, you, "Colossal Dreadmaw");
         Card watcher = TestBoard.inPlay(game, opponent, "Coast Watcher");
-        Combat combat = TestBoard.blockedCombat(game, you, opponent, dreadmaw, watcher);
+        Combat combat = TestBoard.blockedCombat(new TestBoard.CombatSides(game, you, opponent), dreadmaw, watcher);
         CollectionCaps caps = TestCaps.caps().everyDecision().manaCap(2000).interventions(0).probes(1)
                 .probeKeywords("trample").build();
 
