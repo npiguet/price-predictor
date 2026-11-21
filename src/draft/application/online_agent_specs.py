@@ -9,6 +9,19 @@ from pathlib import Path
 from draft.application.online_config_validation import OnlineConfigError
 
 
+def _split_binding(text: str) -> tuple[str, str] | None:
+    """``LABEL=VALUE`` as its stripped label and value, or ``None`` when malformed."""
+    label, sep, value = text.partition("=")
+    label, value = label.strip(), value.strip()
+    if _malformed(sep, label, value):
+        return None
+    return label, value
+
+
+def _malformed(sep: str, label: str, value: str) -> bool:
+    return not sep or not label or not value
+
+
 def parse_learner_spec(specs: list[str] | None) -> tuple[str, Path]:
     """Parse the single ``--learner LABEL=PATH``.
 
@@ -28,13 +41,13 @@ def parse_learner_spec(specs: list[str] | None) -> tuple[str, Path]:
             f"exactly one --learner is allowed, got {len(specs)}: "
             f"{', '.join(specs)}"
         )
-    label, sep, path_str = specs[0].partition("=")
-    label, path_str = label.strip(), path_str.strip()
-    if not sep or not label or not path_str:
+    binding = _split_binding(specs[0])
+    if binding is None:
         raise OnlineConfigError(
             f"--learner {specs[0]!r} must be 'LABEL=PATH' — the mix label is "
             "load-bearing, so a bare PATH is not accepted"
         )
+    label, path_str = binding
     return label, Path(path_str)
 
 
@@ -42,10 +55,10 @@ def parse_frozen_specs(specs: list[str] | None) -> dict[str, Path]:
     """Parse the repeatable ``--frozen LABEL=PATH`` bindings."""
     frozen: dict[str, Path] = {}
     for spec in specs or []:
-        label, sep, path_str = spec.partition("=")
-        label, path_str = label.strip(), path_str.strip()
-        if not sep or not label or not path_str:
+        binding = _split_binding(spec)
+        if binding is None:
             raise OnlineConfigError(f"--frozen {spec!r} must be 'LABEL=PATH'")
+        label, path_str = binding
         if label in frozen:
             raise OnlineConfigError(f"duplicate --frozen label {label!r}")
         frozen[label] = Path(path_str)
@@ -68,21 +81,27 @@ def parse_agent_temperatures(spec: str | None) -> dict[str, float]:
         )
     temperatures: dict[str, float] = {}
     for entry in spec.split(","):
-        label, sep, value_str = entry.partition("=")
-        label, value_str = label.strip(), value_str.strip()
-        if not sep or not label or not value_str:
-            raise OnlineConfigError(
-                f"--agent-temp entry {entry.strip()!r} must be 'LABEL=VALUE' "
-                f"(the whole map was {spec!r})"
-            )
-        try:
-            value = float(value_str)
-        except ValueError:
-            raise OnlineConfigError(
-                f"--agent-temp {label!r} temperature must be a number, got "
-                f"{value_str!r}"
-            ) from None
+        label, value = _parse_temperature_entry(entry, spec)
         if label in temperatures:
             raise OnlineConfigError(f"duplicate --agent-temp label {label!r}")
         temperatures[label] = value
     return temperatures
+
+
+def _parse_temperature_entry(entry: str, spec: str) -> tuple[str, float]:
+    """One ``LABEL=T`` entry of ``--agent-temp`` (``spec`` is the whole map, for the message)."""
+    binding = _split_binding(entry)
+    if binding is None:
+        raise OnlineConfigError(
+            f"--agent-temp entry {entry.strip()!r} must be 'LABEL=VALUE' "
+            f"(the whole map was {spec!r})"
+        )
+    label, value_str = binding
+    try:
+        value = float(value_str)
+    except ValueError:
+        raise OnlineConfigError(
+            f"--agent-temp {label!r} temperature must be a number, got "
+            f"{value_str!r}"
+        ) from None
+    return label, value
